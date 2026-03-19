@@ -8,7 +8,7 @@ from django.test import RequestFactory
 
 from apps.links.context_processors import share_short_url
 
-pytestmark = [pytest.mark.django_db, pytest.mark.pr_origin(6230)]
+pytestmark = pytest.mark.django_db
 
 
 def test_share_short_url_returns_qr_data_uri(monkeypatch):
@@ -47,7 +47,6 @@ def test_share_short_url_falls_back_to_page_url_when_short_url_unavailable(monke
     assert context["share_short_url_qr"].startswith("data:image/png;base64,")
 
 
-@pytest.mark.pr_origin(6236)
 def test_share_short_url_falls_back_to_relative_path_on_disallowed_host(monkeypatch):
     """Disallowed hosts should produce safe relative share URLs."""
 
@@ -66,7 +65,6 @@ def test_share_short_url_falls_back_to_relative_path_on_disallowed_host(monkeypa
 
 
 
-@pytest.mark.pr_origin(6250)
 def test_share_short_url_rebuilds_absolute_url_for_trusted_disallowed_host(monkeypatch):
     """Trusted hosts should still generate absolute URLs when Django rejects request host."""
 
@@ -96,7 +94,6 @@ def test_share_short_url_rebuilds_absolute_url_for_trusted_disallowed_host(monke
     assert context["share_short_url"] == "http://example.com/docs/"
 
 
-@pytest.mark.pr_origin(6250)
 def test_share_short_url_rejects_malformed_trusted_fallback_host(monkeypatch):
     """Fallback should reject authorities whose effective host differs from site domain."""
 
@@ -126,7 +123,6 @@ def test_share_short_url_rejects_malformed_trusted_fallback_host(monkeypatch):
     assert context["share_short_url"] == "/docs/"
 
 
-@pytest.mark.pr_origin(6250)
 def test_share_short_url_rejects_port_mismatch_with_trusted_site(monkeypatch):
     """Fallback should reject trusted hosts when configured site port does not match."""
 
@@ -156,7 +152,6 @@ def test_share_short_url_rejects_port_mismatch_with_trusted_site(monkeypatch):
     assert context["share_short_url"] == "/docs/"
 
 
-@pytest.mark.pr_origin(6250)
 def test_share_short_url_rejects_trusted_host_with_invalid_port(monkeypatch):
     """Fallback should return the path when trusted hosts include malformed ports."""
 
@@ -186,7 +181,6 @@ def test_share_short_url_rejects_trusted_host_with_invalid_port(monkeypatch):
     assert context["share_short_url"] == "/docs/"
 
 
-@pytest.mark.pr_origin(6250)
 def test_share_short_url_accepts_semantically_equivalent_trusted_host(monkeypatch):
     """Fallback should accept trusted hosts that differ only by trailing dots."""
 

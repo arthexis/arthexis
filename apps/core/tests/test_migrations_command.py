@@ -94,7 +94,6 @@ def test_migrations_rebuild_escapes_branch_id(monkeypatch, settings, tmp_path):
     assert 'import os; os.system' in content
 
 
-@pytest.mark.pr_origin(6273)
 def test_migrations_rebuild_accepts_branch_id(monkeypatch):
     """migrations rebuild should call makemigrations during rebuild flow."""
 
@@ -114,7 +113,6 @@ def test_migrations_rebuild_accepts_branch_id(monkeypatch):
     assert name == "makemigrations"
 
 
-@pytest.mark.pr_origin(6273)
 def test_migrations_clear_calls_clear_operation(settings, tmp_path):
     """migrations clear should remove migration files while preserving __init__.py."""
 

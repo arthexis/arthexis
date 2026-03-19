@@ -49,7 +49,6 @@ def test_nav_links_chat_enabled_requires_feature_and_site_or_profile(
 
 
 @pytest.mark.django_db
-@pytest.mark.pr_origin(6225)
 def test_nav_links_respects_per_landing_module_pill_validation(monkeypatch):
     cache.clear()
 
@@ -123,7 +122,6 @@ def test_nav_links_respects_per_landing_module_pill_validation(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.pr_origin(6225)
 def test_nav_links_caches_landing_validation_by_parameters(monkeypatch):
     cache.clear()
 

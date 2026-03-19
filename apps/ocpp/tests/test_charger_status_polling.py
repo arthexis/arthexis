@@ -10,7 +10,6 @@ from django.utils import timezone
 from apps.ocpp import store
 from apps.ocpp.models import Charger, Transaction
 
-pytestmark = pytest.mark.pr_origin(6217)
 
 
 @pytest.mark.django_db

@@ -6,7 +6,6 @@ from django.test import RequestFactory
 from apps.users.backends import LocalhostAdminBackend
 
 
-pytestmark = pytest.mark.pr_origin(9999)
 
 
 def test_get_remote_ip_strips_forwarded_ipv4_port() -> None:

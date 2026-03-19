@@ -9,7 +9,6 @@ from django.urls import reverse
 
 @pytest.mark.django_db
 @pytest.mark.integration
-@pytest.mark.pr_origin(6216)
 def test_remote_action_openapi_forbidden_for_unprivileged_staff(client):
     """Ensure staff without RemoteAction permissions cannot access OpenAPI output."""
 

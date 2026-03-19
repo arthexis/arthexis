@@ -10,7 +10,7 @@ from apps.core.auto_upgrade import (
 )
 
 
-pytestmark = [pytest.mark.django_db, pytest.mark.pr_origin(9999)]
+pytestmark = pytest.mark.django_db
 
 
 def test_ensure_auto_upgrade_periodic_task_reuses_duplicate_interval_schedules(monkeypatch):

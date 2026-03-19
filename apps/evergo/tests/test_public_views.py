@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 
-@pytest.mark.pr_origin(6216)
 def test_to_tsv_sanitizes_formula_and_line_break_characters():
     """Security: TSV export must neutralize formulas and sanitize control characters."""
 

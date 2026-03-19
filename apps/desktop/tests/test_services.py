@@ -15,7 +15,7 @@ from apps.desktop.models import DesktopShortcut
 from apps.desktop.services import DesktopSyncResult, sync_desktop_shortcuts
 
 
-pytestmark = [pytest.mark.django_db, pytest.mark.pr_origin(6266)]
+pytestmark = pytest.mark.django_db
 
 
 class _NodeStub:

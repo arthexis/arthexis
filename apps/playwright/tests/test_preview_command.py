@@ -4,7 +4,6 @@ from django.core.management.base import CommandError
 from apps.playwright.management.commands.preview import Command
 
 
-@pytest.mark.pr_origin(6223)
 def test_handle_reports_backend_failures_without_name_error(monkeypatch) -> None:
     """Backend failure aggregation should raise a clean CommandError message."""
 
@@ -38,7 +37,6 @@ def test_handle_reports_backend_failures_without_name_error(monkeypatch) -> None
     assert deleted_ids == [42]
 
 
-@pytest.mark.pr_origin(6223)
 def test_handle_uses_throwaway_user_and_cleans_it_up(monkeypatch) -> None:
     """Preview captures should use a temporary login user and remove it afterwards."""
 
@@ -79,7 +77,6 @@ def test_handle_uses_throwaway_user_and_cleans_it_up(monkeypatch) -> None:
     assert state["deleted"] == 99
 
 
-@pytest.mark.pr_origin(6223)
 def test_handle_cleans_up_throwaway_user_on_validation_failure(monkeypatch) -> None:
     """Throwaway preview user should be deleted when argument validation fails."""
 
@@ -106,7 +103,6 @@ def test_handle_cleans_up_throwaway_user_on_validation_failure(monkeypatch) -> N
     assert state["deleted"] == 99
 
 
-@pytest.mark.pr_origin(6223)
 def test_handle_skips_login_and_user_creation_for_no_login(monkeypatch) -> None:
     """No-login captures should not create or authenticate any temporary user."""
 
@@ -147,7 +143,6 @@ def test_handle_skips_login_and_user_creation_for_no_login(monkeypatch) -> None:
     assert state["deleted"] is None
 
 
-@pytest.mark.pr_origin(6223)
 def test_handle_falls_back_to_selenium_backend(monkeypatch) -> None:
     """Preview should try Selenium automatically when Playwright backend fails."""
 
@@ -182,7 +177,6 @@ def test_handle_falls_back_to_selenium_backend(monkeypatch) -> None:
     assert attempted_backends == ["playwright", "selenium"]
 
 
-@pytest.mark.pr_origin(6223)
 def test_handle_waits_for_suite_when_requested(monkeypatch) -> None:
     """Preview should probe suite readiness before capturing when requested."""
 
@@ -218,7 +212,6 @@ def test_handle_waits_for_suite_when_requested(monkeypatch) -> None:
     assert state["wait_called"] is True
 
 
-@pytest.mark.pr_origin(6223)
 def test_wait_for_suite_ready_rejects_non_positive_timeout() -> None:
     """Suite wait should fail fast when timeout is non-positive."""
 

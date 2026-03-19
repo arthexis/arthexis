@@ -201,7 +201,6 @@ def test_overdue_trigger_rejects_stale_early_job() -> None:
     assert not task.can_open_github_issue_for_trigger("overdue")
 
 
-@pytest.mark.pr_origin(6182)
 def test_schedule_github_issue_uses_cross_process_cache_dedupe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -241,7 +240,6 @@ def test_schedule_github_issue_uses_cross_process_cache_dedupe(
     assert len(calls) == 1
 
 
-@pytest.mark.pr_origin(6182)
 def test_create_manual_task_github_issue_skips_early_scheduled_start() -> None:
     """Task should not create issue before scheduled start time."""
 

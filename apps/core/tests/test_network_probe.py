@@ -8,7 +8,6 @@ from apps.core.system.ui import network_probe
 from utils.service_probe import ServiceProbeResult
 
 
-@pytest.mark.pr(6201)
 def test_detect_runserver_process_uses_shared_detector(monkeypatch: pytest.MonkeyPatch) -> None:
     """Runserver process detection should delegate to the shared service probe helper."""
 
@@ -19,7 +18,6 @@ def test_detect_runserver_process_uses_shared_detector(monkeypatch: pytest.Monke
     assert port == 7777
 
 
-@pytest.mark.pr(6201)
 def test_probe_ports_uses_http_probe_result(monkeypatch: pytest.MonkeyPatch) -> None:
     """Port probing should return the first port where admin HTTP probing succeeds."""
 

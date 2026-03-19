@@ -12,7 +12,7 @@ from django.urls import reverse
 from apps.extensions.models import JsExtension
 
 
-pytestmark = [pytest.mark.django_db, pytest.mark.pr_origin(6177)]
+pytestmark = pytest.mark.django_db
 
 
 def test_extension_catalog_lists_enabled_extensions_only(client) -> None:
