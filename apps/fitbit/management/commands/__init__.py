@@ -1,1 +1,0 @@
-"""Fitbit management commands."""

@@ -1,1 +1,1 @@
-"""Fitbit integration app."""
+"""Temporary Fitbit app package retained for schema cleanup migrations."""

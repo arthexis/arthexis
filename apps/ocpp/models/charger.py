@@ -93,6 +93,14 @@ class Charger(Ownable):
         default=False,
         help_text="Require a valid RFID before starting a charging session.",
     )
+    auto_accept_offered_certificates = models.BooleanField(
+        _("Auto Accept Offered Certificates"),
+        default=True,
+        help_text=_(
+            "Automatically accept certificate status checks for certificates "
+            "offered by this charge point when no installed certificate matches."
+        ),
+    )
     configuration_check_enabled = models.BooleanField(
         _("Configuration Check"),
         default=False,
