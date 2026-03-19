@@ -12,6 +12,11 @@ ALLOWED_BUILD_FAILURES = {"spidev", "RPi.GPIO"}
 
 
 def _extract_failed_builds(line: str) -> Set[str]:
+    """Extract failed package names from a single pip output line.
+
+    :param line: Raw pip output line.
+    :return: Package names that the line reports as failed.
+    """
     failures: Set[str] = set()
     marker = "Failed to build "
     if marker in line:
@@ -41,7 +46,12 @@ def _extract_failed_builds(line: str) -> Set[str]:
 
 
 def _iter_pip_output(cmd: Iterable[str]) -> int:
-    """Stream pip output while replacing satisfied requirement lines with dots."""
+    """Stream pip output while downgrading allowed hardware wheel failures.
+
+    :param cmd: Command to execute.
+    :return: Process exit status, or ``0`` when only allowed failures occurred.
+    :raises AssertionError: If the child process does not expose stdout.
+    """
     process = subprocess.Popen(
         list(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
     )
@@ -106,6 +116,10 @@ def _iter_pip_output(cmd: Iterable[str]) -> int:
 
 
 def main() -> int:
+    """Execute pip with the current interpreter.
+
+    :return: Exit status from the wrapped pip invocation.
+    """
     pip_args = sys.argv[1:]
     cmd = [sys.executable, "-m", "pip", "install", *pip_args]
     return _iter_pip_output(cmd)
