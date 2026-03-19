@@ -7,7 +7,7 @@ from django.test import RequestFactory
 from apps.sites.models import AdminBadge
 from config.context_processors import site_and_node
 
-pytestmark = [pytest.mark.django_db, pytest.mark.pr_origin(6213)]
+pytestmark = pytest.mark.django_db
 
 
 def _raise_disallowed_host():

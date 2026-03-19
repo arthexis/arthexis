@@ -13,8 +13,6 @@ from django.urls import reverse
 from apps.nodes.models import Node
 from apps.nodes.views import registration as registration_views
 
-pytestmark = pytest.mark.pr_origin(6213)
-
 
 @pytest.mark.django_db
 def test_node_info_registers_missing_local(client, monkeypatch):

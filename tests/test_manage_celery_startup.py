@@ -8,10 +8,6 @@ import pytest
 
 import manage
 
-
-pytestmark = pytest.mark.pr_origin(6275)
-
-
 @pytest.fixture
 def mock_manage_main(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     """Mock ``manage.main`` dependencies and capture spawned process commands."""

@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 pytestmark = [
-    pytest.mark.pr_origin(6213),
     pytest.mark.skipif(sys.platform == "win32", reason="bash helper scripts are not supported on Windows"),
 ]
 
