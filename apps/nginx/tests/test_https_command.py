@@ -186,6 +186,80 @@ def test_https_site_uses_latest_enabled_config_port(monkeypatch):
 
 
 @pytest.mark.django_db
+@pytest.mark.pr_origin(6288)
+def test_https_site_uses_safe_default_paths_instead_of_preview_fixture(monkeypatch):
+    """New HTTPS site configs should not inherit preview-only nginx destination paths."""
+
+    SiteConfiguration.objects.create(
+        name="preview-example",
+        enabled=True,
+        mode="public",
+        protocol="http",
+        port=8888,
+        expected_path="/etc/nginx/sites-enabled/arthexis-preview-example.conf",
+        site_entries_path="apps/nginx/fixtures/data/nginx-sites-preview.json",
+        site_destination="/etc/nginx/sites-enabled/arthexis-preview-sites.conf",
+    )
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--site", "porsche-tijuana.gelectriic.com", "--no-sudo")
+
+    config = SiteConfiguration.objects.get(name="porsche-tijuana.gelectriic.com")
+    meta = SiteConfiguration._meta
+    assert config.expected_path == meta.get_field("expected_path").get_default()
+    assert config.site_entries_path == meta.get_field("site_entries_path").get_default()
+    assert config.site_destination == meta.get_field("site_destination").get_default()
+
+
+@pytest.mark.django_db
+@pytest.mark.pr_origin(6288)
+def test_https_site_preserves_loaded_primary_expected_path(monkeypatch, settings):
+    """New HTTPS site configs should keep the loaded primary nginx config path."""
+
+    settings.NGINX_SITE_PATH = "/etc/nginx/sites-enabled/custom-arthexis.conf"
+    SiteConfiguration.objects.create(
+        name="primary-runtime-config",
+        enabled=True,
+        mode="public",
+        protocol="http",
+        port=8443,
+        expected_path="/etc/nginx/sites-enabled/custom-arthexis.conf",
+    )
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--site", "custom-runtime.gelectriic.com", "--no-sudo")
+
+    config = SiteConfiguration.objects.get(name="custom-runtime.gelectriic.com")
+    assert config.expected_path == "/etc/nginx/sites-enabled/custom-arthexis.conf"
+
+
+@pytest.mark.django_db
 def test_https_site_url_implies_enable_and_creates_managed_site(monkeypatch):
     """`https --site wss://...` should normalize host and stage managed site metadata."""
 
