@@ -1,4 +1,9 @@
-"""Models for Fitbit account connectivity, health history, and Net Message delivery."""
+"""Legacy Fitbit models retained only to support reversible migrations.
+
+This module intentionally keeps the historical model definitions available while
+existing deployments apply the schema-removal migration. The runtime Fitbit
+integration code has been removed.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +12,14 @@ from django.utils import timezone
 
 
 class FitbitConnection(models.Model):
-    """Represents a connected Fitbit account/device used by this Suite node."""
+    """Represent a previously connected Fitbit account for migration compatibility.
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
 
     name = models.CharField(max_length=64, unique=True)
     fitbit_user_id = models.CharField(max_length=64)
@@ -23,18 +35,26 @@ class FitbitConnection(models.Model):
         ordering = ["name"]
 
     def __str__(self) -> str:
-        """Return a readable identity for admin and command output."""
-        return f"{self.name} ({self.fitbit_user_id})"
+        """Return a readable identity for admin and debugging output.
 
-    def token_is_expired(self) -> bool:
-        """Return ``True`` when the current access token has expired."""
-        if self.token_expires_at is None:
-            return False
-        return self.token_expires_at <= timezone.now()
+        Parameters:
+            None.
+
+        Returns:
+            str: The connection label.
+        """
+        return f"{self.name} ({self.fitbit_user_id})"
 
 
 class FitbitHealthSample(models.Model):
-    """Historical health payload captured from Fitbit polling queries."""
+    """Represent historical Fitbit health payloads for migration compatibility.
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
 
     connection = models.ForeignKey(
         FitbitConnection,
@@ -49,16 +69,26 @@ class FitbitHealthSample(models.Model):
     class Meta:
         ordering = ["-observed_at", "-id"]
 
-    def __str__(self) -> str:
-        """Return a concise description of the sample."""
-        return f"{self.connection.name}:{self.resource}@{self.observed_at.isoformat()}"
-
 
 class FitbitNetMessageDelivery(models.Model):
-    """Tracks Net Messages forwarded to connected Fitbit targets."""
+    """Track historical Fitbit Net Message deliveries for migration compatibility.
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
 
     class Status(models.TextChoices):
-        """Delivery states for Fitbit Net Message forwarding."""
+        """Enumerate persisted delivery states for historical Fitbit rows.
+
+        Parameters:
+            None.
+
+        Returns:
+            None.
+        """
 
         QUEUED = "queued", "Queued"
         SENT = "sent", "Sent"
@@ -85,7 +115,3 @@ class FitbitNetMessageDelivery(models.Model):
                 name="fitbit_unique_connection_message_delivery",
             )
         ]
-
-    def __str__(self) -> str:
-        """Return a concise delivery description."""
-        return f"{self.connection.name} <- {self.net_message_id} ({self.status})"
