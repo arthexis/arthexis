@@ -1,1 +1,0 @@
-"""Fitbit integration app."""
