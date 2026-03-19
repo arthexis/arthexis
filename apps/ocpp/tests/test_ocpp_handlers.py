@@ -806,7 +806,7 @@ async def test_get_certificate_status_persists_check():
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.integration
-async def test_get_certificate_status_handles_missing_certificate():
+async def test_get_certificate_status_auto_accepts_missing_certificate_by_default():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-4")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-4"
@@ -816,6 +816,35 @@ async def test_get_certificate_status_handles_missing_certificate():
     payload = {"certificateHashData": {"hashAlgorithm": "SHA256"}}
     result = await consumer._handle_get_certificate_status_action(
         payload, "msg-3", "", "",
+    )
+
+    assert result["status"] == "Accepted"
+    status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
+        charger=charger
+    )
+    assert status_check.status == CertificateStatusCheck.STATUS_ACCEPTED
+    assert (
+        status_check.status_info
+        == "Automatically accepted unmatched offered certificate."
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.integration
+async def test_get_certificate_status_rejects_missing_certificate_when_auto_accept_disabled():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CERT-4B",
+        auto_accept_offered_certificates=False,
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-4B"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    payload = {"certificateHashData": {"hashAlgorithm": "SHA256"}}
+    result = await consumer._handle_get_certificate_status_action(
+        payload, "msg-3b", "", "",
     )
 
     assert result["status"] == "Failed"
