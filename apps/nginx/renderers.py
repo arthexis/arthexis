@@ -25,8 +25,14 @@ HTTP_IPV6_LISTENS = (
     "[::]:8900",
 )
 
-HTTPS_IPV4_LISTENS = ("443 ssl",)
-HTTPS_IPV6_LISTENS = ("[::]:443 ssl",)
+HTTPS_IPV4_LISTENS = (
+    "443 ssl",
+    "8443 ssl",
+)
+HTTPS_IPV6_LISTENS = (
+    "[::]:443 ssl",
+    "[::]:8443 ssl",
+)
 
 
 def _build_server_names(domain: str, prefixes: list[str]) -> str:

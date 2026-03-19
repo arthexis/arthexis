@@ -25,6 +25,7 @@ def test_generate_primary_config_public_mode():
 
     assert "return 301 https://$host$request_uri;" in config
     assert "location ^~ /.well-known/acme-challenge/" in config
+    assert "listen 8443 ssl;" in config
     assert "ssl_certificate" in config
     assert "proxy_pass http://127.0.0.1:8080" in config
 
