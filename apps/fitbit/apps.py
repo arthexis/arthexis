@@ -1,16 +1,18 @@
-"""Application config for Fitbit integration."""
+"""Application config for the temporary Fitbit migration app."""
 
 from django.apps import AppConfig
 
 
 class FitbitConfig(AppConfig):
-    """Configuration for Fitbit integration models and commands."""
+    """Keep the legacy Fitbit app installed long enough to run cleanup migrations.
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+    """
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.fitbit"
     verbose_name = "Fitbit"
-
-
-    def ready(self) -> None:
-        """Register Fitbit signal handlers."""
-        from apps.fitbit import signals  # noqa: F401
