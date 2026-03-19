@@ -20,14 +20,31 @@ def test_generate_primary_config_internal_mode():
     assert "location = /maintenance/app-down.html" in config
     assert "ssl_certificate" not in config
 
-def test_generate_primary_config_public_mode():
-    config = generate_primary_config("public", 8080, https_enabled=True)
+
+@pytest.mark.pr_origin(6292)
+@pytest.mark.parametrize(
+    ("include_ipv6", "expected_listener"),
+    [
+        (False, "listen 8443 ssl;"),
+        (True, "listen [::]:8443 ssl;"),
+    ],
+)
+def test_generate_primary_config_public_mode(include_ipv6: bool, expected_listener: str):
+    """Verify public primary configs include the expected HTTPS 8443 listeners."""
+
+    config = generate_primary_config(
+        "public",
+        8080,
+        https_enabled=True,
+        include_ipv6=include_ipv6,
+    )
 
     assert "return 301 https://$host$request_uri;" in config
     assert "location ^~ /.well-known/acme-challenge/" in config
-    assert "listen 8443 ssl;" in config
+    assert expected_listener in config
     assert "ssl_certificate" in config
     assert "proxy_pass http://127.0.0.1:8080" in config
+
 
 def test_generate_primary_config_external_websockets_toggle():
     config = generate_primary_config("internal", 8080, external_websockets=True)
@@ -42,10 +59,12 @@ def test_generate_primary_config_external_websockets_toggle():
     assert config_utils.WEBSOCKET_CONNECTION_HEADER not in disabled
 
 
-
 def test_generate_site_entries_content_uses_proxy_target(tmp_path: Path):
     staging = tmp_path / "sites.json"
-    staging.write_text('[{"domain": "proxy.example.com", "require_https": false}]', encoding="utf-8")
+    staging.write_text(
+        '[{"domain": "proxy.example.com", "require_https": false}]',
+        encoding="utf-8",
+    )
 
     content = generate_site_entries_content(
         staging, "public", 8080, proxy_target="arthexis-blue"
@@ -53,9 +72,45 @@ def test_generate_site_entries_content_uses_proxy_target(tmp_path: Path):
 
     assert "proxy_pass http://arthexis-blue" in content
 
+
+@pytest.mark.pr_origin(6292)
+@pytest.mark.parametrize(
+    ("include_ipv6", "expected_listener"),
+    [
+        (False, "listen 8443 ssl;"),
+        (True, "listen [::]:8443 ssl;"),
+    ],
+)
+def test_generate_site_entries_content_uses_https_listeners(
+    tmp_path: Path,
+    include_ipv6: bool,
+    expected_listener: str,
+):
+    """Verify managed public HTTPS blocks include the expected 8443 listeners."""
+
+    staging = tmp_path / "sites.json"
+    staging.write_text(
+        '[{"domain": "wss.example.com", "require_https": true}]',
+        encoding="utf-8",
+    )
+
+    content = generate_site_entries_content(
+        staging,
+        "public",
+        8080,
+        https_enabled=True,
+        include_ipv6=include_ipv6,
+    )
+
+    assert expected_listener in content
+
+
 def test_generate_site_entries_content_expands_subdomains(tmp_path: Path):
     staging = tmp_path / "sites.json"
-    staging.write_text('[{"domain": "example.com", "require_https": false}]', encoding="utf-8")
+    staging.write_text(
+        '[{"domain": "example.com", "require_https": false}]',
+        encoding="utf-8",
+    )
 
     content = generate_site_entries_content(
         staging,
@@ -66,6 +121,7 @@ def test_generate_site_entries_content_expands_subdomains(tmp_path: Path):
     )
 
     assert "server_name example.com api.example.com admin.example.com;" in content
+
 
 def test_ssl_directives_omitted_when_assets_missing(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(config_utils, "SSL_OPTIONS_PATH", tmp_path / "missing-options.conf")
@@ -78,6 +134,7 @@ def test_ssl_directives_omitted_when_assets_missing(monkeypatch, tmp_path: Path)
     assert "ssl_certificate" in config
     assert "include /" not in config
     assert "ssl_dhparam" not in config
+
 
 def test_ssl_directives_use_bundled_fallback(monkeypatch, tmp_path: Path):
     missing_options = tmp_path / "missing-options.conf"
@@ -103,7 +160,10 @@ def test_generate_unified_config_includes_managed_sites(tmp_path: Path):
     """Unified nginx config should include primary and managed site blocks in one file."""
 
     staging = tmp_path / "sites.json"
-    staging.write_text('[{"domain": "tenant.example.com", "require_https": true}]', encoding="utf-8")
+    staging.write_text(
+        '[{"domain": "tenant.example.com", "require_https": true}]',
+        encoding="utf-8",
+    )
 
     content = generate_unified_config(
         "public",
