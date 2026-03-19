@@ -14,11 +14,45 @@ from apps.nginx.models import SiteConfiguration
 from apps.nginx.services import NginxUnavailableError, ValidationError
 
 
+_RUNTIME_INHERITED_FIELDS = (
+    "mode",
+    "role",
+    "port",
+    "include_ipv6",
+    "external_websockets",
+    "managed_subdomains",
+)
+
+
 def _get_existing_config(domain: str) -> SiteConfiguration | None:
     """Return an existing site configuration for ``domain`` if present."""
 
     name = "localhost" if domain == "localhost" else domain
     return SiteConfiguration.objects.filter(name=name).first()
+
+
+def _default_config_defaults() -> dict[str, object]:
+    """Return safe default filesystem paths and render settings for new configs."""
+
+    default_config = SiteConfiguration.get_default()
+    defaults: dict[str, object] = {
+        field_name: getattr(default_config, field_name)
+        for field_name in _RUNTIME_INHERITED_FIELDS
+    }
+    defaults.update(
+        {
+            "site_entries_path": (
+                SiteConfiguration._meta.get_field("site_entries_path").get_default()
+            ),
+            "site_destination": (
+                SiteConfiguration._meta.get_field("site_destination").get_default()
+            ),
+            "expected_path": (
+                SiteConfiguration._meta.get_field("expected_path").get_default()
+            ),
+        }
+    )
+    return defaults
 
 
 def _get_or_create_config(domain: str, *, protocol: str) -> SiteConfiguration:
@@ -36,18 +70,15 @@ def _get_or_create_config(domain: str, *, protocol: str) -> SiteConfiguration:
             .first()
             or SiteConfiguration.get_default()
         )
+        defaults = _default_config_defaults()
+        for field_name in _RUNTIME_INHERITED_FIELDS:
+            defaults[field_name] = getattr(defaults_source, field_name)
+
         config = SiteConfiguration.objects.create(
             name=name,
             enabled=True,
             protocol=protocol,
-            mode=defaults_source.mode,
-            role=defaults_source.role,
-            port=defaults_source.port,
-            include_ipv6=defaults_source.include_ipv6,
-            external_websockets=defaults_source.external_websockets,
-            site_entries_path=defaults_source.site_entries_path,
-            site_destination=defaults_source.site_destination,
-            expected_path=defaults_source.expected_path,
+            **defaults,
         )
         created = True
 
