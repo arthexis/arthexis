@@ -17,3 +17,4 @@ def test_validate_host_accepts_control_plane_ip_with_port():
     """Host validation should accept requests sent to 10.42.0.1 with a port."""
 
     assert http_request.validate_host("10.42.0.1:8000", settings.ALLOWED_HOSTS)
+
