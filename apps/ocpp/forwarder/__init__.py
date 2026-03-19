@@ -93,12 +93,19 @@ class Forwarder:
     def _connection_options(node, url: str) -> dict[str, object]:
         """Return websocket-client connection options for ``url`` and ``node``.
 
-        Trusted nodes are already authenticated in the Arthexis node graph, so
-        forwarding sessions to them may skip certificate verification to support
-        private PKI or self-signed deployments.
+        Parameters:
+            node: Remote node metadata for the target endpoint.
+            url: Candidate websocket URL.
+
+        Returns:
+            dict[str, object]: Keyword arguments for ``create_connection``.
+
+        WSS forwarding defaults to accepting any presented certificate so
+        private PKI and self-signed node deployments work without extra setup.
         """
 
-        if url.startswith("wss://") and getattr(node, "trusted", False):
+        del node
+        if url.startswith("wss://"):
             return {
                 "sslopt": {
                     "cert_reqs": ssl.CERT_NONE,
