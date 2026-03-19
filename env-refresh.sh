@@ -538,7 +538,9 @@ else
   PIP_SECTION_START_MS=$(now_ms)
   for req_file in "${install_targets[@]}"; do
     FILE_INSTALL_START_MS=$(now_ms)
-    if ! pip_install_with_helper "${pip_args[@]}" -r "$req_file"; then
+    if pip_install_with_helper "${pip_args[@]}" -r "$req_file"; then
+      :
+    else
       pip_status=$?
       show_pip_failure "$pip_status"
       exit "$pip_status"
