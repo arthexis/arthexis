@@ -7,7 +7,7 @@ name = "arthexis"
 version = "1.2.3"
 description = "Energy & Power Infrastructure"
 requires-python = ">=3.10,<3.14"
-license = "GPL-3.0-only"
+license = "Arthexis Contribution Reciprocity License 1.0"
 classifiers = [ "Programming Language :: Python :: 3", "Framework :: Django",]
 dependencies = [
   "amqp==5.3.1",
