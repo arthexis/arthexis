@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
@@ -13,6 +12,7 @@ from django.db import transaction
 
 from apps.tests.discovery import TestDiscoveryError, discover_suite_tests
 from apps.tests.models import SuiteTest
+from utils.python_env import resolve_project_python
 
 
 class Command(BaseCommand):
@@ -83,7 +83,7 @@ class Command(BaseCommand):
         args = list(pytest_args)
         if args and args[0] == "--":
             args = args[1:]
-        command = [sys.executable, "-m", "pytest", *args]
+        command = [resolve_project_python(self._base_dir()), "-m", "pytest", *args]
         result = subprocess.run(command, cwd=self._base_dir(), env=os.environ.copy())
         if result.returncode != 0:
             raise CommandError(f"pytest exited with status {result.returncode}")

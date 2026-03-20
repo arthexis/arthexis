@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from typing import Protocol
 
+from utils.python_env import resolve_project_python
+
 BASE_DIR = Path(__file__).resolve().parents[2]
 PREFIX = "[Test Runner]"
 
@@ -39,7 +41,7 @@ def build_pytest_command(extra_args: list[str] | None = None) -> list[str]:
         The subprocess command to execute.
     """
 
-    command = [sys.executable, "-m", "pytest"]
+    command = [resolve_project_python(BASE_DIR), "-m", "pytest"]
     if extra_args:
         command.extend(extra_args)
     return command

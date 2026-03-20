@@ -12,6 +12,8 @@ import time
 from pathlib import Path
 from typing import Protocol
 
+from utils.python_env import resolve_project_python
+
 BASE_DIR = Path(__file__).resolve().parents[2]
 PREFIX = "[Migration Runner]"
 DEFAULT_WATCH_DIRS = ("apps", "config", "utils")
@@ -69,7 +71,7 @@ def build_migration_command(extra_args: list[str] | None = None) -> list[str]:
         The subprocess command to execute.
     """
 
-    command = [sys.executable, "manage.py", "migrate"]
+    command = [resolve_project_python(BASE_DIR), "manage.py", "migrate"]
     if extra_args:
         command.extend(extra_args)
     return command
@@ -82,7 +84,13 @@ def build_merge_command() -> list[str]:
         The subprocess command for automatic migration merging.
     """
 
-    return [sys.executable, "manage.py", "makemigrations", "--merge", "--noinput"]
+    return [
+        resolve_project_python(BASE_DIR),
+        "manage.py",
+        "makemigrations",
+        "--merge",
+        "--noinput",
+    ]
 
 
 def _build_popen_kwargs() -> dict[str, object]:
