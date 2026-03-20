@@ -102,8 +102,12 @@ def _build_popen_kwargs() -> dict[str, object]:
 
     creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", None)
     if sys.platform == "win32" and creationflags is not None:
+        # Keep migration subprocess in its own process group so debugger-level
+        # Ctrl+C signals do not interrupt import-time startup unexpectedly.
         popen_kwargs["creationflags"] = creationflags
     elif sys.platform != "win32":
+        # On POSIX, start a new session to avoid debugger-level Ctrl+C signals
+        # propagating into this subprocess during startup.
         popen_kwargs["start_new_session"] = True
 
     return popen_kwargs
@@ -249,7 +253,7 @@ def _iter_watch_files() -> list[Path]:
 
         for dirpath, dirs, filenames in os.walk(root, topdown=True):
             dirs[:] = [
-                dir_name for dir_name in dirs if dir_name not in WATCH_IGNORE_DIRS
+                candidate for candidate in dirs if candidate not in WATCH_IGNORE_DIRS
             ]
             for filename in filenames:
                 if filename.endswith(WATCH_FILE_SUFFIXES):

@@ -16,6 +16,8 @@ from apps.tests.discovery import (
 )
 from apps.tests.models import SuiteTest
 
+pytestmark = pytest.mark.pr_origin(6302)
+
 
 def test_test_command_rejects_unknown_action() -> None:
     """Regression: unsupported actions should raise a command error."""
