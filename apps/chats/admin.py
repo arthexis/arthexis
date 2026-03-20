@@ -16,6 +16,13 @@ class ChatAvatarAdmin(OwnableAdminMixin, admin.ModelAdmin):
 
     @admin.display(description=_("Owner"))
     def owner_display(self, obj):
-        """Return the avatar owner display string for the changelist."""
+        """Return the owner label shown for a chat avatar in admin lists.
+
+        Parameters:
+            obj (ChatAvatar): Avatar instance being rendered in the changelist.
+
+        Returns:
+            str: Owner display text returned by the avatar instance.
+        """
 
         return obj.owner_display()

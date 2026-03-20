@@ -20,7 +20,18 @@ _PERMISSION_NAMES = {
 
 
 def _delete_social_profile_content_types(apps, schema_editor):
-    """Remove auth metadata for the deleted socials profile models."""
+    """Remove auth metadata for deleted socials profile models.
+
+    Parameters:
+        apps (StateApps): Historical app registry supplied by Django migrations.
+        schema_editor (BaseDatabaseSchemaEditor): Active migration schema editor.
+
+    Returns:
+        None.
+
+    Raises:
+        Exception: Propagates migration database errors from Django ORM operations.
+    """
 
     Permission = apps.get_model("auth", "Permission")
     ContentType = apps.get_model("contenttypes", "ContentType")
@@ -37,7 +48,18 @@ def _delete_social_profile_content_types(apps, schema_editor):
 
 
 def _restore_social_profile_content_types(apps, schema_editor):
-    """Recreate auth metadata for rollback to the socials profile models."""
+    """Recreate auth metadata when rolling back socials profile deletions.
+
+    Parameters:
+        apps (StateApps): Historical app registry supplied by Django migrations.
+        schema_editor (BaseDatabaseSchemaEditor): Active migration schema editor.
+
+    Returns:
+        None.
+
+    Raises:
+        Exception: Propagates migration database errors from Django ORM operations.
+    """
 
     Permission = apps.get_model("auth", "Permission")
     ContentType = apps.get_model("contenttypes", "ContentType")
