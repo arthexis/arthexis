@@ -263,8 +263,6 @@ apps/reports/tests/test_admin.py::test_sql_report_product_admin_has_no_delete_pe
 apps/reports/tests/test_admin.py::test_sql_report_product_inline_has_no_add_permission
 apps/aws/tests/test_admin.py::test_credentials_tool_action_rejects_get
 apps/aws/tests/test_admin.py::test_instance_tool_action_rejects_get
-apps/bluetooth/tests/test_admin.py::test_discover_page_defaults_timeout_to_60_seconds
-apps/bluetooth/tests/test_admin.py::test_discover_post_uses_60_seconds_when_timeout_missing
 apps/repos/tests/test_admin.py::test_github_token_admin_add_page_loads
 apps/summary/tests/test_admin.py::test_wizard_uses_single_title_and_breadcrumbs
 apps/summary/tests/test_admin.py::test_wizard_initial_timeout_uses_saved_suite_parameter
