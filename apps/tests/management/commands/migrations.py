@@ -15,7 +15,9 @@ class Command(BaseCommand):
         """Configure CLI options and migration subcommands."""
 
         subparsers = parser.add_subparsers(dest="action")
-        parser.set_defaults(action="run", database="default", app_label=None, migration_name=None)
+        parser.set_defaults(
+            action="run", database="default", app_label=None, migration_name=None
+        )
 
         run_parser = subparsers.add_parser("run", help="Run Django migrations.")
         run_parser.add_argument("app_label", nargs="?")
@@ -102,7 +104,7 @@ class Command(BaseCommand):
     def _run_migration_server(self, options: dict[str, object]) -> None:
         """Run the VS Code migration server watcher."""
 
-        from apps.vscode import migration_server
+        from utils.devtools import migration_server
 
         argv = ["--interval", str(options["interval"])]
         argv.append("--latest" if options["latest"] else "--no-latest")

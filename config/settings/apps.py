@@ -84,7 +84,6 @@ LEGACY_MIGRATION_APPS = [
 NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",
     "apps.loggers",
-    "apps.vscode",
 }
 
 

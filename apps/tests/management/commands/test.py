@@ -88,10 +88,12 @@ class Command(BaseCommand):
         if result.returncode != 0:
             raise CommandError(f"pytest exited with status {result.returncode}")
 
-    def _run_test_server(self, *, interval: float, debounce: float, latest: bool) -> None:
+    def _run_test_server(
+        self, *, interval: float, debounce: float, latest: bool
+    ) -> None:
         """Start the long-running VS Code test server."""
 
-        from apps.vscode import test_server
+        from utils.devtools import test_server
 
         argv = ["--interval", str(interval), "--debounce", str(debounce)]
         argv.append("--latest" if latest else "--no-latest")

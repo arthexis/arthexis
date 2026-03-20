@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run pytest once for VS Code launcher workflows."""
+"""Run pytest once for developer launcher workflows."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ PREFIX = "[Test Runner]"
 
 
 class ProcessLike(Protocol):
-    """Protocol for subprocess handles used by the VS Code launcher."""
+    """Protocol for subprocess handles used by the developer test launcher."""
 
     def wait(self) -> int:
         """Wait for the process and return its exit code."""
@@ -30,7 +30,14 @@ class ProcessLike(Protocol):
 
 
 def build_pytest_command(extra_args: list[str] | None = None) -> list[str]:
-    """Build the command used to execute pytest."""
+    """Build the command used to execute pytest.
+
+    Args:
+        extra_args: Optional extra CLI arguments forwarded to pytest.
+
+    Returns:
+        The subprocess command to execute.
+    """
 
     command = [sys.executable, "-m", "pytest"]
     if extra_args:
@@ -39,7 +46,11 @@ def build_pytest_command(extra_args: list[str] | None = None) -> list[str]:
 
 
 def _build_subprocess_env() -> dict[str, str]:
-    """Build subprocess environment with debug mode disabled for test runs."""
+    """Build subprocess environment with debug mode disabled for test runs.
+
+    Returns:
+        Environment variables for the pytest subprocess.
+    """
 
     env = dict(os.environ)
     env["DEBUG"] = "0"
@@ -48,22 +59,42 @@ def _build_subprocess_env() -> dict[str, str]:
 
 
 def _run_notification_command(command: list[str]) -> None:
-    """Execute a desktop notification command in a best-effort manner."""
+    """Execute a desktop notification command in a best-effort manner.
+
+    Args:
+        command: Notification subprocess command.
+
+    Returns:
+        None.
+
+    Raises:
+        No exception is raised when the OS command is unavailable.
+    """
 
     try:
         subprocess.run(command, check=False, capture_output=True, text=True)
     except OSError:
-        # Notification support is optional in developer environments.
         return
 
 
 def send_desktop_notification(return_code: int) -> None:
-    """Send a desktop notification when a test run completes, if supported."""
+    """Send a desktop notification when a test run completes, if supported.
+
+    Args:
+        return_code: Exit code from pytest.
+
+    Returns:
+        None.
+    """
 
     system = platform.system()
     status = "passed" if return_code == 0 else "failed"
     title = f"{PREFIX} Tests {status}"
-    message = "Pytest finished successfully." if return_code == 0 else f"Pytest exited with code {return_code}."
+    message = (
+        "Pytest finished successfully."
+        if return_code == 0
+        else f"Pytest exited with code {return_code}."
+    )
 
     if system == "Linux":
         if shutil.which("notify-send"):
@@ -90,12 +121,21 @@ def send_desktop_notification(return_code: int) -> None:
 
 
 def run_tests(extra_args: list[str] | None = None) -> int:
-    """Run pytest and return the subprocess exit code."""
+    """Run pytest and return the subprocess exit code.
+
+    Args:
+        extra_args: Optional extra CLI arguments forwarded to pytest.
+
+    Returns:
+        The pytest subprocess exit code.
+    """
 
     command = build_pytest_command(extra_args)
     print(f"{PREFIX} Running: {' '.join(command)}")
 
-    process: ProcessLike = subprocess.Popen(command, cwd=BASE_DIR, env=_build_subprocess_env())
+    process: ProcessLike = subprocess.Popen(
+        command, cwd=BASE_DIR, env=_build_subprocess_env()
+    )
     try:
         return_code = process.wait()
     except KeyboardInterrupt:
@@ -125,7 +165,14 @@ def run_tests(extra_args: list[str] | None = None) -> int:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse launcher arguments for a one-shot pytest run."""
+    """Parse launcher arguments for a one-shot pytest run.
+
+    Args:
+        argv: Optional CLI arguments to parse.
+
+    Returns:
+        Parsed command-line arguments.
+    """
 
     parser = argparse.ArgumentParser(description="Run pytest once.")
     parser.add_argument(
@@ -162,7 +209,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for VS Code test launcher tasks."""
+    """CLI entry point for developer test launcher tasks.
+
+    Args:
+        argv: Optional CLI arguments.
+
+    Returns:
+        Process exit code for the pytest run.
+    """
 
     args = parse_args(argv)
     extra_args = args.extra_args

@@ -39,21 +39,12 @@ Use `@pytest.mark.regression` for tests that guard against reported regressions.
 Regression tests should run in standard CI pipelines and whenever regression-focused local filtering is applied.
 
 
-## Segmented marker groups in `apps/vscode/test_server.py`
+## Local test launcher behavior
 
-When running the local segmented test runner (`apps/vscode/test_server.py`),
-marker groups are intentionally mutually exclusive to prevent duplicate test
-execution across segments:
-
-- `critical`: `critical`
-- `slow`: `slow and not critical`
-- `integration`: `integration and not critical and not slow`
-- `unmarked`: `not critical and not integration and not slow`
-
-This means critical tests are isolated into the first segment, slow tests only
-run in the slow segment when they are not already critical, and integration
-tests that are also marked slow are executed in the slow group. Unmarked tests
-run only in the final fallback segment.
+The developer launcher at `utils/devtools/test_server.py` now executes a single
+pytest run. The legacy segmented marker-group runner is no longer part of this
+entrypoint, so local runs from that module behave the same as invoking `pytest`
+with the provided extra arguments.
 
 ## Local filtering
 
