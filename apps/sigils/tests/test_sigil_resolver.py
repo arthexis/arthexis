@@ -169,6 +169,34 @@ def test_resolve_sigils_entity_aggregate_total_for_field(user_root):
 
 
 @pytest.mark.django_db
+def test_resolve_sigils_explicit_entity_miss_preserves_placeholder(user_root):
+    result = sigil_resolver.resolve_sigils("[USR=missing.email]")
+
+    assert result == "[USR=missing.email]"
+
+
+@pytest.mark.django_db
+def test_resolve_sigils_entity_manager_dispatch_ignores_unrelated_current(user_root):
+    user_model = get_user_model()
+    user_model.objects.create(username="alpha")
+    user_model.objects.create(username="bravo")
+    role = NodeRole.objects.create(name="Manager Dispatch")
+    current_node = Node.objects.create(
+        hostname="dispatch-001",
+        address="127.0.0.3",
+        mac_address="00:11:22:33:44:77",
+        port=7777,
+        public_endpoint="dispatch-001",
+        role=role,
+    )
+
+    result = sigil_resolver.resolve_sigils("[USR=all]", current=current_node)
+
+    assert "alpha" in result
+    assert "bravo" in result
+
+
+@pytest.mark.django_db
 def test_resolve_sigils_conf_looks_up_settings_value(settings):
     SigilRoot.objects.update_or_create(
         prefix="CONF", defaults={"context_type": SigilRoot.Context.CONFIG}

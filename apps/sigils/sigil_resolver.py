@@ -87,7 +87,32 @@ def _get_sigil_root(prefix: str) -> Optional[SigilRoot]:
 
 @lru_cache(maxsize=256)
 def _model_field_map(model: type[models.Model]) -> dict[str, models.Field]:
+    """Return a case-insensitive mapping of model field names to fields.
+
+    Args:
+        model: Django model class to introspect.
+
+    Returns:
+        A dictionary keyed by lowercase field name.
+    """
     return {field.name.lower(): field for field in model._meta.fields}
+
+
+@lru_cache(maxsize=256)
+def _unique_char_fields(model: type[models.Model]) -> tuple[str, ...]:
+    """Return unique character field names for fallback entity lookups.
+
+    Args:
+        model: Django model class to introspect.
+
+    Returns:
+        A tuple of unique ``CharField`` names that support case-insensitive fallback lookup.
+    """
+    return tuple(
+        field.name
+        for field in model._meta.fields
+        if field.unique and isinstance(field, models.CharField)
+    )
 
 
 def _candidate_names(name: str) -> list[str]:
@@ -162,66 +187,129 @@ def _aggregate_values(values: Iterable[float], func: str) -> Optional[str]:
     return str(sum(collected))
 
 
+def _parse_root_name(token: str, index: int) -> tuple[str, int]:
+    """Parse the sigil root name from the current token offset.
+
+    Args:
+        token: Raw token text without surrounding brackets.
+        index: Starting offset within ``token``.
+
+    Returns:
+        A tuple containing the parsed root name and the next unread offset.
+
+    Raises:
+        TokenParseError: If the token does not start with a root name.
+    """
+    start = index
+    while index < len(token) and token[index] not in ":=.":
+        index += 1
+    root_name = token[start:index]
+    if not root_name:
+        raise TokenParseError("Sigil token is missing a root name")
+    return root_name, index
+
+
+def _parse_filter_field(token: str, index: int) -> tuple[str | None, int]:
+    """Parse an optional ``:filter`` segment from a sigil token.
+
+    Args:
+        token: Raw token text without surrounding brackets.
+        index: Current offset immediately after the root name.
+
+    Returns:
+        A tuple containing the normalized filter field, if present, and the next unread offset.
+
+    Raises:
+        TokenParseError: If a filter segment is started but no instance identifier follows it.
+    """
+    if index >= len(token) or token[index] != ":":
+        return None, index
+
+    index += 1
+    start = index
+    while index < len(token) and token[index] != "=":
+        index += 1
+    if index == len(token):
+        raise TokenParseError("Sigil token filter is missing an instance identifier")
+    return token[start:index].replace("-", "_"), index
+
+
+def _parse_instance_id(token: str, index: int) -> tuple[str | None, int]:
+    """Parse an optional ``=instance`` segment, honoring nested sigils.
+
+    Args:
+        token: Raw token text without surrounding brackets.
+        index: Current offset after any filter segment.
+
+    Returns:
+        A tuple containing the parsed instance identifier, if present, and the next unread offset.
+
+    Raises:
+        TokenParseError: This helper does not currently raise parsing errors.
+    """
+    if index >= len(token) or token[index] != "=":
+        return None, index
+
+    index += 1
+    start = index
+    depth = 0
+    while index < len(token):
+        char = token[index]
+        if char == "[":
+            depth += 1
+        elif char == "]" and depth:
+            depth -= 1
+        elif char == "." and depth == 0:
+            break
+        index += 1
+    return token[start:index], index
+
+
+def _parse_key_and_param(token: str, index: int) -> tuple[str | None, str | None, int]:
+    """Parse optional ``.key`` and ``=param`` segments from a sigil token.
+
+    Args:
+        token: Raw token text without surrounding brackets.
+        index: Current offset after any instance identifier.
+
+    Returns:
+        A tuple containing the key, parameter, and next unread offset.
+
+    Raises:
+        TokenParseError: This helper does not currently raise parsing errors.
+    """
+    key = None
+    if index < len(token) and token[index] == ".":
+        index += 1
+        start = index
+        while index < len(token) and token[index] != "=":
+            index += 1
+        key = token[start:index]
+
+    param = None
+    if index < len(token) and token[index] == "=":
+        param = token[index + 1 :]
+        index = len(token)
+
+    return key, param, index
+
+
 def _parse_token_parts(token: str) -> SigilTokenParts:
-    """Parse a sigil token into root, filter field, instance id, key, and param parts.
+    """Parse a sigil token into normalized resolver parts.
 
     Args:
         token: Raw token text without surrounding brackets.
 
     Returns:
-        A tuple-like container with root name, filter field, instance id, key, and param.
+        Parsed root, filter field, instance identifier, key, and parameter values.
 
     Raises:
-        TokenParseError: If the token is missing a root name or contains an incomplete filter.
+        TokenParseError: If the token is malformed and cannot be decomposed.
     """
-    i = 0
-    n = len(token)
-    root_name = ""
-    while i < n and token[i] not in ":=.":
-        root_name += token[i]
-        i += 1
-    if not root_name:
-        raise TokenParseError("Sigil token is missing a root name")
-
-    filter_field = None
-    if i < n and token[i] == ":":
-        i += 1
-        field = ""
-        while i < n and token[i] != "=":
-            field += token[i]
-            i += 1
-        if i == n:
-            raise TokenParseError("Sigil token filter is missing an instance identifier")
-        filter_field = field.replace("-", "_")
-
-    instance_id = None
-    if i < n and token[i] == "=":
-        i += 1
-        start = i
-        depth = 0
-        while i < n:
-            ch = token[i]
-            if ch == "[":
-                depth += 1
-            elif ch == "]" and depth:
-                depth -= 1
-            elif ch == "." and depth == 0:
-                break
-            i += 1
-        instance_id = token[start:i]
-
-    key = None
-    if i < n and token[i] == ".":
-        i += 1
-        start = i
-        while i < n and token[i] != "=":
-            i += 1
-        key = token[start:i]
-
-    param = None
-    if i < n and token[i] == "=":
-        param = token[i + 1 :]
-
+    root_name, index = _parse_root_name(token, 0)
+    filter_field, index = _parse_filter_field(token, index)
+    instance_id, index = _parse_instance_id(token, index)
+    key, param, index = _parse_key_and_param(token, index)
     return SigilTokenParts(root_name, filter_field, instance_id, key, param)
 
 
@@ -313,66 +401,129 @@ def _resolve_instance_value(instance, model, key_name: str, key_lower: str, raw_
     return None
 
 
+def _resolve_env_value(normalized_key: str | None, key_upper: str | None, key_lower: str | None, raw_key: str | None, original_token: str) -> str:
+    """Resolve an ``ENV`` sigil from process environment variables.
+
+    Args:
+        normalized_key: Hyphen-normalized token key.
+        key_upper: Uppercase normalized key.
+        key_lower: Lowercase normalized key.
+        raw_key: Original token key text.
+        original_token: Token used for degraded failure output.
+
+    Returns:
+        The resolved environment variable value or the degraded placeholder.
+    """
+    candidates = []
+    if raw_key:
+        candidates.append(raw_key.replace("-", "_"))
+    if normalized_key:
+        candidates.append(normalized_key)
+    if key_upper:
+        candidates.append(key_upper)
+    if key_lower:
+        candidates.append(key_lower)
+    seen_candidates: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen_candidates:
+            continue
+        seen_candidates.add(candidate)
+        value = os.environ.get(candidate)
+        if value is not None:
+            return value
+    logger.warning(
+        "Missing environment variable for sigil [ENV.%s]",
+        key_upper or normalized_key or raw_key or "",
+    )
+    return _failed_resolution(original_token)
+
+
+def _resolve_conf_value(normalized_key: str | None, key_upper: str | None, key_lower: str | None) -> str:
+    """Resolve a ``CONF`` sigil from Django settings.
+
+    Args:
+        normalized_key: Hyphen-normalized token key.
+        key_upper: Uppercase normalized key.
+        key_lower: Lowercase normalized key.
+
+    Returns:
+        The resolved setting value as a string, or an empty string when absent.
+    """
+    for candidate in [normalized_key, key_upper, key_lower]:
+        if not candidate:
+            continue
+        sentinel = object()
+        value = getattr(settings, candidate, sentinel)
+        if value is not sentinel:
+            return str(value)
+    return ""
+
+
+def _resolve_sys_value(normalized_key: str | None, key_upper: str | None, raw_key: str | None, original_token: str) -> str:
+    """Resolve a ``SYS`` sigil from cached or computed system metadata.
+
+    Args:
+        normalized_key: Hyphen-normalized token key.
+        key_upper: Uppercase normalized key.
+        raw_key: Original token key text.
+        original_token: Token used for degraded failure output.
+
+    Returns:
+        The resolved system value or the degraded placeholder.
+    """
+    values = get_system_sigil_values()
+    candidates = [candidate for candidate in [key_upper, (raw_key or "").upper()] if candidate]
+    for candidate in candidates:
+        if candidate in values:
+            return values[candidate]
+        resolved = resolve_system_namespace_value(candidate)
+        if resolved is not None:
+            return resolved
+    logger.warning(
+        "Missing system information for sigil [SYS.%s]",
+        key_upper or normalized_key or raw_key or "",
+    )
+    return _failed_resolution(original_token)
+
+
 def _resolve_config_value(root, normalized_key: str | None, key_upper: str | None, key_lower: str | None, raw_key: str | None, original_token: str) -> str:
-    """Resolve configuration-backed sigils, including ENV, CONF, and SYS namespaces."""
+    """Resolve configuration-backed sigils, including ENV, CONF, and SYS namespaces.
+
+    Args:
+        root: Matching ``SigilRoot`` configuration.
+        normalized_key: Hyphen-normalized token key.
+        key_upper: Uppercase normalized key.
+        key_lower: Lowercase normalized key.
+        raw_key: Original token key text.
+        original_token: Token used for degraded failure output.
+
+    Returns:
+        The resolved configuration value, an empty string for optional misses, or the degraded placeholder.
+    """
     if not normalized_key:
         return ""
-    if root.prefix.upper() == "ENV":
-        candidates = []
-        if raw_key:
-            candidates.append(raw_key.replace("-", "_"))
-        if normalized_key:
-            candidates.append(normalized_key)
-        if key_upper:
-            candidates.append(key_upper)
-        if key_lower:
-            candidates.append(key_lower)
-        seen_candidates: set[str] = set()
-        for candidate in candidates:
-            if not candidate or candidate in seen_candidates:
-                continue
-            seen_candidates.add(candidate)
-            value = os.environ.get(candidate)
-            if value is not None:
-                return value
-        logger.warning(
-            "Missing environment variable for sigil [ENV.%s]",
-            key_upper or normalized_key or raw_key or "",
-        )
-        return _failed_resolution(original_token)
-    if root.prefix.upper() == "CONF":
-        for candidate in [normalized_key, key_upper, key_lower]:
-            if not candidate:
-                continue
-            sentinel = object()
-            value = getattr(settings, candidate, sentinel)
-            if value is not sentinel:
-                return str(value)
-        return ""
-    if root.prefix.upper() == "SYS":
-        values = get_system_sigil_values()
-        candidates = {
-            key_upper,
-            (raw_key or "").upper(),
-        }
-        for candidate in candidates:
-            if not candidate:
-                continue
-            if candidate in values:
-                return values[candidate]
-            resolved = resolve_system_namespace_value(candidate)
-            if resolved is not None:
-                return resolved
-        logger.warning(
-            "Missing system information for sigil [SYS.%s]",
-            key_upper or normalized_key or raw_key or "",
-        )
-        return _failed_resolution(original_token)
+    prefix = root.prefix.upper()
+    if prefix == "ENV":
+        return _resolve_env_value(normalized_key, key_upper, key_lower, raw_key, original_token)
+    if prefix == "CONF":
+        return _resolve_conf_value(normalized_key, key_upper, key_lower)
+    if prefix == "SYS":
+        return _resolve_sys_value(normalized_key, key_upper, raw_key, original_token)
     return _failed_resolution(original_token)
 
 
 def _resolve_request_root(normalized_key: str | None, raw_key: str | None, param: str | None, param_args: list[str]) -> str:
-    """Resolve request-context sigils from the current request."""
+    """Resolve request-context sigils from the current request.
+
+    Args:
+        normalized_key: Hyphen-normalized token key.
+        raw_key: Original token key text.
+        param: Raw parameter text from the token.
+        param_args: Resolved parameter arguments for callable-style request lookups.
+
+    Returns:
+        The resolved request-derived value as a string.
+    """
     if not normalized_key:
         return ""
     request = get_request()
@@ -381,7 +532,19 @@ def _resolve_request_root(normalized_key: str | None, raw_key: str | None, param
 
 
 def _resolve_dynamic_root(instance, normalized_key: str | None, key_lower: str | None, raw_key: str | None, param_args: list[str], original_token: str) -> str:
-    """Resolve sigils against the dynamic current object."""
+    """Resolve sigils against the dynamic current object.
+
+    Args:
+        instance: Current model instance supplied to resolution.
+        normalized_key: Hyphen-normalized token key.
+        key_lower: Lowercase normalized key.
+        raw_key: Original token key text.
+        param_args: Resolved positional arguments for callable attributes.
+        original_token: Token used for degraded failure output.
+
+    Returns:
+        A resolved string value or serialized instance payload.
+    """
     if normalized_key:
         resolved = _resolve_instance_value(
             instance,
@@ -398,7 +561,20 @@ def _resolve_dynamic_root(instance, normalized_key: str | None, key_lower: str |
 
 
 def _resolve_entity_instance(model, instance, normalized_key: str | None, key_lower: str | None, raw_key: str | None, param_args: list[str], original_token: str) -> str:
-    """Resolve a sigil against a specific entity instance or serialize that instance."""
+    """Resolve a sigil against a specific entity instance or serialize that instance.
+
+    Args:
+        model: Django model class for the instance.
+        instance: Concrete model instance being resolved.
+        normalized_key: Hyphen-normalized token key.
+        key_lower: Lowercase normalized key.
+        raw_key: Original token key text.
+        param_args: Resolved positional arguments for callable attributes.
+        original_token: Token used for degraded failure output.
+
+    Returns:
+        A resolved string value or serialized instance payload.
+    """
     if normalized_key:
         resolved = _resolve_instance_value(
             instance,
@@ -415,7 +591,16 @@ def _resolve_entity_instance(model, instance, normalized_key: str | None, key_lo
 
 
 def _parse_aggregate_request(filter_field: str | None, instance_id: str | None, normalized_key: str | None):
-    """Parse entity aggregate syntax expressed as ``target:function`` in the instance slot."""
+    """Parse entity aggregate syntax expressed as ``target:function`` in the instance slot.
+
+    Args:
+        filter_field: Optional named lookup field from the token.
+        instance_id: Optional instance selector that may encode an aggregate request.
+        normalized_key: Hyphen-normalized token key.
+
+    Returns:
+        A tuple of aggregate target and aggregate function, or ``(None, None)`` when not applicable.
+    """
     if filter_field or instance_id is None or normalized_key is not None or ":" not in instance_id:
         return None, None
     aggregate_target, aggregate_func = instance_id.split(":", 1)
@@ -478,7 +663,20 @@ def _resolve_entity_aggregate(model, aggregate_target: str | None, aggregate_fun
 
 
 def _resolve_entity_lookup(model, filter_field: str | None, instance_id: str | None, current: Optional[models.Model]):
-    """Resolve the target entity instance from explicit ids or ambient context."""
+    """Resolve the target entity instance from explicit selectors or ambient context.
+
+    Args:
+        model: Target Django model class.
+        filter_field: Optional named field used for lookup.
+        instance_id: Optional explicit instance selector from the token.
+        current: Optional ambient current model instance.
+
+    Returns:
+        A matching model instance, or ``None`` when nothing resolves.
+
+    Raises:
+        FieldError: Caught internally when malformed lookups reach the ORM.
+    """
     instance = None
     if model is None:
         return None
@@ -505,15 +703,14 @@ def _resolve_entity_lookup(model, filter_field: str | None, instance_id: str | N
                 instance = None
 
     if instance is None and instance_id and not filter_field:
-        for field in model._meta.fields:
-            if field.unique and isinstance(field, models.CharField):
-                instance = model.objects.filter(**{f"{field.name}__iexact": instance_id}).first()
-                if instance:
-                    break
+        for field_name in _unique_char_fields(model):
+            instance = model.objects.filter(**{f"{field_name}__iexact": instance_id}).first()
+            if instance:
+                break
 
-    if instance is None and current and isinstance(current, model):
+    if instance is None and instance_id is None and current and isinstance(current, model):
         instance = current
-    if instance is None:
+    if instance is None and instance_id is None:
         ctx = get_context()
         inst_pk = ctx.get(model)
         if inst_pk is not None:
@@ -522,7 +719,22 @@ def _resolve_entity_lookup(model, filter_field: str | None, instance_id: str | N
 
 
 def _resolve_entity_root(root, filter_field: str | None, instance_id: str | None, normalized_key: str | None, key_lower: str | None, raw_key: str | None, param_args: list[str], current: Optional[models.Model], original_token: str) -> str:
-    """Resolve entity-context sigils for model instances, aggregates, and manager dispatch."""
+    """Resolve entity-context sigils for model instances, aggregates, and manager dispatch.
+
+    Args:
+        root: Matching ``SigilRoot`` configuration.
+        filter_field: Optional named field used for lookup.
+        instance_id: Optional explicit instance selector from the token.
+        normalized_key: Hyphen-normalized token key.
+        key_lower: Lowercase normalized key.
+        raw_key: Original token key text.
+        param_args: Resolved positional arguments for callable attributes.
+        current: Optional ambient current model instance.
+        original_token: Token used for degraded failure output.
+
+    Returns:
+        The resolved entity value, serialized data, or degraded placeholder.
+    """
     model = root.content_type.model_class() if root.content_type else None
     if model is None:
         return _failed_resolution(original_token)
