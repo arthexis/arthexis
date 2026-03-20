@@ -33,6 +33,15 @@ def _is_private_package_path(path: Path) -> bool:
     return any(part.startswith((".", "_")) for part in path.parts)
 
 
+def _has_django_app_marker(path: Path, marker: str) -> bool:
+    """Return whether *path* contains a discovery marker for a conventional Django app."""
+
+    marker_path = path / marker
+    if marker == "migrations":
+        return (marker_path / "__init__.py").exists()
+    return marker_path.exists()
+
+
 def _is_django_app_dir(path: Path) -> bool:
     """Return whether the given directory looks like a conventional Django app package."""
 
@@ -57,7 +66,7 @@ def _is_django_app_dir(path: Path) -> bool:
         return False
 
     return any(
-        (path / marker).exists()
+        _has_django_app_marker(path, marker)
         for marker in ("models.py", "admin.py", "migrations", "templates", "static")
     )
 
@@ -68,7 +77,10 @@ def _to_module_path(path: Path) -> str:
     return f"apps.{'.'.join(path.relative_to(APPS_DIR).parts)}"
 
 
-LEGACY_MIGRATION_APPS = ["apps.selenium"]
+LEGACY_MIGRATION_APPS = [
+    "apps._legacy.fitbit_migration_only.apps.FitbitMigrationOnlyConfig",
+    "apps.selenium",
+]
 NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",
     "apps.loggers",
