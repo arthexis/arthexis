@@ -4,6 +4,8 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
+    """Create the legacy Mermaid Flow table."""
+
 
     initial = True
 
