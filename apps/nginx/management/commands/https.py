@@ -40,12 +40,12 @@ class Command(BaseCommand):
         action_group.add_argument(
             "--enable",
             action="store_true",
-            help="Enable HTTPS and apply nginx configuration.",
+            help="Enable HTTPS and apply the managed nginx configuration.",
         )
         action_group.add_argument(
             "--disable",
             action="store_true",
-            help="Disable HTTPS and apply nginx configuration.",
+            help="Disable HTTPS and apply the managed nginx configuration.",
         )
         action_group.add_argument(
             "--renew",

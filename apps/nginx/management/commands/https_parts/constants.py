@@ -14,6 +14,6 @@ CERTBOT_HTTP01_BOOTSTRAP_MESSAGE = (
     "Arthexis attempted to stage and apply an HTTP site configuration automatically before requesting the certificate."
 )
 NGINX_CONFIGURE_REMEDIATION_TEMPLATE = (
-    "If nginx is not managed on this node yet, run '{command} nginx-configure' to bootstrap it, "
-    "then re-run this https command."
+    "Run '{command} nginx --configure' to bootstrap nginx management on this node, "
+    "then rerun the HTTPS command."
 )

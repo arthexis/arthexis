@@ -114,9 +114,9 @@ def _apply_config(service, config: SiteConfiguration, *, reload: bool) -> None:
     service.stdout.write(service.style.SUCCESS(result.message))
     if not result.validated:
         service.stdout.write(
-            "nginx configuration applied but validation was skipped or failed."
+            "nginx applied the configuration, but validation was skipped or failed."
         )
     if not result.reloaded:
         service.stdout.write(
-            "nginx reload/start did not complete automatically; check the service status."
+            "nginx was not reloaded automatically; check the service status."
         )
