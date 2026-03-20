@@ -80,7 +80,6 @@ def _to_module_path(path: Path) -> str:
 LEGACY_MIGRATION_APPS = ["apps.selenium", "config.legacy_mermaid"]
 NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",
-    "apps.loggers",
 }
 
 

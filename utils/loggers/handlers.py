@@ -10,8 +10,8 @@ from pathlib import Path
 from django.conf import settings
 
 from config.active_app import get_active_app
-from apps.loggers.filenames import normalize_log_filename
-from apps.loggers.rotation import ArchiveTimedRotatingFileHandler
+from utils.loggers.filenames import normalize_log_filename
+from utils.loggers.rotation import ArchiveTimedRotatingFileHandler
 
 
 class ActiveAppFileHandler(ArchiveTimedRotatingFileHandler):
