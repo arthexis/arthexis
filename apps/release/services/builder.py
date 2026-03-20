@@ -225,7 +225,36 @@ def run_tests(
     return proc
 
 
+def _pep639_license_metadata(license_name: str) -> dict[str, object]:
+    """Return PEP 639-compatible metadata for a package license string.
+
+    Parameters:
+        license_name: Human-readable package license name.
+
+    Returns:
+        Mapping of ``project`` metadata keys for the license declaration.
+    """
+
+    if license_name == "Arthexis Contribution Reciprocity License 1.0":
+        return {
+            "license": "LicenseRef-ArthexisReciprocity",
+            "license-files": ["LICENSE"],
+        }
+    return {"license": license_name}
+
+
 def _write_pyproject(package: Package, version: str, requirements: list[str]) -> None:
+    """Write a buildable ``pyproject.toml`` for the release package.
+
+    Parameters:
+        package: Package metadata to publish.
+        version: Package version string.
+        requirements: Package dependency specifiers.
+
+    Returns:
+        None.
+    """
+
     setuptools_config = {
         "packages": {"find": {"where": ["."]}},
         "include-package-data": True,
@@ -243,7 +272,7 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
             "description": package.description,
             "readme": {"file": "README.md", "content-type": "text/markdown"},
             "requires-python": package.python_requires,
-            "license": package.license,
+            **_pep639_license_metadata(package.license),
             "authors": [{"name": package.author, "email": package.email}],
             "classifiers": [
                 "Programming Language :: Python :: 3",
