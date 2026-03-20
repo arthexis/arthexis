@@ -109,15 +109,6 @@ Agents must run relevant tests after code changes.
 * Each **feature should have a test**.
 * Prefer **quality over quantity** of tests.
 * Do **not create tests solely to validate styling**.
-* Apply required marks to tag the PR of origin.
-
-Example:
-
-```python
-@pytest.mark.pr_origin(6172)
-def test_my_feature():
-    ...
-```
 
 Styling will be validated through previews.
 
