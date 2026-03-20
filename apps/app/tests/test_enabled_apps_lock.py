@@ -89,8 +89,9 @@ def test_load_manifest_app_entries_includes_classification_projects_special_shor
     expected_apps = {
         "apps.classification",
         "apps.projects",
-        "apps.special",
         "apps.shortcuts",
+        "apps.special",
     }
 
     assert expected_apps.issubset(manifest_app_entries)
+    assert "apps.game" not in manifest_app_entries
