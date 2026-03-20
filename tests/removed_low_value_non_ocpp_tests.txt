@@ -313,11 +313,11 @@ apps/playwright/tests/test_preview_command.py::test_playwright_runtime_help_for_
 apps/playwright/tests/test_preview_command.py::test_validate_login_success_allows_non_login_url
 apps/playwright/tests/test_preview_command.py::test_validate_login_success_compares_paths_correctly
 apps/playwright/tests/test_preview_command.py::test_validate_login_success_rejects_login_page_url
-apps/vscode/tests/test_test_server.py::test_run_tests_triggers_desktop_notification
-apps/vscode/tests/test_test_server.py::test_send_desktop_notification_escapes_quotes
-apps/vscode/tests/test_test_server.py::test_send_desktop_notification_linux_uses_notify_send
-apps/vscode/tests/test_test_server.py::test_send_desktop_notification_platform_commands
-apps/vscode/tests/test_test_server.py::test_send_desktop_notification_unsupported_platform_is_noop
+utils/devtools/test_server.py::test_run_tests_triggers_desktop_notification
+utils/devtools/test_server.py::test_send_desktop_notification_escapes_quotes
+utils/devtools/test_server.py::test_send_desktop_notification_linux_uses_notify_send
+utils/devtools/test_server.py::test_send_desktop_notification_platform_commands
+utils/devtools/test_server.py::test_send_desktop_notification_unsupported_platform_is_noop
 
 Removed 50 additional low-value tests (2026-03-13):
 apps/evergo/tests/test_admin.py::test_evergo_admin_load_customers_wizard_submits

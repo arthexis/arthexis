@@ -39,9 +39,9 @@ Use `@pytest.mark.regression` for tests that guard against reported regressions.
 Regression tests should run in standard CI pipelines and whenever regression-focused local filtering is applied.
 
 
-## Segmented marker groups in `apps/vscode/test_server.py`
+## Segmented marker groups in `utils/devtools/test_server.py`
 
-When running the local segmented test runner (`apps/vscode/test_server.py`),
+When running the local segmented test runner (`utils/devtools/test_server.py`),
 marker groups are intentionally mutually exclusive to prevent duplicate test
 execution across segments:
 
