@@ -129,8 +129,16 @@ def test_handle_external_event_interrupt_loads_and_renders(monkeypatch):
 
     monkeypatch.setattr(runner, "_event_interrupt_requested", lambda: True)
     reset_calls: list[str] = []
-    monkeypatch.setattr(runner, "_reset_event_interrupt_flag", lambda: reset_calls.append("reset"))
-    monkeypatch.setattr(runner, "_load_next_event", lambda now_dt: (payload, event_deadline, lock_file))
+    monkeypatch.setattr(
+        runner,
+        "_reset_event_interrupt_flag",
+        lambda: reset_calls.append("reset"),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_load_next_event",
+        lambda now_dt: (payload, event_deadline, lock_file),
+    )
     monkeypatch.setattr(
         runner,
         "_prepare_display_state",
@@ -188,3 +196,66 @@ def test_event_expiry_clears_rotation_state_when_no_followup(monkeypatch):
     assert coordinator.rotation.display_state is None
     assert coordinator.rotation.next_display_state is None
     assert coordinator.rotation.deadline == 0.0
+
+
+def test_render_rotation_frame_handles_hot_unplug_without_attribute_error(monkeypatch):
+    """Rotation rendering should tolerate the LCD being disabled during health checks."""
+
+    coordinator = runner.LCDRunner()
+    coordinator.scroll_scheduler = FakeScheduler()
+    active_lcd = object()
+    coordinator.lcd = active_lcd
+    coordinator.frame_writer = FakeWriter(None)
+    coordinator.rotation.order = ("clock",)
+    coordinator.rotation.index = 0
+    coordinator.rotation.display_state = SimpleNamespace(scroll_sec=0.5)
+
+    blanked: list[object] = []
+    monkeypatch.setattr(runner, "_blank_display", lambda lcd: blanked.append(lcd))
+    monkeypatch.setattr(
+        runner,
+        "_advance_display",
+        lambda state, frame_writer, **kwargs: (state, False, False),
+    )
+
+    coordinator.render_rotation_frame()
+
+    assert coordinator.lcd_disabled is True
+    assert blanked == [active_lcd]
+    assert coordinator.rotation.display_state is None
+    assert coordinator.scroll_scheduler.actions == [
+        ("sleep", None),
+        ("advance", runner.DEFAULT_FALLBACK_SCROLL_SEC),
+    ]
+
+
+def test_render_event_frame_raises_stop_iteration_on_shutdown(monkeypatch):
+    """Event rendering should stop the loop immediately when shutdown is requested."""
+
+    coordinator = runner.LCDRunner()
+    coordinator.scroll_scheduler = FakeScheduler()
+    coordinator.frame_writer = FakeWriter(object())
+    coordinator.lcd = object()
+    coordinator.event.display_state = SimpleNamespace(scroll_sec=0.25)
+
+    shutdown_calls: list[object] = []
+    monkeypatch.setattr(
+        runner,
+        "_handle_shutdown_request",
+        lambda lcd: shutdown_calls.append(lcd) or True,
+    )
+    monkeypatch.setattr(
+        runner,
+        "_advance_display",
+        lambda state, frame_writer, **kwargs: (state, True, True),
+    )
+
+    try:
+        coordinator.render_event_frame()
+    except StopIteration:
+        pass
+    else:  # pragma: no cover - defensive assertion path
+        raise AssertionError("render_event_frame() should raise StopIteration")
+
+    assert shutdown_calls == [coordinator.lcd]
+    assert coordinator.scroll_scheduler.actions == [("sleep", None)]

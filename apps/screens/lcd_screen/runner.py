@@ -479,7 +479,7 @@ class LCDRunner:
         )
         if shutdown_triggered:
             _handle_shutdown_request(self.lcd)
-            return True
+            raise StopIteration
         self.record_health(write_success, "LCD write failed during event display")
         self.scroll_scheduler.advance(
             (self.event.display_state.scroll_sec if self.event.display_state else 0)
@@ -560,7 +560,8 @@ class LCDRunner:
             raise StopIteration
         self.record_health(write_success, "LCD write failed during rotation display")
         self.scroll_scheduler.advance(
-            self.rotation.display_state.scroll_sec or DEFAULT_FALLBACK_SCROLL_SEC
+            (self.rotation.display_state.scroll_sec if self.rotation.display_state else 0)
+            or DEFAULT_FALLBACK_SCROLL_SEC
         )
 
     def finalize_rotation_step(self, now_dt: datetime) -> None:
@@ -710,7 +711,7 @@ def _reset_event_interrupt_flag() -> None:
 
 
 def _sticky_payload(payload: locks.LockPayload | None, now_dt: datetime) -> bool:
-    """Return ``True`` when a payload should trigger base-message relief."""
+    """Return True when a payload should trigger base-message relief."""
 
     if payload is None or payload.is_base or not _payload_has_text(payload):
         return False
@@ -817,7 +818,7 @@ def _load_next_event(
 
 
 def _event_window(payload: locks.EventPayload, index: int) -> tuple[str, str]:
-    """Return a two-line window for the event payload starting at ``index``."""
+    """Return a two-line window for the event payload starting at index."""
 
     if not payload.lines:
         return "", ""
