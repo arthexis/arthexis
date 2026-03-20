@@ -70,6 +70,7 @@ def _to_module_path(path: Path) -> str:
 
 LEGACY_MIGRATION_APPS = ["apps.selenium"]
 NON_DJANGO_UTILITY_PACKAGES = {
+    "apps.camera",
     "apps.loggers",
     "apps.vscode",
 }

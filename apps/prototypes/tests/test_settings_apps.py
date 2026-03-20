@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
 from config.settings import apps as settings_apps
@@ -43,3 +44,24 @@ def test_hidden_prototype_apps_require_explicit_activation(monkeypatch, tmp_path
     )
 
     assert settings_apps._load_active_prototype_app() == ["apps._prototypes.vision_lab"]
+
+
+def test_camera_utility_package_stays_out_of_local_django_app_discovery(monkeypatch, tmp_path):
+    apps_root = tmp_path / "apps"
+    camera_dir = apps_root / "camera"
+    camera_dir.mkdir(parents=True, exist_ok=True)
+    (apps_root / "__init__.py").write_text('"""test package."""\n', encoding="utf-8")
+    (camera_dir / "__init__.py").write_text('"""camera shim package."""\n', encoding="utf-8")
+
+    monkeypatch.setattr(settings_apps, "APPS_DIR", apps_root)
+
+    assert "apps.camera" not in settings_apps._load_local_apps()
+
+
+def test_legacy_camera_shim_remains_importable_for_prototype_integrations():
+    camera_module = importlib.import_module("apps.camera")
+    rpi_module = importlib.import_module("apps.camera.rpi")
+    rfid_module = importlib.import_module("apps.camera.rfid")
+
+    assert camera_module.capture_rpi_snapshot is rpi_module.capture_rpi_snapshot
+    assert rfid_module.queue_camera_snapshot is not None
