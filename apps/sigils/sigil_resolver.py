@@ -353,7 +353,6 @@ def _resolve_config_value(root, normalized_key: str | None, key_upper: str | Non
         values = get_system_sigil_values()
         candidates = {
             key_upper,
-            normalized_key.upper() if normalized_key else None,
             (raw_key or "").upper(),
         }
         for candidate in candidates:
@@ -540,16 +539,9 @@ def _resolve_entity_root(root, filter_field: str | None, instance_id: str | None
         if aggregate_result is not None:
             return aggregate_result
 
-    instance = None
-    if instance_id or current is not None:
-        instance = _resolve_entity_lookup(model, filter_field, instance_id, current)
-    else:
-        ctx = get_context()
-        inst_pk = ctx.get(model)
-        if inst_pk is not None:
-            instance = model.objects.filter(pk=inst_pk).first()
-        if instance is None:
-            instance = root.default_instance()
+    instance = _resolve_entity_lookup(model, filter_field, instance_id, current)
+    if instance is None and not instance_id:
+        instance = root.default_instance()
 
     if instance:
         return _resolve_entity_instance(
@@ -647,7 +639,15 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
 
     try:
         return resolver()
-    except (AttributeError, FieldDoesNotExist, FieldError, LookupError, TypeError, ValueError):
+    except (
+        AttributeError,
+        FieldDoesNotExist,
+        FieldError,
+        LookupError,
+        TimeoutError,
+        TypeError,
+        ValueError,
+    ):
         logger.exception(
             "Error resolving sigil [%s.%s]",
             lookup_root,
@@ -657,6 +657,15 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
 
 
 def resolve_sigils(text: str, current: Optional[models.Model] = None) -> str:
+    """Resolve every sigil token found in the given text.
+
+    Args:
+        text: Source text that may contain bracketed sigil tokens.
+        current: Optional current model instance used for OBJECT and entity resolution.
+
+    Returns:
+        The input text with each recognized sigil token replaced by its resolved value.
+    """
     parts: list[str] = []
     cursor = 0
     for span in scan_sigil_tokens(text):
@@ -671,4 +680,13 @@ def resolve_sigils(text: str, current: Optional[models.Model] = None) -> str:
 
 
 def resolve_sigil(sigil: str, current: Optional[models.Model] = None) -> str:
+    """Resolve a single sigil-bearing string.
+
+    Args:
+        sigil: Text containing one or more sigil tokens.
+        current: Optional current model instance used during resolution.
+
+    Returns:
+        The resolved sigil text.
+    """
     return resolve_sigils(sigil, current)

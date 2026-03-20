@@ -111,6 +111,33 @@ def test_resolve_sigils_uses_default_entity_instance(monkeypatch):
     assert result == role.name
 
 
+@pytest.mark.django_db
+def test_resolve_sigils_uses_default_entity_instance_with_unrelated_current(monkeypatch):
+    SigilRoot.objects.update_or_create(
+        prefix="NODE",
+        defaults={
+            "context_type": SigilRoot.Context.ENTITY,
+            "content_type": ContentType.objects.get_for_model(Node),
+        },
+    )
+
+    role = NodeRole.objects.create(name="Router")
+    node = Node.objects.create(
+        hostname="router-001",
+        address="127.0.0.2",
+        mac_address="00:11:22:33:44:66",
+        port=9999,
+        public_endpoint="router-001",
+        role=role,
+    )
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+    current_user = get_user_model().objects.create(username="context-user")
+
+    result = sigil_resolver.resolve_sigils("[NODE.ROLE]", current=current_user)
+
+    assert result == role.name
+
+
 
 def test_parse_token_parts_parses_filter_key_and_param():
     parts = sigil_resolver._parse_token_parts("USR:username=[ENV.current-user].email=display")
@@ -131,12 +158,14 @@ def test_parse_token_parts_rejects_incomplete_filter():
 @pytest.mark.django_db
 def test_resolve_sigils_entity_aggregate_total_for_field(user_root):
     user_model = get_user_model()
-    user_model.objects.create(username="alpha")
-    user_model.objects.create(username="bravo")
+    baseline = sigil_resolver.resolve_sigils("[USR=id:total]")
+    baseline_total = int(baseline) if baseline else 0
+    first_user = user_model.objects.create(username="alpha")
+    second_user = user_model.objects.create(username="bravo")
 
     result = sigil_resolver.resolve_sigils("[USR=id:total]")
 
-    assert result == "3"
+    assert result == str(baseline_total + first_user.id + second_user.id)
 
 
 @pytest.mark.django_db
