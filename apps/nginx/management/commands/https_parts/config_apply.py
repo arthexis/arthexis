@@ -11,6 +11,7 @@ from django.db.models import F
 from apps.nginx.management.commands.https_parts.constants import (
     NGINX_CONFIGURE_REMEDIATION_TEMPLATE,
 )
+from apps.nginx.management.commands.nginx import write_apply_status
 from apps.nginx.models import SiteConfiguration
 from apps.nginx.services import NginxUnavailableError, ValidationError
 
@@ -111,12 +112,4 @@ def _apply_config(service, config: SiteConfiguration, *, reload: bool) -> None:
             + NGINX_CONFIGURE_REMEDIATION_TEMPLATE.format(command=sys.argv[0])
         ) from exc
 
-    service.stdout.write(service.style.SUCCESS(result.message))
-    if not result.validated:
-        service.stdout.write(
-            "nginx applied the configuration, but validation was skipped or failed."
-        )
-    if not result.reloaded:
-        service.stdout.write(
-            "nginx was not reloaded automatically; check the service status."
-        )
+    write_apply_status(service, result)

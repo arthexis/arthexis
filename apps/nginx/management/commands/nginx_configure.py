@@ -7,6 +7,12 @@ from apps.nginx.management.commands.nginx import ConfigureMixin
 
 
 class Command(ConfigureMixin, BaseCommand):
+    """Deprecated management command forwarding to ``nginx --configure``.
+
+    The command is retained for backward compatibility and always prints a
+    deprecation notice before delegating to the consolidated nginx CLI.
+    """
+
     help = "Deprecated alias for `nginx --configure`."  # noqa: A003 - django requires 'help'
 
     def add_arguments(self, parser):
@@ -27,23 +33,35 @@ class Command(ConfigureMixin, BaseCommand):
         )
 
     def _forwarded_args(self, options: dict[str, object]) -> list[str]:
-        """Convert parsed legacy options back into CLI flags for forwarding."""
+        """Convert parsed legacy options back into CLI flags for forwarding.
+
+        Parameters:
+            options: Parsed option values for ``mode``, ``port``, ``role``,
+                ``ip6``, ``remove``, ``no_reload``, ``sites_config``, and
+                ``sites_destination``.
+
+        Returns:
+            A list of CLI flag strings built from truthy option values.
+        """
 
         forwarded: list[str] = []
-        if options["mode"]:
-            forwarded.extend(["--mode", str(options["mode"])])
-        if options["port"]:
-            forwarded.extend(["--port", str(options["port"])])
-        if options["role"]:
-            forwarded.extend(["--role", str(options["role"])])
-        if options["ip6"]:
-            forwarded.append("--ip6")
-        if options["remove"]:
-            forwarded.append("--remove")
-        if options["no_reload"]:
-            forwarded.append("--no-reload")
-        if options["sites_config"]:
-            forwarded.extend(["--sites-config", str(options["sites_config"])])
-        if options["sites_destination"]:
-            forwarded.extend(["--sites-destination", str(options["sites_destination"])])
+        argument_specs = (
+            ("mode", True),
+            ("port", True),
+            ("role", True),
+            ("ip6", False),
+            ("remove", False),
+            ("no_reload", False),
+            ("sites_config", True),
+            ("sites_destination", True),
+        )
+        for option_name, has_value in argument_specs:
+            value = options[option_name]
+            if not value:
+                continue
+            flag = f"--{option_name.replace('_', '-')}"
+            if has_value:
+                forwarded.extend([flag, str(value)])
+            else:
+                forwarded.append(flag)
         return forwarded

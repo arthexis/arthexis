@@ -5,11 +5,39 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.nginx.models import SiteConfiguration
-from apps.nginx.services import NginxUnavailableError, ValidationError
+from apps.nginx.services import ApplyResult, NginxUnavailableError, ValidationError
+
+
+def write_apply_status(service, result: ApplyResult) -> None:
+    """Write consistent nginx apply status messages to a command's output streams.
+
+    Parameters:
+        service: Management command instance providing ``stdout`` and ``style``.
+        result: Outcome returned from ``SiteConfiguration.apply()``.
+
+    Returns:
+        None.
+    """
+
+    service.stdout.write(service.style.SUCCESS(result.message))
+    if not result.validated:
+        service.stdout.write(
+            "nginx applied the configuration, but validation was skipped or failed."
+        )
+    if not result.reloaded:
+        service.stdout.write(
+            "nginx was not reloaded automatically; check the service status."
+        )
 
 
 class ConfigureMixin:
-    """Shared implementation for nginx configuration commands."""
+    """Reusable nginx configuration workflow for Django management commands.
+
+    The mixin registers ``--configure``-related arguments, updates the default
+    ``SiteConfiguration``, and applies or removes the managed nginx config,
+    including validation and reload messaging. Mix into a ``BaseCommand``
+    subclass that provides ``stdout`` and ``style`` attributes.
+    """
 
     def add_configure_arguments(self, parser) -> None:
         """Register arguments used to apply or remove managed nginx configuration."""
@@ -32,7 +60,20 @@ class ConfigureMixin:
         )
 
     def run_configure(self, options: dict[str, object]) -> None:
-        """Apply or remove the managed nginx configuration using the provided options."""
+        """Apply or remove the managed nginx configuration using the provided options.
+
+        Parameters:
+            options: Parsed Django command options containing ``mode``, ``port``,
+                ``role``, ``ip6``, ``sites_config``, ``sites_destination``,
+                ``remove``, and ``no_reload`` keys.
+
+        Returns:
+            None.
+
+        Raises:
+            CommandError: Raised when nginx is unavailable or configuration
+                validation fails while applying the managed config.
+        """
 
         config = SiteConfiguration.get_default()
 
@@ -61,11 +102,7 @@ class ConfigureMixin:
         except ValidationError as exc:
             raise CommandError(str(exc)) from exc
 
-        self.stdout.write(self.style.SUCCESS(result.message))
-        if not result.validated:
-            self.stdout.write("nginx applied the configuration, but validation was skipped or failed.")
-        if not result.reloaded:
-            self.stdout.write("nginx was not reloaded automatically; check the service status.")
+        write_apply_status(self, result)
 
         if options["sites_config"]:
             self.stdout.write(f"Managed site definitions read from {Path(config.site_entries_path).resolve()}")
@@ -74,6 +111,12 @@ class ConfigureMixin:
 
 
 class Command(ConfigureMixin, BaseCommand):
+    """Consolidated management command for nginx operations on this node.
+
+    The Django ``help`` attribute drives CLI output, while this class docstring
+    documents the developer-facing behavior of the unified nginx command.
+    """
+
     help = "Manage nginx operations for this node."  # noqa: A003 - django requires 'help'
 
     def add_arguments(self, parser):
