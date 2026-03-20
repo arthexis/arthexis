@@ -10,28 +10,81 @@ from pathlib import Path
 from django.conf import settings
 
 from config.active_app import get_active_app
-from utils.loggers.filenames import normalize_log_filename
-from utils.loggers.rotation import ArchiveTimedRotatingFileHandler
+
+from .filenames import normalize_log_filename
+from .rotation import ArchiveTimedRotatingFileHandler
+
+
+def ensure_log_dir() -> Path:
+    """Return the configured log directory, creating it when needed.
+
+    Returns:
+        Path: The existing log directory path.
+    """
+
+    log_dir = Path(settings.LOG_DIR)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir
 
 
 class ActiveAppFileHandler(ArchiveTimedRotatingFileHandler):
     """File handler that writes to a file named after the active app."""
 
+    default_filename: str | None = None
+    test_filename = "tests.log"
+
+    def _resolve_filename(self) -> str:
+        """Return the production log filename for the handler.
+
+        Returns:
+            str: The filename to use outside the test environment.
+
+        Raises:
+            ValueError: Raised when a subclass does not define a filename.
+        """
+
+        if self.default_filename is None:
+            return f"{normalize_log_filename(get_active_app())}.log"
+        return self.default_filename
+
     def _current_file(self) -> Path:
-        log_dir = Path(settings.LOG_DIR)
-        log_dir.mkdir(parents=True, exist_ok=True)
-        if "test" in sys.argv:
-            return log_dir / "tests.log"
-        return log_dir / f"{normalize_log_filename(get_active_app())}.log"
+        """Return the current log file path for the handler.
+
+        Returns:
+            Path: The log file that should receive the current record.
+        """
+
+        log_dir = ensure_log_dir()
+        filename = self.test_filename if "test" in sys.argv else self._resolve_filename()
+        return log_dir / filename
+
+    def _should_reopen_stream(self, current_file: str) -> bool:
+        """Determine whether the handler stream should be reopened.
+
+        Parameters:
+            current_file: The absolute path for the file that should receive logs.
+
+        Returns:
+            bool: True when the underlying file handle must be reopened.
+        """
+
+        if self.baseFilename != current_file:
+            return True
+        return bool(self.stream and not os.path.exists(self.baseFilename))
 
     def emit(self, record: logging.LogRecord) -> None:
-        current = str(self._current_file())
-        should_reopen = self.baseFilename != current
-        if self.stream and not os.path.exists(self.baseFilename):
-            should_reopen = True
+        """Write the record to the handler's current log file.
 
-        if should_reopen:
-            self.baseFilename = current
+        Parameters:
+            record: The log record being emitted.
+
+        Raises:
+            OSError: Propagated when the log stream cannot be opened or written.
+        """
+
+        current_file = str(self._current_file())
+        if self._should_reopen_stream(current_file):
+            self.baseFilename = current_file
             Path(self.baseFilename).parent.mkdir(parents=True, exist_ok=True)
             if self.stream:
                 self.stream.close()
@@ -47,53 +100,33 @@ class ActiveAppFileHandler(ArchiveTimedRotatingFileHandler):
 class ErrorFileHandler(ActiveAppFileHandler):
     """File handler dedicated to capturing application errors."""
 
-    def _current_file(self) -> Path:
-        log_dir = Path(settings.LOG_DIR)
-        log_dir.mkdir(parents=True, exist_ok=True)
-        if "test" in sys.argv:
-            return log_dir / "tests-error.log"
-        return log_dir / "error.log"
+    default_filename = "error.log"
+    test_filename = "tests-error.log"
 
 
 class CeleryFileHandler(ActiveAppFileHandler):
     """File handler dedicated to capturing Celery output."""
 
-    def _current_file(self) -> Path:
-        log_dir = Path(settings.LOG_DIR)
-        log_dir.mkdir(parents=True, exist_ok=True)
-        if "test" in sys.argv:
-            return log_dir / "tests-celery.log"
-        return log_dir / "celery.log"
+    default_filename = "celery.log"
+    test_filename = "tests-celery.log"
 
 
 class PageMissesFileHandler(ActiveAppFileHandler):
     """File handler dedicated to capturing page misses."""
 
-    def _current_file(self) -> Path:
-        log_dir = Path(settings.LOG_DIR)
-        log_dir.mkdir(parents=True, exist_ok=True)
-        if "test" in sys.argv:
-            return log_dir / "tests-page_misses.log"
-        return log_dir / "page_misses.log"
+    default_filename = "page_misses.log"
+    test_filename = "tests-page_misses.log"
 
 
 class CPForwarderFileHandler(ActiveAppFileHandler):
     """File handler dedicated to capturing CP forwarder output."""
 
-    def _current_file(self) -> Path:
-        log_dir = Path(settings.LOG_DIR)
-        log_dir.mkdir(parents=True, exist_ok=True)
-        if "test" in sys.argv:
-            return log_dir / "tests-cp_forwarder.log"
-        return log_dir / "cp_forwarder.log"
+    default_filename = "cp_forwarder.log"
+    test_filename = "tests-cp_forwarder.log"
 
 
 class RFIDFileHandler(ActiveAppFileHandler):
     """File handler dedicated to capturing RFID service output."""
 
-    def _current_file(self) -> Path:
-        log_dir = Path(settings.LOG_DIR)
-        log_dir.mkdir(parents=True, exist_ok=True)
-        if "test" in sys.argv:
-            return log_dir / "tests-rfid.log"
-        return log_dir / "rfid.log"
+    default_filename = "rfid.log"
+    test_filename = "tests-rfid.log"

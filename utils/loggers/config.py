@@ -13,6 +13,9 @@ from .filenames import normalize_log_filename
 from .paths import select_log_dir
 from .rotation import TRANSACTIONAL_LOG_RETENTION_DAYS
 
+FILTERS_MODULE = "utils.loggers.filters"
+HANDLERS_MODULE = "utils.loggers.handlers"
+
 
 def configure_library_loggers(
     debug_enabled: bool, logging_config: dict[str, Any]
@@ -59,17 +62,17 @@ def build_logging_settings(
         },
         "filters": {
             "debug_app_filter": {
-                "()": "utils.loggers.filters.DebugAppFilter",
+                "()": f"{FILTERS_MODULE}.DebugAppFilter",
                 "debug_value": os.environ.get("DEBUG"),
                 "debug_enabled": debug_control.enabled,
             },
             "ignore_static_asset_requests": {
-                "()": "utils.loggers.filters.IgnoreStaticAssetRequestsFilter",
+                "()": f"{FILTERS_MODULE}.IgnoreStaticAssetRequestsFilter",
             },
         },
         "handlers": {
             "file": {
-                "class": "utils.loggers.handlers.ActiveAppFileHandler",
+                "class": f"{HANDLERS_MODULE}.ActiveAppFileHandler",
                 "filename": str(log_dir / log_file_name),
                 "when": "midnight",
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
@@ -78,7 +81,7 @@ def build_logging_settings(
                 "filters": ["debug_app_filter"],
             },
             "cp_forwarder_file": {
-                "class": "utils.loggers.handlers.CPForwarderFileHandler",
+                "class": f"{HANDLERS_MODULE}.CPForwarderFileHandler",
                 "filename": str(log_dir / "cp_forwarder.log"),
                 "when": "midnight",
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
@@ -87,7 +90,7 @@ def build_logging_settings(
                 "level": "INFO",
             },
             "rfid_file": {
-                "class": "utils.loggers.handlers.RFIDFileHandler",
+                "class": f"{HANDLERS_MODULE}.RFIDFileHandler",
                 "filename": str(log_dir / "rfid.log"),
                 "when": "midnight",
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
@@ -96,7 +99,7 @@ def build_logging_settings(
                 "level": "INFO",
             },
             "error_file": {
-                "class": "utils.loggers.handlers.ErrorFileHandler",
+                "class": f"{HANDLERS_MODULE}.ErrorFileHandler",
                 "filename": str(log_dir / "error.log"),
                 "when": "midnight",
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
@@ -105,7 +108,7 @@ def build_logging_settings(
                 "level": "WARNING",
             },
             "celery_file": {
-                "class": "utils.loggers.handlers.CeleryFileHandler",
+                "class": f"{HANDLERS_MODULE}.CeleryFileHandler",
                 "filename": str(log_dir / "celery.log"),
                 "when": "midnight",
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
@@ -114,7 +117,7 @@ def build_logging_settings(
                 "level": "INFO",
             },
             "page_misses_file": {
-                "class": "utils.loggers.handlers.PageMissesFileHandler",
+                "class": f"{HANDLERS_MODULE}.PageMissesFileHandler",
                 "filename": str(log_dir / "page_misses.log"),
                 "when": "midnight",
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
