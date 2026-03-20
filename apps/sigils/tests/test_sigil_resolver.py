@@ -109,3 +109,50 @@ def test_resolve_sigils_uses_default_entity_instance(monkeypatch):
     result = sigil_resolver.resolve_sigils("[NODE.ROLE]")
 
     assert result == role.name
+
+
+
+def test_parse_token_parts_parses_filter_key_and_param():
+    parts = sigil_resolver._parse_token_parts("USR:username=[ENV.current-user].email=display")
+
+    assert parts.root_name == "USR"
+    assert parts.filter_field == "username"
+    assert parts.instance_id == "[ENV.current-user]"
+    assert parts.key == "email"
+    assert parts.param == "display"
+
+
+
+def test_parse_token_parts_rejects_incomplete_filter():
+    with pytest.raises(sigil_resolver.TokenParseError):
+        sigil_resolver._parse_token_parts("USR:username")
+
+
+@pytest.mark.django_db
+def test_resolve_sigils_entity_aggregate_total_for_field(user_root):
+    user_model = get_user_model()
+    user_model.objects.create(username="alpha")
+    user_model.objects.create(username="bravo")
+
+    result = sigil_resolver.resolve_sigils("[USR=id:total]")
+
+    assert result == "3"
+
+
+@pytest.mark.django_db
+def test_resolve_sigils_conf_looks_up_settings_value(settings):
+    SigilRoot.objects.update_or_create(
+        prefix="CONF", defaults={"context_type": SigilRoot.Context.CONFIG}
+    )
+    settings.SIGIL_TEST_VALUE = "configured"
+
+    result = sigil_resolver.resolve_sigils("[CONF.sigil-test-value]")
+
+    assert result == "configured"
+
+
+@pytest.mark.django_db
+def test_resolve_sigils_entity_failures_preserve_placeholder(user_root):
+    result = sigil_resolver.resolve_sigils("[USR:missing-field=value.email]")
+
+    assert result == "[USR:missing-field=value.email]"
