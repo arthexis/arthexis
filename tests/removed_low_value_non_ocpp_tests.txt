@@ -6,7 +6,6 @@ apps/core/tests/reports/test_release_publish_context.py
 apps/prompts/tests/test_models.py
 apps/cards/tests/test_admin_dashboard.py
 apps/energy/tests/test_reporting.py
-apps/liboqs/tests/test_admin.py
 apps/evergo/tests/test_forms.py
 apps/sigils/tests/test_resolve_helper.py
 apps/sites/tests/test_sitemap.py
@@ -29,7 +28,6 @@ apps/video/tests/test_widgets.py
 apps/core/tests/test_offline_time_command.py
 apps/dns/tests/test_proxy.py
 apps/energy/tests/test_scheduling.py
-apps/liboqs/tests/test_services.py
 apps/tests/tests/test_migrations_management_command.py
 apps/energy/tests/test_billing.py
 apps/sigils/tests/test_env_refresh_sigils.py
