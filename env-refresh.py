@@ -6,17 +6,18 @@ Ensures migrations are up to date and fixes inconsistent histories.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 import sys
-from pathlib import Path
-import json
-from collections import defaultdict
 import tempfile
-import hashlib
 import time
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from weakref import WeakKeyDictionary
 from typing import TYPE_CHECKING, Iterable, Any
-from datetime import datetime
 
 import django
 import importlib.util
@@ -67,6 +68,33 @@ if TYPE_CHECKING:  # pragma: no cover - typing support
 _MODEL_SEED_FIELD_CACHE = WeakKeyDictionary()
 
 
+@dataclass(frozen=True)
+class FixtureLoadPlan:
+    """Describe fixture hashes, mtimes, and whether a reload is required.
+
+    Parameters:
+        fixtures: Fixture paths relative to ``BASE_DIR``.
+        current_hash: Freshly computed hash for all fixtures.
+        stored_hash: Previously stored fixture hash.
+        current_mtimes: Current fixture modification times.
+        stored_mtimes: Stored fixture modification times.
+        current_by_app: Freshly computed fixture hashes grouped by app.
+        stored_by_app: Stored fixture hashes grouped by app.
+        mtimes_changed: Whether fixture mtimes changed since the last run.
+        should_load: Whether fixtures should be loaded this run.
+    """
+
+    fixtures: tuple[str, ...]
+    current_hash: str
+    stored_hash: str
+    current_mtimes: dict[str, float]
+    stored_mtimes: dict[str, float]
+    current_by_app: dict[str, str]
+    stored_by_app: dict[str, str]
+    mtimes_changed: bool
+    should_load: bool
+
+
 def _upsert_site_configuration(fields: dict[str, Any]) -> bool:
     """Persist a ``SiteConfiguration`` fixture row by unique ``name``.
 
@@ -85,6 +113,17 @@ def _upsert_site_configuration(fields: dict[str, Any]) -> bool:
     }
     SiteConfiguration.objects.update_or_create(name=name, defaults=defaults)
     return True
+
+
+def _read_json_file(path: Path) -> dict[str, Any]:
+    """Return JSON object content from *path* or an empty mapping on parse errors."""
+
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {}
 
 
 def _schema_needs_migration() -> bool:
@@ -542,6 +581,152 @@ def _fixture_hashes_by_app(fixtures: Iterable[str]) -> dict[str, str]:
     return {label: digest.hexdigest() for label, digest in buckets.items()}
 
 
+def _plan_fixture_loading(
+    *,
+    fixtures: Iterable[str],
+    force_db: bool,
+    clean: bool,
+    migrations_changed: bool,
+    migrations_ran: bool,
+    stored_hash: str,
+    stored_by_app: dict[str, str] | None,
+    stored_mtimes: dict[str, float] | None,
+) -> FixtureLoadPlan:
+    """Compute fixture hashes, mtimes, and reload intent without side effects."""
+
+    normalized_fixtures = tuple(sorted(fixtures))
+    current_mtimes = _fixture_mtime_cache(normalized_fixtures) if normalized_fixtures else {}
+    known_stored_mtimes = stored_mtimes or {}
+    mtimes_changed = current_mtimes != known_stored_mtimes
+    known_stored_by_app = stored_by_app or {}
+
+    if normalized_fixtures:
+        if force_db or mtimes_changed or not stored_hash:
+            current_hash = _fixtures_hash(normalized_fixtures)
+            current_by_app = _fixture_hashes_by_app(normalized_fixtures)
+        else:
+            current_hash = stored_hash
+            current_by_app = known_stored_by_app or _fixture_hashes_by_app(
+                normalized_fixtures
+            )
+    else:
+        current_hash = ""
+        current_by_app = {}
+
+    should_load = force_db or fixtures_changed(
+        fixtures_present=bool(normalized_fixtures),
+        current_hash=current_hash,
+        stored_hash=stored_hash,
+        migrations_changed=migrations_changed,
+        migrations_ran=migrations_ran,
+        current_by_app=current_by_app,
+        stored_by_app=known_stored_by_app,
+        clean=clean,
+    )
+
+    return FixtureLoadPlan(
+        fixtures=normalized_fixtures,
+        current_hash=current_hash,
+        stored_hash=stored_hash,
+        current_mtimes=current_mtimes,
+        stored_mtimes=known_stored_mtimes,
+        current_by_app=current_by_app,
+        stored_by_app=known_stored_by_app,
+        mtimes_changed=mtimes_changed,
+        should_load=should_load,
+    )
+
+
+def _reconcile_existing_user_fixture(
+    obj: dict[str, Any],
+    *,
+    user_pk_map: dict[int, int],
+    pending_user_m2m: dict[int, list[tuple[str, Any]]],
+) -> bool:
+    """Update an existing fixture user in place and record PK remapping."""
+
+    model = get_user_model()
+    username = obj.get("fields", {}).get("username")
+    existing = model.objects.filter(username=username).first() if username else None
+    if not existing:
+        return False
+
+    user_pk_map[obj.get("pk")] = existing.pk
+    m2m_updates: list[tuple[str, Any]] = []
+    for field_name, value in obj.get("fields", {}).items():
+        try:
+            field_object = model._meta.get_field(field_name)
+        except FieldDoesNotExist:
+            setattr(existing, field_name, value)
+            continue
+        if field_object.many_to_many:
+            m2m_updates.append((field_name, value))
+        else:
+            setattr(existing, field_name, value)
+    existing.save()
+    for field_name, value in m2m_updates:
+        if not _assign_many_to_many(existing, field_name, value):
+            pending_user_m2m[existing.pk].append((field_name, value))
+    return True
+
+
+def _upsert_sigilroot_fixture(model: type["Model"], fields: dict[str, Any]) -> bool:
+    """Upsert a ``sigils.SigilRoot`` fixture row by ``prefix`` when valid."""
+
+    skip_reason = _sigilroot_skip_reason(fields)
+    if skip_reason:
+        prefix = fields.get("prefix", "?")
+        print(f"Skipping SigilRoot '{prefix}' ({skip_reason})")
+        return True
+
+    prefix = fields.get("prefix")
+    if not prefix:
+        return False
+
+    defaults = dict(fields)
+    content_type = defaults.get("content_type")
+    if isinstance(content_type, (list, tuple)) and len(content_type) >= 2:
+        defaults["content_type"] = ContentType.objects.get_by_natural_key(
+            content_type[0],
+            content_type[1],
+        )
+    elif isinstance(content_type, dict):
+        app_label = content_type.get("app_label")
+        model_name = content_type.get("model") or content_type.get("model_name")
+        if app_label and model_name:
+            defaults["content_type"] = ContentType.objects.get_by_natural_key(
+                app_label,
+                model_name,
+            )
+
+    model.objects.update_or_create(prefix=prefix, defaults=defaults)
+    return True
+
+
+def _upsert_site_fixture(
+    fields: dict[str, Any],
+    *,
+    site_defaults: dict[str, dict[str, Any]],
+) -> bool:
+    """Upsert a ``sites.Site`` fixture row by ``domain``."""
+
+    domain = fields.get("domain")
+    if not domain:
+        return False
+
+    defaults = dict(fields)
+    Site.objects.update_or_create(domain=domain, defaults=defaults)
+    site_defaults[domain] = defaults
+    return True
+
+
+def _dedupe_package_release_fixture(obj: dict[str, Any]) -> bool:
+    """Skip duplicate ``release.PackageRelease`` fixtures by version."""
+
+    version = obj.get("fields", {}).get("version")
+    return bool(version and PackageRelease.objects.filter(version=version).exists())
+
+
 def _remove_integrator_from_auth_migration() -> None:
     """Strip lingering integrator imports from Django's auth migration."""
     spec = importlib.util.find_spec("django.contrib.auth.migrations.0013_userproxy")
@@ -560,6 +745,181 @@ def _remove_integrator_from_auth_migration() -> None:
     path.write_text(patched + ("\n" if not patched.endswith("\n") else ""))
 
 
+def _prepare_migrations(
+    *,
+    local_apps: list[str],
+    using_sqlite: bool,
+    default_db: dict[str, Any],
+) -> None:
+    """Run pre-migration ``makemigrations`` recovery steps."""
+
+    try:
+        call_command("makemigrations", *local_apps, interactive=False)
+    except CommandError:
+        call_command("makemigrations", *local_apps, merge=True, interactive=False)
+    except InconsistentMigrationHistory:
+        if not using_sqlite:
+            raise
+        _unlink_sqlite_db(Path(default_db["NAME"]))
+        call_command("makemigrations", *local_apps, interactive=False)
+
+
+def _clean_database_before_migrate(
+    *,
+    clean: bool,
+    stored_hash: str,
+    new_hash: str,
+    using_sqlite: bool,
+    default_db: dict[str, Any],
+    local_apps: list[str],
+) -> None:
+    """Apply the existing ``--clean`` downgrade/reset behavior."""
+
+    if not clean:
+        return
+
+    if stored_hash and stored_hash != new_hash:
+        if using_sqlite:
+            _unlink_sqlite_db(Path(default_db["NAME"]))
+        else:  # pragma: no cover - unreachable in sqlite
+            for label in reversed(local_apps):
+                call_command("migrate", label, "zero", interactive=False)
+        return
+
+    try:
+        recorder = MigrationRecorder(connection)
+        loader = MigrationLoader(connection)
+    except OperationalError:
+        recorder = loader = None
+    if not recorder or not loader:
+        return
+
+    for label in local_apps:
+        try:
+            qs = recorder.migration_qs.filter(app=label).order_by("-applied")
+            if qs.exists():
+                last = qs.first().name
+                node = loader.graph.node_map.get((label, last))
+                parents = list(node.parents) if node else []
+                prev = parents[0][1] if parents else "zero"
+                call_command("migrate", label, prev, interactive=False)
+        except OperationalError:
+            continue
+
+
+def _recover_sqlite_migration_failure(
+    *,
+    default_db: dict[str, Any],
+) -> None:
+    """Reset the SQLite database so migrations can be retried cleanly."""
+
+    _unlink_sqlite_db(Path(default_db["NAME"]))
+
+
+def _recover_postgresql_migration_failure(default_db: dict[str, Any]) -> bool:
+    """Attempt to create the configured PostgreSQL database.
+
+    Returns:
+        ``True`` when the database was created and migrations may be retried.
+    """
+
+    try:  # pragma: no cover - PostgreSQL path
+        import psycopg
+        from psycopg import sql
+
+        params = {
+            "dbname": "postgres",
+            "user": default_db.get("USER", ""),
+            "password": default_db.get("PASSWORD", ""),
+            "host": default_db.get("HOST", ""),
+            "port": default_db.get("PORT", ""),
+        }
+        with psycopg.connect(**params, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL("CREATE DATABASE {}").format(
+                        sql.Identifier(default_db["NAME"])
+                    )
+                )
+        return True
+    except Exception:
+        return False
+
+
+def _maybe_reset_database_for_migration_errors(
+    exc: Exception,
+    *,
+    using_sqlite: bool,
+    default_db: dict[str, Any],
+) -> bool:
+    """Handle backend-specific migration recovery and signal retry eligibility."""
+
+    if isinstance(exc, InconsistentMigrationHistory):
+        call_command("reset_ocpp_migrations")
+        return True
+
+    if not isinstance(exc, OperationalError):
+        return False
+
+    if using_sqlite:
+        _recover_sqlite_migration_failure(default_db=default_db)
+        return True
+
+    return _recover_postgresql_migration_failure(default_db)
+
+
+def _apply_migrations(
+    *,
+    should_attempt_migrate: bool,
+    clean: bool,
+    force_db: bool,
+    using_sqlite: bool,
+    default_db: dict[str, Any],
+) -> bool:
+    """Run migrations when needed and keep recovery handling isolated."""
+
+    if connection.in_atomic_block or not should_attempt_migrate:
+        return False
+
+    needs_migration = True if clean or force_db else _schema_needs_migration()
+    if not needs_migration and not force_db:
+        print("Database schema already up to date; skipping migrate.")
+        return False
+
+    try:
+        _run_migrate(
+            using_sqlite=using_sqlite,
+            default_db=default_db,
+            interactive=False,
+        )
+        return True
+    except MissingBranchSplinterError as exc:
+        print(
+            "Detected a retroactively edited migration branch that this database "
+            "skipped.\n"
+            f"{exc}\n"
+            "Manually recreate the database or roll it back to the splinter "
+            "migration before retrying the installation.",
+            flush=True,
+        )
+        raise
+    except InvalidBasesError:
+        raise
+    except (InconsistentMigrationHistory, OperationalError) as exc:
+        if not _maybe_reset_database_for_migration_errors(
+            exc,
+            using_sqlite=using_sqlite,
+            default_db=default_db,
+        ):
+            raise
+        _run_migrate(
+            using_sqlite=using_sqlite,
+            default_db=default_db,
+            interactive=False,
+        )
+        return True
+
+
 def run_database_tasks(
     *, latest: bool = False, clean: bool = False, force_db: bool = False
 ) -> None:
@@ -573,135 +933,40 @@ def run_database_tasks(
     local_apps = _local_app_labels()
 
     _remove_integrator_from_auth_migration()
+    _prepare_migrations(
+        local_apps=local_apps,
+        using_sqlite=using_sqlite,
+        default_db=default_db,
+    )
 
-    try:
-        call_command("makemigrations", *local_apps, interactive=False)
-    except CommandError as exc:
-        call_command("makemigrations", *local_apps, merge=True, interactive=False)
-    except InconsistentMigrationHistory:
-        if using_sqlite:
-            _unlink_sqlite_db(Path(default_db["NAME"]))
-            call_command("makemigrations", *local_apps, interactive=False)
-        else:  # pragma: no cover - unreachable in sqlite
-            raise
-
-    # Compute migrations hash and compare with stored value
     hash_file = locks_dir / "migrations.md5"
     new_hash = _migration_hash(local_apps)
     stored_hash = hash_file.read_text().strip() if hash_file.exists() else ""
 
     migrations_pending = _pending_migration_graph()
-    migrations_ran = False
-
-    if clean:
-        if stored_hash and stored_hash != new_hash:
-            if using_sqlite:
-                _unlink_sqlite_db(Path(default_db["NAME"]))
-            else:  # pragma: no cover - unreachable in sqlite
-                for label in reversed(local_apps):
-                    call_command("migrate", label, "zero", interactive=False)
-        else:
-            try:
-                recorder = MigrationRecorder(connection)
-                loader = MigrationLoader(connection)
-            except OperationalError:
-                recorder = loader = None
-            if recorder and loader:
-                for label in local_apps:
-                    try:
-                        qs = recorder.migration_qs.filter(app=label).order_by(
-                            "-applied"
-                        )
-                        if qs.exists():
-                            last = qs.first().name
-                            node = loader.graph.node_map.get((label, last))
-                            parents = list(node.parents) if node else []
-                            prev = parents[0][1] if parents else "zero"
-                            call_command("migrate", label, prev, interactive=False)
-                    except OperationalError:
-                        continue
+    _clean_database_before_migrate(
+        clean=clean,
+        stored_hash=stored_hash,
+        new_hash=new_hash,
+        using_sqlite=using_sqlite,
+        default_db=default_db,
+        local_apps=local_apps,
+    )
 
     should_attempt_migrate = force_db or clean or migrations_pending
     if latest and stored_hash != new_hash:
         should_attempt_migrate = True
 
-    if not connection.in_atomic_block and should_attempt_migrate:
-        needs_migration = True if clean or force_db else _schema_needs_migration()
-        if not needs_migration and not force_db:
-            print("Database schema already up to date; skipping migrate.")
-        else:
-            try:
-                _run_migrate(
-                    using_sqlite=using_sqlite,
-                    default_db=default_db,
-                    interactive=False,
-                )
-                migrations_ran = True
-            except MissingBranchSplinterError as exc:
-                print(
-                    "Detected a retroactively edited migration branch that this database "
-                    "skipped.\n"
-                    f"{exc}\n"
-                    "Manually recreate the database or roll it back to the splinter "
-                    "migration before retrying the installation.",
-                    flush=True,
-                )
-                raise
-            except InconsistentMigrationHistory:
-                call_command("reset_ocpp_migrations")
-                _run_migrate(
-                    using_sqlite=using_sqlite,
-                    default_db=default_db,
-                    interactive=False,
-                )
-                migrations_ran = True
-            except InvalidBasesError:
-                raise
-            except OperationalError as exc:
-                if using_sqlite:
-                    _unlink_sqlite_db(Path(default_db["NAME"]))
-                    _run_migrate(
-                        using_sqlite=using_sqlite,
-                        default_db=default_db,
-                        interactive=False,
-                    )
-                    migrations_ran = True
-                else:  # pragma: no cover - unreachable in sqlite
-                    try:
-                        import psycopg
-                        from psycopg import sql
+    migrations_ran = _apply_migrations(
+        should_attempt_migrate=should_attempt_migrate,
+        clean=clean,
+        force_db=force_db,
+        using_sqlite=using_sqlite,
+        default_db=default_db,
+    )
 
-                        params = {
-                            "dbname": "postgres",
-                            "user": default_db.get("USER", ""),
-                            "password": default_db.get("PASSWORD", ""),
-                            "host": default_db.get("HOST", ""),
-                            "port": default_db.get("PORT", ""),
-                        }
-                        with psycopg.connect(**params, autocommit=True) as conn:
-                            with conn.cursor() as cur:
-                                cur.execute(
-                                    sql.SQL("CREATE DATABASE {}").format(
-                                        sql.Identifier(default_db["NAME"])
-                                    )
-                                )
-                        _run_migrate(
-                            using_sqlite=using_sqlite,
-                            default_db=default_db,
-                            interactive=False,
-                        )
-                        migrations_ran = True
-                    except Exception:
-                        raise exc
-
-    # SigilRoot entries are protected from deletion; fixtures will update them.
-
-    # Track Site entries provided via fixtures so we can update them without
-    # disturbing operator-managed records.
     Site = apps.get_model("sites", "Site")
 
-    # Ensure Application entries exist for local apps before loading fixtures
-    # that reference them.
     _call_command_with_sqlite_lock_retry(
         "register_site_apps",
         using_sqlite=using_sqlite,
@@ -710,51 +975,21 @@ def run_database_tasks(
     fixture_hash_file = locks_dir / "fixtures.md5"
     fixture_cache_file = locks_dir / "fixtures.by-app.json"
     fixture_mtime_file = locks_dir / "fixtures.mtime.json"
-    fixtures = _fixture_files()
-    fixture_mtimes = _fixture_mtime_cache(fixtures) if fixtures else {}
-    stored_fixture_mtimes: dict[str, float] = {}
-    if fixture_mtime_file.exists():
-        try:
-            stored_fixture_mtimes = json.loads(fixture_mtime_file.read_text())
-        except json.JSONDecodeError:
-            stored_fixture_mtimes = {}
-    fixtures_mtime_changed = fixture_mtimes != stored_fixture_mtimes
-
-    stored_fixture_hash = (
-        fixture_hash_file.read_text().strip() if fixture_hash_file.exists() else ""
-    )
-    stored_fixture_cache = {}
-    if fixture_cache_file.exists():
-        try:
-            stored_fixture_cache = json.loads(fixture_cache_file.read_text())
-        except json.JSONDecodeError:
-            stored_fixture_cache = {}
-
-    if fixtures:
-        if force_db or fixtures_mtime_changed or not stored_fixture_hash:
-            fixture_hash = _fixtures_hash(fixtures)
-            fixtures_by_app = _fixture_hashes_by_app(fixtures)
-        else:
-            fixture_hash = stored_fixture_hash
-            fixtures_by_app = stored_fixture_cache or _fixture_hashes_by_app(fixtures)
-    else:
-        fixture_hash = ""
-        fixtures_by_app = {}
-
-    migrations_changed = stored_hash != new_hash
-    should_load_fixtures = force_db or fixtures_changed(
-        fixtures_present=bool(fixtures),
-        current_hash=fixture_hash,
-        stored_hash=stored_fixture_hash,
-        migrations_changed=migrations_changed,
-        migrations_ran=migrations_ran,
-        current_by_app=fixtures_by_app,
-        stored_by_app=stored_fixture_cache,
+    plan = _plan_fixture_loading(
+        fixtures=_fixture_files(),
+        force_db=force_db,
         clean=clean,
+        migrations_changed=stored_hash != new_hash,
+        migrations_ran=migrations_ran,
+        stored_hash=fixture_hash_file.read_text().strip()
+        if fixture_hash_file.exists()
+        else "",
+        stored_by_app=_read_json_file(fixture_cache_file),
+        stored_mtimes=_read_json_file(fixture_mtime_file),
     )
 
-    if should_load_fixtures:
-        required_tables = _fixture_tables(fixtures)
+    if plan.should_load:
+        required_tables = _fixture_tables(list(plan.fixtures))
         existing_tables = set(connection.introspection.table_names())
         missing_tables = required_tables - existing_tables
         if missing_tables:
@@ -782,7 +1017,7 @@ def run_database_tasks(
                     f"{', '.join(sorted(missing_tables))}"
                 )
 
-        fixtures.sort(key=_fixture_sort_key)
+        fixtures = sorted(plan.fixtures, key=_fixture_sort_key)
         with tempfile.TemporaryDirectory() as tmpdir:
             patched: dict[int, list[str]] = {}
             user_pk_map: dict[int, int] = {}
@@ -803,36 +1038,13 @@ def run_database_tasks(
                     except LookupError:
                         modified = True
                         continue
-                    # Update existing users instead of loading duplicates and
-                    # record their primary key mapping for later references.
-                    if model is get_user_model():
-                        username = obj.get("fields", {}).get("username")
-                        existing = None
-                        if username:
-                            existing = (
-                                get_user_model()
-                                .objects.filter(username=username)
-                                .first()
-                            )
-                        if existing:
-                            user_pk_map[obj.get("pk")] = existing.pk
-                            m2m_updates: list[tuple[str, Any]] = []
-                            for field_name, value in obj.get("fields", {}).items():
-                                try:
-                                    field_object = model._meta.get_field(field_name)
-                                except FieldDoesNotExist:
-                                    setattr(existing, field_name, value)
-                                    continue
-                                if field_object.many_to_many:
-                                    m2m_updates.append((field_name, value))
-                                else:
-                                    setattr(existing, field_name, value)
-                            existing.save()
-                            for field_name, value in m2m_updates:
-                                if not _assign_many_to_many(existing, field_name, value):
-                                    pending_user_m2m[existing.pk].append((field_name, value))
-                            modified = True
-                            continue
+                    if model is get_user_model() and _reconcile_existing_user_fixture(
+                        obj,
+                        user_pk_map=user_pk_map,
+                        pending_user_m2m=pending_user_m2m,
+                    ):
+                        modified = True
+                        continue
                     fields = obj.setdefault("fields", {})
                     if "user" in fields and isinstance(fields["user"], int):
                         original_user = fields["user"]
@@ -841,54 +1053,15 @@ def run_database_tasks(
                             fields["user"] = mapped_user
                             modified = True
                     if model_label == "sigils.sigilroot":
-                        skip_reason = _sigilroot_skip_reason(fields)
-                        if skip_reason:
-                            prefix = fields.get("prefix", "?")
-                            print(f"Skipping SigilRoot '{prefix}' ({skip_reason})")
-                            modified = True
-                            continue
-                        prefix = fields.get("prefix")
-                        if prefix:
-                            defaults = dict(fields)
-                            content_type = defaults.get("content_type")
-                            if isinstance(content_type, (list, tuple)) and len(
-                                content_type
-                            ) >= 2:
-                                defaults["content_type"] = (
-                                    ContentType.objects.get_by_natural_key(
-                                        content_type[0],
-                                        content_type[1],
-                                    )
-                                )
-                            elif isinstance(content_type, dict):
-                                app_label = content_type.get("app_label")
-                                model_name = content_type.get("model")
-                                if not model_name:
-                                    model_name = content_type.get("model_name")
-                                if app_label and model_name:
-                                    defaults["content_type"] = (
-                                        ContentType.objects.get_by_natural_key(
-                                            app_label,
-                                            model_name,
-                                        )
-                                    )
-                            SigilRoot = model
-                            SigilRoot.objects.update_or_create(
-                                prefix=prefix,
-                                defaults=defaults,
-                            )
+                        if _upsert_sigilroot_fixture(model, fields):
                             model_counts[model._meta.label] += 1
                             modified = True
                             continue
                     if model is Site:
-                        domain = fields.get("domain")
-                        if domain:
-                            defaults = dict(fields)
-                            Site.objects.update_or_create(
-                                domain=domain,
-                                defaults=defaults,
-                            )
-                            site_fixture_defaults[domain] = defaults
+                        if _upsert_site_fixture(
+                            fields,
+                            site_defaults=site_fixture_defaults,
+                        ):
                             model_counts[model._meta.label] += 1
                         modified = True
                         continue
@@ -897,21 +1070,11 @@ def run_database_tasks(
                             model_counts[model._meta.label] += 1
                             modified = True
                             continue
-                    if model is PackageRelease:
-                        version = obj.get("fields", {}).get("version")
-                        if (
-                            version
-                            and PackageRelease.objects.filter(version=version).exists()
-                        ):
-                            modified = True
-                            continue
+                    if model is PackageRelease and _dedupe_package_release_fixture(obj):
+                        modified = True
+                        continue
                     defines_seed_flag = _model_defines_seed_flag(model)
-                    has_seed_field = any(
-                        f.name == "is_seed_data" for f in model._meta.fields
-                    )
-                    if (defines_seed_flag or has_seed_field) and fields.get(
-                        "is_seed_data"
-                    ) is not True:
+                    if defines_seed_flag and fields.get("is_seed_data") is not True:
                         fields["is_seed_data"] = True
                         modified = True
                     patched_data.append(obj)
@@ -964,29 +1127,25 @@ def run_database_tasks(
                 for label, count in sorted(model_counts.items()):
                     print(f"{label}: {count}")
 
-        # Load shared fixtures once before personal data
         load_shared_user_fixtures(force=True)
 
-        # Load personal user data fixtures last
         for user in get_user_model().objects.all():
             load_user_fixtures(user)
 
-        # Recreate any missing SigilRoots after loading fixtures
         generate_model_sigils()
 
-        fixture_hash_file.write_text(fixture_hash)
-        fixture_cache_file.write_text(json.dumps(fixtures_by_app, sort_keys=True))
-        fixture_mtime_file.write_text(json.dumps(fixture_mtimes, sort_keys=True))
-    elif fixtures:
+        fixture_hash_file.write_text(plan.current_hash)
+        fixture_cache_file.write_text(json.dumps(plan.current_by_app, sort_keys=True))
+        fixture_mtime_file.write_text(json.dumps(plan.current_mtimes, sort_keys=True))
+    elif plan.fixtures:
         print("Fixtures unchanged; skipping reload.")
-        fixture_cache_file.write_text(json.dumps(fixtures_by_app, sort_keys=True))
-        fixture_mtime_file.write_text(json.dumps(fixture_mtimes, sort_keys=True))
+        fixture_cache_file.write_text(json.dumps(plan.current_by_app, sort_keys=True))
+        fixture_mtime_file.write_text(json.dumps(plan.current_mtimes, sort_keys=True))
 
     local_seed_loaded = load_local_seed_zips()
     if local_seed_loaded:
         print(f"Applied {local_seed_loaded} local seed data fixture(s).")
 
-    # Ensure current node is registered or updated
     node, _ = Node.register_current(notify_peers=False)
 
     control_lock = Path(settings.BASE_DIR) / ".locks" / "control.lck"
@@ -996,7 +1155,6 @@ def run_database_tasks(
             defaults={"name": "Control"},
         )
 
-    # Update the migrations hash file after a successful run.
     hash_file.write_text(new_hash)
 
 
