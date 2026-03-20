@@ -589,8 +589,8 @@ def _plan_fixture_loading(
     migrations_changed: bool,
     migrations_ran: bool,
     stored_hash: str,
-    stored_by_app: dict[str, str] | None,
-    stored_mtimes: dict[str, float] | None,
+    stored_by_app: dict[str, Any] | None,
+    stored_mtimes: dict[str, Any] | None,
 ) -> FixtureLoadPlan:
     """Compute fixture hashes, mtimes, and reload intent without side effects."""
 
@@ -653,6 +653,7 @@ def _reconcile_existing_user_fixture(
 
     user_pk_map[obj.get("pk")] = existing.pk
     m2m_updates: list[tuple[str, Any]] = []
+    fields_to_update: list[str] = []
     for field_name, value in obj.get("fields", {}).items():
         try:
             field_object = model._meta.get_field(field_name)
@@ -661,9 +662,12 @@ def _reconcile_existing_user_fixture(
             continue
         if field_object.many_to_many:
             m2m_updates.append((field_name, value))
-        else:
+            continue
+        if getattr(existing, field_name) != value:
             setattr(existing, field_name, value)
-    existing.save()
+            fields_to_update.append(field_name)
+    if fields_to_update:
+        existing.save(update_fields=fields_to_update)
     for field_name, value in m2m_updates:
         if not _assign_many_to_many(existing, field_name, value):
             pending_user_m2m[existing.pk].append((field_name, value))

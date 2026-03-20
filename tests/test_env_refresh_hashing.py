@@ -98,11 +98,20 @@ def test_plan_fixture_loading_reloads_when_per_app_hash_changes(
 
 @pytest.mark.django_db
 def test_reconcile_existing_user_fixture_updates_fields_and_defers_unresolved_m2m(
-    env_refresh_module,
+    env_refresh_module, monkeypatch
 ):
     """Existing fixture users should update in place and preserve deferred M2M work."""
 
     user = get_user_model().objects.create_user(username="fixture-user", password="old")
+    observed_save_kwargs: dict[str, object] = {}
+    original_save = type(user).save
+
+    def capturing_save(self, *args, **kwargs):
+        observed_save_kwargs.update(kwargs)
+        return original_save(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(user), "save", capturing_save)
+
     user_pk_map: dict[int, int] = {}
     pending_user_m2m = defaultdict(list)
     fixture = {
@@ -123,6 +132,7 @@ def test_reconcile_existing_user_fixture_updates_fields_and_defers_unresolved_m2
     user.refresh_from_db()
     assert reconciled is True
     assert user.first_name == "Updated"
+    assert observed_save_kwargs == {"update_fields": ["first_name"]}
     assert user_pk_map == {9: user.pk}
     assert pending_user_m2m[user.pk] == [("groups", [999999])]
 
