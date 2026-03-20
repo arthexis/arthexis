@@ -68,7 +68,10 @@ def _to_module_path(path: Path) -> str:
     return f"apps.{'.'.join(path.relative_to(APPS_DIR).parts)}"
 
 
-LEGACY_MIGRATION_APPS = ["apps.selenium"]
+LEGACY_MIGRATION_APPS = [
+    "apps._legacy.fitbit_migration_only.apps.FitbitMigrationOnlyConfig",
+    "apps.selenium",
+]
 NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",
     "apps.loggers",
