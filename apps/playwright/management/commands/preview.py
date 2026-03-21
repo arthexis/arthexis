@@ -176,6 +176,7 @@ class Command(BaseCommand):
                         engines=engines,
                         login_required=not options["no_login"],
                     )
+                    self._assert_capture_outputs_exist(captures=captures, backend=backend)
                     self._print_reports(captures)
                     return
                 except CommandError as exc:
@@ -251,6 +252,40 @@ class Command(BaseCommand):
                 f"white_ratio={report.white_pixel_ratio}, "
                 f"mostly_white={report.mostly_white()}"
             )
+
+    def _assert_capture_outputs_exist(
+        self, *, captures: list[dict[str, object]], backend: str
+    ) -> None:
+        """Ensure the active backend actually produced every requested artifact.
+
+        Args:
+            captures (list[dict[str, object]]): Planned capture definitions whose
+                ``output`` values should point at generated image files.
+            backend (str): Backend label used for the attempted capture pass.
+
+        Returns:
+            None: Returns once every requested artifact exists on disk.
+
+        Raises:
+            CommandError: If any expected screenshot artifact was not produced.
+        """
+
+        missing_outputs = [
+            str(capture["output"])
+            for capture in captures
+            if not Path(capture["output"]).is_file()
+        ]
+        if not missing_outputs:
+            return
+
+        raise CommandError(
+            "Preview capture did not produce the expected screenshot artifact(s): "
+            + ", ".join(missing_outputs)
+            + ". Confirm the suite is reachable, then rerun `manage.py preview` after "
+            + "starting `manage.py runserver`; if browser automation is unavailable in "
+            + f"this environment, use another configured backend or capture a manual "
+            + f"screenshot. Backend: {backend}."
+        )
 
     def _create_throwaway_admin_user(self) -> tuple[str, str, int]:
         """Create temporary admin credentials for preview login.

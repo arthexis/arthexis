@@ -199,6 +199,47 @@ def test_handle_falls_back_to_selenium_backend(monkeypatch) -> None:
     assert attempted_backends == ["playwright", "selenium"]
 
 
+def test_handle_reports_missing_screenshot_artifacts(monkeypatch, tmp_path) -> None:
+    """Preview should fail clearly when a backend returns without saving files."""
+
+    command = Command()
+
+    monkeypatch.setattr(
+        command, "_create_throwaway_admin_user", lambda: ("tmp", "pw", 42)
+    )
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", lambda _: None)
+    monkeypatch.setattr(
+        command,
+        "_build_capture_plan",
+        lambda **kwargs: [
+            {
+                "path": "/admin/",
+                "viewport_name": "desktop",
+                "viewport_size": (1440, 1800),
+                "output": tmp_path / "missing-admin-preview.png",
+            }
+        ],
+    )
+    monkeypatch.setattr(command, "_capture_with_backend", lambda **kwargs: None)
+    monkeypatch.setattr(command, "_print_reports", lambda captures: None)
+
+    with pytest.raises(
+        CommandError, match=r"did not produce the expected screenshot artifact"
+    ):
+        command.handle(
+            base_url="http://127.0.0.1:8000",
+            paths=["/admin/"],
+            username=None,
+            password=None,
+            output="media/previews/admin-preview.png",
+            output_dir="",
+            viewports="desktop",
+            backend="playwright",
+            engine="chromium",
+            no_login=False,
+        )
+
+
 def test_handle_waits_for_suite_when_requested(monkeypatch) -> None:
     """Preview should probe suite readiness before capturing when requested."""
 
