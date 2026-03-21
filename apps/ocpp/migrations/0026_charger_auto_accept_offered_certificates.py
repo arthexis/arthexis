@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
             model_name="charger",
             name="auto_accept_offered_certificates",
             field=models.BooleanField(
-                default=True,
+                default=False,
                 help_text="Automatically accept certificate status checks for certificates offered by this charge point when no installed certificate matches.",
                 verbose_name="Auto Accept Offered Certificates",
             ),

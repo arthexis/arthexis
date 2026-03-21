@@ -95,7 +95,7 @@ class Charger(Ownable):
     )
     auto_accept_offered_certificates = models.BooleanField(
         _("Auto Accept Offered Certificates"),
-        default=True,
+        default=False,
         help_text=_(
             "Automatically accept certificate status checks for certificates "
             "offered by this charge point when no installed certificate matches."

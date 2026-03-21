@@ -806,7 +806,7 @@ async def test_get_certificate_status_persists_check():
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.integration
-async def test_get_certificate_status_auto_accepts_missing_certificate_by_default():
+async def test_get_certificate_status_rejects_missing_certificate_by_default():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-4")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-4"
@@ -818,15 +818,12 @@ async def test_get_certificate_status_auto_accepts_missing_certificate_by_defaul
         payload, "msg-3", "", "",
     )
 
-    assert result["status"] == "Accepted"
+    assert result["status"] == "Failed"
     status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
         charger=charger
     )
-    assert status_check.status == CertificateStatusCheck.STATUS_ACCEPTED
-    assert (
-        status_check.status_info
-        == "Automatically accepted unmatched offered certificate."
-    )
+    assert status_check.status == CertificateStatusCheck.STATUS_REJECTED
+    assert status_check.status_info == "Certificate not found."
 
 
 @pytest.mark.anyio
@@ -845,6 +842,32 @@ async def test_get_certificate_status_rejects_missing_certificate_when_auto_acce
     payload = {"certificateHashData": {"hashAlgorithm": "SHA256"}}
     result = await consumer._handle_get_certificate_status_action(
         payload, "msg-3b", "", "",
+    )
+
+    assert result["status"] == "Failed"
+    status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
+        charger=charger
+    )
+    assert status_check.status == CertificateStatusCheck.STATUS_REJECTED
+    assert status_check.status_info == "Certificate not found."
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.integration
+async def test_get_certificate_status_rejects_missing_certificate_when_auto_accept_enabled():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CERT-4C",
+        auto_accept_offered_certificates=True,
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-4C"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    payload = {"certificateHashData": {"hashAlgorithm": "SHA256"}}
+    result = await consumer._handle_get_certificate_status_action(
+        payload, "msg-3c", "", "",
     )
 
     assert result["status"] == "Failed"
