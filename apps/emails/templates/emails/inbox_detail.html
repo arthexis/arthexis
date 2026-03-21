@@ -1,33 +1,21 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ message.subject|default:'Inbox message' }}</title>
-    <style>
-        :root { color-scheme: light dark; }
-        body { margin: 0; font-family: Inter, "Segoe UI", sans-serif; background: #0f172a; color: #e2e8f0; }
-        .page { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
-        .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
-        a.button, .button-muted { display: inline-block; padding: 0.72rem 1rem; border-radius: 10px; text-decoration: none; font-weight: 600; }
-        a.button { background: #2563eb; color: white; }
-        .button-muted { background: #1e293b; color: #cbd5e1; }
-        .message { background: #111827; border: 1px solid #334155; border-radius: 16px; padding: 1.25rem; }
-        .meta-grid { display: grid; grid-template-columns: 120px 1fr; gap: 0.75rem; margin-bottom: 1.25rem; }
-        .meta-label { color: #94a3b8; font-weight: 600; }
-        .body { white-space: pre-wrap; word-break: break-word; line-height: 1.6; background: #0b1220; border-radius: 12px; padding: 1rem; }
-        .error { background: #3f1d24; color: #fecdd3; border-radius: 12px; padding: 1rem; }
-    </style>
+    <link rel="stylesheet" href="{% static 'emails/public_inbox.css' %}">
 </head>
 <body>
 <div class="page">
     <div class="actions">
         <a class="button-muted" href="{% url 'emails:inbox-list' %}{% if selected_inbox %}?inbox={{ selected_inbox.pk }}{% endif %}">← Back to inbox</a>
-        {% if navigation.previous_index is not None %}
-            <a class="button" href="{% url 'emails:inbox-detail' navigation.previous_index %}?inbox={{ selected_inbox.pk }}">Previous</a>
+        {% if navigation.previous_key is not None %}
+            <a class="button" href="{% url 'emails:inbox-detail' navigation.previous_key %}?inbox={{ selected_inbox.pk }}">Previous</a>
         {% endif %}
-        {% if navigation.next_index is not None %}
-            <a class="button" href="{% url 'emails:inbox-detail' navigation.next_index %}?inbox={{ selected_inbox.pk }}">Next</a>
+        {% if navigation.next_key is not None %}
+            <a class="button" href="{% url 'emails:inbox-detail' navigation.next_key %}?inbox={{ selected_inbox.pk }}">Next</a>
         {% endif %}
     </div>
 

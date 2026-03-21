@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import imaplib
+import socket
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -69,12 +72,14 @@ def test_inbox_list_shows_recent_messages_for_selected_user_inbox(client, inbox_
         assert limit == 100
         return [
             {
+                "mailbox_id": "imap:101",
                 "subject": "Quarterly update",
                 "from": "ceo@example.com",
                 "body": "Body one",
                 "date": "Fri, 21 Mar 2026 10:30:00 +0000",
             },
             {
+                "mailbox_id": "imap:102",
                 "subject": "Welcome",
                 "from": "support@example.com",
                 "body": "Body two",
@@ -90,15 +95,16 @@ def test_inbox_list_shows_recent_messages_for_selected_user_inbox(client, inbox_
     assert response.status_code == 200
     assert response.context["selected_inbox"].pk == inbox.pk
     assert len(response.context["messages"]) == 2
+    assert response.context["messages"][0]["key"] == "imap:101"
     content = response.content.decode()
     assert "Quarterly update" in content
     assert "ceo@example.com" in content
-    assert reverse("emails:inbox-detail", args=[0]) in content
+    assert reverse("emails:inbox-detail", args=["imap:101"]) in content
 
 
 @pytest.mark.django_db()
-def test_inbox_detail_supports_navigation_between_messages(client, inbox_owner, monkeypatch):
-    """Inbox detail should render the chosen message and expose previous/next navigation."""
+def test_inbox_detail_uses_stable_message_keys_for_navigation(client, inbox_owner, monkeypatch):
+    """Inbox detail should render the chosen message and expose navigation using stable keys."""
 
     inbox = _create_inbox(user=inbox_owner, username="owner@example.com", priority=10)
 
@@ -107,18 +113,21 @@ def test_inbox_detail_supports_navigation_between_messages(client, inbox_owner, 
         "search_messages",
         lambda self, limit=10, **kwargs: [
             {
+                "mailbox_id": "imap:201",
                 "subject": "First",
                 "from": "first@example.com",
                 "body": "First body",
                 "date": "Fri, 21 Mar 2026 10:30:00 +0000",
             },
             {
+                "mailbox_id": "imap:202",
                 "subject": "Second",
                 "from": "second@example.com",
                 "body": "Second body",
                 "date": "Fri, 21 Mar 2026 11:30:00 +0000",
             },
             {
+                "mailbox_id": "imap:203",
                 "subject": "Third",
                 "from": "third@example.com",
                 "body": "Third body",
@@ -128,15 +137,57 @@ def test_inbox_detail_supports_navigation_between_messages(client, inbox_owner, 
     )
     client.force_login(inbox_owner)
 
-    response = client.get(reverse("emails:inbox-detail", args=[1]), {"inbox": inbox.pk})
+    response = client.get(reverse("emails:inbox-detail", args=["imap:202"]), {"inbox": inbox.pk})
 
     assert response.status_code == 200
     assert response.context["message"]["subject"] == "Second"
-    assert response.context["navigation"] == {"previous_index": 0, "next_index": 2}
+    assert response.context["navigation"] == {"previous_key": "imap:201", "next_key": "imap:203"}
     content = response.content.decode()
     assert "Second body" in content
-    assert reverse("emails:inbox-detail", args=[0]) in content
-    assert reverse("emails:inbox-detail", args=[2]) in content
+    assert reverse("emails:inbox-detail", args=["imap:201"]) in content
+    assert reverse("emails:inbox-detail", args=["imap:203"]) in content
+
+
+@pytest.mark.django_db()
+def test_inbox_list_shows_backend_errors_instead_of_500(client, inbox_owner, monkeypatch):
+    """Mailbox connectivity errors should render the inbox error state instead of crashing."""
+
+    inbox = _create_inbox(user=inbox_owner, username="owner@example.com", priority=10)
+    client.force_login(inbox_owner)
+
+    def fake_search_messages(self, limit=10, **kwargs):
+        assert self.pk == inbox.pk
+        raise imaplib.IMAP4.error("temporary mailbox outage")
+
+    monkeypatch.setattr(EmailInbox, "search_messages", fake_search_messages)
+
+    response = client.get(reverse("emails:inbox-list"))
+
+    assert response.status_code == 200
+    assert response.context["error_message"] == "temporary mailbox outage"
+    assert response.context["messages"] == []
+    assert "temporary mailbox outage" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_inbox_detail_shows_backend_errors_instead_of_500(client, inbox_owner, monkeypatch):
+    """Mailbox connectivity errors should render the detail error state instead of crashing."""
+
+    inbox = _create_inbox(user=inbox_owner, username="owner@example.com", priority=10)
+    client.force_login(inbox_owner)
+
+    def fake_search_messages(self, limit=10, **kwargs):
+        assert self.pk == inbox.pk
+        raise socket.timeout("mail server timed out")
+
+    monkeypatch.setattr(EmailInbox, "search_messages", fake_search_messages)
+
+    response = client.get(reverse("emails:inbox-detail", args=["imap:missing"]), {"inbox": inbox.pk})
+
+    assert response.status_code == 200
+    assert response.context["message"] is None
+    assert response.context["error_message"] == "mail server timed out"
+    assert "mail server timed out" in response.content.decode()
 
 
 @pytest.mark.django_db()

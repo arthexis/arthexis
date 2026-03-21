@@ -1,32 +1,11 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inbox</title>
-    <style>
-        :root { color-scheme: light dark; }
-        body { margin: 0; font-family: Inter, "Segoe UI", sans-serif; background: #0f172a; color: #e2e8f0; }
-        .page { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
-        .header { display: flex; justify-content: space-between; align-items: end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
-        h1 { margin: 0; }
-        .subtitle { margin: 0.3rem 0 0; color: #94a3b8; }
-        .panel { background: #111827; border: 1px solid #334155; border-radius: 16px; padding: 1rem; }
-        .toolbar { display: flex; gap: 0.75rem; align-items: end; flex-wrap: wrap; margin-bottom: 1rem; }
-        label { display: block; font-weight: 600; margin-bottom: 0.35rem; }
-        select { min-width: 240px; padding: 0.7rem 0.8rem; border-radius: 10px; border: 1px solid #475569; background: #020617; color: inherit; }
-        button, .button { display: inline-block; padding: 0.72rem 1rem; border-radius: 10px; border: 0; background: #2563eb; color: white; text-decoration: none; font-weight: 600; cursor: pointer; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 0.9rem 0.75rem; border-top: 1px solid #243244; text-align: left; vertical-align: top; }
-        th { color: #94a3b8; font-size: 0.92rem; }
-        tbody tr:hover { background: rgba(37, 99, 235, 0.08); }
-        a.subject-link { color: #bfdbfe; font-weight: 600; text-decoration: none; }
-        a.subject-link:hover { text-decoration: underline; }
-        .meta { color: #94a3b8; font-size: 0.92rem; }
-        .empty, .error { padding: 1rem; border-radius: 12px; }
-        .empty { background: #0b1220; color: #94a3b8; }
-        .error { background: #3f1d24; color: #fecdd3; }
-    </style>
+    <link rel="stylesheet" href="{% static 'emails/public_inbox.css' %}">
 </head>
 <body>
 <div class="page">
@@ -68,7 +47,7 @@
                         {% for message in messages %}
                             <tr>
                                 <td>
-                                    <a class="subject-link" href="{% url 'emails:inbox-detail' message.index %}?inbox={{ selected_inbox.pk }}">{{ message.subject }}</a>
+                                    <a class="subject-link" href="{% url 'emails:inbox-detail' message.key %}?inbox={{ selected_inbox.pk }}">{{ message.subject }}</a>
                                 </td>
                                 <td>{{ message.from }}</td>
                                 <td class="meta">{{ message.display_date }}</td>

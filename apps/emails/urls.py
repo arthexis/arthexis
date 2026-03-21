@@ -8,5 +8,5 @@ app_name = "emails"
 
 urlpatterns = [
     path("inbox/", views.inbox_list, name="inbox-list"),
-    path("inbox/<int:message_index>/", views.inbox_detail, name="inbox-detail"),
+    path("inbox/message/<str:message_key>/", views.inbox_detail, name="inbox-detail"),
 ]

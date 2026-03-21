@@ -1,4 +1,5 @@
 import logging
+import re
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -265,9 +266,16 @@ class EmailInbox(CoreProfile):
                 ids = data[0].split()[-fetch_limit:]
                 messages = []
                 for mid in ids:
-                    typ, msg_data = conn.fetch(mid, "(RFC822)")
+                    typ, msg_data = conn.fetch(mid, "(UID RFC822)")
                     if typ != "OK" or not msg_data:
                         continue
+                    response_header = (
+                        msg_data[0][0] if isinstance(msg_data[0], tuple) else b""
+                    )
+                    uid_match = re.search(rb"UID\s+(\d+)", response_header or b"")
+                    mailbox_id = (
+                        f"imap:{uid_match.group(1).decode()}" if uid_match else ""
+                    )
                     msg = email.message_from_bytes(msg_data[0][1])
                     body_text = _get_body(msg)
                     subj_value = _decode_header_value(msg.get("Subject", ""))
@@ -284,6 +292,8 @@ class EmailInbox(CoreProfile):
                             "from": from_value,
                             "body": body_text,
                             "date": msg.get("Date", ""),
+                            "mailbox_id": mailbox_id,
+                            "message_id": _decode_header_value(msg.get("Message-ID", "")),
                         }
                     )
                     if len(messages) >= limit:
@@ -319,12 +329,22 @@ class EmailInbox(CoreProfile):
                 and _matches(body_text, body, body_regex)
             ):
                 continue
+            uidl_response = conn.uidl(i)
+            uidl_value = (
+                uidl_response.decode("utf-8", errors="ignore")
+                if isinstance(uidl_response, bytes)
+                else str(uidl_response)
+            )
+            uidl_parts = uidl_value.split()
+            mailbox_id = f"pop3:{uidl_parts[2]}" if len(uidl_parts) >= 3 else ""
             messages.append(
                 {
                     "subject": subj,
                     "from": frm,
                     "body": body_text,
                     "date": msg.get("Date", ""),
+                    "mailbox_id": mailbox_id,
+                    "message_id": _decode_header_value(msg.get("Message-ID", "")),
                 }
             )
             if len(messages) >= limit:

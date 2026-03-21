@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from email.utils import parsedate_to_datetime
+import hashlib
+import imaplib
+import poplib
+import socket
+import ssl
 from typing import Any
 
 from django.contrib.auth.decorators import login_required
@@ -15,15 +20,30 @@ from django.utils import timezone
 from apps.emails.models import EmailInbox
 
 MESSAGE_FETCH_LIMIT = 100
+MAILBOX_BACKEND_EXCEPTIONS = (
+    ConnectionError,
+    EOFError,
+    OSError,
+    TimeoutError,
+    imaplib.IMAP4.error,
+    poplib.error_proto,
+    socket.timeout,
+    ssl.SSLError,
+)
 
 
 def _user_inboxes(request: HttpRequest):
     """Return enabled inboxes owned by the authenticated user."""
 
-    return EmailInbox.objects.filter(user=request.user, is_enabled=True).order_by("-priority", "id")
+    return EmailInbox.objects.filter(
+        user=request.user,
+        is_enabled=True,
+    ).order_by("-priority", "id")
 
 
-def _resolve_selected_inbox(request: HttpRequest) -> tuple[EmailInbox | None, list[EmailInbox]]:
+def _resolve_selected_inbox(
+    request: HttpRequest,
+) -> tuple[EmailInbox | None, list[EmailInbox]]:
     """Resolve the selected inbox from the query string or fall back to the highest priority inbox."""
 
     inboxes = list(_user_inboxes(request))
@@ -57,19 +77,59 @@ def _parse_message_date(raw_value: str) -> tuple[int, str]:
         return (0, cleaned)
     if timezone.is_naive(parsed):
         parsed = timezone.make_aware(parsed, timezone=timezone.utc)
-    return (int(parsed.timestamp()), timezone.localtime(parsed).strftime("%Y-%m-%d %H:%M"))
+    return (
+        int(parsed.timestamp()),
+        timezone.localtime(parsed).strftime("%Y-%m-%d %H:%M"),
+    )
 
 
-def _fetch_messages(inbox: EmailInbox, *, limit: int = MESSAGE_FETCH_LIMIT) -> list[dict[str, Any]]:
-    """Fetch mailbox messages and decorate them with list/detail metadata."""
+def _fallback_message_key(message: dict[str, Any]) -> str:
+    """Build a deterministic fallback key when the backend omits a stable mailbox identifier."""
 
-    raw_messages = inbox.search_messages(limit=limit)
+    digest_source = "".join(
+        [
+            str(message.get("subject", "")),
+            str(message.get("from", "")),
+            str(message.get("date", "")),
+            str(message.get("body", "")),
+        ]
+    )
+    digest = hashlib.sha256(digest_source.encode("utf-8", errors="ignore")).hexdigest()
+    return f"fallback-{digest}"
+
+
+def _message_key(message: dict[str, Any]) -> str:
+    """Return a stable mailbox-backed identifier for a message."""
+
+    for field_name in ("mailbox_id", "message_id"):
+        value = str(message.get(field_name, "")).strip()
+        if value:
+            return value
+    return _fallback_message_key(message)
+
+
+def _fetch_messages(
+    inbox: EmailInbox,
+    *,
+    limit: int = MESSAGE_FETCH_LIMIT,
+) -> list[dict[str, Any]]:
+    """Fetch mailbox messages and decorate them with stable identifiers and display metadata."""
+
+    try:
+        raw_messages = inbox.search_messages(limit=limit)
+    except ValidationError:
+        raise
+    except MAILBOX_BACKEND_EXCEPTIONS as exc:
+        raise ValidationError(
+            str(exc) or "Unable to load messages from the selected inbox."
+        ) from exc
+
     decorated_messages: list[dict[str, Any]] = []
-    for index, message in enumerate(raw_messages):
+    for message in raw_messages:
         timestamp, display_date = _parse_message_date(str(message.get("date", "")))
         decorated_messages.append(
             {
-                "index": index,
+                "key": _message_key(message),
                 "subject": str(message.get("subject", "")).strip() or "(No subject)",
                 "from": str(message.get("from", "")).strip() or "Unknown sender",
                 "body": str(message.get("body", "")).strip(),
@@ -81,12 +141,32 @@ def _fetch_messages(inbox: EmailInbox, *, limit: int = MESSAGE_FETCH_LIMIT) -> l
     return decorated_messages
 
 
-def _message_navigation(messages: Sequence[dict[str, Any]], message_index: int) -> dict[str, int | None]:
-    """Build previous/next navigation indexes for the selected message."""
+def _selected_message(
+    messages: Sequence[dict[str, Any]],
+    message_key: str,
+) -> tuple[dict[str, Any], int]:
+    """Resolve a message and its index from a stable message key."""
 
-    previous_index = message_index - 1 if message_index > 0 else None
-    next_index = message_index + 1 if message_index + 1 < len(messages) else None
-    return {"previous_index": previous_index, "next_index": next_index}
+    normalized_key = (message_key or "").strip()
+    for index, message in enumerate(messages):
+        if message["key"] == normalized_key:
+            return message, index
+    raise Http404("Message was not found in the selected inbox view.")
+
+
+def _message_navigation(
+    messages: Sequence[dict[str, Any]],
+    message_index: int,
+) -> dict[str, str | None]:
+    """Build previous/next navigation keys for the selected message."""
+
+    previous_key = messages[message_index - 1]["key"] if message_index > 0 else None
+    next_key = (
+        messages[message_index + 1]["key"]
+        if message_index + 1 < len(messages)
+        else None
+    )
+    return {"previous_key": previous_key, "next_key": next_key}
 
 
 @login_required
@@ -116,7 +196,7 @@ def inbox_list(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
-def inbox_detail(request: HttpRequest, message_index: int) -> HttpResponse:
+def inbox_detail(request: HttpRequest, message_key: str) -> HttpResponse:
     """Render one message from the current user's selected inbox with navigation."""
 
     try:
@@ -127,7 +207,7 @@ def inbox_detail(request: HttpRequest, message_index: int) -> HttpResponse:
             "inboxes": [],
             "selected_inbox": None,
             "message": None,
-            "navigation": {"previous_index": None, "next_index": None},
+            "navigation": {"previous_key": None, "next_key": None},
         }
         return render(request, "emails/inbox_detail.html", context, status=200)
     if selected_inbox is None:
@@ -141,18 +221,17 @@ def inbox_detail(request: HttpRequest, message_index: int) -> HttpResponse:
             "inboxes": inboxes,
             "selected_inbox": selected_inbox,
             "message": None,
-            "navigation": {"previous_index": None, "next_index": None},
+            "navigation": {"previous_key": None, "next_key": None},
         }
         return render(request, "emails/inbox_detail.html", context, status=200)
 
-    if message_index < 0 or message_index >= len(messages):
-        raise Http404("Message was not found in the selected inbox view.")
+    selected_message, selected_index = _selected_message(messages, message_key)
 
     context = {
         "error_message": "",
         "inboxes": inboxes,
         "selected_inbox": selected_inbox,
-        "message": messages[message_index],
-        "navigation": _message_navigation(messages, message_index),
+        "message": selected_message,
+        "navigation": _message_navigation(messages, selected_index),
     }
     return render(request, "emails/inbox_detail.html", context)
