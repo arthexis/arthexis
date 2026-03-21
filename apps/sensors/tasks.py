@@ -127,7 +127,7 @@ def _read_match_file(path: Path) -> str | None:
 def _match_usb_tracker(
     tracker: UsbTracker,
     mount: Path,
-) -> tuple[Path, Path] | None:
+) -> Path | None:
     """Return the first passive USB tracker match for a mount.
 
     Args:
@@ -135,7 +135,7 @@ def _match_usb_tracker(
         mount: Mount directory to inspect.
 
     Returns:
-        A tuple of ``(match_path, mount)`` when the tracker matches, otherwise ``None``.
+        The matching file path when the tracker matches, otherwise ``None``.
 
     Raises:
         ValueError: If the configured regex is invalid.
@@ -159,7 +159,7 @@ def _match_usb_tracker(
         except re.error as exc:
             raise ValueError(f"Invalid regex for tracker {tracker.slug}: {exc}") from exc
 
-    return candidate, mount
+    return candidate
 
 
 @shared_task(name="apps.sensors.tasks.scan_usb_trackers")
@@ -200,7 +200,7 @@ def scan_usb_trackers() -> dict[str, int]:
             continue
 
         matched += 1
-        match_path, _mount = match_info
+        match_path = match_info
         tracker.last_matched_at = now
         tracker.last_match_path = str(match_path)
         update_fields.extend(["last_matched_at", "last_match_path"])
