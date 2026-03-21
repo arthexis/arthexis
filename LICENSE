@@ -32,11 +32,18 @@ modify, and distribute the Software, subject to the conditions below.
    c. first public or customer-facing deployment.
 
 4. Upstream offer.
-   The contribution required by Section 2 must be offered through a public pull
-   request, patch, or another written submission channel accepted by the
-   maintainers. If the maintainers decline a specific submission, the licensee
-   must make another reasonable good-faith contribution that satisfies Section
-   2 within 30 days after the rejection.
+   The contribution required by Section 2 must be offered either:
+   a. to the Arthexis project through a public pull request, patch, or another
+      written submission channel accepted by the maintainers; or
+   b. to a dependency, maintainer, or upstream project covered by Section 11
+      through the channel that project or maintainer ordinarily accepts for
+      sponsorship, funding, code, documentation, maintenance, or other written
+      contributions.
+
+   If Arthexis maintainers decline a specific submission offered under Section
+   4.a, or if a contribution offered under Section 4.b is rejected or refunded,
+   the licensee must make another reasonable good-faith contribution that
+   satisfies Section 2 within 30 days after the rejection or refund.
 
 5. No closed forks without reciprocation.
    You may not maintain a private fork, proprietary integration layer, or
@@ -74,3 +81,11 @@ modify, and distribute the Software, subject to the conditions below.
     contribution to the upstream Arthexis project. If a court of competent
     jurisdiction holds any provision unenforceable, the remaining provisions
     will continue in effect to the maximum extent permitted by law.
+
+11. Forms of contribution.
+    For clarity, the good-faith contributions described in Sections 2 through 4
+    include sponsoring the Arthexis project and paid or volunteer work that
+    materially supports the open-source dependencies, maintainers, or upstream
+    projects the Software relies on. Such support is considered a valid and
+    important contribution when it is proportionate to the licensee's use or
+    extension of the Software.

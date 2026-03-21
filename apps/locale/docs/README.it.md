@@ -154,3 +154,9 @@ Se decidi di utilizzare la nostra suite per i tuoi progetti energetici, puoi con
 
 > "Cosa? Vuoi sapere qualcosa anche su di me? Beh, mi piace sviluppare software, i giochi di ruolo, lunghe passeggiate sulla spiaggia e una quarta cosa segreta."
 > --Arthexis
+
+## Licenza e sponsorizzazione
+
+Arthexis è distribuito secondo la Arthexis Contribution Reciprocity License 1.0. Oltre a codice, documentazione, revisioni e manutenzione, consideriamo anche il sostegno economico ad Arthexis e il lavoro retribuito o volontario a favore delle dipendenze open source su cui ci basiamo come una forma di contributo valida e importante.
+
+Se Arthexis aiuta il tuo team, consulta i termini della licenza in [`LICENSE`](../../../LICENSE) e valuta la possibilità di sponsorizzare o sostenere direttamente chi mantiene le librerie, i framework e i progetti infrastrutturali che rendono possibile questa suite. Sostenere queste dipendenze aiuta a mantenere sano l'intero ecosistema Arthexis.
