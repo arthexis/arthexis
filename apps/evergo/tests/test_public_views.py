@@ -16,8 +16,8 @@ from apps.features.models import Feature
 
 
 @pytest.mark.django_db
-def test_customer_public_detail_renders_contact_map_and_artifacts(client):
-    """Regression: public customer detail should expose summary fields and map link."""
+def test_customer_public_detail_requires_authentication(client):
+    """Regression: customer detail should require login for access."""
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner", email="owner@example.com")
     profile = EvergoUser.objects.create(
@@ -39,6 +39,12 @@ def test_customer_public_detail_renders_contact_map_and_artifacts(client):
 
     response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
 
+    assert response.status_code == 302
+    assert reverse("admin:login") in response.url
+
+    client.force_login(owner)
+    response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
+
     assert response.status_code == 200
     content = response.content.decode()
     assert "SO-123" in content
@@ -56,8 +62,8 @@ def test_customer_public_detail_renders_contact_map_and_artifacts(client):
 
 
 @pytest.mark.django_db
-def test_customer_artifact_download_rejects_non_pdf(client):
-    """Regression: non-PDF attachments should not be downloadable from PDF endpoint."""
+def test_customer_artifact_download_requires_authentication_and_rejects_non_pdf(client):
+    """Regression: artifact download should require login and still reject non-PDF files."""
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner-2", email="owner2@example.com")
     profile = EvergoUser.objects.create(
@@ -71,6 +77,12 @@ def test_customer_artifact_download_rejects_non_pdf(client):
         file=SimpleUploadedFile("photo.jpg", b"img", content_type="image/jpeg"),
     )
 
+    response = client.get(reverse("evergo:customer-artifact-download", args=[customer.pk, image.pk]))
+
+    assert response.status_code == 302
+    assert reverse("admin:login") in response.url
+
+    client.force_login(owner)
     response = client.get(reverse("evergo:customer-artifact-download", args=[customer.pk, image.pk]))
 
     assert response.status_code == 404

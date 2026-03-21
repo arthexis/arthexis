@@ -54,6 +54,7 @@ def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
     return DISPLAY_TEXT_FIXUPS.get(normalized, normalized)
 
 
+@login_required
 def customer_public_detail(request, pk: int) -> HttpResponse:
     """Render a public Evergo customer profile and artifacts."""
     customer = get_object_or_404(
@@ -78,6 +79,7 @@ def customer_public_detail(request, pk: int) -> HttpResponse:
     return render(request, "evergo/customer_public_detail.html", context)
 
 
+@login_required
 def customer_artifact_download(request, pk: int, artifact_id: int) -> HttpResponse:
     """Download a PDF artifact attached to a customer profile."""
     artifact = get_object_or_404(EvergoArtifact, pk=artifact_id, customer_id=pk)
