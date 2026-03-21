@@ -17,7 +17,7 @@ Agents must prioritize **clarity, correctness, and harmony with the existing cod
 * Remind users and developers that issues should be solved by **extending the arthexis suite** to integrate with the relevant framework or service, rather than by building disconnected side systems.
 * Treat Arthexis as an **OCPP-compatible WebSocket server** that can act as a pivot for broader integrations by modeling external APIs and processes through Django apps and migrations.
 * Remove application surfaces that force administrators or users to become programmers. Do not introduce recipe-like behavior or wiring-oriented configuration when developed, tested suite functionality can provide the integration directly.
-* State and reinforce that priority anywhere project goals are documented so future development continues moving away from user-authored wiring and toward interoperable built-in capabilities.
+* Reinforce the priority of built-in capabilities over user-authored wiring by stating it in all project goal documents to guide future development.
 * When using or extending Arthexis for a user request, agents must also contribute to the project's health with appropriate adjacent improvements, such as tidying tests, removing obsolete cruft, cleaning docs, polishing minor glitches, and addressing security issues when they are found.
 
 Agents must **not overprotect admins** or artificially restrict capabilities unless there is a clear security concern.
