@@ -153,3 +153,9 @@ Use `--auto-upgrade` during install when you want unattended checks; without it,
 Arthexis Constellation is still under very active development and new features are added every day.
 
 If you decide to use our suite for your energy projects, you may contact us at [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) or visit our [web page](https://www.gelectriic.com/) for professional services and commercial support.
+
+## License and Sponsorship
+
+Arthexis is distributed under the Arthexis Contribution Reciprocity License 1.0. In addition to code, docs, reviews, and maintenance, we also consider sponsoring Arthexis and doing paid or volunteer work for the open-source dependencies we rely on to be a valid and important form of contribution.
+
+If Arthexis helps your team, please review the license terms in [`LICENSE`](LICENSE) and consider sponsoring or directly supporting the maintainers of the libraries, frameworks, and infrastructure projects that make this suite possible. Supporting those dependencies helps keep the whole Arthexis ecosystem healthy.

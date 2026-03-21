@@ -21,3 +21,9 @@ This directory introduces a Django-like app organization for Ada code.
 
 This keeps Ada behavior app-scoped, so no Ada model logic needs to live outside
 `ada/apps/<app>/...`.
+
+## License and Sponsorship
+
+Arthexis is released under the Arthexis Contribution Reciprocity License 1.0. Beyond code changes, we consider sponsoring Arthexis and doing paid or volunteer work for the open-source dependencies used by this Ada layer to be a valid and important contribution.
+
+If this layer is useful to you, please review the repository [`LICENSE`](../LICENSE) and consider supporting the maintainers of the dependencies that make it possible.
