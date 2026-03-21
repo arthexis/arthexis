@@ -160,10 +160,6 @@ class CertificatesMixin:
                     status_value = "Accepted"
                     status_info = ""
                     response_payload = {"status": status_value}
-                elif target.auto_accept_offered_certificates:
-                    status_value = "Accepted"
-                    status_info = "Automatically accepted unmatched offered certificate."
-                    response_payload = {"status": status_value}
                 else:
                     status_info = "Certificate not found."
                     response_payload = {
