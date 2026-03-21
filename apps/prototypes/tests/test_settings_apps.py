@@ -89,3 +89,9 @@ def test_removed_runtime_apps_only_remain_available_through_explicit_legacy_shim
         "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig"
         in settings_apps.LEGACY_MIGRATION_APPS
     )
+
+
+def test_legacy_migration_apps_are_kept_sorted_for_maintainability():
+    assert settings_apps.LEGACY_MIGRATION_APPS == sorted(
+        settings_apps.LEGACY_MIGRATION_APPS
+    )

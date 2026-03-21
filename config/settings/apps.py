@@ -78,10 +78,10 @@ def _to_module_path(path: Path) -> str:
 
 
 LEGACY_MIGRATION_APPS = [
-    "apps.selenium",
-    "config.legacy_mermaid",
     "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig",
     "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
+    "apps.selenium",
+    "config.legacy_mermaid",
 ]
 NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",
@@ -100,12 +100,7 @@ def _load_local_apps() -> list[str]:
         if _is_django_app_dir(candidate.parent)
     ]
 
-    return sorted(
-        module_path
-        for app_dir in app_dirs
-        if (module_path := _to_module_path(app_dir))
-        not in NON_DJANGO_UTILITY_PACKAGES | RETIRED_RUNTIME_APP_PACKAGES
-    )
+    return sorted(_to_module_path(app_dir) for app_dir in app_dirs)
 
 
 def _load_active_prototype_app() -> list[str]:
