@@ -40,9 +40,9 @@ When presenting options, agents should note material cost differences between ap
 
 ## Work Summaries
 
-All work summaries, handoffs, and similar completion reports must include a concise cost section that makes invisible effort visible to product managers. The section should include:
+All work summaries, handoffs, and similar completion reports must include a concise cost section that makes invisible effort visible to product managers, unless the response must remain in a fixed schema or other machine-readable format that cannot accommodate additional prose. In those format-constrained cases, include the cost information only where the output contract provides a suitable field. The section should include:
 
-* estimated development time spent or expected
+* estimated development time spent, and total expected time for ongoing work
 * notable resource consumption or external service costs
 * any important follow-up or maintenance costs still implied by the change
 
