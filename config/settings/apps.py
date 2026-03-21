@@ -137,7 +137,6 @@ INSTALLED_APPS = (
         "django_object_actions",
         "django.contrib.sites",
         "channels",
-        "graphene_django",
         "apps.celery.beat_app.CeleryBeatConfig",
     ]
     + LOCAL_APPS
