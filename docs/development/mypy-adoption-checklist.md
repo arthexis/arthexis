@@ -106,3 +106,15 @@ When you hit a persistent failure:
 3. record the remaining blocker here with the failing module path and reason
 
 That keeps ownership monotonic while making the remaining debt explicit.
+
+## CI signal review
+
+The MyPy rollout is now enforced in `.github/workflows/mypy.yml` for the approved paths only.
+Keep the signal useful after each rollout step:
+
+1. review the uploaded `mypy.log` artifact and local pre-commit output
+2. fix newly actionable annotations in the owned paths
+3. cleave noisy or false-positive suppressions down to the narrowest override that still documents the real integration gap
+4. leave excluded apps out of the blocking workflow until their checklist step is complete
+
+If a warning turns out to be persistent noise, document the exact module and reason next to the corresponding override so later rollout work can remove it deliberately instead of normalizing broad ignores.
