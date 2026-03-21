@@ -112,16 +112,12 @@ class ChargePointSimulator:
 
         Raises:
             RuntimeError: If no websocket is connected for the session.
-            Exception: Re-raises websocket send failures after updating status.
+            Exception: Re-raises websocket send failures.
         """
 
         if self._ws is None:
             raise RuntimeError("Simulator websocket is not connected.")
-        try:
-            await self._ws.send(message)
-        except Exception:
-            self._set_status("error")
-            raise
+        await self._ws.send(message)
         store.add_log(self.config.cp_path, f"> {message}", log_type="simulator")
 
     async def _recv(self) -> str:
@@ -133,7 +129,7 @@ class ChargePointSimulator:
         Raises:
             TimeoutError: When the websocket does not produce a frame in time.
             UnsupportedMessageError: When the CSMS sends an unsupported CALL.
-            Exception: Re-raises websocket receive failures after updating status.
+            Exception: Re-raises websocket receive failures.
         """
 
         if self._ws is None:
@@ -142,18 +138,11 @@ class ChargePointSimulator:
             try:
                 raw = await asyncio.wait_for(self._ws.recv(), timeout=60)
             except TimeoutError:
-                self._signal_stop("stopped")
                 store.add_log(
                     self.config.cp_path,
                     "Timeout waiting for response from charger",
                     log_type="simulator",
                 )
-                raise
-            except websockets.exceptions.ConnectionClosed:
-                self._signal_stop("stopped")
-                raise
-            except Exception:
-                self._set_status("error")
                 raise
             store.add_log(self.config.cp_path, f"< {raw}", log_type="simulator")
             try:
@@ -852,7 +841,12 @@ class ChargePointSimulator:
         try:
             self._unsupported_message = False
             self._unsupported_message_reason = ""
-            self._ws = await self._connect_websocket()
+            try:
+                self._ws = await self._connect_websocket()
+            except ValueError as exc:
+                self._mark_connected(str(exc))
+                self._signal_stop("error")
+                return
             negotiated_subprotocol = self._ws.subprotocol
             store.add_log(
                 cfg.cp_path,

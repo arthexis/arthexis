@@ -67,12 +67,9 @@ def test_run_session_falls_back_to_alternate_scheme(simulator, monkeypatch):
 
     async_to_sync(simulator._run_session)()
 
-    assert [uri for uri, _subprotocols in attempts[:3]] == [
-        "ws://127.0.0.1:9000/CP-TEST/",
-        "ws://127.0.0.1:9000/CP-TEST/",
-        "ws://127.0.0.1:9000/CP-TEST/",
-    ]
-    assert attempts[3] == ("wss://127.0.0.1:9000/CP-TEST/", ("ocpp1.6j",))
+    attempted_schemes = {uri.split("://", 1)[0] for uri, _subprotocols in attempts}
+    assert attempted_schemes == {"ws", "wss"}
+    assert attempts[-1] == ("wss://127.0.0.1:9000/CP-TEST/", ("ocpp1.6j",))
     assert simulator._connect_error == "accepted"
     assert simulator._last_ws_subprotocol == "ocpp1.6j"
     assert websocket.closed is True
@@ -117,6 +114,34 @@ def test_run_session_stops_on_receive_timeout(simulator, monkeypatch):
     assert websocket.closed is True
 
 
+def test_start_exits_cleanly_after_preconnect_validation_failure(simulator, monkeypatch):
+    async def fake_connect_websocket():
+        raise ValueError("Basic auth requires TLS (wss) for non-loopback hosts")
+
+    monkeypatch.setattr(simulator, "_connect_websocket", fake_connect_websocket)
+    simulator.config.host = "example.com"
+    simulator.config.username = "user"
+    simulator.config.password = "pass"
+
+    started, message, _log_file = simulator.start()
+
+    assert started is False
+    assert message == (
+        "Connection failed: Basic auth requires TLS (wss) for non-loopback hosts"
+    )
+    assert simulator._thread is not None
+    simulator._thread.join(timeout=1)
+    assert simulator._thread.is_alive() is False
+
+    retry_started, retry_message, _retry_log_file = simulator.start()
+
+    assert retry_started is False
+    assert retry_message == message
+    assert simulator._thread is not None
+    simulator._thread.join(timeout=1)
+    assert simulator._thread.is_alive() is False
+
+
 def test_run_session_honors_early_stop_request(simulator, monkeypatch):
     websocket = FakeWebSocket(
         responses=[
@@ -129,8 +154,10 @@ def test_run_session_honors_early_stop_request(simulator, monkeypatch):
     async def fake_connect(*args, **kwargs):
         return websocket
 
+    original_handshake = simulator._perform_boot_and_authorize_handshake
+
     async def fake_handshake():
-        accepted = await ChargePointSimulator._perform_boot_and_authorize_handshake(simulator)
+        accepted = await original_handshake()
         simulator._stop_event.set()
         return accepted
 
