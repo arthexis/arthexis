@@ -199,6 +199,162 @@ def test_handle_falls_back_to_selenium_backend(monkeypatch) -> None:
     assert attempted_backends == ["playwright", "selenium"]
 
 
+def test_handle_reports_missing_screenshot_artifacts(monkeypatch, tmp_path) -> None:
+    """Preview should fail clearly when a backend returns without saving files."""
+
+    command = Command()
+
+    monkeypatch.setattr(
+        command, "_create_throwaway_admin_user", lambda: ("tmp", "pw", 42)
+    )
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", lambda _: None)
+    monkeypatch.setattr(
+        command,
+        "_build_capture_plan",
+        lambda **kwargs: [
+            {
+                "path": "/admin/",
+                "viewport_name": "desktop",
+                "viewport_size": (1440, 1800),
+                "output": tmp_path / "missing-admin-preview.png",
+            }
+        ],
+    )
+    monkeypatch.setattr(command, "_capture_all_playwright", lambda **kwargs: None)
+    monkeypatch.setattr(command, "_print_reports", lambda captures: None)
+
+    with pytest.raises(
+        CommandError, match=r"did not produce the expected screenshot artifact"
+    ):
+        command.handle(
+            base_url="http://127.0.0.1:8000",
+            paths=["/admin/"],
+            username=None,
+            password=None,
+            output="media/previews/admin-preview.png",
+            output_dir="",
+            viewports="desktop",
+            backend="playwright",
+            engine="chromium",
+            no_login=False,
+        )
+
+
+def test_handle_falls_back_to_secondary_engine_when_first_misses_artifact(
+    monkeypatch, tmp_path
+) -> None:
+    """Preview should keep trying engines when an earlier one skips an artifact."""
+
+    command = Command()
+    attempted_engines: list[str] = []
+    output = tmp_path / "admin-preview.png"
+
+    monkeypatch.setattr(
+        command, "_create_throwaway_admin_user", lambda: ("tmp", "pw", 42)
+    )
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", lambda _: None)
+    monkeypatch.setattr(
+        command,
+        "_build_capture_plan",
+        lambda **kwargs: [
+            {
+                "path": "/admin/",
+                "viewport_name": "desktop",
+                "viewport_size": (1440, 1800),
+                "output": output,
+            }
+        ],
+    )
+    monkeypatch.setattr(command, "_print_reports", lambda captures: None)
+
+    def _capture_all_playwright(**kwargs):
+        attempted_engines.append(kwargs["engine"])
+        if kwargs["engine"] == "firefox":
+            kwargs["captures"][0]["output"].write_text("firefox")
+
+    monkeypatch.setattr(command, "_capture_all_playwright", _capture_all_playwright)
+
+    command.handle(
+        base_url="http://127.0.0.1:8000",
+        paths=["/admin/"],
+        username=None,
+        password=None,
+        output="media/previews/admin-preview.png",
+        output_dir="",
+        viewports="desktop",
+        backend="playwright",
+        engine="chromium,firefox",
+        no_login=False,
+    )
+
+    assert attempted_engines == ["chromium", "firefox"]
+    assert output.read_text() == "firefox"
+
+
+def test_handle_clears_stale_artifacts_between_engine_retries(monkeypatch, tmp_path) -> None:
+    """Preview should not treat mixed outputs from multiple failed engines as success."""
+
+    command = Command()
+    outputs = [tmp_path / "admin-desktop.png", tmp_path / "admin-mobile.png"]
+
+    monkeypatch.setattr(
+        command, "_create_throwaway_admin_user", lambda: ("tmp", "pw", 42)
+    )
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", lambda _: None)
+    monkeypatch.setattr(
+        command,
+        "_build_capture_plan",
+        lambda **kwargs: [
+            {
+                "path": "/admin/",
+                "viewport_name": "desktop",
+                "viewport_size": (1440, 1800),
+                "output": outputs[0],
+            },
+            {
+                "path": "/admin/",
+                "viewport_name": "mobile",
+                "viewport_size": (390, 844),
+                "output": outputs[1],
+            },
+        ],
+    )
+    monkeypatch.setattr(command, "_print_reports", lambda captures: None)
+
+    def _capture_all_playwright(**kwargs):
+        engine = kwargs["engine"]
+        if engine == "chromium":
+            outputs[0].write_text("chromium")
+            return
+        if engine == "firefox":
+            outputs[1].write_text("firefox")
+            return
+        raise AssertionError(f"Unexpected engine: {engine}")
+
+    monkeypatch.setattr(command, "_capture_all_playwright", _capture_all_playwright)
+
+    with pytest.raises(
+        CommandError,
+        match=r"All preview backends failed\. Last error: All Playwright engines failed",
+    ):
+        command.handle(
+            base_url="http://127.0.0.1:8000",
+            paths=["/admin/"],
+            username=None,
+            password=None,
+            output="media/previews/admin-preview.png",
+            output_dir="",
+            viewports="desktop,mobile",
+            backend="playwright",
+            engine="chromium,firefox",
+            no_login=False,
+        )
+
+    assert outputs[0].exists() is False
+    assert outputs[1].exists() is True
+    assert outputs[1].read_text() == "firefox"
+
+
 def test_handle_waits_for_suite_when_requested(monkeypatch) -> None:
     """Preview should probe suite readiness before capturing when requested."""
 
