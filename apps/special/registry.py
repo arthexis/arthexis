@@ -22,6 +22,20 @@ class SpecialCommandValidationError(ValueError):
     """Raised when a special command call does not match DB constraints."""
 
 
+def _global_management_option_dests() -> set[str]:
+    """Return Django's built-in management option destinations.
+
+    These options are injected by ``BaseCommand`` into every parser and should
+    never be persisted as special-command parameters.
+    """
+
+    parser = BaseCommand().create_parser("manage.py", "special")
+    return {action.dest for action in parser._actions}
+
+
+GLOBAL_MANAGEMENT_OPTION_DESTS = _global_management_option_dests()
+
+
 @dataclass(frozen=True)
 class SpecialCommandDeclaration:
     """Declarative metadata attached to command classes via decorator."""
@@ -119,7 +133,7 @@ def sync_special_command(
         # so we intentionally introspect parser._actions. If argparse changes this
         # private structure, this loop should move behind a compatibility wrapper.
         for index, action in enumerate(parser._actions):
-            if action.dest in {"help"}:
+            if action.dest in GLOBAL_MANAGEMENT_OPTION_DESTS:
                 continue
 
             _validate_action_shape(action)
@@ -188,7 +202,9 @@ def call_special_command(name: str, /, **inputs: Any) -> Any:
     except SpecialCommand.DoesNotExist as exc:
         raise SpecialCommandValidationError(f"Unknown special command: {name}") from exc
     parameter_map = {
-        parameter.name: parameter for parameter in special.parameters.all()
+        parameter.name: parameter
+        for parameter in special.parameters.all()
+        if parameter.name not in GLOBAL_MANAGEMENT_OPTION_DESTS
     }
 
     unknown_keys = sorted(set(inputs) - set(parameter_map))
