@@ -30,12 +30,12 @@ def _run_bash(script: str, *, tmp_path: Path) -> subprocess.CompletedProcess[str
 
 def test_playwright_host_dependency_install_warns_without_root_access(tmp_path: Path):
     result = _run_bash(
-        """
+        f"""
         source ./env-refresh.sh
-        uname() { echo Linux; }
-        id() { if [ "$1" = "-u" ]; then echo 1000; else command id "$@"; fi; }
-        sudo() { return 1; }
-        PYTHON=/tmp/fake-python
+        uname() {{ echo Linux; }}
+        id() {{ if [ "$1" = "-u" ]; then echo 1000; else command id "$@"; fi; }}
+        sudo() {{ return 1; }}
+        PYTHON="{tmp_path}/fake-python"
         ensure_playwright_host_dependencies
         """,
         tmp_path=tmp_path,
@@ -44,7 +44,7 @@ def test_playwright_host_dependency_install_warns_without_root_access(tmp_path: 
     output = result.stdout + result.stderr
     assert result.returncode == 0, output
     assert "Linux host libraries may still be missing" in output
-    assert "playwright install-deps chromium firefox" in output
+    assert f"'{tmp_path}/fake-python -m playwright install-deps chromium firefox'" in output
 
 
 def test_playwright_browser_install_reports_missing_host_dependencies(tmp_path: Path):
