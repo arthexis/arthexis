@@ -5,6 +5,7 @@ from datetime import datetime, time, timedelta
 
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.utils.html import format_html
 from django.http import HttpResponseRedirect
@@ -45,18 +46,11 @@ def _contractor_login_wizard_admin_view(admin_instance, request, object_id: str 
     if object_id is not None:
         profile = get_object_or_404(admin_instance.get_queryset(request), pk=object_id)
 
-    if request.method == "POST":
-        permission_granted = (
-            admin_instance.has_change_permission(request, obj=profile)
-            if profile is not None
-            else admin_instance.has_add_permission(request)
-        )
-    else:
-        permission_granted = (
-            admin_instance.has_view_or_change_permission(request, obj=profile)
-            if profile is not None
-            else admin_instance.has_view_or_change_permission(request)
-        )
+    permission_granted = (
+        admin_instance.has_change_permission(request, obj=profile)
+        if profile is not None
+        else admin_instance.has_add_permission(request)
+    )
     if not permission_granted:
         raise PermissionDenied
 
@@ -65,39 +59,42 @@ def _contractor_login_wizard_admin_view(admin_instance, request, object_id: str 
     if request.method == "POST":
         form = EvergoContractorLoginWizardForm(request.POST, instance=instance)
         if form.is_valid():
-            contractor = form.save()
-            setup_results = {"contractor": contractor, "validated": None, "loaded": None}
-            if form.cleaned_data.get("validate_credentials"):
-                try:
-                    login_result = contractor.test_login()
-                except EvergoAPIError as exc:
-                    admin_instance.message_user(
-                        request,
-                        _("Evergo validation failed for %(contractor)s: %(error)s")
-                        % {"contractor": str(contractor), "error": exc},
-                        level=messages.ERROR,
-                    )
-                    setup_results["validated"] = {"ok": False, "message": str(exc)}
-                else:
+            contractor = None
+            show_setup_results = form.cleaned_data.get("validate_credentials") or form.cleaned_data.get(
+                "load_all_customers"
+            )
+
+            def initialize_results(saved_contractor):
+                return {"contractor": saved_contractor, "validated": None, "loaded": None}
+
+            def run_validation_and_load(saved_contractor):
+                current_setup_results = initialize_results(saved_contractor) if show_setup_results else None
+                if form.cleaned_data.get("validate_credentials"):
+                    login_result = saved_contractor.test_login()
                     success_message = _(
                         "Evergo login succeeded for %(contractor)s (status %(status)s)."
-                    ) % {"contractor": str(contractor), "status": login_result.response_code}
+                    ) % {"contractor": str(saved_contractor), "status": login_result.response_code}
                     admin_instance.message_user(request, success_message, level=messages.SUCCESS)
-                    setup_results["validated"] = {"ok": True, "message": success_message}
+                    if current_setup_results is not None:
+                        current_setup_results["validated"] = {"ok": True, "message": success_message}
+
                     if form.cleaned_data.get("load_all_customers"):
                         try:
-                            summary = contractor.load_customers_from_queries(raw_queries="")
+                            summary = saved_contractor.load_customers_from_queries(raw_queries="")
                         except EvergoAPIError as exc:
                             admin_instance.message_user(
                                 request,
                                 _("Initial customer load failed for %(contractor)s: %(error)s")
-                                % {"contractor": str(contractor), "error": exc},
+                                % {"contractor": str(saved_contractor), "error": exc},
                                 level=messages.ERROR,
                             )
-                            setup_results["loaded"] = {"ok": False, "message": str(exc)}
+                            if current_setup_results is not None:
+                                current_setup_results["loaded"] = {"ok": False, "message": str(exc)}
                         else:
                             load_message = _(
-                                "Initial load completed. Customers: %(customers)s | Orders created: %(created)s | Orders updated: %(updated)s | Placeholders: %(placeholders)s"
+                                "Initial load completed. Customers: %(customers)s | "
+                                "Orders created: %(created)s | Orders updated: %(updated)s | "
+                                "Placeholders: %(placeholders)s"
                             ) % {
                                 "customers": summary["customers_loaded"],
                                 "created": summary["orders_created"],
@@ -105,10 +102,49 @@ def _contractor_login_wizard_admin_view(admin_instance, request, object_id: str 
                                 "placeholders": summary["placeholders_created"],
                             }
                             admin_instance.message_user(request, load_message, level=messages.SUCCESS)
-                            setup_results["loaded"] = {"ok": True, "message": load_message, "summary": summary}
-            if "_continue" in request.POST:
+                            if current_setup_results is not None:
+                                current_setup_results["loaded"] = {
+                                    "ok": True,
+                                    "message": load_message,
+                                    "summary": summary,
+                                }
+                return current_setup_results
+
+            if profile is not None and form.cleaned_data.get("validate_credentials"):
+                try:
+                    with transaction.atomic():
+                        contractor = form.save()
+                        setup_results = run_validation_and_load(contractor)
+                except EvergoAPIError as exc:
+                    admin_instance.message_user(
+                        request,
+                        _("Evergo validation failed for %(contractor)s: %(error)s")
+                        % {"contractor": str(profile), "error": exc},
+                        level=messages.ERROR,
+                    )
+                    contractor = profile
+                    contractor.refresh_from_db()
+                    if show_setup_results:
+                        setup_results = initialize_results(contractor)
+                        setup_results["validated"] = {"ok": False, "message": str(exc)}
+            else:
+                contractor = form.save()
+                try:
+                    setup_results = run_validation_and_load(contractor)
+                except EvergoAPIError as exc:
+                    admin_instance.message_user(
+                        request,
+                        _("Evergo validation failed for %(contractor)s: %(error)s")
+                        % {"contractor": str(contractor), "error": exc},
+                        level=messages.ERROR,
+                    )
+                    if show_setup_results:
+                        setup_results = initialize_results(contractor)
+                        setup_results["validated"] = {"ok": False, "message": str(exc)}
+
+            if "_continue" in request.POST and not setup_results:
                 return redirect(reverse(f"admin:{opts.app_label}_{opts.model_name}_change", args=[contractor.pk]))
-            if "_save" in request.POST:
+            if "_save" in request.POST and not setup_results:
                 return redirect(changelist_url)
     else:
         form = EvergoContractorLoginWizardForm(instance=instance)
@@ -212,9 +248,11 @@ class EvergoUserAdmin(
     """Manage Evergo users and allow login verification from admin actions."""
 
     change_form_template = "django_object_actions/change_form.html"
-    change_list_template = "django_object_actions/change_list.html"
+    change_list_template = "admin/evergo/evergouser/change_list.html"
     dashboard_actions = ("login_on_evergo_dashboard_action",)
-    changelist_actions = ("login_on_evergo_wizard", "my_profile")
+    LOGIN_ON_EVERGO_LABEL = _("Login on Evergo")
+
+    changelist_actions = ("my_profile",)
 
     list_display = (
         "evergo_email",
@@ -336,7 +374,7 @@ class EvergoUserAdmin(
         """Inject a direct changelist button for the Evergo contractor login wizard."""
         extra_context = extra_context or {}
         links = list(extra_context.get("global_object_links") or [])
-        links.insert(0, {"label": _("Login on Evergo"), "url": reverse("admin:evergo_evergouser_login_on_evergo")})
+        links.insert(0, {"label": self.LOGIN_ON_EVERGO_LABEL, "url": reverse("admin:evergo_evergouser_login_on_evergo")})
         extra_context["global_object_links"] = links
         return super().changelist_view(request, extra_context=extra_context)
 
@@ -361,8 +399,8 @@ class EvergoUserAdmin(
         """Open the contractor signup/login wizard from the changelist."""
         return redirect(reverse("admin:evergo_evergouser_login_on_evergo"))
 
-    login_on_evergo_wizard.label = _("Login on Evergo")
-    login_on_evergo_wizard.short_description = _("Login on Evergo")
+    login_on_evergo_wizard.label = LOGIN_ON_EVERGO_LABEL
+    login_on_evergo_wizard.short_description = LOGIN_ON_EVERGO_LABEL
     login_on_evergo_wizard.requires_queryset = False
     login_on_evergo_wizard.dashboard_url = "admin:evergo_evergouser_login_on_evergo"
 
@@ -370,16 +408,16 @@ class EvergoUserAdmin(
         """Expose the contractor login wizard from the admin dashboard."""
         return redirect(reverse("admin:evergo_evergouser_login_on_evergo"))
 
-    login_on_evergo_dashboard_action.label = _("Login on Evergo")
-    login_on_evergo_dashboard_action.short_description = _("Login on Evergo")
+    login_on_evergo_dashboard_action.label = LOGIN_ON_EVERGO_LABEL
+    login_on_evergo_dashboard_action.short_description = LOGIN_ON_EVERGO_LABEL
     login_on_evergo_dashboard_action.dashboard_url = "admin:evergo_evergouser_login_on_evergo"
 
     def login_on_evergo_action(self, request, obj):
         """Open the wizard prefilled with the selected contractor record."""
         return redirect(reverse("admin:evergo_evergouser_login_on_evergo_object", args=[obj.pk]))
 
-    login_on_evergo_action.label = _("Login on Evergo")
-    login_on_evergo_action.short_description = _("Login on Evergo")
+    login_on_evergo_action.label = LOGIN_ON_EVERGO_LABEL
+    login_on_evergo_action.short_description = LOGIN_ON_EVERGO_LABEL
 
     def login_on_evergo_view(self, request):
         """Render the contractor signup/login wizard without a preselected contractor."""

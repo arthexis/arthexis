@@ -5,6 +5,7 @@ from django.urls import reverse
 
 import pytest
 
+from apps.evergo.exceptions import EvergoAPIError
 from apps.evergo.models import EvergoUser
 
 
@@ -15,7 +16,8 @@ def test_evergo_contractors_changelist_exposes_login_on_evergo_action(admin_clie
 
     assert response.status_code == 200
     admin_instance = admin.site._registry[EvergoUser]
-    assert "login_on_evergo_wizard" in admin_instance.get_changelist_actions(response.wsgi_request)
+    assert admin_instance.get_changelist_actions(response.wsgi_request) == ("my_profile",)
+    assert response.resolver_match.view_name == "admin:evergo_evergouser_changelist"
     wizard_response = admin_client.get(reverse("admin:evergo_evergouser_login_on_evergo"))
     assert wizard_response.status_code == 200
     assert "Login on Evergo" in wizard_response.content.decode()
@@ -94,3 +96,39 @@ def test_evergo_user_admin_exposes_dashboard_action_and_object_wizard_redirect(a
     content = response.content.decode()
     assert "existing.contractor@example.com" in content
     assert reverse("admin:evergo_evergouser_changelist") in content
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+def test_evergo_login_wizard_keeps_existing_credentials_when_validation_fails(
+    admin_client, admin_user, monkeypatch
+):
+    contractor = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="existing.contractor@example.com",
+        evergo_password="working-secret",
+    )
+
+    def fake_test_login(self, *, timeout: int = 15):
+        raise EvergoAPIError("bad credentials")
+
+    monkeypatch.setattr(EvergoUser, "test_login", fake_test_login)
+
+    response = admin_client.post(
+        reverse("admin:evergo_evergouser_login_on_evergo_object", args=[contractor.pk]),
+        {
+            "user": str(admin_user.pk),
+            "group": "",
+            "avatar": "",
+            "evergo_email": "broken.contractor@example.com",
+            "evergo_password": "",
+            "validate_credentials": "on",
+            "_save": "Save and return to contractors",
+        },
+    )
+
+    assert response.status_code == 200
+    contractor.refresh_from_db()
+    assert contractor.evergo_email == "existing.contractor@example.com"
+    assert contractor.evergo_password == "working-secret"
+    assert "bad credentials" in response.content.decode()

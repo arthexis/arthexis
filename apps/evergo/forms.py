@@ -110,7 +110,9 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         """Prefill first-time contractor setup defaults for a smoother signup flow."""
         super().__init__(*args, **kwargs)
-        self.fields["evergo_password"].widget = forms.PasswordInput(render_value=True)
+        self.fields["evergo_password"].widget = forms.PasswordInput()
+        if self.instance.pk:
+            self.fields["evergo_password"].required = False
         self.fields["user"].required = False
         self.fields["group"].required = False
         self.fields["avatar"].required = False
@@ -120,6 +122,9 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
     def clean(self):
         """Require a single owner and force validation before optional initial loading."""
         cleaned_data = super().clean()
+        if self.instance.pk and not cleaned_data.get("evergo_password"):
+            cleaned_data["evergo_password"] = self.instance.evergo_password
+
         owners = [
             field_name
             for field_name in ("user", "group", "avatar")
