@@ -9,7 +9,7 @@
       "title": "Rename admin preview command to preview and document AGENTS guidance",
       "prompt_text": "Propose and implement a way to include a screenshot tool within the suite itself that can be used during development to standardize the process of generating previews and asserting general information about the image and a text blurb we can include in every system prompt to let agents know how to use it and use it to generate a preview of the admin as a test preview.",
       "initial_plan": "1) Rename command usage from capture_admin_preview to preview while preserving compatibility. 2) Update preview guidance docs/skill text. 3) Add AGENTS.md instructions for the preview command. 4) Validate with tests and a live admin preview capture.",
-      "pr_reference": "PR-TBD",
+      "change_reference": "",
       "context": {
         "scope": "preview automation and diagnostics",
         "target_branch": "current",

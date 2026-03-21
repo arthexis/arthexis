@@ -1,4 +1,4 @@
-"""Compatibility wrapper for the deprecated ``purge_net_messages`` command."""
+"""Shortcut wrapper for the standalone ``purge_net_messages`` command."""
 
 from __future__ import annotations
 
@@ -7,21 +7,16 @@ from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    """Bridge legacy ``purge_net_messages`` calls to ``node purge_net_messages``."""
+    """Forward standalone ``purge_net_messages`` calls to ``node purge-messages``."""
 
-    help = "Deprecated; use `python manage.py node purge_net_messages` instead."
+    help = "Shortcut for `python manage.py node purge-messages`."
 
     def handle(self, *args, **options):
-        """Print deprecation notice and execute ``node purge_net_messages``."""
+        """Execute ``node purge-messages`` without standalone warning noise."""
 
-        self.stdout.write(
-            self.style.WARNING(
-                "DEPRECATED: `manage.py purge_net_messages` is deprecated; use `manage.py node purge_net_messages` instead."
-            )
-        )
         call_command(
             "node",
-            "purge_net_messages",
+            "purge-messages",
             stdout=self.stdout,
             stderr=self.stderr,
         )

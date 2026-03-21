@@ -24,11 +24,22 @@ EXPECTED_METHOD_PATHS = {
 }
 
 
+def _ensure_evergo_api_seeded() -> APIExplorer:
+    """Ensure Evergo API explorer data exists even when migrations are skipped."""
+
+    api, _ = APIExplorer.objects.get_or_create(
+        name="Evergo API",
+        defaults={"base_url": "https://portal-backend.evergo.com/api/mex/v1/"},
+    )
+    call_command("loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0)
+    return api
+
+
 @pytest.mark.django_db
 def test_evergo_api_explorer_seeded_endpoints() -> None:
     """Regression: migration should seed all Evergo integration endpoints."""
 
-    api = APIExplorer.objects.get(name="Evergo API")
+    api = _ensure_evergo_api_seeded()
     methods = {
         (method.http_method, method.resource_path)
         for method in ResourceMethod.objects.filter(api=api)
@@ -42,7 +53,7 @@ def test_evergo_api_explorer_seeded_endpoints() -> None:
 def test_evergo_api_explorer_matches_model_endpoints() -> None:
     """Regression: seeded API explorer routes should include all endpoint constants used by the model."""
 
-    api = APIExplorer.objects.get(name="Evergo API")
+    api = _ensure_evergo_api_seeded()
     seeded_paths = {method.resource_path for method in ResourceMethod.objects.filter(api=api)}
     base_path = urlparse(api.base_url).path
     model_urls = {
@@ -62,7 +73,7 @@ def test_evergo_api_explorer_matches_model_endpoints() -> None:
 def test_evergo_fixture_loaddata_is_idempotent() -> None:
     """Regression: loading Evergo endpoint fixture should update seeded rows without integrity errors."""
 
-    api = APIExplorer.objects.get(name="Evergo API")
+    api = _ensure_evergo_api_seeded()
     initial_count = ResourceMethod.objects.filter(api=api).count()
 
     call_command("loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0)

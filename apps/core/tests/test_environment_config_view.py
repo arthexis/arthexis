@@ -127,7 +127,7 @@ def test_environment_view_post_persists_user_values(db, tmp_path, settings) -> N
 
 
 def test_environment_view_trims_user_env_keys(db, tmp_path, settings) -> None:
-    """User env keys with spaces around '=' should still match known variables."""
+    """User env keys with spaces around '=' should map and normalize values."""
     settings.BASE_DIR = tmp_path
     user = get_user_model().objects.create_superuser(
         username="admin4",
@@ -149,4 +149,4 @@ def test_environment_view_trims_user_env_keys(db, tmp_path, settings) -> None:
         for row in response.context_data["env_rows"]
         if row["key"] == "PATH"
     )
-    assert path_row["user_value"] == " /spaced/value"
+    assert path_row["user_value"] == "/spaced/value"

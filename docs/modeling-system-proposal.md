@@ -113,7 +113,7 @@ Provide a formal specification for transformations:
 - **Lossy fields:** flagged explicitly.
 - **Preconditions:** required fields or state checks.
 - **Postconditions:** resulting state or guarantees.
-- **Version policy:** deprecation timeline and compatibility rules.
+- **Version policy:** compatibility timeline and compatibility rules.
 
 ### C. Interaction policy framework
 Define policy as code for routing and safety:

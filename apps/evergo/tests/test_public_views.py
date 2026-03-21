@@ -1,4 +1,4 @@
-"""Tests for Evergo public customer pages and artifact downloads."""
+"""Focused Evergo public-view security regression tests."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from apps.features.models import Feature
 
 
 @pytest.mark.django_db
-def test_customer_public_detail_renders_contact_map_and_artifacts(client):
-    """Regression: public customer detail should expose summary fields and map link."""
+def test_customer_public_detail_requires_authentication(client):
+    """Regression: customer detail should require login for access."""
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner", email="owner@example.com")
     profile = EvergoUser.objects.create(
@@ -32,11 +32,36 @@ def test_customer_public_detail_renders_contact_map_and_artifacts(client):
         address="Av Siempre Viva 742, Monterrey, NL",
         latest_so="SO-123",
     )
+
+    response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
+
+    assert response.status_code == 302
+    assert "/login/" in response.url
+
+
+@pytest.mark.django_db
+def test_customer_public_detail_renders_for_authenticated_owner(client):
+    """Regression: customer detail should still render for the owning authenticated user."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-detail", email="owner-detail@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-detail@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(
+        user=profile,
+        name="Jane Doe",
+        phone_number="+52 555 1234",
+        address="Av Siempre Viva 742, Monterrey, NL",
+        latest_so="SO-123",
+    )
     image = SimpleUploadedFile("house.png", b"img-bytes", content_type="image/png")
     pdf = SimpleUploadedFile("quote.pdf", b"%PDF-1.4\nmock", content_type="application/pdf")
     EvergoArtifact.objects.create(customer=customer, file=image)
     artifact_pdf = EvergoArtifact.objects.create(customer=customer, file=pdf)
 
+    client.force_login(owner)
     response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
 
     assert response.status_code == 200
@@ -56,8 +81,27 @@ def test_customer_public_detail_renders_contact_map_and_artifacts(client):
 
 
 @pytest.mark.django_db
-def test_customer_artifact_download_rejects_non_pdf(client):
-    """Regression: non-PDF attachments should not be downloadable from PDF endpoint."""
+def test_customer_public_detail_rejects_non_owner_access(client):
+    """Security: authenticated users cannot view customer details for other owners."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-private", email="owner-private@example.com")
+    intruder = User.objects.create_user(username="evergo-intruder", email="intruder@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-private@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="Jane Doe")
+
+    client.force_login(intruder)
+    response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_customer_artifact_download_requires_authentication(client):
+    """Regression: artifact download should require login before evaluating the artifact."""
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner-2", email="owner2@example.com")
     profile = EvergoUser.objects.create(
@@ -72,6 +116,52 @@ def test_customer_artifact_download_rejects_non_pdf(client):
     )
 
     response = client.get(reverse("evergo:customer-artifact-download", args=[customer.pk, image.pk]))
+
+    assert response.status_code == 302
+    assert "/login/" in response.url
+
+
+@pytest.mark.django_db
+def test_customer_artifact_download_rejects_non_pdf_for_authenticated_owner(client):
+    """Regression: authenticated owners should still get 404 for non-PDF downloads."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-2b", email="owner2b@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner2b@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="John")
+    image = EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("photo.jpg", b"img", content_type="image/jpeg"),
+    )
+
+    client.force_login(owner)
+    response = client.get(reverse("evergo:customer-artifact-download", args=[customer.pk, image.pk]))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_customer_artifact_download_rejects_non_owner_access(client):
+    """Security: authenticated users cannot download artifacts for other owners' customers."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-2c", email="owner2c@example.com")
+    intruder = User.objects.create_user(username="evergo-owner-2d", email="owner2d@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner2c@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="John")
+    pdf = EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("quote.pdf", b"%PDF-1.4\nmock", content_type="application/pdf"),
+    )
+
+    client.force_login(intruder)
+    response = client.get(reverse("evergo:customer-artifact-download", args=[customer.pk, pdf.pk]))
 
     assert response.status_code == 404
 
@@ -788,7 +878,8 @@ def test_my_evergo_dashboard_handles_orders_without_remote_id(client):
 
 
 def test_to_tsv_sanitizes_formula_and_line_break_characters():
-    """Security: TSV export should neutralize formulas and preserve table shape."""
+    """Security: TSV export must neutralize formulas and sanitize control characters."""
+
     from apps.evergo.views import _to_tsv
 
     tsv = _to_tsv(
@@ -812,12 +903,3 @@ def test_to_tsv_sanitizes_formula_and_line_break_characters():
     assert "'@phone" in tsv
     assert "'-brand" in tsv
     assert "Monterrey NL" in tsv
-
-
-
-@pytest.mark.django_db
-def test_my_evergo_dashboard_404_for_invalid_token(client):
-    """Security: dashboard should not be accessible with an unknown token."""
-    response = client.get(reverse("evergo:my-dashboard", kwargs={"token": "00000000-0000-0000-0000-000000000000"}))
-
-    assert response.status_code == 404

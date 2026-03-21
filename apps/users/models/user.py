@@ -328,23 +328,6 @@ class User(Entity, AbstractUser):
     def odoo_profile(self):
         return self.odoo_employee
 
-    @property
-    def social_profile(self):
-        avatars = getattr(self, "chat_avatars", None)
-        if avatars is None:
-            return None
-
-        for avatar in avatars.all():
-            for app_label, model_name in (
-                ("socials", "BlueskyProfile"),
-                ("socials", "DiscordProfile"),
-            ):
-                model = apps.get_model(app_label, model_name)
-                profile = model.objects.filter(avatar=avatar).first()
-                if profile is not None:
-                    return profile
-        return None
-
     class Meta(AbstractUser.Meta):
         verbose_name = _("User")
         verbose_name_plural = _("Users")

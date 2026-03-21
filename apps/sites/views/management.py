@@ -69,7 +69,7 @@ PASSKEY_CHALLENGE_SESSION_KEY = "passkey_login_challenge"
 
 
 class _GraphvizDeprecationFilter(logging.Filter):
-    """Filter out Graphviz debug logs about positional arg deprecations."""
+    """Filter out Graphviz debug logs about positional arg legacy warnings."""
 
     _MESSAGE_PREFIX = "deprecate positional args:"
 

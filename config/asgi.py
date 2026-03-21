@@ -1,5 +1,4 @@
-"""
-ASGI config for config project.
+"""ASGI config for config project.
 
 It exposes the ASGI callable as a module-level variable named ``application``.
 
@@ -8,20 +7,24 @@ https://docs.djangoproject.com/en/5.2/howto/deployment/asgi/
 """
 
 import os
+
 from config.loadenv import loadenv
+from config.sqlite_driver import bootstrap_sqlite_driver
+
+loadenv()
+bootstrap_sqlite_driver()
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
-
-loadenv()
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 django_asgi_app = get_asgi_application()
 
 # Import routing modules after Django has initialized to ensure models are
 # registered before consumers are loaded.
-import apps.ocpp.routing
 import apps.nodes.routing
+import apps.ocpp.routing
 import apps.sites.routing
 import apps.video.routing
 

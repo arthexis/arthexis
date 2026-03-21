@@ -1,3 +1,5 @@
+const MOBILE_BREAKPOINT = '(max-width: 767.98px)';
+
 /**
  * Apply site theme variables from data attributes on the html element.
  */
@@ -289,7 +291,7 @@ const setupShareModal = () => {
     if (shortUrlInput && !shortUrlInput.value) {
       shortUrlInput.value = currentPageUrl;
     }
-    if (thumbnailFrame) {
+    if (thumbnailFrame && !window.matchMedia(MOBILE_BREAKPOINT).matches) {
       const previewUrl = new URL(currentPageUrl);
       previewUrl.searchParams.set('djdt', 'share-preview');
       if (thumbnailFrame.src !== previewUrl.toString()) {

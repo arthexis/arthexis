@@ -147,3 +147,49 @@ def test_features_command_reset_all_reloads_mainstream_fixtures() -> None:
     assert "Reloaded" in output
     assert not Feature.objects.filter(slug="temporary-local").exists()
     assert Feature.objects.filter(slug="development-blog").exists()
+
+
+@pytest.mark.django_db
+def test_features_command_refresh_node_triggers_local_refresh(monkeypatch) -> None:
+    """Plural command should refresh the local node when --refresh-node is used."""
+
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    calls: list[int] = []
+
+    def fake_refresh(self) -> None:
+        calls.append(self.pk)
+
+    monkeypatch.setattr(Node, "refresh_features", fake_refresh)
+
+    out = StringIO()
+    call_command("features", "--refresh-node", stdout=out)
+
+    assert calls == [node.pk]
+    assert "Successfully refreshed features." in out.getvalue()
+
+
+@pytest.mark.django_db
+def test_feature_command_refresh_node_runs_without_slug(monkeypatch) -> None:
+    """Singular command should support refresh-only mode without a slug."""
+
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    calls: list[int] = []
+
+    def fake_refresh(self) -> None:
+        calls.append(self.pk)
+
+    monkeypatch.setattr(Node, "refresh_features", fake_refresh)
+
+    out = StringIO()
+    call_command("feature", "--refresh-node", stdout=out)
+
+    assert calls == [node.pk]
+    assert "Successfully refreshed features." in out.getvalue()

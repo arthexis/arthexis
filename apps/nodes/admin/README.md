@@ -4,7 +4,9 @@
 
 The Django admin setup for the nodes app is split across focused modules to keep the large surface area manageable:
 
-[View all Developer Documents](/docs/library/)
+[View all Developer Documents](../../../docs/index.md)
+
+> Note: this link targets the in-repo docs index for repository readers, not a runtime web route.
 
 - `forms.py` — admin-only forms such as `NodeAdminForm`, firmware/DataTransfer helpers, and NetMessage forms. All admin classes import shared forms from here rather than defining them inline.
 - `inlines.py` — inline admin configurations (currently `NodeFeatureAssignmentInline`).

@@ -65,6 +65,9 @@
     {% block object-tools %}
         <ul class="object-tools">
           {% block object-tools-items %}
+            {% for public_link in public_view_links %}
+              <li><a href="{{ public_link.url }}" target="_blank" rel="noopener">{{ public_link.label }}</a></li>
+            {% endfor %}
             {% block import_export_buttons %}
               {% include "admin/includes/import_export_buttons.html" %}
             {% endblock %}

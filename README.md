@@ -1,7 +1,7 @@
 # Constellation
 
 [![OCPP 1.6 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.0.1 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp201_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.1 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md)
-[![Install CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/install-hourly.yml?branch=main&label=Install%20CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/install-hourly.yml) [![Upgrade CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/ci.yml?branch=main&label=Upgrade%20CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/arthexis/arthexis/blob/main/LICENSE)
+[![Install CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/install-hourly.yml?branch=main&label=Install%20CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/install-hourly.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/arthexis/arthexis/blob/main/LICENSE)
 
 
 ## Purpose
@@ -56,10 +56,9 @@ Visit our [Changelog Report](https://arthexis.com/changelog/) to browse past and
 
 Arthexis Constellation ships in four node roles tailored to different deployment scenarios.
 
-> [!WARNING]
-> Operators should avoid installing any node role other than **Terminal** unless they are familiar with the system-level changes those roles can introduce.
-> Non-Terminal roles can enable **heavy** node features that are allowed to modify host environment configuration (networking, background services, and related runtime settings).
-> **Terminal** is the default role and keeps these environment-changing capabilities disabled by default.
+> [!NOTE]
+> **Terminal** is the default role and keeps environment-changing capabilities disabled by default.
+> Other roles may enable host-level features (such as networking changes or background services), so choose them only when those capabilities are needed.
 
 <table border="1" cellpadding="8" cellspacing="0">
   <thead>
@@ -123,13 +122,15 @@ For local bootstrapping, run `./install.sh --terminal` to install with defaults,
    - To run as a background service, install [NSSM](https://nssm.cc/) and use [`service.bat install --name arthexis`](https://github.com/arthexis/arthexis/blob/main/service.bat) (add `--port` if needed).
    - Installation is not required to start in Terminal mode (the default).
 
-Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgrade.sh`):
+Upgrade channels (selected during install/upgrade and used by `scripts/delegated-upgrade.sh` when auto-upgrade is enabled):
 
-| Channel | Check cadence | Purpose | Opt-in flag |
+| Channel | Check cadence | Purpose | Channel flags |
 | --- | --- | --- | --- |
-| Stable | Weekly (Thu before 5:00 AM) | Tracks release revisions with automated weekly checks. | `--stable` (default) |
-| Latest | Daily (same hour) | Follows the newest mainline revisions with daily checks. | `--latest` / `-l` or `--unstable` |
-| Manual | None (manual upgrades only) | Disables the automatic upgrade loop for full operator control. | _Run upgrades on demand without specifying a channel flag._ |
+| Stable | Weekly (Thu before 5:00 AM) | Tracks release revisions with automated weekly checks. | `--stable` / `--regular` / `--normal` (default) |
+| Latest (unstable) | Daily (same hour) | Follows the newest `origin/main` revisions with daily checks. | `--latest` / `-l` / `--unstable` |
+| Manual-only | None (manual upgrades only) | Disables unattended checks for full operator control. | Use `--fixed` on install, then run `./upgrade.sh` manually when needed. |
+
+Use `--auto-upgrade` during install when you want unattended checks; without it, upgrades stay operator-driven by default.
 
 ### 4. Administration
 - Access the Django admin at `localhost:8888/admin/` to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
