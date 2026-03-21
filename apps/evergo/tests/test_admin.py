@@ -107,7 +107,9 @@ def test_evergo_login_wizard_does_not_create_contractor_when_validation_fails(
         user=admin_user,
         evergo_email="broken.contractor@example.com",
     ).exists()
-    assert "bad credentials" in response.content.decode()
+    content = response.content.decode()
+    assert "bad credentials" in content
+    assert '/change/' not in content
 
 
 @pytest.mark.django_db
@@ -121,6 +123,7 @@ def test_evergo_user_admin_exposes_dashboard_action_and_object_wizard_redirect(a
     admin_instance = admin.site._registry[EvergoUser]
 
     assert admin_instance.get_dashboard_actions(None) == ("login_on_evergo_dashboard_action",)
+    assert admin_instance.login_on_evergo_dashboard_action.requires_queryset is False
 
     response = admin_client.get(
         reverse("admin:evergo_evergouser_login_on_evergo_object", args=[contractor.pk])

@@ -30,7 +30,11 @@
         <ul>
           <li>
             <strong>{% translate "Contractor" %}:</strong>
-            <a href="{% url 'admin:evergo_evergouser_change' setup_results.contractor.pk %}">{{ setup_results.contractor }}</a>
+            {% if setup_results.contractor.pk %}
+              <a href="{% url 'admin:evergo_evergouser_change' setup_results.contractor.pk %}">{{ setup_results.contractor }}</a>
+            {% else %}
+              {{ setup_results.contractor }}
+            {% endif %}
           </li>
           <li>
             <strong>{% translate "Credential validation" %}:</strong>
