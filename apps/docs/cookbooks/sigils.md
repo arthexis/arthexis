@@ -26,10 +26,13 @@ Because sigils resolve just before the data is used, they keep configurations DR
 Sigils always start with `[` and end with `]`. The following patterns are supported:
 
 - `[PREFIX.KEY]` &mdash; returns a field or attribute. Hyphens and casing are normalized automatically so `[env.smtp-password]` and `[ENV.SMTP_PASSWORD]` behave the same.
+- `[PREFIX->KEY]` &mdash; resolves the same field or attribute using strict access semantics; if the target record lookup fails, Arthexis preserves the original sigil instead of degrading to an empty value.
 - `[PREFIX=IDENTIFIER.FIELD]` &mdash; selects a specific record by primary key or any unique field declared as a natural key.
 - `[PREFIX:FIELD=VALUE.ATTRIBUTE]` &mdash; filters by a custom field instead of the primary key.
 - `[PREFIX.FIELD=[OTHER.SIGIL]]` &mdash; nests sigils so the value after `=` resolves before the outer token.
 - `[PREFIX]` &mdash; for entity prefixes, returns the serialized object in JSON; for configuration prefixes, resolves to an empty string when the key is missing.
+
+Within sigil identifiers, hyphens and underscores are interchangeable. For example, `[env_alt.smtp-password]` and `[ENV-ALT.SMTP_PASSWORD]` address the same root and key.
 
 ## 3. Built-in prefixes
 

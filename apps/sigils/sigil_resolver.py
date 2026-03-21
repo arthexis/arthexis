@@ -37,14 +37,15 @@ class SigilTokenParts(tuple):
 
     __slots__ = ()
 
-    def __new__(cls, root_name, filter_field, instance_id, key, param):
-        return super().__new__(cls, (root_name, filter_field, instance_id, key, param))
+    def __new__(cls, root_name, filter_field, instance_id, key, param, strict_key):
+        return super().__new__(cls, (root_name, filter_field, instance_id, key, param, strict_key))
 
     root_name = property(lambda self: self[0])
     filter_field = property(lambda self: self[1])
     instance_id = property(lambda self: self[2])
     key = property(lambda self: self[3])
     param = property(lambda self: self[4])
+    strict_key = property(lambda self: self[5])
 
 
 def _shutdown_attribute_executor():
@@ -70,19 +71,43 @@ def _failed_resolution(token: str) -> str:
 
 
 def _normalize_name(name: str) -> str:
+    """Normalize sigil identifier names so hyphens and underscores are interchangeable."""
     return name.replace("-", "_")
+
+
+def _identifier_variants(name: str | None) -> list[str]:
+    """Return normalized sigil identifier variants for tolerant lookups.
+
+    Args:
+        name: Raw sigil identifier text.
+
+    Returns:
+        Ordered unique variants that treat hyphens and underscores as equivalent.
+    """
+    if not name:
+        return []
+    normalized = _normalize_name(name)
+    dashed = normalized.replace("_", "-")
+    variants: list[str] = []
+    for candidate in (name, normalized, dashed, normalized.lower(), normalized.upper(), dashed.lower(), dashed.upper()):
+        if candidate and candidate not in variants:
+            variants.append(candidate)
+    return variants
 
 
 @lru_cache(maxsize=256)
 def _get_sigil_root(prefix: str) -> Optional[SigilRoot]:
-    try:
-        return SigilRoot.objects.get(prefix__iexact=prefix)
-    except SigilRoot.DoesNotExist:
-        logger.warning("Unknown sigil root [%s]", prefix)
-        return None
-    except SigilRoot.MultipleObjectsReturned:
-        logger.exception("Multiple sigil roots found [%s]", prefix)
-        return None
+    """Fetch a sigil root while treating hyphens and underscores as equivalent."""
+    for candidate in _identifier_variants(prefix):
+        try:
+            return SigilRoot.objects.get(prefix__iexact=candidate)
+        except SigilRoot.DoesNotExist:
+            continue
+        except SigilRoot.MultipleObjectsReturned:
+            logger.exception("Multiple sigil roots found [%s]", candidate)
+            return None
+    logger.warning("Unknown sigil root [%s]", prefix)
+    return None
 
 
 @lru_cache(maxsize=256)
@@ -116,13 +141,7 @@ def _unique_char_fields(model: type[models.Model]) -> tuple[str, ...]:
 
 
 def _candidate_names(name: str) -> list[str]:
-    normalized = _normalize_name(name)
-    return [
-        name,
-        normalized,
-        normalized.lower(),
-        normalized.upper(),
-    ]
+    return _identifier_variants(name)
 
 
 def _stringify_value(value) -> str:
@@ -201,7 +220,9 @@ def _parse_root_name(token: str, index: int) -> tuple[str, int]:
         TokenParseError: If the token does not start with a root name.
     """
     start = index
-    while index < len(token) and token[index] not in ":=.":
+    while index < len(token):
+        if token[index] in ":=." or token[index : index + 2] == "->":
+            break
         index += 1
     root_name = token[start:index]
     if not root_name:
@@ -259,28 +280,36 @@ def _parse_instance_id(token: str, index: int) -> tuple[str | None, int]:
             depth += 1
         elif char == "]" and depth:
             depth -= 1
-        elif char == "." and depth == 0:
+        elif depth == 0 and (char == "." or token[index : index + 2] == "->"):
             break
         index += 1
     return token[start:index], index
 
 
-def _parse_key_and_param(token: str, index: int) -> tuple[str | None, str | None, int]:
-    """Parse optional ``.key`` and ``=param`` segments from a sigil token.
+def _parse_key_and_param(token: str, index: int) -> tuple[str | None, str | None, bool, int]:
+    """Parse optional ``.key``/``->key`` and ``=param`` segments from a sigil token.
 
     Args:
         token: Raw token text without surrounding brackets.
         index: Current offset after any instance identifier.
 
     Returns:
-        A tuple containing the key, parameter, and next unread offset.
+        A tuple containing the key, parameter, strict-key flag, and next unread offset.
 
     Raises:
         TokenParseError: This helper does not currently raise parsing errors.
     """
     key = None
+    strict_key = False
     if index < len(token) and token[index] == ".":
         index += 1
+        start = index
+        while index < len(token) and token[index] != "=":
+            index += 1
+        key = token[start:index]
+    elif token[index:index + 2] == "->":
+        strict_key = True
+        index += 2
         start = index
         while index < len(token) and token[index] != "=":
             index += 1
@@ -291,7 +320,7 @@ def _parse_key_and_param(token: str, index: int) -> tuple[str | None, str | None
         param = token[index + 1 :]
         index = len(token)
 
-    return key, param, index
+    return key, param, strict_key, index
 
 
 def _parse_token_parts(token: str) -> SigilTokenParts:
@@ -309,8 +338,8 @@ def _parse_token_parts(token: str) -> SigilTokenParts:
     root_name, index = _parse_root_name(token, 0)
     filter_field, index = _parse_filter_field(token, index)
     instance_id, index = _parse_instance_id(token, index)
-    key, param, index = _parse_key_and_param(token, index)
-    return SigilTokenParts(root_name, filter_field, instance_id, key, param)
+    key, param, strict_key, index = _parse_key_and_param(token, index)
+    return SigilTokenParts(root_name, filter_field, instance_id, key, param, strict_key)
 
 
 def _resolve_request_value(request, key: str, param: str) -> str:
@@ -531,7 +560,14 @@ def _resolve_request_root(normalized_key: str | None, raw_key: str | None, param
     return _resolve_request_value(request, normalized_key or raw_key or "", param_value)
 
 
-def _resolve_dynamic_root(instance, normalized_key: str | None, key_lower: str | None, raw_key: str | None, param_args: list[str], original_token: str) -> str:
+def _resolve_dynamic_root(
+    instance,
+    normalized_key: str | None,
+    key_lower: str | None,
+    raw_key: str | None,
+    param_args: list[str],
+    original_token: str,
+) -> str:
     """Resolve sigils against the dynamic current object.
 
     Args:
@@ -662,7 +698,12 @@ def _resolve_entity_aggregate(model, aggregate_target: str | None, aggregate_fun
     return aggregated if aggregated is not None else _failed_resolution(original_token)
 
 
-def _resolve_entity_lookup(model, filter_field: str | None, instance_id: str | None, current: Optional[models.Model]):
+def _resolve_entity_lookup(
+    model,
+    filter_field: str | None,
+    instance_id: str | None,
+    current: Optional[models.Model],
+) -> tuple[Optional[models.Model], bool]:
     """Resolve the target entity instance from explicit selectors or ambient context.
 
     Args:
@@ -672,14 +713,16 @@ def _resolve_entity_lookup(model, filter_field: str | None, instance_id: str | N
         current: Optional ambient current model instance.
 
     Returns:
-        A matching model instance, or ``None`` when nothing resolves.
+        A tuple containing a matching model instance, if any, and a flag indicating
+        whether the lookup itself was invalid.
 
     Raises:
         FieldError: Caught internally when malformed lookups reach the ORM.
     """
     instance = None
+    invalid_lookup = False
     if model is None:
-        return None
+        return None, False
 
     if instance_id:
         if filter_field:
@@ -687,6 +730,7 @@ def _resolve_entity_lookup(model, filter_field: str | None, instance_id: str | N
             try:
                 field_obj = model._meta.get_field(field_name)
             except FieldDoesNotExist:
+                invalid_lookup = True
                 field_obj = None
             if field_obj and isinstance(field_obj, models.CharField):
                 lookup = {f"{field_name}__iexact": instance_id}
@@ -695,6 +739,7 @@ def _resolve_entity_lookup(model, filter_field: str | None, instance_id: str | N
             try:
                 instance = model.objects.filter(**lookup).first()
             except (FieldError, TypeError, ValueError):
+                invalid_lookup = True
                 instance = None
         else:
             try:
@@ -715,10 +760,21 @@ def _resolve_entity_lookup(model, filter_field: str | None, instance_id: str | N
         inst_pk = ctx.get(model)
         if inst_pk is not None:
             instance = model.objects.filter(pk=inst_pk).first()
-    return instance
+    return instance, invalid_lookup
 
 
-def _resolve_entity_root(root, filter_field: str | None, instance_id: str | None, normalized_key: str | None, key_lower: str | None, raw_key: str | None, param_args: list[str], current: Optional[models.Model], original_token: str) -> str:
+def _resolve_entity_root(
+    root,
+    filter_field: str | None,
+    instance_id: str | None,
+    normalized_key: str | None,
+    key_lower: str | None,
+    raw_key: str | None,
+    param_args: list[str],
+    current: Optional[models.Model],
+    original_token: str,
+    strict_key: bool,
+) -> str:
     """Resolve entity-context sigils for model instances, aggregates, and manager dispatch.
 
     Args:
@@ -731,6 +787,7 @@ def _resolve_entity_root(root, filter_field: str | None, instance_id: str | None
         param_args: Resolved positional arguments for callable attributes.
         current: Optional ambient current model instance.
         original_token: Token used for degraded failure output.
+        strict_key: Whether key access used ``->`` strict semantics.
 
     Returns:
         The resolved entity value, serialized data, or degraded placeholder.
@@ -751,7 +808,7 @@ def _resolve_entity_root(root, filter_field: str | None, instance_id: str | None
         if aggregate_result is not None:
             return aggregate_result
 
-    instance = _resolve_entity_lookup(model, filter_field, instance_id, current)
+    instance, invalid_lookup = _resolve_entity_lookup(model, filter_field, instance_id, current)
     if instance is None and not instance_id:
         instance = root.default_instance()
 
@@ -776,6 +833,10 @@ def _resolve_entity_root(root, filter_field: str | None, instance_id: str | None
                 return serializers.serialize("json", [manager_val])
             return _stringify_value(manager_val)
 
+    if invalid_lookup:
+        return _failed_resolution(original_token)
+    if normalized_key and not strict_key:
+        return ""
     return _failed_resolution(original_token)
 
 
@@ -787,7 +848,7 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
     except TokenParseError:
         return _failed_resolution(original_token)
 
-    root_name, filter_field, instance_id, key, param = token_parts
+    root_name, filter_field, instance_id, key, param, strict_key = token_parts
     normalized_root = _normalize_name(root_name)
     lookup_root = normalized_root.upper()
     raw_key = key
@@ -842,6 +903,7 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
             param_args,
             current,
             original_token,
+            strict_key,
         ),
     }
 

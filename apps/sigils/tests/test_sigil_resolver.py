@@ -30,6 +30,23 @@ def test_resolve_sigils_env_normalizes_key(monkeypatch):
     assert result == "42"
 
 
+@pytest.mark.django_db
+def test_resolve_sigils_root_normalizes_hyphen_and_underscore():
+    user_model = get_user_model()
+    SigilRoot.objects.update_or_create(
+        prefix="USR-ALT",
+        defaults={
+            "context_type": SigilRoot.Context.ENTITY,
+            "content_type": ContentType.objects.get_for_model(user_model),
+        },
+    )
+    user = user_model.objects.create(username="hyphen-root")
+
+    result = sigil_resolver.resolve_sigils("[usr_alt.username]", current=user)
+
+    assert result == user.username
+
+
 @pytest.fixture
 def user_root():
     user_model = get_user_model()
@@ -148,6 +165,18 @@ def test_parse_token_parts_parses_filter_key_and_param():
     assert parts.instance_id == "[ENV.current-user]"
     assert parts.key == "email"
     assert parts.param == "display"
+    assert parts.strict_key is False
+
+
+def test_parse_token_parts_parses_strict_arrow_key():
+    parts = sigil_resolver._parse_token_parts("USR:username=[ENV.current-user]->email=display")
+
+    assert parts.root_name == "USR"
+    assert parts.filter_field == "username"
+    assert parts.instance_id == "[ENV.current-user]"
+    assert parts.key == "email"
+    assert parts.param == "display"
+    assert parts.strict_key is True
 
 
 
@@ -171,9 +200,16 @@ def test_resolve_sigils_entity_aggregate_total_for_field(user_root):
 
 @pytest.mark.django_db
 def test_resolve_sigils_explicit_entity_miss_preserves_placeholder(user_root):
+    result = sigil_resolver.resolve_sigils("[USR=missing->email]")
+
+    assert result == "[USR=missing->email]"
+
+
+@pytest.mark.django_db
+def test_resolve_sigils_explicit_entity_miss_returns_empty_string_for_dot(user_root):
     result = sigil_resolver.resolve_sigils("[USR=missing.email]")
 
-    assert result == "[USR=missing.email]"
+    assert result == ""
 
 
 @pytest.mark.django_db
