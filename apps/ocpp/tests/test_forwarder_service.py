@@ -1,4 +1,3 @@
-import ssl
 import sys
 from datetime import timedelta
 
@@ -57,10 +56,10 @@ def test_candidate_forwarding_urls_skips_tls_ip_targets(forwarder_instance):
     ]
 
 
-def test_connect_forwarding_session_skips_tls_verification_for_trusted_node(
+def test_connect_forwarding_session_keeps_tls_verification_for_trusted_node(
     monkeypatch, forwarder_instance
 ):
-    """Trusted nodes should disable TLS certificate checks for WSS forwarding."""
+    """Trusted nodes must retain default TLS certificate verification."""
 
     charger = SimpleNamespace(pk=1, charger_id="CP-1")
     node = SimpleNamespace(
@@ -79,10 +78,7 @@ def test_connect_forwarding_session_skips_tls_verification_for_trusted_node(
     session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
 
     assert session is not None
-    assert create_kwargs["sslopt"] == {
-        "cert_reqs": ssl.CERT_NONE,
-        "check_hostname": False,
-    }
+    assert not create_kwargs
 
 
 def test_connect_forwarding_session_keeps_tls_verification_for_untrusted_node(
