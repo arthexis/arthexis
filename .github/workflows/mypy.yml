@@ -1,0 +1,101 @@
+name: MyPy
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  NODE_OPTIONS: '--no-deprecation'
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mypy.yml'
+      - '.pre-commit-config.yaml'
+      - 'CONTRIBUTING.md'
+      - 'Makefile'
+      - 'docs/development/mypy-adoption-checklist.md'
+      - 'pyproject.toml'
+      - 'scripts/run_mypy.sh'
+      - 'scripts/generate_requirements.py'
+      - 'scripts/sort_pyproject_deps.py'
+      - 'apps/protocols/**'
+      - 'apps/repos/github.py'
+      - 'apps/repos/services/github.py'
+      - 'apps/core/services/health.py'
+      - 'apps/core/services/health_checks.py'
+      - 'apps/core/modeling/**'
+      - 'apps/core/system_ui.py'
+  push:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - '.github/workflows/mypy.yml'
+      - '.pre-commit-config.yaml'
+      - 'CONTRIBUTING.md'
+      - 'Makefile'
+      - 'docs/development/mypy-adoption-checklist.md'
+      - 'pyproject.toml'
+      - 'scripts/run_mypy.sh'
+      - 'scripts/generate_requirements.py'
+      - 'scripts/sort_pyproject_deps.py'
+      - 'apps/protocols/**'
+      - 'apps/repos/github.py'
+      - 'apps/repos/services/github.py'
+      - 'apps/core/services/health.py'
+      - 'apps/core/services/health_checks.py'
+      - 'apps/core/modeling/**'
+      - 'apps/core/system_ui.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mypy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mypy:
+    name: MyPy approved paths
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Cache virtualenv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh', 'env-refresh.sh') }}
+          restore-keys: |
+            venv-${{ runner.os }}-
+
+      - name: Refresh developer environment
+        run: |
+          ./env-refresh.sh --deps-only
+
+      - name: Run MyPy on approved paths
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          ./scripts/run_mypy.sh --show-error-codes --pretty 2>&1 | tee mypy.log
+
+      - name: Upload MyPy log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mypy-log
+          path: mypy.log
+          if-no-files-found: warn
