@@ -112,8 +112,6 @@ class Shortcut(Entity):
             errors[f"{field_prefix}_identifier"] = _("A target identifier is required.")
         elif not _TARGET_IDENTIFIER_PATTERN.match(normalized_identifier):
             errors[f"{field_prefix}_identifier"] = _("Target identifier contains unsupported characters.")
-        if payload in (None, ""):
-            payload = {}
         if not isinstance(payload, dict):
             errors[f"{field_prefix}_payload"] = _("Target parameters must be a JSON object.")
         if errors:
@@ -124,6 +122,8 @@ class Shortcut(Entity):
 
         super().clean()
         self.key_combo = self.normalize_key_combo(self.key_combo)
+        if self.target_payload in (None, ""):
+            self.target_payload = {}
         if not self.key_combo:
             raise ValidationError({"key_combo": _("Key combo is required.")})
 
@@ -177,6 +177,8 @@ class ClipboardPattern(Entity):
         """Validate pattern syntax and shortcut kind compatibility."""
 
         super().clean()
+        if self.target_payload in (None, ""):
+            self.target_payload = {}
         if self.shortcut_id and self.shortcut.kind != Shortcut.Kind.CLIENT:
             raise ValidationError({"shortcut": _("Clipboard patterns require a client shortcut.")})
         Shortcut.validate_target_fields(

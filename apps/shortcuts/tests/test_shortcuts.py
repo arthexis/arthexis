@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 
 import pytest
@@ -119,3 +120,83 @@ def test_server_shortcut_executes_typed_target() -> None:
 
     assert execution.target_identifier == "text.prepend_prefix"
     assert execution.action_result.value == "run:CTRL+ALT+S"
+
+
+@pytest.mark.django_db
+def test_client_shortcut_output_template_keeps_legacy_recipe_result_alias(client) -> None:
+    """Client shortcuts should keep ``recipe_result`` available for migrated templates."""
+
+    Feature.objects.update_or_create(
+        slug=SHORTCUT_MANAGEMENT_FEATURE_SLUG,
+        defaults={"display": "Shortcut Management", "is_enabled": True},
+    )
+    user_model = get_user_model()
+    user = user_model.objects.create_user(username="legacy-template-user", password="password", is_staff=True)
+    client.force_login(user)
+
+    shortcut = Shortcut.objects.create(
+        display="Legacy template shortcut",
+        key_combo="CTRL+SHIFT+L",
+        kind=Shortcut.Kind.CLIENT,
+        target_kind=ShortcutTargetKind.COMMAND,
+        target_identifier="text.append_suffix",
+        target_payload={"source": "clipboard", "suffix": "-legacy"},
+        is_active=True,
+        clipboard_output_enabled=True,
+        output_template="[ARG.recipe_result]!",
+    )
+
+    response = client.post(
+        reverse("shortcuts:client-execute", args=[shortcut.pk]),
+        data=json.dumps({"clipboard": "ABC"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["action_result"]["value"] == "ABC-legacy"
+    assert payload["clipboard_output"] == "ABC-legacy!"
+
+
+@pytest.mark.django_db
+def test_shortcut_clean_normalizes_empty_target_payload() -> None:
+    """Shortcut cleaning should normalize empty payloads before validation."""
+
+    shortcut = Shortcut(
+        display="Empty payload shortcut",
+        key_combo="ctrl+shift+n",
+        kind=Shortcut.Kind.CLIENT,
+        target_kind=ShortcutTargetKind.ACTION,
+        target_identifier="text.static",
+        target_payload="",
+        is_active=True,
+    )
+
+    shortcut.clean()
+
+    assert shortcut.key_combo == "CTRL+SHIFT+N"
+    assert shortcut.target_payload == {}
+
+
+def test_typed_target_migration_handles_shortcut_key_and_reverse_static_text() -> None:
+    """Migration helpers should preserve shortcut-key commands and static text rollbacks."""
+
+    migration = importlib.import_module("apps.shortcuts.migrations.0002_shortcut_typed_targets")
+
+    recipe = type(
+        "RecipeStub",
+        (),
+        {
+            "script": "result = 'run:' + kwargs.get('shortcut_key', '')",
+            "slug": "server.shortcut",
+            "body_type": "python",
+            "display": "Server shortcut",
+        },
+    )()
+
+    kind, identifier, payload = migration._forward_target(recipe)
+
+    assert kind == "command"
+    assert identifier == "text.prepend_prefix"
+    assert payload == {"prefix": "run:", "source": "shortcut_key"}
+    assert migration._reverse_script("action", "text.static", {"text": "Hello"}) == "result = 'Hello'"

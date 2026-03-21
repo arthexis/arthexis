@@ -171,6 +171,7 @@ def execute_client_shortcut(*, shortcut: Shortcut, clipboard: str, keyboard: str
     )
     context["action_result"] = action_result.value
     context["action_payload"] = action_result.payload
+    context["recipe_result"] = action_result.value
     output_template = (getattr(target, "output_template", "") or "").strip()
     rendered_output = render_shortcut_output(output_template, context=context)
     fallback_output = str(action_result.value) if action_result.value is not None else ""

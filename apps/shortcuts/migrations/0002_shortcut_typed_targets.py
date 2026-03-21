@@ -12,14 +12,15 @@ _COMMAND = "command"
 _WORKFLOW = "workflow"
 
 _APPEND_SUFFIX_PATTERN = re.compile(
-    r"^result\s*=\s*kwargs\.get\('(?P<source>clipboard|keyboard)'\s*,\s*''\)\s*\+\s*'(?P<suffix>.*)'\s*$"
+    r"^result\s*=\s*kwargs\.get\('(?P<source>clipboard|keyboard|shortcut_key)'\s*,\s*''\)\s*\+\s*'(?P<suffix>.*)'\s*$"
 )
 _PREPEND_PREFIX_PATTERN = re.compile(
-    r"^result\s*=\s*'(?P<prefix>.*)'\s*\+\s*kwargs\.get\('(?P<source>clipboard|keyboard)'\s*,\s*''\)\s*$"
+    r"^result\s*=\s*'(?P<prefix>.*)'\s*\+\s*kwargs\.get\('(?P<source>clipboard|keyboard|shortcut_key)'\s*,\s*''\)\s*$"
 )
 
 
 def _forward_target(recipe):
+    """Map a legacy recipe record to a typed shortcut target tuple."""
     if recipe is None:
         return _ACTION, "text.static", {"text": ""}
 
@@ -50,13 +51,16 @@ def _forward_target(recipe):
 
 
 def _reverse_script(kind, identifier, payload):
+    """Recreate a runnable legacy recipe script from a typed target."""
     payload = payload if isinstance(payload, dict) else {}
     if kind == _ACTION and identifier == "text.static":
-        return payload.get("text") or "result = ''"
+        return f"result = {str(payload.get('text') or '')!r}"
     if kind == _ACTION and identifier == "clipboard.echo":
         return "result = kwargs.get('clipboard', '')"
     if kind == _ACTION and identifier == "keyboard.echo":
         return "result = kwargs.get('keyboard', '')"
+    if kind == _ACTION and identifier == "shortcut_key.echo":
+        return "result = kwargs.get('shortcut_key', '')"
     if kind == _COMMAND and identifier == "text.append_suffix":
         source = payload.get("source") or "clipboard"
         suffix = repr(str(payload.get("suffix") or ""))
@@ -77,6 +81,7 @@ def _reverse_script(kind, identifier, payload):
 
 
 def forwards(apps, schema_editor):
+    """Populate typed target fields from existing recipe relations."""
     Shortcut = apps.get_model("shortcuts", "Shortcut")
     ClipboardPattern = apps.get_model("shortcuts", "ClipboardPattern")
 
@@ -98,6 +103,7 @@ def forwards(apps, schema_editor):
 
 
 def backwards(apps, schema_editor):
+    """Restore legacy recipe relations from typed shortcut targets."""
     Recipe = apps.get_model("recipes", "Recipe")
     Shortcut = apps.get_model("shortcuts", "Shortcut")
     ClipboardPattern = apps.get_model("shortcuts", "ClipboardPattern")
