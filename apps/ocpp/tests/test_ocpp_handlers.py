@@ -1796,8 +1796,8 @@ async def test_report_charging_profiles_rejects_malformed_payload(monkeypatch):
 @pytest.mark.django_db(transaction=True)
 async def test_report_charging_profiles_rejects_invalid_schedule_values(monkeypatch):
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
-    consumer.store_key = "RCP-BAD-SCHEDULE-1"
-    consumer.charger_id = "RCP-BAD-SCHEDULE-1"
+    consumer.store_key = store.identity_key("report-invalid-schedule", 1)
+    consumer.charger_id = "report-invalid-schedule"
     consumer.charger = None
     consumer.aggregate_charger = None
     consumer.connector_value = 1
