@@ -48,10 +48,10 @@ def test_refresh_enabled_apps_lock_keeps_manifest_apps_without_rows(
 ):
     """Regression: manifest apps without Application rows should stay in lock output."""
 
-    Application.objects.filter(name__in=["enabled-core", "blog"]).delete()
+    Application.objects.filter(name__in=["enabled-core", "sites"]).delete()
     monkeypatch.setattr(
         "apps.app.models._load_manifest_app_entries",
-        lambda: {"apps.blog", "apps.sites"},
+        lambda: {"apps.meta", "apps.sites"},
     )
 
     Application.objects.create(name="enabled-core", enabled=True)
@@ -62,7 +62,7 @@ def test_refresh_enabled_apps_lock_keeps_manifest_apps_without_rows(
     )
 
     assert "enabled-core" in lock_entries
-    assert "apps.blog" in lock_entries
+    assert "apps.meta" in lock_entries
 
 
 @pytest.mark.django_db
@@ -71,13 +71,13 @@ def test_refresh_enabled_apps_lock_respects_disabled_manifest_labels(
 ):
     """Regression: disabled labels should remove matching manifest app entries."""
 
-    Application.objects.filter(name__in=["enabled-core", "blog"]).delete()
+    Application.objects.filter(name__in=["enabled-core", "sites"]).delete()
     monkeypatch.setattr(
         "apps.app.models._load_manifest_app_entries",
-        lambda: {"apps.blog", "apps.sites"},
+        lambda: {"apps.meta", "apps.sites"},
     )
 
-    Application.objects.create(name="blog", enabled=False)
+    Application.objects.create(name="meta", enabled=False)
     Application.objects.create(name="enabled-core", enabled=True)
     lock_entries = (
         get_enabled_apps_lock_path(settings.BASE_DIR)
@@ -85,7 +85,7 @@ def test_refresh_enabled_apps_lock_respects_disabled_manifest_labels(
         .splitlines()
     )
 
-    assert "apps.blog" not in lock_entries
+    assert "apps.meta" not in lock_entries
     assert "enabled-core" in lock_entries
 
 
