@@ -2,19 +2,11 @@
 
 from __future__ import annotations
 
-from django.conf import settings
 from django.db import models
 
 
 class ArchivedSurveyTopic(models.Model):
-    """Archived snapshot of a historical survey topic.
-
-    Parameters:
-        None.
-
-    Returns:
-        None.
-    """
+    """Archived snapshot of a historical survey topic."""
 
     original_id = models.BigIntegerField(unique=True)
     is_seed_data = models.BooleanField(default=False, editable=False)
@@ -32,14 +24,7 @@ class ArchivedSurveyTopic(models.Model):
 
 
 class ArchivedSurveyQuestion(models.Model):
-    """Archived snapshot of a historical survey question.
-
-    Parameters:
-        None.
-
-    Returns:
-        None.
-    """
+    """Archived snapshot of a historical survey question."""
 
     original_id = models.BigIntegerField(unique=True)
     topic_original_id = models.BigIntegerField()
@@ -65,23 +50,11 @@ class ArchivedSurveyQuestion(models.Model):
 
 
 class ArchivedSurveyResult(models.Model):
-    """Archived snapshot of a historical survey result payload.
-
-    Parameters:
-        None.
-
-    Returns:
-        None.
-    """
+    """Archived snapshot of a historical survey result payload."""
 
     original_id = models.BigIntegerField(unique=True)
     topic_original_id = models.BigIntegerField()
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-    )
+    user_original_id = models.BigIntegerField(null=True, blank=True)
     session_key = models.CharField(max_length=40, blank=True, default="")
     is_seed_data = models.BooleanField(default=False, editable=False)
     is_user_data = models.BooleanField(default=False, editable=False)

@@ -6,6 +6,36 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def _preserve_model_timestamps(model, *, pk, created_at, updated_at):
+    """Persist historical timestamps exactly, bypassing auto_now fields."""
+
+    model.objects.filter(pk=pk).update(
+        created_at=created_at,
+        updated_at=updated_at,
+    )
+
+
+def _remove_survey_application_metadata(apps):
+    """Delete persisted survey application rows so the app is no longer advertised."""
+
+    Application = apps.get_model("app", "Application")
+    ApplicationModel = apps.get_model("app", "ApplicationModel")
+
+    survey_applications = Application.objects.filter(name="survey")
+    ApplicationModel.objects.filter(application__in=survey_applications).delete()
+    survey_applications.delete()
+
+
+def _restore_survey_application_metadata(apps):
+    """Recreate the survey application row when reversing the decommissioning."""
+
+    Application = apps.get_model("app", "Application")
+
+    Application.objects.update_or_create(
+        name="survey",
+        defaults={"description": ""},
+    )
+
 
 def archive_survey_data(apps, schema_editor):
     """Copy survey rows into archive tables before the runtime schema is dropped."""
@@ -56,7 +86,7 @@ def archive_survey_data(apps, schema_editor):
             original_id=result.pk,
             defaults={
                 "topic_original_id": result.topic_id,
-                "user_id": result.user_id,
+                "user_original_id": result.user_id,
                 "session_key": result.session_key,
                 "is_seed_data": result.is_seed_data,
                 "is_user_data": result.is_user_data,
@@ -67,6 +97,7 @@ def archive_survey_data(apps, schema_editor):
             },
         )
 
+    _remove_survey_application_metadata(apps)
 
 
 def restore_survey_data(apps, schema_editor):
@@ -89,9 +120,13 @@ def restore_survey_data(apps, schema_editor):
                 "name": topic.name,
                 "slug": topic.slug,
                 "description": topic.description,
-                "created_at": topic.created_at,
-                "updated_at": topic.updated_at,
             },
+        )
+        _preserve_model_timestamps(
+            SurveyTopic,
+            pk=topic.original_id,
+            created_at=topic.created_at,
+            updated_at=topic.updated_at,
         )
 
     for question in ArchivedSurveyQuestion.objects.order_by("original_id").iterator():
@@ -108,9 +143,13 @@ def restore_survey_data(apps, schema_editor):
                 "no_label": question.no_label,
                 "priority": question.priority,
                 "position": question.position,
-                "created_at": question.created_at,
-                "updated_at": question.updated_at,
             },
+        )
+        _preserve_model_timestamps(
+            SurveyQuestion,
+            pk=question.original_id,
+            created_at=question.created_at,
+            updated_at=question.updated_at,
         )
 
     for result in ArchivedSurveyResult.objects.order_by("original_id").iterator():
@@ -118,22 +157,29 @@ def restore_survey_data(apps, schema_editor):
             pk=result.original_id,
             defaults={
                 "topic_id": result.topic_original_id,
-                "user_id": result.user_id,
+                "user_id": result.user_original_id,
                 "session_key": result.session_key,
                 "is_seed_data": result.is_seed_data,
                 "is_user_data": result.is_user_data,
                 "is_deleted": result.is_deleted,
                 "data": result.data,
-                "created_at": result.created_at,
-                "updated_at": result.updated_at,
             },
         )
+        _preserve_model_timestamps(
+            SurveyResult,
+            pk=result.original_id,
+            created_at=result.created_at,
+            updated_at=result.updated_at,
+        )
+
+    _restore_survey_application_metadata(apps)
 
 
 class Migration(migrations.Migration):
     """Archive survey data into legacy tables before deleting the live schema."""
 
     dependencies = [
+        ("app", "0002_applicationmodel"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ("survey", "0001_initial"),
     ]
@@ -142,7 +188,15 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="ArchivedSurveyTopic",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 ("original_id", models.BigIntegerField(unique=True)),
                 ("is_seed_data", models.BooleanField(default=False, editable=False)),
                 ("is_user_data", models.BooleanField(default=False, editable=False)),
@@ -159,14 +213,29 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="ArchivedSurveyQuestion",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 ("original_id", models.BigIntegerField(unique=True)),
                 ("topic_original_id", models.BigIntegerField()),
                 ("is_seed_data", models.BooleanField(default=False, editable=False)),
                 ("is_user_data", models.BooleanField(default=False, editable=False)),
                 ("is_deleted", models.BooleanField(default=False, editable=False)),
                 ("prompt", models.TextField()),
-                ("question_type", models.CharField(choices=[("binary", "Binary"), ("open", "Open ended")], default="binary", max_length=12)),
+                (
+                    "question_type",
+                    models.CharField(
+                        choices=[("binary", "Binary"), ("open", "Open ended")],
+                        default="binary",
+                        max_length=12,
+                    ),
+                ),
                 ("yes_label", models.CharField(default="Yes", max_length=64)),
                 ("no_label", models.CharField(default="No", max_length=64)),
                 ("priority", models.IntegerField(default=0)),
@@ -175,14 +244,30 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField()),
                 ("archived_at", models.DateTimeField(auto_now_add=True)),
             ],
-            options={"ordering": ["topic_original_id", "-priority", "position", "original_id"]},
+            options={
+                "ordering": [
+                    "topic_original_id",
+                    "-priority",
+                    "position",
+                    "original_id",
+                ]
+            },
         ),
         migrations.CreateModel(
             name="ArchivedSurveyResult",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 ("original_id", models.BigIntegerField(unique=True)),
                 ("topic_original_id", models.BigIntegerField()),
+                ("user_original_id", models.BigIntegerField(blank=True, null=True)),
                 ("session_key", models.CharField(blank=True, default="", max_length=40)),
                 ("is_seed_data", models.BooleanField(default=False, editable=False)),
                 ("is_user_data", models.BooleanField(default=False, editable=False)),
@@ -191,7 +276,6 @@ class Migration(migrations.Migration):
                 ("created_at", models.DateTimeField()),
                 ("updated_at", models.DateTimeField()),
                 ("archived_at", models.DateTimeField(auto_now_add=True)),
-                ("user", models.ForeignKey(blank=True, null=True, on_delete=models.SET_NULL, to=settings.AUTH_USER_MODEL)),
             ],
             options={"ordering": ["-created_at", "original_id"]},
         ),
