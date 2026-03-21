@@ -176,7 +176,6 @@ class Command(BaseCommand):
                         engines=engines,
                         login_required=not options["no_login"],
                     )
-                    self._assert_capture_outputs_exist(captures=captures, backend=backend)
                     self._print_reports(captures)
                     return
                 except CommandError as exc:
@@ -254,14 +253,15 @@ class Command(BaseCommand):
             )
 
     def _assert_capture_outputs_exist(
-        self, *, captures: list[dict[str, object]], backend: str
+        self, *, captures: list[dict[str, object]], attempt_label: str
     ) -> None:
         """Ensure the active backend actually produced every requested artifact.
 
         Args:
             captures (list[dict[str, object]]): Planned capture definitions whose
                 ``output`` values should point at generated image files.
-            backend (str): Backend label used for the attempted capture pass.
+            attempt_label (str): Human-readable label for the active backend or
+                engine attempt used in the capture pass.
 
         Returns:
             None: Returns once every requested artifact exists on disk.
@@ -279,13 +279,28 @@ class Command(BaseCommand):
             return
 
         raise CommandError(
-            "Preview capture did not produce the expected screenshot artifact(s): "
-            + ", ".join(missing_outputs)
-            + ". Confirm the suite is reachable, then rerun `manage.py preview` after "
-            + "starting `manage.py runserver`; if browser automation is unavailable in "
-            + f"this environment, use another configured backend or capture a manual "
-            + f"screenshot. Backend: {backend}."
+            f"Preview capture did not produce the expected screenshot artifact(s): "
+            f"{', '.join(missing_outputs)}. Confirm the suite is reachable, then rerun "
+            f"`manage.py preview` after starting `manage.py runserver`; if browser "
+            f"automation is unavailable in this environment, use another configured "
+            f"backend or capture a manual screenshot. Attempt: {attempt_label}."
         )
+
+    def _clear_capture_outputs(self, *, captures: list[dict[str, object]]) -> None:
+        """Remove planned capture outputs before retrying a backend or engine.
+
+        Args:
+            captures (list[dict[str, object]]): Planned capture definitions whose
+                ``output`` files should be removed if they already exist.
+
+        Returns:
+            None: Returns after removing any pre-existing planned artifact files.
+        """
+
+        for capture in captures:
+            output = Path(capture["output"])
+            if output.exists():
+                output.unlink()
 
     def _create_throwaway_admin_user(self) -> tuple[str, str, int]:
         """Create temporary admin credentials for preview login.
@@ -423,6 +438,7 @@ class Command(BaseCommand):
         last_error: CommandError | None = None
         for engine in engines:
             try:
+                self._clear_capture_outputs(captures=captures)
                 self._capture_all_playwright(
                     base_url=base_url,
                     username=username,
@@ -430,6 +446,10 @@ class Command(BaseCommand):
                     captures=captures,
                     engine=engine,
                     login_required=login_required,
+                )
+                self._assert_capture_outputs_exist(
+                    captures=captures,
+                    attempt_label=f"playwright/{engine}",
                 )
                 return
             except CommandError as exc:
@@ -514,6 +534,7 @@ class Command(BaseCommand):
         last_error: CommandError | None = None
         for browser_name in browsers:
             try:
+                self._clear_capture_outputs(captures=captures)
                 self._capture_all_selenium(
                     base_url=base_url,
                     username=username,
@@ -521,6 +542,10 @@ class Command(BaseCommand):
                     captures=captures,
                     browser_name=browser_name,
                     login_required=login_required,
+                )
+                self._assert_capture_outputs_exist(
+                    captures=captures,
+                    attempt_label=f"selenium/{browser_name}",
                 )
                 return
             except CommandError as exc:
