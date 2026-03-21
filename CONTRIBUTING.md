@@ -70,6 +70,13 @@ python manage.py runserver 0.0.0.0:8888
   ```bash
   pyright
   ```
+- Run the baseline **mypy** check for the lower-dynamic paths first:
+  ```bash
+  mypy
+  ```
+  This reads the repo-root configuration in `pyproject.toml` and starts with `config/`,
+  `utils/`, and `scripts/` while excluding migrations, generated assets, media, and
+  fixture-heavy paths. Expand to `apps/protocols/` once the initial baseline settles.
 - Prefer clear, well-documented functions over clever shortcuts.
 
 ### Documentation changes
