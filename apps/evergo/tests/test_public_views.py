@@ -713,6 +713,38 @@ def test_compute_tracking_step_completion_allows_assign_without_visita_completio
 
 
 @pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.submit_tracking_phase_one", return_value={"completed_steps": 1})
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"reporte_visita": {"foto_tablero": "https://cdn.evergo.example/fotos/tablero.jpg"}})
+def test_order_tracking_public_preserves_remote_images_on_partial_submission(_, mock_submit, client):
+    """Regression: partial submissions should not overwrite already persisted remote images with placeholders."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-remote-images", email="owner-remote-images@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-remote-images@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30316, order_number="GM030316")
+    client.force_login(owner)
+
+    response = client.post(
+        reverse("evergo:order-tracking-public", args=[order.remote_id]),
+        data={
+            "metraje_visita_tecnica": 10,
+            "confirm_missing_images": "1",
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert mock_submit.called
+    files = mock_submit.call_args.kwargs["files"]
+    assert "foto_tablero" not in files
+
+
+@pytest.mark.django_db
 @patch("apps.evergo.views.EvergoUser.submit_tracking_phase_one", return_value={"completed_steps": 0})
 def test_order_tracking_public_allows_partial_submission_without_required_primary_fields(mock_submit, client):
     """Regression: operators can submit partial progress and continue later without completing every field."""

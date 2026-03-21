@@ -269,7 +269,14 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
                 form.add_error(None, "Confirma que deseas continuar con imágenes faltantes.")
             else:
                 payload = _build_phase_one_payload(form.cleaned_data)
-                files = ensure_image_payload({name: form.cleaned_data.get(name) for name in IMAGE_FIELD_NAMES})
+                image_inputs: dict[str, object] = {}
+                for name in IMAGE_FIELD_NAMES:
+                    image_value = form.cleaned_data.get(name)
+                    if image_value is not None:
+                        image_inputs[name] = image_value
+                    elif not remote_image_urls.get(name):
+                        image_inputs[name] = None
+                files = ensure_image_payload(image_inputs)
                 merged_step_values = dict(remote_initial_data)
                 merged_step_values.update(form.cleaned_data)
                 step_completion = _compute_tracking_step_completion(
