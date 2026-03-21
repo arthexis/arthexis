@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.urls import reverse
 
 from apps.blog.models import (
     BlogArticle,
@@ -8,6 +9,7 @@ from apps.blog.models import (
     BlogSigilShortcut,
     BlogTag,
 )
+from apps.core.admin.mixins import PublicViewLinksAdminMixin
 
 
 class BlogCodeReferenceInline(admin.TabularInline):
@@ -32,7 +34,7 @@ class BlogRevisionInline(admin.TabularInline):
 
 
 @admin.register(BlogArticle)
-class BlogArticleAdmin(admin.ModelAdmin):
+class BlogArticleAdmin(PublicViewLinksAdminMixin, admin.ModelAdmin):
     """Admin configuration for engineering blog articles."""
 
     list_display = (
@@ -49,6 +51,15 @@ class BlogArticleAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("title",)}
     filter_horizontal = ("tags", "reviewers")
     inlines = (BlogCodeReferenceInline, BlogSigilShortcutInline, BlogRevisionInline)
+    view_on_site = False
+
+    def get_public_view_links(self, obj=None) -> list[dict[str, str]]:
+        """Return public blog routes relevant to the current admin page."""
+
+        links = [{"label": "View on site: Blog index", "url": reverse("blog-list")}]
+        if obj and obj.status == BlogArticle.Status.PUBLISHED:
+            links.append({"label": "View on site: Article", "url": obj.get_absolute_url()})
+        return links
 
 
 @admin.register(BlogSeries)
