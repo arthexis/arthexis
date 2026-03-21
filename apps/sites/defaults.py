@@ -67,5 +67,4 @@ DEFAULT_APPLICATION_DESCRIPTIONS: dict[str, str] = {
     "vehicle": "Vehicle management and telemetry.",
     "video": "Video capture, playback, and streaming helpers.",
     "widgets": "Reusable UI widgets and embed components.",
-    "wikis": "Wiki pages and collaborative documentation.",
 }

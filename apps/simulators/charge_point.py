@@ -77,11 +77,84 @@ class ChargePointSimulator:
         self._last_ws_subprotocol: Optional[str] = None
         self._last_close_code: Optional[int] = None
         self._last_close_reason: str | None = None
+        self._ws = None
 
     def trigger_door_open(self) -> None:
         """Queue a DoorOpen status notification for the simulator."""
 
         self._door_open_event.set()
+
+    def _set_status(self, status: str) -> None:
+        """Update the simulator status in one place."""
+
+        self.status = status
+
+    def _signal_stop(self, status: str) -> None:
+        """Mark the simulator as stopped and set the shared stop event."""
+
+        self._set_status(status)
+        self._stop_event.set()
+
+    def _mark_connected(self, result: str, *, status: Optional[str] = None) -> None:
+        """Publish the connection result for start-up coordination."""
+
+        if status is not None:
+            self._set_status(status)
+        if not self._connected.is_set():
+            self._connect_error = result
+            self._connected.set()
+
+    async def _send(self, message: str) -> None:
+        """Send a websocket frame and log it.
+
+        Parameters:
+            message: Serialized websocket payload to send.
+
+        Raises:
+            RuntimeError: If no websocket is connected for the session.
+            Exception: Re-raises websocket send failures.
+        """
+
+        if self._ws is None:
+            raise RuntimeError("Simulator websocket is not connected.")
+        await self._ws.send(message)
+        store.add_log(self.config.cp_path, f"> {message}", log_type="simulator")
+
+    async def _recv(self) -> str:
+        """Receive the next non-CSMS-call websocket frame.
+
+        Returns:
+            str: The next raw websocket frame that is not handled internally.
+
+        Raises:
+            TimeoutError: When the websocket does not produce a frame in time.
+            UnsupportedMessageError: When the CSMS sends an unsupported CALL.
+            Exception: Re-raises websocket receive failures.
+        """
+
+        if self._ws is None:
+            raise RuntimeError("Simulator websocket is not connected.")
+        while True:
+            try:
+                raw = await asyncio.wait_for(self._ws.recv(), timeout=60)
+            except TimeoutError:
+                store.add_log(
+                    self.config.cp_path,
+                    "Timeout waiting for response from charger",
+                    log_type="simulator",
+                )
+                raise
+            store.add_log(self.config.cp_path, f"< {raw}", log_type="simulator")
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                return raw
+            handled = await self._handle_csms_call(parsed, self._send, self._recv)
+            if handled:
+                if self._unsupported_message:
+                    raise UnsupportedMessageError(self._unsupported_message_reason)
+                continue
+            return raw
 
     async def _maybe_send_door_event(self, send, recv) -> None:
         if not self._door_open_event.is_set():
@@ -436,398 +509,385 @@ class ChargePointSimulator:
             response_payload["unknownKey"] = unknown_keys
         await send(json.dumps([3, message_id, response_payload]))
 
-    @requires_network
-    async def _run_session(self) -> None:
+    def _websocket_headers(self) -> dict[str, str]:
+        """Build HTTP headers for websocket negotiation."""
+
         cfg = self.config
-        self._last_ws_subprotocol = None
-        self._last_close_code = None
-        self._last_close_reason = None
-        clean_exit = False
-        abnormal_disconnect = False
-        stop_requested = False
+        if not (cfg.username and cfg.password):
+            return {}
+        userpass = f"{cfg.username}:{cfg.password}"
+        b64 = base64.b64encode(userpass.encode()).decode()
+        return {"Authorization": f"Basic {b64}"}
+
+    def _build_websocket_uri(self, ws_scheme: str) -> str:
+        """Build the websocket URI for the configured charge point."""
+
+        cfg = self.config
+        if cfg.ws_port:
+            return f"{ws_scheme}://{cfg.host}:{cfg.ws_port}/{cfg.cp_path}"
+        return f"{ws_scheme}://{cfg.host}/{cfg.cp_path}"
+
+    async def _connect_websocket(self) -> object:
+        """Negotiate the simulator websocket connection.
+
+        Returns:
+            object: Connected websocket client returned by ``websockets.connect``.
+
+        Raises:
+            Exception: Propagates the last connection error after exhausting retries.
+        """
+
+        cfg = self.config
+        requested_subprotocol = _ocpp_subprotocol_16j()
         scheme = resolve_ws_scheme(ws_scheme=cfg.ws_scheme, use_tls=cfg.use_tls)
         fallback_scheme = "ws" if scheme == "wss" else "wss"
         candidate_schemes = [scheme]
         if fallback_scheme != scheme:
             candidate_schemes.append(fallback_scheme)
 
-        try:
-            if cfg.username and cfg.password:
-                is_loopback = cfg.host in {"127.0.0.1", "localhost", "::1"}
-                if scheme != "wss" and not is_loopback:
-                    raise ValueError(
-                        "Basic auth requires TLS (wss) for non-loopback hosts"
-                    )
-                if not is_loopback:
-                    candidate_schemes = ["wss"]
-            validate_simulator_endpoint(
-                cfg.host,
-                cfg.ws_port,
-                allow_private_network=cfg.allow_private_network,
-            )
-        except ValueError as exc:
-            if not self._connected.is_set():
-                self._connect_error = str(exc)
-                self._connected.set()
-            self.status = "error"
-            self._stop_event.set()
-            return
-
-        def _build_uri(ws_scheme: str) -> str:
-            if cfg.ws_port:
-                return f"{ws_scheme}://{cfg.host}:{cfg.ws_port}/{cfg.cp_path}"
-            return f"{ws_scheme}://{cfg.host}/{cfg.cp_path}"
-        headers: dict[str, str] = {}
         if cfg.username and cfg.password:
-            userpass = f"{cfg.username}:{cfg.password}"
-            b64 = base64.b64encode(userpass.encode()).decode()
-            headers["Authorization"] = f"Basic {b64}"
+            is_loopback = cfg.host in {"127.0.0.1", "localhost", "::1"}
+            if scheme != "wss" and not is_loopback:
+                raise ValueError("Basic auth requires TLS (wss) for non-loopback hosts")
+            if not is_loopback:
+                candidate_schemes = ["wss"]
+
+        validate_simulator_endpoint(
+            cfg.host,
+            cfg.ws_port,
+            allow_private_network=cfg.allow_private_network,
+        )
 
         connect_kwargs: dict[str, object] = {}
+        headers = self._websocket_headers()
         if headers:
             connect_kwargs["additional_headers"] = headers
 
-        ws = None
         last_error: Exception | None = None
-        requested_subprotocol = _ocpp_subprotocol_16j()
+        for ws_scheme in candidate_schemes:
+            uri = self._build_websocket_uri(ws_scheme)
+            ws = None
+            try:
+                for attempt in range(2):
+                    try:
+                        ws = await websockets.connect(
+                            uri,
+                            subprotocols=[requested_subprotocol],
+                            **connect_kwargs,
+                        )
+                        break
+                    except Exception as exc:
+                        store.add_log(
+                            cfg.cp_path,
+                            (
+                                "Connection with subprotocol failed "
+                                f"({ws_scheme}, attempt {attempt + 1}): {exc}"
+                            ),
+                            log_type="simulator",
+                        )
+                        last_error = exc
+                        if attempt < 1:
+                            store.add_log(
+                                cfg.cp_path,
+                                "Retrying connection with subprotocol",
+                                log_type="simulator",
+                            )
+                            await asyncio.sleep(0.1)
+                if ws is not None:
+                    return ws
+                raise last_error or RuntimeError(
+                    "Subprotocol connection attempts failed without a specific error."
+                )
+            except Exception:
+                try:
+                    ws = await websockets.connect(uri, **connect_kwargs)
+                    return ws
+                except Exception as inner_exc:
+                    last_error = inner_exc
+                    store.add_log(
+                        cfg.cp_path,
+                        f"Connection failed ({ws_scheme}): {inner_exc}",
+                        log_type="simulator",
+                    )
+                    if ws_scheme != candidate_schemes[-1]:
+                        store.add_log(
+                            cfg.cp_path,
+                            f"Retrying connection with scheme {candidate_schemes[-1]}",
+                            log_type="simulator",
+                        )
+        raise last_error or RuntimeError("Unable to establish simulator websocket connection")
+
+    async def _perform_boot_and_authorize_handshake(self) -> bool:
+        """Run the boot notification and authorize exchange.
+
+        Returns:
+            bool: ``True`` when the charger accepts the handshake.
+        """
+
+        cfg = self.config
+        boot = json.dumps(
+            [
+                2,
+                "boot",
+                "BootNotification",
+                {
+                    "chargePointModel": "Simulator",
+                    "chargePointVendor": "SimVendor",
+                    "chargePointSerialNumber": cfg.serial_number,
+                },
+            ]
+        )
+        await self._send(boot)
+        try:
+            resp = json.loads(await self._recv())
+        except Exception:
+            self._set_status("error")
+            raise
+        status = resp[2].get("status")
+        if status != "Accepted":
+            self._mark_connected(f"Boot status {status}")
+            return False
+
+        await self._send(json.dumps([2, "auth", "Authorize", {"idTag": cfg.rfid}]))
+        await self._recv()
+        await self._maybe_send_door_event(self._send, self._recv)
+        self._mark_connected("accepted", status="running")
+        return True
+
+    async def _run_pre_charge_idle_loop(self) -> bool:
+        """Emit idle status, heartbeat, and meter traffic before charging starts."""
+
+        cfg = self.config
+        if cfg.duration <= 0:
+            self._signal_stop("stopped")
+            return False
+        if cfg.pre_charge_delay <= 0:
+            return True
+
+        idle_start = time.monotonic()
+        while time.monotonic() - idle_start < cfg.pre_charge_delay:
+            if self._stop_event.is_set():
+                return False
+            await self._send(
+                json.dumps(
+                    [
+                        2,
+                        "status",
+                        "StatusNotification",
+                        {
+                            "connectorId": cfg.connector_id,
+                            "errorCode": "NoError",
+                            "status": (
+                                "Available"
+                                if self._availability_state == "Operative"
+                                else "Unavailable"
+                            ),
+                        },
+                    ]
+                )
+            )
+            await self._recv()
+            await self._send(json.dumps([2, "hb", "Heartbeat", {}]))
+            await self._recv()
+            await self._send(
+                json.dumps(
+                    [
+                        2,
+                        "meter",
+                        "MeterValues",
+                        {
+                            "connectorId": cfg.connector_id,
+                            "meterValue": [
+                                {
+                                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                    "sampledValue": [
+                                        {
+                                            "value": "0",
+                                            "measurand": "Energy.Active.Import.Register",
+                                            "unit": "kWh",
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                    ]
+                )
+            )
+            await self._recv()
+            await self._maybe_send_door_event(self._send, self._recv)
+            await asyncio.sleep(cfg.interval)
+        return not self._stop_event.is_set()
+
+    async def _start_transaction(self) -> tuple[int, object]:
+        """Start a charging transaction and return the initial meter and tx id."""
+
+        cfg = self.config
+        meter_start = random.randint(1000, 2000)
+        await self._send(
+            json.dumps(
+                [
+                    2,
+                    "start",
+                    "StartTransaction",
+                    {
+                        "connectorId": cfg.connector_id,
+                        "idTag": cfg.rfid,
+                        "meterStart": meter_start,
+                        "vin": cfg.vin,
+                    },
+                ]
+            )
+        )
+        try:
+            resp = json.loads(await self._recv())
+        except Exception:
+            self._set_status("error")
+            raise
+        self._in_transaction = True
+        return meter_start, resp[2].get("transactionId")
+
+    async def _run_metering_loop(self, *, meter_start: int, tx_id: object) -> tuple[bool, int]:
+        """Send periodic meter values until the configured duration elapses."""
+
+        cfg = self.config
+        meter = meter_start
+        steps = max(1, int(cfg.duration / cfg.interval))
+
+        def _jitter(value: float) -> float:
+            return value * random.uniform(0.95, 1.05)
+
+        target_kwh = _jitter(cfg.average_kwh)
+        step_avg = (target_kwh * 1000) / steps if steps else target_kwh * 1000
+
+        start_time = time.monotonic()
+        while time.monotonic() - start_time < cfg.duration:
+            if self._stop_event.is_set():
+                return False, meter
+            inc = _jitter(step_avg)
+            meter += max(1, int(inc))
+            meter_kwh = meter / 1000.0
+            amperage = _jitter(cfg.amperage)
+            await self._send(
+                json.dumps(
+                    [
+                        2,
+                        "meter",
+                        "MeterValues",
+                        {
+                            "connectorId": cfg.connector_id,
+                            "transactionId": tx_id,
+                            "meterValue": [
+                                {
+                                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                    "sampledValue": [
+                                        {
+                                            "value": f"{meter_kwh:.3f}",
+                                            "measurand": "Energy.Active.Import.Register",
+                                            "unit": "kWh",
+                                        },
+                                        {
+                                            "value": f"{amperage:.3f}",
+                                            "measurand": "Current.Import",
+                                            "unit": "A",
+                                        },
+                                    ],
+                                }
+                            ],
+                        },
+                    ]
+                )
+            )
+            await self._recv()
+            await self._maybe_send_door_event(self._send, self._recv)
+            await asyncio.sleep(cfg.interval)
+        return True, meter
+
+    async def _finalize_transaction(self, tx_id: object, meter_stop: int) -> None:
+        """Send the stop transaction frame and apply deferred cleanup."""
+
+        await self._send(
+            json.dumps(
+                [
+                    2,
+                    "stop",
+                    "StopTransaction",
+                    {
+                        "transactionId": tx_id,
+                        "idTag": self.config.rfid,
+                        "meterStop": meter_stop,
+                    },
+                ]
+            )
+        )
+        await self._recv()
+        await self._maybe_send_door_event(self._send, self._recv)
+        self._in_transaction = False
+        if self._pending_availability:
+            pending = self._pending_availability
+            self._pending_availability = None
+            self._availability_state = pending
+            status_label = "Available" if pending == "Operative" else "Unavailable"
+            await self._send_status_notification(self._send, self._recv, status_label)
+
+    @requires_network
+    async def _run_session(self) -> None:
+        self._last_ws_subprotocol = None
+        self._last_close_code = None
+        self._last_close_reason = None
+        clean_exit = False
+        abnormal_disconnect = False
+        stop_requested = False
+        cfg = self.config
         try:
             self._unsupported_message = False
             self._unsupported_message_reason = ""
-            for ws_scheme in candidate_schemes:
-                uri = _build_uri(ws_scheme)
-                try:
-                    for attempt in range(2):
-                        try:
-                            ws = await websockets.connect(
-                                uri,
-                                subprotocols=[requested_subprotocol],
-                                **connect_kwargs,
-                            )
-                            break
-                        except Exception as exc:
-                            store.add_log(
-                                cfg.cp_path,
-                                (
-                                    "Connection with subprotocol failed "
-                                    f"({ws_scheme}, attempt {attempt + 1}): {exc}"
-                                ),
-                                log_type="simulator",
-                            )
-                            last_error = exc
-                            if attempt < 1:
-                                store.add_log(
-                                    cfg.cp_path,
-                                    "Retrying connection with subprotocol",
-                                    log_type="simulator",
-                                )
-                                await asyncio.sleep(0.1)
-                    if ws is None:
-                        if not last_error:
-                            raise RuntimeError(
-                                "Subprotocol connection attempts failed without a specific error."
-                            )
-                        raise last_error
-                except Exception:
-                    try:
-                        ws = await websockets.connect(uri, **connect_kwargs)
-                    except Exception as inner_exc:
-                        last_error = inner_exc
-                        ws = None
-                        store.add_log(
-                            cfg.cp_path,
-                            f"Connection failed ({ws_scheme}): {inner_exc}",
-                            log_type="simulator",
-                        )
-                        if ws_scheme != candidate_schemes[-1]:
-                            store.add_log(
-                                cfg.cp_path,
-                                f"Retrying connection with scheme {candidate_schemes[-1]}",
-                                log_type="simulator",
-                            )
-                        continue
-
-                if ws:
-                    break
-
-            if ws is None:
-                raise last_error if last_error else RuntimeError(
-                    "Unable to establish simulator websocket connection"
-                )
-
-            negotiated_subprotocol = ws.subprotocol
+            try:
+                self._ws = await self._connect_websocket()
+            except ValueError as exc:
+                self._mark_connected(str(exc))
+                self._signal_stop("error")
+                return
+            negotiated_subprotocol = self._ws.subprotocol
             store.add_log(
                 cfg.cp_path,
                 f"Connected (subprotocol={negotiated_subprotocol or 'none'})",
                 log_type="simulator",
             )
             self._last_ws_subprotocol = negotiated_subprotocol
-
-            async def send(msg: str) -> None:
-                try:
-                    await ws.send(msg)
-                except Exception:
-                    self.status = "error"
-                    raise
-                store.add_log(cfg.cp_path, f"> {msg}", log_type="simulator")
-
-            async def recv() -> str:
-                while True:
-                    try:
-                        raw = await asyncio.wait_for(ws.recv(), timeout=60)
-                    except TimeoutError:
-                        self.status = "stopped"
-                        self._stop_event.set()
-                        store.add_log(
-                            cfg.cp_path,
-                            "Timeout waiting for response from charger",
-                            log_type="simulator",
-                        )
-                        raise
-                    except websockets.exceptions.ConnectionClosed:
-                        self.status = "stopped"
-                        self._stop_event.set()
-                        raise
-                    except Exception:
-                        self.status = "error"
-                        raise
-                    store.add_log(cfg.cp_path, f"< {raw}", log_type="simulator")
-                    try:
-                        parsed = json.loads(raw)
-                    except Exception:
-                        return raw
-                    handled = await self._handle_csms_call(parsed, send, recv)
-                    if handled:
-                        if self._unsupported_message:
-                            raise UnsupportedMessageError(
-                                self._unsupported_message_reason
-                            )
-                        continue
-                    return raw
-
-            # handshake
-            boot = json.dumps(
-                [
-                    2,
-                    "boot",
-                    "BootNotification",
-                    {
-                        "chargePointModel": "Simulator",
-                        "chargePointVendor": "SimVendor",
-                        "chargePointSerialNumber": cfg.serial_number,
-                    },
-                ]
-            )
-            await send(boot)
-            try:
-                resp = json.loads(await recv())
-            except Exception:
-                self.status = "error"
-                raise
-            status = resp[2].get("status")
-            if status != "Accepted":
-                if not self._connected.is_set():
-                    self._connect_error = f"Boot status {status}"
-                    self._connected.set()
+            if not await self._perform_boot_and_authorize_handshake():
                 return
-
-            await send(json.dumps([2, "auth", "Authorize", {"idTag": cfg.rfid}]))
-            await recv()
-            await self._maybe_send_door_event(send, recv)
-            if not self._connected.is_set():
-                self.status = "running"
-                self._connect_error = "accepted"
-                self._connected.set()
-            if cfg.duration <= 0:
-                self.status = "stopped"
-                stop_requested = True
-                self._stop_event.set()
-                clean_exit = True
+            if not await self._run_pre_charge_idle_loop():
+                stop_requested = self._stop_event.is_set()
+                clean_exit = stop_requested
                 return
-            if cfg.pre_charge_delay > 0:
-                idle_start = time.monotonic()
-                while time.monotonic() - idle_start < cfg.pre_charge_delay:
-                    await send(
-                        json.dumps(
-                            [
-                                2,
-                                "status",
-                                "StatusNotification",
-                                {
-                                    "connectorId": cfg.connector_id,
-                                    "errorCode": "NoError",
-                                    "status": (
-                                        "Available"
-                                        if self._availability_state == "Operative"
-                                        else "Unavailable"
-                                    ),
-                                },
-                            ]
-                        )
-                    )
-                    await recv()
-                    await send(json.dumps([2, "hb", "Heartbeat", {}]))
-                    await recv()
-                    await send(
-                        json.dumps(
-                            [
-                                2,
-                                "meter",
-                                "MeterValues",
-                                {
-                                    "connectorId": cfg.connector_id,
-                                    "meterValue": [
-                                        {
-                                            "timestamp": time.strftime(
-                                                "%Y-%m-%dT%H:%M:%SZ"
-                                            ),
-                                            "sampledValue": [
-                                                {
-                                                    "value": "0",
-                                                    "measurand": "Energy.Active.Import.Register",
-                                                    "unit": "kWh",
-                                                }
-                                            ],
-                                        }
-                                    ],
-                                },
-                            ]
-                        )
-                    )
-                    await recv()
-                    await self._maybe_send_door_event(send, recv)
-                    await asyncio.sleep(cfg.interval)
-
-            if not await self._wait_until_operative(send, recv):
-                if self._stop_event.is_set():
-                    stop_requested = True
+            if not await self._wait_until_operative(self._send, self._recv):
+                stop_requested = self._stop_event.is_set()
+                clean_exit = stop_requested
                 return
-            meter_start = random.randint(1000, 2000)
-            await send(
-                json.dumps(
-                    [
-                        2,
-                        "start",
-                        "StartTransaction",
-                        {
-                            "connectorId": cfg.connector_id,
-                            "idTag": cfg.rfid,
-                            "meterStart": meter_start,
-                            "vin": cfg.vin,
-                        },
-                    ]
-                )
+            meter_start, tx_id = await self._start_transaction()
+            completed, meter_stop = await self._run_metering_loop(
+                meter_start=meter_start,
+                tx_id=tx_id,
             )
-            try:
-                resp = json.loads(await recv())
-            except Exception:
-                self.status = "error"
-                raise
-            tx_id = resp[2].get("transactionId")
-            self._in_transaction = True
-
-            meter = meter_start
-            steps = max(1, int(cfg.duration / cfg.interval))
-
-            def _jitter(value: float) -> float:
-                return value * random.uniform(0.95, 1.05)
-
-            target_kwh = _jitter(cfg.average_kwh)
-            step_avg = (target_kwh * 1000) / steps if steps else target_kwh * 1000
-
-            start_time = time.monotonic()
-            while time.monotonic() - start_time < cfg.duration:
-                if self._stop_event.is_set():
-                    stop_requested = True
-                    break
-                inc = _jitter(step_avg)
-                meter += max(1, int(inc))
-                meter_kwh = meter / 1000.0
-                amperage = _jitter(cfg.amperage)
-                await send(
-                    json.dumps(
-                        [
-                            2,
-                            "meter",
-                            "MeterValues",
-                            {
-                                "connectorId": cfg.connector_id,
-                                "transactionId": tx_id,
-                                "meterValue": [
-                                    {
-                                        "timestamp": time.strftime(
-                                            "%Y-%m-%dT%H:%M:%SZ"
-                                        ),
-                                        "sampledValue": [
-                                            {
-                                                "value": f"{meter_kwh:.3f}",
-                                                "measurand": "Energy.Active.Import.Register",
-                                                "unit": "kWh",
-                                            },
-                                            {
-                                                "value": f"{amperage:.3f}",
-                                                "measurand": "Current.Import",
-                                                "unit": "A",
-                                            },
-                                        ],
-                                    }
-                                ],
-                            },
-                        ]
-                    )
-                )
-                await recv()
-                await self._maybe_send_door_event(send, recv)
-                await asyncio.sleep(cfg.interval)
-
-            await send(
-                json.dumps(
-                    [
-                        2,
-                        "stop",
-                        "StopTransaction",
-                        {
-                            "transactionId": tx_id,
-                            "idTag": cfg.rfid,
-                            "meterStop": meter,
-                        },
-                    ]
-                )
-            )
-            await recv()
-            await self._maybe_send_door_event(send, recv)
-            self._in_transaction = False
-            if self._pending_availability:
-                pending = self._pending_availability
-                self._pending_availability = None
-                self._availability_state = pending
-                status_label = "Available" if pending == "Operative" else "Unavailable"
-                await self._send_status_notification(send, recv, status_label)
+            stop_requested = not completed
+            await self._finalize_transaction(tx_id, meter_stop)
             clean_exit = True
         except UnsupportedMessageError:
-            if not self._connected.is_set():
-                self._connect_error = "Unsupported CSMS message"
-                self._connected.set()
-            self.status = "error"
-            self._stop_event.set()
+            self._mark_connected("Unsupported CSMS message")
+            self._signal_stop("error")
             return
         except TimeoutError:
             abnormal_disconnect = True
-            if not self._connected.is_set():
-                self._connect_error = "Timeout waiting for response"
-                self._connected.set()
-            self.status = "stopped"
-            self._stop_event.set()
+            self._mark_connected("Timeout waiting for response")
+            self._signal_stop("stopped")
             return
         except websockets.exceptions.ConnectionClosed as exc:
             abnormal_disconnect = True
-            if not self._connected.is_set():
-                self._connect_error = str(exc)
-                self._connected.set()
+            self._mark_connected(str(exc))
             # The charger closed the connection; mark the simulator as
             # terminated rather than erroring so the status reflects that it
             # was stopped remotely.
-            self.status = "stopped"
-            self._stop_event.set()
+            self._signal_stop("stopped")
             store.add_log(
                 cfg.cp_path,
                 f"Disconnected by charger (code={getattr(exc, 'code', '')})",
@@ -835,14 +895,13 @@ class ChargePointSimulator:
             )
             return
         except Exception as exc:
-            if not self._connected.is_set():
-                self._connect_error = str(exc)
-                self._connected.set()
-            self.status = "error"
-            self._stop_event.set()
+            self._mark_connected(str(exc))
+            self._signal_stop("error")
             raise
         finally:
             self._in_transaction = False
+            ws = self._ws
+            self._ws = None
             if ws is not None:
                 await ws.close()
                 close_code = ws.close_code
@@ -865,7 +924,7 @@ class ChargePointSimulator:
                     log_type="simulator",
                 )
             if not self._stop_event.is_set():
-                self.status = "stopped"
+                self._set_status("stopped")
 
     async def _run(self) -> None:
         try:
