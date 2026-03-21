@@ -56,7 +56,7 @@ def _is_django_app_dir(path: Path) -> bool:
         return False
 
     module_path = _to_module_path(path)
-    if module_path in NON_DJANGO_UTILITY_PACKAGES:
+    if module_path in NON_DJANGO_UTILITY_PACKAGES | RETIRED_RUNTIME_APP_PACKAGES:
         return False
 
     if (path / "apps.py").exists():
@@ -78,12 +78,16 @@ def _to_module_path(path: Path) -> str:
 
 
 LEGACY_MIGRATION_APPS = [
+    "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig",
+    "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
     "apps.selenium",
     "config.legacy_mermaid",
-    "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
 ]
 NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",
+}
+RETIRED_RUNTIME_APP_PACKAGES = {
+    "apps.socials",
 }
 
 
@@ -96,11 +100,7 @@ def _load_local_apps() -> list[str]:
         if _is_django_app_dir(candidate.parent)
     ]
 
-    return sorted(
-        module_path
-        for app_dir in app_dirs
-        if (module_path := _to_module_path(app_dir)) not in NON_DJANGO_UTILITY_PACKAGES
-    )
+    return sorted(_to_module_path(app_dir) for app_dir in app_dirs)
 
 
 def _load_active_prototype_app() -> list[str]:
@@ -153,6 +153,7 @@ SITE_ID = 1
 
 MIGRATION_MODULES = {
     "sites": "apps.core.sites_migrations",
+    "socials": "apps.socials.migrations",
     # Pin django_celery_beat migrations to a local copy so we can override
     # upstream changes that introduce optional dependencies (e.g. Google
     # Calendar profile) and avoid InvalidBases errors during migrate.
