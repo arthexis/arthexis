@@ -31,6 +31,7 @@ def test_hidden_prototype_apps_require_explicit_activation(monkeypatch, tmp_path
     apps_root = tmp_path / "apps"
     _write_app(apps_root, ("blog",))
     _write_app(apps_root, ("_legacy", "fitbit_migration_only"))
+    _write_app(apps_root, ("_legacy", "socials_migration_only"))
     _write_app(apps_root, ("_prototypes", "vision_lab"))
     monkeypatch.setattr(settings_apps, "APPS_DIR", apps_root)
 
@@ -38,6 +39,7 @@ def test_hidden_prototype_apps_require_explicit_activation(monkeypatch, tmp_path
 
     assert "apps.blog" in discovered
     assert "apps._legacy.fitbit_migration_only" not in discovered
+    assert "apps._legacy.socials_migration_only" not in discovered
     assert "apps._prototypes.vision_lab" not in discovered
 
     monkeypatch.setenv("ARTHEXIS_PROTOTYPE_APP", "apps._prototypes.vision_lab")
