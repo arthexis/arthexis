@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from argparse import SUPPRESS
+from argparse import Action, SUPPRESS
 from typing import Any
 
 from django.contrib.auth import get_user_model
@@ -68,26 +68,31 @@ class Command(BaseCommand):
 
         list_parser = subparsers.add_parser("list", aliases=["ls"], help="List inbox, outbox, and bridge configuration.")
         list_parser.set_defaults(action="list")
+        self._add_base_command_arguments(parser, list_parser)
 
         inbox_parser = subparsers.add_parser("inbox", aliases=["ib"], help="Show or configure an inbox.")
         inbox_parser.set_defaults(action="inbox")
+        self._add_base_command_arguments(parser, inbox_parser)
         inbox_parser.add_argument("inbox_id", nargs="?", type=int, help="Inbox id to show or update.")
         inbox_parser.add_argument("--owner-user", type=int, help="Owner user id for created or updated inboxes.")
         self._add_inbox_arguments(inbox_parser)
 
         outbox_parser = subparsers.add_parser("outbox", aliases=["ob"], help="Show or configure an outbox.")
         outbox_parser.set_defaults(action="outbox")
+        self._add_base_command_arguments(parser, outbox_parser)
         outbox_parser.add_argument("outbox_id", nargs="?", type=int, help="Outbox id to show or update.")
         outbox_parser.add_argument("--owner-user", type=int, help="Owner user id for created or updated outboxes.")
         self._add_outbox_arguments(outbox_parser)
 
         bridge_parser = subparsers.add_parser("bridge", aliases=["br"], help="Show or configure an inbox/outbox bridge.")
         bridge_parser.set_defaults(action="bridge")
+        self._add_base_command_arguments(parser, bridge_parser)
         bridge_parser.add_argument("bridge_id", nargs="?", type=int, help="Bridge id to show or update.")
         self._add_bridge_arguments(bridge_parser)
 
         send_parser = subparsers.add_parser("send", aliases=["tx"], help="Send an outbound email.")
         send_parser.set_defaults(action="send")
+        self._add_base_command_arguments(parser, send_parser)
         send_parser.add_argument("outbox_id", nargs="?", type=int, help="Optional outbox id to use.")
         send_parser.add_argument("-t", "--to", help="Comma-separated recipients.")
         send_parser.add_argument("-s", "--subject", default="", help="Email subject.")
@@ -96,6 +101,7 @@ class Command(BaseCommand):
 
         search_parser = subparsers.add_parser("search", aliases=["find"], help="Search inbound messages.")
         search_parser.set_defaults(action="search")
+        self._add_base_command_arguments(parser, search_parser)
         search_parser.add_argument("inbox_id", nargs="?", type=int, help="Optional inbox id to search.")
         search_parser.add_argument("-s", "--subject", default="", help="Subject filter.")
         search_parser.add_argument("-f", "--from", dest="search_from", default="", help="From-address filter.")
@@ -122,6 +128,51 @@ class Command(BaseCommand):
         parser.add_argument("--search-body", default="", help=SUPPRESS)
         parser.add_argument("--search-limit", type=int, default=10, help=SUPPRESS)
         parser.add_argument("--regex", action="store_true", help=SUPPRESS)
+
+    def _add_base_command_arguments(self, parser, subparser) -> None:
+        """Copy Django base command options onto a verb subparser."""
+
+        base_option_dests = {
+            "force_color",
+            "no_color",
+            "pythonpath",
+            "settings",
+            "skip_checks",
+            "traceback",
+            "verbosity",
+            "version",
+        }
+        for action in parser._actions:
+            if action.dest not in base_option_dests or not action.option_strings:
+                continue
+            kwargs = self._build_argument_copy_kwargs(action)
+            subparser.add_argument(*action.option_strings, **kwargs)
+
+    def _build_argument_copy_kwargs(self, action: Action) -> dict[str, Any]:
+        """Build ``add_argument`` kwargs that reproduce an existing parser action."""
+
+        if action.dest == "version":
+            return {
+                "action": "version",
+                "help": action.help,
+                "version": self.get_version(),
+            }
+
+        kwargs: dict[str, Any] = {
+            "action": type(action),
+            "default": action.default,
+            "dest": action.dest,
+            "help": action.help,
+        }
+        if action.metavar is not None:
+            kwargs["metavar"] = action.metavar
+        if getattr(action, "choices", None) is not None:
+            kwargs["choices"] = action.choices
+        if getattr(action, "nargs", None) not in (None, 0):
+            kwargs["nargs"] = action.nargs
+        if getattr(action, "type", None) is not None:
+            kwargs["type"] = action.type
+        return kwargs
 
     def _add_inbox_arguments(
         self, parser, help_text: str | None = None, include_short_aliases: bool = True
@@ -189,7 +240,7 @@ class Command(BaseCommand):
             port_flags.insert(0, "--port")
             username_flags.insert(0, "--username")
             password_flags.insert(0, "--password")
-            from_flags[:0] = ["--from", "--from-email"]
+            from_flags.insert(0, "--from")
             priority_flags.insert(0, "--priority")
             tls_flags.insert(0, "--tls")
             no_tls_flags.insert(0, "--no-tls")
@@ -271,7 +322,7 @@ class Command(BaseCommand):
             self._search_email(normalized_options)
             configured = True
         if not configured:
-            self._report()
+            self._report_legacy_selection(normalized_options)
 
     def _normalize_options(self, options: dict[str, Any]) -> dict[str, Any]:
         """Map subcommand positional values onto the legacy option names."""
@@ -297,11 +348,11 @@ class Command(BaseCommand):
     def _handle_inbox_action(self, options: dict[str, Any]) -> None:
         """Show or configure a single inbox using the inbox subcommand."""
 
-        if self._has_inbox_changes(options) or options.get("owner_user") is not None or options.get("inbox") is None:
-            if self._has_inbox_changes(options) or options.get("owner_user") is not None:
-                inbox = self._configure_inbox(options)
-                self.stdout.write(self.style.SUCCESS(f"Configured inbox #{inbox.pk}"))
-                return
+        if self._has_inbox_changes(options) or options.get("owner_user") is not None:
+            inbox = self._configure_inbox(options)
+            self.stdout.write(self.style.SUCCESS(f"Configured inbox #{inbox.pk}"))
+            return
+
         self._report_inboxes(options.get("inbox"))
 
     def _handle_outbox_action(self, options: dict[str, Any]) -> None:
@@ -364,6 +415,28 @@ class Command(BaseCommand):
         """Return whether bridge configuration flags were supplied."""
 
         return any(options.get(key) is not None for key in self.BRIDGE_EDITABLE_KEYS)
+
+    def _report_legacy_selection(self, options: dict[str, Any]) -> None:
+        """Report a legacy flat-flag selection when no action was executed."""
+
+        selectors = {
+            "inbox": options.get("inbox"),
+            "outbox": options.get("outbox"),
+            "bridge": options.get("bridge"),
+        }
+        selected = [name for name, value in selectors.items() if value is not None]
+        if len(selected) != 1:
+            self._report()
+            return
+
+        selection = selected[0]
+        if selection == "inbox":
+            self._report_inboxes(selectors[selection])
+            return
+        if selection == "outbox":
+            self._report_outboxes(selectors[selection])
+            return
+        self._report_bridges(selectors[selection])
 
     def _configure_inbox(self, options: dict[str, Any]) -> EmailInbox:
         """Create or update an inbox profile from command options."""

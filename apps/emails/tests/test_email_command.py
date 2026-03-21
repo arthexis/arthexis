@@ -322,3 +322,88 @@ def test_email_subcommand_validation_errors(args, message):
 
     with pytest.raises(CommandError, match=message):
         call_command("email", *args)
+
+
+def test_email_send_subcommand_accepts_trailing_django_base_options(monkeypatch, owner):
+    """The send subcommand should keep Django base options valid after verb arguments."""
+
+    outbox = EmailOutbox.objects.create(
+        user=owner,
+        host="smtp.example.com",
+        port=587,
+        username="sender@example.com",
+        password="secret",
+        from_email="sender@example.com",
+    )
+    sent = {}
+
+    def fake_send(subject, message, recipients, from_email=None, outbox=None, fail_silently=False):
+        sent.update(
+            {
+                "subject": subject,
+                "message": message,
+                "recipients": recipients,
+                "from_email": from_email,
+                "outbox": outbox,
+                "fail_silently": fail_silently,
+            }
+        )
+
+    monkeypatch.setattr("apps.emails.mailer.send", fake_send)
+
+    stdout = StringIO()
+    call_command(
+        "email",
+        "send",
+        str(outbox.pk),
+        "-t",
+        "alice@example.com",
+        "--verbosity",
+        "2",
+        stdout=stdout,
+    )
+
+    assert "Sent email to alice@example.com" in stdout.getvalue()
+    assert sent["outbox"] == outbox
+    assert sent["recipients"] == ["alice@example.com"]
+
+
+def test_email_legacy_bridge_selector_reports_requested_bridge(owner):
+    """The legacy bridge selector should still validate and filter bridge reports."""
+
+    inbox = EmailInbox.objects.create(
+        user=owner,
+        username="legacy-bridge-inbox@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+        protocol=EmailInbox.IMAP,
+    )
+    outbox = EmailOutbox.objects.create(
+        user=owner,
+        host="smtp.example.com",
+        port=587,
+        username="legacy-bridge-outbox@example.com",
+        password="secret",
+        from_email="legacy-bridge-outbox@example.com",
+    )
+    bridge = EmailBridge.objects.create(name="Legacy bridge", inbox=inbox, outbox=outbox)
+
+    stdout = StringIO()
+    call_command("email", "--bridge", str(bridge.pk), stdout=stdout)
+
+    assert json.loads(stdout.getvalue()) == [
+        {
+            "id": bridge.pk,
+            "inbox_id": inbox.pk,
+            "name": "Legacy bridge",
+            "outbox_id": outbox.pk,
+        }
+    ]
+
+
+def test_email_legacy_bridge_selector_raises_for_missing_bridge(db):
+    """The legacy bridge selector should keep the not-found validation behavior."""
+
+    with pytest.raises(CommandError, match="Bridge not found: 999999"):
+        call_command("email", "--bridge", "999999")
