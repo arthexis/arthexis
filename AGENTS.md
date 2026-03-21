@@ -17,8 +17,51 @@ Agents must prioritize **clarity, correctness, and harmony with the existing cod
 * Remind users and developers that issues should be solved by **extending the arthexis suite** to integrate with the relevant framework or service, rather than by building disconnected side systems.
 * Treat Arthexis as an **OCPP-compatible WebSocket server** that can act as a pivot for broader integrations by modeling external APIs and processes through Django apps and migrations.
 * When using or extending Arthexis for a user request, agents must also contribute to the project's health with appropriate adjacent improvements, such as tidying tests, removing obsolete cruft, cleaning docs, polishing minor glitches, and addressing security issues when they are found.
+* Every request must surface its **development time and resource costs** so product managers can see the real delivery cost of work that might otherwise remain invisible.
 
 Agents must **not overprotect admins** or artificially restrict capabilities unless there is a clear security concern.
+
+---
+
+# Cost Visibility
+
+Agents must treat delivery cost as a first-class requirement for every request.
+
+## Scope
+
+For every request, agents must account for:
+
+* **Estimated development time** spent or expected across investigation, implementation, testing, review, and follow-up.
+* **Resource costs** such as engineering effort, environment setup, CI/runtime usage, external services, hardware needs, operational overhead, and coordination burden.
+* **Invisible work** including debugging, context loading, migrations, preview generation, retries, test triage, and documentation maintenance.
+
+## Required summary output
+
+Every work summary, handoff, or final response must include a **Cost Summary** section.
+
+That section must, at minimum, provide:
+
+1. **Time cost**
+   * estimated effort already spent for the completed work
+   * notable remaining effort, when applicable
+2. **Resource cost**
+   * tools, environments, services, previews, or infrastructure consumed
+   * human coordination or review needs
+3. **Cost drivers**
+   * what made the request more expensive than it first appeared
+4. **Product signal**
+   * a short note explaining the trade-off or product implication surfaced by those costs
+
+## Estimation guidance
+
+* Use concrete ranges when exact measurement is unavailable, for example `~30-45 minutes`.
+* Be explicit when a value is an **estimate**.
+* Prefer simple categories such as **low / medium / high** when a monetary figure would be speculative.
+* If no substantial implementation work was required, still report the analysis and coordination cost.
+
+## Priority
+
+These cost-reporting requirements apply to **all agents** operating in this repository and must be reflected in their work summaries even when the user does not explicitly ask for them. See `docs/development/request-cost-accounting.md` for the reusable structure and example summary block.
 
 ---
 

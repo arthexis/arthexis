@@ -44,6 +44,7 @@ python manage.py runserver 0.0.0.0:8888
 - Create a topic branch per change.
 - Keep commits focused and descriptive.
 - Reference relevant issues or docs when possible.
+- Include a cost-oriented work summary in handoffs and PR descriptions that surfaces estimated time spent, resource usage, cost drivers, and the resulting product trade-off.
 
 ### Django changes
 - Add or update tests alongside app changes.
