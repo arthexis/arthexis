@@ -77,7 +77,11 @@ def _to_module_path(path: Path) -> str:
     return f"apps.{'.'.join(path.relative_to(APPS_DIR).parts)}"
 
 
-LEGACY_MIGRATION_APPS = ["apps.selenium", "config.legacy_mermaid"]
+LEGACY_MIGRATION_APPS = [
+    "apps.selenium",
+    "config.legacy_mermaid",
+    "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
+]
 NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",
 }
@@ -116,25 +120,29 @@ def _load_active_prototype_app() -> list[str]:
 
 LOCAL_APPS = _load_local_apps() + _load_active_prototype_app()
 
-INSTALLED_APPS = [
-    "apps.whitenoise",
-    "django.contrib.admin",
-    "django.contrib.admindocs",
-    "config.auth_app.AuthConfig",
-    "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django_otp",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
-    "django_mermaid.apps.MermaidConfig",
-    "parler",
-    "import_export",
-    "django_object_actions",
-    "django.contrib.sites",
-    "channels",
-    "graphene_django",
-    "apps.celery.beat_app.CeleryBeatConfig",
-] + LOCAL_APPS + LEGACY_MIGRATION_APPS
+INSTALLED_APPS = (
+    [
+        "apps.whitenoise",
+        "django.contrib.admin",
+        "django.contrib.admindocs",
+        "config.auth_app.AuthConfig",
+        "django.contrib.contenttypes",
+        "django.contrib.sessions",
+        "django_otp",
+        "django.contrib.messages",
+        "django.contrib.staticfiles",
+        "django_mermaid.apps.MermaidConfig",
+        "parler",
+        "import_export",
+        "django_object_actions",
+        "django.contrib.sites",
+        "channels",
+        "graphene_django",
+        "apps.celery.beat_app.CeleryBeatConfig",
+    ]
+    + LOCAL_APPS
+    + LEGACY_MIGRATION_APPS
+)
 
 if HAS_DEBUG_TOOLBAR:
     INSTALLED_APPS.append("debug_toolbar")

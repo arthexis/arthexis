@@ -1,9 +1,8 @@
 """Default configuration for the pages application."""
+
 from __future__ import annotations
 
-from typing import Dict
-
-DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
+DEFAULT_APPLICATION_DESCRIPTIONS: dict[str, str] = {
     "app": "Application registry and metadata.",
     "actions": "Remote actions API, bearer token management, and OpenAPI export.",
     "audio": "Audio playback, capture, and signal processing helpers.",
@@ -59,7 +58,6 @@ DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
     "sites": "Site management, domains, and tenancy helpers.",
     "socials": "Social integrations and sharing utilities.",
     "summary": "Aggregated dashboards and executive summaries.",
-    "survey": "Survey collection and response management.",
     "teams": "Identity, Entitlements and Access Controls.",
     "tasks": "Task execution and job tracking.",
     "terms": "Terms, policies, and legal content management.",

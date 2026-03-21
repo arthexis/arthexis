@@ -52,12 +52,16 @@ def test_hidden_prototype_apps_require_explicit_activation(monkeypatch, tmp_path
     assert settings_apps._load_active_prototype_app() == ["apps._prototypes.vision_lab"]
 
 
-def test_camera_utility_package_stays_out_of_local_django_app_discovery(monkeypatch, tmp_path):
+def test_camera_utility_package_stays_out_of_local_django_app_discovery(
+    monkeypatch, tmp_path
+):
     apps_root = tmp_path / "apps"
     camera_dir = apps_root / "camera"
     camera_dir.mkdir(parents=True, exist_ok=True)
     (apps_root / "__init__.py").write_text('"""test package."""\n', encoding="utf-8")
-    (camera_dir / "__init__.py").write_text('"""camera shim package."""\n', encoding="utf-8")
+    (camera_dir / "__init__.py").write_text(
+        '"""camera shim package."""\n', encoding="utf-8"
+    )
 
     monkeypatch.setattr(settings_apps, "APPS_DIR", apps_root)
 
@@ -71,3 +75,11 @@ def test_legacy_camera_shim_remains_importable_for_prototype_integrations():
 
     assert camera_module.capture_rpi_snapshot is rpi_module.capture_rpi_snapshot
     assert rfid_module.queue_camera_snapshot is not None
+
+
+def test_survey_runtime_app_removed_but_legacy_migration_app_remains_explicit():
+    assert "apps.survey" not in settings_apps.LOCAL_APPS
+    assert (
+        "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig"
+        in settings_apps.LEGACY_MIGRATION_APPS
+    )
