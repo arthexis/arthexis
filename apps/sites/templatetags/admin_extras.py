@@ -855,8 +855,6 @@ def related_admin_models(opts):
             if relation_name:
                 lookups.append(f"{relation_name}__id__in")
         resolved = sorted(set(lookups))
-        if resolved:
-            resolved.append("selected-id__id__in")
         return resolved
 
     def add_model(model_cls, relation_type: str, relation_title: str):
