@@ -280,7 +280,12 @@ class Command(BaseCommand):
         self._add_service_timing_arguments(service_parser)
 
     def _rewrite_legacy_cli_args(self, command_args: list[str]) -> list[str]:
-        """Translate legacy CLI action flags into their preferred subcommand form."""
+        """Translate legacy CLI action flags into their preferred subcommand form.
+
+        Root-level options must remain before the inserted subcommand so Django's
+        parser still accepts legacy invocations such as ``video --verbosity 0
+        --doctor``.
+        """
 
         if not command_args or any(arg in {"-h", "--help"} for arg in command_args):
             return command_args
@@ -288,9 +293,8 @@ class Command(BaseCommand):
             return command_args
 
         compatibility_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-        compatibility_parser.add_argument("--doctor", action="store_true")
-        compatibility_parser.add_argument("--mjpeg", action="store_true")
-        compatibility_parser.add_argument("--snapshot", action="store_true")
+        for flag in self._LEGACY_ACTION_FLAGS:
+            compatibility_parser.add_argument(flag, action="store_true")
         known, remainder = compatibility_parser.parse_known_args(command_args)
 
         action_flags = [
@@ -300,7 +304,27 @@ class Command(BaseCommand):
         ]
         if len(action_flags) != 1:
             return command_args
-        return [action_flags[0], *remainder]
+
+        action_flag = next(
+            flag
+            for flag, action in self._LEGACY_ACTION_FLAGS.items()
+            if action == action_flags[0]
+        )
+        leading_root_args: list[str] = []
+        trailing_args = list(remainder)
+        while trailing_args:
+            next_arg = trailing_args[0]
+            if next_arg == action_flag:
+                trailing_args.pop(0)
+                continue
+            if next_arg.startswith("-"):
+                leading_root_args.append(trailing_args.pop(0))
+                if trailing_args and not trailing_args[0].startswith("-"):
+                    leading_root_args.append(trailing_args.pop(0))
+                continue
+            break
+
+        return [*leading_root_args, action_flags[0], *trailing_args]
 
     def _normalize_compatibility_options(self, options: dict[str, object]) -> dict[str, object]:
         """Merge subcommand arguments with legacy compatibility flags."""
@@ -308,10 +332,15 @@ class Command(BaseCommand):
         normalized = dict(options)
         action = normalized.get("action")
         compatibility_actions = [
-            name
-            for name in ("doctor", "mjpeg", "snapshot")
-            if normalized.get(name)
+            compatibility_action
+            for compatibility_action in self._LEGACY_ACTION_FLAGS.values()
+            if normalized.get(compatibility_action)
         ]
+        if action and compatibility_actions:
+            raise CommandError(
+                f"Cannot use subcommand '{action}' with legacy action flag "
+                f"'--{compatibility_actions[0]}'."
+            )
         if len(compatibility_actions) > 1:
             raise CommandError("Choose only one legacy action flag at a time.")
 
@@ -391,25 +420,6 @@ class Command(BaseCommand):
         samples = normalized.get("samples")
         if samples is not None:
             self._capture_samples(node=node, feature=feature, options=normalized, samples=samples)
-
-    def _normalize_legacy_flags(self, options: dict[str, object]) -> dict[str, object]:
-        """Merge sub-action arguments with legacy top-level flags for compatibility."""
-
-        normalized = dict(options)
-        action = normalized.get("action")
-
-        normalized["discover"] = bool(normalized.get("discover") or normalized.get("refresh_devices"))
-
-        if action == "list":
-            normalized["list_streams"] = bool(normalized.get("list_streams"))
-        elif action == "snapshot":
-            normalized["snapshot"] = True
-        elif action == "mjpeg":
-            normalized["mjpeg"] = True
-        elif action == "service":
-            normalized["service"] = True
-
-        return normalized
 
     def _maybe_enable_or_disable_feature(
         self,

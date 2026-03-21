@@ -507,14 +507,42 @@ def test_video_legacy_cli_flags_rewrite_to_subcommands(legacy_args, expected_met
 
     node = SimpleNamespace() if expected_method == "_capture_snapshot" else None
 
-    with patch(f"apps.video.management.commands.video.Command.{expected_method}") as action_mock:
-        with patch("apps.video.management.commands.video.Command._list_devices"):
-            with patch("apps.video.management.commands.video.Node.get_local", return_value=node):
-                with patch("apps.video.management.commands.video.NodeFeature") as feature_mock:
-                    feature_mock.objects.get.return_value = SimpleNamespace(is_enabled=True)
-                    call_command("video", *legacy_args)
+    with (
+        patch(f"apps.video.management.commands.video.Command.{expected_method}") as action_mock,
+        patch("apps.video.management.commands.video.Command._list_devices"),
+        patch("apps.video.management.commands.video.Node.get_local", return_value=node),
+        patch("apps.video.management.commands.video.NodeFeature") as feature_mock,
+    ):
+        feature_mock.objects.get.return_value = SimpleNamespace(is_enabled=True)
+        call_command("video", *legacy_args)
 
     assert action_mock.called
+
+
+def test_video_legacy_cli_rewrite_preserves_root_level_options():
+    """Keep root-level options ahead of rewritten legacy actions for compatibility."""
+
+    from apps.video.management.commands.video import Command
+
+    rewritten = Command()._rewrite_legacy_cli_args(["--verbosity", "0", "--doctor"])
+
+    assert rewritten == ["--verbosity", "0", "doctor"]
+
+
+def test_video_rejects_subcommand_combined_with_legacy_action_flag():
+    """Reject ambiguous invocations that mix preferred and legacy action syntax."""
+
+    from apps.video.management.commands.video import Command
+
+    with pytest.raises(CommandError, match="Cannot use subcommand 'snapshot' with legacy action flag '--doctor'\\."):
+        Command()._normalize_compatibility_options(
+            {
+                "action": "snapshot",
+                "doctor": True,
+                "mjpeg": False,
+                "snapshot": False,
+            }
+        )
 
 
 def test_camera_service_compatibility_alias_delegates_to_video_service(capsys):
