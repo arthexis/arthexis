@@ -179,7 +179,6 @@ include-package-data = true
 "apps.aws" = [ "**/*",]
 "apps.aws.migrations" = [ "**/*",]
 "apps.base" = [ "**/*",]
-"apps.camera" = [ "**/*",]
 "apps.cards" = [ "**/*",]
 "apps.cards.management" = [ "**/*",]
 "apps.cards.management.commands" = [ "**/*",]

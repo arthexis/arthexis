@@ -83,9 +83,7 @@ LEGACY_MIGRATION_APPS = [
     "apps.selenium",
     "config.legacy_mermaid",
 ]
-NON_DJANGO_UTILITY_PACKAGES = {
-    "apps.camera",
-}
+NON_DJANGO_UTILITY_PACKAGES: set[str] = set()
 RETIRED_RUNTIME_APP_PACKAGES = {
     "apps.socials",
 }
