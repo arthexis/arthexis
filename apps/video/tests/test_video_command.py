@@ -40,6 +40,32 @@ def test_video_command_lists_devices(capsys):
 
 
 @pytest.mark.django_db
+def test_video_list_subcommand_discovers_and_lists_devices(capsys):
+    """Prefer the list subcommand while keeping discovery behavior intact."""
+
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    NodeFeature.objects.create(slug="video-cam", display="Video Camera")
+
+    with (
+        patch("apps.video.management.commands.video.Node.get_local", return_value=node),
+        patch(
+            "apps.video.management.commands.video.VideoDevice.refresh_from_system",
+            return_value=(1, 0),
+        ) as refresh_mock,
+    ):
+        call_command("video", "list", "--discover")
+
+    refresh_mock.assert_called_once_with(node=node)
+    output = capsys.readouterr().out
+    assert "Detected 1 new" in output
+    assert "Video devices:" in output
+
+
+@pytest.mark.django_db
 def test_video_command_discover(capsys):
     """Discover video devices from the local node."""
 
@@ -466,6 +492,67 @@ def test_video_service_subaction_invokes_service_runner():
         call_command("video", "service", interval=0.33, sleep=0.12)
 
     service_mock.assert_called_once_with(interval=0.33, sleep=0.12)
+
+
+@pytest.mark.parametrize(
+    ("legacy_args", "expected_method"),
+    [
+        (["--doctor"], "_run_doctor"),
+        (["--mjpeg"], "_capture_mjpeg"),
+        (["--snapshot"], "_capture_snapshot"),
+    ],
+)
+def test_video_legacy_cli_flags_rewrite_to_subcommands(legacy_args, expected_method):
+    """Rewrite legacy top-level flags into the preferred subcommand dispatch path."""
+
+    node = SimpleNamespace() if expected_method == "_capture_snapshot" else None
+
+    with (
+        patch(f"apps.video.management.commands.video.Command.{expected_method}") as action_mock,
+        patch("apps.video.management.commands.video.Command._list_devices"),
+        patch("apps.video.management.commands.video.Node.get_local", return_value=node),
+        patch("apps.video.management.commands.video.NodeFeature") as feature_mock,
+    ):
+        feature_mock.objects.get.return_value = SimpleNamespace(is_enabled=True)
+        call_command("video", *legacy_args)
+
+    assert action_mock.called
+
+
+def test_video_legacy_cli_rewrite_preserves_root_level_options():
+    """Keep root-level options ahead of rewritten legacy actions for compatibility."""
+
+    from apps.video.management.commands.video import Command
+
+    rewritten = Command()._rewrite_legacy_cli_args(["--verbosity", "0", "--doctor"])
+
+    assert rewritten == ["--verbosity", "0", "doctor"]
+
+
+def test_video_rejects_subcommand_combined_with_legacy_action_flag():
+    """Reject ambiguous invocations that mix preferred and legacy action syntax."""
+
+    from apps.video.management.commands.video import Command
+
+    with pytest.raises(CommandError, match="Cannot use subcommand 'snapshot' with legacy action flag '--doctor'\\."):
+        Command()._normalize_compatibility_options(
+            {
+                "action": "snapshot",
+                "doctor": True,
+                "mjpeg": False,
+                "snapshot": False,
+            }
+        )
+
+
+def test_camera_service_compatibility_alias_delegates_to_video_service(capsys):
+    """Keep the short alias as a compatibility wrapper around ``video service``."""
+
+    with patch("apps.video.management.commands.camera_service.call_command") as call_mock:
+        call_command("camera_service", interval=0.25, sleep=0.1)
+
+    call_mock.assert_called_once_with("video", "service", interval=0.25, sleep=0.1)
+    assert "legacy alias" in capsys.readouterr().out
 
 @override_settings(VIDEO_FRAME_CAPTURE_INTERVAL=0.0, VIDEO_FRAME_SERVICE_SLEEP=0.0)
 def test_video_command_setting_defaults_preserve_zero():
