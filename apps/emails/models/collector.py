@@ -77,14 +77,6 @@ class EmailCollector(Entity):
         blank=True,
         help_text="Comma-separated recipients used when notification mode is Email.",
     )
-    notification_recipe = models.ForeignKey(
-        "recipes.Recipe",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="email_collectors",
-        help_text="Optional recipe to execute after the selected notification action.",
-    )
 
     class Meta:
         verbose_name = _("Email Collector")
@@ -158,19 +150,6 @@ class EmailCollector(Entity):
             return []
         return [item.strip() for item in raw.split(",") if item.strip()]
 
-    @staticmethod
-    def _sanitize_recipe_argument(value: str) -> str:
-        """Escape text used in recipe argument substitution to reduce injection risks."""
-        return (
-            str(value or "")
-            .replace("\\", "\\\\")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
-            .replace('"', '\\"')
-            .replace("'", "\\'")
-        )
-
     def _notify_for_message(self, msg: dict[str, str], sigils: dict[str, str]) -> None:
         """Dispatch collector notification according to ``notification_mode``."""
         mode = (self.notification_mode or self.NOTIFY_NONE).strip().lower()
@@ -225,34 +204,6 @@ class EmailCollector(Entity):
                         self.pk,
                     )
 
-        recipe = self.notification_recipe
-        if recipe is None:
-            return
-
-        recipe_kwargs = {
-            "subject": rendered_subject,
-            "message": rendered_message,
-            "sender": context.get("sender", ""),
-            "body": context.get("body", ""),
-            "date": context.get("date", ""),
-            "sigils": {str(key): str(value) for key, value in sigils.items()},
-        }
-
-        if recipe.detect_format() != recipe.RecipeFormat.BASH:
-            recipe_kwargs = {
-                "subject": self._sanitize_recipe_argument(recipe_kwargs["subject"]),
-                "message": self._sanitize_recipe_argument(recipe_kwargs["message"]),
-                "sender": self._sanitize_recipe_argument(recipe_kwargs["sender"]),
-                "body": self._sanitize_recipe_argument(recipe_kwargs["body"]),
-                "date": self._sanitize_recipe_argument(recipe_kwargs["date"]),
-                "sigils": {
-                    str(key): self._sanitize_recipe_argument(str(value))
-                    for key, value in sigils.items()
-                },
-            }
-
-        recipe.execute(**recipe_kwargs)
-
     def collect(self, limit: int = 10) -> None:
         """Poll inboxes and store artifacts not already recorded.
 
@@ -264,7 +215,7 @@ class EmailCollector(Entity):
 
         Note:
             Notification dispatch failures are logged and suppressed for popup,
-            net-message, email, and recipe channels.
+            net-message, and email channels.
         """
         if not self.is_enabled:
             return
