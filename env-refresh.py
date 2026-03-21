@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -16,56 +18,56 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Iterable
 from weakref import WeakKeyDictionary
-from typing import TYPE_CHECKING, Iterable, Any
 
 import django
-import importlib.util
 from django.apps import apps
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.sites.models import Site
 from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import connections, connection, close_old_connections
+from django.core.serializers.base import DeserializationError
+from django.db import close_old_connections, connection, connections
+from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.exceptions import (
     InconsistentMigrationHistory,
     InvalidBasesError,
     MigrationSchemaMissing,
 )
-from django.db.utils import OperationalError
-from django.db.migrations.recorder import MigrationRecorder
 from django.db.migrations.loader import MigrationLoader
-from django.db.migrations.executor import MigrationExecutor
-from django.core.serializers.base import DeserializationError
-from utils.migration_branches import MissingBranchSplinterError
+from django.db.migrations.recorder import MigrationRecorder
+from django.db.utils import OperationalError
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 
 os.environ.setdefault("NET_MESSAGE_DISABLE_PROPAGATION", "1")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
-from apps.nodes.models import Node
-from django.contrib.sites.models import Site
-from django.contrib.auth import get_user_model
-from django.contrib.contenttypes.models import ContentType
 
-from apps.release.models import PackageRelease
-from apps.nginx.models import SiteConfiguration
-from apps.sigils.sigil_builder import generate_model_sigils
 from apps.locals.user_data import (
     load_local_seed_zips,
     load_shared_user_fixtures,
     load_user_fixtures,
 )
-from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
+from apps.nginx.models import SiteConfiguration
+from apps.nodes.models import Node
+from apps.release.models import PackageRelease
+from apps.sigils.sigil_builder import generate_model_sigils
 from scripts.fixtures_changed import fixtures_changed
-from django.utils import timezone
-from django.utils.dateparse import parse_datetime
+from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
+from utils.migration_branches import MissingBranchSplinterError
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing support
     from django.db.models import Model
 
 _MODEL_SEED_FIELD_CACHE = WeakKeyDictionary()
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -606,8 +608,10 @@ def _plan_fixture_loading(
             current_by_app = _fixture_hashes_by_app(normalized_fixtures)
         else:
             current_hash = stored_hash
-            current_by_app = known_stored_by_app or _fixture_hashes_by_app(
-                normalized_fixtures
+            current_by_app = (
+                known_stored_by_app
+                if stored_by_app is not None
+                else _fixture_hashes_by_app(normalized_fixtures)
             )
     else:
         current_hash = ""
@@ -651,7 +655,9 @@ def _reconcile_existing_user_fixture(
     if not existing:
         return False
 
-    user_pk_map[obj.get("pk")] = existing.pk
+    fixture_pk = obj.get("pk")
+    if fixture_pk is not None:
+        user_pk_map[fixture_pk] = existing.pk
     m2m_updates: list[tuple[str, Any]] = []
     fields_to_update: list[str] = []
     for field_name, value in obj.get("fields", {}).items():
@@ -799,16 +805,27 @@ def _clean_database_before_migrate(
         return
 
     for label in local_apps:
-        try:
-            qs = recorder.migration_qs.filter(app=label).order_by("-applied")
-            if qs.exists():
-                last = qs.first().name
-                node = loader.graph.node_map.get((label, last))
-                parents = list(node.parents) if node else []
-                prev = parents[0][1] if parents else "zero"
-                call_command("migrate", label, prev, interactive=False)
-        except OperationalError:
-            continue
+        _downgrade_app_to_previous_migration(label, recorder, loader)
+
+
+def _downgrade_app_to_previous_migration(
+    label: str,
+    recorder: MigrationRecorder,
+    loader: MigrationLoader,
+) -> None:
+    """Downgrade a local app by one migration step when a prior migration exists."""
+
+    try:
+        qs = recorder.migration_qs.filter(app=label).order_by("-applied")
+        if not qs.exists():
+            return
+        last = qs.first().name
+        node = loader.graph.node_map.get((label, last))
+        parents = list(node.parents) if node else []
+        prev = parents[0][1] if parents else "zero"
+        call_command("migrate", label, prev, interactive=False)
+    except OperationalError:
+        return
 
 
 def _recover_sqlite_migration_failure(
@@ -846,7 +863,8 @@ def _recover_postgresql_migration_failure(default_db: dict[str, Any]) -> bool:
                     )
                 )
         return True
-    except Exception:
+    except Exception as exc:
+        logger.exception("PostgreSQL recovery failed.", exc_info=exc)
         return False
 
 

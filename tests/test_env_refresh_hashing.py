@@ -68,6 +68,43 @@ def test_plan_fixture_loading_uses_stored_hashes_when_mtimes_match(
 
 
 @pytest.mark.django_db
+def test_plan_fixture_loading_preserves_empty_stored_by_app(
+    env_refresh_module, monkeypatch, settings, tmp_path
+):
+    """Fixture planning should not recompute per-app hashes for empty stored mappings."""
+
+    settings.BASE_DIR = tmp_path
+    fixture_path = tmp_path / "apps" / "core" / "fixtures" / "sample.json"
+    fixture_path.parent.mkdir(parents=True)
+    fixture_path.write_text(json.dumps([{"model": "sites.site", "fields": {"domain": "x"}}]))
+
+    current_mtimes = env_refresh_module._fixture_mtime_cache(["apps/core/fixtures/sample.json"])
+
+    def fail_hash_recompute(*_args, **_kwargs):
+        raise AssertionError("per-app hashes should not be recomputed")
+
+    monkeypatch.setattr(
+        env_refresh_module,
+        "_fixture_hashes_by_app",
+        fail_hash_recompute,
+    )
+    plan = env_refresh_module._plan_fixture_loading(
+        fixtures=["apps/core/fixtures/sample.json"],
+        force_db=False,
+        clean=False,
+        migrations_changed=False,
+        migrations_ran=False,
+        stored_hash="stored-fixture-hash",
+        stored_by_app={},
+        stored_mtimes=current_mtimes,
+    )
+
+    assert plan.current_hash == "stored-fixture-hash"
+    assert plan.current_by_app == {}
+    assert plan.should_load is False
+
+
+@pytest.mark.django_db
 def test_plan_fixture_loading_reloads_when_per_app_hash_changes(
     env_refresh_module, settings, tmp_path
 ):
@@ -135,6 +172,32 @@ def test_reconcile_existing_user_fixture_updates_fields_and_defers_unresolved_m2
     assert observed_save_kwargs == {"update_fields": ["first_name"]}
     assert user_pk_map == {9: user.pk}
     assert pending_user_m2m[user.pk] == [("groups", [999999])]
+
+
+@pytest.mark.django_db
+def test_reconcile_existing_user_fixture_skips_missing_fixture_pk(env_refresh_module):
+    """Existing fixture users should not record a PK remap when fixture PK is missing."""
+
+    get_user_model().objects.create_user(username="fixture-user-without-pk", password="old")
+
+    user_pk_map: dict[int, int] = {}
+    pending_user_m2m = defaultdict(list)
+    fixture = {
+        "fields": {
+            "username": "fixture-user-without-pk",
+            "first_name": "Updated",
+        },
+    }
+
+    reconciled = env_refresh_module._reconcile_existing_user_fixture(
+        fixture,
+        user_pk_map=user_pk_map,
+        pending_user_m2m=pending_user_m2m,
+    )
+
+    assert reconciled is True
+    assert user_pk_map == {}
+    assert pending_user_m2m == {}
 
 
 @pytest.mark.django_db
