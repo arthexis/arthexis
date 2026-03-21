@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
             name="auto_accept_offered_certificates",
             field=models.BooleanField(
                 default=False,
-                help_text="Automatically accept certificate status checks for certificates offered by this charge point when no installed certificate matches.",
+                help_text="Deprecated. This flag no longer has any effect and will be removed in a future version.",
                 verbose_name="Auto Accept Offered Certificates",
             ),
         ),

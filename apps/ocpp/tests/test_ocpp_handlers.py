@@ -2,7 +2,6 @@ import json
 from datetime import datetime, timezone as dt_timezone
 from functools import partial
 from unittest.mock import AsyncMock
-import json
 
 import anyio
 import pytest
@@ -855,7 +854,7 @@ async def test_get_certificate_status_rejects_missing_certificate_when_auto_acce
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.integration
-async def test_get_certificate_status_rejects_missing_certificate_when_auto_accept_enabled():
+async def test_get_certificate_status_ignores_auto_accept_flag():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="CERT-4C",
         auto_accept_offered_certificates=True,
@@ -865,6 +864,7 @@ async def test_get_certificate_status_rejects_missing_certificate_when_auto_acce
     consumer.charger = charger
     consumer.aggregate_charger = None
 
+    # Guard against reintroducing the legacy auto-accept behavior.
     payload = {"certificateHashData": {"hashAlgorithm": "SHA256"}}
     result = await consumer._handle_get_certificate_status_action(
         payload, "msg-3c", "", "",

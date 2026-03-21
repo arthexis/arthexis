@@ -93,12 +93,13 @@ class Charger(Ownable):
         default=False,
         help_text="Require a valid RFID before starting a charging session.",
     )
+    # Deprecated: kept for compatibility with existing charger records.
     auto_accept_offered_certificates = models.BooleanField(
         _("Auto Accept Offered Certificates"),
         default=False,
         help_text=_(
-            "Automatically accept certificate status checks for certificates "
-            "offered by this charge point when no installed certificate matches."
+            "Deprecated. This flag no longer has any effect and will be removed "
+            "in a future version."
         ),
     )
     configuration_check_enabled = models.BooleanField(
