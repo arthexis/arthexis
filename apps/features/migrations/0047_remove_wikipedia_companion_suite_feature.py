@@ -4,14 +4,15 @@ from django.db import migrations
 
 
 FEATURE_SLUG = "wikipedia-companion"
+FEATURE_SOURCE = "mainstream"
 
 
 def remove_wikipedia_companion_suite_feature(apps, schema_editor):
-    """Delete legacy Wikipedia Companion feature rows now that runtime support is gone."""
+    """Delete only the retired mainstream feature row now that runtime support is gone."""
 
     del schema_editor
     Feature = apps.get_model("features", "Feature")
-    Feature.objects.filter(slug=FEATURE_SLUG).delete()
+    Feature.objects.filter(slug=FEATURE_SLUG, source=FEATURE_SOURCE).delete()
 
 
 def restore_wikipedia_companion_suite_feature(apps, schema_editor):
@@ -21,7 +22,7 @@ def restore_wikipedia_companion_suite_feature(apps, schema_editor):
     Feature = apps.get_model("features", "Feature")
     Feature.objects.update_or_create(
         slug=FEATURE_SLUG,
-        source="mainstream",
+        source=FEATURE_SOURCE,
         defaults={
             "display": "Wikipedia Companion",
             "summary": (
@@ -50,7 +51,6 @@ def restore_wikipedia_companion_suite_feature(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("features", "0046_seed_playwright_automation_suite_feature"),
     ]

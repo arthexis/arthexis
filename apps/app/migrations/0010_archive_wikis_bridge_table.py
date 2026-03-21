@@ -12,12 +12,16 @@ def archive_wiki_bridge_table(apps, schema_editor) -> None:
 
     del apps
     existing_tables = set(schema_editor.connection.introspection.table_names())
+    quoted_archive_table = schema_editor.quote_name(ARCHIVE_TABLE)
+    quoted_source_table = schema_editor.quote_name(SOURCE_TABLE)
     if ARCHIVE_TABLE in existing_tables:
-        schema_editor.execute(f"DROP TABLE {ARCHIVE_TABLE}")
+        schema_editor.execute(f"DROP TABLE {quoted_archive_table}")
         existing_tables.remove(ARCHIVE_TABLE)
 
     if SOURCE_TABLE in existing_tables:
-        schema_editor.execute(f"ALTER TABLE {SOURCE_TABLE} RENAME TO {ARCHIVE_TABLE}")
+        schema_editor.execute(
+            f"ALTER TABLE {quoted_source_table} RENAME TO {quoted_archive_table}"
+        )
 
 
 def restore_wiki_bridge_table(apps, schema_editor) -> None:
@@ -25,12 +29,15 @@ def restore_wiki_bridge_table(apps, schema_editor) -> None:
 
     del apps
     existing_tables = set(schema_editor.connection.introspection.table_names())
+    quoted_archive_table = schema_editor.quote_name(ARCHIVE_TABLE)
+    quoted_source_table = schema_editor.quote_name(SOURCE_TABLE)
     if ARCHIVE_TABLE in existing_tables and SOURCE_TABLE not in existing_tables:
-        schema_editor.execute(f"ALTER TABLE {ARCHIVE_TABLE} RENAME TO {SOURCE_TABLE}")
+        schema_editor.execute(
+            f"ALTER TABLE {quoted_archive_table} RENAME TO {quoted_source_table}"
+        )
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("app", "0009_application_enabled"),
     ]
