@@ -7,6 +7,7 @@ This project now includes a shared **admin UI framework** for consistent spacing
 - Ensure buttons and action links render at a predictable, uniform height.
 - Use common spacing and panel primitives so custom views feel native.
 - Provide a repeatable pattern for future admin customizations.
+- Keep admin surfaces focused on developed and tested suite functionality instead of recipe-like workflows that expect administrators to perform programming-style wiring.
 
 ## Framework location
 

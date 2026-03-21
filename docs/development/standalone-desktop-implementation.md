@@ -8,6 +8,7 @@ This document proposes a concrete path to ship Arthexis as a standalone desktop 
 - Keep Django as the backend and web UI source of truth.
 - Support offline/local-first startup on `localhost`.
 - Keep Linux and Windows parity for MVP.
+- Ensure the desktop experience connects developed and tested suite capabilities without exposing recipe-like or programming-oriented wiring tasks to administrators or end users.
 
 ## Recommended Stack
 
