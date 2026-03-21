@@ -435,11 +435,9 @@ class LocalhostAdminBackend(ModelBackend):
             return self._is_test_environment(request)
 
     def _get_remote_ip(self, request):
-        forwarded = request.META.get("HTTP_X_FORWARDED_FOR") if request else ""
-        if forwarded:
-            remote = forwarded.split(",")[0].strip()
-        else:
-            remote = request.META.get("REMOTE_ADDR", "") if request else ""
+        """Return the directly connected client IP address."""
+
+        remote = request.META.get("REMOTE_ADDR", "") if request else ""
 
         try:
             return ipaddress.ip_address(remote)
