@@ -1,7 +1,7 @@
 import pytest
 
 from django.contrib.auth import get_user_model
-from django.test import RequestFactory
+from django.test import RequestFactory, override_settings
 
 from apps.users import temp_passwords
 from apps.users.backends import LocalhostAdminBackend, TempPasswordBackend
@@ -115,15 +115,31 @@ def test_temp_password_allows_email_lookup():
 
 
 @pytest.mark.django_db
-def test_localhost_admin_backend_ignores_forwarded_for_header():
+def test_localhost_admin_backend_ignores_untrusted_forwarded_for_hops():
     backend = LocalhostAdminBackend()
     request = RequestFactory().post(
         "/login/",
         HTTP_HOST="127.0.0.1",
-        REMOTE_ADDR="127.0.0.1",
-        HTTP_X_FORWARDED_FOR="203.0.113.10",
+        REMOTE_ADDR="172.17.0.2",
+        HTTP_X_FORWARDED_FOR="203.0.113.10, 127.0.0.1",
     )
 
     remote_ip = backend._get_remote_ip(request)
 
     assert str(remote_ip) == "127.0.0.1"
+
+
+@override_settings(TRUSTED_PROXIES=("198.51.100.2",))
+@pytest.mark.django_db
+def test_localhost_admin_backend_uses_last_untrusted_forwarded_hop():
+    backend = LocalhostAdminBackend()
+    request = RequestFactory().post(
+        "/login/",
+        HTTP_HOST="127.0.0.1",
+        REMOTE_ADDR="172.17.0.2",
+        HTTP_X_FORWARDED_FOR="203.0.113.10, 198.51.100.2",
+    )
+
+    remote_ip = backend._get_remote_ip(request)
+
+    assert str(remote_ip) == "203.0.113.10"
