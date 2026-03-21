@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone as dt_timezone
 import asyncio
 from collections import deque
+from dataclasses import dataclass
 import inspect
 import json
 import logging
@@ -44,6 +45,7 @@ from apps.ocpp.models import (
     ChargerLogRequest,
     PowerProjection,
     ChargingProfile,
+    ChargingSchedule,
     Variable,
     MonitoringRule,
     MonitoringReport,
@@ -101,6 +103,57 @@ from apps.ocpp.consumers.csms.handlers.status import StatusHandlersMixin
 from apps.ocpp.consumers.csms.transport import CSMSTransportMixin
 
 logger = logging.getLogger(__name__)
+
+
+class ReportChargingProfilesValidationError(ValueError):
+    """Raised when a ReportChargingProfiles payload is malformed."""
+
+
+@dataclass(frozen=True)
+class NormalizedChargingSchedulePeriod:
+    """Internal representation of a charging schedule period."""
+
+    start_period: int
+    limit: float
+    number_phases: int | None = None
+    phase_to_use: int | None = None
+
+
+@dataclass(frozen=True)
+class NormalizedChargingSchedule:
+    """Internal representation of a charging schedule."""
+
+    charging_rate_unit: str
+    periods: tuple[NormalizedChargingSchedulePeriod, ...]
+    duration_seconds: int | None = None
+    start_schedule: datetime | None = None
+    min_charging_rate: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class NormalizedChargingProfileReport:
+    """Internal representation of a reported charging profile."""
+
+    profile_id: int
+    stack_level: int
+    purpose: str
+    kind: str
+    connector_id: int
+    schedule: NormalizedChargingSchedule
+    recurrency_kind: str = ""
+    transaction_id: int | None = None
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+
+
+@dataclass(frozen=True)
+class NormalizedChargingProfileReportPayload:
+    """Validated ReportChargingProfiles payload data."""
+
+    request_id: int | None
+    evse_id: int | None
+    tbc: bool
+    profiles: tuple[NormalizedChargingProfileReport, ...]
 
 
 class SinkConsumer(AsyncWebsocketConsumer):
@@ -1329,6 +1382,487 @@ class CSMSConsumer(
             message += f": {', '.join(details)}"
         store.add_log(self.store_key, message, log_type="charger")
 
+    @staticmethod
+    def _parse_optional_int(value: object | None) -> int | None:
+        """Return an integer value when coercion succeeds."""
+
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _validate_report_charging_profiles_payload(
+        self, payload: object
+    ) -> NormalizedChargingProfileReportPayload:
+        """Validate and normalize a ReportChargingProfiles payload.
+
+        Parameters:
+            payload: Raw protocol payload received from the charge point.
+
+        Returns:
+            A normalized representation of the request payload.
+
+        Raises:
+            ReportChargingProfilesValidationError: If required fields are missing
+                or malformed.
+        """
+
+        payload_data = payload if isinstance(payload, dict) else {}
+        request_id = self._parse_optional_int(payload_data.get("requestId"))
+        evse_id = self._parse_optional_int(payload_data.get("evseId"))
+        tbc = bool(payload_data.get("tbc")) if payload_data.get("tbc") is not None else False
+
+        raw_profiles = payload_data.get("chargingProfiles")
+        if raw_profiles is None:
+            raw_profiles = payload_data.get("chargingProfile")
+
+        if isinstance(raw_profiles, dict):
+            profile_entries = [raw_profiles]
+        elif isinstance(raw_profiles, list):
+            profile_entries = raw_profiles
+        else:
+            raise ReportChargingProfilesValidationError(
+                "missing chargingProfile payload"
+            )
+
+        normalized_profiles = tuple(
+            self._normalize_reported_charging_profile(entry, evse_id=evse_id)
+            for entry in profile_entries
+        )
+        if not normalized_profiles:
+            raise ReportChargingProfilesValidationError(
+                "missing chargingProfile payload"
+            )
+
+        return NormalizedChargingProfileReportPayload(
+            request_id=request_id,
+            evse_id=evse_id,
+            tbc=tbc,
+            profiles=normalized_profiles,
+        )
+
+    def _normalize_reported_charging_profile(
+        self, payload: object, *, evse_id: int | None
+    ) -> NormalizedChargingProfileReport:
+        """Map a protocol charging profile payload to an internal structure.
+
+        Parameters:
+            payload: Raw charging profile object from the protocol payload.
+            evse_id: EVSE identifier attached to the report.
+
+        Returns:
+            A normalized charging profile representation.
+
+        Raises:
+            ReportChargingProfilesValidationError: If the profile is malformed.
+        """
+
+        if not isinstance(payload, dict):
+            raise ReportChargingProfilesValidationError("chargingProfile must be an object")
+
+        profile_id = self._parse_optional_int(
+            payload.get("chargingProfileId") or payload.get("id")
+        )
+        if profile_id is None:
+            raise ReportChargingProfilesValidationError("chargingProfileId is required")
+
+        stack_level = self._parse_optional_int(payload.get("stackLevel"))
+        if stack_level is None:
+            raise ReportChargingProfilesValidationError("stackLevel is required")
+
+        purpose = str(payload.get("chargingProfilePurpose") or "").strip()
+        if not purpose:
+            raise ReportChargingProfilesValidationError(
+                "chargingProfilePurpose is required"
+            )
+
+        kind = str(payload.get("chargingProfileKind") or "").strip()
+        if not kind:
+            raise ReportChargingProfilesValidationError("chargingProfileKind is required")
+
+        return NormalizedChargingProfileReport(
+            profile_id=profile_id,
+            stack_level=stack_level,
+            purpose=purpose,
+            kind=kind,
+            connector_id=evse_id or 0,
+            schedule=self._normalize_reported_charging_schedule(
+                payload.get("chargingSchedule")
+            ),
+            recurrency_kind=str(payload.get("recurrencyKind") or "").strip(),
+            transaction_id=self._parse_optional_int(payload.get("transactionId")),
+            valid_from=_parse_ocpp_timestamp(payload.get("validFrom")),
+            valid_to=_parse_ocpp_timestamp(payload.get("validTo")),
+        )
+
+    def _normalize_reported_charging_schedule(
+        self, payload: object
+    ) -> NormalizedChargingSchedule:
+        """Map a protocol charging schedule payload to an internal structure.
+
+        Parameters:
+            payload: Raw charging schedule mapping from the protocol payload.
+
+        Returns:
+            A normalized charging schedule representation.
+
+        Raises:
+            ReportChargingProfilesValidationError: If required schedule fields are
+                missing or malformed.
+        """
+
+        if not isinstance(payload, dict):
+            raise ReportChargingProfilesValidationError("chargingSchedule is required")
+
+        charging_rate_unit = str(payload.get("chargingRateUnit") or "").strip()
+        if not charging_rate_unit:
+            raise ReportChargingProfilesValidationError(
+                "chargingRateUnit is required"
+            )
+
+        raw_periods = payload.get("chargingSchedulePeriod")
+        if not isinstance(raw_periods, list) or not raw_periods:
+            raise ReportChargingProfilesValidationError(
+                "chargingSchedulePeriod is required"
+            )
+
+        periods: list[NormalizedChargingSchedulePeriod] = []
+        for index, period_payload in enumerate(raw_periods, start=1):
+            periods.append(
+                self._normalize_reported_charging_schedule_period(
+                    period_payload, index=index
+                )
+            )
+
+        min_rate_raw = payload.get("minChargingRate")
+        try:
+            min_charging_rate = (
+                Decimal(str(min_rate_raw)) if min_rate_raw is not None else None
+            )
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ReportChargingProfilesValidationError(
+                "minChargingRate is invalid"
+            ) from exc
+
+        return NormalizedChargingSchedule(
+            charging_rate_unit=charging_rate_unit,
+            periods=tuple(sorted(periods, key=lambda entry: entry.start_period)),
+            duration_seconds=self._parse_optional_int(payload.get("duration")),
+            start_schedule=_parse_ocpp_timestamp(payload.get("startSchedule")),
+            min_charging_rate=min_charging_rate,
+        )
+
+    def _normalize_reported_charging_schedule_period(
+        self, payload: object, *, index: int
+    ) -> NormalizedChargingSchedulePeriod:
+        """Map a protocol schedule period payload to an internal structure.
+
+        Parameters:
+            payload: Raw schedule period mapping from the protocol payload.
+            index: One-based period index for error reporting.
+
+        Returns:
+            A normalized schedule period representation.
+
+        Raises:
+            ReportChargingProfilesValidationError: If the period is malformed.
+        """
+
+        if not isinstance(payload, dict):
+            raise ReportChargingProfilesValidationError(
+                f"chargingSchedulePeriod[{index}] must be an object"
+            )
+
+        start_period = self._parse_optional_int(payload.get("startPeriod"))
+        if start_period is None:
+            raise ReportChargingProfilesValidationError(
+                f"chargingSchedulePeriod[{index}].startPeriod is required"
+            )
+
+        try:
+            limit = float(payload.get("limit"))
+        except (TypeError, ValueError) as exc:
+            raise ReportChargingProfilesValidationError(
+                f"chargingSchedulePeriod[{index}].limit is required"
+            ) from exc
+
+        return NormalizedChargingSchedulePeriod(
+            start_period=start_period,
+            limit=limit,
+            number_phases=self._parse_optional_int(payload.get("numberPhases")),
+            phase_to_use=self._parse_optional_int(payload.get("phaseToUse")),
+        )
+
+    @staticmethod
+    def _normalized_schedule_payload(
+        schedule: NormalizedChargingSchedule,
+    ) -> dict[str, object]:
+        """Serialize a normalized schedule for logging and comparisons."""
+
+        payload: dict[str, object] = {
+            "chargingRateUnit": schedule.charging_rate_unit,
+            "periods": [
+                {
+                    "startPeriod": period.start_period,
+                    "limit": period.limit,
+                    **(
+                        {"numberPhases": period.number_phases}
+                        if period.number_phases is not None
+                        else {}
+                    ),
+                    **(
+                        {"phaseToUse": period.phase_to_use}
+                        if period.phase_to_use is not None
+                        else {}
+                    ),
+                }
+                for period in schedule.periods
+            ],
+        }
+        if schedule.duration_seconds is not None:
+            payload["duration"] = schedule.duration_seconds
+        if schedule.start_schedule is not None:
+            payload["startSchedule"] = schedule.start_schedule.isoformat()
+        if schedule.min_charging_rate is not None:
+            payload["minChargingRate"] = float(schedule.min_charging_rate)
+        return payload
+
+    def _normalized_profile_payload(
+        self, profile: NormalizedChargingProfileReport
+    ) -> dict[str, object]:
+        """Serialize a normalized profile for logging and comparisons."""
+
+        payload: dict[str, object] = {
+            "id": profile.profile_id,
+            "stackLevel": profile.stack_level,
+            "purpose": profile.purpose,
+            "kind": profile.kind,
+            "schedule": self._normalized_schedule_payload(profile.schedule),
+        }
+        if profile.recurrency_kind:
+            payload["recurrencyKind"] = profile.recurrency_kind
+        if profile.transaction_id is not None:
+            payload["transactionId"] = profile.transaction_id
+        if profile.valid_from is not None:
+            payload["validFrom"] = profile.valid_from.isoformat()
+        if profile.valid_to is not None:
+            payload["validTo"] = profile.valid_to.isoformat()
+        return payload
+
+    def _persist_reported_charging_profiles(
+        self, report: NormalizedChargingProfileReportPayload
+    ) -> Charger | None:
+        """Persist reported charging profiles for the charger.
+
+        Parameters:
+            report: Normalized payload data to persist.
+
+        Returns:
+            The charger used for persistence, if one could be resolved.
+        """
+
+        charger = self.charger
+        connector_id = report.evse_id or self.connector_value or 0
+        if charger is None and self.charger_id:
+            charger = Charger.objects.filter(
+                charger_id=self.charger_id,
+                connector_id=connector_id,
+            ).first()
+        if charger is None and self.charger_id:
+            charger, _created = Charger.objects.get_or_create(
+                charger_id=self.charger_id,
+                connector_id=connector_id,
+            )
+        if charger is None:
+            return None
+
+        for profile in report.profiles:
+            profile_obj, _created = ChargingProfile.objects.update_or_create(
+                charger=charger,
+                connector_id=profile.connector_id,
+                charging_profile_id=profile.profile_id,
+                defaults={
+                    "stack_level": profile.stack_level,
+                    "purpose": profile.purpose,
+                    "kind": profile.kind,
+                    "recurrency_kind": profile.recurrency_kind,
+                    "transaction_id": profile.transaction_id,
+                    "valid_from": profile.valid_from,
+                    "valid_to": profile.valid_to,
+                },
+            )
+            ChargingSchedule.objects.update_or_create(
+                profile=profile_obj,
+                defaults={
+                    "charging_rate_unit": profile.schedule.charging_rate_unit,
+                    "duration_seconds": profile.schedule.duration_seconds,
+                    "start_schedule": profile.schedule.start_schedule,
+                    "charging_schedule_periods": [
+                        {
+                            "start_period": period.start_period,
+                            "limit": period.limit,
+                            **(
+                                {"number_phases": period.number_phases}
+                                if period.number_phases is not None
+                                else {}
+                            ),
+                            **(
+                                {"phase_to_use": period.phase_to_use}
+                                if period.phase_to_use is not None
+                                else {}
+                            ),
+                        }
+                        for period in profile.schedule.periods
+                    ],
+                    "min_charging_rate": profile.schedule.min_charging_rate,
+                },
+            )
+        return charger
+
+    def _diff_reported_charging_profile(
+        self,
+        expected_profile: ChargingProfile,
+        reported_profile: NormalizedChargingProfileReport,
+    ) -> list[str]:
+        """Return human-readable mismatches between expected and reported profiles."""
+
+        expected_payload = self._normalize_reported_charging_profile(
+            expected_profile.as_cs_charging_profile(),
+            evse_id=expected_profile.connector_id,
+        )
+        expected_normalized = self._normalized_profile_payload(expected_payload)
+        reported_normalized = self._normalized_profile_payload(reported_profile)
+
+        mismatches: list[str] = []
+
+        def _compare_field(key: str, label: str) -> None:
+            if expected_normalized.get(key) != reported_normalized.get(key):
+                mismatches.append(
+                    f"{label} expected {expected_normalized.get(key)} got {reported_normalized.get(key)}"
+                )
+
+        _compare_field("stackLevel", "stack level")
+        _compare_field("purpose", "purpose")
+        _compare_field("kind", "kind")
+        _compare_field("recurrencyKind", "recurrency kind")
+        _compare_field("transactionId", "transaction id")
+        _compare_field("validFrom", "valid from")
+        _compare_field("validTo", "valid to")
+
+        expected_schedule = expected_normalized.get("schedule", {})
+        reported_schedule = reported_normalized.get("schedule", {})
+        for key, label in (
+            ("chargingRateUnit", "charging rate unit"),
+            ("duration", "duration"),
+            ("startSchedule", "start schedule"),
+            ("minChargingRate", "min charging rate"),
+        ):
+            if expected_schedule.get(key) != reported_schedule.get(key):
+                mismatches.append(
+                    f"{label} expected {expected_schedule.get(key)} got {reported_schedule.get(key)}"
+                )
+
+        expected_periods = expected_schedule.get("periods", [])
+        reported_periods = reported_schedule.get("periods", [])
+        if len(expected_periods) != len(reported_periods):
+            mismatches.append(
+                f"period count expected {len(expected_periods)} got {len(reported_periods)}"
+            )
+        else:
+            for index, (expected_period, reported_period) in enumerate(
+                zip(expected_periods, reported_periods), start=1
+            ):
+                if expected_period != reported_period:
+                    mismatches.append(
+                        f"period {index} expected {expected_period} got {reported_period}"
+                    )
+
+        return mismatches
+
+    def _reconcile_reported_charging_profiles(
+        self,
+        report: NormalizedChargingProfileReportPayload,
+        *,
+        charger: Charger | None,
+    ) -> None:
+        """Compare reported charging profiles against locally stored profiles."""
+
+        if charger is None:
+            return
+
+        evse_label = store.connector_slug(report.evse_id)
+        expected_profiles = ChargingProfile.objects.filter(
+            charger__charger_id=charger.charger_id
+        )
+        if report.evse_id is not None:
+            expected_profiles = expected_profiles.filter(charger__connector_id=report.evse_id)
+        expected_by_id = {
+            entry.charging_profile_id: entry for entry in expected_profiles
+        }
+
+        mismatches: list[str] = []
+        seen_profile_ids: set[int] = set()
+        for profile in report.profiles:
+            if profile.profile_id in seen_profile_ids:
+                mismatches.append(
+                    f"duplicate profile {profile.profile_id} reported for evse {evse_label}"
+                )
+                continue
+            seen_profile_ids.add(profile.profile_id)
+            store.record_reported_charging_profile(
+                charger.charger_id,
+                request_id=report.request_id,
+                evse_id=report.evse_id,
+                profile_id=profile.profile_id,
+            )
+            expected_profile = expected_by_id.get(profile.profile_id)
+            if expected_profile is None:
+                mismatches.append(
+                    f"unexpected profile {profile.profile_id} reported for evse {evse_label}"
+                )
+                continue
+            mismatches.extend(
+                self._diff_reported_charging_profile(expected_profile, profile)
+            )
+
+        if mismatches:
+            request_label = (
+                f"request {report.request_id}" if report.request_id is not None else "request ?"
+            )
+            store.add_log(
+                self.store_key,
+                f"ReportChargingProfiles mismatch ({request_label}, evse {evse_label}): {', '.join(mismatches)}",
+                log_type="charger",
+            )
+
+        if report.tbc:
+            return
+
+        recorded = store.consume_reported_charging_profiles(
+            charger.charger_id, request_id=report.request_id
+        )
+        reported_by_evse = recorded.get("reported") if recorded else {}
+
+        expected_all = ChargingProfile.objects.filter(charger__charger_id=charger.charger_id)
+        expected_by_evse: dict[str, set[int]] = {}
+        for entry in expected_all:
+            key = store.connector_slug(entry.connector_id)
+            expected_by_evse.setdefault(key, set()).add(entry.charging_profile_id)
+
+        for evse_key, expected_ids in expected_by_evse.items():
+            reported_ids = reported_by_evse.get(evse_key, set())
+            missing = sorted(expected_ids - set(reported_ids))
+            if missing:
+                request_label = (
+                    f"request {report.request_id}" if report.request_id is not None else "request ?"
+                )
+                store.add_log(
+                    self.store_key,
+                    f"ReportChargingProfiles missing ({request_label}, evse {evse_key}): "
+                    + ", ".join(str(value) for value in missing),
+                    log_type="charger",
+                )
+
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "CostUpdated")
     async def _handle_cost_updated_action(self, payload, msg_id, raw, text_data):
         self._log_ocpp201_notification("CostUpdated", payload)
@@ -2240,314 +2774,27 @@ class CSMSConsumer(
     async def _handle_report_charging_profiles_action(
         self, payload, msg_id, raw, text_data
     ):
-        payload_data = payload if isinstance(payload, dict) else {}
-        request_id_value = payload_data.get("requestId")
-        evse_value = payload_data.get("evseId")
-        charging_profile = payload_data.get("chargingProfile")
-        tbc = (
-            bool(payload_data.get("tbc"))
-            if payload_data.get("tbc") is not None
-            else False
-        )
-
-        def _parse_int(value: object | None) -> int | None:
-            try:
-                return int(value) if value is not None else None
-            except (TypeError, ValueError):
-                return None
-
         try:
-            request_id = _parse_int(request_id_value)
-        except Exception:  # pragma: no cover - defensive
-            request_id = None
-
-        evse_id = _parse_int(evse_value)
-
-        if not isinstance(charging_profile, dict):
+            report = self._validate_report_charging_profiles_payload(payload)
+        except ReportChargingProfilesValidationError as exc:
             store.add_log(
                 self.store_key,
-                "ReportChargingProfiles: missing chargingProfile payload",
+                f"ReportChargingProfiles ignored: {exc}",
                 log_type="charger",
             )
             return {}
 
-        def _normalize_schedule(data: dict | None) -> dict[str, object]:
-            if not isinstance(data, dict):
-                return {}
-
-            normalized: dict[str, object] = {}
-
-            rate_unit = str(data.get("chargingRateUnit") or "").strip()
-            if rate_unit:
-                normalized["chargingRateUnit"] = rate_unit
-
-            duration = _parse_int(data.get("duration"))
-            if duration is not None:
-                normalized["duration"] = duration
-
-            start_schedule = _parse_ocpp_timestamp(data.get("startSchedule"))
-            if start_schedule is not None:
-                normalized["startSchedule"] = start_schedule.isoformat()
-
-            try:
-                min_charging_rate = (
-                    float(data.get("minChargingRate"))
-                    if data.get("minChargingRate") is not None
-                    else None
-                )
-            except (TypeError, ValueError):
-                min_charging_rate = None
-            if min_charging_rate is not None:
-                normalized["minChargingRate"] = min_charging_rate
-
-            periods: list[dict[str, object]] = []
-            entries = data.get("chargingSchedulePeriod")
-            if isinstance(entries, list):
-                for entry in entries:
-                    if not isinstance(entry, dict):
-                        continue
-                    start_period = _parse_int(entry.get("startPeriod"))
-                    try:
-                        limit = float(entry.get("limit"))
-                    except (TypeError, ValueError):
-                        continue
-                    period: dict[str, object] = {
-                        "startPeriod": start_period,
-                        "limit": limit,
-                    }
-                    number_phases = _parse_int(entry.get("numberPhases"))
-                    if number_phases is not None:
-                        period["numberPhases"] = number_phases
-                    phase_to_use = _parse_int(entry.get("phaseToUse"))
-                    if phase_to_use is not None:
-                        period["phaseToUse"] = phase_to_use
-                    periods.append(period)
-
-            periods.sort(key=lambda entry: entry.get("startPeriod") or 0)
-            if periods:
-                normalized["periods"] = periods
-
-            return normalized
-
-        def _normalize_profile(data: dict[str, object]) -> dict[str, object]:
-            normalized: dict[str, object] = {}
-
-            profile_id = _parse_int(data.get("chargingProfileId") or data.get("id"))
-            if profile_id is not None:
-                normalized["id"] = profile_id
-
-            stack_level = _parse_int(data.get("stackLevel"))
-            if stack_level is not None:
-                normalized["stackLevel"] = stack_level
-
-            purpose_value = str(data.get("chargingProfilePurpose") or "").strip()
-            if purpose_value:
-                normalized["purpose"] = purpose_value
-
-            kind_value = str(data.get("chargingProfileKind") or "").strip()
-            if kind_value:
-                normalized["kind"] = kind_value
-
-            recurrency = str(data.get("recurrencyKind") or "").strip()
-            if recurrency:
-                normalized["recurrencyKind"] = recurrency
-
-            transaction_id = _parse_int(data.get("transactionId"))
-            if transaction_id is not None:
-                normalized["transactionId"] = transaction_id
-
-            valid_from = _parse_ocpp_timestamp(data.get("validFrom"))
-            if valid_from is not None:
-                normalized["validFrom"] = valid_from.isoformat()
-
-            valid_to = _parse_ocpp_timestamp(data.get("validTo"))
-            if valid_to is not None:
-                normalized["validTo"] = valid_to.isoformat()
-
-            normalized["schedule"] = _normalize_schedule(data.get("chargingSchedule"))
-
-            return normalized
-
-        def _diff_profiles(expected_profile, reported_profile: dict[str, object]):
-            expected_payload = {
-                "chargingProfileId": expected_profile.charging_profile_id,
-                "stackLevel": expected_profile.stack_level,
-                "chargingProfilePurpose": expected_profile.purpose,
-                "chargingProfileKind": expected_profile.kind,
-                "recurrencyKind": expected_profile.recurrency_kind,
-                "transactionId": expected_profile.transaction_id,
-                "validFrom": expected_profile.valid_from,
-                "validTo": expected_profile.valid_to,
-                "chargingSchedule": expected_profile._schedule_payload(),
-            }
-
-            expected_normalized = _normalize_profile(expected_payload)
-            reported_normalized = _normalize_profile(reported_profile)
-
-            mismatches: list[str] = []
-
-            def _compare_field(key: str, label: str) -> None:
-                expected_value = expected_normalized.get(key)
-                reported_value = reported_normalized.get(key)
-                if expected_value != reported_value:
-                    mismatches.append(
-                        f"{label} expected {expected_value} got {reported_value}"
-                    )
-
-            _compare_field("stackLevel", "stack level")
-            _compare_field("purpose", "purpose")
-            _compare_field("kind", "kind")
-            _compare_field("recurrencyKind", "recurrency kind")
-            _compare_field("transactionId", "transaction id")
-            _compare_field("validFrom", "valid from")
-            _compare_field("validTo", "valid to")
-
-            expected_schedule = expected_normalized.get("schedule", {})
-            reported_schedule = reported_normalized.get("schedule", {})
-
-            if expected_schedule.get("chargingRateUnit") != reported_schedule.get(
-                "chargingRateUnit"
-            ):
-                mismatches.append(
-                    "charging rate unit expected "
-                    f"{expected_schedule.get('chargingRateUnit')} got "
-                    f"{reported_schedule.get('chargingRateUnit')}"
-                )
-
-            if expected_schedule.get("duration") != reported_schedule.get("duration"):
-                mismatches.append(
-                    f"duration expected {expected_schedule.get('duration')} got "
-                    f"{reported_schedule.get('duration')}"
-                )
-
-            if expected_schedule.get("startSchedule") != reported_schedule.get(
-                "startSchedule"
-            ):
-                mismatches.append(
-                    "start schedule expected "
-                    f"{expected_schedule.get('startSchedule')} got "
-                    f"{reported_schedule.get('startSchedule')}"
-                )
-
-            if expected_schedule.get("minChargingRate") != reported_schedule.get(
-                "minChargingRate"
-            ):
-                mismatches.append(
-                    "min charging rate expected "
-                    f"{expected_schedule.get('minChargingRate')} got "
-                    f"{reported_schedule.get('minChargingRate')}"
-                )
-
-            expected_periods = expected_schedule.get("periods", [])
-            reported_periods = reported_schedule.get("periods", [])
-
-            if len(expected_periods) != len(reported_periods):
-                mismatches.append(
-                    f"period count expected {len(expected_periods)} got {len(reported_periods)}"
-                )
-            else:
-                for index, (expected_period, reported_period) in enumerate(
-                    zip(expected_periods, reported_periods), start=1
-                ):
-                    if expected_period != reported_period:
-                        mismatches.append(
-                            "period %s expected %s got %s"
-                            % (index, expected_period, reported_period)
-                        )
-
-            return mismatches
-
-        def _reconcile_profiles() -> None:
+        def _persist_and_reconcile() -> None:
             charger = self.charger
             if charger is None and self.charger_id:
-                charger = Charger.objects.filter(charger_id=self.charger_id).first()
-            if charger is None:
-                return
+                charger = Charger.objects.filter(
+                    charger_id=self.charger_id,
+                    connector_id=report.evse_id or self.connector_value or 0,
+                ).first()
+            self._reconcile_reported_charging_profiles(report, charger=charger)
+            self._persist_reported_charging_profiles(report)
 
-            profile_id = _parse_int(
-                charging_profile.get("chargingProfileId") or charging_profile.get("id")
-            )
-
-            evse_label = store.connector_slug(evse_id)
-
-            if profile_id is not None:
-                store.record_reported_charging_profile(
-                    charger.charger_id,
-                    request_id=request_id,
-                    evse_id=evse_id,
-                    profile_id=profile_id,
-                )
-
-            expected_profiles = ChargingProfile.objects.filter(
-                charger__charger_id=charger.charger_id
-            )
-            if evse_id is not None:
-                expected_profiles = expected_profiles.filter(
-                    charger__connector_id=evse_id
-                )
-            expected_by_id = {
-                entry.charging_profile_id: entry for entry in expected_profiles
-            }
-
-            mismatches: list[str] = []
-
-            if profile_id is None:
-                mismatches.append("missing chargingProfileId")
-            else:
-                expected_profile = expected_by_id.get(profile_id)
-                if expected_profile is None:
-                    mismatches.append(
-                        f"unexpected profile {profile_id} reported for evse {evse_label}"
-                    )
-                else:
-                    mismatches.extend(
-                        _diff_profiles(expected_profile, charging_profile)
-                    )
-
-            if mismatches:
-                prefix = "ReportChargingProfiles mismatch"
-                details = ", ".join(mismatches)
-                request_label = (
-                    f"request {request_id}" if request_id is not None else "request ?"
-                )
-                store.add_log(
-                    self.store_key,
-                    f"{prefix} ({request_label}, evse {evse_label}): {details}",
-                    log_type="charger",
-                )
-
-            if tbc:
-                return
-
-            recorded = store.consume_reported_charging_profiles(
-                charger.charger_id, request_id=request_id
-            )
-            reported_by_evse = recorded.get("reported") if recorded else {}
-
-            expected_all = ChargingProfile.objects.filter(
-                charger__charger_id=charger.charger_id
-            )
-            expected_by_evse: dict[str, set[int]] = {}
-            for entry in expected_all:
-                key = store.connector_slug(entry.connector_id)
-                expected_by_evse.setdefault(key, set()).add(entry.charging_profile_id)
-
-            for evse_key, expected_ids in expected_by_evse.items():
-                reported_ids = reported_by_evse.get(evse_key, set())
-                missing = sorted(expected_ids - set(reported_ids))
-                if not missing:
-                    continue
-                request_label = (
-                    f"request {request_id}" if request_id is not None else "request ?"
-                )
-                store.add_log(
-                    self.store_key,
-                    f"ReportChargingProfiles missing ({request_label}, evse {evse_key}): "
-                    + ", ".join(str(value) for value in missing),
-                    log_type="charger",
-                )
-
-        await database_sync_to_async(_reconcile_profiles)()
+        await database_sync_to_async(_persist_and_reconcile)()
         self._log_ocpp201_notification("ReportChargingProfiles", payload)
         return {}
 
