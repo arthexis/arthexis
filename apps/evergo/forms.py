@@ -130,10 +130,6 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
             for field_name in ("user", "group", "avatar")
             if cleaned_data.get(field_name) is not None
         ]
-        if len(owners) > 1:
-            raise ValidationError(
-                {field_name: "Select only one owner between user, group, and avatar." for field_name in owners}
-            )
         if not owners:
             raise ValidationError("Choose a user, security group, or avatar owner for this contractor.")
         if cleaned_data.get("load_all_customers") and not cleaned_data.get("validate_credentials"):
