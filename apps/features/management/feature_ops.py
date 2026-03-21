@@ -181,18 +181,6 @@ def _ensure_fixture_applications_exist(*, fixture_paths: list[Path]) -> None:
         Application.objects.get_or_create(name=label)
 
 
-def _ensure_reset_baseline_features() -> None:
-    """Restore baseline suite features that are seeded by migrations, not fixtures."""
-
-    Feature.objects.update_or_create(
-        slug="development-blog",
-        defaults={
-            "display": "Development Blog",
-            "is_enabled": True,
-        },
-    )
-
-
 def reset_all_suite_features() -> tuple[int, int]:
     """Reload mainstream suite feature fixtures.
 
@@ -217,5 +205,4 @@ def reset_all_suite_features() -> tuple[int, int]:
         call_command(
             "loaddata", *(str(path) for path in fixture_paths), verbosity=0
         )
-        _ensure_reset_baseline_features()
     return deleted_count, len(fixture_paths)

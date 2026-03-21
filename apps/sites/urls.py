@@ -1,5 +1,6 @@
 from django.urls import path
 from django.views.generic import RedirectView
+
 from .views import analytics, landing, management
 
 
@@ -12,6 +13,16 @@ urlpatterns = [
     path("sitemap.xml", landing.sitemap, name="pages-sitemap"),
     path("changelog/", landing.changelog_report, name="changelog"),
     path("changelog/data/", landing.changelog_report_data, name="changelog-data"),
+    path(
+        "engineering/blog/",
+        RedirectView.as_view(url="/changelog/", permanent=True),
+        name="engineering-blog-redirect",
+    ),
+    path(
+        "engineering/blog/<path:slug>/",
+        RedirectView.as_view(url="/changelog/", permanent=True),
+        name="engineering-blog-detail-redirect",
+    ),
     path("client-report/", analytics.client_report, name="client-report"),
     path(
         "client-report/download/<int:report_id>/",

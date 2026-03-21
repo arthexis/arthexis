@@ -1,0 +1,31 @@
+{
+  "captured_at": "2026-03-21T00:00:00Z",
+  "source_database": "db.sqlite3",
+  "collection_method": [
+    "sqlite schema inspection for blog_* tables",
+    "django showmigrations blog"
+  ],
+  "blog_tables_present": false,
+  "models": {
+    "BlogArticle": {
+      "count": 0,
+      "records": []
+    },
+    "BlogRevision": {
+      "count": 0,
+      "records": []
+    },
+    "BlogSeries": {
+      "count": 0,
+      "records": []
+    },
+    "BlogTag": {
+      "count": 0,
+      "records": []
+    }
+  },
+  "notes": [
+    "The repository checkout did not contain migrated blog tables in db.sqlite3 at capture time.",
+    "The blog app migration 0001_initial was unapplied, so no persisted blog content was available to export from this environment."
+  ]
+}

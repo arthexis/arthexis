@@ -147,6 +147,19 @@ def test_invitation_login_invalid_tokens_are_handled_safely(client):
     assert malformed_uid_response.status_code == 400
 
 
+
+
+def test_engineering_blog_routes_redirect_to_changelog(client):
+    """Retired engineering blog routes should redirect to the public changelog."""
+
+    list_response = client.get("/engineering/blog/")
+    detail_response = client.get("/engineering/blog/retired-article/")
+
+    assert list_response.status_code == 301
+    assert list_response.headers["Location"].endswith(reverse("pages:changelog"))
+    assert detail_response.status_code == 301
+    assert detail_response.headers["Location"].endswith(reverse("pages:changelog"))
+
 def test_whatsapp_webhook_post_payload_validation(client, settings):
     """Validate webhook JSON payload content and malformed request handling.
 

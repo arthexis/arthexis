@@ -37,7 +37,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("sigils", "0004_protect_sigil_roots"),
-        ("blog", "0001_initial"),
     ]
 
     operations = [
