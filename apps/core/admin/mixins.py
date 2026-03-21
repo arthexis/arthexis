@@ -1,3 +1,4 @@
+from inspect import signature
 from urllib.parse import urlencode
 
 from django import forms
@@ -121,6 +122,67 @@ class OwnedObjectLinksMixin:
     def _attach_owned_objects(self, extra_context, payload):
         if payload:
             extra_context.setdefault(self.owned_object_context_key, payload)
+
+
+class PublicViewLinksAdminMixin:
+    """Expose public view shortcuts in admin object tools for changelists and objects."""
+
+    public_view_links_context_key = "public_view_links"
+
+    def get_public_view_links(self, obj=None, request=None) -> list[dict[str, str]]:
+        """Return additional public links to render in admin object tools."""
+
+        del request
+        return []
+
+    def _normalize_public_view_links(self, obj=None, request=None) -> list[dict[str, str]]:
+        """Return de-duplicated public view links with stable labels."""
+
+        normalized: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        parameters = signature(self.get_public_view_links).parameters
+        kwargs = {}
+        if "obj" in parameters:
+            kwargs["obj"] = obj
+        if "request" in parameters:
+            kwargs["request"] = request
+        for entry in self.get_public_view_links(**kwargs):
+            url = (entry or {}).get("url")
+            if not url:
+                continue
+            label = (entry.get("label") or _("View on site")).strip()
+            key = (label, url)
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append({"label": label, "url": url})
+        return normalized
+
+    def changelist_view(self, request, extra_context=None):
+        """Inject public route shortcuts into changelist object tools."""
+
+        extra_context = extra_context or {}
+        links = self._normalize_public_view_links(request=request)
+        if links:
+            extra_context.setdefault(self.public_view_links_context_key, links)
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        """Inject object-specific public route shortcuts into change-form tools."""
+
+        extra_context = extra_context or {}
+        obj = None
+        if object_id:
+            obj = self.get_object(request, object_id)
+        links = self._normalize_public_view_links(obj=obj, request=request)
+        if links:
+            extra_context.setdefault(self.public_view_links_context_key, links)
+        return super().changeform_view(
+            request,
+            object_id=object_id,
+            form_url=form_url,
+            extra_context=extra_context,
+        )
 
 
 class SaveBeforeChangeAction(DjangoObjectActions):

@@ -6,6 +6,8 @@ import pytest
 
 from apps.emails.models import EmailCollector, EmailInbox
 from apps.users.models import User
+
+
 @pytest.mark.integration
 @pytest.mark.django_db
 def test_setup_collector_tool_requires_single_selected_inbox(admin_client, admin_user):
@@ -78,7 +80,6 @@ def test_setup_collector_view_saves_collector_and_runs_preview(admin_client, adm
             "notification_subject": "",
             "notification_message": "",
             "notification_recipients": "",
-            "notification_recipe": "",
             "additional_inboxes": [str(additional.pk)],
             "test_now": "on",
         },
@@ -124,7 +125,6 @@ def test_setup_collector_view_reports_non_validation_test_errors(admin_client, a
             "notification_subject": "",
             "notification_message": "",
             "notification_recipients": "",
-            "notification_recipe": "",
             "additional_inboxes": [],
             "test_now": "on",
         },

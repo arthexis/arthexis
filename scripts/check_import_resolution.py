@@ -13,7 +13,7 @@ import importlib.util
 import os
 import sys
 from pathlib import Path
-from typing import Iterable, Iterator, NamedTuple
+from typing import Iterable, Iterator, NamedTuple, TypeAlias
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 IGNORED_DIRS = {
@@ -37,18 +37,29 @@ OPTIONAL_MODULES = {
 }
 OPTIONAL_IMPORT_MARKER = "optional-import"
 OPTIONAL_IMPORT_HELPERS = {"optional_import", "optional_import_block"}
+PackageExports: TypeAlias = set[str]
+PackageExportsCache: TypeAlias = dict[Path, PackageExports]
 
 
 def _prepare_django() -> None:
+    """Initialize Django settings when the project dependencies are available.
+
+    Returns:
+        None.
+    """
+
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     try:
-        import django
+        "optional-import"
+        import django  # type: ignore[import-not-found]
     except ImportError:
         return
     django.setup(set_prefix=False)
 
 
 class ImportIssue(NamedTuple):
+    """Structured details for a single unresolved import reference."""
+
     module: str
     path: Path
     lineno: int
@@ -56,6 +67,15 @@ class ImportIssue(NamedTuple):
 
 
 def iter_python_files(root: Path) -> Iterator[Path]:
+    """Yield Python files beneath ``root`` while skipping ignored directories.
+
+    Args:
+        root: Directory tree to scan.
+
+    Returns:
+        An iterator of project Python file paths.
+    """
+
     for path in root.rglob("*.py"):
         if any(part in IGNORED_DIRS for part in path.parts):
             continue
@@ -63,6 +83,16 @@ def iter_python_files(root: Path) -> Iterator[Path]:
 
 
 def module_path_from_file(path: Path) -> str | None:
+    """Convert a project file path into a dotted Python module path.
+
+    Args:
+        path: Absolute or project-relative Python file path.
+
+    Returns:
+        Dotted import path relative to ``PROJECT_ROOT``, or ``None`` when the
+        file does not live under the repository root.
+    """
+
     try:
         relative = path.relative_to(PROJECT_ROOT)
     except ValueError:
@@ -71,6 +101,17 @@ def module_path_from_file(path: Path) -> str | None:
 
 
 def resolve_import(module: str, package: str | None, level: int) -> str | None:
+    """Resolve a possibly-relative import target to an absolute module name.
+
+    Args:
+        module: Imported module or symbol name.
+        package: Package context used for relative imports.
+        level: Relative import level from the AST node.
+
+    Returns:
+        The resolved absolute module name, or ``None`` when resolution fails.
+    """
+
     if level:
         if package is None:
             return None
@@ -82,21 +123,34 @@ def resolve_import(module: str, package: str | None, level: int) -> str | None:
 
 
 class ImportCollector(ast.NodeVisitor):
+    """Collect unresolved imports from a parsed Python module."""
+
     def __init__(self, file_path: Path, package: str | None):
+        """Initialize collector state for a single file.
+
+        Args:
+            file_path: Python file being inspected.
+            package: Dotted package name for relative import resolution.
+        """
+
         self.file_path = file_path
         self.package = package
         self.type_checking_stack: list[bool] = []
         self.optional_import_stack: list[bool] = []
         self.issues: list[ImportIssue] = []
-        self._package_exports_cache: dict[Path, set[str]] = {}
+        self._package_exports_cache: PackageExportsCache = {}
 
     def visit_If(self, node: ast.If) -> None:
+        """Track ``TYPE_CHECKING`` guards while traversing child nodes."""
+
         condition = self._is_type_checking(node.test)
         self.type_checking_stack.append(condition)
         self.generic_visit(node)
         self.type_checking_stack.pop()
 
     def visit_Try(self, node: ast.Try) -> None:
+        """Track optional-import guards while traversing child nodes."""
+
         optional = self._is_explicit_optional_try(
             node
         ) or self._is_legacy_guarded_optional_try(node)
@@ -105,12 +159,16 @@ class ImportCollector(ast.NodeVisitor):
         self.optional_import_stack.pop()
 
     def visit_Import(self, node: ast.Import) -> None:
+        """Validate absolute imports in regular execution paths."""
+
         if self._skip_node():
             return
         for alias in node.names:
             self._check_import(alias.name, node.lineno, level=0)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Validate ``from ... import ...`` statements in regular execution paths."""
+
         if self._skip_node():
             return
         if node.level:
@@ -126,25 +184,49 @@ class ImportCollector(ast.NodeVisitor):
             self._check_import(alias.name, node.lineno, level=node.level)
 
     def _check_import(self, module: str, lineno: int, level: int) -> None:
+        """Record unresolved imports for absolute import statements.
+
+        Args:
+            module: Imported module name.
+            lineno: Source line number for the import.
+            level: Relative import level, kept for call-site symmetry.
+
+        Returns:
+            None.
+        """
+
         if not module:
             return
-        if module in OPTIONAL_MODULES:
+        resolved_module = resolve_import(module, self.package, level)
+        if resolved_module is None or resolved_module in OPTIONAL_MODULES:
             return
-        module_path = PROJECT_ROOT / Path(module.replace(".", "/"))
+        module_path = PROJECT_ROOT / Path(resolved_module.replace(".", "/"))
         if self._path_exists(module_path):
             return
         try:
-            spec = importlib.util.find_spec(module)
+            spec = importlib.util.find_spec(resolved_module)
         except Exception:
             spec = None
         if spec is None:
             self.issues.append(
                 ImportIssue(
-                    module, self.file_path, lineno, "import could not be resolved"
+                    resolved_module,
+                    self.file_path,
+                    lineno,
+                    "import could not be resolved",
                 )
             )
 
     def _check_relative_import(self, node: ast.ImportFrom) -> None:
+        """Record unresolved imports for relative import statements.
+
+        Args:
+            node: ``from ... import ...`` AST node using a relative level.
+
+        Returns:
+            None.
+        """
+
         target_dir = self.file_path.parent
         for _ in range(max(node.level - 1, 0)):
             target_dir = target_dir.parent
@@ -185,7 +267,16 @@ class ImportCollector(ast.NodeVisitor):
                         )
                     )
 
-    def _package_exports(self, package_dir: Path) -> set[str]:
+    def _package_exports(self, package_dir: Path) -> PackageExports:
+        """Return importable names exposed by a package ``__init__`` module.
+
+        Args:
+            package_dir: Package directory containing an ``__init__.py`` file.
+
+        Returns:
+            Exported names inferred from assignments, imports, and ``__all__``.
+        """
+
         cached = self._package_exports_cache.get(package_dir)
         if cached is not None:
             return cached
@@ -201,8 +292,8 @@ class ImportCollector(ast.NodeVisitor):
             self._package_exports_cache[package_dir] = set()
             return set()
 
-        exported_names: set[str] = set()
-        explicit_all: set[str] | None = None
+        exported_names: PackageExports = set()
+        explicit_all: PackageExports | None = None
 
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -232,10 +323,12 @@ class ImportCollector(ast.NodeVisitor):
         return result
 
     @staticmethod
-    def _extract_all_names(node: ast.expr) -> set[str]:
+    def _extract_all_names(node: ast.expr) -> PackageExports:
+        """Extract string literal names from a ``__all__`` assignment value."""
+
         if not isinstance(node, (ast.List, ast.Tuple, ast.Set)):
             return set()
-        values: set[str] = set()
+        values: PackageExports = set()
         for element in node.elts:
             if isinstance(element, ast.Constant) and isinstance(element.value, str):
                 values.add(element.value)
@@ -243,9 +336,13 @@ class ImportCollector(ast.NodeVisitor):
 
     @staticmethod
     def _path_exists(path: Path) -> bool:
+        """Return ``True`` when a module path resolves to a file or package."""
+
         return path.with_suffix(".py").exists() or (path / "__init__.py").exists()
 
     def _skip_node(self) -> bool:
+        """Return ``True`` when an import should be ignored for this traversal path."""
+
         return any(self.type_checking_stack) or any(self.optional_import_stack)
 
     def _is_explicit_optional_try(self, node: ast.Try) -> bool:
@@ -296,6 +393,8 @@ class ImportCollector(ast.NodeVisitor):
 
     @staticmethod
     def _is_type_checking(node: ast.expr) -> bool:
+        """Return ``True`` for ``TYPE_CHECKING`` guard expressions."""
+
         return (isinstance(node, ast.Name) and node.id == "TYPE_CHECKING") or (
             isinstance(node, ast.Attribute)
             and isinstance(node.value, ast.Name)
@@ -305,6 +404,8 @@ class ImportCollector(ast.NodeVisitor):
 
     @staticmethod
     def _is_import_error_handler(handler: ast.excepthandler) -> bool:
+        """Return ``True`` when an exception handler catches ``ImportError``."""
+
         if not isinstance(handler, ast.ExceptHandler):
             return False
         if isinstance(handler.type, ast.Name):
@@ -318,6 +419,15 @@ class ImportCollector(ast.NodeVisitor):
 
 
 def collect_missing_imports(files: Iterable[Path]) -> list[ImportIssue]:
+    """Collect unresolved imports from the given Python files.
+
+    Args:
+        files: Python files to inspect.
+
+    Returns:
+        Sorted import issues are not guaranteed; callers may sort later.
+    """
+
     issues: list[ImportIssue] = []
     for file_path in files:
         module_path = module_path_from_file(file_path)
@@ -337,7 +447,14 @@ def _is_in_ignored_dir(path: Path) -> bool:
 
 
 def _collect_target_files(paths: list[str]) -> list[Path]:
-    """Resolve CLI-provided paths into Python files under project root."""
+    """Resolve CLI-provided paths into Python files under project root.
+
+    Args:
+        paths: Optional file or directory paths supplied on the command line.
+
+    Returns:
+        Deduplicated Python files under ``PROJECT_ROOT``.
+    """
 
     if not paths:
         return list(iter_python_files(PROJECT_ROOT))
@@ -368,7 +485,14 @@ def _collect_target_files(paths: list[str]) -> list[Path]:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments for import resolution checks."""
+    """Parse command-line arguments for import resolution checks.
+
+    Args:
+        argv: Optional CLI argument list.
+
+    Returns:
+        Parsed command-line namespace.
+    """
 
     parser = argparse.ArgumentParser(
         description="Check Python imports resolve correctly."
@@ -382,6 +506,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the import resolution checker as a command-line tool.
+
+    Args:
+        argv: Optional CLI argument list.
+
+    Returns:
+        Process exit code, where ``0`` means all imports resolved.
+    """
+
     sys.path.insert(0, str(PROJECT_ROOT))
     _prepare_django()
     args = parse_args(argv)
