@@ -360,8 +360,10 @@ ensure_playwright_browsers_installed() {
     return 1
   fi
 
+  set +e
   playwright_missing_host_dependencies
   verify_status=$?
+  set -e
   if [ "$verify_status" -ne 0 ]; then
     if [ "$verify_status" -eq 10 ]; then
       echo "Warning: Playwright browser runtimes are installed, but this Linux environment is still missing host libraries for browser execution." >&2

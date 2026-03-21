@@ -15,6 +15,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
+from apps.features.utils import is_suite_feature_enabled
+
 from .exceptions import EvergoAPIError, EvergoPhaseSubmissionError
 from .forms import EvergoDashboardLookupForm, EvergoOrderTrackingForm
 from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoUser
@@ -44,6 +46,35 @@ TRACKING_PREFILL_SOURCE_KEYS = (
     "tracking",
     "data",
 )
+
+
+def _build_public_widget_context(*, user) -> dict[str, object]:
+    """Return chat and feedback flags for Evergo public pages.
+
+    Parameters:
+        user: Current authenticated Django user viewing the page.
+
+    Returns:
+        dict[str, object]: Template context flags required by shared public widgets.
+    """
+
+    feedback_ingestion_enabled = is_suite_feature_enabled("feedback-ingestion", default=True)
+    staff_chat_bridge_enabled = is_suite_feature_enabled("staff-chat-bridge", default=False)
+    user_is_authenticated = getattr(user, "is_authenticated", False)
+    staff_chat_bridge_allowed = user_is_authenticated and bool(
+        getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)
+    )
+    chat_enabled = bool(
+        getattr(settings, "PAGES_CHAT_ENABLED", False)
+        and staff_chat_bridge_enabled
+        and staff_chat_bridge_allowed
+    )
+    return {
+        "chat_enabled": chat_enabled,
+        "chat_socket_path": getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/"),
+        "feedback_ingestion_enabled": feedback_ingestion_enabled,
+        "user_story_attachment_limit": int(getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)),
+    }
 
 
 def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
@@ -337,6 +368,7 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
                 if order.remote_id is not None
                 else ""
             ),
+            **_build_public_widget_context(user=request.user),
         },
     )
 

@@ -146,11 +146,12 @@ def sync_special_command(
         )
 
         special.parameters.all().delete()
+        seen_parameters: set[str] = set()
         # NOTE: argparse does not expose a public, equivalent action-iteration API,
         # so we intentionally introspect parser._actions. If argparse changes this
         # private structure, this loop should move behind a compatibility wrapper.
-        for index, action in enumerate(parser._actions):
-            if action.dest in GLOBAL_MANAGEMENT_OPTION_DESTS:
+        for index, (action, is_nested) in enumerate(_iter_parser_actions(parser)):
+            if action.dest in GLOBAL_MANAGEMENT_OPTION_DESTS or action.dest in seen_parameters:
                 continue
 
             _validate_action_shape(action)
