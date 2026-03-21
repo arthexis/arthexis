@@ -5,10 +5,11 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand
 
 from apps.shortcuts.models import Shortcut
+from apps.shortcuts.runtime import execute_server_shortcut
 
 
 class Command(BaseCommand):
-    help = "Listen for key-combo lines on stdin and execute active server shortcuts."
+    help = "Listen for key-combo lines on stdin and render active server shortcut output."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -34,11 +35,11 @@ class Command(BaseCommand):
                 kind=Shortcut.Kind.SERVER,
                 is_active=True,
                 key_combo=combo,
-            ).select_related("recipe").first()
-            if shortcut is None or shortcut.recipe is None:
+            ).first()
+            if shortcut is None:
                 self.stdout.write(self.style.WARNING(f"No active server shortcut for {combo}"))
             else:
-                execution = shortcut.recipe.execute(shortcut_key=combo)
-                self.stdout.write(self.style.SUCCESS(f"Executed {shortcut.recipe.slug}: {execution.result}"))
+                rendered_output = execute_server_shortcut(shortcut=shortcut)
+                self.stdout.write(self.style.SUCCESS(f"Rendered {shortcut.display}: {rendered_output}"))
             if once:
                 break

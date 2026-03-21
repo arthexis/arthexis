@@ -15,7 +15,7 @@ _SHORTCUT_TOKEN_PATTERN = re.compile(r"^[A-Z0-9]+$")
 
 
 class Shortcut(Entity):
-    """A user-configurable keyboard shortcut that executes recipes."""
+    """A user-configurable keyboard shortcut with optional output templates."""
 
     class Kind(models.TextChoices):
         SERVER = "server", _("Server Shortcut")
@@ -25,17 +25,9 @@ class Shortcut(Entity):
     key_combo = models.CharField(max_length=120, help_text=_("Example: CTRL+SHIFT+K"))
     kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.CLIENT)
     is_active = models.BooleanField(default=True)
-    recipe = models.ForeignKey(
-        "recipes.Recipe",
-        on_delete=models.PROTECT,
-        related_name="shortcuts",
-        null=True,
-        blank=True,
-        help_text=_("Fallback recipe when no clipboard pattern matches."),
-    )
     use_clipboard_patterns = models.BooleanField(
         default=False,
-        help_text=_("Evaluate clipboard patterns in ascending priority before fallback recipe."),
+        help_text=_("Evaluate clipboard patterns in ascending priority before the default shortcut output."),
     )
     clipboard_output_enabled = models.BooleanField(default=False)
     keyboard_output_enabled = models.BooleanField(default=False)
@@ -87,9 +79,6 @@ class Shortcut(Entity):
         if self.use_clipboard_patterns and self.kind != self.Kind.CLIENT:
             raise ValidationError({"use_clipboard_patterns": _("Clipboard patterns are supported only for client shortcuts.")})
 
-        if not self.recipe_id:
-            raise ValidationError({"recipe": _("A fallback recipe is required.")})
-
 
 class ClipboardPattern(Entity):
     """Pattern-driven clipboard routing for a client shortcut."""
@@ -102,11 +91,6 @@ class ClipboardPattern(Entity):
     display = models.CharField(max_length=120)
     pattern = models.CharField(max_length=255, help_text=_("Python regex pattern."))
     priority = models.PositiveIntegerField(default=0)
-    recipe = models.ForeignKey(
-        "recipes.Recipe",
-        on_delete=models.PROTECT,
-        related_name="clipboard_shortcut_patterns",
-    )
     is_active = models.BooleanField(default=True)
     clipboard_output_enabled = models.BooleanField(default=False)
     keyboard_output_enabled = models.BooleanField(default=False)

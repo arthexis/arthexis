@@ -180,26 +180,13 @@ def scan_usb_trackers() -> dict[str, int]:
         tracker.last_triggered_at = now
         update_fields.extend(["last_match_signature", "last_triggered_at"])
 
-        if tracker.recipe:
-            try:
-                result = tracker.recipe.execute(
-                    tracker=tracker,
-                    mount_path=str(mount),
-                    file_path=str(match_path),
-                )
-                tracker.last_recipe_result = _format_recipe_result(result.result)
-                tracker.last_error = ""
-                triggered += 1
-                update_fields.extend(["last_recipe_result", "last_error"])
-            except Exception as exc:  # pragma: no cover - defensive logging
-                tracker.last_error = str(exc)
-                tracker.last_recipe_result = ""
-                failed += 1
-                update_fields.extend(["last_error", "last_recipe_result"])
-        else:
-            tracker.last_recipe_result = ""
-            tracker.last_error = ""
-            update_fields.extend(["last_recipe_result", "last_error"])
+        tracker.last_recipe_result = _format_recipe_result({
+            "mount_path": str(mount),
+            "file_path": str(match_path),
+        })
+        tracker.last_error = ""
+        triggered += 1
+        update_fields.extend(["last_recipe_result", "last_error"])
 
         tracker.save(update_fields=update_fields)
 

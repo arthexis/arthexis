@@ -18,7 +18,6 @@ class ClipboardPatternInline(admin.TabularInline):
         "display",
         "pattern",
         "priority",
-        "recipe",
         "is_active",
         "clipboard_output_enabled",
         "keyboard_output_enabled",

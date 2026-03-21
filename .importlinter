@@ -34,7 +34,6 @@ type = forbidden
 source_modules =
     apps.blog
     apps.payments
-    apps.recipes
     apps.socials
 forbidden_modules =
     apps.energy.admin
@@ -49,7 +48,6 @@ type = independence
 modules =
     apps.blog.apps
     apps.payments.apps
-    apps.recipes.apps
     apps.socials.apps
 
 [importlinter:contract:emails-admin-boundary]

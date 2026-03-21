@@ -81,6 +81,7 @@ LEGACY_MIGRATION_APPS = [
     "apps.selenium",
     "config.legacy_mermaid",
     "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
+    "apps._legacy.recipes_migration_only.apps.RecipesMigrationOnlyConfig",
 ]
 NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",

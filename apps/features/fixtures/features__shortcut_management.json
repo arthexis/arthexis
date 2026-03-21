@@ -9,7 +9,7 @@
       "main_app": ["shortcuts"],
       "node_feature": null,
       "admin_requirements": "Manage server/client shortcuts and clipboard patterns from admin.",
-      "public_requirements": "Client shortcuts execute in browser JavaScript and can map clipboard patterns to recipes.",
+      "public_requirements": "Client shortcuts execute in browser JavaScript and can map clipboard patterns to rendered outputs.",
       "service_requirements": "Server shortcuts rely on the shortcut-listener node feature when available.",
       "admin_views": ["admin:shortcuts_shortcut_changelist"],
       "public_views": ["pages:index"],

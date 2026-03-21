@@ -10,7 +10,6 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity, EntityManager
-from apps.recipes.models import Recipe
 
 
 class PhysicalSensor(Entity):
@@ -167,7 +166,7 @@ class UsbTrackerManager(EntityManager):
 
 
 class UsbTracker(Entity):
-    """Watch mounted USB devices for trigger files and run a recipe."""
+    """Watch mounted USB devices for trigger files and record matching events."""
 
     name = models.CharField(max_length=128)
     slug = models.SlugField(unique=True)
@@ -181,13 +180,6 @@ class UsbTracker(Entity):
         help_text=_(
             "Optional regex used to validate file contents before triggering."
         ),
-    )
-    recipe = models.ForeignKey(
-        Recipe,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="usb_trackers",
     )
     cooldown_seconds = models.PositiveIntegerField(
         default=10,

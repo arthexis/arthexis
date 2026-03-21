@@ -211,7 +211,6 @@ class UsbTrackerAdmin(admin.ModelAdmin):
         "name",
         "slug",
         "required_file_path",
-        "recipe",
         "cooldown_seconds",
         "last_triggered_at",
         "is_active",
