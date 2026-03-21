@@ -1,4 +1,4 @@
-"""Compatibility wrapper for the legacy ``purge_nodes`` command."""
+"""Shortcut wrapper for the standalone ``purge_nodes`` command."""
 
 from __future__ import annotations
 
@@ -7,26 +7,23 @@ from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    """Bridge legacy ``purge_nodes`` calls to ``node purge_nodes``."""
+    """Forward standalone ``purge_nodes`` calls to ``node purge``."""
 
-    help = "Legacy alias; use `python manage.py node purge_nodes` instead."
+    help = "Shortcut for `python manage.py node purge`."
 
     def add_arguments(self, parser):
-        """Mirror legacy args and forward to the unified node command."""
+        """Mirror standalone args and forward to the unified node command."""
 
-        parser.add_argument("--remove-anonymous", action="store_true", dest="remove_anonymous")
+        parser.add_argument(
+            "--remove-anonymous", action="store_true", dest="remove_anonymous"
+        )
 
     def handle(self, *args, **options):
-        """Print legacy-alias notice and execute ``node purge_nodes``."""
+        """Execute ``node purge`` with the mirrored standalone arguments."""
 
-        self.stdout.write(
-            self.style.WARNING(
-                "LEGACY: `manage.py purge_nodes` is a legacy alias; use `manage.py node purge_nodes` instead."
-            )
-        )
         call_command(
             "node",
-            "purge_nodes",
+            "purge",
             remove_anonymous=options.get("remove_anonymous", False),
             stdout=self.stdout,
             stderr=self.stderr,

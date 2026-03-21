@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
+from unittest.mock import ANY
 
 import pytest
 from django.core.management import call_command, get_commands, load_command_class
@@ -27,7 +28,9 @@ def test_node_message_broadcast(monkeypatch):
     def fake_broadcast(**kwargs):
         captured.update(kwargs)
 
-    monkeypatch.setattr("apps.nodes.management.commands.node.NetMessage.broadcast", fake_broadcast)
+    monkeypatch.setattr(
+        "apps.nodes.management.commands.node.NetMessage.broadcast", fake_broadcast
+    )
 
     command.handle(
         action="message",
@@ -86,12 +89,16 @@ def test_node_screenshot_rejects_invalid_argument_combo():
     """The node screenshot action should enforce mutually exclusive args."""
 
     command = _load_node_command()
-    with pytest.raises(CommandError, match="--local cannot be used together with a URL"):
-        command.handle(action="screenshot", url="https://example.com", local=True, freq=None)
+    with pytest.raises(
+        CommandError, match="--local cannot be used together with a URL"
+    ):
+        command.handle(
+            action="screenshot", url="https://example.com", local=True, freq=None
+        )
 
 
-def test_legacy_command_wrappers_delegate(monkeypatch):
-    """Legacy commands should print legacy-alias notices and call node subcommands."""
+def test_standalone_command_wrappers_delegate_without_warning_noise(monkeypatch):
+    """Standalone wrappers should delegate to the preferred node actions quietly."""
 
     stdout = io.StringIO()
     calls: list[tuple[tuple, dict]] = []
@@ -99,24 +106,50 @@ def test_legacy_command_wrappers_delegate(monkeypatch):
     def fake_call_command(*inner_args, **inner_kwargs):
         calls.append((inner_args, inner_kwargs))
 
-    monkeypatch.setattr("apps.nodes.management.commands.message.call_command", fake_call_command)
-    monkeypatch.setattr("apps.nodes.management.commands.purge_nodes.call_command", fake_call_command)
     monkeypatch.setattr(
-        "apps.nodes.management.commands.purge_net_messages.call_command", fake_call_command
+        "apps.nodes.management.commands.message.call_command", fake_call_command
     )
-    monkeypatch.setattr("apps.nodes.management.commands.screenshot.call_command", fake_call_command)
+    monkeypatch.setattr(
+        "apps.nodes.management.commands.purge_nodes.call_command", fake_call_command
+    )
+    monkeypatch.setattr(
+        "apps.nodes.management.commands.purge_net_messages.call_command",
+        fake_call_command,
+    )
+    monkeypatch.setattr(
+        "apps.nodes.management.commands.screenshot.call_command", fake_call_command
+    )
     monkeypatch.setattr(
         "apps.nodes.management.commands.refresh_node_features.call_command",
         fake_call_command,
     )
 
     call_command("message", "Subject", "Body", stdout=stdout, reach="ops")
+    call_command("refresh_node_features", stdout=stdout)
+    call_command("purge_nodes", stdout=stdout)
+    call_command("purge_net_messages", stdout=stdout)
+    call_command("screenshot", stdout=stdout)
 
-    assert "LEGACY:" in stdout.getvalue()
-    assert calls, "Wrapper did not delegate to node command"
-    forwarded_args, forwarded_kwargs = calls[-1]
-    assert forwarded_args[0] == "node"
-    assert forwarded_args[1] == "message"
+    assert "LEGACY:" not in stdout.getvalue()
+    assert [call[0][:2] for call in calls] == [
+        ("node", "message"),
+        ("node", "refresh"),
+        ("node", "purge"),
+        ("node", "purge-messages"),
+        ("node", "screenshot"),
+    ]
+    assert calls[0][1] == {
+        "reach": "ops",
+        "seen": None,
+        "lcd_channel_type": None,
+        "lcd_channel_num": None,
+        "stdout": ANY,
+        "stderr": ANY,
+    }
+    assert calls[1][1] == {"stdout": ANY, "stderr": ANY}
+    assert calls[2][1] == {"remove_anonymous": False, "stdout": ANY, "stderr": ANY}
+    assert calls[3][1] == {"stdout": ANY, "stderr": ANY}
+    assert calls[4][1] == {"freq": None, "local": False, "stdout": ANY, "stderr": ANY}
 
 
 def test_node_screenshot_returns_path(monkeypatch):
@@ -153,3 +186,82 @@ def test_node_refresh_features_action_refreshes_local_node(monkeypatch):
     command.handle(action="refresh_features")
 
     assert calls == [command]
+
+
+def test_node_action_aliases_dispatch_to_existing_handlers(monkeypatch):
+    """Canonical and short node action names should resolve to the same handlers."""
+
+    calls: list[tuple[str, str]] = []
+    command = _load_node_command()
+    command.stdout = io.StringIO()
+
+    def fake_register_curl(**options):
+        calls.append(("register_curl", options["action"]))
+
+    def fake_refresh_features(**options):
+        calls.append(("refresh_features", options["action"]))
+
+    def fake_purge_nodes(**options):
+        calls.append(("purge_nodes", options["action"]))
+
+    def fake_purge_net_messages(**options):
+        calls.append(("purge_net_messages", options["action"]))
+
+    monkeypatch.setattr(command, "_handle_register_curl", fake_register_curl)
+    monkeypatch.setattr(command, "_handle_refresh_features", fake_refresh_features)
+    monkeypatch.setattr(command, "_handle_purge_nodes", fake_purge_nodes)
+    monkeypatch.setattr(command, "_handle_purge_net_messages", fake_purge_net_messages)
+
+    command.handle(
+        action="register_curl",
+        upstream="https://example.com",
+        local_base="https://localhost",
+        token="",
+    )
+    command.handle(
+        action="register-curl",
+        upstream="https://example.com",
+        local_base="https://localhost",
+        token="",
+    )
+    command.handle(
+        action="curl",
+        upstream="https://example.com",
+        local_base="https://localhost",
+        token="",
+    )
+    command.handle(action="refresh")
+    command.handle(action="refresh_features")
+    command.handle(action="purge")
+    command.handle(action="purge_nodes")
+    command.handle(action="purge-messages")
+    command.handle(action="purge_net_messages")
+
+    assert calls == [
+        ("register_curl", "register_curl"),
+        ("register_curl", "register-curl"),
+        ("register_curl", "curl"),
+        ("refresh_features", "refresh"),
+        ("refresh_features", "refresh_features"),
+        ("purge_nodes", "purge"),
+        ("purge_nodes", "purge_nodes"),
+        ("purge_net_messages", "purge-messages"),
+        ("purge_net_messages", "purge_net_messages"),
+    ]
+
+
+def test_node_parser_accepts_short_action_aliases():
+    """The node parser should accept short, hyphenated action aliases."""
+
+    command = _load_node_command()
+    parser = command.create_parser("manage.py", "node")
+
+    curl_args = parser.parse_args(["curl", "https://example.com"])
+    refresh_args = parser.parse_args(["refresh"])
+    purge_args = parser.parse_args(["purge"])
+    purge_messages_args = parser.parse_args(["purge-messages"])
+
+    assert curl_args.action == "curl"
+    assert refresh_args.action == "refresh"
+    assert purge_args.action == "purge"
+    assert purge_messages_args.action == "purge-messages"
