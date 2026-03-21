@@ -10,7 +10,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, TypedDict
 
 from utils.python_env import resolve_project_python
 
@@ -61,6 +61,18 @@ class CommandResult(Protocol):
     stderr: str
 
 
+class PopenKwargs(TypedDict, total=False):
+    """Typed ``subprocess.Popen`` keyword arguments shared by migration commands."""
+
+    cwd: Path
+    env: dict[str, str]
+    stderr: int
+    stdout: int
+    text: bool
+    creationflags: int
+    start_new_session: bool
+
+
 def build_migration_command(extra_args: list[str] | None = None) -> list[str]:
     """Build the command used to execute Django migrations.
 
@@ -93,14 +105,14 @@ def build_merge_command() -> list[str]:
     ]
 
 
-def _build_popen_kwargs() -> dict[str, object]:
+def _build_popen_kwargs() -> PopenKwargs:
     """Build common subprocess arguments for migration-related commands.
 
     Returns:
         Shared keyword arguments for ``subprocess.Popen``.
     """
 
-    popen_kwargs: dict[str, object] = {
+    popen_kwargs: PopenKwargs = {
         "cwd": BASE_DIR,
         "env": _build_subprocess_env(),
         "stderr": subprocess.PIPE,
@@ -258,7 +270,6 @@ def _iter_watch_files() -> list[Path]:
         root = BASE_DIR / dir_name
         if not root.is_dir():
             continue
-
         for dirpath, dirs, filenames in os.walk(root, topdown=True):
             dirs[:] = [
                 candidate for candidate in dirs if candidate not in WATCH_IGNORE_DIRS
@@ -465,6 +476,7 @@ def main(argv: list[str] | None = None) -> int:
     extra_args = args.extra_args
     if extra_args and extra_args[0] == "--":
         extra_args = extra_args[1:]
+
     return run_migration_server(
         extra_args=extra_args,
         interval=args.interval,
