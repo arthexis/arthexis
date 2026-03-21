@@ -1,4 +1,4 @@
-"""Tests for the ``chargers`` management command websocket auth options."""
+"""Tests for the ``chargers`` management command verbs and legacy aliases."""
 
 import io
 import json
@@ -16,7 +16,7 @@ from apps.ocpp.models import Charger
 
 
 class ChargersCommandTests(TestCase):
-    """Validate websocket authentication toggles in the chargers CLI command."""
+    """Validate charger command verbs and backward-compatible legacy flags."""
 
     def test_sets_ws_auth_user_with_password(self) -> None:
         """Setting websocket auth binds the matched charger and persists credentials."""
@@ -24,13 +24,13 @@ class ChargersCommandTests(TestCase):
         charger = Charger.objects.create(charger_id="CLI-WS-1")
 
         call_command(
-            "chargers",
+            "charger",
+            "auth",
+            "set",
+            "cp-user",
+            "secret123",
             "--sn",
             charger.charger_id,
-            "--ws-auth-username",
-            "cp-user",
-            "--ws-auth-password",
-            "secret123",
         )
 
         charger.refresh_from_db()
@@ -48,7 +48,7 @@ class ChargersCommandTests(TestCase):
         )
         charger = Charger.objects.create(charger_id="CLI-WS-2", ws_auth_user=user)
 
-        call_command("chargers", "--sn", charger.charger_id, "--ws-auth-clear")
+        call_command("charger", "auth", "clear", "--sn", charger.charger_id)
 
         charger.refresh_from_db()
         self.assertIsNone(charger.ws_auth_user_id)
@@ -59,9 +59,25 @@ class ChargersCommandTests(TestCase):
 
         Charger.objects.create(charger_id="CLI-WS-3")
 
-        with self.assertRaisesMessage(CommandError, "requires --ws-auth-password"):
+        with self.assertRaisesMessage(CommandError, "--ws-auth-password is required."):
             call_command(
                 "chargers", "--sn", "CLI-WS-3", "--ws-auth-username", "cp-user"
+            )
+
+    def test_requires_username_when_ws_auth_username_is_blank(self) -> None:
+        """Whitespace-only websocket usernames are rejected with the right error."""
+
+        Charger.objects.create(charger_id="CLI-WS-3B")
+
+        with self.assertRaisesMessage(CommandError, "--ws-auth-username is required."):
+            call_command(
+                "chargers",
+                "--sn",
+                "CLI-WS-3B",
+                "--ws-auth-username",
+                "   ",
+                "--ws-auth-password",
+                "secret123",
             )
 
     def test_requires_effective_cp_selector_for_ws_auth_changes(self) -> None:
@@ -117,7 +133,7 @@ class ChargersCommandTests(TestCase):
             charger_id="CLI-REN-1", connector_id=2, display_name="Old B"
         )
 
-        call_command("chargers", "--sn", "CLI-REN-1", "--rename", "Main Hub")
+        call_command("charger", "rename", "Main Hub", "--sn", "CLI-REN-1")
 
         connector_a.refresh_from_db()
         connector_b.refresh_from_db()
@@ -145,7 +161,7 @@ class ChargersCommandTests(TestCase):
             ),
             patch("apps.ocpp.management.commands.chargers.store.schedule_call_timeout"),
         ):
-            call_command("chargers", "--sn", "CLI-RST-1", "--cp", "A", "--send-restart")
+            call_command("charger", "restart", "--sn", "CLI-RST-1", "--cp", "A")
 
         self.assertEqual(len(ws.messages), 1)
         frame = json.loads(ws.messages[0])
@@ -197,7 +213,7 @@ class ChargersCommandTests(TestCase):
             ),
             patch("apps.ocpp.management.commands.chargers.store.schedule_call_timeout"),
         ):
-            call_command("chargers", "--sn", "CLI-STOP-1", "--send-stop")
+            call_command("charger", "stop", "--sn", "CLI-STOP-1")
 
         frame_a = json.loads(ws_a.messages[0])
         frame_b = json.loads(ws_b.messages[0])
@@ -244,7 +260,7 @@ class ChargersCommandTests(TestCase):
             ),
             patch("apps.ocpp.management.commands.chargers.store.schedule_call_timeout"),
         ):
-            call_command("chargers", "--sn", "CLI-STOP-2", "--send-stop")
+            call_command("charger", "stop", "--sn", "CLI-STOP-2")
 
         self.assertEqual(len(ws_a.messages), 1)
         frame = json.loads(ws_a.messages[0])
@@ -276,7 +292,7 @@ class ChargersCommandTests(TestCase):
             patch("apps.ocpp.management.commands.chargers.store.schedule_call_timeout"),
         ):
             call_command(
-                "chargers", "--sn", "CLI-RST-ALL-1", "--cp", "all", "--send-restart"
+                "charger", "restart", "--sn", "CLI-RST-ALL-1", "--cp", "all"
             )
 
         self.assertEqual(len(ws_base.messages), 1)
@@ -311,7 +327,7 @@ class ChargersCommandTests(TestCase):
         ):
             with self.assertRaisesMessage(CommandError, "failed to send Reset"):
                 call_command(
-                    "chargers", "--sn", "CLI-RST-ERR-1", "--cp", "A", "--send-restart"
+                    "charger", "restart", "--sn", "CLI-RST-ERR-1", "--cp", "A"
                 )
 
     def test_charger_alias_defaults_to_base_charger(self) -> None:
@@ -349,12 +365,13 @@ class ChargersCommandTests(TestCase):
             patch("apps.ocpp.management.commands.chargers.store.schedule_call_timeout"),
         ):
             call_command(
-                "chargers",
+                "charger",
+                "rfid",
+                "push",
                 "--sn",
                 charger.charger_id,
                 "--cp",
                 "A",
-                "--send-local-rfids",
             )
 
         self.assertEqual(len(ws.messages), 1)
@@ -392,12 +409,13 @@ class ChargersCommandTests(TestCase):
             patch("apps.ocpp.management.commands.chargers.store.schedule_call_timeout"),
         ):
             call_command(
-                "chargers",
+                "charger",
+                "rfid",
+                "lock",
                 "--sn",
                 charger.charger_id,
                 "--cp",
                 "A",
-                "--rfid-lockdown",
             )
 
         charger.refresh_from_db()
