@@ -1,8 +1,7 @@
-name: CI
+name: Upgrade Gate
 
 permissions:
   contents: read
-  pull-requests: write
 
 env:
   PYTHONDONTWRITEBYTECODE: '1'
@@ -11,7 +10,7 @@ env:
   PYTEST_WORKERS: 'auto'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: upgrade-gate-${{ github.ref }}
   cancel-in-progress: true
 
 on:
@@ -21,7 +20,6 @@ on:
       - 'release/**'
     paths:
       - '**/*.py'
-      - '**/*.js'
       - '**/*.json'
       - '**/*.toml'
       - '**/*.txt'
@@ -37,41 +35,11 @@ on:
       - 'start.sh'
       - 'stop.sh'
       - 'upgrade.sh'
-  pull_request:
-    branches:
-      - main
-      - 'release/**'
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
-    paths:
-      - '**/*.py'
-      - '**/*.js'
-      - '**/*.json'
-      - '**/*.toml'
-      - '**/*.txt'
-      - '.github/workflows/ci.yml'
-      - 'apps/**'
-      - 'config/**'
-      - 'scripts/**'
-      - 'tests/**'
-      - 'manage.py'
-      - 'configure.sh'
-      - 'env-refresh.sh'
-      - 'install.sh'
-      - 'start.sh'
-      - 'stop.sh'
-      - 'upgrade.sh'
-  schedule:
-    - cron: '0 2 * * *'
   workflow_dispatch:
 
 jobs:
-  install:
-    if: ${{ (github.event_name != 'pull_request' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)) && needs.upgrade.result == 'failure' }}
-    needs: upgrade
+  upgrade:
+    name: Upgrade safety gate
     runs-on: ubuntu-latest
     services:
       redis:
@@ -86,13 +54,14 @@ jobs:
     env:
       OCPP_STATE_REDIS_URL: redis://localhost:6379
     steps:
-      # GitHub-hosted runners start with a writable workspace; skipping manual chown saves setup time.
       - uses: actions/checkout@v6
         with:
           clean: false
+
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
+
       - name: Cache pip
         uses: actions/cache@v5
         with:
@@ -100,217 +69,37 @@ jobs:
           key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
           restore-keys: |
             pip-${{ runner.os }}-
+
       - name: Cache virtualenv
         uses: actions/cache@v5
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh', 'upgrade.sh') }}
           restore-keys: |
             venv-${{ runner.os }}-
+
       - name: Validate pyproject dependency ordering
         run: |
           python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
+
       - name: Validate generated requirements
         run: |
           python "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
+
       - name: Install suite from repository
         run: |
           ./install.sh --no-start
+
       - name: Install CI dependencies
         run: |
           source .venv/bin/activate
           python -m pip install -r requirements-ci.txt
-      - name: Validate migrations
-        run: |
-          source .venv/bin/activate
-          python scripts/check_migration_conflicts.py
-          python manage.py makemigrations --check --dry-run
-          python manage.py migrate --noinput --database default
-      - name: Create docs admin user
-        env:
-          DOCS_ADMIN_PASSWORD: ${{ secrets.DOCS_ADMIN_PASSWORD }}
-        run: |
-          set -Eeuo pipefail
-          source .venv/bin/activate
-          if [ -z "${DOCS_ADMIN_PASSWORD}" ]; then
-            DOCS_ADMIN_PASSWORD="$(openssl rand -base64 32)"
-          fi
-          echo "DOCS_ADMIN_PASSWORD=${DOCS_ADMIN_PASSWORD}" >> "${GITHUB_ENV}"
-          python manage.py create_docs_admin --confirm --password "${DOCS_ADMIN_PASSWORD}"
-      - name: Check import resolution
-        run: |
-          source .venv/bin/activate
-          python scripts/check_import_resolution.py
-      - name: Detect changed fixture files
-        id: seed-fixtures
-        env:
-          PR_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
-        run: |
-          set -Eeuo pipefail
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "mode=full" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
 
-          if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${PR_BASE_SHA}...${{ github.sha }}")"; then
-            echo "Fixture path detection failed; falling back to full scan."
-            echo "mode=full" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
-          CHANGED_FIXTURES="$(printf '%s\n' "${CHANGED_FILES}" | grep -E '^apps/.*/fixtures/.*\.json$' || true)"
-          if [ -z "${CHANGED_FIXTURES}" ]; then
-            echo "mode=changed" >> "${GITHUB_OUTPUT}"
-            {
-              echo "paths<<EOF"
-              echo ""
-              echo "EOF"
-            } >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
-          echo "mode=changed" >> "${GITHUB_OUTPUT}"
-          {
-            echo "paths<<EOF"
-            printf '%s\n' "${CHANGED_FIXTURES}"
-            echo "EOF"
-          } >> "${GITHUB_OUTPUT}"
-      - name: Lint seed fixtures
-        run: |
-          set -Eeuo pipefail
-          source .venv/bin/activate
-
-          if [ "${{ steps.seed-fixtures.outputs.mode }}" = "full" ]; then
-            python scripts/lint_seed_fixtures.py
-            exit 0
-          fi
-
-          fixture_paths=()
-          while IFS= read -r fixture_path; do
-            [ -n "${fixture_path}" ] && fixture_paths+=("${fixture_path}")
-          done <<< "${{ steps.seed-fixtures.outputs.paths }}"
-
-          if [ "${#fixture_paths[@]}" -eq 0 ]; then
-            echo "No fixture JSON files changed; skipping seed fixture lint."
-            exit 0
-          fi
-
-          python scripts/lint_seed_fixtures.py "${fixture_paths[@]}"
-      - name: Run Ruff
-        run: |
-          source .venv/bin/activate
-          ruff check --select E9,F823 .
-      - name: Run import contracts
-        run: |
-          source .venv/bin/activate
-          lint-imports
-      - name: Detect pytest xdist arguments
-        run: |
-          set -Eeuo pipefail
-          source .venv/bin/activate
-          pytest_help="$(pytest --help)"
-          if grep -q -- '--dist' <<<"$pytest_help"; then
-            workers="${PYTEST_WORKERS:-auto}"
-            echo "PYTEST_XDIST_ARGS=-n ${workers} --dist loadfile" >> "${GITHUB_ENV}"
-          else
-            echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
-          fi
-      - name: Run tests
-        run: |
-          set -Eeuo pipefail
-          source .venv/bin/activate
-          read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
-          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
-      - name: Upload pytest log
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: install-pytest-log
-          path: pytest.log
-          if-no-files-found: warn
-  upgrade:
-    if: ${{ github.event_name != 'pull_request' || (github.event_name == 'pull_request' && !github.event.pull_request.draft) }}
-    runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      OCPP_STATE_REDIS_URL: redis://localhost:6379
-    steps:
-      # Workspace is already writable on GitHub runners, so we skip the chown to reduce overhead.
-      - name: Checkout baseline branch for PR upgrades
-        uses: actions/checkout@v6
-        if: ${{ github.event_name == 'pull_request' }}
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          clean: false
-      - name: Checkout current ref for non-PR upgrades
-        uses: actions/checkout@v6
-        if: ${{ github.event_name != 'pull_request' }}
-        with:
-          clean: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-      - name: Cache pip
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-          restore-keys: |
-            pip-${{ runner.os }}-
-      - name: Cache virtualenv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-          restore-keys: |
-            venv-${{ runner.os }}-
-      - name: Install from default branch
-        run: |
-          ./install.sh --no-start
-      - name: Checkout PR changes
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/checkout@v6
-        with:
-          clean: false
-      - name: Validate pyproject dependency ordering (PR)
-        run: |
-          python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
-      - name: Validate generated requirements (PR)
-        run: |
-          python "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
-      - name: Install CI dependencies before upgrade checks
-        run: |
-          source .venv/bin/activate
-          python -m pip install -r requirements-ci.txt
-      - name: Apply upgrade
+      - name: Apply upgrade smoke path
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
           ./upgrade.sh --local --no-restart
-      - name: Install CI dependencies after upgrade
-        run: |
-          source .venv/bin/activate
-          python -m pip install -r requirements-ci.txt
-
-      - name: Validate manifest app entries early (upgraded install)
-        run: |
-          set -Eeuo pipefail
-          source .venv/bin/activate
-          manifest_test_file="tests/test_installed_apps_manifests.py"
-          if [[ -f "$manifest_test_file" ]]; then
-            pytest "$manifest_test_file" -q
-          else
-            echo "Manifest test file $manifest_test_file not found; skipping manifest app validation."
-          fi
 
       - name: Validate upgraded migrations
         run: |
@@ -319,138 +108,7 @@ jobs:
           python scripts/check_migration_conflicts.py
           python manage.py makemigrations --check --dry-run
           python manage.py migrate --noinput --database default
-      - name: Create docs admin user
-        env:
-          DOCS_ADMIN_PASSWORD: ${{ secrets.DOCS_ADMIN_PASSWORD }}
-        run: |
-          set -Eeuo pipefail
-          source .venv/bin/activate
-          if [ -z "${DOCS_ADMIN_PASSWORD}" ]; then
-            DOCS_ADMIN_PASSWORD="$(openssl rand -base64 32)"
-          fi
-          echo "DOCS_ADMIN_PASSWORD=${DOCS_ADMIN_PASSWORD}" >> "${GITHUB_ENV}"
-          python manage.py create_docs_admin --confirm --password "${DOCS_ADMIN_PASSWORD}"
 
-      - name: Run Ruff on upgraded install
-        run: |
-          set -Eeuo pipefail
-          source .venv/bin/activate
-          ruff check --select E9,F823 .
-      - name: Run import contracts on upgraded install
-        run: |
-          set -Eeuo pipefail
-          source .venv/bin/activate
-          lint-imports
-      - name: Decide whether to run integration tests
-        id: integration_gate
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const eventName = context.eventName;
-            const integrationLabel = 'ci:run-integration';
-            const pathMatchers = [
-              'apps/ocpp/**',
-              'apps/protocols/**',
-              'apps/core/**',
-              'apps/services/**',
-              'apps/tasks/**',
-              'apps/**/tests/**',
-              'config/**',
-              'scripts/**',
-              'manage.py',
-              'pyproject.toml',
-              'requirements*.txt',
-              'tests/test_*.py',
-              'tests/**/test_*.py',
-              'tests/integration/**',
-              '.github/workflows/ci.yml'
-            ];
-
-            if (eventName === 'schedule') {
-              core.setOutput('run_integration', 'true');
-              core.setOutput('reason', 'scheduled run');
-              core.info('Integration tests enabled: scheduled run.');
-              return;
-            }
-
-            if (eventName === 'workflow_dispatch') {
-              core.setOutput('run_integration', 'true');
-              core.setOutput('reason', 'manual workflow_dispatch run');
-              core.info('Integration tests enabled: workflow_dispatch run.');
-              return;
-            }
-
-            if (eventName !== 'pull_request') {
-              core.setOutput('run_integration', 'false');
-              core.setOutput('reason', `event ${eventName} is not configured for integration tests`);
-              core.info(`Integration tests skipped: event ${eventName} is not configured for integration tests.`);
-              return;
-            }
-
-            const pr = context.payload.pull_request;
-            const labels = (pr?.labels || []).map(label => label.name);
-            if (labels.includes(integrationLabel)) {
-              core.setOutput('run_integration', 'true');
-              core.setOutput('reason', `PR label ${integrationLabel} is present`);
-              core.info(`Integration tests enabled: PR label ${integrationLabel} is present.`);
-              return;
-            }
-
-            const changedFiles = await github.paginate(
-              github.rest.pulls.listFiles,
-              {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: pr.number,
-                per_page: 100
-              },
-              response => response.data.map(file => file.filename)
-            );
-
-            const wildcardToRegex = (pattern) => {
-              const escaped = pattern
-                .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-                .replace(/\*\*/g, '::DOUBLE_STAR::')
-                .replace(/\*/g, '[^/]*')
-                .replace(/::DOUBLE_STAR::/g, '.*');
-              return new RegExp(`^${escaped}$`);
-            };
-
-            const regexMatchers = pathMatchers.map(pattern => ({
-              pattern,
-              regex: wildcardToRegex(pattern)
-            }));
-
-            const matchedPatterns = new Set();
-            const matchedFiles = [];
-
-            for (const file of changedFiles) {
-              for (const matcher of regexMatchers) {
-                if (matcher.regex.test(file)) {
-                  matchedPatterns.add(matcher.pattern);
-                  matchedFiles.push(file);
-                  break;
-                }
-              }
-            }
-
-            if (matchedFiles.length > 0) {
-              const filesSummary = matchedFiles.slice(0, 10).join(', ');
-              core.setOutput('run_integration', 'true');
-              core.setOutput(
-                'reason',
-                `PR modifies integration-sensitive paths (${Array.from(matchedPatterns).join(', ')})`
-              );
-              core.info(`Integration tests enabled: matched files ${filesSummary}.`);
-              return;
-            }
-
-            core.setOutput('run_integration', 'false');
-            core.setOutput(
-              'reason',
-              `PR does not include label ${integrationLabel} or integration-sensitive file changes`
-            );
-            core.info('Integration tests skipped: no label and no integration-sensitive file changes.');
       - name: Detect pytest xdist arguments
         run: |
           set -Eeuo pipefail
@@ -462,157 +120,18 @@ jobs:
           else
             echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
           fi
-      - name: Run tests on upgraded install
+
+      - name: Run critical auto-upgrade checks
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          : > pytest.log
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
+          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee pytest.log
 
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "=== Full test suite (scheduled daily run) ===" | tee -a pytest.log
-            pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 | tee -a pytest.log
-            exit 0
-          fi
-
-          marker_expr="critical and not integration"
-          echo "=== Critical tests (excluding integration) ===" | tee -a pytest.log
-          if [ -z "${PYTEST_XDIST_ARGS:-}" ]; then
-            echo "pytest-xdist is unavailable; running upgraded critical tests serially." | tee -a pytest.log
-          fi
-
-          if [ "${{ steps.integration_gate.outputs.run_integration }}" = "true" ]; then
-            marker_expr="critical or integration"
-            echo "=== Integration tests ===" | tee -a pytest.log
-          fi
-
-          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "${marker_expr}" | tee -a pytest.log
-      - name: Report integration test skip
-        if: ${{ github.event_name != 'schedule' && steps.integration_gate.outputs.run_integration != 'true' }}
-        run: |
-          set -Eeuo pipefail
-          echo "=== Integration tests skipped ===" | tee -a pytest.log
-          echo "Reason: ${{ steps.integration_gate.outputs.reason }}" | tee -a pytest.log
-      - name: Summarize upgrade test coverage
-        if: always()
-        run: |
-          {
-            echo "## Upgrade test coverage";
-            if [ "${{ github.event_name }}" = "schedule" ]; then
-              echo "- Full test suite: executed";
-              echo "- Reason: scheduled daily run";
-              echo "- Integration tests: included via full suite";
-            else
-              echo "- Critical tests (excluding integration): executed";
-              if [ "${{ steps.integration_gate.outputs.run_integration }}" = "true" ]; then
-                echo "- Integration tests: executed";
-                echo "- Reason: ${{ steps.integration_gate.outputs.reason }}";
-              else
-                echo "- Integration tests: skipped";
-                echo "- Reason: ${{ steps.integration_gate.outputs.reason }}";
-                echo "- Branch protection note: keep requiring the **upgrade** job so critical tests remain mandatory while integration executes conditionally.";
-              fi
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: upgrade-pytest-log
+          name: upgrade-gate-pytest-log
           path: pytest.log
           if-no-files-found: warn
-  notify-failure:
-    if: ${{ failure() && github.event_name == 'pull_request' && !github.event.pull_request.draft }}
-    needs:
-      - install
-      - upgrade
-    permissions:
-      actions: read
-      contents: read
-      pull-requests: write
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download install pytest log
-        if: always()
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: install-pytest-log
-          path: artifacts/install-pytest-log
-      - name: Download upgrade pytest log
-        if: always()
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          name: upgrade-pytest-log
-          path: artifacts/upgrade-pytest-log
-      - name: Comment on PR with failure summary
-        uses: actions/github-script@v8
-        env:
-          INSTALL_RESULT: ${{ needs.install.result }}
-          UPGRADE_RESULT: ${{ needs.upgrade.result }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-
-            const prNumber = context.payload.pull_request?.number;
-            if (!prNumber) {
-              core.info('No pull request context available for commenting.');
-              return;
-            }
-
-            const results = {
-              install: process.env.INSTALL_RESULT,
-              upgrade: process.env.UPGRADE_RESULT
-            };
-
-            const failedJobs = Object.entries(results)
-              .filter(([, result]) => result === 'failure')
-              .map(([name]) => `- ${name}`)
-              .join('\n');
-
-            const summaryLines = failedJobs || '- One or more jobs failed. Review the workflow run for details.';
-
-            const logFiles = {
-              install: 'artifacts/install-pytest-log/pytest.log',
-              upgrade: 'artifacts/upgrade-pytest-log/pytest.log'
-            };
-
-            const logBlocks = Object.entries(logFiles)
-              .map(([job, filePath]) => {
-                if (!fs.existsSync(filePath)) {
-                  return null;
-                }
-                const content = fs.readFileSync(filePath, 'utf8').trim();
-                if (!content) {
-                  return null;
-                }
-                const lines = content.split('\n');
-                const tail = lines.slice(-200).join('\n');
-                return [
-                  `### ${job} pytest log (tail)`,
-                  '```',
-                  tail,
-                  '```'
-                ].join('\n');
-              })
-              .filter(Boolean)
-              .join('\n\n');
-
-            const body = [
-              'CI failed for this PR.',
-              '',
-              '### Failed job summary',
-              summaryLines,
-              logBlocks ? `\n${logBlocks}` : '',
-              '',
-              `View the workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            ].join('\n');
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              body
-            });

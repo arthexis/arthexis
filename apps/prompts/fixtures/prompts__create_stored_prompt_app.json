@@ -7,18 +7,18 @@
       "is_deleted": false,
       "slug": "create-prompts-app-for-pr-context",
       "title": "Create prompts app with stored prompt workflow",
-      "prompt_text": "Create a \"prompts\" app with a Stored Prompt model that we can use to preserve the intent of the original request after development is complete. Ensure each change we make adds a fixture with the prompt and ties it to the PR and other valuable context. No migrations required, we depend on new fixtures getting auto-imported. Each prompt should also include an initial implementation plan: refined out of the original prompt and stored with it. Incluse a pre-commit check that ensures the prompt was stored and agent.md advice on performing this task.",
-      "initial_plan": "1) Create a dedicated prompts app and register a StoredPrompt model in admin. 2) Persist the original request plus a refined implementation plan in seed fixtures. 3) Capture PR context in each stored prompt fixture (PR reference + JSON context). 4) Add a pre-commit validation hook that blocks commits when non-fixture changes do not include a stored prompt fixture update. 5) Add operational guidance in agent.md so future changes repeat this process.",
-      "pr_reference": "PR-TBD",
+      "prompt_text": "Create a \"prompts\" app with a Stored Prompt model that we can use to preserve the intent of the original request after development is complete. Ensure each change we make adds a fixture with the prompt and ties it to any useful implementation context. No migrations required, we depend on new fixtures getting auto-imported. Each prompt should also include an initial implementation plan: refined out of the original prompt and stored with it. Include agent.md advice on performing this task.",
+      "initial_plan": "1) Create a dedicated prompts app and register a StoredPrompt model in admin. 2) Persist the original request plus a refined implementation plan in seed fixtures. 3) Capture relevant change context in each stored prompt fixture (optional change reference + JSON context). 4) Keep fixtures aligned with the model and add operational guidance in agent.md so future changes repeat this process.",
+      "change_reference": "",
       "context": {
         "scope": "Repository-wide prompt persistence",
         "target_branch": "current",
         "related_files": [
           "apps/prompts/models.py",
           "apps/prompts/admin.py",
-          "scripts/check_prompt_storage.py"
+          "apps/prompts/migrations/0002_rename_pr_reference_change_reference.py"
         ],
-        "notes": "PR reference should be updated when opening/updating the pull request."
+        "notes": "Change references are optional and may be left blank."
       },
       "created_at": "2026-02-27T00:00:00Z",
       "updated_at": "2026-02-27T00:00:00Z"

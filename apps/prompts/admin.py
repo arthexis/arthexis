@@ -9,7 +9,6 @@ from .models import StoredPrompt
 class StoredPromptAdmin(admin.ModelAdmin):
     """Admin configuration for stored prompts."""
 
-    list_display = ("title", "slug", "pr_reference", "updated_at")
-    list_filter = ("pr_reference",)
-    search_fields = ("title", "slug", "prompt_text", "initial_plan")
+    list_display = ("title", "slug", "change_reference", "updated_at")
+    search_fields = ("title", "slug", "change_reference", "prompt_text", "initial_plan")
     readonly_fields = ("created_at", "updated_at")

@@ -17,7 +17,7 @@ class StoredPromptManager(models.Manager):
 
 
 class StoredPrompt(Entity):
-    """Persist the original request, refined plan, and PR context."""
+    """Persist the original request, refined plan, and related change context."""
 
     slug = models.SlugField(max_length=120, unique=True)
     title = models.CharField(max_length=200)
@@ -25,9 +25,11 @@ class StoredPrompt(Entity):
     initial_plan = models.TextField(
         help_text="Refined implementation plan derived from the original request.",
     )
-    pr_reference = models.CharField(
+    change_reference = models.CharField(
         max_length=120,
-        help_text="Pull request identifier such as PR-123 or a URL.",
+        blank=True,
+        default="",
+        help_text="Optional reference for the related change, ticket, or external record.",
     )
     context = models.JSONField(
         default=dict,
