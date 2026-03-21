@@ -1,0 +1,13 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  {% if opts.app_label == 'evergo' and opts.model_name == 'evergouser' %}
+    <li>
+      <a href="{% url 'admin:evergo_evergouser_login_on_evergo' %}" class="addlink">
+        {% trans "Login on Evergo" %}
+      </a>
+    </li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}
