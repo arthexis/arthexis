@@ -1,7 +1,9 @@
 from django.contrib import admin
+from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
+from apps.core.admin.mixins import PublicViewLinksAdminMixin
 from apps.media.models import MediaFile
 
 from .models import (
@@ -13,7 +15,7 @@ from .models import (
 
 
 @admin.register(Term)
-class TermAdmin(admin.ModelAdmin):
+class TermAdmin(PublicViewLinksAdminMixin, admin.ModelAdmin):
     list_display = (
         "title",
         "slug",
@@ -66,6 +68,15 @@ class TermAdmin(admin.ModelAdmin):
             },
         ),
     )
+    view_on_site = True
+
+    def get_public_view_links(self, obj=None) -> list[dict[str, str]]:
+        """Return public term routes relevant to term administration."""
+
+        links = [{"label": "View on site: Registration", "url": reverse("terms:registration")}]
+        if obj:
+            links.append({"label": "View on site: Term", "url": obj.get_absolute_url()})
+        return links
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
