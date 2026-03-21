@@ -7,7 +7,7 @@ from django.core.management.base import BaseCommand
 class Command(BaseCommand):
     """Backward-compatible wrapper for camera service mode."""
 
-    help = "Run camera service. Legacy alias: use `video service`."
+    help = "Run camera service. Compatibility alias; prefer `video service`."
 
     def add_arguments(self, parser) -> None:
         """Register camera service compatibility arguments."""
