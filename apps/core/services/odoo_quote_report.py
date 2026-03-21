@@ -339,8 +339,8 @@ def _present_quote(quote: dict[str, object]) -> dict[str, object]:
     activity_value = activity_summary or activity_name
     amount_total = quote.get("amount_total") or 0
     currency = quote.get("currency") or {}
-    currency_label = currency.get("label", "") if isinstance(currency, dict) else ""
-    total_display = f"{currency_label}{amount_total:,.2f}" if currency_label else f"{amount_total:,.2f}"
+    currency_label = currency.get("label", "")
+    total_display = f"{currency_label}{amount_total:,.2f}"
     return {
         "name": quote.get("name", ""),
         "customer": customer,
@@ -393,13 +393,14 @@ def parse_odoo_datetime(value) -> datetime | None:
             try:
                 dt = datetime.fromisoformat(text_iso)
             except ValueError:
+                dt = None
                 for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
                     try:
                         dt = datetime.strptime(text, fmt)
                         break
                     except ValueError:
                         continue
-                else:
+                if dt is None:
                     return None
     if timezone.is_naive(dt):
         tzinfo = getattr(timezone, "utc", datetime_timezone.utc)
