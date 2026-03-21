@@ -417,7 +417,18 @@ where = [ ".",]
 
 [tool.mypy]
 python_version = "3.10"
-files = ["scripts/generate_requirements.py", "scripts/sort_pyproject_deps.py"]
+plugins = ["mypy_django_plugin.main"]
+files = [
+  "scripts/generate_requirements.py",
+  "scripts/sort_pyproject_deps.py",
+  "apps/protocols",
+  "apps/repos/github.py",
+  "apps/repos/services/github.py",
+  "apps/core/services/health.py",
+  "apps/core/services/health_checks.py",
+  "apps/core/modeling",
+  "apps/core/system_ui.py",
+]
 exclude = [
   ".*/migrations/.*",
   ".*/beat_migrations/.*",
@@ -433,6 +444,13 @@ warn_redundant_casts = true
 check_untyped_defs = false
 allow_untyped_globals = true
 follow_imports = "silent"
+
+[tool.django-stubs]
+django_settings_module = "config.settings.mypy"
+
+[[tool.mypy.overrides]]
+module = ["psutil"]
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = [
