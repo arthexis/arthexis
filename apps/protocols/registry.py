@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from types import ModuleType
-from typing import Callable, Iterable, Protocol, Sequence, TypeAlias
+from typing import AbstractSet, Callable, Iterable, Protocol, Sequence, TypeAlias
 
 ProtocolHandler: TypeAlias = Callable[..., object]
 ProtocolCallRegistration: TypeAlias = tuple[str, str, str]
@@ -16,7 +16,9 @@ ProtocolCallRegistry: TypeAlias = dict[str, ProtocolSlugRegistry]
 class SupportsProtocolCalls(Protocol):
     """Protocol for callables annotated by ``@protocol_call`` metadata."""
 
-    __protocol_calls__: Sequence[ProtocolCallRegistration]
+    __protocol_calls__: (
+        AbstractSet[ProtocolCallRegistration] | Sequence[ProtocolCallRegistration]
+    )
 
 
 _registry: ProtocolCallRegistry = defaultdict(
@@ -102,12 +104,15 @@ def rehydrate_from_module(module: ModuleType) -> None:
         maybe_protocol_calls = getattr(obj, "__protocol_calls__", None)
         if maybe_protocol_calls is None:
             return
-        annotated = maybe_protocol_calls
-        if not isinstance(annotated, Sequence):
-            return
         if not callable(obj):
             return
-        for slug, direction, name in annotated:
+        annotated = maybe_protocol_calls
+        if not isinstance(annotated, (set, Sequence)):
+            return
+        for registration in annotated:
+            if not isinstance(registration, tuple) or len(registration) != 3:
+                return
+            slug, direction, name = registration
             register(slug, direction, name, obj)
 
     for attr in module.__dict__.values():

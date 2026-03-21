@@ -13,6 +13,6 @@ Use these conventions when tightening types in existing modules so MyPy gains si
 ## Adoption notes
 
 - Replace `Any` only when it currently blocks a useful MyPy check or obscures a stable data shape.
-- Keep aliases close to the owning module unless the exact same shape is shared broadly.
+- Keep aliases close to the owning module unless the same shape is shared broadly.
 - Add or refresh docstrings on touched functions and classes so the implementation and typing intent stay discoverable.
 - Favor incremental changes in lower-dynamic modules first, then expand app-by-app as coverage improves.

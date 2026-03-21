@@ -361,11 +361,21 @@ def _parse_legacy_invocation(argv: Sequence[str]) -> LegacyInvocation:
 
     if argv[0] in {"list", "run"}:
         action = argv[0]
-        command = argv[1] if action == "run" and len(argv) > 1 else None
-        command_args = list(argv[2:]) if action == "run" and len(argv) > 2 else []
+        option_flags: list[str] = []
+        command: str | None = None
+        command_args: list[str] = []
+
+        for index, token in enumerate(argv[1:], start=1):
+            if command is None and token.startswith("-"):
+                option_flags.append(token)
+                continue
+            command = token
+            command_args = list(argv[index + 1 :])
+            break
+
         return {
             "action": action,
-            "option_flags": [],
+            "option_flags": option_flags,
             "command": command,
             "command_args": command_args,
         }
