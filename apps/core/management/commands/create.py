@@ -25,6 +25,11 @@ class Command(BaseCommand):
 
         app_parser = subparsers.add_parser("app", help="Create a new local app scaffold.")
         app_parser.add_argument("name", help="App package name (lowercase snake_case).")
+        app_parser.add_argument(
+            "--backend-only",
+            action="store_true",
+            help="Create an app scaffold without views.py, urls.py, and routes.py.",
+        )
         app_parser.add_argument("--apps-dir", dest="apps_dir", help="Override apps directory path.")
 
         model_parser = subparsers.add_parser(
@@ -43,7 +48,7 @@ class Command(BaseCommand):
         if target == "app":
             app_name = str(options["name"]).strip()
             self._validate_snake_case_name(app_name, noun="app")
-            self._create_app(apps_dir, app_name)
+            self._create_app(apps_dir, app_name, backend_only=bool(options.get("backend_only")))
             return
 
         if target == "model":
@@ -59,7 +64,7 @@ class Command(BaseCommand):
     def _get_apps_dir(self, apps_dir_option: str | None) -> Path:
         return Path(apps_dir_option or getattr(settings, "APPS_DIR", Path(settings.BASE_DIR) / "apps"))
 
-    def _create_app(self, apps_dir: Path, app_name: str) -> None:
+    def _create_app(self, apps_dir: Path, app_name: str, *, backend_only: bool) -> None:
         app_dir = apps_dir / app_name
         if app_dir.exists():
             raise CommandError(f"App already exists: {app_dir}")
@@ -73,14 +78,20 @@ class Command(BaseCommand):
             app_dir / "apps.py": self._apps_py(app_config_class, app_name),
             app_dir / "models.py": self._model_class_block(model_name, app_name, include_import=True),
             app_dir / "admin.py": self._admin_registration_block(model_name, include_imports=True),
-            app_dir / "views.py": self._views_block(app_name, model_name, include_imports=True),
-            app_dir / "urls.py": self._urls_block(model_name, include_imports=True),
-            app_dir / "manifest.py": self._manifest_py(app_name),
-            app_dir / "routes.py": self._routes_with_urls(app_name),
+            app_dir / "manifest.py": self._manifest_py(app_name, backend_only=backend_only),
             app_dir / "migrations" / "__init__.py": "",
             app_dir / "tests" / "__init__.py": '"""Tests for scaffolded app modules."""\n',
-            app_dir / "tests" / f"test_{app_name}_smoke.py": self._app_test_py(app_name),
+            app_dir / "tests" / f"test_{app_name}_smoke.py": self._app_test_py(app_name, backend_only),
         }
+
+        if not backend_only:
+            files_to_write[app_dir / "views.py"] = self._views_block(
+                app_name,
+                model_name,
+                include_imports=True,
+            )
+            files_to_write[app_dir / "urls.py"] = self._urls_block(model_name, include_imports=True)
+            files_to_write[app_dir / "routes.py"] = self._routes_with_urls(app_name)
 
         for path, content in files_to_write.items():
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -93,6 +104,7 @@ class Command(BaseCommand):
         app_dir = apps_dir / app_name
         if not app_dir.exists():
             raise CommandError(f"App does not exist: {app_dir}")
+        backend_only = self._is_backend_only_app(app_dir)
 
         models_path = app_dir / "models.py"
         self._append_unique_block(
@@ -108,21 +120,36 @@ class Command(BaseCommand):
             block=self._admin_registration_block(model_name, include_imports=not admin_path.exists()),
         )
 
-        views_path = app_dir / "views.py"
-        self._append_unique_block(
-            views_path,
-            marker=f"class {model_name}ListView(ListView)",
-            block=self._views_block(app_name, model_name, include_imports=not views_path.exists()),
-        )
+        if not backend_only:
+            views_path = app_dir / "views.py"
+            self._append_unique_block(
+                views_path,
+                marker=f"class {model_name}ListView(ListView)",
+                block=self._views_block(app_name, model_name, include_imports=not views_path.exists()),
+            )
 
-        self._ensure_urls_include_model(app_dir / "urls.py", model_name)
-        self._ensure_routes_include(app_dir / "routes.py", app_name)
+            self._ensure_urls_include_model(app_dir / "urls.py", model_name)
+            self._ensure_routes_include(app_dir / "routes.py", app_name)
 
         self.stdout.write(self.style.SUCCESS(f"Scaffolded model {model_name} in apps/{app_name}/"))
         self.stdout.write("\nPost-create checklist:")
         self.stdout.write(f"1. Run `python manage.py makemigrations {app_name}` then `python manage.py migrate`.")
-        self.stdout.write("2. Adjust generated fields, admin list_display, and views to your domain.")
-        self.stdout.write(f"3. Add templates under apps/{app_name}/templates/{app_name}/ for the new views.")
+        if backend_only:
+            self.stdout.write("2. Adjust generated fields and admin list_display to your domain.")
+            self.stdout.write(
+                "3. Backend-only marker detected in manifest.py; skipped views.py, urls.py, and routes.py wiring."
+            )
+        else:
+            self.stdout.write("2. Adjust generated fields, admin list_display, and views to your domain.")
+            self.stdout.write(
+                f"3. Add templates under apps/{app_name}/templates/{app_name}/ for the new views."
+            )
+
+    def _is_backend_only_app(self, app_dir: Path) -> bool:
+        manifest_path = app_dir / "manifest.py"
+        if not manifest_path.exists():
+            return False
+        return "APP_STRUCTURE: backend-only" in manifest_path.read_text(encoding="utf-8")
 
     def _append_unique_block(self, path: Path, marker: str, block: str) -> None:
         if path.exists():
@@ -320,10 +347,12 @@ class Command(BaseCommand):
             f"    path(\"{slug}/<int:pk>/\", views.{detail_class}.as_view(), name=\"{slug}-detail\"),"
         )
 
-    def _manifest_py(self, app_name: str) -> str:
+    def _manifest_py(self, app_name: str, *, backend_only: bool) -> str:
+        marker = "# APP_STRUCTURE: backend-only (intentionally omits views.py, urls.py, and routes.py)\n"
         return (
             '"""Manifest entries for Django app loading."""\n\n'
-            "DJANGO_APPS = [\n"
+            + (marker if backend_only else "")
+            + "DJANGO_APPS = [\n"
             f'    "apps.{app_name}",\n'
             "]\n"
         )
@@ -337,7 +366,13 @@ class Command(BaseCommand):
             "]\n"
         )
 
-    def _app_test_py(self, app_name: str) -> str:
+    def _app_test_py(self, app_name: str, backend_only: bool) -> str:
+        web_assertions = ""
+        if not backend_only:
+            web_assertions = (
+                f'    assert import_module("apps.{app_name}.views")\n'
+                f'    assert import_module("apps.{app_name}.urls")\n'
+            )
         return (
             '"""Starter smoke tests for generated app modules."""\n\n'
             "from importlib import import_module\n\n\n"
@@ -346,8 +381,7 @@ class Command(BaseCommand):
             f'    assert import_module("apps.{app_name}.apps")\n'
             f'    assert import_module("apps.{app_name}.manifest")\n'
             f'    assert import_module("apps.{app_name}.models")\n'
-            f'    assert import_module("apps.{app_name}.views")\n'
-            f'    assert import_module("apps.{app_name}.urls")\n'
+            + web_assertions
         )
 
     def _print_post_create_steps(self, app_name: str) -> None:
@@ -355,7 +389,7 @@ class Command(BaseCommand):
         self.stdout.write(f"1. Add 'apps.{app_name}' to your enabled app manifests if needed.")
         self.stdout.write(f"2. Run `python manage.py makemigrations {app_name}` then `python manage.py migrate`.")
         self.stdout.write(
-            f"3. Review apps/{app_name}/routes.py and apps/{app_name}/urls.py for URL mounting requirements."
+            f"3. If this app serves web endpoints, review apps/{app_name}/routes.py and apps/{app_name}/urls.py for URL mounting requirements."
         )
         self.stdout.write(f"4. Add templates in apps/{app_name}/templates/{app_name}/ and expand tests.")
         self.stdout.write(f"5. Add fixtures under apps/{app_name}/fixtures/ as needed.")

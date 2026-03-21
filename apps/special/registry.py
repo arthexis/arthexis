@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from argparse import Action
+from argparse import Action, ArgumentParser, _SubParsersAction
 from dataclasses import dataclass
 from typing import Any
 
@@ -59,6 +59,18 @@ def special_command(*, singular: str, plural: str, keystone_model: str = ""):
     return decorator
 
 
+def _iter_parser_actions(parser: ArgumentParser, *, nested: bool = False):
+    """Yield parser actions and whether they are nested under a subparser branch."""
+
+    for action in parser._actions:
+        if isinstance(action, _SubParsersAction):
+            yield action, nested
+            for choice in action.choices.values():
+                yield from _iter_parser_actions(choice, nested=True)
+            continue
+        yield action, nested
+
+
 def _value_type_from_action(action: Action) -> str:
     if action.nargs == 0 and action.const is True:
         return SpecialCommandParameter.ValueType.BOOLEAN
@@ -72,6 +84,8 @@ def _value_type_from_action(action: Action) -> str:
 
 
 def _kind_from_action(action: Action) -> str:
+    if isinstance(action, _SubParsersAction):
+        return SpecialCommandParameter.ParameterKind.POSITIONAL
     if not action.option_strings:
         return SpecialCommandParameter.ParameterKind.POSITIONAL
     if action.nargs == 0 and action.const is True:
@@ -87,6 +101,9 @@ def _allows_multiple(action: Action) -> bool:
 
 def _validate_action_shape(action: Action) -> None:
     """Reject parser shapes that cannot be reconstructed safely at runtime."""
+
+    if isinstance(action, _SubParsersAction):
+        return
 
     if not action.option_strings and not getattr(action, "required", True):
         raise SpecialCommandValidationError(
@@ -137,6 +154,7 @@ def sync_special_command(
                 continue
 
             _validate_action_shape(action)
+            seen_parameters.add(action.dest)
 
             cli_name = (
                 action.option_strings[-1] if action.option_strings else action.dest
@@ -148,7 +166,7 @@ def sync_special_command(
                 cli_name=cli_name,
                 kind=_kind_from_action(action),
                 value_type=_value_type_from_action(action),
-                is_required=bool(getattr(action, "required", False)),
+                is_required=False if is_nested else bool(getattr(action, "required", False)),
                 allows_multiple=_allows_multiple(action),
                 choices=choices,
                 nargs=getattr(action, "nargs", None),

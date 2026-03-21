@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.app.models import Application
+from apps.app.models import Application, _load_manifest_app_entries
 from utils.enabled_apps_lock import get_enabled_apps_lock_path
 
 
@@ -79,3 +79,19 @@ def test_refresh_enabled_apps_lock_respects_disabled_manifest_labels(monkeypatch
 
     assert "apps.blog" not in lock_entries
     assert "enabled-core" in lock_entries
+
+
+@pytest.mark.pr("6193", "2026-03-12T00:00:00Z")
+def test_load_manifest_app_entries_includes_classification_projects_special_shortcuts():
+    """Manifest discovery should include app entries for recently-manifested apps."""
+
+    manifest_app_entries = _load_manifest_app_entries()
+    expected_apps = {
+        "apps.classification",
+        "apps.projects",
+        "apps.shortcuts",
+        "apps.special",
+    }
+
+    assert expected_apps.issubset(manifest_app_entries)
+    assert "apps.game" not in manifest_app_entries

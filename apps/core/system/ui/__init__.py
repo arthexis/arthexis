@@ -240,6 +240,11 @@ def _gather_info(auto_upgrade_next_check: Callable[[], str]) -> dict:
     running = False
     service_status = ""
     service = info["service"]
+
+    process_running, process_port = _detect_runserver_process()
+    if process_running:
+        detected_port = process_port
+
     if service and shutil.which("systemctl"):
         try:
             result = subprocess.run(
@@ -257,17 +262,14 @@ def _gather_info(auto_upgrade_next_check: Callable[[], str]) -> dict:
         except Exception:
             pass
     else:
-        process_running, process_port = _detect_runserver_process()
-        if process_running:
-            running = True
-            detected_port = process_port
+        running = process_running
 
-        if not running or detected_port is None:
-            probe_running, probe_port = _probe_ports(_port_candidates(default_port))
-            if probe_running:
-                running = True
-                if detected_port is None:
-                    detected_port = probe_port
+    if not running or detected_port is None:
+        probe_running, probe_port = _probe_ports(_port_candidates(default_port))
+        if probe_running:
+            running = True
+            if detected_port is None:
+                detected_port = probe_port
 
     info["running"] = running
     info["port"] = detected_port if detected_port is not None else default_port
@@ -393,7 +395,7 @@ def _read_startup_report(
         "clock_warning": clock_warning,
     }
 
-# Deprecated compatibility re-exports.
+# Legacy compatibility re-exports.
 # Prefer importing these from ``apps.core.system_ui``.
 build_nginx_report = _build_nginx_report
 build_services_report = _build_services_report

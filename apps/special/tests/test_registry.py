@@ -42,6 +42,27 @@ class OptionalPositionalCommand(BaseCommand):
         return None
 
 
+@special_command(singular="nested", plural="nesteds")
+class NestedSubparserCommand(BaseCommand):
+    """Command with nested subparsers used to verify sync compatibility."""
+
+    def add_arguments(self, parser) -> None:
+        parser.add_argument("--shared")
+        subparsers = parser.add_subparsers(dest="action")
+
+        show_parser = subparsers.add_parser("show")
+        show_parser.add_argument("slug")
+
+        auth_parser = subparsers.add_parser("auth")
+        auth_subparsers = auth_parser.add_subparsers(dest="auth_action", required=True)
+        auth_set = auth_subparsers.add_parser("set")
+        auth_set.add_argument("username")
+        auth_set.add_argument("password")
+
+    def handle(self, *args, **options) -> None:
+        return None
+
+
 @pytest.mark.django_db
 def test_special_command_model_enforces_one_word_restrictions() -> None:
     """Special command names should enforce lowercase one-word restrictions."""
@@ -251,3 +272,50 @@ def test_call_special_command_reports_unknown_command() -> None:
 
     with pytest.raises(SpecialCommandValidationError, match="Unknown special command"):
         call_special_command("does-not-exist")
+
+
+@pytest.mark.django_db
+def test_sync_special_command_supports_nested_subparsers() -> None:
+    """Sync should flatten nested subparsers without rejecting the command."""
+
+    special = sync_special_command(command_name="nested", command_cls=NestedSubparserCommand)
+
+    parameter_map = {parameter.name: parameter for parameter in special.parameters.all()}
+
+    assert parameter_map["action"].kind == SpecialCommandParameter.ParameterKind.POSITIONAL
+    assert parameter_map["action"].choices == ["show", "auth"]
+    assert parameter_map["slug"].kind == SpecialCommandParameter.ParameterKind.POSITIONAL
+    assert parameter_map["auth_action"].choices == ["set"]
+    assert parameter_map["username"].kind == SpecialCommandParameter.ParameterKind.POSITIONAL
+    assert parameter_map["shared"].kind == SpecialCommandParameter.ParameterKind.OPTION
+
+
+@pytest.mark.django_db
+def test_call_special_command_supports_nested_subparsers(monkeypatch) -> None:
+    """Nested subparser selections should be forwarded in positional order."""
+
+    sync_special_command(command_name="nested", command_cls=NestedSubparserCommand)
+
+    captured: dict[str, object] = {}
+
+    def fake_call_command(name: str, *args, **kwargs):
+        captured["name"] = name
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return "ok"
+
+    monkeypatch.setattr("apps.special.registry.call_command", fake_call_command)
+
+    result = call_special_command(
+        "nested",
+        action="auth",
+        auth_action="set",
+        username="cp-user",
+        password="secret123",
+        shared="station-a",
+    )
+
+    assert result == "ok"
+    assert captured["name"] == "nested"
+    assert captured["args"] == ("auth", "set", "cp-user", "secret123")
+    assert captured["kwargs"] == {"shared": "station-a"}

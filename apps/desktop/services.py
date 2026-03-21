@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import base64
 import ast
+import base64
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,9 +15,13 @@ import sys
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractBaseUser
+from django.db.utils import OperationalError, ProgrammingError
 
 from apps.desktop.models import DesktopShortcut, RegisteredExtension
 from apps.nodes.models import Node
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -34,6 +39,7 @@ class DesktopSyncResult:
     installed: int = 0
     skipped: int = 0
     removed: int = 0
+    skipped_db_unavailable: bool = False
 
 
 def build_windows_registry_command(extension: RegisteredExtension) -> str:
@@ -379,6 +385,12 @@ def render_shortcut_desktop_entry(shortcut: DesktopShortcut, *, exec_value: str,
 
 def sync_desktop_shortcuts(*, base_dir: Path, username: str, port: int, remove_stale: bool = True) -> DesktopSyncResult:
     """Synchronize desktop shortcut files from ``DesktopShortcut`` records."""
+
+    try:
+        DesktopShortcut.objects.exists()
+    except (OperationalError, ProgrammingError) as exc:
+        logger.warning("Desktop shortcut sync skipped because database is unavailable: %s", exc)
+        return DesktopSyncResult(skipped_db_unavailable=True)
 
     managed_dirs = _all_managed_dirs(base_dir=base_dir, username=username)
     if not managed_dirs:

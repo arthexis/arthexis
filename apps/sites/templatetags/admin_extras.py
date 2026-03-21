@@ -648,12 +648,19 @@ def related_admin_models(opts):
             return None
         if model_cls in registry:
             return model_cls
-        concrete_model = getattr(model_cls, "_meta", None)
-        if concrete_model is None:
+        concrete_options = getattr(model_cls, "_meta", None)
+        if concrete_options is None:
             return None
-        concrete_model = concrete_model.concrete_model
+        concrete_model = concrete_options.concrete_model
         if concrete_model in registry:
             return concrete_model
+
+        for registered_model in registry:
+            registered_options = getattr(registered_model, "_meta", None)
+            if registered_options is None:
+                continue
+            if registered_options.concrete_model == concrete_model:
+                return registered_model
         return None
 
     def describe_relation(field):
@@ -700,8 +707,10 @@ def related_admin_models(opts):
             relation_name = relation_lookup_name(field)
             if relation_name:
                 lookups.append(f"{relation_name}__id__in")
-
-        return sorted(set(lookups))
+        resolved = sorted(set(lookups))
+        if resolved:
+            resolved.append("selected-id__id__in")
+        return resolved
 
     def add_model(model_cls, relation_type: str, relation_title: str):
         registered_model = get_registered(model_cls)

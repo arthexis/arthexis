@@ -32,3 +32,7 @@ These 30 tests were previously selected by the `critical` marker through regress
 28. `apps/evergo/tests/test_evergo_command.py::test_evergo_command_saves_credentials_and_tests_login`
 29. `apps/evergo/tests/test_evergo_command.py::test_evergo_command_load_customers_with_inline_queries`
 30. `apps/evergo/tests/test_evergo_command.py::test_evergo_command_load_customers_requires_query_source`
+
+## Test suite maintenance note
+
+Redundant UI, presentation, redirect, and default-formatting checks were trimmed in favor of representative coverage points so critical behavior paths stay covered without repetitive wiring assertions.

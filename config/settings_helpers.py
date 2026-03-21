@@ -127,12 +127,13 @@ def strip_ipv6_brackets(host: str) -> str:
 def extract_ip_from_host(host: str):
     """Return an :mod:`ipaddress` object for ``host`` when possible."""
 
-    candidate = strip_ipv6_brackets(host)
+    normalized_host = (host or "").split(",", 1)[0].strip().rstrip(".")
+    candidate = strip_ipv6_brackets(normalized_host)
     try:
         return ipaddress.ip_address(candidate)
     except ValueError:
-        domain, _port = split_domain_port(host)
-        if domain and domain != host:
+        domain, _port = split_domain_port(normalized_host)
+        if domain and domain != normalized_host:
             candidate = strip_ipv6_brackets(domain)
             try:
                 return ipaddress.ip_address(candidate)
@@ -147,9 +148,11 @@ def validate_host_with_subnets(host, allowed_hosts, original_validate=None):
     if original_validate is None:
         original_validate = http_request.validate_host
 
-    ip = extract_ip_from_host(host)
+    normalized_host = (host or "").split(",", 1)[0].strip().rstrip(".")
+
+    ip = extract_ip_from_host(normalized_host)
     if ip is None:
-        return original_validate(host, allowed_hosts)
+        return original_validate(normalized_host, allowed_hosts)
 
     for pattern in allowed_hosts:
         try:
@@ -158,7 +161,7 @@ def validate_host_with_subnets(host, allowed_hosts, original_validate=None):
             continue
         if ip in network:
             return True
-    return original_validate(host, allowed_hosts)
+    return original_validate(normalized_host, allowed_hosts)
 
 
 def install_validate_host_with_subnets() -> None:

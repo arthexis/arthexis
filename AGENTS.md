@@ -14,6 +14,9 @@ Agents must prioritize **clarity, correctness, and harmony with the existing cod
 * Avoid unnecessary complexity.
 * Prefer **clarity and maintainability** over cleverness.
 * The application suite should remain **flexible and powerful**, especially for administrators.
+* Remind users and developers that issues should be solved by **extending the arthexis suite** to integrate with the relevant framework or service, rather than by building disconnected side systems.
+* Treat Arthexis as an **OCPP-compatible WebSocket server** that can act as a pivot for broader integrations by modeling external APIs and processes through Django apps and migrations.
+* When using or extending Arthexis for a user request, agents must also contribute to the project's health with appropriate adjacent improvements, such as tidying tests, removing obsolete cruft, cleaning docs, polishing minor glitches, and addressing security issues when they are found.
 
 Agents must **not overprotect admins** or artificially restrict capabilities unless there is a clear security concern.
 
@@ -44,6 +47,7 @@ curl https://api.github.com/repos/<org>/<repo>/issues
 
   * a clearly appropriate app already exists, or
   * the user explicitly specifies otherwise.
+* Prefer integration work that extends the suite's role as the system pivot, including Django models and migrations that represent external APIs, workflows, and business processes when that is the clearest fit.
 
 When new apps are created:
 
@@ -86,6 +90,8 @@ All functions and classes should include **docstrings** describing:
 * return values
 * raised exceptions (when relevant)
 
+Code within test modules (e.g., test functions and classes) is exempt from this requirement unless a docstring is needed to clarify non-obvious behavior.
+
 ---
 
 # Testing Policy
@@ -95,6 +101,9 @@ Agents must run relevant tests after code changes.
 ### Test Execution
 
 * Execute tests and **fix errors introduced by changes**.
+* Prefer validated repository entrypoints over ad-hoc interpreter calls. Run `./env-refresh.sh --deps-only` before Django or pytest commands when the environment may be unbootstrapped.
+* Use `.venv/bin/python` (or the repo's validated wrapper/management entrypoints) instead of bare `python` when invoking `manage.py` or `pytest` directly.
+* Prefer `python manage.py test run -- ...` and `python manage.py migrations check` over raw `python -m pytest` / `makemigrations --check` when those entrypoints cover the task.
 * Avoid creating tests for **micro-behaviors** unless:
 
   * they are security-relevant, or
@@ -107,15 +116,6 @@ Agents must run relevant tests after code changes.
 * Each **feature should have a test**.
 * Prefer **quality over quantity** of tests.
 * Do **not create tests solely to validate styling**.
-* Apply required marks to tag the PR of origin.
-
-Example:
-
-```python
-@pytest.mark.pr_origin(6172)
-def test_my_feature():
-    ...
-```
 
 Styling will be validated through previews.
 
@@ -294,8 +294,7 @@ Focus on:
 * preserving consistency with the codebase
 * maintaining developer flexibility
 * enabling powerful administrative capabilities
-
----
+* extending Arthexis so it can integrate cleanly with the systems around it
 
 If multiple solutions are possible, choose the one that:
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import uuid
@@ -15,6 +16,7 @@ from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+from apps.cards.models import RFID as CoreRFID
 from apps.ocpp import store
 from apps.ocpp.models import Charger, MeterValue, Transaction
 from apps.ocpp.views import _aggregate_dashboard_state
@@ -26,148 +28,318 @@ class Command(BaseCommand):
     help = "Inspect configured OCPP chargers and update their RFID settings."
 
     def add_arguments(self, parser) -> None:  # pragma: no cover - simple wiring
+        """Register selectors, legacy flags, and verb-style subcommands."""
+
+        parser.formatter_class = argparse.RawDescriptionHelpFormatter
+        parser.epilog = (
+            "Examples:\n"
+            "  charger show --sn CP-01\n"
+            "  charger tail 50 --sn CP-01 --cp A\n"
+            "  charger sessions 10 --sn CP-01\n"
+            "  charger rfid on --sn CP-01\n"
+            "  charger auth set cp-user secret123 --sn CP-01\n"
+            "  charger rename 'Main Hub' --sn CP-01\n"
+            "  charger stop --sn CP-01\n"
+            "  charger restart --sn CP-01\n"
+            "\n"
+            "Legacy flags such as --tail, --sessions, --rfid-enable, "
+            "--ws-auth-clear,\n"
+            "--rename, --send-stop, and --send-restart remain available during "
+            "the transition."
+        )
+
+        selector_parent = self._build_selector_parent()
         parser.add_argument(
-            "--sn",
-            dest="serial",
+            '--sn',
+            dest='serial',
             help=(
-                "Serial number (or suffix) used to narrow the charger selection. "
-                "Matching is case-insensitive and falls back to helpful suffix "
-                "matching."
+                'Serial number (or suffix) used to narrow the charger selection. '
+                'Matching is case-insensitive and falls back to helpful suffix '
+                'matching.'
             ),
         )
         parser.add_argument(
-            "-cp",
-            "--cp",
-            dest="cp",
+            '-cp',
+            '--cp',
+            dest='cp',
             help=(
-                "Connector identifier used to filter chargers. Provide a connector "
+                'Connector identifier used to filter chargers. Provide a connector '
                 "number or 'all' to select all connector charge points. Non-numeric "
-                "values fall back to matching the charge point path, ignoring "
-                "surrounding slashes."
+                'values fall back to matching the charge point path, ignoring '
+                'surrounding slashes.'
             ),
         )
         parser.add_argument(
-            "--tail",
-            dest="tail",
+            '--default-base',
+            action='store_true',
+            help='Select the first available base charger when no selector is provided.',
+        )
+        parser.add_argument(
+            '--tail',
+            dest='tail',
             type=int,
-            nargs="?",
+            nargs='?',
             const=20,
-            help=(
-                "Show the last N log entries for the selected charger/connector. "
-                "Defaults to 20 entries when no value is provided."
-            ),
+            help='Legacy alias for "tail". Show the last N log entries.',
         )
         parser.add_argument(
-            "--sessions",
-            dest="sessions",
+            '--sessions',
+            dest='sessions',
             type=int,
-            nargs="?",
+            nargs='?',
             const=10,
-            help=(
-                "Show the last N session logs for the selected chargers. Defaults to "
-                "10 sessions when no value is provided."
-            ),
+            help='Legacy alias for "sessions". Show the last N session logs.',
         )
         parser.add_argument(
-            "--rfid-enable",
-            action="store_true",
-            help="Enable the RFID authentication requirement for the matched chargers.",
+            '--rfid-enable',
+            action='store_true',
+            help='Legacy alias for "rfid on".',
         )
         parser.add_argument(
-            "--rfid-disable",
-            action="store_true",
-            help=(
-                "Disable the RFID authentication requirement for the matched "
-                "chargers."
-            ),
+            '--rfid-disable',
+            action='store_true',
+            help='Legacy alias for "rfid off".',
         )
         parser.add_argument(
-            "--ws-auth-username",
-            dest="ws_auth_username",
-            help=(
-                "Username used for HTTP Basic websocket authentication. Requires "
-                "--ws-auth-password and at least one charger selector."
-            ),
+            '--send-local-rfids',
+            action='store_true',
+            help='Legacy alias for "rfid push".',
         )
         parser.add_argument(
-            "--ws-auth-password",
-            dest="ws_auth_password",
-            help=(
-                "Password for --ws-auth-username. The user is created when missing "
-                "and password is updated when present."
-            ),
+            '--rfid-lockdown',
+            action='store_true',
+            help='Legacy alias for "rfid lock".',
         )
         parser.add_argument(
-            "--ws-auth-clear",
-            action="store_true",
-            help=(
-                "Remove HTTP Basic websocket protection from the matched chargers "
-                "(clears both user and group rules)."
-            ),
+            '--ws-auth-username',
+            dest='ws_auth_username',
+            help='Legacy alias for "auth set <username> <password>" username.',
         )
         parser.add_argument(
-            "--rename",
-            nargs="?",
-            const="",
-            help=(
-                "Rename the selected charger display name. Provide a value to rename "
-                "non-interactively, or pass --rename with no value for an interactive prompt."
-            ),
+            '--ws-auth-password',
+            dest='ws_auth_password',
+            help='Legacy alias for "auth set <username> <password>" password.',
         )
         parser.add_argument(
-            "--send-stop",
-            action="store_true",
-            help="Send a remote stop request to the selected charger(s).",
+            '--ws-auth-clear',
+            action='store_true',
+            help='Legacy alias for "auth clear".',
         )
         parser.add_argument(
-            "--send-restart",
-            action="store_true",
-            help="Send a soft reset request to the selected charger(s).",
+            '--rename',
+            nargs='?',
+            const='',
+            help='Legacy alias for "rename <name>".',
         )
         parser.add_argument(
-            "--default-base",
-            action="store_true",
-            help="Select the first available base charger when no selector is provided.",
+            '--send-stop',
+            action='store_true',
+            help='Legacy alias for "stop".',
         )
+        parser.add_argument(
+            '--send-restart',
+            action='store_true',
+            help='Legacy alias for "restart".',
+        )
+
+        subparsers = parser.add_subparsers(dest='action')
+
+        subparsers.add_parser(
+            'show',
+            parents=[selector_parent],
+            help='Show charger details or the default table view.',
+            description='Show charger details or the default table view.',
+        )
+
+        tail_parser = subparsers.add_parser(
+            'tail',
+            parents=[selector_parent],
+            help='Show the last N charger log entries.',
+            description='Show the last N charger log entries.',
+        )
+        tail_parser.add_argument('count', type=int, nargs='?', default=20)
+
+        sessions_parser = subparsers.add_parser(
+            'sessions',
+            parents=[selector_parent],
+            help='Show the last N charger sessions.',
+            description='Show the last N charger sessions.',
+        )
+        sessions_parser.add_argument('count', type=int, nargs='?', default=10)
+
+        rfid_parser = subparsers.add_parser(
+            'rfid',
+            parents=[selector_parent],
+            help='Manage RFID requirements and local lists.',
+            description='Manage RFID requirements and local lists.',
+        )
+        rfid_parser.add_argument('rfid_action', choices=['on', 'off', 'push', 'lock'])
+
+        auth_parser = subparsers.add_parser(
+            'auth',
+            help='Manage websocket basic auth for chargers.',
+            description='Manage websocket basic auth for chargers.',
+        )
+        auth_subparsers = auth_parser.add_subparsers(dest='auth_action', required=True)
+        auth_set = auth_subparsers.add_parser('set', parents=[selector_parent])
+        auth_set.add_argument('username')
+        auth_set.add_argument('password')
+        auth_subparsers.add_parser('clear', parents=[selector_parent])
+
+        rename_parser = subparsers.add_parser(
+            'rename',
+            parents=[selector_parent],
+            help='Rename a charger display name.',
+            description='Rename a charger display name.',
+        )
+        rename_parser.add_argument('name', nargs='?', default='')
+
+        subparsers.add_parser(
+            'stop',
+            parents=[selector_parent],
+            help='Send a remote stop request.',
+            description='Send a remote stop request.',
+        )
+        subparsers.add_parser(
+            'restart',
+            parents=[selector_parent],
+            help='Send a soft reset request.',
+            description='Send a soft reset request.',
+        )
+
+    def _build_selector_parent(self):
+        """Return a parser parent that shares charger selection options."""
+
+        parent = argparse.ArgumentParser(add_help=False)
+        parent.add_argument('--sn', dest='serial')
+        parent.add_argument('-cp', '--cp', dest='cp')
+        parent.add_argument('--default-base', action='store_true')
+        return parent
 
     def handle(self, *args, **options):
-        serial = options.get("serial")
-        cp_raw = options.get("cp")
-        tail = options.get("tail")
-        sessions = options.get("sessions")
-        enable_rfid = options.get("rfid_enable")
-        disable_rfid = options.get("rfid_disable")
-        ws_auth_username = (options.get("ws_auth_username") or "").strip()
-        ws_auth_password = options.get("ws_auth_password")
-        ws_auth_clear = options.get("ws_auth_clear")
-        rename_value = options.get("rename")
-        send_stop = bool(options.get("send_stop"))
-        send_restart = bool(options.get("send_restart"))
-        use_default_base = bool(options.get("default_base"))
+        """Dispatch charger command actions using verb-style subcommands or legacy flags."""
 
-        self._validate_option_combinations(
-            enable_rfid=enable_rfid,
-            disable_rfid=disable_rfid,
-            ws_auth_username=ws_auth_username,
-            ws_auth_password=ws_auth_password,
-            ws_auth_clear=ws_auth_clear,
-            send_stop=send_stop,
-            send_restart=send_restart,
-            tail=tail,
-            sessions=sessions,
+        action = self._resolve_action(options)
+        queryset, selection = self._select_chargers(options)
+        chargers = list(queryset.order_by('charger_id', 'connector_id'))
+
+        if not chargers:
+            self.stdout.write('No chargers found.')
+            return
+
+        self._execute_action(
+            action=action,
+            chargers=chargers,
+            queryset=queryset,
+            selection=selection,
         )
 
+    def _resolve_action(self, options: dict[str, object]) -> dict[str, object]:
+        """Resolve the requested action from verb-style subcommands or legacy flags."""
+
+        subcommand = options.get('action')
+        if subcommand == 'show':
+            return {'name': 'show'}
+        if subcommand == 'tail':
+            return {'name': 'tail', 'count': options.get('count')}
+        if subcommand == 'sessions':
+            return {'name': 'sessions', 'count': options.get('count')}
+        if subcommand == 'rfid':
+            return {'name': 'rfid', 'mode': options.get('rfid_action')}
+        if subcommand == 'auth':
+            auth_action = options.get('auth_action')
+            if auth_action == 'set':
+                return {
+                    'name': 'auth_set',
+                    'username': (options.get('username') or '').strip(),
+                    'password': options.get('password'),
+                }
+            return {'name': 'auth_clear'}
+        if subcommand == 'rename':
+            return {'name': 'rename', 'value': options.get('name')}
+        if subcommand == 'stop':
+            return {'name': 'stop'}
+        if subcommand == 'restart':
+            return {'name': 'restart'}
+
+        return self._resolve_legacy_action(options)
+
+    def _resolve_legacy_action(self, options: dict[str, object]) -> dict[str, object]:
+        """Resolve the requested action using backward-compatible long flags."""
+
+        if options.get('rfid_lockdown') and options.get('send_local_rfids'):
+            raise CommandError(
+                '--rfid-lockdown already sends local RFIDs; remove '
+                '--send-local-rfids.'
+            )
+
+        ws_auth_username = (options.get('ws_auth_username') or '').strip()
+        ws_auth_password = options.get('ws_auth_password')
+        if options.get('ws_auth_clear') and (ws_auth_username or ws_auth_password):
+            raise CommandError(
+                'Use either --ws-auth-clear or '
+                '--ws-auth-username/--ws-auth-password, not both.'
+            )
+
+        actions: list[dict[str, object]] = []
+        if options.get('tail') is not None:
+            actions.append({'name': 'tail', 'count': options.get('tail')})
+        if options.get('sessions') is not None:
+            actions.append({'name': 'sessions', 'count': options.get('sessions')})
+        if options.get('rfid_enable'):
+            actions.append({'name': 'rfid', 'mode': 'on'})
+        if options.get('rfid_disable'):
+            actions.append({'name': 'rfid', 'mode': 'off'})
+        if options.get('send_local_rfids'):
+            actions.append({'name': 'rfid', 'mode': 'push'})
+        if options.get('rfid_lockdown'):
+            actions.append({'name': 'rfid', 'mode': 'lock'})
+
+        if ws_auth_username or ws_auth_password:
+            actions.append(
+                {
+                    'name': 'auth_set',
+                    'username': ws_auth_username,
+                    'password': ws_auth_password,
+                }
+            )
+        if options.get('ws_auth_clear'):
+            actions.append({'name': 'auth_clear'})
+        if options.get('rename') is not None:
+            actions.append({'name': 'rename', 'value': options.get('rename')})
+        if options.get('send_stop'):
+            actions.append({'name': 'stop'})
+        if options.get('send_restart'):
+            actions.append({'name': 'restart'})
+
+        if len(actions) > 1:
+            raise CommandError('Choose one charger action at a time.')
+        if actions:
+            return actions[0]
+        return {'name': 'show'}
+
+    def _select_chargers(
+        self, options: dict[str, object]
+    ) -> tuple[QuerySet[Charger], dict[str, object]]:
+        """Return the selected charger queryset and normalized selector metadata."""
+
+        serial = options.get('serial')
+        cp_raw = options.get('cp')
+        use_default_base = bool(options.get('default_base'))
         queryset = (
             Charger.objects.all()
-            .select_related("location", "manager_node")
+            .select_related('location', 'manager_node')
             .prefetch_related(self._transaction_prefetch())
         )
 
         if use_default_base and not serial and not cp_raw:
             default_charger = self._resolve_default_base_charger(queryset)
             if not default_charger:
-                self.stdout.write("No chargers found.")
-                return
+                return queryset.none(), {
+                    'serial': serial,
+                    'cp_raw': cp_raw,
+                    'has_selector': False,
+                }
             queryset = queryset.filter(pk=default_charger.pk)
             serial = default_charger.charger_id
 
@@ -195,7 +367,7 @@ class Command(BaseCommand):
             if match_count > 1:
                 self.stdout.write(
                     self.style.WARNING(
-                        "Multiple chargers matched the provided connector id; showing all matches."
+                        'Multiple chargers matched the provided connector id; showing all matches.'
                     )
                 )
 
@@ -206,224 +378,227 @@ class Command(BaseCommand):
                     f"No chargers found matching charge point path '{cp_path}'."
                 )
 
-        has_charger_selector = (
-            bool(serial) or connector_filter is not None or bool(cp_path)
-        )
+        return queryset, {
+            'serial': serial,
+            'cp_raw': cp_raw,
+            'connector_filter': connector_filter,
+            'cp_path': cp_path,
+            'has_selector': bool(serial)
+            or connector_filter is not None
+            or bool(cp_path),
+        }
 
-        self._validate_selector_requirements(
-            has_charger_selector=has_charger_selector,
-            enable_rfid=enable_rfid,
-            disable_rfid=disable_rfid,
-            ws_auth_username=ws_auth_username,
-            ws_auth_clear=ws_auth_clear,
-            rename_value=rename_value,
-            send_stop=send_stop,
-            send_restart=send_restart,
-        )
+    def _execute_action(
+        self,
+        *,
+        action: dict[str, object],
+        chargers: list[Charger],
+        queryset: QuerySet[Charger],
+        selection: dict[str, object],
+    ) -> None:
+        """Validate and execute the selected charger action."""
 
-        chargers = list(queryset.order_by("charger_id", "connector_id"))
-
-        if not chargers:
-            self.stdout.write("No chargers found.")
+        name = action['name']
+        if name == 'show':
+            if selection['serial'] or selection['cp_raw']:
+                self._render_details(chargers)
+            else:
+                self._render_table(chargers)
             return
 
-        if self._handle_mutating_actions(
-            chargers=chargers,
-            queryset=queryset,
-            enable_rfid=enable_rfid,
-            disable_rfid=disable_rfid,
-            ws_auth_username=ws_auth_username,
-            ws_auth_password=ws_auth_password,
-            ws_auth_clear=ws_auth_clear,
-            rename_value=rename_value,
-            send_stop=send_stop,
-            send_restart=send_restart,
-        ):
-            return
-
-        if tail is not None:
+        if name == 'tail':
+            count = self._validate_positive_count(action.get('count'), '--tail')
+            self._require_selector(
+                selection,
+                message=(
+                    'Log tail requires selecting at least one charger with --sn '
+                    'and/or --cp.'
+                ),
+            )
             if len(chargers) != 1:
                 raise CommandError(
-                    "--tail requires selecting exactly one charger using --sn and/or --cp."
+                    '--tail requires selecting exactly one charger using --sn '
+                    'and/or --cp.'
                 )
             self._render_details(chargers)
-            self._render_tail(chargers[0], tail)
+            self._render_tail(chargers[0], count)
             return
 
-        if sessions is not None:
-            self._render_sessions(chargers, sessions)
+        if name == 'sessions':
+            count = self._validate_positive_count(action.get('count'), '--sessions')
+            self._render_sessions(chargers, count)
             return
 
-        if serial or cp_raw:
-            self._render_details(chargers)
-        else:
-            self._render_table(chargers)
+        if name == 'auth_set':
+            self._require_selector(
+                selection,
+                message=(
+                    'Websocket auth changes require selecting at least one '
+                    'charger with --sn and/or --cp.'
+                ),
+            )
+            self._handle_auth_set(
+                chargers=chargers,
+                queryset=queryset,
+                username=str(action.get('username') or ''),
+                password=action.get('password'),
+            )
+            return
+        if name == 'auth_clear':
+            self._require_selector(
+                selection,
+                message=(
+                    'Websocket auth changes require selecting at least one '
+                    'charger with --sn and/or --cp.'
+                ),
+            )
+            updated = queryset.update(ws_auth_user=None, ws_auth_group=None)
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f'Cleared websocket auth protection on {updated} charger(s).'
+                )
+            )
+            return
+        self._require_selector(selection)
 
-    def _validate_option_combinations(
+        if name == 'rfid':
+            self._handle_rfid_action(
+                chargers=chargers,
+                queryset=queryset,
+                mode=str(action['mode']),
+            )
+            return
+        if name == 'rename':
+            self._handle_rename(chargers=chargers, value=action.get('value'))
+            return
+        if name == 'stop':
+            sent = self._send_stop(chargers)
+            self.stdout.write(
+                self.style.SUCCESS(f'Sent remote stop request to {sent} charger(s).')
+            )
+            return
+        if name == 'restart':
+            restart_targets = self._action_targets_for_single_station(chargers)
+            sent = self._send_restart(restart_targets)
+            self.stdout.write(
+                self.style.SUCCESS(f'Sent reset request to {sent} charger(s).')
+            )
+            return
+        raise CommandError(f'Unknown charger action: {name}')
+
+    def _require_selector(
         self,
+        selection: dict[str, object],
         *,
-        enable_rfid: bool,
-        disable_rfid: bool,
-        ws_auth_username: str,
-        ws_auth_password: str | None,
-        ws_auth_clear: bool,
-        send_stop: bool,
-        send_restart: bool,
-        tail: int | None,
-        sessions: int | None,
+        message: str = (
+            'This action requires selecting at least one charger with --sn '
+            'and/or --cp.'
+        ),
     ) -> None:
-        if enable_rfid and disable_rfid:
-            raise CommandError("Use either --rfid-enable or --rfid-disable, not both.")
+        """Require an explicit charger selector for mutating or focused actions."""
 
-        if ws_auth_username and not ws_auth_password:
-            raise CommandError("--ws-auth-username requires --ws-auth-password.")
+        if not selection['has_selector']:
+            raise CommandError(message)
 
-        if ws_auth_password and not ws_auth_username:
-            raise CommandError("--ws-auth-password requires --ws-auth-username.")
+    def _validate_positive_count(self, value: object, option_name: str) -> int:
+        """Return a validated positive count for tail and sessions actions."""
 
-        if ws_auth_clear and ws_auth_username:
-            raise CommandError(
-                "Use either --ws-auth-clear or --ws-auth-username/--ws-auth-password, not both."
-            )
+        count = int(value)
+        if count <= 0:
+            raise CommandError(f'{option_name} requires a positive number.')
+        return count
 
-        if send_stop and send_restart:
-            raise CommandError("Use either --send-stop or --send-restart, not both.")
-
-        if tail is not None and tail <= 0:
-            raise CommandError("--tail requires a positive number of log entries.")
-
-        if sessions is not None and sessions <= 0:
-            raise CommandError("--sessions requires a positive number of sessions.")
-
-    def _validate_selector_requirements(
-        self,
-        *,
-        has_charger_selector: bool,
-        enable_rfid: bool,
-        disable_rfid: bool,
-        ws_auth_username: str,
-        ws_auth_clear: bool,
-        rename_value: str | None,
-        send_stop: bool,
-        send_restart: bool,
-    ) -> None:
-        if (enable_rfid or disable_rfid) and not has_charger_selector:
-            raise CommandError(
-                "RFID toggles require selecting at least one charger with --sn and/or --cp."
-            )
-
-        if (ws_auth_username or ws_auth_clear) and not has_charger_selector:
-            raise CommandError(
-                "Websocket auth changes require selecting at least one charger with --sn and/or --cp."
-            )
-
-        if (
-            rename_value is not None or send_stop or send_restart
-        ) and not has_charger_selector:
-            raise CommandError(
-                "This action requires selecting at least one charger with --sn and/or --cp."
-            )
-
-    def _handle_mutating_actions(
+    def _handle_rfid_action(
         self,
         *,
         chargers: list[Charger],
         queryset: QuerySet[Charger],
-        enable_rfid: bool,
-        disable_rfid: bool,
-        ws_auth_username: str,
-        ws_auth_password: str | None,
-        ws_auth_clear: bool,
-        rename_value: str | None,
-        send_stop: bool,
-        send_restart: bool,
-    ) -> bool:
-        if not (
-            enable_rfid
-            or disable_rfid
-            or ws_auth_username
-            or ws_auth_clear
-            or rename_value is not None
-            or send_stop
-            or send_restart
-        ):
-            return False
+        mode: str,
+    ) -> None:
+        """Apply one RFID action to the selected chargers."""
 
-        selected_chargers = chargers
-        selected_queryset = queryset
-        aggregate_target: Charger | None = None
-
-        if rename_value is not None or send_restart:
-            aggregate_target = self._resolve_aggregate_charger(chargers)
-
-        if enable_rfid or disable_rfid:
-            new_value = bool(enable_rfid)
-            updated = selected_queryset.update(require_rfid=new_value)
-            verb = "Enabled" if new_value else "Disabled"
+        if mode in {'on', 'off'}:
+            new_value = mode == 'on'
+            updated = queryset.update(require_rfid=new_value)
+            verb = 'Enabled' if new_value else 'Disabled'
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"{verb} RFID authentication on {updated} charger(s)."
+                    f'{verb} RFID authentication on {updated} charger(s).'
                 )
             )
-            selected_chargers = self._reload_chargers(selected_chargers)
-
-        if ws_auth_username:
-            ws_auth_user = self._upsert_ws_auth_user(
-                username=ws_auth_username,
-                password=ws_auth_password,
+            return
+        if mode == 'push':
+            sent = self._send_local_rfid_list(chargers)
+            self.stdout.write(
+                self.style.SUCCESS(f'Sent local RFID list to {sent} charger(s).')
             )
-            updated = selected_queryset.update(
-                ws_auth_user=ws_auth_user, ws_auth_group=None
-            )
+            return
+        if mode == 'lock':
+            updated = queryset.update(require_rfid=True)
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"Enabled websocket auth on {updated} charger(s) with user '{ws_auth_username}'."
+                    f'Enabled RFID authentication on {updated} charger(s).'
                 )
             )
-            selected_chargers = self._reload_chargers(selected_chargers)
-
-        if ws_auth_clear:
-            updated = selected_queryset.update(ws_auth_user=None, ws_auth_group=None)
+            sent = self._send_local_rfid_list(self._reload_chargers(chargers))
             self.stdout.write(
-                self.style.SUCCESS(
-                    f"Cleared websocket auth protection on {updated} charger(s)."
-                )
+                self.style.SUCCESS(f'Sent local RFID list to {sent} charger(s).')
             )
-            selected_chargers = self._reload_chargers(selected_chargers)
+            return
+        raise CommandError(f'Unknown RFID action: {mode}')
 
-        if rename_value is not None:
-            rename_targets = (
-                [aggregate_target] if aggregate_target is not None else chargers
-            )
-            if len(rename_targets) != 1:
-                raise CommandError(
-                    "--rename requires selecting exactly one charger using --sn and/or --cp."
-                )
-            renamed = self._rename_charger(
-                rename_targets[0],
-                rename_value,
-                interactive=rename_value == "",
-            )
-            self.stdout.write(
-                self.style.SUCCESS(f"Renamed charger to '{renamed.display_name}'.")
-            )
+    def _handle_auth_set(
+        self,
+        *,
+        chargers: list[Charger],
+        queryset: QuerySet[Charger],
+        username: str,
+        password: object,
+    ) -> None:
+        """Enable websocket auth on the selected chargers with one user."""
 
-        if send_stop:
-            sent = self._send_stop(chargers)
-            self.stdout.write(
-                self.style.SUCCESS(f"Sent remote stop request to {sent} charger(s).")
+        username = username.strip()
+        if not username:
+            raise CommandError('--ws-auth-username is required.')
+        if not password:
+            raise CommandError('--ws-auth-password is required.')
+        ws_auth_user = self._upsert_ws_auth_user(
+            username=username,
+            password=str(password),
+        )
+        updated = queryset.update(ws_auth_user=ws_auth_user, ws_auth_group=None)
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Enabled websocket auth on {updated} charger(s) with user '{username}'."
             )
+        )
 
-        if send_restart:
-            restart_targets = (
-                [aggregate_target] if aggregate_target is not None else chargers
-            )
-            sent = self._send_restart(restart_targets)
-            self.stdout.write(
-                self.style.SUCCESS(f"Sent reset request to {sent} charger(s).")
-            )
+    def _handle_rename(self, *, chargers: list[Charger], value: object) -> None:
+        """Rename one selected charger, collapsing station selections to the base charger."""
 
-        return True
+        rename_targets = self._action_targets_for_single_station(chargers)
+        if len(rename_targets) != 1:
+            raise CommandError(
+                '--rename requires selecting exactly one charger using --sn '
+                'and/or --cp.'
+            )
+        rename_value = '' if value is None else str(value)
+        renamed = self._rename_charger(
+            rename_targets[0],
+            rename_value,
+            interactive=rename_value == '',
+        )
+        self.stdout.write(
+            self.style.SUCCESS(f"Renamed charger to '{renamed.display_name}'.")
+        )
+
+    def _action_targets_for_single_station(self, chargers: list[Charger]) -> list[Charger]:
+        """Return a collapsed base charger target for single-station actions when available."""
+
+        aggregate_target = self._resolve_aggregate_charger(chargers)
+        if aggregate_target is not None:
+            return [aggregate_target]
+        return chargers
 
     def _reload_chargers(self, chargers: list[Charger]) -> list[Charger]:
         return list(
@@ -653,6 +828,41 @@ class Command(BaseCommand):
             )
             sent += 1
         return sent
+
+    def _send_local_rfid_list(self, chargers: list[Charger]) -> int:
+        """Send ``SendLocalList`` full updates using released RFID entries."""
+
+        authorization_list = self._build_local_authorization_list()
+        sent = 0
+        for charger in chargers:
+            list_version = (charger.local_auth_list_version or 0) + 1
+            self._send_control_call(
+                charger,
+                action="SendLocalList",
+                payload={
+                    "listVersion": list_version,
+                    "updateType": "Full",
+                    "localAuthorizationList": [entry.copy() for entry in authorization_list],
+                },
+                metadata={"list_version": list_version, "list_size": len(authorization_list)},
+                timeout_message="SendLocalList request timed out",
+            )
+            sent += 1
+        return sent
+
+    def _build_local_authorization_list(self) -> list[dict[str, object]]:
+        """Return released RFID values encoded for OCPP ``SendLocalList`` payloads."""
+
+        return [
+            {
+                "idTag": (CoreRFID.normalize_code(tag.rfid) or "")[:20],
+                "idTagInfo": {"status": "Accepted"},
+            }
+            for tag in CoreRFID.objects.filter(released=True)
+            .order_by("rfid")
+            .only("rfid")
+            .iterator()
+        ]
 
     def _send_control_call(
         self,

@@ -20,6 +20,12 @@ repos:
         language: system
         pass_filenames: false
         stages: [commit]
+      - id: critical-tests
+        name: Run critical and regression tests
+        entry: scripts/git-hooks/pre-commit-critical-tests.sh
+        language: system
+        pass_filenames: false
+        stages: [commit]
       - id: ruff
         name: ruff
         entry: ruff check --select E9,F823

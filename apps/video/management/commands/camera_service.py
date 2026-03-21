@@ -7,7 +7,7 @@ from django.core.management.base import BaseCommand
 class Command(BaseCommand):
     """Backward-compatible wrapper for camera service mode."""
 
-    help = "Run camera service. Deprecated: use `video service`."
+    help = "Run camera service. Compatibility alias; prefer `video service`."
 
     def add_arguments(self, parser) -> None:
         """Register camera service compatibility arguments."""
@@ -26,7 +26,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         """Delegate camera service execution to ``video service``."""
 
-        self.stdout.write(self.style.WARNING("`camera_service` is deprecated; use `video service`."))
+        self.stdout.write(self.style.WARNING("`camera_service` is a legacy alias; use `video service`."))
 
         kwargs: dict[str, float] = {
             key: value

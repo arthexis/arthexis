@@ -8,8 +8,15 @@ import sys
 import pytest
 from django.core.management import CommandError, call_command
 
-from apps.tests.discovery import MAX_NODE_ID_LENGTH, _infer_app_label, _normalize_marks, discover_suite_tests
+from apps.tests.discovery import (
+    MAX_NODE_ID_LENGTH,
+    _infer_app_label,
+    _normalize_marks,
+    discover_suite_tests,
+)
 from apps.tests.models import SuiteTest
+
+pytestmark = pytest.mark.pr_origin(6302)
 
 
 def test_test_command_rejects_unknown_action() -> None:
@@ -32,7 +39,7 @@ def test_test_server_subcommand_does_not_require_vscode_cli(monkeypatch) -> None
         called["argv"] = argv
         return 0
 
-    monkeypatch.setattr("apps.vscode.test_server.main", fake_main)
+    monkeypatch.setattr("utils.devtools.test_server.main", fake_main)
 
     Command()._run_test_server(interval=1.5, debounce=0.5, latest=True)
 
@@ -102,7 +109,6 @@ def test_infer_app_label_from_apps_path() -> None:
     assert _infer_app_label("tests/test_misc.py") == ""
 
 
-
 def test_discover_suite_tests_truncates_long_node_ids(monkeypatch) -> None:
     """Regression: discovery should cap node ids to the SuiteTest field length."""
 
@@ -125,7 +131,9 @@ def test_discover_suite_tests_truncates_long_node_ids(monkeypatch) -> None:
         stdout = "collected 1 item\n" + json.dumps(payload)
         stderr = ""
 
-    monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: FakeCompletedProcess())
+    monkeypatch.setattr(
+        "subprocess.run", lambda *args, **kwargs: FakeCompletedProcess()
+    )
 
     tests = discover_suite_tests()
 
@@ -173,3 +181,37 @@ def test_discover_subcommand_is_atomic_on_bulk_create_failure(monkeypatch) -> No
     assert SuiteTest.objects.filter(
         node_id="apps/tests/test_existing.py::test_existing"
     ).exists()
+
+
+def test_run_subcommand_uses_validated_project_python(monkeypatch) -> None:
+    """Regression: ``test run`` should prefer the repository virtualenv interpreter."""
+
+    from apps.tests.management.commands.test import Command
+
+    captured: dict[str, object] = {}
+
+    def fake_run(command, cwd=None, env=None):
+        captured["command"] = command
+        captured["cwd"] = cwd
+        captured["env"] = env
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(
+        "apps.tests.management.commands.test.resolve_project_python",
+        lambda base_dir: "/tmp/project/.venv/bin/python",
+    )
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    Command()._run_pytest(["--", "-k", "smoke"])
+
+    assert captured["command"] == [
+        "/tmp/project/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-k",
+        "smoke",
+    ]

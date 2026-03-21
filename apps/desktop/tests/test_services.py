@@ -7,12 +7,15 @@ from pathlib import Path
 import pytest
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.db.utils import OperationalError
 
 from apps.desktop.models import DesktopShortcut
-from apps.desktop.services import sync_desktop_shortcuts
+from apps.desktop.services import DesktopSyncResult, sync_desktop_shortcuts
 
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.pr_origin(6266)]
 
 
 class _NodeStub:
@@ -98,3 +101,38 @@ def test_sync_desktop_shortcuts_removes_stale_file_when_location_changes(monkeyp
     assert result.removed >= 1
     assert applications_target.exists()
     assert not stale_desktop_file.exists()
+
+
+def test_sync_desktop_shortcuts_marks_db_unavailable_and_logs_warning(monkeypatch, caplog) -> None:
+    """Database availability failures should be visible and distinguishable in results."""
+
+    def _raise_operational_error() -> None:
+        raise OperationalError("database is down")
+
+    caplog.set_level("WARNING")
+    monkeypatch.setattr("apps.desktop.services.DesktopShortcut.objects.exists", _raise_operational_error)
+
+    result = sync_desktop_shortcuts(base_dir=Path("/home/tester/arthexis"), username="tester", port=8000)
+
+    assert result.skipped_db_unavailable is True
+    assert "database is unavailable" in caplog.text
+
+
+def test_sync_desktop_shortcuts_command_raises_when_db_is_unavailable(monkeypatch, tmp_path: Path) -> None:
+    """The management command should fail fast when sync is skipped for DB availability."""
+
+    def _skip_sync(**_kwargs) -> DesktopSyncResult:
+        return DesktopSyncResult(skipped_db_unavailable=True)
+
+    monkeypatch.setattr(
+        "apps.desktop.management.commands.sync_desktop_shortcuts.sync_desktop_shortcuts",
+        _skip_sync,
+    )
+
+    with pytest.raises(CommandError, match="database is unavailable"):
+        call_command(
+            "sync_desktop_shortcuts",
+            base_dir=str(tmp_path / "arthexis"),
+            username="tester",
+            port=8000,
+        )

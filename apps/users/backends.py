@@ -441,6 +441,16 @@ class LocalhostAdminBackend(ModelBackend):
         else:
             remote = request.META.get("REMOTE_ADDR", "") if request else ""
 
+        if remote.startswith("[") and "]" in remote:
+            remote = remote[1 : remote.index("]")]
+        elif ":" in remote and remote.count(":") == 1:
+            host, port = split_domain_port(remote)
+            if host and port:
+                remote = host
+
+        if "%" in remote:
+            remote = remote.split("%", 1)[0]
+
         try:
             return ipaddress.ip_address(remote)
         except ValueError:
