@@ -555,7 +555,7 @@ def _decode_scanned_rfid(uid_bytes: list[int]) -> dict:
     return {"uid": uid_bytes, "rfid": rfid, "kind": kind}
 
 
-def _read_basic_tag_data(decoded_card: dict) -> tuple[Any, bool, dict]:
+def _read_basic_tag_data(decoded_card: dict) -> tuple[RFID, bool, dict]:
     """Register a scanned card and build the standard response payload."""
 
     tag, created = RFID.register_scan(decoded_card["rfid"], kind=decoded_card["kind"])
@@ -661,7 +661,8 @@ def _read_deep_classic_tag_data(mfrc, tag, uid: list[int], result: dict) -> dict
                             pending_updates.update({"key_b", "key_b_verified"})
                         if used_bytes is not None:
                             key_candidates["B"] = [(used_value, used_bytes)]
-        except Exception:
+        except Exception as exc:
+            logger.debug("Failed to read block %d for classic tag: %s", block, exc)
             continue
 
     if pending_updates:

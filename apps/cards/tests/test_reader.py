@@ -165,3 +165,49 @@ def test_read_rfid_returns_error_and_notifies_on_processing_failure(monkeypatch)
 
     assert result == {"error": "decode failed"}
     assert notifications == [("RFID AABBCCDD", "Read failed")]
+
+
+def test_read_deep_classic_tag_data_logs_and_skips_block_errors(monkeypatch):
+    class _DeepReadReader:
+        MI_OK = 0
+        MI_ERR = 1
+        PICC_AUTHENT1A = 3
+        PICC_AUTHENT1B = 4
+
+        def MFRC522_Auth(self, _auth_mode, block, _key_bytes, _uid):
+            return self.MI_OK if block == 0 else self.MI_ERR
+
+        def MFRC522_Read(self, block):
+            if block == 0:
+                raise RuntimeError("read failed")
+            return self.MI_ERR, None
+
+    tag = SimpleNamespace(
+        key_a="FFFFFFFFFFFF",
+        key_a_verified=False,
+        key_b="",
+        key_b_verified=False,
+        data=None,
+    )
+    saves: list[list[str]] = []
+    tag.save = lambda *, update_fields: saves.append(list(update_fields))
+
+    debug_messages: list[tuple[str, int, str]] = []
+    monkeypatch.setattr(
+        reader.logger,
+        "debug",
+        lambda message, block, exc: debug_messages.append((message, block, str(exc))),
+    )
+
+    result = reader._read_deep_classic_tag_data(
+        _DeepReadReader(),
+        tag,
+        [1, 2, 3, 4],
+        {"rfid": "01020304"},
+    )
+
+    assert result["dump"] == []
+    assert saves == [["data"]]
+    assert debug_messages == [
+        ("Failed to read block %d for classic tag: %s", 0, "read failed")
+    ]
