@@ -1,6 +1,7 @@
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.db import DatabaseError
 from django.test import RequestFactory
 
 from apps.nodes.models import Node, NodeRole
@@ -209,17 +210,16 @@ def test_resolve_sigils_conf_looks_up_settings_value(settings):
 
 
 @pytest.mark.django_db
-def test_resolve_sigils_manager_runtime_errors_preserve_placeholder(monkeypatch, user_root):
+def test_resolve_sigils_manager_database_errors_propagate(monkeypatch, user_root):
     user_model = get_user_model()
 
     def explode(*args, **kwargs):
-        raise RuntimeError("boom")
+        raise DatabaseError("boom")
 
     monkeypatch.setattr(user_model.objects, "explode", explode, raising=False)
 
-    result = sigil_resolver.resolve_sigils("[USR=explode]")
-
-    assert result == "[USR=explode]"
+    with pytest.raises(DatabaseError, match="boom"):
+        sigil_resolver.resolve_sigils("[USR=explode]")
 
 
 @pytest.mark.django_db
