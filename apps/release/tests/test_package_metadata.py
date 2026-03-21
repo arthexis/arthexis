@@ -11,8 +11,6 @@ import tomllib
 from apps.release.services.builder import _write_pyproject
 from apps.release.services.defaults import DEFAULT_PACKAGE
 
-pytestmark = pytest.mark.pr_origin(6306)
-
 
 def _find_repository_root(start: Path) -> Path:
     """Return the repository root by walking upward to the project markers.

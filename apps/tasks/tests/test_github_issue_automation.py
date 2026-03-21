@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+
 import pytest
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -201,7 +202,6 @@ def test_overdue_trigger_rejects_stale_early_job() -> None:
     assert not task.can_open_github_issue_for_trigger("overdue")
 
 
-@pytest.mark.pr_origin(6182)
 def test_schedule_github_issue_uses_cross_process_cache_dedupe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -210,13 +210,15 @@ def test_schedule_github_issue_uses_cross_process_cache_dedupe(
     calls: list[dict] = []
 
     def fake_schedule(task, *, args=None, kwargs=None, require_enabled=True, **options):
-        calls.append({
-            "task": task,
-            "args": args,
-            "kwargs": kwargs,
-            "require_enabled": require_enabled,
-            "options": options,
-        })
+        calls.append(
+            {
+                "task": task,
+                "args": args,
+                "kwargs": kwargs,
+                "require_enabled": require_enabled,
+                "options": options,
+            }
+        )
         return True
 
     monkeypatch.setattr("apps.celery.utils.schedule_task", fake_schedule)
@@ -241,7 +243,6 @@ def test_schedule_github_issue_uses_cross_process_cache_dedupe(
     assert len(calls) == 1
 
 
-@pytest.mark.pr_origin(6182)
 def test_create_manual_task_github_issue_skips_early_scheduled_start() -> None:
     """Task should not create issue before scheduled start time."""
 

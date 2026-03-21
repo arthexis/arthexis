@@ -16,7 +16,6 @@ Selection criteria: script-focused permutation tests and narrowly scoped regress
 7. `scripts/tests/test_command_script.py` (2 tests)
 8. `scripts/tests/test_nmcli_setup_script.py` (2 tests)
 9. `tests/test_installed_apps_manifests.py` (3 tests)
-10. `tests/test_pr_origin_marker_policy.py` (1 test)
 11. `tests/test_role_bootstrap_smoke.py` (1 test)
 
 Total removed tests: **39**.

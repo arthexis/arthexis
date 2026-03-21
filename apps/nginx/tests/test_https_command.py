@@ -186,7 +186,6 @@ def test_https_site_uses_latest_enabled_config_port(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.pr_origin(6288)
 def test_https_site_uses_safe_default_paths_instead_of_preview_fixture(monkeypatch):
     """New HTTPS site configs should not inherit preview-only nginx destination paths."""
 
@@ -225,7 +224,6 @@ def test_https_site_uses_safe_default_paths_instead_of_preview_fixture(monkeypat
 
 
 @pytest.mark.django_db
-@pytest.mark.pr_origin(6288)
 def test_https_site_preserves_loaded_primary_expected_path(monkeypatch, settings):
     """New HTTPS site configs should keep the loaded primary nginx config path."""
 
