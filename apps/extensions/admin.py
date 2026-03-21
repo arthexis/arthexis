@@ -30,6 +30,7 @@ class JsExtensionAdmin(PublicViewLinksAdminMixin, admin.ModelAdmin):
     search_fields = ("name", "slug", "description")
     prepopulated_fields = {"slug": ("name",)}
     readonly_fields = ("download_archive_link",)
+    view_on_site = False
     fieldsets = (
         (
             "Identity",
@@ -76,13 +77,15 @@ class JsExtensionAdmin(PublicViewLinksAdminMixin, admin.ModelAdmin):
 
         if obj is None:
             return reverse("extensions:catalog")
+        if not obj.is_enabled:
+            return None
         return reverse("extensions:manifest", args=[obj.slug])
 
     def get_public_view_links(self, obj=None) -> list[dict[str, str]]:
         """Return public extension routes that admins may need to inspect."""
 
         links = [{"label": "View on site: Catalog", "url": reverse("extensions:catalog")}]
-        if obj is None:
+        if obj is None or not obj.is_enabled:
             return links
 
         links.extend(

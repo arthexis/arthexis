@@ -68,13 +68,29 @@ class TermAdmin(PublicViewLinksAdminMixin, admin.ModelAdmin):
             },
         ),
     )
-    view_on_site = True
+    view_on_site = False
 
-    def get_public_view_links(self, obj=None) -> list[dict[str, str]]:
+    def _user_can_view_public_term(self, request, obj: Term | None) -> bool:
+        """Return whether the current admin user can open the term detail route."""
+
+        if obj is None:
+            return False
+        if obj.category != Term.Category.SECURITY_GROUP:
+            return True
+        user = getattr(request, "user", None)
+        if not getattr(user, "is_authenticated", False):
+            return False
+        if user.is_superuser:
+            return True
+        if not obj.security_group_id:
+            return False
+        return user.groups.filter(pk=obj.security_group_id).exists()
+
+    def get_public_view_links(self, obj=None, request=None) -> list[dict[str, str]]:
         """Return public term routes relevant to term administration."""
 
         links = [{"label": "View on site: Registration", "url": reverse("terms:registration")}]
-        if obj:
+        if self._user_can_view_public_term(request, obj):
             links.append({"label": "View on site: Term", "url": obj.get_absolute_url()})
         return links
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group, Permission
 from django.urls import reverse
 
 from apps.blog.models import BlogArticle
@@ -26,7 +27,7 @@ def admin_user():
 
 
 def test_blog_article_admin_shows_public_index_and_detail_links(client, admin_user):
-    """Blog article admin pages should expose list and detail public routes."""
+    """Published blog article admin pages should expose list and detail public routes."""
 
     client.force_login(admin_user)
     article = BlogArticle.objects.create(
@@ -48,11 +49,32 @@ def test_blog_article_admin_shows_public_index_and_detail_links(client, admin_us
     assert article.get_absolute_url() in content
 
 
-def test_term_admin_shows_registration_and_detail_links(client, admin_user):
-    """Term admin pages should expose registration and term detail routes."""
+def test_blog_article_admin_hides_dead_detail_links_for_unpublished_entries(client, admin_user):
+    """Unpublished article admin pages should not expose detail links that 404 publicly."""
 
     client.force_login(admin_user)
-    term = Term.objects.create(title="Operations Policy", slug="operations-policy")
+    article = BlogArticle.objects.create(
+        title="Draft article",
+        body="Draft content",
+        status=BlogArticle.Status.DRAFT,
+    )
+
+    change_response = client.get(reverse("admin:blog_blogarticle_change", args=[article.pk]))
+    assert change_response.status_code == 200
+    content = change_response.content.decode()
+    assert reverse("blog-list") in content
+    assert article.get_absolute_url() not in content
+
+
+def test_term_admin_shows_registration_and_detail_links_for_accessible_terms(client, admin_user):
+    """Term admin pages should expose registration and accessible detail routes."""
+
+    client.force_login(admin_user)
+    term = Term.objects.create(
+        title="Operations Policy",
+        slug="operations-policy",
+        category=Term.Category.GENERAL,
+    )
 
     changelist_response = client.get(reverse("admin:terms_term_changelist"))
     assert changelist_response.status_code == 200
@@ -63,6 +85,35 @@ def test_term_admin_shows_registration_and_detail_links(client, admin_user):
     content = change_response.content.decode()
     assert reverse("terms:registration") in content
     assert term.get_absolute_url() in content
+
+
+def test_term_admin_hides_protected_detail_links_for_non_members(client):
+    """Protected term links should stay hidden for staff users outside the required group."""
+
+    staff_user = get_user_model().objects.create_user(
+        username="staff-public-links",
+        email="staff-public-links@example.com",
+        password="admin123",
+        is_staff=True,
+    )
+    staff_user.user_permissions.add(
+        Permission.objects.get(codename="view_term"),
+        Permission.objects.get(codename="change_term"),
+    )
+    protected_group = Group.objects.create(name="Protected Terms")
+    term = Term.objects.create(
+        title="Protected Policy",
+        slug="protected-policy",
+        category=Term.Category.SECURITY_GROUP,
+        security_group=protected_group,
+    )
+
+    client.force_login(staff_user)
+    change_response = client.get(reverse("admin:terms_term_change", args=[term.pk]))
+    assert change_response.status_code == 200
+    content = change_response.content.decode()
+    assert reverse("terms:registration") in content
+    assert term.get_absolute_url() not in content
 
 
 def test_shop_admin_pages_show_storefront_and_tracking_links(client, admin_user):
@@ -96,8 +147,8 @@ def test_shop_admin_pages_show_storefront_and_tracking_links(client, admin_user)
     )
 
 
-def test_extension_admin_shows_catalog_and_asset_links(client, admin_user):
-    """JS extension admin pages should expose catalog and served asset routes."""
+def test_extension_admin_shows_catalog_and_asset_links_for_enabled_extensions(client, admin_user):
+    """Enabled JS extension admin pages should expose catalog and served asset routes."""
 
     client.force_login(admin_user)
     extension = JsExtension.objects.create(
@@ -123,3 +174,29 @@ def test_extension_admin_shows_catalog_and_asset_links(client, admin_user):
     assert reverse("extensions:content", args=[extension.slug]) in content
     assert reverse("extensions:background", args=[extension.slug]) in content
     assert reverse("extensions:options", args=[extension.slug]) in content
+
+
+def test_extension_admin_hides_asset_links_for_disabled_extensions(client, admin_user):
+    """Disabled JS extension admin pages should not advertise dead asset routes."""
+
+    client.force_login(admin_user)
+    extension = JsExtension.objects.create(
+        slug="disabled-helper",
+        name="Disabled Helper",
+        is_enabled=False,
+        content_script="console.log('ready')",
+        background_script="console.log('background')",
+        options_page="<html><body>Options</body></html>",
+    )
+
+    change_response = client.get(
+        reverse("admin:extensions_jsextension_change", args=[extension.pk])
+    )
+    assert change_response.status_code == 200
+    content = change_response.content.decode()
+    assert reverse("extensions:catalog") in content
+    assert reverse("extensions:manifest", args=[extension.slug]) not in content
+    assert reverse("extensions:download", args=[extension.slug]) not in content
+    assert reverse("extensions:content", args=[extension.slug]) not in content
+    assert reverse("extensions:background", args=[extension.slug]) not in content
+    assert reverse("extensions:options", args=[extension.slug]) not in content

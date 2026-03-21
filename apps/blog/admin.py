@@ -51,13 +51,13 @@ class BlogArticleAdmin(PublicViewLinksAdminMixin, admin.ModelAdmin):
     prepopulated_fields = {"slug": ("title",)}
     filter_horizontal = ("tags", "reviewers")
     inlines = (BlogCodeReferenceInline, BlogSigilShortcutInline, BlogRevisionInline)
-    view_on_site = True
+    view_on_site = False
 
     def get_public_view_links(self, obj=None) -> list[dict[str, str]]:
         """Return public blog routes relevant to the current admin page."""
 
         links = [{"label": "View on site: Blog index", "url": reverse("blog-list")}]
-        if obj:
+        if obj and obj.status == BlogArticle.Status.PUBLISHED:
             links.append({"label": "View on site: Article", "url": obj.get_absolute_url()})
         return links
 

@@ -1,3 +1,4 @@
+from inspect import signature
 from urllib.parse import urlencode
 
 from django import forms
@@ -128,17 +129,24 @@ class PublicViewLinksAdminMixin:
 
     public_view_links_context_key = "public_view_links"
 
-    def get_public_view_links(self, obj=None) -> list[dict[str, str]]:
+    def get_public_view_links(self, obj=None, request=None) -> list[dict[str, str]]:
         """Return additional public links to render in admin object tools."""
 
+        del request
         return []
 
-    def _normalize_public_view_links(self, obj=None) -> list[dict[str, str]]:
+    def _normalize_public_view_links(self, obj=None, request=None) -> list[dict[str, str]]:
         """Return de-duplicated public view links with stable labels."""
 
         normalized: list[dict[str, str]] = []
         seen: set[tuple[str, str]] = set()
-        for entry in self.get_public_view_links(obj=obj):
+        parameters = signature(self.get_public_view_links).parameters
+        kwargs = {}
+        if "obj" in parameters:
+            kwargs["obj"] = obj
+        if "request" in parameters:
+            kwargs["request"] = request
+        for entry in self.get_public_view_links(**kwargs):
             url = (entry or {}).get("url")
             if not url:
                 continue
@@ -154,7 +162,7 @@ class PublicViewLinksAdminMixin:
         """Inject public route shortcuts into changelist object tools."""
 
         extra_context = extra_context or {}
-        links = self._normalize_public_view_links()
+        links = self._normalize_public_view_links(request=request)
         if links:
             extra_context.setdefault(self.public_view_links_context_key, links)
         return super().changelist_view(request, extra_context=extra_context)
@@ -166,7 +174,7 @@ class PublicViewLinksAdminMixin:
         obj = None
         if object_id:
             obj = self.get_object(request, object_id)
-        links = self._normalize_public_view_links(obj=obj)
+        links = self._normalize_public_view_links(obj=obj, request=request)
         if links:
             extra_context.setdefault(self.public_view_links_context_key, links)
         return super().changeform_view(
