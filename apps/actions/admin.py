@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 @admin.register(StaffTask)
 class StaffTaskAdmin(EntityModelAdmin):
-    """Manage available dashboard staff tasks and default visibility."""
+    """Manage available dashboard task panels and default visibility."""
 
     list_display = (
         "label",
@@ -48,7 +48,7 @@ class StaffTaskAdmin(EntityModelAdmin):
 
 @admin.register(StaffTaskPreference)
 class StaffTaskPreferenceAdmin(EntityModelAdmin):
-    """Inspect per-user staff task visibility overrides."""
+    """Inspect per-user task panel visibility overrides."""
 
     list_display = ("user", "task", "is_enabled", "updated_at")
     list_filter = ("is_enabled", "task")

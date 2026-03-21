@@ -1,51 +1,252 @@
-from pathlib import Path
-
 import pytest
-from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from apps.playwright.management.commands.preview import Command
 
 
-def test_preview_command_help_lists_expected_options(capsys):
-    """The short preview command should expose the expected CLI contract."""
+def test_handle_reports_backend_failures_without_name_error(monkeypatch) -> None:
+    """Backend failure aggregation should raise a clean CommandError message."""
 
-    with pytest.raises(SystemExit):
-        call_command("preview", "--help")
+    command = Command()
 
-    output = capsys.readouterr().out
-    assert "--base-url" in output
-    assert "--engine" in output
-    assert "--output-dir" in output
+    deleted_ids: list[int | None] = []
 
+    monkeypatch.setattr(
+        command, "_create_throwaway_admin_user", lambda: ("tmp", "pw", 42)
+    )
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", deleted_ids.append)
+    monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
 
-def test_preview_command_supports_multiple_paths(settings, monkeypatch):
-    """The preview command should capture each requested path into its own file."""
+    def _always_fail(**kwargs):
+        raise CommandError("boom")
 
-    settings.BASE_DIR = Path("/tmp/arthexis-test")
-    captured: list[tuple[str, Path]] = []
+    monkeypatch.setattr(command, "_capture_with_backend", _always_fail)
 
-    def fake_capture_with_fallback(*_, **kwargs):
-        output_path = kwargs["output"]
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_bytes(
-            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDAT\x08\xd7c\xf8\xff\xff?\x00\x05\xfe\x02\xfeA\xce\xb6\xd4\x00\x00\x00\x00IEND\xaeB`\x82"
+    with pytest.raises(
+        CommandError, match=r"All preview backends failed\. Last error: boom"
+    ):
+        command.handle(
+            base_url="http://127.0.0.1:8000",
+            paths=["/admin/"],
+            username=None,
+            password=None,
+            output="media/previews/admin-preview.png",
+            output_dir="",
+            viewports="desktop",
+            backend="playwright,selenium",
+            engine="chromium,firefox",
+            no_login=False,
         )
-        captured.append((kwargs["path"], output_path))
 
-    monkeypatch.setattr(Command, "_ensure_admin_user", lambda *args, **kwargs: None)
-    monkeypatch.setattr(Command, "_capture_with_fallback", fake_capture_with_fallback)
+    assert deleted_ids == [42]
 
-    call_command(
-        "preview",
-        "--path",
-        "/admin/",
-        "--path",
-        "/",
-        "--output-dir",
-        "media/previews",
+
+def test_handle_uses_throwaway_user_and_cleans_it_up(monkeypatch) -> None:
+    """Preview captures should use a temporary login user and remove it afterwards."""
+
+    command = Command()
+    state: dict[str, object] = {
+        "created": False,
+        "deleted": None,
+        "login_required": None,
+    }
+
+    def _create_user() -> tuple[str, str, int]:
+        state["created"] = True
+        return "preview-user", "preview-pass", 99
+
+    def _delete_user(user_id: int | None) -> None:
+        state["deleted"] = user_id
+
+    def _capture_with_backend(**kwargs):
+        state["login_required"] = kwargs["login_required"]
+
+    monkeypatch.setattr(command, "_create_throwaway_admin_user", _create_user)
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", _delete_user)
+    monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
+    monkeypatch.setattr(command, "_capture_with_backend", _capture_with_backend)
+    monkeypatch.setattr(command, "_print_reports", lambda captures: None)
+
+    command.handle(
+        base_url="http://127.0.0.1:8000",
+        paths=["/admin/"],
+        username=None,
+        password=None,
+        output="media/previews/admin-preview.png",
+        output_dir="",
+        viewports="desktop",
+        backend="playwright",
+        engine="chromium",
+        no_login=False,
     )
 
-    assert captured[0][0] == "/admin/"
-    assert captured[0][1] == settings.BASE_DIR / "media/previews/admin.png"
-    assert captured[1][0] == "/"
-    assert captured[1][1] == settings.BASE_DIR / "media/previews/root.png"
+    assert state["created"] is True
+    assert state["login_required"] is True
+    assert state["deleted"] == 99
+
+
+def test_handle_cleans_up_throwaway_user_on_validation_failure(monkeypatch) -> None:
+    """Throwaway preview user should be deleted when argument validation fails."""
+
+    command = Command()
+    state: dict[str, object] = {"deleted": None}
+
+    monkeypatch.setattr(
+        command,
+        "_create_throwaway_admin_user",
+        lambda: ("preview-user", "preview-pass", 99),
+    )
+    monkeypatch.setattr(
+        command,
+        "_delete_throwaway_admin_user",
+        lambda user_id: state.__setitem__("deleted", user_id),
+    )
+
+    with pytest.raises(CommandError, match="At least one viewport profile"):
+        command.handle(
+            base_url="http://127.0.0.1:8000",
+            paths=["/admin/"],
+            username=None,
+            password=None,
+            output="media/previews/admin-preview.png",
+            output_dir="",
+            viewports=",",
+            backend="playwright",
+            engine="chromium",
+            no_login=False,
+        )
+
+    assert state["deleted"] == 99
+
+
+def test_handle_skips_login_and_user_creation_for_no_login(monkeypatch) -> None:
+    """No-login captures should not create or authenticate any temporary user."""
+
+    command = Command()
+    state: dict[str, object] = {
+        "created": False,
+        "deleted": None,
+        "login_required": None,
+    }
+
+    def _create_user() -> tuple[str, str, int]:
+        state["created"] = True
+        return "preview-user", "preview-pass", 99
+
+    def _delete_user(user_id: int | None) -> None:
+        state["deleted"] = user_id
+
+    def _capture_with_backend(**kwargs):
+        state["login_required"] = kwargs["login_required"]
+
+    monkeypatch.setattr(command, "_create_throwaway_admin_user", _create_user)
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", _delete_user)
+    monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
+    monkeypatch.setattr(command, "_capture_with_backend", _capture_with_backend)
+    monkeypatch.setattr(command, "_print_reports", lambda captures: None)
+
+    command.handle(
+        base_url="http://127.0.0.1:8000",
+        paths=["/admin/"],
+        username=None,
+        password=None,
+        output="media/previews/admin-preview.png",
+        output_dir="",
+        viewports="desktop",
+        backend="playwright",
+        engine="chromium",
+        no_login=True,
+    )
+
+    assert state["created"] is False
+    assert state["login_required"] is False
+    assert state["deleted"] is None
+
+
+def test_handle_falls_back_to_selenium_backend(monkeypatch) -> None:
+    """Preview should try Selenium automatically when Playwright backend fails."""
+
+    command = Command()
+    attempted_backends: list[str] = []
+
+    monkeypatch.setattr(
+        command, "_create_throwaway_admin_user", lambda: ("tmp", "pw", 42)
+    )
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", lambda _: None)
+    monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
+    monkeypatch.setattr(command, "_print_reports", lambda captures: None)
+
+    def _capture_with_backend(**kwargs):
+        attempted_backends.append(kwargs["backend"])
+        if kwargs["backend"] == "playwright":
+            raise CommandError("playwright unavailable")
+
+    monkeypatch.setattr(command, "_capture_with_backend", _capture_with_backend)
+
+    command.handle(
+        base_url="http://127.0.0.1:8000",
+        paths=["/admin/"],
+        username=None,
+        password=None,
+        output="media/previews/admin-preview.png",
+        output_dir="",
+        viewports="desktop",
+        backend="playwright,selenium",
+        engine="chromium",
+        no_login=False,
+    )
+
+    assert attempted_backends == ["playwright", "selenium"]
+
+
+def test_handle_waits_for_suite_when_requested(monkeypatch) -> None:
+    """Preview should probe suite readiness before capturing when requested."""
+
+    command = Command()
+    state: dict[str, object] = {"wait_called": False}
+
+    monkeypatch.setattr(
+        command,
+        "_create_throwaway_admin_user",
+        lambda: ("preview-user", "preview-pass", 99),
+    )
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", lambda _: None)
+    monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
+    monkeypatch.setattr(command, "_capture_with_backend", lambda **kwargs: None)
+    monkeypatch.setattr(command, "_print_reports", lambda captures: None)
+
+    def _wait_for_suite_ready(**kwargs):
+        state["wait_called"] = kwargs == {
+            "base_url": "http://127.0.0.1:8000",
+            "timeout_seconds": 10,
+        }
+
+    monkeypatch.setattr(command, "_wait_for_suite_ready", _wait_for_suite_ready)
+
+    command.handle(
+        base_url="http://127.0.0.1:8000",
+        paths=["/admin/"],
+        username=None,
+        password=None,
+        output="media/previews/admin-preview.png",
+        output_dir="",
+        viewports="desktop",
+        backend="playwright",
+        engine="chromium",
+        no_login=False,
+        wait_for_suite=True,
+        suite_timeout=10,
+    )
+
+    assert state["wait_called"] is True
+
+
+def test_wait_for_suite_ready_rejects_non_positive_timeout() -> None:
+    """Suite wait should fail fast when timeout is non-positive."""
+
+    command = Command()
+
+    with pytest.raises(CommandError, match="--suite-timeout must be greater than zero"):
+        command._wait_for_suite_ready(
+            base_url="http://127.0.0.1:8000", timeout_seconds=0
+        )

@@ -1,1 +1,0 @@
-"""liboqs integration app."""

@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+from utils.python_env import resolve_project_python
+
 ALLOWED_COMMAND_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 DISCOVERED_COMMAND_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 DEFAULT_CACHE_TTL_SECONDS = 30
@@ -121,7 +123,7 @@ def _run_manage(base_dir: Path, *args: str) -> str:
     Raises:
         CommandApiError: When manage.py invocation fails.
     """
-    cmd = [sys.executable, "manage.py", *args]
+    cmd = [resolve_project_python(base_dir), "manage.py", *args]
     timeout = _manage_timeout_seconds()
     try:
         result = subprocess.run(
@@ -301,7 +303,13 @@ def run_command(
         command = _resolve_command(base_dir, raw_command, options)
 
     process = subprocess.run(
-        [sys.executable, "manage.py", options.celery_flag, command, *command_args],
+        [
+            resolve_project_python(base_dir),
+            "manage.py",
+            options.celery_flag,
+            command,
+            *command_args,
+        ],
         cwd=base_dir,
         check=False,
     )

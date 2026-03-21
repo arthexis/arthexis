@@ -8,12 +8,6 @@ repos:
         pass_filenames: false
         stages: [commit]
         always_run: true
-      - id: test-pr-marker
-        name: Ensure new tests include PR marker metadata
-        entry: scripts/git-hooks/pre-commit-test-pr-mark.sh
-        language: system
-        pass_filenames: false
-        stages: [commit]
       - id: prompt-storage
         name: Ensure prompt fixture stored for code changes
         entry: scripts/git-hooks/pre-commit-prompt-storage.sh
@@ -23,6 +17,11 @@ repos:
       - id: ruff
         name: ruff
         entry: ruff check --select E9,F823
+        language: system
+        types: [python]
+      - id: check-import-resolution
+        name: check-import-resolution
+        entry: python scripts/check_import_resolution.py
         language: system
         types: [python]
       - id: black

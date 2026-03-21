@@ -141,7 +141,8 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
 - Verbinde Slack-Workspaces mit dem [Slack-Bot-Onboarding-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
 
 ### 5. Entwicklung
-- Durchsuche die [Entwickler-Dokumentationsbibliothek](/docs/library/) für Architekturreferenzen, Protokollhandbücher und Beitrags-Workflows.
+- Durchsuche die [Entwickler-Dokumentationsbibliothek](../../../docs/index.md) für Architekturreferenzen, Protokollhandbücher und Beitrags-Workflows.
+- Hinweis: Dieser Link zeigt auf die Dokumentation im Repository und nicht auf eine Laufzeit-Webroute.
 
 ## Support
 

@@ -1,9 +1,3 @@
-"""Deprecated admin entrypoint kept for import compatibility."""
+"""Legacy selenium admin module kept empty after Playwright migration."""
 
-from apps.playwright.admin import (  # noqa: F401
-    PlaywrightBrowserAdmin as SeleniumBrowserAdmin,
-    PlaywrightScriptAdmin as SeleniumScriptAdmin,
-    SessionCookieAdmin,
-)
-
-__all__ = ["SeleniumBrowserAdmin", "SeleniumScriptAdmin", "SessionCookieAdmin"]
+__all__: list[str] = []

@@ -5,14 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.db.utils import OperationalError
 
 from apps.desktop.models import DesktopShortcut
-from apps.desktop.services import sync_desktop_shortcuts
+from apps.desktop.services import DesktopSyncResult, sync_desktop_shortcuts
 
-
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db]
 
 
 class _NodeStub:
@@ -25,7 +26,9 @@ class _NodeStub:
         return True
 
 
-def test_sync_desktop_shortcuts_installs_applications_only(monkeypatch, tmp_path: Path) -> None:
+def test_sync_desktop_shortcuts_installs_applications_only(
+    monkeypatch, tmp_path: Path
+) -> None:
     """Applications-only shortcuts should not create launchers on the desktop."""
 
     User = get_user_model()
@@ -45,13 +48,19 @@ def test_sync_desktop_shortcuts_installs_applications_only(monkeypatch, tmp_path
     desktop_dir.mkdir(parents=True, exist_ok=True)
     applications_dir.mkdir(parents=True, exist_ok=True)
 
-    monkeypatch.setattr("apps.desktop.services.detect_desktop_dir", lambda _base_dir, _username: desktop_dir)
     monkeypatch.setattr(
-        "apps.desktop.services.detect_applications_dir", lambda _base_dir, _username: applications_dir
+        "apps.desktop.services.detect_desktop_dir",
+        lambda _base_dir, _username: desktop_dir,
+    )
+    monkeypatch.setattr(
+        "apps.desktop.services.detect_applications_dir",
+        lambda _base_dir, _username: applications_dir,
     )
     monkeypatch.setattr("apps.desktop.services.Node.get_local", lambda: _NodeStub())
 
-    result = sync_desktop_shortcuts(base_dir=Path("/home/tester/arthexis"), username="tester", port=8000)
+    result = sync_desktop_shortcuts(
+        base_dir=Path("/home/tester/arthexis"), username="tester", port=8000
+    )
 
     applications_target = applications_dir / f"{shortcut.desktop_filename}.desktop"
     desktop_target = desktop_dir / f"{shortcut.desktop_filename}.desktop"
@@ -61,7 +70,9 @@ def test_sync_desktop_shortcuts_installs_applications_only(monkeypatch, tmp_path
     assert not desktop_target.exists()
 
 
-def test_sync_desktop_shortcuts_removes_stale_file_when_location_changes(monkeypatch, tmp_path: Path) -> None:
+def test_sync_desktop_shortcuts_removes_stale_file_when_location_changes(
+    monkeypatch, tmp_path: Path
+) -> None:
     """Managed desktop files are removed when shortcut is moved to applications only."""
 
     User = get_user_model()
@@ -82,15 +93,23 @@ def test_sync_desktop_shortcuts_removes_stale_file_when_location_changes(monkeyp
     applications_dir.mkdir(parents=True, exist_ok=True)
 
     stale_desktop_file = desktop_dir / f"{shortcut.desktop_filename}.desktop"
-    stale_desktop_file.write_text("[Desktop Entry]\nX-Arthexis-Managed=true\n", encoding="utf-8")
+    stale_desktop_file.write_text(
+        "[Desktop Entry]\nX-Arthexis-Managed=true\n", encoding="utf-8"
+    )
 
-    monkeypatch.setattr("apps.desktop.services.detect_desktop_dir", lambda _base_dir, _username: desktop_dir)
     monkeypatch.setattr(
-        "apps.desktop.services.detect_applications_dir", lambda _base_dir, _username: applications_dir
+        "apps.desktop.services.detect_desktop_dir",
+        lambda _base_dir, _username: desktop_dir,
+    )
+    monkeypatch.setattr(
+        "apps.desktop.services.detect_applications_dir",
+        lambda _base_dir, _username: applications_dir,
     )
     monkeypatch.setattr("apps.desktop.services.Node.get_local", lambda: _NodeStub())
 
-    result = sync_desktop_shortcuts(base_dir=Path("/home/tester/arthexis"), username="tester", port=8000)
+    result = sync_desktop_shortcuts(
+        base_dir=Path("/home/tester/arthexis"), username="tester", port=8000
+    )
 
     applications_target = applications_dir / f"{shortcut.desktop_filename}.desktop"
 
@@ -98,3 +117,46 @@ def test_sync_desktop_shortcuts_removes_stale_file_when_location_changes(monkeyp
     assert result.removed >= 1
     assert applications_target.exists()
     assert not stale_desktop_file.exists()
+
+
+def test_sync_desktop_shortcuts_marks_db_unavailable_and_logs_warning(
+    monkeypatch, caplog
+) -> None:
+    """Database availability failures should be visible and distinguishable in results."""
+
+    def _raise_operational_error() -> None:
+        raise OperationalError("database is down")
+
+    caplog.set_level("WARNING")
+    monkeypatch.setattr(
+        "apps.desktop.services.DesktopShortcut.objects.exists", _raise_operational_error
+    )
+
+    result = sync_desktop_shortcuts(
+        base_dir=Path("/home/tester/arthexis"), username="tester", port=8000
+    )
+
+    assert result.skipped_db_unavailable is True
+    assert "database is unavailable" in caplog.text
+
+
+def test_sync_desktop_shortcuts_command_raises_when_db_is_unavailable(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """The management command should fail fast when sync is skipped for DB availability."""
+
+    def _skip_sync(**_kwargs) -> DesktopSyncResult:
+        return DesktopSyncResult(skipped_db_unavailable=True)
+
+    monkeypatch.setattr(
+        "apps.desktop.management.commands.sync_desktop_shortcuts.sync_desktop_shortcuts",
+        _skip_sync,
+    )
+
+    with pytest.raises(CommandError, match="database is unavailable"):
+        call_command(
+            "sync_desktop_shortcuts",
+            base_dir=str(tmp_path / "arthexis"),
+            username="tester",
+            port=8000,
+        )

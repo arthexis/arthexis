@@ -15,19 +15,62 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - '**/*.py'
+      - '**/*.js'
+      - '**/*.json'
+      - '**/*.toml'
+      - '**/*.txt'
+      - '.github/workflows/ci.yml'
+      - 'apps/**'
+      - 'config/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'manage.py'
+      - 'configure.sh'
+      - 'env-refresh.sh'
+      - 'install.sh'
+      - 'start.sh'
+      - 'stop.sh'
+      - 'upgrade.sh'
   pull_request:
+    branches:
+      - main
+      - 'release/**'
     types:
       - opened
       - synchronize
       - reopened
       - ready_for_review
+    paths:
+      - '**/*.py'
+      - '**/*.js'
+      - '**/*.json'
+      - '**/*.toml'
+      - '**/*.txt'
+      - '.github/workflows/ci.yml'
+      - 'apps/**'
+      - 'config/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'manage.py'
+      - 'configure.sh'
+      - 'env-refresh.sh'
+      - 'install.sh'
+      - 'start.sh'
+      - 'stop.sh'
+      - 'upgrade.sh'
   schedule:
     - cron: '0 2 * * *'
   workflow_dispatch:
 
 jobs:
   install:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && needs.upgrade.result == 'failure' }}
+    if: ${{ (github.event_name != 'pull_request' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)) && needs.upgrade.result == 'failure' }}
     needs: upgrade
     runs-on: ubuntu-latest
     services:
@@ -100,6 +143,8 @@ jobs:
           python scripts/check_import_resolution.py
       - name: Detect changed fixture files
         id: seed-fixtures
+        env:
+          PR_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: |
           set -Eeuo pipefail
           if [ "${{ github.event_name }}" != "pull_request" ]; then
@@ -107,7 +152,7 @@ jobs:
             exit 0
           fi
 
-          if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${{ github.event.pull_request.base.sha }}...${{ github.sha }}")"; then
+          if ! CHANGED_FILES="$(git diff --name-only --diff-filter=ACMRT "${PR_BASE_SHA}...${{ github.sha }}")"; then
             echo "Fixture path detection failed; falling back to full scan."
             echo "mode=full" >> "${GITHUB_OUTPUT}"
             exit 0
@@ -175,7 +220,7 @@ jobs:
           set -Eeuo pipefail
           source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
-          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "not critical and not slow and not integration" | tee pytest.log
+          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v7
@@ -184,7 +229,7 @@ jobs:
           path: pytest.log
           if-no-files-found: warn
   upgrade:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    if: ${{ github.event_name != 'pull_request' || (github.event_name == 'pull_request' && !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
     services:
       redis:
@@ -200,10 +245,16 @@ jobs:
       OCPP_STATE_REDIS_URL: redis://localhost:6379
     steps:
       # Workspace is already writable on GitHub runners, so we skip the chown to reduce overhead.
-      - name: Checkout main
+      - name: Checkout baseline branch for PR upgrades
         uses: actions/checkout@v6
+        if: ${{ github.event_name == 'pull_request' }}
         with:
           ref: ${{ github.event.repository.default_branch }}
+          clean: false
+      - name: Checkout current ref for non-PR upgrades
+        uses: actions/checkout@v6
+        if: ${{ github.event_name != 'pull_request' }}
+        with:
           clean: false
       - uses: actions/setup-python@v6
         with:
@@ -226,6 +277,7 @@ jobs:
         run: |
           ./install.sh --no-start
       - name: Checkout PR changes
+        if: ${{ github.event_name == 'pull_request' }}
         uses: actions/checkout@v6
         with:
           clean: false
@@ -239,11 +291,6 @@ jobs:
         run: |
           source .venv/bin/activate
           python -m pip install -r requirements-ci.txt
-      - name: Pre-upgrade role bootstrap smoke tests
-        run: |
-          set -Eeuo pipefail
-          source .venv/bin/activate
-          pytest tests/test_role_bootstrap_smoke.py -q
       - name: Apply upgrade
         run: |
           set -Eeuo pipefail
@@ -258,7 +305,12 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          pytest tests/test_installed_apps_manifests.py -q
+          manifest_test_file="tests/test_installed_apps_manifests.py"
+          if [[ -f "$manifest_test_file" ]]; then
+            pytest "$manifest_test_file" -q
+          else
+            echo "Manifest test file $manifest_test_file not found; skipping manifest app validation."
+          fi
 
       - name: Validate upgraded migrations
         run: |

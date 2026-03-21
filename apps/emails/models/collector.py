@@ -43,6 +43,10 @@ class EmailCollector(Entity):
         default=False,
         help_text="Treat subject, sender and body filters as regular expressions (case-insensitive).",
     )
+    is_enabled = models.BooleanField(
+        default=True,
+        help_text="Disable to exclude this collector from automatic runs and admin totals.",
+    )
     NOTIFY_EMAIL = "email"
     NOTIFY_NET_MESSAGE = "net_message"
     NOTIFY_NONE = "none"
@@ -154,6 +158,19 @@ class EmailCollector(Entity):
             return []
         return [item.strip() for item in raw.split(",") if item.strip()]
 
+    @staticmethod
+    def _sanitize_recipe_argument(value: str) -> str:
+        """Escape text used in recipe argument substitution to reduce injection risks."""
+        return (
+            str(value or "")
+            .replace("\\", "\\\\")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+            .replace('"', '\\"')
+            .replace("'", "\\'")
+        )
+
     def _notify_for_message(self, msg: dict[str, str], sigils: dict[str, str]) -> None:
         """Dispatch collector notification according to ``notification_mode``."""
         mode = (self.notification_mode or self.NOTIFY_NONE).strip().lower()
@@ -212,42 +229,67 @@ class EmailCollector(Entity):
         if recipe is None:
             return
 
-        recipe.execute(
-            subject=rendered_subject,
-            message=rendered_message,
-            sender=context.get("sender", ""),
-            body=context.get("body", ""),
-            date=context.get("date", ""),
-            sigils=sigils,
-        )
+        recipe_kwargs = {
+            "subject": rendered_subject,
+            "message": rendered_message,
+            "sender": context.get("sender", ""),
+            "body": context.get("body", ""),
+            "date": context.get("date", ""),
+            "sigils": {str(key): str(value) for key, value in sigils.items()},
+        }
+
+        if recipe.detect_format() != recipe.RecipeFormat.BASH:
+            recipe_kwargs = {
+                "subject": self._sanitize_recipe_argument(recipe_kwargs["subject"]),
+                "message": self._sanitize_recipe_argument(recipe_kwargs["message"]),
+                "sender": self._sanitize_recipe_argument(recipe_kwargs["sender"]),
+                "body": self._sanitize_recipe_argument(recipe_kwargs["body"]),
+                "date": self._sanitize_recipe_argument(recipe_kwargs["date"]),
+                "sigils": {
+                    str(key): self._sanitize_recipe_argument(str(value))
+                    for key, value in sigils.items()
+                },
+            }
+
+        recipe.execute(**recipe_kwargs)
 
     def collect(self, limit: int = 10) -> None:
-        """Poll the inbox and store new artifacts until an existing one is found."""
-        inboxes = [self.inbox, *self.additional_inboxes.all()]
-        for inbox in inboxes:
-            messages = inbox.search_messages(
-                subject=self.subject,
-                from_address=self.sender,
-                body=self.body,
-                limit=limit,
-                use_regular_expressions=self.use_regular_expressions,
+        """Poll inboxes and store artifacts not already recorded.
+
+        Args:
+            limit: Maximum number of matching messages to fetch across inboxes.
+
+        Returns:
+            None.
+
+        Note:
+            Notification dispatch failures are logged and suppressed for popup,
+            net-message, email, and recipe channels.
+        """
+        if not self.is_enabled:
+            return
+
+        messages = self.search_messages(limit=limit)
+        for msg in messages:
+            fp = EmailArtifact.fingerprint_for(
+                msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")
             )
-            for msg in messages:
-                fp = EmailArtifact.fingerprint_for(
-                    msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")
-                )
-                if EmailArtifact.objects.filter(collector=self, fingerprint=fp).exists():
-                    break
-                sigils = self._parse_sigils(msg.get("body", ""))
-                EmailArtifact.objects.create(
-                    collector=self,
-                    subject=msg.get("subject", ""),
-                    sender=msg.get("from", ""),
-                    body=msg.get("body", ""),
-                    sigils=sigils,
-                    fingerprint=fp,
-                )
-                try:
-                    self._notify_for_message(msg, sigils)
-                except Exception:
-                    logger.exception("Failed to send notification for collector %s", self.pk)
+            sigils = self._parse_sigils(msg.get("body", ""))
+
+            _, created = EmailArtifact.objects.get_or_create(
+                collector=self,
+                fingerprint=fp,
+                defaults={
+                    "subject": msg.get("subject", ""),
+                    "sender": msg.get("from", ""),
+                    "body": msg.get("body", ""),
+                    "sigils": sigils,
+                },
+            )
+            if not created:
+                continue
+
+            try:
+                self._notify_for_message(msg, sigils)
+            except Exception:
+                logger.exception("Failed to send notification for collector %s", self.pk)

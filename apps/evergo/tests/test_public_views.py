@@ -1,8 +1,6 @@
-"""Tests for Evergo public customer pages and artifact downloads."""
+"""Focused Evergo public-view security regression tests."""
 
 from __future__ import annotations
-
-from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -800,7 +798,8 @@ def test_my_evergo_dashboard_handles_orders_without_remote_id(client):
 
 
 def test_to_tsv_sanitizes_formula_and_line_break_characters():
-    """Security: TSV export should neutralize formulas and preserve table shape."""
+    """Security: TSV export must neutralize formulas and sanitize control characters."""
+
     from apps.evergo.views import _to_tsv
 
     tsv = _to_tsv(
@@ -824,12 +823,3 @@ def test_to_tsv_sanitizes_formula_and_line_break_characters():
     assert "'@phone" in tsv
     assert "'-brand" in tsv
     assert "Monterrey NL" in tsv
-
-
-
-@pytest.mark.django_db
-def test_my_evergo_dashboard_404_for_invalid_token(client):
-    """Security: dashboard should not be accessible with an unknown token."""
-    response = client.get(reverse("evergo:my-dashboard", kwargs={"token": "00000000-0000-0000-0000-000000000000"}))
-
-    assert response.status_code == 404

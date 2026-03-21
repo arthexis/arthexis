@@ -62,6 +62,22 @@ python manage.py runserver 0.0.0.0:8888
   ```bash
   python -m black .
   ```
+- Check import resolution with the canonical standalone checker:
+  ```bash
+  make check-imports
+  ```
+- Run **Pyright** for editor-friendly import diagnostics:
+  ```bash
+  pyright
+  ```
+- Run the baseline **mypy** check for the lower-dynamic paths first:
+  ```bash
+  mypy
+  ```
+  This reads the repo-root configuration in `pyproject.toml` and currently targets
+  `scripts/generate_requirements.py` plus `scripts/sort_pyproject_deps.py`, which already
+  pass cleanly as a pragmatic baseline before the broader `config/`, `utils/`, and
+  `scripts/` directories are brought into scope.
 - Prefer clear, well-documented functions over clever shortcuts.
 
 ### Documentation changes

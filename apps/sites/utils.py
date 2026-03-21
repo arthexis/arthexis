@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -50,6 +51,32 @@ def landing(label=None):
     def decorator(view):
         view.landing = True
         view.landing_label = label or view.__name__.replace("_", " ").title()
+        return view
+
+    return decorator
+
+
+def module_pill_link_validation(
+    validator: Callable[..., bool],
+    *,
+    parameter_getter: Callable[..., dict[str, object]] | None = None,
+    cache_ttl: int = 60,
+):
+    """Attach a navigation-link visibility validator to a landing view.
+
+    Parameters:
+        validator: Callable returning ``True`` when the landing should appear.
+        parameter_getter: Optional callable returning cache parameters for ``validator``.
+        cache_ttl: Cache lifetime in seconds for validation results.
+
+    Returns:
+        A decorator that enriches a view with validation metadata.
+    """
+
+    def decorator(view):
+        view.module_pill_link_validator = validator
+        view.module_pill_link_validator_parameter_getter = parameter_getter
+        view.module_pill_link_validator_cache_ttl = cache_ttl
         return view
 
     return decorator
