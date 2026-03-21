@@ -428,17 +428,17 @@ def _model_admin_action_url(model_admin, action_name, func, request, source):
         except NoReverseMatch:
             return dashboard_url
 
+    if source == "changelist":
+        tools_url = _model_admin_action_tools_url(model_admin, action_name)
+        if tools_url:
+            return tools_url
+
     if action_name == "my_profile":
         getter = getattr(model_admin, "get_my_profile_url", None)
         if callable(getter):
             url = getter(request)
             if url:
                 return url
-
-    if source == "changelist":
-        tools_url = _model_admin_action_tools_url(model_admin, action_name)
-        if tools_url:
-            return tools_url
 
     return _model_admin_action_default_url(model_admin, action_name)
 

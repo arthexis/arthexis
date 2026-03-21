@@ -91,6 +91,30 @@ class VisibilityBranchAdmin(admin.ModelAdmin):
     dashboard_launch.dashboard_url = "test_dashboard_action"
 
 
+class ChangelistMyProfileAdmin(admin.ModelAdmin):
+    """Model admin exposing changelist-only my-profile actions."""
+
+    def get_actions(self, request):
+        """Return an empty action mapping for changelist-only coverage."""
+
+        return {}
+
+    def get_changelist_actions(self, request):
+        """Return the changelist my-profile action for all users."""
+
+        return ["my_profile"]
+
+    def get_my_profile_url(self, request):
+        """Return the direct profile fallback URL for the request."""
+
+        return f"/profile-direct/{request.user.pk}/"
+
+    def my_profile(self, request):
+        """Placeholder changelist my-profile tool for routing tests."""
+
+    my_profile.short_description = "Active Profile"
+
+
 @pytest.fixture
 def visibility_admin():
     """Swap in a temporary admin registration used by action visibility tests."""
@@ -135,6 +159,20 @@ def request_factory():
     """Return a request factory for admin extras tests."""
 
     return RequestFactory()
+
+
+@pytest.fixture
+def changelist_my_profile_admin():
+    """Swap in a temporary admin registration for changelist my-profile checks."""
+
+    original_admin = admin.site._registry[TestResult]
+    test_admin = ChangelistMyProfileAdmin(TestResult, admin.site)
+    test_admin.tools_view_name = "test_admin_action_tool"
+    admin.site._registry[TestResult] = test_admin
+    try:
+        yield test_admin
+    finally:
+        admin.site._registry[TestResult] = original_admin
 
 
 @override_settings(ROOT_URLCONF="apps.sites.tests.urls_admin_extras")
@@ -213,3 +251,22 @@ def test_model_admin_actions_visibility_by_role(
         assert actions[4]["url"].endswith("/test/dashboard-action/")
     elif role == "staff":
         assert actions[2]["url"].endswith("/test/tools/changelist_tool/")
+
+
+@override_settings(ROOT_URLCONF="apps.sites.tests.urls_admin_extras")
+@pytest.mark.django_db
+def test_model_admin_actions_routes_changelist_my_profile_through_tools(
+    changelist_my_profile_admin,
+    admin_action_users,
+    request_factory,
+):
+    """Changelist my-profile actions should preserve tool-view redirects."""
+
+    del changelist_my_profile_admin
+    request = request_factory.get("/admin/tests/testresult/")
+    request.user = admin_action_users["superuser"]
+
+    actions = model_admin_actions({"request": request}, "tests", "TestResult")
+
+    assert [action["label"] for action in actions] == ["Active Profile"]
+    assert actions[0]["url"].endswith("/test/tools/my_profile/")
