@@ -10,8 +10,6 @@ from django.utils import timezone
 from apps.ocpp import store
 from apps.ocpp.models import Charger, Transaction
 
-pytestmark = pytest.mark.pr_origin(6217)
-
 
 @pytest.mark.django_db
 def test_status_view_disables_polling_without_active_session(client):
@@ -160,7 +158,9 @@ def test_status_view_aggregate_deduplicates_events_from_multiple_identities(clie
         username="status-events-deduplicated", password="pass"
     )
     client.force_login(user)
-    charger = Charger.objects.create(charger_id=f"STATUS-EVENTS-DEDUPE-{uuid.uuid4().hex[:8]}")
+    charger = Charger.objects.create(
+        charger_id=f"STATUS-EVENTS-DEDUPE-{uuid.uuid4().hex[:8]}"
+    )
     connector_a = Charger.objects.create(charger_id=charger.charger_id, connector_id=1)
     connector_b = Charger.objects.create(charger_id=charger.charger_id, connector_id=2)
 
@@ -237,7 +237,9 @@ def test_status_view_aggregate_keeps_distinct_connector_status_rows(client):
     assert response.status_code == 200
     events = response.context["non_transaction_events"]
     connector_status_rows = [
-        row for row in events if row["event"] == "Status" and row["details"] == "Available"
+        row
+        for row in events
+        if row["event"] == "Status" and row["details"] == "Available"
     ]
     assert len(connector_status_rows) == 2
 

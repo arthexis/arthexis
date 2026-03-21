@@ -126,7 +126,10 @@ Homepage = "https://arthexis.com"
 [project.optional-dependencies]
 ci = [
   "black==26.3.1",
+  "django-stubs-ext==6.0.1",
+  "django-stubs==6.0.1",
   "import-linter==2.11",
+  "mypy==1.19.1",
   "playwright==1.58.0",
   "pytest-timeout==2.4.0",
   "pytest-xdist==3.8.0",
@@ -214,7 +217,6 @@ config = [ "**/*",]
 "apps.ftp" = [ "**/*",]
 "apps.docs" = [ "**/*",]
 "apps.meta" = [ "**/*",]
-"apps.wikis" = [ "**/*",]
 "apps.credentials" = [ "**/*",]
 "apps.maps" = [ "**/*",]
 "apps.logbook" = [ "**/*",]
@@ -370,9 +372,6 @@ config = [ "**/*",]
 "apps.ftp.management.commands" = [ "**/*",]
 "apps.docs.migrations" = [ "**/*",]
 "apps.meta.migrations" = [ "**/*",]
-"apps.wikis.templatetags" = [ "**/*",]
-"apps.wikis.tests" = [ "**/*",]
-"apps.wikis.migrations" = [ "**/*",]
 "apps.credentials.migrations" = [ "**/*",]
 "apps.maps.migrations" = [ "**/*",]
 "apps.logbook.tests" = [ "**/*",]
@@ -413,6 +412,43 @@ config = [ "**/*",]
 
 [tool.setuptools.packages.find]
 where = [ ".",]
+
+
+[tool.mypy]
+python_version = "3.10"
+files = ["scripts/generate_requirements.py", "scripts/sort_pyproject_deps.py"]
+exclude = [
+  ".*/migrations/.*",
+  ".*/beat_migrations/.*",
+  "media/.*",
+  "static/.*",
+  "node_modules/.*",
+  "tests/fixtures/.*",
+  "apps/.*/fixtures/.*",
+  "scripts/generated/.*",
+]
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = false
+allow_untyped_globals = true
+follow_imports = "silent"
+
+[[tool.mypy.overrides]]
+module = [
+  "bleach",
+  "cron_descriptor",
+  "dotenv",
+  "import_export.*",
+  "markdown",
+  "mdx_truly_sane_lists",
+  "qrcode",
+  "qrcode.image.svg",
+  "reportlab.*",
+  "requests",
+  "setuptools",
+  "tomllib",
+]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 88

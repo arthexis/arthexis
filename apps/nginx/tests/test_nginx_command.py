@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import StringIO
+
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -37,7 +38,6 @@ class _DummyConfig:
         )
 
 
-@pytest.mark.pr_origin(6299)
 def test_nginx_configure_requires_an_explicit_action():
     """The consolidated nginx command should require a top-level action flag."""
 
@@ -45,7 +45,6 @@ def test_nginx_configure_requires_an_explicit_action():
         call_command("nginx")
 
 
-@pytest.mark.pr_origin(6299)
 def test_nginx_configure_applies_configuration_with_tighter_messages(monkeypatch):
     """`nginx --configure` should reuse the configure flow and print tighter status output."""
 
@@ -66,11 +65,13 @@ def test_nginx_configure_applies_configuration_with_tighter_messages(monkeypatch
     assert dummy.saved is True
     assert dummy.apply_calls == [{"reload": False, "remove": False}]
     assert "Applied nginx configuration." in output
-    assert "nginx applied the configuration, but validation was skipped or failed." in output
+    assert (
+        "nginx applied the configuration, but validation was skipped or failed."
+        in output
+    )
     assert "nginx was not reloaded automatically; check the service status." in output
 
 
-@pytest.mark.pr_origin(6299)
 def test_https_remediation_message_points_to_nginx_configure():
     """HTTPS remediation guidance should point operators to the consolidated nginx command."""
 
@@ -83,7 +84,6 @@ def test_https_remediation_message_points_to_nginx_configure():
     assert "rerun the HTTPS command" in message
 
 
-@pytest.mark.pr_origin(6299)
 def test_legacy_nginx_configure_forwards_to_consolidated_command(monkeypatch):
     """The legacy alias should forward arguments to `nginx --configure`."""
 
@@ -94,7 +94,9 @@ def test_legacy_nginx_configure_forwards_to_consolidated_command(monkeypatch):
         forwarded["args"] = args
         forwarded["kwargs"] = kwargs
 
-    from apps.nginx.management.commands import nginx_configure as nginx_configure_command
+    from apps.nginx.management.commands import (
+        nginx_configure as nginx_configure_command,
+    )
 
     monkeypatch.setattr(nginx_configure_command, "call_command", fake_call_command)
 

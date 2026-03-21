@@ -70,7 +70,6 @@ def test_nav_links_chat_enabled_requires_feature_and_site_or_profile(
 
 
 @pytest.mark.django_db
-@pytest.mark.pr_origin(6225)
 def test_nav_links_respects_per_landing_module_pill_validation(monkeypatch):
     cache.clear()
 
@@ -150,7 +149,6 @@ def test_nav_links_respects_per_landing_module_pill_validation(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.pr_origin(6225)
 def test_nav_links_caches_landing_validation_by_parameters(monkeypatch):
     cache.clear()
 
@@ -225,7 +223,6 @@ def test_nav_links_caches_landing_validation_by_parameters(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.pr_origin(6225)
 def test_nav_links_scopes_landing_validation_cache_per_user(monkeypatch):
     cache.clear()
 
@@ -292,7 +289,6 @@ def test_nav_links_scopes_landing_validation_cache_per_user(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.pr_origin(6225)
 def test_nav_links_keeps_locked_landings_visible(monkeypatch):
     cache.clear()
 
@@ -349,7 +345,6 @@ def test_nav_links_keeps_locked_landings_visible(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.pr_origin(6225)
 def test_nav_links_excludes_group_gated_module_for_non_member(monkeypatch):
     cache.clear()
 
@@ -405,7 +400,6 @@ def test_nav_links_excludes_group_gated_module_for_non_member(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.pr_origin(6225)
 def test_nav_links_prefers_most_specific_current_module(monkeypatch):
     cache.clear()
 

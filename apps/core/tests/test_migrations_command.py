@@ -5,14 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from django.core.management import call_command
 
 
 def _seed_apps_root(base_dir: Path) -> Path:
     apps_dir = base_dir / "apps"
     apps_dir.mkdir(parents=True, exist_ok=True)
-    (apps_dir / "__init__.py").write_text('"""Project application packages."""\n', encoding="utf-8")
+    (apps_dir / "__init__.py").write_text(
+        '"""Project application packages."""\n', encoding="utf-8"
+    )
     return apps_dir
 
 
@@ -60,11 +61,15 @@ def test_migrations_rebuild_tags_initial_migration(monkeypatch, settings, tmp_pa
 
         raise AssertionError(f"Unexpected command: {name} {args}")
 
-    monkeypatch.setattr("apps.core.management.commands.migrations.call_command", _fake_call_command)
+    monkeypatch.setattr(
+        "apps.core.management.commands.migrations.call_command", _fake_call_command
+    )
 
     call_command("migrations", "rebuild", branch_id="branch-123")
 
-    content = (apps_dir / "catalog" / "migrations" / "0001_initial.py").read_text(encoding="utf-8")
+    content = (apps_dir / "catalog" / "migrations" / "0001_initial.py").read_text(
+        encoding="utf-8"
+    )
     assert "BranchTagOperation" in content
     assert '"branch-123"' in content
 
@@ -84,17 +89,20 @@ def test_migrations_rebuild_escapes_branch_id(monkeypatch, settings, tmp_path):
 
         raise AssertionError(f"Unexpected command: {name} {args}")
 
-    monkeypatch.setattr("apps.core.management.commands.migrations.call_command", _fake_call_command)
+    monkeypatch.setattr(
+        "apps.core.management.commands.migrations.call_command", _fake_call_command
+    )
 
     malicious_branch = '"); import os; os.system("echo pwned"); #'
     call_command("migrations", "rebuild", branch_id=malicious_branch)
 
-    content = (apps_dir / "catalog" / "migrations" / "0001_initial.py").read_text(encoding="utf-8")
+    content = (apps_dir / "catalog" / "migrations" / "0001_initial.py").read_text(
+        encoding="utf-8"
+    )
     assert '\\"' in content
-    assert 'import os; os.system' in content
+    assert "import os; os.system" in content
 
 
-@pytest.mark.pr_origin(6273)
 def test_migrations_rebuild_accepts_branch_id(monkeypatch):
     """migrations rebuild should call makemigrations during rebuild flow."""
 
@@ -114,7 +122,6 @@ def test_migrations_rebuild_accepts_branch_id(monkeypatch):
     assert name == "makemigrations"
 
 
-@pytest.mark.pr_origin(6273)
 def test_migrations_clear_calls_clear_operation(settings, tmp_path):
     """migrations clear should remove migration files while preserving __init__.py."""
 

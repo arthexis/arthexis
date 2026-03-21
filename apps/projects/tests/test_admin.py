@@ -18,7 +18,6 @@ from apps.projects.models import Project, ProjectItem
 
 @pytest.mark.django_db
 @pytest.mark.integration
-@pytest.mark.pr_origin(6216)
 def test_bundle_import_rejects_models_without_add_permission(client):
     """Ensure bundle import rejects model payloads a non-superuser cannot add."""
 

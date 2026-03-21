@@ -59,7 +59,6 @@ def test_callable_path_runs_after_start_url(monkeypatch):
     assert driver.quit_called is True
 
 
-@pytest.mark.pr_origin(6217)
 @pytest.mark.skipif(
     not sys.platform.startswith("linux"),
     reason="Display-environment detection is Linux-specific in this suite.",

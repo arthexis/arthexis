@@ -7,7 +7,7 @@ from django.test import RequestFactory
 from apps.sites.models import AdminBadge
 from config.context_processors import site_and_node
 
-pytestmark = [pytest.mark.django_db, pytest.mark.pr_origin(6213)]
+pytestmark = [pytest.mark.django_db]
 
 
 def _raise_disallowed_host():
@@ -28,7 +28,9 @@ def test_site_and_node_recovers_from_disallowed_host(monkeypatch):
 
 def test_site_and_node_disallowed_host_rejects_unsafe_header(monkeypatch):
     """Unsafe host characters should not be returned into the template context."""
-    request = RequestFactory().get("/admin/", HTTP_HOST='bad"><script>alert(1)</script>')
+    request = RequestFactory().get(
+        "/admin/", HTTP_HOST='bad"><script>alert(1)</script>'
+    )
 
     monkeypatch.setattr(request, "get_host", _raise_disallowed_host)
 

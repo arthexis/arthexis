@@ -13,8 +13,6 @@ from django.urls import reverse
 from apps.nodes.models import Node
 from apps.nodes.views import registration as registration_views
 
-pytestmark = pytest.mark.pr_origin(6213)
-
 
 @pytest.mark.django_db
 def test_node_info_registers_missing_local(client, monkeypatch):
@@ -23,7 +21,9 @@ def test_node_info_registers_missing_local(client, monkeypatch):
     Node._local_cache.clear()
 
     monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: expected_mac))
-    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda _, *__: ([], [])))
+    monkeypatch.setattr(
+        Node, "_resolve_ip_addresses", classmethod(lambda _, *__: ([], []))
+    )
     monkeypatch.setattr(socket, "gethostname", lambda: "test-host")
     monkeypatch.setattr(socket, "getfqdn", lambda *_: "test-host.local")
     monkeypatch.setattr(socket, "gethostbyname", lambda *_: "127.0.0.1")
@@ -94,8 +94,8 @@ def test_resolve_visitor_base_defaults_to_loopback():
     node_admin = NodeAdmin(Node, admin_site)
     request = RequestFactory().get("/")
 
-    visitor_base, visitor_host, visitor_port, visitor_scheme = node_admin._resolve_visitor_base(
-        request
+    visitor_base, visitor_host, visitor_port, visitor_scheme = (
+        node_admin._resolve_visitor_base(request)
     )
 
     assert visitor_base == "https://127.0.0.1:443"
@@ -121,7 +121,13 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
     def fake_getaddrinfo(host, port, *args, **kwargs):
         if host == "visitor.test":
             return [
-                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 443))
+                (
+                    socket.AF_INET,
+                    socket.SOCK_STREAM,
+                    6,
+                    "",
+                    ("93.184.216.34", port or 443),
+                )
             ]
         raise OSError("unknown host")
 
@@ -200,7 +206,13 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     def fake_getaddrinfo(host, port, *args, **kwargs):
         if host == "visitor.test":
             return [
-                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 443))
+                (
+                    socket.AF_INET,
+                    socket.SOCK_STREAM,
+                    6,
+                    "",
+                    ("93.184.216.34", port or 443),
+                )
             ]
         raise OSError("unknown host")
 

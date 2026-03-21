@@ -26,7 +26,6 @@ class LCDStartupNotificationTests(TestCase):
             public_endpoint="local",
         )
 
-    @pytest.mark.pr_origin(6282)
     def test_lcd_feature_enablement_toggles_startup_behavior(self):
         """Verify startup lock presence toggles LCD feature enablement checks."""
         mac_address = "aa:bb:cc:dd:ee:ff"
@@ -50,7 +49,6 @@ class LCDStartupNotificationTests(TestCase):
 
                     self.assertTrue(feature.is_enabled)
 
-    @pytest.mark.pr_origin(6282)
     def test_refresh_features_assigns_lcd_feature_from_project_lock_dir(self):
         """Verify local nodes auto-assign the LCD feature when project locks exist."""
         mac_address = "aa:bb:cc:dd:ee:ff"
@@ -75,7 +73,6 @@ class LCDStartupNotificationTests(TestCase):
 
             self.assertIn(feature, node.features.all())
 
-    @pytest.mark.pr_origin(6282)
     def test_lcd_feature_enabled_for_paths_checks_node_lock_dir(self):
         """Verify node-local lock directories enable LCD detection for path checks."""
         with TemporaryDirectory() as tmpdir:
@@ -103,7 +100,9 @@ class LCDStartupNotificationTests(TestCase):
 
     def test_render_and_read_preserve_expiration(self):
         expires_at = timezone.now().replace(microsecond=0)
-        payload = render_lcd_lock_file(subject="hi", body="there", expires_at=expires_at)
+        payload = render_lcd_lock_file(
+            subject="hi", body="there", expires_at=expires_at
+        )
 
         with TemporaryDirectory() as tmpdir:
             lock_dir = Path(tmpdir) / ".locks"

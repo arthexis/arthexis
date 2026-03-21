@@ -8,10 +8,6 @@ from pathlib import Path
 
 import pytest
 
-
-pytestmark = pytest.mark.pr_origin(6271)
-
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "rename_service"
 
