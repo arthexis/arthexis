@@ -25,6 +25,25 @@ logger = logging.getLogger(__name__)
 READ_ONLY_SQL_PATTERN = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
 
 
+def _sanitize_remediation_url(remediation_url: str) -> str:
+    """Return a safe remediation URL for security alert links."""
+
+    candidate = remediation_url.strip()
+    if not candidate:
+        return "/admin/"
+
+    parsed = urlparse(candidate)
+    if not parsed.scheme:
+        if candidate.startswith("//"):
+            return "/admin/"
+        return candidate
+
+    if parsed.scheme in {"http", "https"}:
+        return candidate
+
+    return "/admin/"
+
+
 class OperationScreen(Entity):
     """Defines an operation that staff can execute through one or more screens."""
 
@@ -219,6 +238,7 @@ class SecurityAlertEvent(Entity):
         """Create or update an event entry while incrementing occurrence metadata."""
 
         event_timestamp = occurred_at or timezone.now()
+        safe_remediation_url = _sanitize_remediation_url(remediation_url)
         try:
             with transaction.atomic():
                 return cls.objects.create(
@@ -228,7 +248,7 @@ class SecurityAlertEvent(Entity):
                     detail=detail,
                     occurrence_count=1,
                     last_occurred_at=event_timestamp,
-                    remediation_url=remediation_url,
+                    remediation_url=safe_remediation_url,
                     is_active=True,
                 )
         except IntegrityError:
@@ -236,7 +256,7 @@ class SecurityAlertEvent(Entity):
                 severity=severity,
                 message=message,
                 detail=detail,
-                remediation_url=remediation_url,
+                remediation_url=safe_remediation_url,
                 occurrence_count=F("occurrence_count") + 1,
                 last_occurred_at=Greatest(F("last_occurred_at"), Value(event_timestamp)),
                 is_active=True,
