@@ -30,6 +30,7 @@ Sigils always start with `[` and end with `]`. The following patterns are suppor
 - `[PREFIX=IDENTIFIER.FIELD]` &mdash; selects a specific record by primary key or any unique field declared as a natural key.
 - `[PREFIX:FIELD=VALUE.ATTRIBUTE]` &mdash; filters by a custom field instead of the primary key.
 - `[PREFIX.FIELD=[OTHER.SIGIL]]` &mdash; nests sigils so the value after `=` resolves before the outer token.
+- `[PREFIX="VALUE.WITH.DOTS"."attribute->name"]` &mdash; wrap selectors or keys in double quotes when they must contain `.` or `->` literally instead of acting as sigil separators.
 - `[PREFIX]` &mdash; for entity prefixes, returns the serialized object in JSON; for configuration prefixes, resolves to an empty string when the key is missing.
 
 Within sigil identifiers, hyphens and underscores are interchangeable. For example, `[env_alt.smtp-password]` and `[ENV-ALT.SMTP_PASSWORD]` address the same root and key.

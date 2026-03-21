@@ -47,6 +47,31 @@ def test_resolve_sigils_root_normalizes_hyphen_and_underscore():
     assert result == user.username
 
 
+@pytest.mark.django_db
+def test_resolve_sigils_entity_key_normalizes_hyphen_and_underscore(monkeypatch):
+    SigilRoot.objects.update_or_create(
+        prefix="NODE",
+        defaults={
+            "context_type": SigilRoot.Context.ENTITY,
+            "content_type": ContentType.objects.get_for_model(Node),
+        },
+    )
+    role = NodeRole.objects.create(name="Hyphen Key")
+    node = Node.objects.create(
+        hostname="hyphen-key-node",
+        address="127.0.0.10",
+        mac_address="00:11:22:33:44:10",
+        port=8010,
+        public_endpoint="hyphen-key-node",
+        role=role,
+    )
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    result = sigil_resolver.resolve_sigils("[node.public-endpoint]")
+
+    assert result == node.public_endpoint
+
+
 @pytest.fixture
 def user_root():
     user_model = get_user_model()
@@ -179,6 +204,24 @@ def test_parse_token_parts_parses_strict_arrow_key():
     assert parts.strict_key is True
 
 
+def test_parse_token_parts_allows_quoted_instance_id_with_arrow_and_dot():
+    parts = sigil_resolver._parse_token_parts('USR="user->ops.example".email')
+
+    assert parts.root_name == "USR"
+    assert parts.instance_id == "user->ops.example"
+    assert parts.key == "email"
+    assert parts.strict_key is False
+
+
+def test_parse_token_parts_allows_quoted_key_with_arrow_and_dot():
+    parts = sigil_resolver._parse_token_parts('USR->"profile->work.email"')
+
+    assert parts.root_name == "USR"
+    assert parts.instance_id is None
+    assert parts.key == "profile->work.email"
+    assert parts.strict_key is True
+
+
 
 def test_parse_token_parts_rejects_incomplete_filter():
     with pytest.raises(sigil_resolver.TokenParseError):
@@ -208,6 +251,31 @@ def test_resolve_sigils_explicit_entity_miss_preserves_placeholder(user_root):
 @pytest.mark.django_db
 def test_resolve_sigils_explicit_entity_miss_returns_empty_string_for_dot(user_root):
     result = sigil_resolver.resolve_sigils("[USR=missing.email]")
+
+    assert result == ""
+
+
+@pytest.mark.django_db
+def test_resolve_sigils_empty_nested_selector_does_not_fall_back_to_default_instance(monkeypatch, user_root):
+    SigilRoot.objects.update_or_create(
+        prefix="NODE",
+        defaults={
+            "context_type": SigilRoot.Context.ENTITY,
+            "content_type": ContentType.objects.get_for_model(Node),
+        },
+    )
+    role = NodeRole.objects.create(name="Default Role")
+    node = Node.objects.create(
+        hostname="default-node",
+        address="127.0.0.4",
+        mac_address="00:11:22:33:44:88",
+        port=7788,
+        public_endpoint="default-node",
+        role=role,
+    )
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    result = sigil_resolver.resolve_sigils("[NODE=\"[USR=missing.email]\".role]")
 
     assert result == ""
 

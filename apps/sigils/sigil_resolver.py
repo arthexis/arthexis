@@ -272,18 +272,89 @@ def _parse_instance_id(token: str, index: int) -> tuple[str | None, int]:
         return None, index
 
     index += 1
+    return _parse_quoted_segment(
+        token,
+        index,
+        lambda value, offset, depth, in_quotes: depth == 0
+        and not in_quotes
+        and (value[offset] == "." or value[offset : offset + 2] == "->"),
+    )
+
+
+def _parse_quoted_segment(
+    token: str,
+    index: int,
+    should_stop,
+) -> tuple[str, int]:
+    """Parse a token segment while honoring nested sigils and quoted text.
+
+    Args:
+        token: Raw token text without surrounding brackets.
+        index: Current offset at the segment start.
+        should_stop: Callable that returns ``True`` when the current position ends the segment.
+
+    Returns:
+        The parsed segment value with surrounding double quotes removed, and the next unread offset.
+    """
     start = index
     depth = 0
+    in_quotes = False
+    quoted = False
     while index < len(token):
-        char = token[index]
-        if char == "[":
-            depth += 1
-        elif char == "]" and depth:
-            depth -= 1
-        elif depth == 0 and (char == "." or token[index : index + 2] == "->"):
+        if should_stop(token, index, depth, in_quotes):
             break
+        char = token[index]
+        if char == "\\" and in_quotes and index + 1 < len(token):
+            index += 2
+            continue
+        if char == '"':
+            if index == start:
+                quoted = True
+            in_quotes = not in_quotes
+            index += 1
+            continue
+        if not in_quotes:
+            if char == "[":
+                depth += 1
+            elif char == "]" and depth:
+                depth -= 1
         index += 1
-    return token[start:index], index
+
+    value = token[start:index]
+    if quoted and len(value) >= 2 and value[0] == value[-1] == '"':
+        value = value[1:-1]
+    return value, index
+
+
+def _parse_key_segment(token: str, index: int) -> tuple[str | None, bool, int]:
+    """Parse an optional ``.key`` or ``->key`` segment.
+
+    Args:
+        token: Raw token text without surrounding brackets.
+        index: Current offset after any instance selector.
+
+    Returns:
+        A tuple containing the parsed key, strict-key flag, and the next unread offset.
+    """
+    strict_key = False
+    key_started = False
+    if index < len(token) and token[index] == ".":
+        index += 1
+        key_started = True
+    elif token[index : index + 2] == "->":
+        strict_key = True
+        index += 2
+        key_started = True
+
+    if not key_started:
+        return None, strict_key, index
+
+    key, index = _parse_quoted_segment(
+        token,
+        index,
+        lambda value, offset, depth, in_quotes: depth == 0 and not in_quotes and value[offset] == "=",
+    )
+    return key, strict_key, index
 
 
 def _parse_key_and_param(token: str, index: int) -> tuple[str | None, str | None, bool, int]:
@@ -299,21 +370,7 @@ def _parse_key_and_param(token: str, index: int) -> tuple[str | None, str | None
     Raises:
         TokenParseError: This helper does not currently raise parsing errors.
     """
-    key = None
-    strict_key = False
-    if index < len(token) and token[index] == ".":
-        index += 1
-        start = index
-        while index < len(token) and token[index] != "=":
-            index += 1
-        key = token[start:index]
-    elif token[index:index + 2] == "->":
-        strict_key = True
-        index += 2
-        start = index
-        while index < len(token) and token[index] != "=":
-            index += 1
-        key = token[start:index]
+    key, strict_key, index = _parse_key_segment(token, index)
 
     param = None
     if index < len(token) and token[index] == "=":
@@ -724,7 +781,7 @@ def _resolve_entity_lookup(
     if model is None:
         return None, False
 
-    if instance_id:
+    if instance_id is not None:
         if filter_field:
             field_name = filter_field.lower()
             try:
@@ -747,7 +804,7 @@ def _resolve_entity_lookup(
             except (TypeError, ValueError):
                 instance = None
 
-    if instance is None and instance_id and not filter_field:
+    if instance is None and instance_id is not None and not filter_field:
         for field_name in _unique_char_fields(model):
             instance = model.objects.filter(**{f"{field_name}__iexact": instance_id}).first()
             if instance:
@@ -809,7 +866,7 @@ def _resolve_entity_root(
             return aggregate_result
 
     instance, invalid_lookup = _resolve_entity_lookup(model, filter_field, instance_id, current)
-    if instance is None and not instance_id:
+    if instance is None and instance_id is None:
         instance = root.default_instance()
 
     if instance:
