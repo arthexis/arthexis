@@ -56,8 +56,21 @@ def _resolve_landing_visibility(
     *,
     role_id: object,
     site_id: object,
+    user_cache_key: object,
 ) -> bool:
-    """Return whether a landing should be visible in module navigation."""
+    """Return whether a landing should be visible in module navigation.
+
+    Parameters:
+        landing: Landing being considered for display.
+        view_func: Resolved view callable for the landing.
+        request: Current Django request.
+        role_id: Current node role identifier for cache scoping.
+        site_id: Current site identifier for cache scoping.
+        user_cache_key: Stable per-user cache scope for user-sensitive validators.
+
+    Returns:
+        bool: Whether the landing should remain visible in navigation.
+    """
 
     validator = getattr(view_func, "module_pill_link_validator", None)
     if validator is None:
@@ -84,6 +97,7 @@ def _resolve_landing_visibility(
         f"{landing.path}:"
         f"role:{role_id}:"
         f"site:{site_id}:"
+        f"user:{user_cache_key}:"
         f"params:{params_fingerprint}"
     )
     cached = cache.get(cache_key)
@@ -107,8 +121,7 @@ def _initialize_request_badges(request):
         if role is None:
             role = node.role if node else None
     except (OperationalError, ProgrammingError):
-        node = node or None
-        role = role or None
+        pass
     request.badge_site = site
     request.badge_node = node
     request.badge_role = role
@@ -118,7 +131,10 @@ def _initialize_request_badges(request):
 def _get_user_group_membership(user) -> tuple[set[str], set[int]]:
     """Return the user's security-group names and ids when available."""
 
-    if not getattr(user, "is_authenticated", False) or getattr(user, "pk", None) is None:
+    if (
+        not getattr(user, "is_authenticated", False)
+        or getattr(user, "pk", None) is None
+    ):
         return set(), set()
     return (
         set(user.groups.values_list("name", flat=True)),
@@ -126,11 +142,15 @@ def _get_user_group_membership(user) -> tuple[set[str], set[int]]:
     )
 
 
-def _module_matches_navigation_access(module, role, user, user_group_ids: set[int]) -> bool:
+def _module_matches_navigation_access(
+    module, role, user, user_group_ids: set[int]
+) -> bool:
     """Return whether ``module`` is eligible for the current role and groups."""
 
     module_roles = getattr(module, "roles")
-    role_ids = {candidate.id for candidate in module_roles.all()} if module_roles else set()
+    role_ids = (
+        {candidate.id for candidate in module_roles.all()} if module_roles else set()
+    )
     role_matches = not role_ids or (role and role.id in role_ids)
     group_matches = bool(
         module.security_group_id
@@ -144,8 +164,20 @@ def _module_matches_navigation_access(module, role, user, user_group_ids: set[in
     return bool(role_matches)
 
 
-def _load_visible_modules(request, role, user, feature_checker) -> list[Module]:
-    """Load modules that survive feature and access checks for navigation."""
+def _load_visible_modules(
+    role, user, feature_checker, user_group_ids: set[int]
+) -> list[Module]:
+    """Load modules that survive feature and access checks for navigation.
+
+    Parameters:
+        role: Active node role used by the module manager.
+        user: Current request user.
+        feature_checker: FeatureChecker used for module feature gates.
+        user_group_ids: Current user's security group ids.
+
+    Returns:
+        list[Module]: Modules eligible for further landing annotation.
+    """
 
     try:
         modules = (
@@ -162,7 +194,6 @@ def _load_visible_modules(request, role, user, feature_checker) -> list[Module]:
     except (OperationalError, ProgrammingError):
         return []
 
-    _user_group_names, user_group_ids = _get_user_group_membership(user)
     visible_modules: list[Module] = []
     for module in candidate_modules:
         if not module.meets_feature_requirements(feature_checker.is_enabled):
@@ -173,7 +204,9 @@ def _load_visible_modules(request, role, user, feature_checker) -> list[Module]:
     return visible_modules
 
 
-def _compute_landing_lock_state(landing, view_func, request, user_group_names: set[str]):
+def _compute_landing_lock_state(
+    landing, view_func, request, user_group_names: set[str]
+):
     """Return lock metadata for a landing based on auth, staff, and group rules."""
 
     user = getattr(request, "user", None)
@@ -196,13 +229,57 @@ def _compute_landing_lock_state(landing, view_func, request, user_group_names: s
     elif requires_login and not user_is_authenticated:
         blocked_reason = "login"
 
-    if staff_only and not getattr(user, "is_staff", False) and blocked_reason != "login":
+    if (
+        staff_only
+        and not getattr(user, "is_staff", False)
+        and blocked_reason != "login"
+    ):
         blocked_reason = "permission"
 
     return {
         "nav_is_locked": bool(blocked_reason),
         "nav_lock_reason": blocked_reason,
     }
+
+
+def _select_primary_landings(module_path: str, landings: list):
+    """Return the preferred visible landings for a module path.
+
+    Parameters:
+        module_path: Module base path.
+        landings: Visible landing objects for the module.
+
+    Returns:
+        list: The preferred landing list, preserving historical `/read` behavior.
+    """
+
+    normalized_module_path = module_path.rstrip("/") or "/"
+    if landings and normalized_module_path == "/read":
+        primary_landings = [
+            landing
+            for landing in landings
+            if landing.path.rstrip("/") == normalized_module_path
+        ]
+        return primary_landings or [landings[0]]
+    return landings
+
+
+def _assign_module_menu(module):
+    """Normalize special module menu labels in place.
+
+    Parameters:
+        module: Module instance being prepared for navigation.
+
+    Returns:
+        Module: The same module with any special menu label adjustments applied.
+    """
+
+    app_name = getattr(module.application, "name", "").lower()
+    if app_name == "awg":
+        module.menu = "Calculators"
+    elif module.path.rstrip("/").lower() == "/man":
+        module.menu = "Manual"
+    return module
 
 
 def _annotate_module_landings(
@@ -212,6 +289,7 @@ def _annotate_module_landings(
     feature_checker,
     role_id: object,
     site_id: object,
+    user_cache_key: object,
     user_group_names: set[str],
 ):
     """Attach visible landing metadata to ``module`` for navigation rendering."""
@@ -246,11 +324,11 @@ def _annotate_module_landings(
             request,
             role_id=role_id,
             site_id=site_id,
+            user_cache_key=user_cache_key,
         ):
             continue
 
         seen_paths.add(normalized_path)
-        landing.nav_is_invalid = landing.nav_is_invalid or (not landing.is_link_valid())
         for key, value in _compute_landing_lock_state(
             landing,
             view_func,
@@ -260,23 +338,12 @@ def _annotate_module_landings(
             setattr(landing, key, value)
         landings.append(landing)
 
-    normalized_module_path = module.path.rstrip("/") or "/"
-    if landings and normalized_module_path == "/read":
-        primary_landings = [
-            landing
-            for landing in landings
-            if landing.path.rstrip("/") == normalized_module_path
-        ]
-        landings = primary_landings or [landings[0]]
+    landings = _select_primary_landings(module.path, landings)
 
     if not landings:
         return None
 
-    app_name = getattr(module.application, "name", "").lower()
-    if app_name == "awg":
-        module.menu = "Calculators"
-    elif module.path.rstrip("/").lower() == "/man":
-        module.menu = "Manual"
+    _assign_module_menu(module)
     module.enabled_landings_all_invalid = all(
         landing.nav_is_invalid for landing in landings
     )
@@ -307,7 +374,7 @@ def _select_favicon_url(current_module, site, node) -> str | None:
             badge = site.badge
             if badge.favicon_url:
                 favicon_url = badge.favicon_url
-        except (AttributeError, ObjectDoesNotExist, OperationalError, ProgrammingError):
+        except Exception:
             favicon_url = None
     if favicon_url:
         return favicon_url
@@ -335,7 +402,7 @@ def _load_header_references(request, site, node):
         return []
 
 
-def _build_chat_context(request, site, user, *, pages_chat_enabled: bool):
+def _build_chat_context(site, user, *, pages_chat_enabled: bool):
     """Return chat-related context flags for the current request."""
 
     user_is_authenticated = getattr(user, "is_authenticated", False)
@@ -365,41 +432,57 @@ def _build_chat_context(request, site, user, *, pages_chat_enabled: bool):
     return {
         "chat_enabled": chat_enabled,
         "chat_opt_in_checked": user_chat_opt_in,
-        "chat_socket_path": getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/"),
+        "chat_socket_path": getattr(
+            settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/"
+        ),
     }
+
+
+def _get_user_group_site_template(user):
+    """Return the first security-group site template available to ``user``.
+
+    Parameters:
+        user: Current request user.
+
+    Returns:
+        SiteTemplate | None: The first matching group template, if any.
+    """
+
+    try:
+        group_template = (
+            SecurityGroup.objects.filter(site_template__isnull=False, user=user)
+            .select_related("site_template")
+            .order_by("name")
+            .first()
+        )
+    except (OperationalError, ProgrammingError):
+        return None
+    return group_template.site_template if group_template else None
 
 
 def _select_site_template(site, user):
     """Return the best site template for the current user and site."""
 
     site_template = None
-    if getattr(user, "is_authenticated", False) and getattr(user, "pk", None) is not None:
+    if (
+        getattr(user, "is_authenticated", False)
+        and getattr(user, "pk", None) is not None
+    ):
         try:
             site_template = getattr(user, "site_template", None)
         except (AttributeError, ObjectDoesNotExist, OperationalError, ProgrammingError):
             site_template = None
         if site_template is None:
-            try:
-                group_template = (
-                    SecurityGroup.objects.filter(site_template__isnull=False, user=user)
-                    .select_related("site_template")
-                    .order_by("name")
-                    .first()
-                )
-            except (OperationalError, ProgrammingError):
-                group_template = None
-            else:
-                if group_template:
-                    site_template = group_template.site_template
+            site_template = _get_user_group_site_template(user)
 
     if site_template is None and site:
         site_template = getattr(site, "template", None)
-    if site_template is None:
-        try:
-            site_template = SiteTemplate.objects.order_by("name").first()
-        except (OperationalError, ProgrammingError):
-            site_template = None
-    return site_template
+    if site_template is not None:
+        return site_template
+    try:
+        return SiteTemplate.objects.order_by("name").first()
+    except (OperationalError, ProgrammingError):
+        return None
 
 
 def nav_links(request):
@@ -408,7 +491,6 @@ def nav_links(request):
     site, node, role = _initialize_request_badges(request)
     user = getattr(request, "user", None)
     user_is_authenticated = getattr(user, "is_authenticated", False)
-    user_has_pk = getattr(user, "pk", None) is not None
     user_is_staff = getattr(user, "is_staff", False)
     user_is_superuser = getattr(user, "is_superuser", False)
     is_site_operator = user_in_site_operator_group(user)
@@ -430,9 +512,12 @@ def nav_links(request):
     )
     pages_chat_enabled = bool(getattr(settings, "PAGES_CHAT_ENABLED", False))
     feature_checker = FeatureChecker()
-    user_group_names, _user_group_ids = _get_user_group_membership(user)
+    user_group_names, user_group_ids = _get_user_group_membership(user)
+    user_cache_key = getattr(user, "pk", None) if user_is_authenticated else "anonymous"
 
-    candidate_modules = _load_visible_modules(request, role, user, feature_checker)
+    candidate_modules = _load_visible_modules(
+        role, user, feature_checker, user_group_ids
+    )
     annotated_modules = [
         annotated_module
         for module in candidate_modules
@@ -443,12 +528,15 @@ def nav_links(request):
                 feature_checker=feature_checker,
                 role_id=role_id,
                 site_id=site_id,
+                user_cache_key=user_cache_key,
                 user_group_names=user_group_names,
             )
         )
         is not None
     ]
-    annotated_modules.sort(key=lambda module: (module.priority, module.menu_label.lower()))
+    annotated_modules.sort(
+        key=lambda module: (module.priority, module.menu_label.lower())
+    )
     current_module = _select_current_module(request.path, annotated_modules)
     request.current_module = current_module
 
@@ -467,7 +555,6 @@ def nav_links(request):
     }
     context.update(
         _build_chat_context(
-            request,
             site,
             user,
             pages_chat_enabled=pages_chat_enabled,
