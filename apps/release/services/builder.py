@@ -316,6 +316,30 @@ def build(
     creds: Optional[Credentials] = None,
     stash: bool = False,
 ) -> None:
+    """Build and optionally publish a package release from the current checkout.
+
+    Parameters:
+        version: Explicit release version to use. When omitted, the version file
+            is read from the package configuration.
+        tests: Run the package test command before building artifacts.
+        dist: Build distribution artifacts into ``dist/``.
+        twine: Upload built artifacts to PyPI with Twine.
+        git: Commit release metadata changes and push the current branch.
+        tag: Create and push the release git tag.
+        all: Enable the standard dist/twine/git/tag workflow flags together.
+        force: Skip the PyPI duplicate-version check before upload.
+        package: Release package configuration describing paths and commands.
+        creds: Optional PyPI credentials override.
+        stash: Automatically stash local changes when the repository is dirty.
+
+    Returns:
+        None.
+
+    Raises:
+        ReleaseError: If prerequisites fail, tests fail, upload fails, or git
+            operations cannot complete.
+    """
+
     from .network import fetch_pypi_releases
     from .uploader import upload_with_retries
 
@@ -392,19 +416,6 @@ def build(
                     _run([sys.executable, "-m", "pip", "install", "build"])
             _build_in_sanitized_tree(Path.cwd(), generate_wheels=package.generate_wheels)
 
-        if git:
-            files = ["VERSION", "pyproject.toml"]
-            _run(["git", "add"] + files)
-            msg = f"PyPI Release v{version}" if twine else f"Release v{version}"
-            if _git_has_staged_changes():
-                _run(["git", "commit", "-m", msg])
-            _run(["git", "push"])
-
-        if tag:
-            tag_name = f"v{version}"
-            _run(["git", "tag", tag_name])
-            _run(["git", "push", "origin", tag_name])
-
         if dist and twine:
             if not force:
                 releases = fetch_pypi_releases(package)
@@ -427,6 +438,19 @@ def build(
             except ValueError as err:
                 raise ReleaseError("Missing PyPI credentials") from err
             upload_with_retries(cmd, repository="PyPI")
+
+        if git:
+            files = ["VERSION", "pyproject.toml"]
+            _run(["git", "add"] + files)
+            msg = f"PyPI Release v{version}" if twine else f"Release v{version}"
+            if _git_has_staged_changes():
+                _run(["git", "commit", "-m", msg])
+            _run(["git", "push"])
+
+        if tag:
+            tag_name = f"v{version}"
+            _run(["git", "tag", tag_name])
+            _run(["git", "push", "origin", tag_name])
     finally:
         if stashed:
             _run(["git", "stash", "pop"], check=False)

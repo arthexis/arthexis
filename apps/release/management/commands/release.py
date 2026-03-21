@@ -269,9 +269,7 @@ class Command(BaseCommand):
 
         mode = options.get("mode")
         if mode:
-            for flag, enabled in BUILD_MODE_FLAGS[str(mode)].items():
-                if enabled:
-                    build_options[flag] = True
+            build_options.update(BUILD_MODE_FLAGS.get(str(mode), {}))
 
         return build_options
 
