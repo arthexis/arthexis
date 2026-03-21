@@ -317,7 +317,6 @@ include-package-data = true
 "apps.odoo.tests" = [ "**/*",]
 "apps.payments" = [ "**/*",]
 "apps.payments.migrations" = [ "**/*",]
-"apps.prompts" = [ "**/*",]
 "apps.protocols" = [ "**/*",]
 "apps.protocols.migrations" = [ "**/*",]
 "apps.protocols.tests" = [ "**/*",]
