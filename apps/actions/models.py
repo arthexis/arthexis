@@ -130,7 +130,7 @@ class DashboardAction(models.Model):
             if not (is_safe_relative or is_safe_absolute):
                 raise ValidationError({"absolute_url": _("Invalid or unsafe URL scheme.")})
         if self.http_method == self.HttpMethod.POST and self.target_type != self.TargetType.ABSOLUTE_URL:
-            raise ValidationError({"http_method": _("POST actions must use an absolute or relative URL target.")})
+            raise ValidationError({"http_method": _("POST actions must use the 'Absolute URL' target type.")})
         if self.caller_sigil and not self._is_safe_caller_sigil(self.caller_sigil):
             raise ValidationError({"caller_sigil": _("Caller sigil contains unsupported characters.")})
 

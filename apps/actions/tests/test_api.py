@@ -178,5 +178,5 @@ def test_dashboard_action_clean_rejects_post_admin_url_targets():
         action.clean()
 
     assert excinfo.value.message_dict == {
-        "http_method": ["POST actions must use an absolute or relative URL target."]
+        "http_method": ["POST actions must use the 'Absolute URL' target type."]
     }
