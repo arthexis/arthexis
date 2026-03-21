@@ -9,11 +9,15 @@ from urllib.parse import quote_plus
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.sites.models import Site
 from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.translation import gettext as _
+
+from apps.features.utils import is_suite_feature_enabled
+from apps.sites.context_processors import _build_chat_context
 
 from .exceptions import EvergoAPIError, EvergoPhaseSubmissionError
 from .forms import EvergoDashboardLookupForm, EvergoOrderTrackingForm
@@ -44,6 +48,46 @@ TRACKING_PREFILL_SOURCE_KEYS = (
     "tracking",
     "data",
 )
+
+
+def _parse_user_story_attachment_limit() -> int:
+    """Return the configured attachment limit with a safe integer fallback.
+
+    Returns:
+        int: Parsed attachment limit, or ``3`` when the setting is invalid.
+    """
+
+    raw_limit = getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)
+    try:
+        return int(raw_limit)
+    except (TypeError, ValueError):
+        return 3
+
+
+def _build_public_widget_context(*, user) -> dict[str, object]:
+    """Return chat and feedback flags for Evergo public pages.
+
+    Parameters:
+        user: Current authenticated Django user viewing the page.
+
+    Returns:
+        dict[str, object]: Template context flags required by shared public widgets.
+    """
+
+    feedback_ingestion_enabled = is_suite_feature_enabled("feedback-ingestion", default=True)
+    pages_chat_enabled = bool(getattr(settings, "PAGES_CHAT_ENABLED", False))
+    site = Site.objects.get_current()
+    chat_context = _build_chat_context(
+        site,
+        user,
+        pages_chat_enabled=pages_chat_enabled,
+    )
+    return {
+        "chat_enabled": chat_context["chat_enabled"],
+        "chat_socket_path": chat_context["chat_socket_path"],
+        "feedback_ingestion_enabled": feedback_ingestion_enabled,
+        "user_story_attachment_limit": _parse_user_story_attachment_limit(),
+    }
 
 
 def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
@@ -344,6 +388,7 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
                 if order.remote_id is not None
                 else ""
             ),
+            **_build_public_widget_context(user=request.user),
         },
     )
 

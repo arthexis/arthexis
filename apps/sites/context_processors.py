@@ -49,6 +49,20 @@ _ROLE_FAVICONS = {
 }
 
 
+def _parse_user_story_attachment_limit() -> int:
+    """Return the configured attachment limit with a safe integer fallback.
+
+    Returns:
+        int: Parsed attachment limit, or ``3`` when the setting is invalid.
+    """
+
+    raw_limit = getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)
+    try:
+        return int(raw_limit)
+    except (TypeError, ValueError):
+        return 3
+
+
 def _resolve_landing_visibility(
     landing,
     view_func,
@@ -549,9 +563,7 @@ def nav_links(request):
         "site_template": _select_site_template(site, user),
         "operator_interface_mode": operator_interface_mode,
         "feedback_ingestion_enabled": feedback_ingestion_enabled,
-        "user_story_attachment_limit": int(
-            getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)
-        ),
+        "user_story_attachment_limit": _parse_user_story_attachment_limit(),
     }
     context.update(
         _build_chat_context(
