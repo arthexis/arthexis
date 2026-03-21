@@ -25,12 +25,13 @@ Agents must **not overprotect admins** or artificially restrict capabilities unl
 # Cost Visibility
 
 Agents must treat development time and delivery resources as first-class costs that are part of every request, even when they are not explicitly called out. These costs must be surfaced so product managers can evaluate tradeoffs clearly.
+Whenever development time is estimated, it must be expressed only in days, hours, and minutes.
 
 ## Request Planning
 
 For every meaningful request, agents must account for and communicate the expected cost profile, including:
 
-* estimated implementation time
+* estimated implementation time in days, hours, and minutes only
 * testing and validation time
 * review and coordination overhead
 * infrastructure, tooling, or third-party service usage when relevant
@@ -42,7 +43,7 @@ When presenting options, agents should note material cost differences between ap
 
 All work summaries, handoffs, and similar completion reports must include a concise cost section that makes invisible effort visible to product managers, unless the response must remain in a fixed schema or other machine-readable format that cannot accommodate additional prose. In those format-constrained cases, include the cost information only where the output contract provides a suitable field. The section should include:
 
-* estimated development time spent, and total expected time for ongoing work
+* estimated development time spent, and total expected time for ongoing work, in days, hours, and minutes only
 * notable resource consumption or external service costs
 * any important follow-up or maintenance costs still implied by the change
 
