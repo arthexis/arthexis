@@ -1,4 +1,4 @@
-"""Compatibility wrapper for the legacy ``purge_net_messages`` command."""
+"""Shortcut wrapper for the standalone ``purge_net_messages`` command."""
 
 from __future__ import annotations
 
@@ -7,21 +7,16 @@ from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    """Bridge legacy ``purge_net_messages`` calls to ``node purge_net_messages``."""
+    """Forward standalone ``purge_net_messages`` calls to ``node purge-messages``."""
 
-    help = "Legacy alias; use `python manage.py node purge_net_messages` instead."
+    help = "Shortcut for `python manage.py node purge-messages`."
 
     def handle(self, *args, **options):
-        """Print legacy-alias notice and execute ``node purge_net_messages``."""
+        """Execute ``node purge-messages`` without standalone warning noise."""
 
-        self.stdout.write(
-            self.style.WARNING(
-                "LEGACY: `manage.py purge_net_messages` is a legacy alias; use `manage.py node purge_net_messages` instead."
-            )
-        )
         call_command(
             "node",
-            "purge_net_messages",
+            "purge-messages",
             stdout=self.stdout,
             stderr=self.stderr,
         )
