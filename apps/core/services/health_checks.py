@@ -10,9 +10,10 @@ import string
 import subprocess
 import time
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Protocol, cast
 
 from django.conf import settings
+from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth import get_user_model
 from django.core.management.base import CommandError
 from django.utils import timezone
@@ -31,10 +32,35 @@ from apps.screens.startup_notifications import LCD_LOW_LOCK_FILE, render_lcd_loc
 from apps.users.system import collect_system_user_issues, ensure_system_user
 
 
-def _get_user_by_natural_key(user_model, username: str):
-    """Return the user matching ``username`` or ``None`` when it does not exist."""
+class SupportsNaturalKeyManager(Protocol):
+    """Manager protocol for natural-key user lookups used by health checks."""
 
-    manager = getattr(user_model, "all_objects", user_model._default_manager)
+    def get_by_natural_key(self, username: str) -> AbstractBaseUser:
+        """Return the user matching ``username``."""
+
+
+def _get_user_by_natural_key(
+    user_model: type[AbstractBaseUser], username: str
+) -> AbstractBaseUser | None:
+    """Return the user matching ``username`` from the broadest available manager.
+
+    Parameters:
+        user_model: Concrete Django user model class to query, preferring
+            ``all_objects`` when present and otherwise falling back to
+            ``_default_manager``.
+        username: Natural-key username for the user lookup.
+
+    Returns:
+        The matching user instance when ``get_by_natural_key`` succeeds; otherwise ``None``.
+
+    Raises:
+        No exceptions are raised. ``DoesNotExist`` is handled by returning ``None``.
+    """
+
+    manager = cast(
+        SupportsNaturalKeyManager,
+        getattr(user_model, "all_objects", user_model._default_manager),
+    )
     try:
         return manager.get_by_natural_key(username)
     except user_model.DoesNotExist:

@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable, Iterator, Mapping, TYPE_CHECKING, Any, Protocol, TypeAlias
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, Protocol, TypeAlias
 
 import requests
 from django.conf import settings
@@ -51,9 +51,10 @@ class SupportsRepositoryPayload(Protocol):
     is_private: bool
 
 
+JSONScalar: TypeAlias = str | int | float | bool | None
 JSONMapping: TypeAlias = dict[str, Any]
 JSONList: TypeAlias = list[Any]
-JSONValue: TypeAlias = JSONMapping | JSONList
+JSONValue: TypeAlias = JSONMapping | JSONList | JSONScalar
 
 
 def build_headers(token: str, *, user_agent: str = "arthexis-admin") -> Mapping[str, str]:
@@ -135,6 +136,18 @@ def _extract_error_message(response: requests.Response) -> str:
 
 
 def _safe_json(response: requests.Response) -> JSONValue:
+    """Return parsed JSON for ``response`` and require callers to narrow before indexing.
+
+    Parameters:
+        response: HTTP response whose JSON payload should be decoded.
+
+    Returns:
+        The decoded JSON payload, which may be a mapping, list, scalar, or ``None``.
+
+    Raises:
+        No exceptions are raised. Invalid JSON payloads fall back to an empty mapping.
+    """
+
     try:
         return response.json()
     except ValueError:

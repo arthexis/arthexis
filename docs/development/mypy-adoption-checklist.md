@@ -16,7 +16,7 @@ The current MyPy-owned paths are recorded in `pyproject.toml` under `[tool.mypy]
 - `apps/core/modeling/`
 - `apps/core/system_ui.py`
 
-Django-aware checking is enabled through the `mypy_django_plugin.main` plugin with `config.settings` as the settings module. Keep new ownership additions small enough that `mypy` stays green before adding the next path.
+Django-aware checking is enabled through the `mypy_django_plugin.main` plugin with `config.settings.mypy` as the settings module. Keep new ownership additions small enough that `mypy` stays green before adding the next path.
 
 ## Rollout order per app
 
@@ -46,9 +46,11 @@ Search these patterns before claiming a package as MyPy-owned:
 - `from typing import Any`
 - unparameterized `list`, `dict`, `set`, and `tuple` annotations
 
+The backlog summaries below are a snapshot taken on 2026-03-21 with `rg` so reviewers can refresh them as coverage expands instead of treating them as evergreen totals.
+
 ### `apps/protocols/`
 
-Backlog summary:
+Backlog snapshot as of 2026-03-21:
 
 - `TYPE_CHECKING`: 0
 - `from typing import Any`: 0
@@ -61,7 +63,7 @@ Small follow-ups:
 
 ### `apps/repos/`
 
-Backlog summary:
+Backlog snapshot as of 2026-03-21:
 
 - `TYPE_CHECKING`: 8
 - `from typing import Any`: 5
@@ -75,7 +77,7 @@ Small follow-ups:
 
 ### Selected `apps/core/` modules
 
-Backlog summary for the current service and registry-heavy targets:
+Backlog snapshot as of 2026-03-21 for the current service and registry-heavy targets:
 
 - `TYPE_CHECKING`: 0
 - `from typing import Any`: 2
