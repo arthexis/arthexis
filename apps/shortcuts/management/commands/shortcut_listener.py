@@ -5,6 +5,7 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand
 
 from apps.shortcuts.models import Shortcut
+from apps.shortcuts.runtime import ShortcutExecutionError, execute_server_shortcut
 
 
 class Command(BaseCommand):
@@ -34,11 +35,19 @@ class Command(BaseCommand):
                 kind=Shortcut.Kind.SERVER,
                 is_active=True,
                 key_combo=combo,
-            ).select_related("recipe").first()
-            if shortcut is None or shortcut.recipe is None:
+            ).first()
+            if shortcut is None:
                 self.stdout.write(self.style.WARNING(f"No active server shortcut for {combo}"))
             else:
-                execution = shortcut.recipe.execute(shortcut_key=combo)
-                self.stdout.write(self.style.SUCCESS(f"Executed {shortcut.recipe.slug}: {execution.result}"))
+                try:
+                    execution = execute_server_shortcut(shortcut=shortcut)
+                except ShortcutExecutionError as exc:
+                    self.stdout.write(self.style.ERROR(f"Failed {combo}: {exc}"))
+                else:
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Executed {execution.target_identifier}: {execution.action_result.value}"
+                        )
+                    )
             if once:
                 break

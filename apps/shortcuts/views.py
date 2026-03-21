@@ -11,11 +11,9 @@ from django.views.decorators.http import require_GET, require_POST
 
 from apps.features.utils import is_suite_feature_enabled
 
-from apps.recipes.models import RecipeExecutionError
-
 from .constants import SHORTCUT_MANAGEMENT_FEATURE_SLUG
 from .models import Shortcut
-from .runtime import execute_client_shortcut
+from .runtime import ShortcutExecutionError, execute_client_shortcut
 
 
 @login_required
@@ -74,14 +72,15 @@ def execute_client_shortcut_view(request: HttpRequest, shortcut_id: int) -> Json
     except ValidationError as exc:
         message = exc.message if hasattr(exc, "message") else "; ".join(exc.messages) or "Invalid shortcut configuration."
         return JsonResponse({"detail": message}, status=400)
-    except RecipeExecutionError as exc:
+    except ShortcutExecutionError as exc:
         return JsonResponse({"detail": str(exc)}, status=422)
 
     return JsonResponse(
         {
             "shortcut": shortcut.key_combo,
-            "recipe": execution.recipe_slug,
-            "recipe_result": execution.recipe_result,
+            "target_kind": execution.target_kind,
+            "target_identifier": execution.target_identifier,
+            "action_result": execution.action_result.payload,
             "matched_pattern_id": execution.matched_pattern_id,
             "clipboard_output": execution.clipboard_output,
             "keyboard_output": execution.keyboard_output,

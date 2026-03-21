@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 
 import pytest
@@ -9,14 +10,14 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from apps.features.models import Feature
-from apps.recipes.models import Recipe
 from apps.shortcuts.constants import SHORTCUT_MANAGEMENT_FEATURE_SLUG
-from apps.shortcuts.models import ClipboardPattern, Shortcut
+from apps.shortcuts.models import ClipboardPattern, Shortcut, ShortcutTargetKind
+from apps.shortcuts.runtime import execute_server_shortcut
 
 
 @pytest.mark.django_db
 def test_client_shortcut_executes_first_matching_clipboard_pattern(client) -> None:
-    """Client shortcuts should execute the first matching clipboard pattern recipe."""
+    """Client shortcuts should execute the first matching clipboard pattern target."""
 
     feature, _ = Feature.objects.update_or_create(
         slug=SHORTCUT_MANAGEMENT_FEATURE_SLUG,
@@ -28,21 +29,13 @@ def test_client_shortcut_executes_first_matching_clipboard_pattern(client) -> No
     user = user_model.objects.create_user(username="shortcut-user", password="password", is_staff=True)
     client.force_login(user)
 
-    fallback_recipe = Recipe.objects.create(
-        slug="shortcut.fallback",
-        display="Fallback",
-        script="result = kwargs.get('clipboard', '') + '-fallback'",
-    )
-    primary_recipe = Recipe.objects.create(
-        slug="shortcut.primary",
-        display="Primary",
-        script="result = kwargs.get('clipboard', '') + '-pattern'",
-    )
     shortcut = Shortcut.objects.create(
         display="Clipboard shortcut",
         key_combo="CTRL+SHIFT+V",
         kind=Shortcut.Kind.CLIENT,
-        recipe=fallback_recipe,
+        target_kind=ShortcutTargetKind.COMMAND,
+        target_identifier="text.append_suffix",
+        target_payload={"source": "clipboard", "suffix": "-fallback"},
         use_clipboard_patterns=True,
         is_active=True,
         clipboard_output_enabled=True,
@@ -52,7 +45,9 @@ def test_client_shortcut_executes_first_matching_clipboard_pattern(client) -> No
         display="ticket",
         pattern=r"^TKT-",
         priority=1,
-        recipe=primary_recipe,
+        target_kind=ShortcutTargetKind.COMMAND,
+        target_identifier="text.append_suffix",
+        target_payload={"source": "clipboard", "suffix": "-pattern"},
         is_active=True,
         clipboard_output_enabled=True,
     )
@@ -65,6 +60,143 @@ def test_client_shortcut_executes_first_matching_clipboard_pattern(client) -> No
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["recipe"] == "shortcut.primary"
+    assert payload["target_identifier"] == "text.append_suffix"
+    assert payload["action_result"]["value"] == "TKT-10-pattern"
     assert payload["clipboard_output"] == "TKT-10-pattern"
     assert payload["matched_pattern_id"] is not None
+
+
+@pytest.mark.django_db
+def test_client_shortcut_workflow_output_template_uses_action_payload(client) -> None:
+    """Client shortcuts should render output from typed action-result payloads."""
+
+    Feature.objects.update_or_create(
+        slug=SHORTCUT_MANAGEMENT_FEATURE_SLUG,
+        defaults={"display": "Shortcut Management", "is_enabled": True},
+    )
+    user_model = get_user_model()
+    user = user_model.objects.create_user(username="workflow-user", password="password", is_staff=True)
+    client.force_login(user)
+
+    shortcut = Shortcut.objects.create(
+        display="Template shortcut",
+        key_combo="CTRL+SHIFT+T",
+        kind=Shortcut.Kind.CLIENT,
+        target_kind=ShortcutTargetKind.WORKFLOW,
+        target_identifier="text.render_template",
+        target_payload={"template": "[ARG.clipboard]-wf"},
+        is_active=True,
+        clipboard_output_enabled=True,
+        output_template="[ARG.action_result]!",
+    )
+
+    response = client.post(
+        reverse("shortcuts:client-execute", args=[shortcut.pk]),
+        data=json.dumps({"clipboard": "ABC"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["action_result"]["value"] == "ABC-wf"
+    assert payload["clipboard_output"] == "ABC-wf!"
+
+
+@pytest.mark.django_db
+def test_server_shortcut_executes_typed_target() -> None:
+    """Server shortcuts should execute structured command targets without recipes."""
+
+    shortcut = Shortcut.objects.create(
+        display="Server shortcut",
+        key_combo="CTRL+ALT+S",
+        kind=Shortcut.Kind.SERVER,
+        target_kind=ShortcutTargetKind.COMMAND,
+        target_identifier="text.prepend_prefix",
+        target_payload={"source": "shortcut_key", "prefix": "run:"},
+        is_active=True,
+    )
+
+    execution = execute_server_shortcut(shortcut=shortcut)
+
+    assert execution.target_identifier == "text.prepend_prefix"
+    assert execution.action_result.value == "run:CTRL+ALT+S"
+
+
+@pytest.mark.django_db
+def test_client_shortcut_output_template_keeps_legacy_recipe_result_alias(client) -> None:
+    """Client shortcuts should keep ``recipe_result`` available for migrated templates."""
+
+    Feature.objects.update_or_create(
+        slug=SHORTCUT_MANAGEMENT_FEATURE_SLUG,
+        defaults={"display": "Shortcut Management", "is_enabled": True},
+    )
+    user_model = get_user_model()
+    user = user_model.objects.create_user(username="legacy-template-user", password="password", is_staff=True)
+    client.force_login(user)
+
+    shortcut = Shortcut.objects.create(
+        display="Legacy template shortcut",
+        key_combo="CTRL+SHIFT+L",
+        kind=Shortcut.Kind.CLIENT,
+        target_kind=ShortcutTargetKind.COMMAND,
+        target_identifier="text.append_suffix",
+        target_payload={"source": "clipboard", "suffix": "-legacy"},
+        is_active=True,
+        clipboard_output_enabled=True,
+        output_template="[ARG.recipe_result]!",
+    )
+
+    response = client.post(
+        reverse("shortcuts:client-execute", args=[shortcut.pk]),
+        data=json.dumps({"clipboard": "ABC"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["action_result"]["value"] == "ABC-legacy"
+    assert payload["clipboard_output"] == "ABC-legacy!"
+
+
+@pytest.mark.django_db
+def test_shortcut_clean_normalizes_empty_target_payload() -> None:
+    """Shortcut cleaning should normalize empty payloads before validation."""
+
+    shortcut = Shortcut(
+        display="Empty payload shortcut",
+        key_combo="ctrl+shift+n",
+        kind=Shortcut.Kind.CLIENT,
+        target_kind=ShortcutTargetKind.ACTION,
+        target_identifier="text.static",
+        target_payload="",
+        is_active=True,
+    )
+
+    shortcut.clean()
+
+    assert shortcut.key_combo == "CTRL+SHIFT+N"
+    assert shortcut.target_payload == {}
+
+
+def test_typed_target_migration_handles_shortcut_key_and_reverse_static_text() -> None:
+    """Migration helpers should preserve shortcut-key commands and static text rollbacks."""
+
+    migration = importlib.import_module("apps.shortcuts.migrations.0002_shortcut_typed_targets")
+
+    recipe = type(
+        "RecipeStub",
+        (),
+        {
+            "script": "result = 'run:' + kwargs.get('shortcut_key', '')",
+            "slug": "server.shortcut",
+            "body_type": "python",
+            "display": "Server shortcut",
+        },
+    )()
+
+    kind, identifier, payload = migration._forward_target(recipe)
+
+    assert kind == "command"
+    assert identifier == "text.prepend_prefix"
+    assert payload == {"prefix": "run:", "source": "shortcut_key"}
+    assert migration._reverse_script("action", "text.static", {"text": "Hello"}) == "result = 'Hello'"
