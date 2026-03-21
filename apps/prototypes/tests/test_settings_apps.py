@@ -71,3 +71,11 @@ def test_legacy_camera_shim_remains_importable_for_prototype_integrations():
 
     assert camera_module.capture_rpi_snapshot is rpi_module.capture_rpi_snapshot
     assert rfid_module.queue_camera_snapshot is not None
+
+
+def test_socials_runtime_app_is_replaced_with_legacy_migration_shim():
+    assert "apps.socials" not in settings_apps.LOCAL_APPS
+    assert (
+        "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig"
+        in settings_apps.LEGACY_MIGRATION_APPS
+    )

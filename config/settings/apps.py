@@ -77,7 +77,11 @@ def _to_module_path(path: Path) -> str:
     return f"apps.{'.'.join(path.relative_to(APPS_DIR).parts)}"
 
 
-LEGACY_MIGRATION_APPS = ["apps.selenium", "config.legacy_mermaid"]
+LEGACY_MIGRATION_APPS = [
+    "apps.selenium",
+    "config.legacy_mermaid",
+    "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig",
+]
 NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",
 }

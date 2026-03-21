@@ -57,7 +57,6 @@ DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
     "sensors": "Sensor data ingestion and monitoring utilities.",
     "sigils": "Sigil handling and certificate helpers.",
     "sites": "Site management, domains, and tenancy helpers.",
-    "socials": "Social integrations and sharing utilities.",
     "summary": "Aggregated dashboards and executive summaries.",
     "survey": "Survey collection and response management.",
     "teams": "Identity, Entitlements and Access Controls.",
