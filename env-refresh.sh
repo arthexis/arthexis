@@ -310,14 +310,18 @@ ensure_playwright_host_dependencies() {
   local -a install_deps_cmd=("$PYTHON" -m playwright install-deps chromium firefox)
   if [ "$(id -u)" -eq 0 ]; then
     echo "Installing Playwright host libraries for Linux."
-    "${install_deps_cmd[@]}"
-    return $?
+    if ! "${install_deps_cmd[@]}"; then
+      echo "Warning: Host dependency installation failed, but continuing to verification." >&2
+    fi
+    return 0
   fi
 
   if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
     echo "Installing Playwright host libraries for Linux via sudo."
-    sudo -n "${install_deps_cmd[@]}"
-    return $?
+    if ! sudo -n "${install_deps_cmd[@]}"; then
+      echo "Warning: Host dependency installation via sudo failed, but continuing to verification." >&2
+    fi
+    return 0
   fi
 
   echo "Warning: Playwright browser binaries are installed, but Linux host libraries may still be missing." >&2
