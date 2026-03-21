@@ -19,6 +19,15 @@ USB_TRACKER_MAX_BYTES = 128 * 1024
 
 
 def _thermometer_is_due(thermometer: Thermometer, now: datetime) -> bool:
+    """Return whether the thermometer should be sampled now.
+
+    Args:
+        thermometer: Thermometer instance under consideration.
+        now: Current timestamp used for interval comparison.
+
+    Returns:
+        ``True`` when the sampling interval has elapsed.
+    """
     interval_seconds = thermometer.sampling_interval_seconds
     if interval_seconds <= 0:
         return False
@@ -30,6 +39,11 @@ def _thermometer_is_due(thermometer: Thermometer, now: datetime) -> bool:
 
 @shared_task(name="apps.sensors.tasks.sample_thermometers")
 def sample_thermometers() -> dict[str, int]:
+    """Sample all active thermometers that are due for a reading.
+
+    Returns:
+        Counters describing sampled, skipped, and failed thermometers.
+    """
     now = timezone.localtime()
     sampled = 0
     skipped = 0
@@ -62,11 +76,24 @@ def sample_thermometers() -> dict[str, int]:
 
 
 def _usb_mount_roots() -> tuple[Path, ...]:
+    """Return the configured directories that may contain USB mounts.
+
+    Returns:
+        Candidate mount root paths.
+    """
     roots = getattr(settings, "USB_TRACKER_MOUNT_ROOTS", USB_TRACKER_DEFAULT_ROOTS)
     return tuple(Path(root) for root in roots)
 
 
 def _iter_usb_mounts(roots: tuple[Path, ...]) -> list[Path]:
+    """Enumerate mounted USB directories below the configured roots.
+
+    Args:
+        roots: Root directories to search.
+
+    Returns:
+        Unique mount directories found under the roots.
+    """
     mounts: set[Path] = set()
     for root in roots:
         if not root.is_dir():
@@ -82,6 +109,14 @@ def _iter_usb_mounts(roots: tuple[Path, ...]) -> list[Path]:
 
 
 def _read_match_file(path: Path) -> str | None:
+    """Read a candidate match file up to the tracker byte limit.
+
+    Args:
+        path: File path to read.
+
+    Returns:
+        File contents, or ``None`` when the file cannot be read.
+    """
     try:
         with path.open("r", encoding="utf-8", errors="ignore") as handle:
             return handle.read(USB_TRACKER_MAX_BYTES)
@@ -89,19 +124,22 @@ def _read_match_file(path: Path) -> str | None:
         return None
 
 
-def _format_recipe_result(result: object) -> str:
-    if result is None:
-        return ""
-    try:
-        return str(result)
-    except Exception:
-        return repr(result)
-
-
 def _match_usb_tracker(
     tracker: UsbTracker,
     mount: Path,
-) -> tuple[str, Path, Path] | None:
+) -> tuple[Path, Path] | None:
+    """Return the first passive USB tracker match for a mount.
+
+    Args:
+        tracker: USB tracker configuration.
+        mount: Mount directory to inspect.
+
+    Returns:
+        A tuple of ``(match_path, mount)`` when the tracker matches, otherwise ``None``.
+
+    Raises:
+        ValueError: If the configured regex is invalid.
+    """
     relative_path = tracker.required_file_path.lstrip("/")
     if not relative_path:
         return None
@@ -121,28 +159,27 @@ def _match_usb_tracker(
         except re.error as exc:
             raise ValueError(f"Invalid regex for tracker {tracker.slug}: {exc}") from exc
 
-    try:
-        stats = candidate.stat()
-    except OSError:
-        return None
-
-    signature = f"{candidate}:{stats.st_size}:{stats.st_mtime_ns}"
-    return signature, candidate, mount
+    return candidate, mount
 
 
 @shared_task(name="apps.sensors.tasks.scan_usb_trackers")
 def scan_usb_trackers() -> dict[str, int]:
+    """Scan configured USB trackers and update their passive match state.
+
+    Returns:
+        Counters describing scanned, matched, and failed trackers.
+    """
     now = timezone.localtime()
     mounts = _iter_usb_mounts(_usb_mount_roots())
     scanned = 0
     matched = 0
-    triggered = 0
     failed = 0
 
     for tracker in UsbTracker.objects.filter(is_active=True).iterator():
         scanned += 1
-        update_fields = ["last_checked_at"]
         tracker.last_checked_at = now
+        tracker.last_error = ""
+        update_fields = ["last_checked_at", "last_error"]
 
         match_info = None
         for mount in mounts:
@@ -150,63 +187,28 @@ def scan_usb_trackers() -> dict[str, int]:
                 match_info = _match_usb_tracker(tracker, mount)
             except ValueError as exc:
                 tracker.last_error = str(exc)
-                update_fields.append("last_error")
+                failed += 1
                 match_info = None
                 break
             if match_info:
                 break
 
         if not match_info:
+            tracker.last_match_path = ""
+            update_fields.append("last_match_path")
             tracker.save(update_fields=update_fields)
             continue
 
         matched += 1
-        signature, match_path, mount = match_info
+        match_path, _mount = match_info
         tracker.last_matched_at = now
         tracker.last_match_path = str(match_path)
         update_fields.extend(["last_matched_at", "last_match_path"])
-
-        if signature == tracker.last_match_signature:
-            tracker.save(update_fields=update_fields)
-            continue
-
-        if tracker.last_triggered_at and tracker.cooldown_seconds:
-            elapsed = (now - tracker.last_triggered_at).total_seconds()
-            if elapsed < tracker.cooldown_seconds:
-                tracker.save(update_fields=update_fields)
-                continue
-
-        tracker.last_match_signature = signature
-        tracker.last_triggered_at = now
-        update_fields.extend(["last_match_signature", "last_triggered_at"])
-
-        if tracker.recipe:
-            try:
-                result = tracker.recipe.execute(
-                    tracker=tracker,
-                    mount_path=str(mount),
-                    file_path=str(match_path),
-                )
-                tracker.last_recipe_result = _format_recipe_result(result.result)
-                tracker.last_error = ""
-                triggered += 1
-                update_fields.extend(["last_recipe_result", "last_error"])
-            except Exception as exc:  # pragma: no cover - defensive logging
-                tracker.last_error = str(exc)
-                tracker.last_recipe_result = ""
-                failed += 1
-                update_fields.extend(["last_error", "last_recipe_result"])
-        else:
-            tracker.last_recipe_result = ""
-            tracker.last_error = ""
-            update_fields.extend(["last_recipe_result", "last_error"])
-
         tracker.save(update_fields=update_fields)
 
     return {
         "scanned": scanned,
         "matched": matched,
-        "triggered": triggered,
         "failed": failed,
     }
 
