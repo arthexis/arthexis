@@ -78,8 +78,13 @@ def test_legacy_camera_shim_remains_importable_for_prototype_integrations():
 
 
 def test_removed_runtime_apps_only_remain_available_through_explicit_legacy_shims():
+    assert "apps.prompts" not in settings_apps.LOCAL_APPS
     assert "apps.socials" not in settings_apps.LOCAL_APPS
     assert "apps.survey" not in settings_apps.LOCAL_APPS
+    assert (
+        "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig"
+        in settings_apps.LEGACY_MIGRATION_APPS
+    )
     assert settings_apps.MIGRATION_MODULES["socials"] == "apps.socials.migrations"
     assert (
         "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig"
