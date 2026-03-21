@@ -20,13 +20,15 @@ def remove_development_blog_suite_feature(apps, schema_editor):
 def restore_development_blog_suite_feature(apps, schema_editor):
     """Recreate the Development Blog feature on rollback."""
 
-    del schema_editor
+    db_alias = schema_editor.connection.alias
     Feature = apps.get_model("features", "Feature")
-    Feature.objects.update_or_create(
+    feature_manager = getattr(Feature, "all_objects", Feature._base_manager).using(db_alias)
+    feature, _created = feature_manager.update_or_create(
         slug=FEATURE_SLUG,
         defaults={
             "display": FEATURE_DISPLAY,
             "is_enabled": True,
+            "is_deleted": False,
             "summary": (
                 "Legacy engineering blog feature retained only for migration rollback. "
                 "Public engineering updates now live on the changelog page."
@@ -38,6 +40,9 @@ def restore_development_blog_suite_feature(apps, schema_editor):
             "metadata": {"replacement_public_view": "pages:changelog"},
         },
     )
+    if feature.is_deleted:
+        feature.is_deleted = False
+        feature.save(update_fields=["is_deleted"])
 
 
 class Migration(migrations.Migration):

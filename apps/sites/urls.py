@@ -6,6 +6,20 @@ from .views import analytics, landing, management
 
 app_name = "pages"
 
+
+class EngineeringBlogRedirectView(RedirectView):
+    """Redirect retired engineering blog routes to the maintained changelog page."""
+
+    pattern_name = "pages:changelog"
+    permanent = True
+
+    def get_redirect_url(self, *args, **kwargs):
+        """Ignore legacy blog slug parameters when resolving the changelog destination."""
+
+        del args, kwargs
+        return super().get_redirect_url()
+
+
 urlpatterns = [
     path("", landing.index, name="index"),
     path("footer/", landing.footer_fragment, name="footer-fragment"),
@@ -15,12 +29,12 @@ urlpatterns = [
     path("changelog/data/", landing.changelog_report_data, name="changelog-data"),
     path(
         "engineering/blog/",
-        RedirectView.as_view(url="/changelog/", permanent=True),
+        EngineeringBlogRedirectView.as_view(),
         name="engineering-blog-redirect",
     ),
     path(
         "engineering/blog/<path:slug>/",
-        RedirectView.as_view(url="/changelog/", permanent=True),
+        EngineeringBlogRedirectView.as_view(),
         name="engineering-blog-detail-redirect",
     ),
     path("client-report/", analytics.client_report, name="client-report"),

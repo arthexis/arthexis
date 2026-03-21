@@ -12,16 +12,22 @@ def remove_blog_sigil_roots(apps, schema_editor):
     SigilRoot = apps.get_model("sigils", "SigilRoot")
     db_alias = schema_editor.connection.alias
     sigil_manager = getattr(SigilRoot, "all_objects", SigilRoot._base_manager).using(db_alias)
-    sigil_manager.filter(prefix__in=BLOG_SIGIL_PREFIXES)._raw_delete(db_alias)
+    sigil_manager.filter(
+        prefix__in=BLOG_SIGIL_PREFIXES,
+        context_type="request",
+        content_type=None,
+        is_seed_data=True,
+    )._raw_delete(db_alias)
 
 
 def restore_blog_sigil_roots(apps, schema_editor):
     """Recreate blog sigil roots on rollback."""
 
-    del schema_editor
+    db_alias = schema_editor.connection.alias
     SigilRoot = apps.get_model("sigils", "SigilRoot")
+    sigil_manager = getattr(SigilRoot, "all_objects", SigilRoot._base_manager).using(db_alias)
     for prefix in BLOG_SIGIL_PREFIXES:
-        SigilRoot.objects.update_or_create(
+        sigil_manager.update_or_create(
             prefix=prefix,
             defaults={
                 "context_type": "request",
