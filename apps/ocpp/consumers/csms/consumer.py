@@ -1485,7 +1485,7 @@ class CSMSConsumer(
             stack_level=stack_level,
             purpose=purpose,
             kind=kind,
-            connector_id=evse_id or 0,
+            connector_id=evse_id or self.connector_value or 0,
             schedule=self._normalize_reported_charging_schedule(
                 payload.get("chargingSchedule")
             ),

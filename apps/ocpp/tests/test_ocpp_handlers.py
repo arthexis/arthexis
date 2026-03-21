@@ -2105,6 +2105,55 @@ async def test_report_charging_profiles_persists_multi_profile_payload():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_uses_connector_context_without_evse_id():
+    connector_charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="RCP-CONTEXT-1", connector_id=1
+    )
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(
+        connector_charger.charger_id, connector_charger.connector_id
+    )
+    consumer.charger_id = connector_charger.charger_id
+    consumer.charger = connector_charger
+    consumer.aggregate_charger = None
+    consumer.connector_value = connector_charger.connector_id
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    result = await consumer._handle_report_charging_profiles_action(
+        {
+            "requestId": 28,
+            "chargingProfile": {
+                "chargingProfileId": 12,
+                "stackLevel": 1,
+                "chargingProfilePurpose": ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+                "chargingProfileKind": ChargingProfile.Kind.ABSOLUTE,
+                "chargingSchedule": {
+                    "chargingRateUnit": ChargingProfile.RateUnit.AMP,
+                    "chargingSchedulePeriod": [{"startPeriod": 0, "limit": 14}],
+                },
+            },
+            "tbc": False,
+        },
+        "msg-rcp-context-1",
+        "",
+        "",
+    )
+
+    assert result == {}
+    profile_data = await database_sync_to_async(
+        lambda: ChargingProfile.objects.select_related("charger")
+        .get(
+            charger=connector_charger,
+            charging_profile_id=12,
+        )
+    )()
+    assert profile_data.charger.connector_id == 1
+    assert profile_data.connector_id == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
 async def test_report_charging_profiles_resolves_evse_row_from_aggregate_charger():
     aggregate_charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="RCP-EVSE-1", connector_id=0
