@@ -438,6 +438,7 @@ class EvergoUserAdmin(
 
     login_on_evergo_dashboard_action.label = LOGIN_ON_EVERGO_LABEL
     login_on_evergo_dashboard_action.short_description = LOGIN_ON_EVERGO_LABEL
+    login_on_evergo_dashboard_action.requires_queryset = False
     login_on_evergo_dashboard_action.dashboard_url = "admin:evergo_evergouser_login_on_evergo"
 
     def login_on_evergo_action(self, request, obj):
