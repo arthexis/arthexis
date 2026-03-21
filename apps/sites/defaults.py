@@ -56,7 +56,6 @@ DEFAULT_APPLICATION_DESCRIPTIONS: dict[str, str] = {
     "sensors": "Sensor data ingestion and monitoring utilities.",
     "sigils": "Sigil handling and certificate helpers.",
     "sites": "Site management, domains, and tenancy helpers.",
-    "socials": "Social integrations and sharing utilities.",
     "summary": "Aggregated dashboards and executive summaries.",
     "teams": "Identity, Entitlements and Access Controls.",
     "tasks": "Task execution and job tracking.",

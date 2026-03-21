@@ -77,8 +77,14 @@ def test_legacy_camera_shim_remains_importable_for_prototype_integrations():
     assert rfid_module.queue_camera_snapshot is not None
 
 
-def test_survey_runtime_app_removed_but_legacy_migration_app_remains_explicit():
+def test_removed_runtime_apps_only_remain_available_through_explicit_legacy_shims():
+    assert "apps.socials" not in settings_apps.LOCAL_APPS
     assert "apps.survey" not in settings_apps.LOCAL_APPS
+    assert settings_apps.MIGRATION_MODULES["socials"] == "apps.socials.migrations"
+    assert (
+        "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig"
+        in settings_apps.LEGACY_MIGRATION_APPS
+    )
     assert (
         "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig"
         in settings_apps.LEGACY_MIGRATION_APPS
