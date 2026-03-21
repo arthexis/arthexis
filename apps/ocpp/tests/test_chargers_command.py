@@ -59,9 +59,25 @@ class ChargersCommandTests(TestCase):
 
         Charger.objects.create(charger_id="CLI-WS-3")
 
-        with self.assertRaisesMessage(CommandError, "requires --ws-auth-password"):
+        with self.assertRaisesMessage(CommandError, "--ws-auth-password is required."):
             call_command(
                 "chargers", "--sn", "CLI-WS-3", "--ws-auth-username", "cp-user"
+            )
+
+    def test_requires_username_when_ws_auth_username_is_blank(self) -> None:
+        """Whitespace-only websocket usernames are rejected with the right error."""
+
+        Charger.objects.create(charger_id="CLI-WS-3B")
+
+        with self.assertRaisesMessage(CommandError, "--ws-auth-username is required."):
+            call_command(
+                "chargers",
+                "--sn",
+                "CLI-WS-3B",
+                "--ws-auth-username",
+                "   ",
+                "--ws-auth-password",
+                "secret123",
             )
 
     def test_requires_effective_cp_selector_for_ws_auth_changes(self) -> None:

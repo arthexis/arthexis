@@ -559,9 +559,9 @@ class Command(BaseCommand):
 
         username = username.strip()
         if not username:
-            raise CommandError('--ws-auth-password requires --ws-auth-username.')
+            raise CommandError('--ws-auth-username is required.')
         if not password:
-            raise CommandError('--ws-auth-username requires --ws-auth-password.')
+            raise CommandError('--ws-auth-password is required.')
         ws_auth_user = self._upsert_ws_auth_user(
             username=username,
             password=str(password),
