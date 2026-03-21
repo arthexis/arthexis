@@ -16,7 +16,8 @@ trap cleanup EXIT
 "$PYTHON_BIN" -m mypy --config-file pyproject.toml "$@" >"$mypy_output" 2>&1 || status=$?
 status="${status:-0}"
 
-if ! "$PYTHON_BIN" - "$mypy_output" <<'PY'
+set +e
+"$PYTHON_BIN" - "$mypy_output" <<'PY'
 from __future__ import annotations
 
 import re
@@ -40,8 +41,10 @@ for line in path.read_text(encoding="utf-8").splitlines():
     print(line)
     previous_blank = is_blank
 PY
-then
-  filter_status=$?
+filter_status=$?
+set -e
+
+if [ "$filter_status" -ne 0 ]; then
   echo "Warning: MyPy output filter failed with exit code ${filter_status}; showing unfiltered output." >&2
   cat "$mypy_output" >&2
 fi
