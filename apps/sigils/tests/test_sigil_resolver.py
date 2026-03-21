@@ -209,6 +209,20 @@ def test_resolve_sigils_conf_looks_up_settings_value(settings):
 
 
 @pytest.mark.django_db
+def test_resolve_sigils_manager_runtime_errors_preserve_placeholder(monkeypatch, user_root):
+    user_model = get_user_model()
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(user_model.objects, "explode", explode, raising=False)
+
+    result = sigil_resolver.resolve_sigils("[USR=explode]")
+
+    assert result == "[USR=explode]"
+
+
+@pytest.mark.django_db
 def test_resolve_sigils_entity_failures_preserve_placeholder(user_root):
     result = sigil_resolver.resolve_sigils("[USR:missing-field=value.email]")
 

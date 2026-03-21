@@ -866,6 +866,13 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
             key_upper or normalized_key or raw_key,
         )
         return _failed_resolution(original_token)
+    except Exception:
+        logger.exception(
+            "Unexpected error resolving sigil [%s.%s]",
+            lookup_root,
+            key_upper or normalized_key or raw_key,
+        )
+        return _failed_resolution(original_token)
 
 
 def resolve_sigils(text: str, current: Optional[models.Model] = None) -> str:
