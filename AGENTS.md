@@ -101,6 +101,9 @@ Agents must run relevant tests after code changes.
 ### Test Execution
 
 * Execute tests and **fix errors introduced by changes**.
+* Prefer validated repository entrypoints over ad-hoc interpreter calls. Run `./env-refresh.sh --deps-only` before Django or pytest commands when the environment may be unbootstrapped.
+* Use `.venv/bin/python` (or the repo's validated wrapper/management entrypoints) instead of bare `python` when invoking `manage.py` or `pytest` directly.
+* Prefer `python manage.py test run -- ...` and `python manage.py migrations check` over raw `python -m pytest` / `makemigrations --check` when those entrypoints cover the task.
 * Avoid creating tests for **micro-behaviors** unless:
 
   * they are security-relevant, or
