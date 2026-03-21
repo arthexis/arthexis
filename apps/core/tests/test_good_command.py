@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from io import StringIO
 
+import pytest
+
 from django.core.management import call_command
 
 from apps.core.good import GoodIssue, GoodReport, _issue_sort_key, marketing_tagline
@@ -30,6 +32,19 @@ def test_issue_sort_key_orders_by_priority() -> None:
     ordered = sorted(issues, key=_issue_sort_key)
 
     assert [item.key for item in ordered] == ["b", "c", "a"]
+
+
+def test_success_line_rejects_non_minor_issue_reports() -> None:
+    """Reports with blocking issues should not expose a misleading success line."""
+
+    report = GoodReport(
+        issues=(
+            GoodIssue("critical", "Tests failed", "detail", "critical", "tests"),
+        )
+    )
+
+    with pytest.raises(ValueError, match="non-minor issues"):
+        _ = report.success_line
 
 
 def test_good_command_tagline_includes_docs_link(monkeypatch) -> None:

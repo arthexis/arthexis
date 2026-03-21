@@ -87,12 +87,21 @@ class GoodReport:
 
     @property
     def success_line(self) -> str:
-        """Return the one-line success output requested by product guidance."""
+        """Return the one-line success output requested by product guidance.
+
+        Returns:
+            The plain tagline when no issues exist, or the starred tagline when
+            only minor considerations were found.
+
+        Raises:
+            ValueError: If important issues exist and a success line should not
+                be shown.
+        """
 
         if not self.issues:
             return self.tagline
         if self.has_non_minor_issues:
-            return self.tagline
+            raise ValueError("Cannot render a success line when non-minor issues exist.")
         return f"{self.tagline}*"
 
 
@@ -247,10 +256,10 @@ def _check_recent_logs() -> Iterable[GoodIssue]:
         if stat.st_mtime < cutoff_ts:
             continue
         try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
+            with path.open(encoding="utf-8", errors="ignore") as handle:
+                line_count = sum(1 for line in handle if _is_suspicious_log_line(line))
         except OSError:
             continue
-        line_count = sum(1 for line in text.splitlines() if _is_suspicious_log_line(line))
         if line_count:
             suspicious += line_count
             latest_path = str(path)
