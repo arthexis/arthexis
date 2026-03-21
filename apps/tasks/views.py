@@ -6,6 +6,7 @@ from django.utils.translation import gettext_lazy as _
 from django.views.generic import FormView, TemplateView
 
 from apps.nodes.models import Node
+from apps.rates.mixins import RateLimitedViewMixin
 from apps.sites.utils import landing
 
 from .forms import ChargerVendorSubmissionForm, MaintenanceRequestForm
@@ -36,17 +37,22 @@ def maintenance_request(request):
     return render(request, "tasks/maintenance_request.html", {"form": form})
 
 
-class ChargerVendorSubmissionView(FormView):
+class ChargerVendorSubmissionView(RateLimitedViewMixin, FormView):
     """Render a public intake form for charger vendors seeking Arthexis integration."""
 
     template_name = "tasks/charger_vendor_submission.html"
     form_class = ChargerVendorSubmissionForm
     success_url = reverse_lazy("tasks:charger-vendor-submission-thanks")
+    rate_limit_scope = "charger-vendor-submission"
+    rate_limit_fallback = 5
+    rate_limit_window = 3600
 
     def form_valid(self, form):
         """Persist the submission and notify the user with next-step messaging."""
 
-        form.save()
+        submission = form.save(commit=False)
+        submission.is_user_data = True
+        submission.save()
         messages.success(
             self.request,
             _(

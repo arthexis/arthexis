@@ -23,6 +23,8 @@ class TaskCategoryAdminForm(forms.ModelForm):
     )
 
     class Meta:
+        """Configure the task category admin form to expose every model field."""
+
         model = TaskCategory
         fields = "__all__"
 
@@ -68,6 +70,8 @@ class MaintenanceRequestForm(forms.ModelForm):
     )
 
     class Meta:
+        """Configure editable maintenance request fields and Bootstrap-oriented widgets."""
+
         model = ManualTaskRequest
         fields = [
             "category",
@@ -139,6 +143,8 @@ class ChargerVendorSubmissionForm(forms.ModelForm):
     """Collect charger vendor details needed for integration evaluation."""
 
     class Meta:
+        """Bind the public intake form to charger vendor submissions and their widgets."""
+
         model = ChargerVendorSubmission
         fields = [
             "company_name",

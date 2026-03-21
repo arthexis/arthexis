@@ -19,100 +19,48 @@
           {% endif %}
           <div class="row g-3">
             <div class="col-md-6">
-              <label class="form-label" for="id_company_name">{% trans "Company name" %}</label>
-              {{ form.company_name }}
-              {% if form.company_name.errors %}<div class="invalid-feedback d-block">{{ form.company_name.errors|join:" " }}</div>{% endif %}
+              {% include "tasks/includes/form_field.html" with field=form.company_name wrapper_class="" %}
             </div>
             <div class="col-md-6">
-              <label class="form-label" for="id_charger_brand">{% trans "Charger brand" %}</label>
-              {{ form.charger_brand }}
-              {% if form.charger_brand.errors %}<div class="invalid-feedback d-block">{{ form.charger_brand.errors|join:" " }}</div>{% endif %}
+              {% include "tasks/includes/form_field.html" with field=form.charger_brand wrapper_class="" %}
             </div>
             <div class="col-md-6">
-              <label class="form-label" for="id_contact_name">{% trans "Primary contact" %}</label>
-              {{ form.contact_name }}
-              {% if form.contact_name.errors %}<div class="invalid-feedback d-block">{{ form.contact_name.errors|join:" " }}</div>{% endif %}
+              {% include "tasks/includes/form_field.html" with field=form.contact_name wrapper_class="" %}
             </div>
             <div class="col-md-6">
-              <label class="form-label" for="id_contact_email">{% trans "Primary contact email" %}</label>
-              {{ form.contact_email }}
-              {% if form.contact_email.errors %}<div class="invalid-feedback d-block">{{ form.contact_email.errors|join:" " }}</div>{% endif %}
+              {% include "tasks/includes/form_field.html" with field=form.contact_email wrapper_class="" %}
             </div>
             <div class="col-md-6">
-              <label class="form-label" for="id_contact_phone">{% trans "Primary contact phone" %}</label>
-              {{ form.contact_phone }}
-              {% if form.contact_phone.help_text %}<div class="form-text">{{ form.contact_phone.help_text }}</div>{% endif %}
-              {% if form.contact_phone.errors %}<div class="invalid-feedback d-block">{{ form.contact_phone.errors|join:" " }}</div>{% endif %}
+              {% include "tasks/includes/form_field.html" with field=form.contact_phone wrapper_class="" %}
             </div>
             <div class="col-md-6">
-              <label class="form-label" for="id_website">{% trans "Company website" %}</label>
-              {{ form.website }}
-              {% if form.website.errors %}<div class="invalid-feedback d-block">{{ form.website.errors|join:" " }}</div>{% endif %}
+              {% include "tasks/includes/form_field.html" with field=form.website wrapper_class="" %}
             </div>
           </div>
 
-          <div class="mt-4">
-            <label class="form-label" for="id_charger_models">{% trans "Charger models" %}</label>
-            {{ form.charger_models }}
-            {% if form.charger_models.help_text %}<div class="form-text">{{ form.charger_models.help_text }}</div>{% endif %}
-            {% if form.charger_models.errors %}<div class="invalid-feedback d-block">{{ form.charger_models.errors|join:" " }}</div>{% endif %}
-          </div>
+          {% include "tasks/includes/form_field.html" with field=form.charger_models wrapper_class="mt-4" %}
           <div class="row g-3 mt-1">
             <div class="col-md-6">
-              <label class="form-label" for="id_ocpp_versions">{% trans "Supported OCPP versions" %}</label>
-              {{ form.ocpp_versions }}
-              {% if form.ocpp_versions.help_text %}<div class="form-text">{{ form.ocpp_versions.help_text }}</div>{% endif %}
-              {% if form.ocpp_versions.errors %}<div class="invalid-feedback d-block">{{ form.ocpp_versions.errors|join:" " }}</div>{% endif %}
+              {% include "tasks/includes/form_field.html" with field=form.ocpp_versions wrapper_class="" %}
             </div>
             <div class="col-md-6">
-              <label class="form-label" for="id_api_documentation_url">{% trans "API or documentation URL" %}</label>
-              {{ form.api_documentation_url }}
-              {% if form.api_documentation_url.errors %}<div class="invalid-feedback d-block">{{ form.api_documentation_url.errors|join:" " }}</div>{% endif %}
+              {% include "tasks/includes/form_field.html" with field=form.api_documentation_url wrapper_class="" %}
             </div>
           </div>
-          <div class="mt-3">
-            <label class="form-label" for="id_connectivity_summary">{% trans "Connectivity and network summary" %}</label>
-            {{ form.connectivity_summary }}
-            {% if form.connectivity_summary.errors %}<div class="invalid-feedback d-block">{{ form.connectivity_summary.errors|join:" " }}</div>{% endif %}
-          </div>
+          {% include "tasks/includes/form_field.html" with field=form.connectivity_summary %}
           <div class="row g-3 mt-1">
             <div class="col-md-6">
-              <label class="form-label" for="id_deployment_regions">{% trans "Deployment regions" %}</label>
-              {{ form.deployment_regions }}
-              {% if form.deployment_regions.errors %}<div class="invalid-feedback d-block">{{ form.deployment_regions.errors|join:" " }}</div>{% endif %}
+              {% include "tasks/includes/form_field.html" with field=form.deployment_regions wrapper_class="" %}
             </div>
             <div class="col-md-6">
-              <label class="form-label" for="id_deployment_volume">{% trans "Installed base" %}</label>
-              {{ form.deployment_volume }}
-              {% if form.deployment_volume.errors %}<div class="invalid-feedback d-block">{{ form.deployment_volume.errors|join:" " }}</div>{% endif %}
+              {% include "tasks/includes/form_field.html" with field=form.deployment_volume wrapper_class="" %}
             </div>
           </div>
-          <div class="mt-3">
-            <label class="form-label" for="id_certification_summary">{% trans "Certification and compliance summary" %}</label>
-            {{ form.certification_summary }}
-            {% if form.certification_summary.errors %}<div class="invalid-feedback d-block">{{ form.certification_summary.errors|join:" " }}</div>{% endif %}
-          </div>
-          <div class="mt-3">
-            <label class="form-label" for="id_remote_access_method">{% trans "Remote access and support workflow" %}</label>
-            {{ form.remote_access_method }}
-            {% if form.remote_access_method.errors %}<div class="invalid-feedback d-block">{{ form.remote_access_method.errors|join:" " }}</div>{% endif %}
-          </div>
-          <div class="mt-3">
-            <label class="form-label" for="id_hardware_notes">{% trans "Hardware highlights" %}</label>
-            {{ form.hardware_notes }}
-            {% if form.hardware_notes.errors %}<div class="invalid-feedback d-block">{{ form.hardware_notes.errors|join:" " }}</div>{% endif %}
-          </div>
-          <div class="mt-3">
-            <label class="form-label" for="id_integration_goals">{% trans "Integration goals" %}</label>
-            {{ form.integration_goals }}
-            {% if form.integration_goals.help_text %}<div class="form-text">{{ form.integration_goals.help_text }}</div>{% endif %}
-            {% if form.integration_goals.errors %}<div class="invalid-feedback d-block">{{ form.integration_goals.errors|join:" " }}</div>{% endif %}
-          </div>
-          <div class="mt-3">
-            <label class="form-label" for="id_additional_notes">{% trans "Additional notes" %}</label>
-            {{ form.additional_notes }}
-            {% if form.additional_notes.errors %}<div class="invalid-feedback d-block">{{ form.additional_notes.errors|join:" " }}</div>{% endif %}
-          </div>
+          {% include "tasks/includes/form_field.html" with field=form.certification_summary %}
+          {% include "tasks/includes/form_field.html" with field=form.remote_access_method %}
+          {% include "tasks/includes/form_field.html" with field=form.hardware_notes %}
+          {% include "tasks/includes/form_field.html" with field=form.integration_goals %}
+          {% include "tasks/includes/form_field.html" with field=form.additional_notes %}
           <div class="mt-4 d-flex flex-column flex-md-row gap-3 align-items-md-center">
             <button type="submit" class="btn btn-primary">{% trans "Submit charger portfolio" %}</button>
             <span class="text-muted small">{% trans "We review submissions so Arthexis can integrate with the right charger APIs, OCPP behaviors, and operational workflows instead of building disconnected side systems." %}</span>
