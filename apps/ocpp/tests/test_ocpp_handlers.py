@@ -1794,6 +1794,51 @@ async def test_report_charging_profiles_rejects_malformed_payload(monkeypatch):
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_rejects_invalid_schedule_values(monkeypatch):
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "RCP-BAD-SCHEDULE-1"
+    consumer.charger_id = "RCP-BAD-SCHEDULE-1"
+    consumer.charger = None
+    consumer.aggregate_charger = None
+    consumer.connector_value = 1
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    logs: list[str] = []
+    monkeypatch.setattr(
+        store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry)
+    )
+
+    result = await consumer._handle_report_charging_profiles_action(
+        {
+            "requestId": 23,
+            "evseId": 1,
+            "chargingProfile": {
+                "chargingProfileId": 3,
+                "stackLevel": 1,
+                "chargingProfilePurpose": ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+                "chargingProfileKind": ChargingProfile.Kind.ABSOLUTE,
+                "chargingSchedule": {
+                    "chargingRateUnit": ChargingProfile.RateUnit.AMP,
+                    "duration": 0,
+                    "chargingSchedulePeriod": [{"startPeriod": 0, "limit": -1}],
+                },
+            },
+        },
+        "msg-rcp-bad-schedule-1",
+        "",
+        "",
+    )
+
+    assert result == {}
+    assert logs == [
+        "ReportChargingProfiles ignored: chargingSchedulePeriod[1].limit must be greater than zero"
+    ]
+    count = await database_sync_to_async(ChargingProfile.objects.count)()
+    assert count == 0
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
 async def test_report_charging_profiles_flags_missing_entries(monkeypatch):
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="RCP-3", connector_id=1
@@ -1905,7 +1950,7 @@ async def test_report_charging_profiles_flags_duplicate_profiles(monkeypatch):
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_report_charging_profiles_partial_update_preserves_existing_optionals():
+async def test_report_charging_profiles_partial_update_clears_missing_optionals():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="RCP-PART-1", connector_id=1
     )
@@ -2056,6 +2101,57 @@ async def test_report_charging_profiles_persists_multi_profile_payload():
         {"start_period": 0, "limit": 1200.0},
         {"start_period": 300, "limit": 900.0},
     ]
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_resolves_evse_row_from_aggregate_charger():
+    aggregate_charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="RCP-EVSE-1", connector_id=0
+    )
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(
+        aggregate_charger.charger_id, aggregate_charger.connector_id
+    )
+    consumer.charger_id = aggregate_charger.charger_id
+    consumer.charger = aggregate_charger
+    consumer.aggregate_charger = aggregate_charger
+    consumer.connector_value = aggregate_charger.connector_id
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    result = await consumer._handle_report_charging_profiles_action(
+        {
+            "requestId": 27,
+            "evseId": 1,
+            "chargingProfile": {
+                "chargingProfileId": 11,
+                "stackLevel": 1,
+                "chargingProfilePurpose": ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+                "chargingProfileKind": ChargingProfile.Kind.ABSOLUTE,
+                "chargingSchedule": {
+                    "chargingRateUnit": ChargingProfile.RateUnit.AMP,
+                    "chargingSchedulePeriod": [{"startPeriod": 0, "limit": 18}],
+                },
+            },
+            "tbc": False,
+        },
+        "msg-rcp-evse-1",
+        "",
+        "",
+    )
+
+    assert result == {}
+    profile = await database_sync_to_async(ChargingProfile.objects.select_related("charger").get)(
+        charger__charger_id="RCP-EVSE-1",
+        charging_profile_id=11,
+    )
+    assert profile.charger.connector_id == 1
+    assert profile.connector_id == 1
+    aggregate_profiles = await database_sync_to_async(
+        lambda: ChargingProfile.objects.filter(charger=aggregate_charger).count()
+    )()
+    assert aggregate_profiles == 0
 
 
 @pytest.mark.anyio

@@ -1410,7 +1410,7 @@ class CSMSConsumer(
         payload_data = payload if isinstance(payload, dict) else {}
         request_id = self._parse_optional_int(payload_data.get("requestId"))
         evse_id = self._parse_optional_int(payload_data.get("evseId"))
-        tbc = bool(payload_data.get("tbc")) if payload_data.get("tbc") is not None else False
+        tbc = bool(payload_data.get("tbc"))
 
         raw_profiles = payload_data.get("chargingProfiles")
         if raw_profiles is None:
@@ -1544,10 +1544,20 @@ class CSMSConsumer(
                 "minChargingRate is invalid"
             ) from exc
 
+        duration_seconds = self._parse_optional_int(payload.get("duration"))
+        if duration_seconds is not None and duration_seconds <= 0:
+            raise ReportChargingProfilesValidationError(
+                "duration must be greater than zero"
+            )
+        if min_charging_rate is not None and min_charging_rate <= 0:
+            raise ReportChargingProfilesValidationError(
+                "minChargingRate must be greater than zero"
+            )
+
         return NormalizedChargingSchedule(
             charging_rate_unit=charging_rate_unit,
             periods=tuple(sorted(periods, key=lambda entry: entry.start_period)),
-            duration_seconds=self._parse_optional_int(payload.get("duration")),
+            duration_seconds=duration_seconds,
             start_schedule=_parse_ocpp_timestamp(payload.get("startSchedule")),
             min_charging_rate=min_charging_rate,
         )
@@ -1585,6 +1595,11 @@ class CSMSConsumer(
             raise ReportChargingProfilesValidationError(
                 f"chargingSchedulePeriod[{index}].limit is required"
             ) from exc
+
+        if limit <= 0:
+            raise ReportChargingProfilesValidationError(
+                f"chargingSchedulePeriod[{index}].limit must be greater than zero"
+            )
 
         return NormalizedChargingSchedulePeriod(
             start_period=start_period,
@@ -1627,6 +1642,98 @@ class CSMSConsumer(
             payload["minChargingRate"] = float(schedule.min_charging_rate)
         return payload
 
+    @staticmethod
+    def _model_schedule_to_normalized(
+        schedule: ChargingSchedule,
+    ) -> NormalizedChargingSchedule:
+        """Convert a trusted schedule model into the normalized representation.
+
+        Parameters:
+            schedule: Persisted schedule model loaded from the database.
+
+        Returns:
+            A normalized schedule representation suitable for comparisons.
+        """
+
+        return NormalizedChargingSchedule(
+            charging_rate_unit=schedule.charging_rate_unit,
+            periods=tuple(
+                NormalizedChargingSchedulePeriod(
+                    start_period=int(period["start_period"]),
+                    limit=float(period["limit"]),
+                    number_phases=(
+                        int(period["number_phases"])
+                        if period.get("number_phases") is not None
+                        else None
+                    ),
+                    phase_to_use=(
+                        int(period["phase_to_use"])
+                        if period.get("phase_to_use") is not None
+                        else None
+                    ),
+                )
+                for period in schedule.charging_schedule_periods
+            ),
+            duration_seconds=schedule.duration_seconds,
+            start_schedule=schedule.start_schedule,
+            min_charging_rate=schedule.min_charging_rate,
+        )
+
+    def _model_profile_to_normalized(
+        self, profile: ChargingProfile
+    ) -> NormalizedChargingProfileReport:
+        """Convert a trusted charging profile model into the normalized representation.
+
+        Parameters:
+            profile: Persisted profile model loaded from the database.
+
+        Returns:
+            A normalized charging profile representation suitable for comparisons.
+        """
+
+        return NormalizedChargingProfileReport(
+            profile_id=profile.charging_profile_id,
+            stack_level=profile.stack_level,
+            purpose=profile.purpose,
+            kind=profile.kind,
+            connector_id=profile.connector_id,
+            schedule=self._model_schedule_to_normalized(profile.schedule),
+            recurrency_kind=profile.recurrency_kind,
+            transaction_id=profile.transaction_id,
+            valid_from=profile.valid_from,
+            valid_to=profile.valid_to,
+        )
+
+    def _resolve_report_charging_profile_charger(
+        self, report: NormalizedChargingProfileReportPayload
+    ) -> Charger | None:
+        """Resolve the charger row that should receive a reported profile payload.
+
+        Parameters:
+            report: Normalized payload data containing the EVSE context.
+
+        Returns:
+            The connector-specific charger row when available, otherwise the
+            aggregate row or ``None`` when no charger identity is available.
+        """
+
+        connector_id = report.evse_id or self.connector_value or 0
+        charger = self.charger
+        if (
+            charger is not None
+            and self.charger_id
+            and charger.charger_id == self.charger_id
+            and charger.connector_id == connector_id
+        ):
+            return charger
+        if self.charger_id:
+            charger, _created = Charger.objects.get_or_create(
+                charger_id=self.charger_id,
+                connector_id=connector_id,
+            )
+            return charger
+        return charger
+
     def _normalized_profile_payload(
         self, profile: NormalizedChargingProfileReport
     ) -> dict[str, object]:
@@ -1650,29 +1757,22 @@ class CSMSConsumer(
         return payload
 
     def _persist_reported_charging_profiles(
-        self, report: NormalizedChargingProfileReportPayload
+        self,
+        report: NormalizedChargingProfileReportPayload,
+        *,
+        charger: Charger | None = None,
     ) -> Charger | None:
         """Persist reported charging profiles for the charger.
 
         Parameters:
             report: Normalized payload data to persist.
+            charger: Optionally pre-resolved charger row for the reported EVSE.
 
         Returns:
             The charger used for persistence, if one could be resolved.
         """
 
-        charger = self.charger
-        connector_id = report.evse_id or self.connector_value or 0
-        if charger is None and self.charger_id:
-            charger = Charger.objects.filter(
-                charger_id=self.charger_id,
-                connector_id=connector_id,
-            ).first()
-        if charger is None and self.charger_id:
-            charger, _created = Charger.objects.get_or_create(
-                charger_id=self.charger_id,
-                connector_id=connector_id,
-            )
+        charger = charger or self._resolve_report_charging_profile_charger(report)
         if charger is None:
             return None
 
@@ -1726,11 +1826,9 @@ class CSMSConsumer(
     ) -> list[str]:
         """Return human-readable mismatches between expected and reported profiles."""
 
-        expected_payload = self._normalize_reported_charging_profile(
-            expected_profile.as_cs_charging_profile(),
-            evse_id=expected_profile.connector_id,
+        expected_normalized = self._normalized_profile_payload(
+            self._model_profile_to_normalized(expected_profile)
         )
-        expected_normalized = self._normalized_profile_payload(expected_payload)
         reported_normalized = self._normalized_profile_payload(reported_profile)
 
         mismatches: list[str] = []
@@ -2785,14 +2883,9 @@ class CSMSConsumer(
             return {}
 
         def _persist_and_reconcile() -> None:
-            charger = self.charger
-            if charger is None and self.charger_id:
-                charger = Charger.objects.filter(
-                    charger_id=self.charger_id,
-                    connector_id=report.evse_id or self.connector_value or 0,
-                ).first()
+            charger = self._resolve_report_charging_profile_charger(report)
             self._reconcile_reported_charging_profiles(report, charger=charger)
-            self._persist_reported_charging_profiles(report)
+            self._persist_reported_charging_profiles(report, charger=charger)
 
         await database_sync_to_async(_persist_and_reconcile)()
         self._log_ocpp201_notification("ReportChargingProfiles", payload)
