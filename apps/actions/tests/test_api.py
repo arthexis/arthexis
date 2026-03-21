@@ -6,13 +6,14 @@ import datetime
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.test import RequestFactory
 from django.utils import timezone
 
-from apps.actions.models import RemoteAction, RemoteActionToken
+from apps.actions.models import DashboardAction, RemoteAction, RemoteActionToken
 from apps.actions.openapi import build_openapi_spec
 from apps.groups.models import SecurityGroup
-from apps.recipes.models import Recipe
 
 
 @pytest.mark.django_db
@@ -35,23 +36,16 @@ def test_security_groups_endpoint_returns_authorized_user_groups(client):
 
 
 @pytest.mark.django_db
-def test_invoke_action_executes_linked_recipe_for_owned_action(client):
-    """Regression: API invocation executes selected action recipe and returns result."""
+def test_invoke_action_returns_payload_for_owned_action(client):
+    """Regression: API invocation returns the accepted payload for an owned action."""
 
     user_model = get_user_model()
     user = user_model.objects.create_user(username="owner", password="secret123")
-    recipe = Recipe.objects.create(
-        user=user,
-        display="Echo",
-        slug="echo-recipe",
-        script="result = kwargs.get('message', 'none')",
-    )
     RemoteAction.objects.create(
         user=user,
         display="Echo action",
         slug="echo-action",
         operation_id="echoAction",
-        recipe=recipe,
     )
     _, raw_key = RemoteActionToken.issue_for_user(user)
 
@@ -63,7 +57,11 @@ def test_invoke_action_executes_linked_recipe_for_owned_action(client):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"action": "echo-action", "result": "hello"}
+    assert response.json() == {
+        "action": "echo-action",
+        "args": [],
+        "kwargs": {"message": "hello"},
+    }
 
 
 @pytest.mark.django_db
@@ -92,18 +90,11 @@ def test_invoke_action_rejects_invalid_argument_shapes(client):
 
     user_model = get_user_model()
     user = user_model.objects.create_user(username="owner2", password="secret123")
-    recipe = Recipe.objects.create(
-        user=user,
-        display="Echo",
-        slug="echo-recipe-2",
-        script="result = kwargs.get('message', 'none')",
-    )
     RemoteAction.objects.create(
         user=user,
         display="Echo action",
         slug="echo-action-2",
         operation_id="echoAction2",
-        recipe=recipe,
     )
     _, raw_key = RemoteActionToken.issue_for_user(user)
 
@@ -149,19 +140,12 @@ def test_openapi_spec_uses_request_host_and_strips_html():
 
     user_model = get_user_model()
     user = user_model.objects.create_user(username="spec-user", password="secret123")
-    recipe = Recipe.objects.create(
-        user=user,
-        display="Recipe",
-        slug="spec-recipe",
-        script="result = 'ok'",
-    )
     action = RemoteAction.objects.create(
         user=user,
         display="<b>Display</b>",
         slug="spec-action",
         operation_id="specAction",
         description="<script>alert(1)</script>Description",
-        recipe=recipe,
     )
 
     request = RequestFactory().get("/admin/actions/remoteaction/my-openapi-spec/", HTTP_HOST="testserver")
@@ -172,3 +156,27 @@ def test_openapi_spec_uses_request_host_and_strips_html():
     assert spec["servers"][0]["url"] == "http://testserver"
     assert operation["summary"] == "Display"
     assert operation["description"] == "alert(1)Description"
+    assert operation["requestBody"]["content"]["application/json"]["schema"]["description"] == (
+        "Optional JSON arguments supplied with the remote action invocation."
+    )
+
+
+@pytest.mark.django_db
+def test_dashboard_action_clean_rejects_post_admin_url_targets():
+    """Regression: POST dashboard actions must keep URL-based execution semantics."""
+
+    action = DashboardAction(
+        content_type=ContentType.objects.get_for_model(SecurityGroup),
+        slug="open-admin",
+        label="Open admin",
+        http_method=DashboardAction.HttpMethod.POST,
+        target_type=DashboardAction.TargetType.ADMIN_URL,
+        admin_url_name="admin:sites_site_changelist",
+    )
+
+    with pytest.raises(ValidationError) as excinfo:
+        action.clean()
+
+    assert excinfo.value.message_dict == {
+        "http_method": ["POST actions must use an absolute or relative URL target."]
+    }

@@ -20,7 +20,7 @@ from apps.core.models import Ownable
 
 
 class RemoteAction(Ownable):
-    """Ownable action that maps an API operation to a recipe."""
+    """Ownable action that maps an API operation to a bearer-authenticated endpoint."""
 
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     display = models.CharField(max_length=120)
@@ -31,12 +31,6 @@ class RemoteAction(Ownable):
         help_text=_("OpenAPI operationId for this action."),
     )
     description = models.TextField(blank=True)
-    recipe = models.ForeignKey(
-        "recipes.Recipe",
-        on_delete=models.PROTECT,
-        related_name="remote_actions",
-        help_text=_("Recipe executed when this action is invoked."),
-    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -76,7 +70,6 @@ class DashboardAction(models.Model):
 
         ADMIN_URL = "admin_url", _("Admin URL Name")
         ABSOLUTE_URL = "absolute_url", _("Absolute URL")
-        RECIPE = "recipe", _("Recipe")
 
     content_type = models.ForeignKey(
         ContentType,
@@ -98,13 +91,6 @@ class DashboardAction(models.Model):
     )
     admin_url_name = models.CharField(max_length=200, blank=True)
     absolute_url = models.CharField(max_length=500, blank=True)
-    recipe = models.ForeignKey(
-        "recipes.Recipe",
-        null=True,
-        blank=True,
-        on_delete=models.PROTECT,
-        related_name="dashboard_actions",
-    )
     caller_sigil = models.CharField(
         max_length=120,
         blank=True,
@@ -143,16 +129,14 @@ class DashboardAction(models.Model):
             is_safe_absolute = parsed.scheme in {"http", "https"} and bool(parsed.netloc)
             if not (is_safe_relative or is_safe_absolute):
                 raise ValidationError({"absolute_url": _("Invalid or unsafe URL scheme.")})
-        if self.target_type == self.TargetType.RECIPE and not self.recipe_id:
-            raise ValidationError({"recipe": _("Recipe is required.")})
-        if self.target_type == self.TargetType.RECIPE and self.http_method != self.HttpMethod.POST:
-            raise ValidationError({"http_method": _("Recipe-backed actions must use POST.")})
+        if self.http_method == self.HttpMethod.POST and self.target_type != self.TargetType.ABSOLUTE_URL:
+            raise ValidationError({"http_method": _("POST actions must use an absolute or relative URL target.")})
         if self.caller_sigil and not self._is_safe_caller_sigil(self.caller_sigil):
             raise ValidationError({"caller_sigil": _("Caller sigil contains unsupported characters.")})
 
     @staticmethod
     def _is_safe_caller_sigil(value: str) -> bool:
-        """Return whether a caller sigil is safe for downstream recipe expansion."""
+        """Return whether a caller sigil is safe for downstream request expansion."""
 
         return bool(value) and all(ch.isalnum() or ch in {"_", ".", "-"} for ch in value)
 
@@ -200,13 +184,6 @@ class DashboardAction(models.Model):
                 return ""
         if self.target_type == self.TargetType.ABSOLUTE_URL:
             return self.absolute_url if self._is_safe_target_url(self.absolute_url) else ""
-        if self.target_type == self.TargetType.RECIPE:
-            if not self.pk:
-                return ""
-            try:
-                return reverse("admin:actions_dashboardaction_execute", args=[self.pk])
-            except NoReverseMatch:
-                return ""
         return ""
 
     def as_rendered_action(self) -> dict[str, str | bool]:

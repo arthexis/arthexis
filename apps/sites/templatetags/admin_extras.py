@@ -453,7 +453,7 @@ def _configured_dashboard_action_descriptors(model):
     for configured_action in DashboardAction.objects.filter(
         content_type=content_type,
         is_active=True,
-    ).select_related("recipe"):
+    ):
         descriptors.append(
             {
                 "action_key": _model_admin_action_key(configured_action.slug),
