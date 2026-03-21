@@ -217,6 +217,56 @@ def test_call_special_command_parses_string_booleans(monkeypatch) -> None:
 
 
 @pytest.mark.django_db
+def test_sync_special_command_excludes_global_management_options() -> None:
+    """Sync should not persist Django's built-in global management options."""
+
+    special = sync_special_command(command_name="sample", command_cls=SampleCommand)
+
+    parameter_names = {parameter.name for parameter in special.parameters.all()}
+
+    assert "settings" not in parameter_names
+    assert "pythonpath" not in parameter_names
+
+
+@pytest.mark.django_db
+def test_call_special_command_rejects_legacy_global_management_option_metadata(
+    monkeypatch,
+) -> None:
+    """Calls should reject global options even if stale rows exist in the database."""
+
+    command = SpecialCommand.objects.create(
+        name="legacy",
+        plural_name="legacies",
+        command_name="sample",
+        command_path="tests.SampleCommand",
+    )
+    SpecialCommandParameter.objects.create(
+        command=command,
+        name="slug",
+        cli_name="slug",
+        kind=SpecialCommandParameter.ParameterKind.POSITIONAL,
+        value_type=SpecialCommandParameter.ValueType.STRING,
+        is_required=True,
+        sort_order=0,
+    )
+    SpecialCommandParameter.objects.create(
+        command=command,
+        name="settings",
+        cli_name="--settings",
+        kind=SpecialCommandParameter.ParameterKind.OPTION,
+        value_type=SpecialCommandParameter.ValueType.STRING,
+        sort_order=1,
+    )
+
+    def fake_call_command(name: str, *args, **kwargs):
+        return "ok"
+
+    monkeypatch.setattr("apps.special.registry.call_command", fake_call_command)
+
+    with pytest.raises(SpecialCommandValidationError, match="Unknown parameters"):
+        call_special_command("legacy", slug="alpha", settings="malicious.settings")
+
+@pytest.mark.django_db
 def test_call_special_command_reports_unknown_command() -> None:
     """Unknown command keys should raise the public validation error type."""
 
