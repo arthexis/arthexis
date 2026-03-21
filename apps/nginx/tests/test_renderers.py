@@ -21,7 +21,6 @@ def test_generate_primary_config_internal_mode():
     assert "ssl_certificate" not in config
 
 
-@pytest.mark.pr_origin(6292)
 @pytest.mark.parametrize(
     ("include_ipv6", "expected_listener"),
     [
@@ -29,7 +28,9 @@ def test_generate_primary_config_internal_mode():
         (True, "listen [::]:8443 ssl;"),
     ],
 )
-def test_generate_primary_config_public_mode(include_ipv6: bool, expected_listener: str):
+def test_generate_primary_config_public_mode(
+    include_ipv6: bool, expected_listener: str
+):
     """Verify public primary configs include the expected HTTPS 8443 listeners."""
 
     config = generate_primary_config(
@@ -73,7 +74,6 @@ def test_generate_site_entries_content_uses_proxy_target(tmp_path: Path):
     assert "proxy_pass http://arthexis-blue" in content
 
 
-@pytest.mark.pr_origin(6292)
 @pytest.mark.parametrize(
     ("include_ipv6", "expected_listener"),
     [
@@ -124,10 +124,22 @@ def test_generate_site_entries_content_expands_subdomains(tmp_path: Path):
 
 
 def test_ssl_directives_omitted_when_assets_missing(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(config_utils, "SSL_OPTIONS_PATH", tmp_path / "missing-options.conf")
-    monkeypatch.setattr(config_utils, "BUNDLED_SSL_OPTIONS_PATH", tmp_path / "missing-bundled-options.conf")
-    monkeypatch.setattr(config_utils, "SSL_DHPARAM_PATH", tmp_path / "missing-dhparam.pem")
-    monkeypatch.setattr(config_utils, "BUNDLED_SSL_DHPARAM_PATH", tmp_path / "missing-bundled-dhparam.pem")
+    monkeypatch.setattr(
+        config_utils, "SSL_OPTIONS_PATH", tmp_path / "missing-options.conf"
+    )
+    monkeypatch.setattr(
+        config_utils,
+        "BUNDLED_SSL_OPTIONS_PATH",
+        tmp_path / "missing-bundled-options.conf",
+    )
+    monkeypatch.setattr(
+        config_utils, "SSL_DHPARAM_PATH", tmp_path / "missing-dhparam.pem"
+    )
+    monkeypatch.setattr(
+        config_utils,
+        "BUNDLED_SSL_DHPARAM_PATH",
+        tmp_path / "missing-bundled-dhparam.pem",
+    )
 
     config = config_utils.https_proxy_server("example.test", 8443)
 
@@ -153,7 +165,6 @@ def test_ssl_directives_use_bundled_fallback(monkeypatch, tmp_path: Path):
 
     assert f"include {bundled_options}" in config
     assert f"ssl_dhparam {bundled_dhparam}" in config
-
 
 
 def test_generate_unified_config_includes_managed_sites(tmp_path: Path):

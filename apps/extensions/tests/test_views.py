@@ -11,8 +11,7 @@ from django.urls import reverse
 
 from apps.extensions.models import JsExtension
 
-
-pytestmark = [pytest.mark.django_db, pytest.mark.pr_origin(6177)]
+pytestmark = [pytest.mark.django_db]
 
 
 def test_extension_catalog_lists_enabled_extensions_only(client) -> None:
@@ -48,9 +47,13 @@ def test_extension_catalog_lists_enabled_extensions_only(client) -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    matching_entries = [entry for entry in payload["extensions"] if entry["slug"] == extension.slug]
+    matching_entries = [
+        entry for entry in payload["extensions"] if entry["slug"] == extension.slug
+    ]
     assert len(matching_entries) == 1
-    assert matching_entries[0]["download_url"].endswith(f"/extensions/{extension.slug}/download.zip")
+    assert matching_entries[0]["download_url"].endswith(
+        f"/extensions/{extension.slug}/download.zip"
+    )
 
 
 def test_extension_download_archive_contains_manifest_and_assets(client) -> None:
@@ -79,9 +82,10 @@ def test_extension_download_archive_contains_manifest_and_assets(client) -> None
     response = client.get(reverse("extensions:download", args=[extension.slug]))
 
     assert response.status_code == 200
-    assert 'attachment; filename="github-resolve-open-comments-test-1.0.0.zip"' in response[
-        "Content-Disposition"
-    ]
+    assert (
+        'attachment; filename="github-resolve-open-comments-test-1.0.0.zip"'
+        in response["Content-Disposition"]
+    )
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         names = sorted(archive.namelist())
         assert names == ["content.js", "manifest.json", "options.html"]

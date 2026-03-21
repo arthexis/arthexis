@@ -14,7 +14,9 @@ from django.core.management.base import CommandError
 def _seed_apps_root(base_dir: Path) -> Path:
     apps_dir = base_dir / "apps"
     apps_dir.mkdir(parents=True, exist_ok=True)
-    (apps_dir / "__init__.py").write_text('"""Project application packages."""\n', encoding="utf-8")
+    (apps_dir / "__init__.py").write_text(
+        '"""Project application packages."""\n', encoding="utf-8"
+    )
     settings.BASE_DIR = base_dir
     settings.APPS_DIR = apps_dir
     return apps_dir
@@ -81,7 +83,6 @@ def test_create_model_requires_existing_app(tmp_path):
         call_command("create", "model", "unknown", "item")
 
 
-
 def test_create_model_extends_existing_urlpatterns_without_duplicate_imports(tmp_path):
     """create model should append route entries instead of redefining urlpatterns/imports."""
 
@@ -106,7 +107,7 @@ def test_create_model_updates_routes_with_whitespace_tolerant_empty_list(tmp_pat
     app_dir.mkdir(parents=True)
 
     (app_dir / "routes.py").write_text(
-        'from django.urls import path\n\nROOT_URLPATTERNS = [ ]\n',
+        "from django.urls import path\n\nROOT_URLPATTERNS = [ ]\n",
         encoding="utf-8",
     )
 
@@ -115,7 +116,6 @@ def test_create_model_updates_routes_with_whitespace_tolerant_empty_list(tmp_pat
     routes_text = (app_dir / "routes.py").read_text(encoding="utf-8")
     assert "from django.urls import include, path" in routes_text
     assert 'path("support/", include("apps.support.urls"))' in routes_text
-
 
 
 def test_create_app_backend_only_omits_web_modules(tmp_path):
@@ -154,7 +154,6 @@ def test_create_model_skips_web_wiring_for_backend_only_app(tmp_path):
     assert "@admin.register(WorkItem)" in admin_text
 
 
-@pytest.mark.pr_origin(6273)
 def test_create_app_subcommand_scaffolds_app(tmp_path):
     """create app should scaffold via the unified command."""
 

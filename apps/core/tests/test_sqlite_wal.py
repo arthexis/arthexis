@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from django.db import DatabaseError
 import pytest
+from django.db import DatabaseError
 
 from apps.core import apps as core_apps
 
 
-@pytest.mark.pr_origin(9999)
 def test_connect_sqlite_wal_default_path_unchanged(monkeypatch):
     """WAL setup should keep core PRAGMAs and apply safe defaults."""
 
@@ -27,7 +26,6 @@ def test_connect_sqlite_wal_default_path_unchanged(monkeypatch):
     ]
 
 
-@pytest.mark.pr_origin(9999)
 def test_connect_sqlite_wal_executes_env_configured_pragmas(monkeypatch):
     """Valid SQLite PRAGMA environment values should be applied on connect."""
 
@@ -49,8 +47,9 @@ def test_connect_sqlite_wal_executes_env_configured_pragmas(monkeypatch):
     ]
 
 
-@pytest.mark.pr_origin(9999)
-def test_connect_sqlite_wal_ignores_invalid_env_values_with_warning(monkeypatch, caplog):
+def test_connect_sqlite_wal_ignores_invalid_env_values_with_warning(
+    monkeypatch, caplog
+):
     """Invalid PRAGMA env values should be ignored without breaking startup."""
 
     receiver = _register_sqlite_wal_receiver(monkeypatch)
@@ -73,7 +72,6 @@ def test_connect_sqlite_wal_ignores_invalid_env_values_with_warning(monkeypatch,
     assert "Invalid ARTHEXIS_SQLITE_MMAP_SIZE value" in caplog.text
 
 
-@pytest.mark.pr_origin(9999)
 def test_connect_sqlite_wal_runtime_pragma_failure_keeps_wal(monkeypatch, caplog):
     """Runtime PRAGMA errors should log warnings and preserve successful WAL setup."""
 
@@ -107,7 +105,9 @@ def _register_sqlite_wal_receiver(monkeypatch):
         captured["receiver"] = receiver
 
     monkeypatch.setattr("django.apps.apps.ready", True)
-    monkeypatch.setattr("django.db.backends.signals.connection_created.connect", _fake_connect)
+    monkeypatch.setattr(
+        "django.db.backends.signals.connection_created.connect", _fake_connect
+    )
     core_apps._connect_sqlite_wal()
     return captured["receiver"]
 

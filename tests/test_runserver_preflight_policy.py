@@ -9,8 +9,10 @@ from pathlib import Path
 import pytest
 
 pytestmark = [
-    pytest.mark.pr_origin(6213),
-    pytest.mark.skipif(sys.platform == "win32", reason="bash helper scripts are not supported on Windows"),
+    pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="bash helper scripts are not supported on Windows",
+    )
 ]
 
 
@@ -29,8 +31,7 @@ def _run_shell(script: str) -> subprocess.CompletedProcess[str]:
 def test_runserver_preflight_check_policy_fails_on_pending_migrations() -> None:
     """Check-only policy should fail fast when migrate --check reports pending work."""
 
-    result = _run_shell(
-        """
+    result = _run_shell("""
         set -e
         source scripts/helpers/common.sh
         source scripts/helpers/runserver_preflight.sh
@@ -53,8 +54,7 @@ def test_runserver_preflight_check_policy_fails_on_pending_migrations() -> None:
 
         ARTHEXIS_MIGRATION_POLICY=check
         run_runserver_preflight
-        """
-    )
+        """)
 
     assert result.returncode != 0
     assert "policy is check-only" in result.stderr
