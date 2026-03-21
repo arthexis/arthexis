@@ -209,13 +209,13 @@ def _check_migrations(labels: Iterable[str]) -> int:
 
 
 def _staged_migration_files() -> list[StagedMigration]:
-    """Return newly added staged migration files from the current Git index.
+    """Return added or modified staged migration files from the current Git index.
 
     Parameters:
         None.
 
     Return values:
-        A list of newly added staged migration descriptors limited to
+        A list of added or modified staged migration descriptors limited to
         ``apps/*/migrations/*.py`` files except ``__init__.py``.
 
     Raised exceptions:
@@ -223,7 +223,7 @@ def _staged_migration_files() -> list[StagedMigration]:
     """
 
     result = subprocess.run(
-        ["git", "diff", "--cached", "--name-status", "--diff-filter=ACMR"],
+        ["git", "diff", "--cached", "--name-status", "--diff-filter=AM"],
         cwd=REPO_ROOT,
         text=True,
         capture_output=True,
@@ -237,7 +237,7 @@ def _staged_migration_files() -> list[StagedMigration]:
         if len(parts) != 2:
             continue
         status, raw_path = parts
-        if status != "A":
+        if status not in {"A", "M"}:
             continue
         path = Path(raw_path)
         if len(path.parts) != 4:
@@ -256,30 +256,6 @@ def _staged_migration_files() -> list[StagedMigration]:
     return migrations
 
 
-def _describe_operation(operation) -> str:
-    """Return a concise description of a migration operation instance.
-
-    Parameters:
-        operation: Django migration operation instance.
-
-    Return values:
-        A user-facing string naming the operation class and common target field.
-
-    Raised exceptions:
-        None.
-    """
-
-    details: list[str] = []
-    for attribute_name in ("name", "model_name", "code"):
-        value = getattr(operation, attribute_name, None)
-        if callable(value):
-            continue
-        if isinstance(value, str) and value:
-            details.append(f"{attribute_name}={value}")
-            break
-    suffix = f" ({', '.join(details)})" if details else ""
-    return f"{operation.__class__.__name__}{suffix}"
-
 def _node_key(node) -> tuple[str, str | None]:
     """Return a migration graph node key from a graph node or raw key.
 
@@ -296,38 +272,39 @@ def _node_key(node) -> tuple[str, str | None]:
     return node.key if hasattr(node, "key") else node
 
 
-def _migration_is_irreversible(loader, migration) -> str | None:
-    """Return the blocking operation description when ``migration`` is irreversible.
+def _migration_is_irreversible(connection, loader, migration) -> str | None:
+    """Return the blocking error text when ``migration`` is irreversible.
 
     Parameters:
+        connection: Django database connection used to build a schema editor.
         loader: Django migration loader used to compute project state.
         migration: Loaded Django migration instance to inspect.
 
     Return values:
-        A description of the irreversible operation, or ``None`` when rollback is
-        allowed.
+        The irreversible error text, or ``None`` when rollback is allowed.
 
     Raised exceptions:
-        Propagates unexpected migration state construction errors.
+        Propagates unexpected migration state construction and schema editor errors.
     """
 
     from django.db.migrations.exceptions import IrreversibleError
 
     try:
         project_state = loader.project_state(
-            {migration.app_label: migration.name},
-            at_end=True,
+            [(migration.app_label, migration.name)],
+            at_end=False,
         )
-    except Exception:
-        project_state = loader.project_state((migration.app_label, migration.name), at_end=True)
+    except TypeError:
+        project_state = loader.project_state(
+            (migration.app_label, migration.name),
+            at_end=False,
+        )
 
-    for operation in reversed(migration.operations):
-        if not operation.reversible:
-            return _describe_operation(operation)
+    with connection.schema_editor(collect_sql=True) as schema_editor:
         try:
-            project_state = operation.state_backwards(migration.app_label, project_state)
-        except IrreversibleError:
-            return _describe_operation(operation)
+            migration.unapply(project_state, schema_editor, collect_sql=True)
+        except IrreversibleError as exc:
+            return str(exc)
     return None
 
 
@@ -402,11 +379,11 @@ def _check_staged_migration_reversibility() -> int:
         rollback_targets = predecessors or [(staged_migration.app_label, None)]
         try:
             executor.migration_plan(rollback_targets, clean_start=True)
-            offending_operation = _migration_is_irreversible(loader, migration)
-            if offending_operation is not None:
+            irreversibility_reason = _migration_is_irreversible(connection, loader, migration)
+            if irreversibility_reason is not None:
                 failures.append(
                     f"{staged_migration.app_label}.{staged_migration.migration_name} cannot be rolled back to "
-                    f"{rollback_targets}: {offending_operation} prevents reversal."
+                    f"{rollback_targets}: {irreversibility_reason}."
                 )
         except IrreversibleError as exc:
             failures.append(
