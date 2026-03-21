@@ -109,7 +109,7 @@ def test_evergo_login_wizard_does_not_create_contractor_when_validation_fails(
     ).exists()
     content = response.content.decode()
     assert "bad credentials" in content
-    assert 'href="/admin/evergo/evergouser/' not in content
+    assert '/change/' not in content
 
 
 @pytest.mark.django_db

@@ -107,6 +107,9 @@ def _save_contractor_and_maybe_validate(admin_instance, request, form, profile):
         contractor = profile if profile is not None else form.save(commit=False)
         if profile is not None:
             contractor.refresh_from_db()
+        else:
+            contractor.pk = None
+            contractor._state.adding = True
         admin_instance.message_user(
             request,
             _("Evergo validation failed for %(contractor)s: %(error)s")
