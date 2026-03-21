@@ -12,6 +12,7 @@ on:
       - 'CONTRIBUTING.md'
       - 'Makefile'
       - 'docs/development/mypy-adoption-checklist.md'
+      - 'config/settings/mypy.py'
       - 'pyproject.toml'
       - 'scripts/run_mypy.sh'
       - 'scripts/generate_requirements.py'
@@ -33,6 +34,7 @@ on:
       - 'CONTRIBUTING.md'
       - 'Makefile'
       - 'docs/development/mypy-adoption-checklist.md'
+      - 'config/settings/mypy.py'
       - 'pyproject.toml'
       - 'scripts/run_mypy.sh'
       - 'scripts/generate_requirements.py'
@@ -85,6 +87,11 @@ jobs:
       - name: Refresh developer environment
         run: |
           ./env-refresh.sh --deps-only
+
+      - name: Install CI typing dependencies
+        run: |
+          source .venv/bin/activate
+          python -m pip install -r requirements-ci.txt
 
       - name: Run MyPy on approved paths
         run: |

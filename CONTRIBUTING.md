@@ -75,8 +75,8 @@ python manage.py runserver 0.0.0.0:8888
   make mypy
   ```
   This shells through `scripts/run_mypy.sh` so local runs and CI share the same noise-filtered, Django-aware invocation.
-  The repo-root `pyproject.toml` is the source of truth for the enforced MyPy baseline, and
-  the current approved paths are:
+  The repo-root `pyproject.toml` is the source of truth for the enforced MyPy baseline under
+  `[tool.mypy].files`, and the current approved paths are:
   - `scripts/generate_requirements.py`
   - `scripts/sort_pyproject_deps.py`
   - `apps/protocols/`
