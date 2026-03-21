@@ -420,7 +420,7 @@ where = [ ".",]
 
 [tool.mypy]
 python_version = "3.10"
-files = ["config", "utils", "scripts"]
+files = ["scripts/generate_requirements.py", "scripts/sort_pyproject_deps.py"]
 exclude = [
   ".*/migrations/.*",
   ".*/beat_migrations/.*",
