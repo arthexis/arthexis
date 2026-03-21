@@ -150,10 +150,13 @@ def sync_special_command(
         # NOTE: argparse does not expose a public, equivalent action-iteration API,
         # so we intentionally introspect parser._actions. If argparse changes this
         # private structure, this loop should move behind a compatibility wrapper.
-        for index, (action, is_nested) in enumerate(_iter_parser_actions(parser)):
+        actions = sorted(_iter_parser_actions(parser), key=lambda item: item[1])
+        for index, (action, is_nested) in enumerate(actions):
             if action.dest in GLOBAL_MANAGEMENT_OPTION_DESTS or action.dest in seen_parameters:
                 continue
 
+            if is_nested and not action.option_strings and not getattr(action, "required", True):
+                continue
             _validate_action_shape(action)
             seen_parameters.add(action.dest)
 

@@ -9,6 +9,7 @@ from urllib.parse import quote_plus
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.sites.models import Site
 from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -16,6 +17,7 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 
 from apps.features.utils import is_suite_feature_enabled
+from apps.sites.context_processors import _build_chat_context
 
 from .exceptions import EvergoAPIError, EvergoPhaseSubmissionError
 from .forms import EvergoDashboardLookupForm, EvergoOrderTrackingForm
@@ -48,6 +50,20 @@ TRACKING_PREFILL_SOURCE_KEYS = (
 )
 
 
+def _parse_user_story_attachment_limit() -> int:
+    """Return the configured attachment limit with a safe integer fallback.
+
+    Returns:
+        int: Parsed attachment limit, or ``3`` when the setting is invalid.
+    """
+
+    raw_limit = getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)
+    try:
+        return int(raw_limit)
+    except (TypeError, ValueError):
+        return 3
+
+
 def _build_public_widget_context(*, user) -> dict[str, object]:
     """Return chat and feedback flags for Evergo public pages.
 
@@ -59,21 +75,18 @@ def _build_public_widget_context(*, user) -> dict[str, object]:
     """
 
     feedback_ingestion_enabled = is_suite_feature_enabled("feedback-ingestion", default=True)
-    staff_chat_bridge_enabled = is_suite_feature_enabled("staff-chat-bridge", default=False)
-    user_is_authenticated = getattr(user, "is_authenticated", False)
-    staff_chat_bridge_allowed = user_is_authenticated and bool(
-        getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)
-    )
-    chat_enabled = bool(
-        getattr(settings, "PAGES_CHAT_ENABLED", False)
-        and staff_chat_bridge_enabled
-        and staff_chat_bridge_allowed
+    pages_chat_enabled = bool(getattr(settings, "PAGES_CHAT_ENABLED", False))
+    site = Site.objects.get_current()
+    chat_context = _build_chat_context(
+        site,
+        user,
+        pages_chat_enabled=pages_chat_enabled,
     )
     return {
-        "chat_enabled": chat_enabled,
-        "chat_socket_path": getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/"),
+        "chat_enabled": chat_context["chat_enabled"],
+        "chat_socket_path": chat_context["chat_socket_path"],
         "feedback_ingestion_enabled": feedback_ingestion_enabled,
-        "user_story_attachment_limit": int(getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)),
+        "user_story_attachment_limit": _parse_user_story_attachment_limit(),
     }
 
 

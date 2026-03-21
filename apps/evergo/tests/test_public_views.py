@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -457,6 +458,42 @@ def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, c
 
 @pytest.mark.django_db
 @patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={})
+@patch("apps.evergo.views.Site.objects.get_current")
+def test_order_tracking_public_reuses_public_chat_site_enablement(
+    mock_get_current_site,
+    _,
+    client,
+    settings,
+):
+    """Public Evergo tracking should honor the shared site-level public chat contract."""
+
+    settings.PAGES_CHAT_ENABLED = True
+    Feature.objects.update_or_create(
+        slug="staff-chat-bridge",
+        defaults={"display": "Staff Chat Bridge", "is_enabled": True},
+    )
+    mock_get_current_site.return_value = SimpleNamespace(enable_public_chat=True)
+
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-public-chat", email="owner-public-chat@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-public-chat@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=28702, order_number="GM01172")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    assert 'id="chat-launch"' in response.content.decode()
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={})
 def test_order_tracking_public_hides_feedback_and_chat_icons_when_disabled(_, client, settings):
     """Regression: tracking view should hide feedback/chat quick actions when permissions disable them."""
     settings.PAGES_CHAT_ENABLED = False
@@ -483,6 +520,31 @@ def test_order_tracking_public_hides_feedback_and_chat_icons_when_disabled(_, cl
     content = response.content.decode()
     assert 'id="chat-launch"' not in content
     assert 'id="user-story-toggle"' not in content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={})
+def test_order_tracking_public_falls_back_to_default_attachment_limit(_, client, settings):
+    """Misconfigured attachment limits should not crash the public tracking page."""
+
+    settings.USER_STORY_ATTACHMENT_LIMIT = "not-a-number"
+
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-bad-limit", email="owner-bad-limit@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-bad-limit@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=28703, order_number="GM01173")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    assert response.context["user_story_attachment_limit"] == 3
 
 
 @pytest.mark.django_db
