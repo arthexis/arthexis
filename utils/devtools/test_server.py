@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, TypedDict
 
 from utils.python_env import resolve_project_python
 
@@ -29,6 +29,14 @@ class ProcessLike(Protocol):
 
     def kill(self) -> None:
         """Forcefully terminate the process."""
+
+
+class NotificationPayload(TypedDict):
+    """Notification content derived from a completed pytest run."""
+
+    title: str
+    message: str
+    status: str
 
 
 def build_pytest_command(extra_args: list[str] | None = None) -> list[str]:
@@ -58,6 +66,28 @@ def _build_subprocess_env() -> dict[str, str]:
     env["DEBUG"] = "0"
     env["DJANGO_DEBUG"] = "0"
     return env
+
+
+def _build_notification_payload(return_code: int) -> NotificationPayload:
+    """Build normalized notification content for a pytest result.
+
+    Args:
+        return_code: Exit code from pytest.
+
+    Returns:
+        Typed notification fields shared by platform-specific senders.
+    """
+
+    status = "passed" if return_code == 0 else "failed"
+    return {
+        "status": status,
+        "title": f"{PREFIX} Tests {status}",
+        "message": (
+            "Pytest finished successfully."
+            if return_code == 0
+            else f"Pytest exited with code {return_code}."
+        ),
+    }
 
 
 def _run_notification_command(command: list[str]) -> None:
@@ -90,13 +120,9 @@ def send_desktop_notification(return_code: int) -> None:
     """
 
     system = platform.system()
-    status = "passed" if return_code == 0 else "failed"
-    title = f"{PREFIX} Tests {status}"
-    message = (
-        "Pytest finished successfully."
-        if return_code == 0
-        else f"Pytest exited with code {return_code}."
-    )
+    payload = _build_notification_payload(return_code)
+    title = payload["title"]
+    message = payload["message"]
 
     if system == "Linux":
         if shutil.which("notify-send"):
