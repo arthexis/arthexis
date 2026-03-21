@@ -1,0 +1,16 @@
+Licensing and Cost Reference
+============================
+
+This repository's primary license texts and third-party notices remain in the existing legal documentation, including `docs/legal/THIRD_PARTY_LICENSES.md`.
+
+For agent-delivered work summaries, use the following labor-cost reference when reporting implementation cost:
+
+* minimum baseline labor rate: **USD 15.00/hour**
+* taxes: **add applicable taxes on top of the labor subtotal**
+* reporting guidance: include a final dollar-amount summary and note the formula or tax assumptions used when the exact tax rate is unknown
+
+Reference formula:
+
+`total_estimated_cost_usd = estimated_hours * 15.00 * (1 + applicable_tax_rate)`
+
+When the tax rate is unknown, report the pre-tax subtotal and explicitly state that taxes are additional.

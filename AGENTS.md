@@ -45,6 +45,7 @@ All work summaries, handoffs, and similar completion reports must include a conc
 * estimated development time spent, and total expected time for ongoing work
 * notable resource consumption or external service costs
 * any important follow-up or maintenance costs still implied by the change
+* a final dollar-amount summary based on a minimum labor rate of **USD 15.00/hour plus applicable taxes**, including the formula or assumptions used when the exact tax rate is unknown
 
 If a cost is negligible or no external spend is involved, state that explicitly rather than omitting the category.
 
