@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 from typing import Iterable, Mapping, TYPE_CHECKING
 
 from django.utils import timezone
@@ -99,7 +99,7 @@ def parse_github_timestamp(value: str | None) -> datetime:
     if parsed is None:
         parsed = timezone.now()
     if timezone.is_naive(parsed):
-        parsed = timezone.make_aware(parsed, timezone.utc)
+        parsed = timezone.make_aware(parsed, dt_timezone.utc)
     return parsed
 
 

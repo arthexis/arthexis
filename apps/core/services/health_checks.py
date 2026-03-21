@@ -31,6 +31,16 @@ from apps.screens.startup_notifications import LCD_LOW_LOCK_FILE, render_lcd_loc
 from apps.users.system import collect_system_user_issues, ensure_system_user
 
 
+def _get_user_by_natural_key(user_model, username: str):
+    """Return the user matching ``username`` or ``None`` when it does not exist."""
+
+    manager = getattr(user_model, "all_objects", user_model._default_manager)
+    try:
+        return manager.get_by_natural_key(username)
+    except user_model.DoesNotExist:
+        return None
+
+
 def run_check_time(*, stdout, style, **_kwargs) -> None:
     """Print the current server time."""
 
@@ -117,8 +127,7 @@ def run_check_admin(*, stdout, style, force: bool = False, **_kwargs) -> None:
     if not username:
         raise CommandError("The user model does not define an admin username.")
 
-    manager = getattr(user_model, "all_objects", user_model._default_manager)
-    user = manager.filter(username=username).first()
+    user = _get_user_by_natural_key(user_model, username)
 
     if user is None:
         if not force:
@@ -163,8 +172,7 @@ def run_check_system_user(*, stdout, style, force: bool = False, **_kwargs) -> N
     if not username:
         raise CommandError("The user model does not define a system username.")
 
-    manager = getattr(user_model, "all_objects", user_model._default_manager)
-    user = manager.filter(username=username).first()
+    user = _get_user_by_natural_key(user_model, username)
 
     if user is None:
         if not force:
@@ -208,8 +216,10 @@ def run_check_rfid(*, stdout, rfid_value: str | None = None, rfid_kind: str | No
     result = validate_rfid_value(rfid_value, kind=rfid_kind)
     if "error" in result:
         raise CommandError(result["error"])
-    dump_kwargs = {"indent": 2, "sort_keys": True} if rfid_pretty else {}
-    stdout.write(json.dumps(result, **dump_kwargs))
+    if rfid_pretty:
+        stdout.write(json.dumps(result, indent=2, sort_keys=True))
+        return
+    stdout.write(json.dumps(result))
 
 
 def run_check_next_upgrade(*, stdout, **_kwargs) -> None:

@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable, Iterator, Mapping, TYPE_CHECKING, Any
+from typing import Iterable, Iterator, Mapping, TYPE_CHECKING, Any, Protocol, TypeAlias
 
 import requests
 from django.conf import settings
@@ -40,6 +40,20 @@ ISSUE_LOCK_DIR = _resolve_issue_lock_dir()
 
 class GitHubRepositoryError(RuntimeError):
     """Raised when a GitHub repository operation fails."""
+
+
+class SupportsRepositoryPayload(Protocol):
+    """Repository-like object accepted by the GitHub service helpers."""
+
+    name: str
+    owner: str
+    description: str
+    is_private: bool
+
+
+JSONMapping: TypeAlias = dict[str, Any]
+JSONList: TypeAlias = list[Any]
+JSONValue: TypeAlias = JSONMapping | JSONList
 
 
 def build_headers(token: str, *, user_agent: str = "arthexis-admin") -> Mapping[str, str]:
@@ -120,7 +134,7 @@ def _extract_error_message(response: requests.Response) -> str:
     return message
 
 
-def _safe_json(response: requests.Response) -> dict[str, Any] | list[Any]:
+def _safe_json(response: requests.Response) -> JSONValue:
     try:
         return response.json()
     except ValueError:
@@ -128,7 +142,7 @@ def _safe_json(response: requests.Response) -> dict[str, Any] | list[Any]:
 
 
 def create_repository(
-    repository: Any,
+    repository: SupportsRepositoryPayload,
     *,
     package: Package | None,
     private: bool | None = None,
@@ -172,14 +186,14 @@ def create_repository(
         try:
             if 200 <= response.status_code < 300:
                 data = _safe_json(response)
-                html_url = data.get("html_url")
+                payload_data = data if isinstance(data, dict) else {}
+                html_url = payload_data.get("html_url")
                 if html_url:
                     return html_url
 
+                owner_data = payload_data.get("owner")
                 resolved_owner = (
-                    data.get("owner", {}).get("login")
-                    if isinstance(data.get("owner"), Mapping)
-                    else owner
+                    owner_data.get("login") if isinstance(owner_data, Mapping) else owner
                 )
                 resolved_owner = (resolved_owner or owner).strip("/")
                 return f"https://github.com/{resolved_owner}/{getattr(repository, 'name', '')}"

@@ -74,10 +74,10 @@ python manage.py runserver 0.0.0.0:8888
   ```bash
   mypy
   ```
-  This reads the repo-root configuration in `pyproject.toml` and currently targets
-  `scripts/generate_requirements.py` plus `scripts/sort_pyproject_deps.py`, which already
-  pass cleanly as a pragmatic baseline before the broader `config/`, `utils/`, and
-  `scripts/` directories are brought into scope.
+  This reads the repo-root configuration in `pyproject.toml` and now covers the stable
+  baseline scripts plus the first Django-aware owned paths under `apps/protocols/`,
+  `apps/repos/`, and selected modules in `apps/core/`. Extend that list monotonically and
+  track rollout backlog or regressions in `docs/development/mypy-adoption-checklist.md`.
 - Prefer clear, well-documented functions over clever shortcuts.
 
 ### Documentation changes
