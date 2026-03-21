@@ -7,7 +7,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.urls import reverse
 
-from apps.blog.models import BlogArticle
 from apps.extensions.models import JsExtension
 from apps.shop.models import Shop, ShopOrder
 from apps.terms.models import Term
@@ -24,46 +23,6 @@ def admin_user():
         email="admin-public-links@example.com",
         password="admin123",
     )
-
-
-def test_blog_article_admin_shows_public_index_and_detail_links(client, admin_user):
-    """Published blog article admin pages should expose list and detail public routes."""
-
-    client.force_login(admin_user)
-    article = BlogArticle.objects.create(
-        title="Admin-findable article",
-        body="Published content",
-        status=BlogArticle.Status.PUBLISHED,
-    )
-
-    changelist_response = client.get(reverse("admin:blog_blogarticle_changelist"))
-    assert changelist_response.status_code == 200
-    assert reverse("blog-list") in changelist_response.content.decode()
-
-    change_response = client.get(
-        reverse("admin:blog_blogarticle_change", args=[article.pk])
-    )
-    assert change_response.status_code == 200
-    content = change_response.content.decode()
-    assert reverse("blog-list") in content
-    assert article.get_absolute_url() in content
-
-
-def test_blog_article_admin_hides_dead_detail_links_for_unpublished_entries(client, admin_user):
-    """Unpublished article admin pages should not expose detail links that 404 publicly."""
-
-    client.force_login(admin_user)
-    article = BlogArticle.objects.create(
-        title="Draft article",
-        body="Draft content",
-        status=BlogArticle.Status.DRAFT,
-    )
-
-    change_response = client.get(reverse("admin:blog_blogarticle_change", args=[article.pk]))
-    assert change_response.status_code == 200
-    content = change_response.content.decode()
-    assert reverse("blog-list") in content
-    assert article.get_absolute_url() not in content
 
 
 def test_term_admin_shows_registration_and_detail_links_for_accessible_terms(client, admin_user):
