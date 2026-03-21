@@ -58,8 +58,9 @@ def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
 def customer_public_detail(request, pk: int) -> HttpResponse:
     """Render a public Evergo customer profile and artifacts."""
     customer = get_object_or_404(
-        EvergoCustomer.objects.select_related("latest_order").prefetch_related("artifacts"),
+        EvergoCustomer.objects.select_related("latest_order", "user__user").prefetch_related("artifacts"),
         pk=pk,
+        user__user=request.user,
     )
     artifacts = list(customer.artifacts.all())
     address = customer.address.strip()
@@ -82,7 +83,12 @@ def customer_public_detail(request, pk: int) -> HttpResponse:
 @login_required
 def customer_artifact_download(request, pk: int, artifact_id: int) -> HttpResponse:
     """Download a PDF artifact attached to a customer profile."""
-    artifact = get_object_or_404(EvergoArtifact, pk=artifact_id, customer_id=pk)
+    artifact = get_object_or_404(
+        EvergoArtifact.objects.select_related("customer__user__user"),
+        pk=artifact_id,
+        customer_id=pk,
+        customer__user__user=request.user,
+    )
     if not artifact.is_pdf:
         raise Http404("Only PDF artifacts can be downloaded from this endpoint.")
 

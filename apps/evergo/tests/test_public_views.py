@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -30,15 +32,34 @@ def test_customer_public_detail_requires_authentication(client):
         address="Av Siempre Viva 742, Monterrey, NL",
         latest_so="SO-123",
     )
-    image = SimpleUploadedFile("house.png", b"img-bytes", content_type="image/png")
-    pdf = SimpleUploadedFile("quote.pdf", b"%PDF-1.4\nmock", content_type="application/pdf")
-    EvergoArtifact.objects.create(customer=customer, file=image)
-    artifact_pdf = EvergoArtifact.objects.create(customer=customer, file=pdf)
 
     response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
 
     assert response.status_code == 302
-    assert reverse("admin:login") in response.url
+    assert "/login/" in response.url
+
+
+@pytest.mark.django_db
+def test_customer_public_detail_renders_for_authenticated_owner(client):
+    """Regression: customer detail should still render for the owning authenticated user."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-detail", email="owner-detail@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-detail@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(
+        user=profile,
+        name="Jane Doe",
+        phone_number="+52 555 1234",
+        address="Av Siempre Viva 742, Monterrey, NL",
+        latest_so="SO-123",
+    )
+    image = SimpleUploadedFile("house.png", b"img-bytes", content_type="image/png")
+    pdf = SimpleUploadedFile("quote.pdf", b"%PDF-1.4\nmock", content_type="application/pdf")
+    EvergoArtifact.objects.create(customer=customer, file=image)
+    artifact_pdf = EvergoArtifact.objects.create(customer=customer, file=pdf)
 
     client.force_login(owner)
     response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
@@ -60,8 +81,27 @@ def test_customer_public_detail_requires_authentication(client):
 
 
 @pytest.mark.django_db
-def test_customer_artifact_download_requires_authentication_and_rejects_non_pdf(client):
-    """Regression: artifact download should require login and still reject non-PDF files."""
+def test_customer_public_detail_rejects_non_owner_access(client):
+    """Security: authenticated users cannot view customer details for other owners."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-private", email="owner-private@example.com")
+    intruder = User.objects.create_user(username="evergo-intruder", email="intruder@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-private@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="Jane Doe")
+
+    client.force_login(intruder)
+    response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_customer_artifact_download_requires_authentication(client):
+    """Regression: artifact download should require login before evaluating the artifact."""
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner-2", email="owner2@example.com")
     profile = EvergoUser.objects.create(
@@ -78,10 +118,50 @@ def test_customer_artifact_download_requires_authentication_and_rejects_non_pdf(
     response = client.get(reverse("evergo:customer-artifact-download", args=[customer.pk, image.pk]))
 
     assert response.status_code == 302
-    assert reverse("admin:login") in response.url
+    assert "/login/" in response.url
+
+
+@pytest.mark.django_db
+def test_customer_artifact_download_rejects_non_pdf_for_authenticated_owner(client):
+    """Regression: authenticated owners should still get 404 for non-PDF downloads."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-2b", email="owner2b@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner2b@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="John")
+    image = EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("photo.jpg", b"img", content_type="image/jpeg"),
+    )
 
     client.force_login(owner)
     response = client.get(reverse("evergo:customer-artifact-download", args=[customer.pk, image.pk]))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_customer_artifact_download_rejects_non_owner_access(client):
+    """Security: authenticated users cannot download artifacts for other owners' customers."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-2c", email="owner2c@example.com")
+    intruder = User.objects.create_user(username="evergo-owner-2d", email="owner2d@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner2c@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="John")
+    pdf = EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("quote.pdf", b"%PDF-1.4\nmock", content_type="application/pdf"),
+    )
+
+    client.force_login(intruder)
+    response = client.get(reverse("evergo:customer-artifact-download", args=[customer.pk, pdf.pk]))
 
     assert response.status_code == 404
 
