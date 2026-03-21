@@ -273,6 +273,58 @@ ensure_playwright_installed() {
   fi
 }
 
+playwright_missing_host_dependencies() {
+  "$PYTHON" - <<'PY'
+import sys
+
+try:
+    from playwright.sync_api import Error, sync_playwright
+except Exception as exc:
+    print(exc, file=sys.stderr)
+    raise SystemExit(1)
+
+try:
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        browser.close()
+except Error as exc:
+    message = str(exc)
+    if "Host system is missing dependencies" in message:
+        print(message, file=sys.stderr)
+        raise SystemExit(10)
+    print(message, file=sys.stderr)
+    raise SystemExit(1)
+PY
+}
+
+ensure_playwright_host_dependencies() {
+  if [ "${ARTHEXIS_SKIP_PLAYWRIGHT_INSTALL_DEPS:-0}" = "1" ]; then
+    echo "Skipping Playwright host dependency installation because ARTHEXIS_SKIP_PLAYWRIGHT_INSTALL_DEPS=1."
+    return 0
+  fi
+
+  if [ "$(uname -s)" != "Linux" ]; then
+    return 0
+  fi
+
+  local -a install_deps_cmd=("$PYTHON" -m playwright install-deps chromium firefox)
+  if [ "$(id -u)" -eq 0 ]; then
+    echo "Installing Playwright host libraries for Linux."
+    "${install_deps_cmd[@]}"
+    return $?
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    echo "Installing Playwright host libraries for Linux via sudo."
+    sudo -n "${install_deps_cmd[@]}"
+    return $?
+  fi
+
+  echo "Warning: Playwright browser binaries are installed, but Linux host libraries may still be missing." >&2
+  echo "Run '$PYTHON -m playwright install-deps chromium firefox' with root access if preview capture still fails." >&2
+  return 0
+}
+
 ensure_playwright_browsers_installed() {
   local browser_marker_file="$LOCK_DIR/playwright.version"
   local current_version=""
@@ -297,6 +349,23 @@ ensure_playwright_browsers_installed() {
   if ! "$PYTHON" -m playwright install chromium firefox; then
     echo "Playwright browser runtime installation failed." >&2
     return 1
+  fi
+
+  if ! ensure_playwright_host_dependencies; then
+    echo "Playwright host dependency installation failed." >&2
+    return 1
+  fi
+
+  if playwright_missing_host_dependencies; then
+    :
+  else
+    local verify_status=$?
+    if [ "$verify_status" -eq 10 ]; then
+      echo "Warning: Playwright browser runtimes are installed, but this Linux environment is still missing host libraries for browser execution." >&2
+      echo "Run '$PYTHON -m playwright install-deps chromium firefox' or install the packages reported above." >&2
+    else
+      echo "Warning: Playwright browser verification failed after installation." >&2
+    fi
   fi
 
   printf '%s\n' "$current_version" > "$browser_marker_file"
@@ -420,6 +489,10 @@ install_watch_upgrade_helper() {
     return 0
   fi
 }
+
+if [ "${ARTHEXIS_ENV_REFRESH_SOURCE_ONLY:-0}" = "1" ]; then
+  return 0 2>/dev/null || exit 0
+fi
 
 
 mkdir -p "$LOCK_DIR"
