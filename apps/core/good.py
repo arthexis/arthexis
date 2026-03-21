@@ -454,7 +454,7 @@ def marketing_tagline(*, docs_url: str | None = None) -> str:
         A concise tagline that can be reused by docs or marketing surfaces.
     """
 
-    base = "Arthexis is Good — one command to prove your suite is ready."
+    base = "Arthexis is Good[*] — one command to prove your suite is ready."
     if not docs_url:
         return base
     return f"{base} Learn more: {docs_url}"

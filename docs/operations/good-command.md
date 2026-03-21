@@ -1,6 +1,6 @@
 # `good` command
 
-**Tagline:** **Arthexis is Good — one command to prove your suite is ready.**
+**Tagline:** **Arthexis is Good[*] — one command to prove your suite is ready.**
 
 Use the `good` management command to evaluate how healthy, compatible, and activation-ready the current Arthexis deployment looks.
 

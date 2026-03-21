@@ -16,7 +16,7 @@ def test_marketing_tagline_can_include_docs_url() -> None:
 
     result = marketing_tagline(docs_url="/docs/operations/good-command/")
 
-    assert "Arthexis is Good" in result
+    assert "Arthexis is Good[*]" in result
     assert "/docs/operations/good-command/" in result
 
 
@@ -56,7 +56,7 @@ def test_good_command_tagline_includes_docs_link(monkeypatch) -> None:
     call_command("good", "--tagline", stdout=output)
 
     rendered = output.getvalue().strip()
-    assert "Arthexis is Good" in rendered
+    assert "Arthexis is Good[*]" in rendered
     assert "/docs/operations/good-command/" in rendered
 
 
