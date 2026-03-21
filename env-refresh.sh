@@ -329,6 +329,7 @@ ensure_playwright_browsers_installed() {
   local browser_marker_file="$LOCK_DIR/playwright.version"
   local current_version=""
   local stored_version=""
+  local verify_status=0
 
   if ! ensure_playwright_installed; then
     return 1
@@ -340,15 +341,14 @@ ensure_playwright_browsers_installed() {
     stored_version="$(cat "$browser_marker_file")"
   fi
 
-  if [ "$FORCE_REFRESH" -eq 0 ] && [ "$current_version" = "$stored_version" ]; then
+  if [ "$FORCE_REFRESH" -ne 0 ] || [ "$current_version" != "$stored_version" ]; then
+    echo "Installing Playwright browser runtimes (chromium, firefox) for version ${current_version}."
+    if ! "$PYTHON" -m playwright install chromium firefox; then
+      echo "Playwright browser runtime installation failed." >&2
+      return 1
+    fi
+  else
     echo "playwright browsers already installed for version ${current_version}; skipping"
-    return 0
-  fi
-
-  echo "Installing Playwright browser runtimes (chromium, firefox) for version ${current_version}."
-  if ! "$PYTHON" -m playwright install chromium firefox; then
-    echo "Playwright browser runtime installation failed." >&2
-    return 1
   fi
 
   if ! ensure_playwright_host_dependencies; then
@@ -356,17 +356,21 @@ ensure_playwright_browsers_installed() {
     return 1
   fi
 
-  if ! playwright_missing_host_dependencies; then
-    local verify_status=$?
+  playwright_missing_host_dependencies
+  verify_status=$?
+  if [ "$verify_status" -ne 0 ]; then
     if [ "$verify_status" -eq 10 ]; then
       echo "Warning: Playwright browser runtimes are installed, but this Linux environment is still missing host libraries for browser execution." >&2
       echo "Run '$PYTHON -m playwright install-deps chromium firefox' or install the packages reported above." >&2
     else
       echo "Warning: Playwright browser verification failed after installation." >&2
     fi
+    return 0
   fi
 
-  printf '%s\n' "$current_version" > "$browser_marker_file"
+  if [ "$FORCE_REFRESH" -ne 0 ] || [ "$current_version" != "$stored_version" ]; then
+    printf '%s\n' "$current_version" > "$browser_marker_file"
+  fi
 }
 
 should_install_hardware_requirements() {
