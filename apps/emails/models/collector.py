@@ -198,9 +198,7 @@ class EmailCollector(Entity):
                     )
                 except Exception:
                     logger.exception(
-                        "Failed email notification for collector %s; "
-                        "Failed to send notification for collector %s",
-                        self.pk,
+                        "Failed to send email notification for collector %s",
                         self.pk,
                     )
 

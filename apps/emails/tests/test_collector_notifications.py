@@ -237,7 +237,7 @@ def test_collect_continues_when_notification_fails(monkeypatch, caplog):
         collector.collect(limit=2)
 
     assert EmailArtifact.objects.filter(collector=collector).count() == 2
-    assert "Failed to send notification for collector" in caplog.text
+    assert "Failed to send email notification for collector" in caplog.text
 
 
 def test_collect_none_mode_skips_dispatch(monkeypatch):
