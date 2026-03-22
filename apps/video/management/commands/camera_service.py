@@ -5,12 +5,12 @@ from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    """Backward-compatible wrapper for camera service mode."""
+    """Supported alias for camera service mode."""
 
-    help = "Run camera service. Compatibility alias; prefer `video service`."
+    help = "Run camera service. Supported alias for `video service`."
 
     def add_arguments(self, parser) -> None:
-        """Register camera service compatibility arguments."""
+        """Register camera service alias arguments."""
 
         parser.add_argument(
             "--interval",
@@ -26,7 +26,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         """Delegate camera service execution to ``video service``."""
 
-        self.stdout.write(self.style.WARNING("`camera_service` is a legacy alias; use `video service`."))
+        self.stdout.write(self.style.SUCCESS("`camera_service` is a supported alias for `video service`."))
 
         kwargs: dict[str, float] = {
             key: value

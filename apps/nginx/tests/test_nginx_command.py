@@ -84,8 +84,8 @@ def test_https_remediation_message_points_to_nginx_configure():
     assert "rerun the HTTPS command" in message
 
 
-def test_legacy_nginx_configure_forwards_to_consolidated_command(monkeypatch):
-    """The legacy alias should forward arguments to `nginx --configure`."""
+def test_nginx_configure_alias_forwards_to_consolidated_command(monkeypatch):
+    """The supported alias should forward arguments to `nginx --configure`."""
 
     forwarded = {}
 
@@ -111,7 +111,7 @@ def test_legacy_nginx_configure_forwards_to_consolidated_command(monkeypatch):
         stdout=stdout,
     )
 
-    assert "deprecated" in stdout.getvalue().lower()
+    assert "supported alias" in stdout.getvalue().lower()
     assert forwarded["name"] == "nginx"
     assert forwarded["args"] == (
         "--configure",
