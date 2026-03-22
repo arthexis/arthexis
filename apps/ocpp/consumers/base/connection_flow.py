@@ -26,6 +26,10 @@ OCPP_VERSION_FEATURE_SLUGS = {
     "ocpp2.0.1": "ocpp-201-charge-point",
     "ocpp2.1": "ocpp-21-charge-point",
 }
+CREATION_FEATURE_FALLBACK_SLUGS = [
+    CHARGER_CREATION_FEATURE_SLUG,
+    *OCPP_VERSION_FEATURE_SLUGS.values(),
+]
 
 
 class ConnectionFlowMixin:
@@ -93,34 +97,46 @@ class ConnectionFlowMixin:
 
         def _resolve_feature_reason() -> str | None:
             node = Node.get_local()
-            if not node:
-                logger.warning(
-                    "Charge point connection blocked: no local node is registered."
-                )
-                return "node-missing"
-
+            offered_subprotocols = self._get_offered_subprotocols()
+            requested_version = self._canonicalize_ocpp_subprotocol(
+                self._select_subprotocol(offered_subprotocols, None)
+            )
             requested_feature_slug = OCPP_VERSION_FEATURE_SLUGS.get(
-                getattr(self, "ocpp_version", ""),
+                requested_version,
                 CHARGER_CREATION_FEATURE_SLUG,
             )
-            feature = Feature.objects.filter(slug=requested_feature_slug).first()
-            if not feature and requested_feature_slug != CHARGER_CREATION_FEATURE_SLUG:
-                feature = Feature.objects.filter(
-                    slug=CHARGER_CREATION_FEATURE_SLUG
-                ).first()
-            if not feature:
+            feature_slugs = [requested_feature_slug]
+            if requested_feature_slug == CHARGER_CREATION_FEATURE_SLUG:
+                feature_slugs = CREATION_FEATURE_FALLBACK_SLUGS
+            elif CHARGER_CREATION_FEATURE_SLUG not in feature_slugs:
+                feature_slugs.append(CHARGER_CREATION_FEATURE_SLUG)
+
+            features = list(Feature.objects.filter(slug__in=feature_slugs))
+            feature_by_slug = {feature.slug: feature for feature in features}
+            ordered_features = [
+                feature_by_slug[slug] for slug in feature_slugs if slug in feature_by_slug
+            ]
+            if not ordered_features:
                 logger.warning(
-                    "Charge point connection blocked: creation feature %s is missing.",
-                    requested_feature_slug,
+                    "Charge point connection blocked: creation features %s are missing.",
+                    ", ".join(feature_slugs),
                 )
                 return "creation-feature-missing"
-            if not feature.is_enabled:
+            for feature in ordered_features:
+                if feature.is_enabled_for_node(node=node):
+                    return None
+            enabled_globally = [feature.slug for feature in ordered_features if feature.is_enabled]
+            if enabled_globally:
                 logger.info(
-                    "Charge point connection blocked: creation feature %s is disabled.",
-                    feature.slug,
+                    "Charge point connection blocked: creation features %s require an unavailable node capability.",
+                    ", ".join(enabled_globally),
                 )
-                return "creation-feature-disabled"
-            return None
+                return "creation-node-feature-disabled"
+            logger.info(
+                "Charge point connection blocked: creation features %s are disabled.",
+                ", ".join(feature.slug for feature in ordered_features),
+            )
+            return "creation-feature-disabled"
 
         self._charge_point_connection_reason = await database_sync_to_async(
             _resolve_feature_reason
