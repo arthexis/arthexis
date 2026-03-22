@@ -7,7 +7,7 @@ from functools import lru_cache
 from types import SimpleNamespace
 
 from django.contrib import messages
-from django.http import (Http404, HttpResponse, JsonResponse)
+from django.http import Http404, HttpResponse, JsonResponse
 from django.http.request import split_domain_port
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
@@ -154,7 +154,9 @@ def _visible_error_code(value: str | None) -> str | None:
 def _visible_chargers(user):
     """Return chargers visible to ``user`` on public dashboards."""
 
-    return Charger.visible_for_user(user).prefetch_related("owner_users", "owner_groups")
+    return Charger.visible_for_user(user).prefetch_related(
+        "owner_users", "owner_groups"
+    )
 
 
 def _charger_last_seen(charger: Charger | object):
@@ -266,7 +268,9 @@ def _connector_overview(
     """Return connector metadata used for navigation and summaries."""
 
     overview: list[dict] = []
-    sibling_connectors = connectors if connectors is not None else _connector_set(charger)
+    sibling_connectors = (
+        connectors if connectors is not None else _connector_set(charger)
+    )
     for sibling in sibling_connectors:
         if user is not None and not sibling.is_visible_to(user):
             continue
@@ -287,9 +291,7 @@ def _connector_overview(
                 "last_status_timestamp": sibling.last_status_timestamp,
                 "last_status_vendor_info": sibling.last_status_vendor_info,
                 "tx": tx_obj,
-                "rfid_details": _transaction_rfid_details(
-                    tx_obj, cache=rfid_cache
-                ),
+                "rfid_details": _transaction_rfid_details(tx_obj, cache=rfid_cache),
                 "connected": store.is_connected(
                     sibling.charger_id, sibling.connector_id
                 ),
@@ -363,7 +365,9 @@ def _is_untracked_origin(
     local_pk = getattr(local_node, "pk", None)
     if local_pk is not None and origin.pk == local_pk:
         return False
-    last_seen = getattr(origin, "last_seen", None) or getattr(origin, "last_updated", None)
+    last_seen = getattr(origin, "last_seen", None) or getattr(
+        origin, "last_updated", None
+    )
     if last_seen is None:
         return True
     if timezone.is_naive(last_seen):
@@ -455,10 +459,7 @@ def _collect_status_events(
             continue
 
         if event_time < window_start:
-            if (
-                latest_before_window is None
-                or event_time > latest_before_window[0]
-            ):
+            if latest_before_window is None or event_time > latest_before_window[0]:
                 latest_before_window = (event_time, status_bucket)
             break
         if event_time > window_end:
@@ -481,6 +482,7 @@ def _important_non_transaction_events(
     connector: Charger,
     *,
     limit: int = 5,
+    include_sensitive: bool = True,
 ) -> list[dict[str, str | int | datetime | None]]:
     """Return recent notable non-transaction events for the status page."""
 
@@ -513,16 +515,22 @@ def _important_non_transaction_events(
         "MeterValues queued:",
         "MeterValues received:",
     )
-    important_prefixes = (
+    important_prefixes = [
         "Connected",
         "Closed",
         "Heartbeat",
         "BootNotification",
         "Authorize",
-        "DiagnosticsStatusNotification",
-        "FirmwareStatusNotification",
-        "SecurityEventNotification",
-    )
+    ]
+    if include_sensitive:
+        important_prefixes.extend(
+            [
+                "DiagnosticsStatusNotification",
+                "FirmwareStatusNotification",
+                "SecurityEventNotification",
+            ]
+        )
+    important_prefixes = tuple(important_prefixes)
 
     warning_statuses = {"faulted", "suspendedev", "suspendedevse", "unavailable"}
     error_statuses = {"error", "offline", "closed", "rejected"}
@@ -582,7 +590,9 @@ def _important_non_transaction_events(
             status_value = str(payload.get("status") or "").strip()
             if not status_value:
                 continue
-            severity, severity_color, severity_label = _event_meta("Status", status_value)
+            severity, severity_color, severity_label = _event_meta(
+                "Status", status_value
+            )
             events.append(
                 {
                     "timestamp": entry.timestamp,
@@ -675,9 +685,7 @@ def _usage_timeline(
         if (
             fallback_state == "offline"
             and fallback_source == "connection"
-            and _is_untracked_origin(
-                connector, local_node, window_end, active_delta
-            )
+            and _is_untracked_origin(connector, local_node, window_end, active_delta)
         ):
             fallback_state = "untracked"
         current_state = fallback_state
@@ -783,8 +791,9 @@ def _supported_language_codes() -> list[str]:
     try:
         codes = [
             str(code).strip()
-            for code in Language.objects.filter(is_deleted=False)
-            .values_list("code", flat=True)
+            for code in Language.objects.filter(is_deleted=False).values_list(
+                "code", flat=True
+            )
             if str(code).strip()
         ]
     except (OperationalError, ProgrammingError):
@@ -906,7 +915,9 @@ def _active_transaction_for_charger(charger: Charger) -> Transaction | None:
     return tx_obj
 
 
-def _is_superseded_open_transaction(charger: Charger, tx_obj: Transaction | None) -> bool:
+def _is_superseded_open_transaction(
+    charger: Charger, tx_obj: Transaction | None
+) -> bool:
     """Return whether ``tx_obj`` was superseded by a newer transaction.
 
     Some chargers fail to send ``StopTransaction`` and leave an old row with
@@ -995,7 +1006,11 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
     normalized_status = status_value.casefold() if status_value else ""
 
     aggregate_state = _aggregate_dashboard_state(charger)
-    if aggregate_state is not None and normalized_status in {"", "available", "charging"}:
+    if aggregate_state is not None and normalized_status in {
+        "",
+        "available",
+        "charging",
+    }:
         return aggregate_state
 
     has_session = _has_active_session(tx_obj)
@@ -1021,7 +1036,9 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
             # Some chargers continue reporting "Charging" after a session ends.
             # When no active transaction exists, surface the state as available
             # so the UI reflects the actual behaviour at the site.
-            label, color = STATUS_BADGE_MAP.get("available", (_("Available"), "#0d6efd"))
+            label, color = STATUS_BADGE_MAP.get(
+                "available", (_("Available"), "#0d6efd")
+            )
         elif error_code and error_code_lower not in ERROR_OK_VALUES:
             label = _("%(status)s (%(error)s)") % {
                 "status": label,
@@ -1039,9 +1056,7 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
     last_seen = _charger_last_seen(charger)
     if last_seen:
         if timezone.is_naive(last_seen):
-            last_seen = timezone.make_aware(
-                last_seen, timezone.get_current_timezone()
-            )
+            last_seen = timezone.make_aware(last_seen, timezone.get_current_timezone())
         if timezone.now() - last_seen <= _remote_node_active_delta():
             if has_session:
                 return STATUS_BADGE_MAP["charging"]
