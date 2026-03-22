@@ -55,6 +55,10 @@ The Windows installer is intentionally simple: it bootstraps `.venv`, installs r
 
 ## 2. Runtime helpers
 
+### 2.0 Linux: `scripts/rename_service`
+
+Use `scripts/rename_service --new-name <name>` to rename a managed suite service after installation without uninstalling the node. The helper reads `.locks/service.lck` by default, keeps companion lock state (Celery/LCD/RFID/Camera), and recreates the corresponding unit names in systemd mode. Use `--dry-run` to preview changes and `--start` to start renamed units after provisioning.
+
 ### 2.1 Linux: `start.sh`
 
 `start.sh` activates the virtual environment, loads `*.env` files, optionally restarts provisioned systemd units, and then launches Django. Static assets are hashed before running `collectstatic`, saving time on repeated starts. Supported options:

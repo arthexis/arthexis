@@ -8,7 +8,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from filelock import FileLock, Timeout
 
-from apps.core.management.commands.set_env import env_path, read_env, write_env
+from apps.core.management.commands.env import env_path, read_env, write_env
 from config.admin_urls import normalize_admin_url_path
 
 

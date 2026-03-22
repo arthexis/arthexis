@@ -10,7 +10,6 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity, EntityManager
-from apps.recipes.models import Recipe
 
 
 class PhysicalSensor(Entity):
@@ -53,6 +52,14 @@ class PhysicalSensor(Entity):
         ordering = ["name"]
 
     def extract_reading(self, report: str | None) -> Decimal | None:
+        """Extract and scale a sensor reading from a raw report string.
+
+        Args:
+            report: Raw device report text to inspect.
+
+        Returns:
+            The parsed decimal reading, or ``None`` when no reading matches.
+        """
         if not report or not self.report_regex:
             return None
 
@@ -77,6 +84,15 @@ class PhysicalSensor(Entity):
         return reading * self.report_scale
 
     def update_from_report(self, report: str, *, commit: bool = True) -> Decimal | None:
+        """Update the sensor from a raw report.
+
+        Args:
+            report: Raw report text to parse.
+            commit: When ``True``, persist the updated reading fields.
+
+        Returns:
+            The parsed reading, or ``None`` when parsing fails.
+        """
         reading = self.extract_reading(report)
         if reading is None:
             return None
@@ -88,6 +104,14 @@ class PhysicalSensor(Entity):
         return reading
 
     def format_reading(self, reading: Decimal | None = None) -> str:
+        """Return a human-readable reading string.
+
+        Args:
+            reading: Optional reading override. Defaults to ``last_reading``.
+
+        Returns:
+            A formatted string with the configured precision and unit.
+        """
         if reading is None:
             reading = self.last_reading
         if reading is None:
@@ -120,6 +144,11 @@ class Thermometer(PhysicalSensor):
         return self.name
 
     def format_lcd_reading(self) -> str:
+        """Return the current reading formatted for compact displays.
+
+        Returns:
+            The formatted current thermometer reading.
+        """
         return self.format_reading()
 
     def record_reading(
@@ -129,6 +158,16 @@ class Thermometer(PhysicalSensor):
         read_at: datetime | None = None,
         commit: bool = True,
     ) -> None:
+        """Persist a thermometer reading and append to the reading history.
+
+        Args:
+            reading: Parsed reading to store.
+            read_at: Optional timestamp for the reading.
+            commit: When ``True``, save the thermometer and create a reading row.
+
+        Returns:
+            ``None``.
+        """
         read_at = read_at or timezone.now()
         self.last_reading = reading
         self.last_read_at = read_at
@@ -139,6 +178,15 @@ class Thermometer(PhysicalSensor):
             )
 
     def update_from_report(self, report: str, *, commit: bool = True) -> Decimal | None:
+        """Parse a report and store the resulting thermometer reading.
+
+        Args:
+            report: Raw report text to parse.
+            commit: When ``True``, persist the reading and history row.
+
+        Returns:
+            The parsed reading, or ``None`` when parsing fails.
+        """
         reading = self.extract_reading(report)
         if reading is None:
             return None
@@ -147,6 +195,8 @@ class Thermometer(PhysicalSensor):
 
 
 class ThermometerReading(models.Model):
+    """Historical point-in-time reading captured for a thermometer."""
+
     thermometer = models.ForeignKey(
         Thermometer, related_name="readings", on_delete=models.CASCADE
     )
@@ -167,7 +217,7 @@ class UsbTrackerManager(EntityManager):
 
 
 class UsbTracker(Entity):
-    """Watch mounted USB devices for trigger files and run a recipe."""
+    """Watch mounted USB devices for a required file and record passive match status."""
 
     name = models.CharField(max_length=128)
     slug = models.SlugField(unique=True)
@@ -179,27 +229,12 @@ class UsbTracker(Entity):
     required_file_regex = models.TextField(
         blank=True,
         help_text=_(
-            "Optional regex used to validate file contents before triggering."
+            "Optional regex used to validate file contents before marking a match."
         ),
-    )
-    recipe = models.ForeignKey(
-        Recipe,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="usb_trackers",
-    )
-    cooldown_seconds = models.PositiveIntegerField(
-        default=10,
-        validators=[MinValueValidator(1)],
-        help_text=_("Minimum seconds between triggers."),
     )
     last_checked_at = models.DateTimeField(null=True, blank=True)
     last_matched_at = models.DateTimeField(null=True, blank=True)
-    last_triggered_at = models.DateTimeField(null=True, blank=True)
     last_match_path = models.CharField(max_length=512, blank=True)
-    last_match_signature = models.CharField(max_length=256, blank=True)
-    last_recipe_result = models.TextField(blank=True)
     last_error = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
 

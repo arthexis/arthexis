@@ -358,7 +358,7 @@ def test_request_certbot_certificate_challenge_failure_raises_specific_exception
     assert "/var/log/letsencrypt/letsencrypt.log" in message
 
 
-def test_request_certbot_certificate_http01_challenge_failure_includes_dns_resolution_hint_regression(
+def test_request_certbot_certificate_http01_challenge_failure_includes_dns_resolution_hint(
     monkeypatch, tmp_path
 ):
     """Regression: HTTP-01 failures should include current DNS resolution details for the domain."""

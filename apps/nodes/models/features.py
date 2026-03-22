@@ -15,6 +15,8 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
 from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
+from apps.clocks.utils import has_clock_device
+from apps.core.systemctl import _systemctl_command
 from apps.emails import mailer
 from apps.nodes.feature_detection import node_feature_detection_registry
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
@@ -230,6 +232,7 @@ class NodeFeatureMixin:
         "ap-router",
         "gpio-rtc",
         "lcd-screen",
+        "llvm-sigils",
         "gui-toast",
         "video-cam",
         "llm-summary",

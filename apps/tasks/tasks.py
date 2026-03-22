@@ -15,6 +15,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_SLEEP_SECONDS = 30
@@ -129,6 +130,12 @@ def run_scheduled_website_screenshots() -> list[int]:
 @shared_task(name="apps.repos.tasks.report_exception_to_github")
 def report_exception_to_github(payload: dict[str, Any]) -> None:
     """Send exception context to the GitHub issue helper.
+
+    Parameters:
+        payload: Serialized request exception data queued by the repos app.
+
+    Returns:
+        ``None``.
 
     The task is intentionally light-weight in this repository. Deployments can
     replace it with an implementation that forwards ``payload`` to the

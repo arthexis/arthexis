@@ -2,9 +2,9 @@ from django.db import migrations, models
 
 
 ACRONYM_MAP = {
-    "Terminal": "TERM",
+    "Terminal": "TRMN",
     "Control": "CTRL",
-    "Satellite": "SATL",
+    "Satellite": "STLT",
     "Watchtower": "WTTW",
     "Constellation": "CONS",
 }

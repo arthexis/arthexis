@@ -39,6 +39,7 @@ class UserStoryAdmin(
         "submitted_at",
         "github_issue_display",
         "owner",
+        "javascript_enabled",
         "assign_to",
     )
     list_filter = ("rating", "status", "submitted_at")
@@ -58,7 +59,9 @@ class UserStoryAdmin(
         "path",
         "user",
         "owner",
+        "javascript_enabled",
         "language_code",
+        "screenshot",
         "referer",
         "user_agent",
         "ip_address",
@@ -77,6 +80,8 @@ class UserStoryAdmin(
         "language_code",
         "user",
         "owner",
+        "javascript_enabled",
+        "screenshot",
         "status",
         "assign_to",
         "referer",

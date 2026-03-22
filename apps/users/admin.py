@@ -7,7 +7,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin.mixins import OwnableAdminForm, OwnableAdminMixin
 
-from .models import ChatProfile
+from .models import ChatProfile, UserFlag
 
 
 class ChatProfileAdminForm(OwnableAdminForm):
@@ -49,6 +49,15 @@ class ChatProfileAdmin(OwnableAdminMixin, admin.ModelAdmin):
     )
     list_filter = ("contact_via_chat", "is_enabled")
     search_fields = ("user__username", "group__name", "avatar__name")
+
+
+@admin.register(UserFlag)
+class UserFlagAdmin(admin.ModelAdmin):
+    """Manage user-level flags that apply independently of avatars."""
+
+    list_display = ("id", "user", "key", "is_enabled", "updated_at")
+    list_filter = ("is_enabled",)
+    search_fields = ("user__username", "user__email", "key")
 
 
 __all__ = ["admin"]

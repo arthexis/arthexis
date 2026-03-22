@@ -1,6 +1,5 @@
 import json
 import os
-import subprocess
 import uuid
 from pathlib import Path
 
@@ -9,18 +8,17 @@ from django.contrib import admin, messages
 from django.contrib.admin import helpers
 from django.db.models import Q
 from django.http import HttpResponseRedirect
-from django.shortcuts import render
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.cards.models import RFID
 from apps.cards.sync import serialize_rfid
-from apps.core.system.ui import _systemd_unit_status
+from apps.content.utils import capture_screenshot, save_screenshot
+from apps.core.system_ui import systemd_unit_status
 from apps.ocpp.models import CPForwarder, Charger
 
 from ..models import NetMessage, Node
-from apps.content.utils import capture_screenshot, save_screenshot
 from .forms import DownloadFirmwareForm, SendNetMessageForm
 
 
@@ -187,34 +185,6 @@ def download_evcs_firmware(modeladmin, request, queryset):
     return TemplateResponse(
         request, "admin/nodes/node/download_firmware.html", context
     )
-
-
-@admin.action(description="Run task")
-def run_task(modeladmin, request, queryset):
-    if "apply" in request.POST:
-        recipe_text = request.POST.get("recipe", "")
-        results = []
-        for node in queryset:
-            try:
-                if not node.is_local:
-                    raise NotImplementedError(
-                        "Remote node execution is not implemented"
-                    )
-                command = ["/bin/sh", "-c", recipe_text]
-                result = subprocess.run(
-                    command,
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
-                output = result.stdout + result.stderr
-            except Exception as exc:
-                output = str(exc)
-            results.append((node, output))
-        context = {"recipe": recipe_text, "results": results}
-        return render(request, "admin/nodes/task_result.html", context)
-    context = {"nodes": queryset}
-    return render(request, "admin/nodes/node/run_task.html", context)
 
 
 @admin.action(description="Take Screenshots")
@@ -541,7 +511,7 @@ def validate_service_active(modeladmin, request, queryset):
             modeladmin.message_user(request, message, level=messages.WARNING)
             continue
 
-        status = _systemd_unit_status(unit_name)
+        status = systemd_unit_status(unit_name)
         unit_status = status.get("status") or str(_("unknown"))
         enabled_state = status.get("enabled") or ""
         if status.get("missing"):

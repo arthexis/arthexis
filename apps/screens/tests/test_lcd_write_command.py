@@ -16,6 +16,11 @@ from apps.screens.startup_notifications import (
 )
 
 
+LCD_WRITE_FEATURE_ACTIVE_PATH = (
+    "apps.screens.management.commands.lcd_actions.write.is_local_node_feature_active"
+)
+
+
 @pytest.fixture()
 def temp_base_dir(tmp_path: Path) -> Path:
     (tmp_path / ".locks").mkdir(parents=True, exist_ok=True)
@@ -67,10 +72,14 @@ def test_delete_lock_file(temp_base_dir: Path):
     assert not lock_file.exists()
 
 
+@pytest.mark.django_db
 def test_restart_reports_failure(temp_base_dir: Path):
     """Surface systemctl stderr when restart exits with a non-zero status."""
 
-    with override_settings(BASE_DIR=temp_base_dir):
+    with (
+        override_settings(BASE_DIR=temp_base_dir),
+        mock.patch(LCD_WRITE_FEATURE_ACTIVE_PATH, return_value=True),
+    ):
         with mock.patch.object(subprocess, "run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(
                 ["systemctl", "restart", "lcd-demo"],
@@ -80,20 +89,24 @@ def test_restart_reports_failure(temp_base_dir: Path):
             )
 
             with pytest.raises(CommandError, match="restart failed"):
-                call_command("lcd", "write", restart=True, service_name="demo")
+                call_command("lcd", "write", restart=True, service_name="demo", resolve_sigils=False)
 
 
+@pytest.mark.django_db
 def test_restart_handles_missing_systemctl(temp_base_dir: Path):
     """Raise a clear error when systemctl is unavailable on the host."""
 
-    with override_settings(BASE_DIR=temp_base_dir):
+    with (
+        override_settings(BASE_DIR=temp_base_dir),
+        mock.patch(LCD_WRITE_FEATURE_ACTIVE_PATH, return_value=True),
+    ):
         with mock.patch.object(
             subprocess, "run", side_effect=FileNotFoundError
         ) as mock_run:
             with pytest.raises(
                 CommandError, match="systemctl not available; cannot restart lcd service"
             ):
-                call_command("lcd", "write", restart=True, service_name="demo")
+                call_command("lcd", "write", restart=True, service_name="demo", resolve_sigils=False)
 
     mock_run.assert_called_once_with(
         ["systemctl", "restart", "lcd-demo"], capture_output=True, text=True
@@ -133,11 +146,12 @@ def test_lcd_write_sigil_resolution_modes(
     assert lock_payload.body == "Body"
 
 
+@pytest.mark.django_db
 def test_restart_requires_lcd_feature(temp_base_dir: Path, monkeypatch):
     """Restart should be gated by lcd-screen feature availability."""
 
     monkeypatch.setattr(
-        "apps.screens.management.commands.lcd_actions.write.is_local_node_feature_active",
+        LCD_WRITE_FEATURE_ACTIVE_PATH,
         lambda slug: False,
     )
 
@@ -145,6 +159,6 @@ def test_restart_requires_lcd_feature(temp_base_dir: Path, monkeypatch):
 
     with override_settings(BASE_DIR=temp_base_dir):
         with pytest.raises(CommandError, match="lcd-screen feature is not active"):
-            call_command("lcd", "write", restart=True, service_name="demo")
+            call_command("lcd", "write", restart=True, service_name="demo", resolve_sigils=False)
 
     assert not lock_path.exists()

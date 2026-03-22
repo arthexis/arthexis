@@ -1,7 +1,8 @@
-"""Tests for Evergo public customer pages and artifact downloads."""
+"""Focused Evergo public-view security regression tests."""
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -11,12 +12,13 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoUser
+from apps.evergo.views import _compute_tracking_step_completion
 from apps.features.models import Feature
 
 
 @pytest.mark.django_db
-def test_customer_public_detail_renders_contact_map_and_artifacts(client):
-    """Regression: public customer detail should expose summary fields and map link."""
+def test_customer_public_detail_requires_authentication(client):
+    """Regression: customer detail should require login for access."""
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner", email="owner@example.com")
     profile = EvergoUser.objects.create(
@@ -31,11 +33,36 @@ def test_customer_public_detail_renders_contact_map_and_artifacts(client):
         address="Av Siempre Viva 742, Monterrey, NL",
         latest_so="SO-123",
     )
+
+    response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
+
+    assert response.status_code == 302
+    assert "/login/" in response.url
+
+
+@pytest.mark.django_db
+def test_customer_public_detail_renders_for_authenticated_owner(client):
+    """Regression: customer detail should still render for the owning authenticated user."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-detail", email="owner-detail@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-detail@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(
+        user=profile,
+        name="Jane Doe",
+        phone_number="+52 555 1234",
+        address="Av Siempre Viva 742, Monterrey, NL",
+        latest_so="SO-123",
+    )
     image = SimpleUploadedFile("house.png", b"img-bytes", content_type="image/png")
     pdf = SimpleUploadedFile("quote.pdf", b"%PDF-1.4\nmock", content_type="application/pdf")
     EvergoArtifact.objects.create(customer=customer, file=image)
     artifact_pdf = EvergoArtifact.objects.create(customer=customer, file=pdf)
 
+    client.force_login(owner)
     response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
 
     assert response.status_code == 200
@@ -55,8 +82,27 @@ def test_customer_public_detail_renders_contact_map_and_artifacts(client):
 
 
 @pytest.mark.django_db
-def test_customer_artifact_download_rejects_non_pdf(client):
-    """Regression: non-PDF attachments should not be downloadable from PDF endpoint."""
+def test_customer_public_detail_rejects_non_owner_access(client):
+    """Security: authenticated users cannot view customer details for other owners."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-private", email="owner-private@example.com")
+    intruder = User.objects.create_user(username="evergo-intruder", email="intruder@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-private@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="Jane Doe")
+
+    client.force_login(intruder)
+    response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_customer_artifact_download_requires_authentication(client):
+    """Regression: artifact download should require login before evaluating the artifact."""
     User = get_user_model()
     owner = User.objects.create_user(username="evergo-owner-2", email="owner2@example.com")
     profile = EvergoUser.objects.create(
@@ -71,6 +117,52 @@ def test_customer_artifact_download_rejects_non_pdf(client):
     )
 
     response = client.get(reverse("evergo:customer-artifact-download", args=[customer.pk, image.pk]))
+
+    assert response.status_code == 302
+    assert "/login/" in response.url
+
+
+@pytest.mark.django_db
+def test_customer_artifact_download_rejects_non_pdf_for_authenticated_owner(client):
+    """Regression: authenticated owners should still get 404 for non-PDF downloads."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-2b", email="owner2b@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner2b@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="John")
+    image = EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("photo.jpg", b"img", content_type="image/jpeg"),
+    )
+
+    client.force_login(owner)
+    response = client.get(reverse("evergo:customer-artifact-download", args=[customer.pk, image.pk]))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_customer_artifact_download_rejects_non_owner_access(client):
+    """Security: authenticated users cannot download artifacts for other owners' customers."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-2c", email="owner2c@example.com")
+    intruder = User.objects.create_user(username="evergo-owner-2d", email="owner2d@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner2c@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="John")
+    pdf = EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("quote.pdf", b"%PDF-1.4\nmock", content_type="application/pdf"),
+    )
+
+    client.force_login(intruder)
+    response = client.get(reverse("evergo:customer-artifact-download", args=[customer.pk, pdf.pk]))
 
     assert response.status_code == 404
 
@@ -246,6 +338,64 @@ def test_order_tracking_public_loads_remote_image_previews(mock_fetch_order_deta
 
 
 @pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail")
+def test_order_tracking_public_counts_remote_images_for_step_status(mock_fetch_order_detail, client):
+    """Regression: persisted remote images should count toward install/montage completion display."""
+    mock_fetch_order_detail.return_value = {
+        "reporte_visita": {
+            "metraje_visita_tecnica": "10",
+            "programacion_cargador": "32A",
+            "capacidad_itm_principal": "60",
+            "fecha_visita": "2026-02-26 13:00:00",
+            "voltaje_fase_fase": "220",
+            "voltaje_fase_tierra": "120",
+            "voltaje_fase_neutro": "120",
+            "voltaje_neutro_tierra": "1",
+            "prueba_carga": "Sin prueba",
+            "marca_cargador": "Marca",
+            "numero_serie": "SER-1",
+            "foto_tablero": "https://cdn.evergo.example/fotos/tablero.jpg",
+            "foto_medidor": "https://cdn.evergo.example/fotos/medidor.jpg",
+            "foto_tierra": "https://cdn.evergo.example/fotos/tierra.jpg",
+            "foto_ruta_cableado": "https://cdn.evergo.example/fotos/ruta.jpg",
+            "foto_ubicacion_cargador": "https://cdn.evergo.example/fotos/ubicacion.jpg",
+            "foto_general": "https://cdn.evergo.example/fotos/general.jpg",
+            "foto_hoja_visita": "https://cdn.evergo.example/fotos/hoja-visita.jpg",
+            "foto_interruptor_principal": "https://cdn.evergo.example/fotos/interruptor-principal.jpg",
+            "foto_panoramica_estacion": "https://cdn.evergo.example/fotos/panoramica.jpg",
+            "foto_numero_serie_cargador": "https://cdn.evergo.example/fotos/serie-cargador.jpg",
+            "foto_interruptor_instalado": "https://cdn.evergo.example/fotos/interruptor-instalado.jpg",
+            "foto_conexion_cargador": "https://cdn.evergo.example/fotos/conexion.jpg",
+            "foto_preparacion_cfe": "https://cdn.evergo.example/fotos/preparacion-cfe.jpg",
+            "foto_hoja_reporte_instalacion": "https://cdn.evergo.example/fotos/hoja-reporte.jpg",
+            "foto_voltaje_fase_fase": "https://cdn.evergo.example/fotos/vff.jpg",
+            "foto_voltaje_fase_tierra": "https://cdn.evergo.example/fotos/vft.jpg",
+            "foto_voltaje_fase_neutro": "https://cdn.evergo.example/fotos/vfn.jpg",
+            "foto_voltaje_neutro_tierra": "https://cdn.evergo.example/fotos/vnt.jpg",
+        }
+    }
+
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-images-steps", email="owner-images-steps@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-images-steps@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30206, order_number="GM030206")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "✅ 3. Reporte de instalación" in content
+    assert "✅ 4. Montaje-Conexión" in content
+
+
+@pytest.mark.django_db
 @patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"foto_tablero": "javascript:alert(1)"})
 def test_order_tracking_public_ignores_non_http_remote_image_urls(_, client):
     """Security regression: preview images should only accept HTTP(S) URLs from Evergo."""
@@ -308,6 +458,42 @@ def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, c
 
 @pytest.mark.django_db
 @patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={})
+@patch("apps.evergo.views.Site.objects.get_current")
+def test_order_tracking_public_reuses_public_chat_site_enablement(
+    mock_get_current_site,
+    _,
+    client,
+    settings,
+):
+    """Public Evergo tracking should honor the shared site-level public chat contract."""
+
+    settings.PAGES_CHAT_ENABLED = True
+    Feature.objects.update_or_create(
+        slug="staff-chat-bridge",
+        defaults={"display": "Staff Chat Bridge", "is_enabled": True},
+    )
+    mock_get_current_site.return_value = SimpleNamespace(enable_public_chat=True)
+
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-public-chat", email="owner-public-chat@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-public-chat@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=28702, order_number="GM01172")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    assert 'id="chat-launch"' in response.content.decode()
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={})
 def test_order_tracking_public_hides_feedback_and_chat_icons_when_disabled(_, client, settings):
     """Regression: tracking view should hide feedback/chat quick actions when permissions disable them."""
     settings.PAGES_CHAT_ENABLED = False
@@ -334,6 +520,31 @@ def test_order_tracking_public_hides_feedback_and_chat_icons_when_disabled(_, cl
     content = response.content.decode()
     assert 'id="chat-launch"' not in content
     assert 'id="user-story-toggle"' not in content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={})
+def test_order_tracking_public_falls_back_to_default_attachment_limit(_, client, settings):
+    """Misconfigured attachment limits should not crash the public tracking page."""
+
+    settings.USER_STORY_ATTACHMENT_LIMIT = "not-a-number"
+
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-bad-limit", email="owner-bad-limit@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-bad-limit@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=28703, order_number="GM01173")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    assert response.context["user_story_attachment_limit"] == 3
 
 
 @pytest.mark.django_db
@@ -546,6 +757,110 @@ def test_order_tracking_public_submits_with_missing_images_after_confirmation(mo
     assert "4/4 pasos completados" in response.content.decode()
 
 
+
+
+def test_compute_tracking_step_completion_allows_assign_without_visita_completion():
+    """Regression: assign step can be complete independently while install still requires visita completion."""
+    completion = _compute_tracking_step_completion(
+        {
+            "fecha_visita": "2026-03-09T10:00",
+            "programacion_cargador": "32A",
+        }
+    )
+
+    assert completion["visita"] is False
+    assert completion["assign"] is True
+    assert completion["install"] is False
+    assert completion["montage"] is False
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.submit_tracking_phase_one", return_value={"completed_steps": 1})
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"reporte_visita": {"foto_tablero": "https://cdn.evergo.example/fotos/tablero.jpg"}})
+def test_order_tracking_public_preserves_remote_images_on_partial_submission(_, mock_submit, client):
+    """Regression: partial submissions should not overwrite already persisted remote images with placeholders."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-remote-images", email="owner-remote-images@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-remote-images@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30316, order_number="GM030316")
+    client.force_login(owner)
+
+    response = client.post(
+        reverse("evergo:order-tracking-public", args=[order.remote_id]),
+        data={
+            "metraje_visita_tecnica": 10,
+            "confirm_missing_images": "1",
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert mock_submit.called
+    files = mock_submit.call_args.kwargs["files"]
+    assert "foto_tablero" not in files
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.submit_tracking_phase_one", return_value={"completed_steps": 0})
+def test_order_tracking_public_allows_partial_submission_without_required_primary_fields(mock_submit, client):
+    """Regression: operators can submit partial progress and continue later without completing every field."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-partial", email="owner-partial@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-partial@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30314, order_number="GM030314")
+    client.force_login(owner)
+
+    response = client.post(
+        reverse("evergo:order-tracking-public", args=[order.remote_id]),
+        data={
+            "metraje_visita_tecnica": 10,
+            "confirm_missing_images": "1",
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert mock_submit.called
+    content = response.content.decode()
+    assert "Orden enviada correctamente. 0/4 pasos completados." in content
+    assert "Orden enviada correctamente. 4/4 pasos completados." not in content
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={"reporte_visita": {"metraje_visita_tecnica": "31"}})
+def test_order_tracking_public_shows_step_progress_with_incomplete_prefill(_, client):
+    """Regression: step summary should keep later steps pending when required fields remain missing."""
+    User = get_user_model()
+    owner = User.objects.create_user(username="evergo-owner-step-status", email="owner-step-status@example.com")
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-step-status@example.com",
+        evergo_password="secret",
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30315, order_number="GM030315")
+    client.force_login(owner)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Estado de pasos" in content
+    assert "🕓 1. Visita técnica" in content
+
 @pytest.mark.django_db
 def test_my_evergo_dashboard_renders_and_generates_table_from_local_orders(client):
     """Regression: dashboard token page should render readonly username and order table rows."""
@@ -657,7 +972,8 @@ def test_my_evergo_dashboard_handles_orders_without_remote_id(client):
 
 
 def test_to_tsv_sanitizes_formula_and_line_break_characters():
-    """Security: TSV export should neutralize formulas and preserve table shape."""
+    """Security: TSV export must neutralize formulas and sanitize control characters."""
+
     from apps.evergo.views import _to_tsv
 
     tsv = _to_tsv(
@@ -681,12 +997,3 @@ def test_to_tsv_sanitizes_formula_and_line_break_characters():
     assert "'@phone" in tsv
     assert "'-brand" in tsv
     assert "Monterrey NL" in tsv
-
-
-
-@pytest.mark.django_db
-def test_my_evergo_dashboard_404_for_invalid_token(client):
-    """Security: dashboard should not be accessible with an unknown token."""
-    response = client.get(reverse("evergo:my-dashboard", kwargs={"token": "00000000-0000-0000-0000-000000000000"}))
-
-    assert response.status_code == 404

@@ -1,14 +1,17 @@
+import hashlib
 import json
 import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
+from django.db import IntegrityError
 from django.test import RequestFactory
 
 import pytest
 
 from apps.nodes.models import Node, NodeRole
+from apps.nodes.services import registration
 from apps.nodes.views import node_info, register_node
 
 
@@ -209,6 +212,152 @@ def test_register_current_uses_managed_site_domain(settings, caplog):
     assert node.base_site_id == site.id
     assert node.port == 443
 
+
+@pytest.mark.django_db
+def test_register_current_prefers_node_role_from_env_when_settings_missing(settings, monkeypatch, tmp_path):
+    """Registration should use NODE_ROLE env value before lock-file fallback."""
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
+    monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
+    monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    Node.objects.all().delete()
+    Node._local_cache.clear()
+    NodeRole.objects.get_or_create(name="Terminal")
+    control_role, _ = NodeRole.objects.get_or_create(name="Control")
+
+    settings.BASE_DIR = tmp_path
+    settings.NODE_ROLE = None
+    monkeypatch.setenv("NODE_ROLE", "Control")
+
+    node, created = Node.register_current(notify_peers=False)
+
+    assert created
+    assert node.role_id == control_role.id
+
+
+@pytest.mark.django_db
+def test_register_current_uses_role_lock_when_node_role_is_missing(settings, monkeypatch, tmp_path):
+    """Registration should honor legacy lock-file role resolution when NODE_ROLE is unset."""
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
+    monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
+    monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    Node.objects.all().delete()
+    Node._local_cache.clear()
+    NodeRole.objects.get_or_create(name="Terminal")
+    control_role, _ = NodeRole.objects.get_or_create(name="Control")
+
+    settings.BASE_DIR = tmp_path
+    settings.NODE_ROLE = None
+    monkeypatch.delenv("NODE_ROLE", raising=False)
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
+
+    node, created = Node.register_current(notify_peers=False)
+
+    assert created
+    assert node.role_id == control_role.id
+
+
+@pytest.mark.django_db
+def test_register_current_prefers_settings_node_role_over_lock(settings, monkeypatch, tmp_path):
+    """Registration should use settings.NODE_ROLE before legacy lock role."""
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
+    monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
+    monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    Node.objects.all().delete()
+    Node._local_cache.clear()
+    NodeRole.objects.get_or_create(name="Terminal")
+    control_role, _ = NodeRole.objects.get_or_create(name="Control")
+
+    settings.BASE_DIR = tmp_path
+    settings.NODE_ROLE = "Control"
+    monkeypatch.delenv("NODE_ROLE", raising=False)
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    (lock_dir / "role.lck").write_text("Terminal", encoding="utf-8")
+
+    node, created = Node.register_current(notify_peers=False)
+
+    assert created
+    assert node.role_id == control_role.id
+
+
+@pytest.mark.django_db
+def test_register_current_reloads_lock_when_settings_node_role_is_bootstrap_terminal(settings, monkeypatch, tmp_path):
+    """Registration should still honor runtime lock-file updates when settings.NODE_ROLE is bootstrapped Terminal."""
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
+    monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
+    monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    Node.objects.all().delete()
+    Node._local_cache.clear()
+    NodeRole.objects.get_or_create(name="Terminal")
+    control_role, _ = NodeRole.objects.get_or_create(name="Control")
+
+    settings.BASE_DIR = tmp_path
+    settings.NODE_ROLE = "Terminal"
+    monkeypatch.delenv("NODE_ROLE", raising=False)
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
+
+    node, created = Node.register_current(notify_peers=False)
+
+    assert created
+    assert node.role_id == control_role.id
+
+
+@pytest.mark.django_db
+def test_register_current_normalizes_env_role_name_case(settings, monkeypatch, tmp_path):
+    """Registration should normalize lowercase NODE_ROLE values."""
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
+    monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
+    monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    Node.objects.all().delete()
+    Node._local_cache.clear()
+    NodeRole.objects.get_or_create(name="Terminal")
+    control_role, _ = NodeRole.objects.get_or_create(name="Control")
+
+    settings.BASE_DIR = tmp_path
+    settings.NODE_ROLE = None
+    monkeypatch.setenv("NODE_ROLE", "control")
+
+    node, created = Node.register_current(notify_peers=False)
+
+    assert created
+    assert node.role_id == control_role.id
+
+
+@pytest.mark.django_db
+def test_register_current_defaults_to_terminal_role(settings, monkeypatch, tmp_path):
+    """Registration should default to Terminal when no role configuration exists."""
+    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
+    monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
+    monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    Node.objects.all().delete()
+    Node._local_cache.clear()
+    terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+
+    settings.BASE_DIR = tmp_path
+    settings.NODE_ROLE = None
+    monkeypatch.delenv("NODE_ROLE", raising=False)
+
+    node, created = Node.register_current(notify_peers=False)
+
+    assert created
+    assert node.role_id == terminal_role.id
+
 @pytest.mark.django_db
 def test_node_info_prefers_base_site_domain(monkeypatch):
     site = Site.objects.create(domain="base.example.test", name="Base Example")
@@ -244,7 +393,7 @@ def test_get_local_refreshes_self_node_mac_on_mismatch(monkeypatch, caplog):
     Node._local_cache.clear()
     monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
 
-    caplog.set_level(logging.WARNING, logger="apps.nodes.models.core.node")
+    caplog.set_level(logging.WARNING, logger="apps.nodes.models.node")
     local = Node.get_local()
 
     assert local is not None
@@ -320,10 +469,57 @@ def test_get_local_keeps_self_node_mac_when_runtime_mac_is_in_use(monkeypatch, c
     Node._local_cache.clear()
     monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
 
-    caplog.set_level(logging.WARNING, logger="apps.nodes.models.core.node")
+    caplog.set_level(logging.WARNING, logger="apps.nodes.models.node")
     local = Node.get_local()
 
     assert local is not None
     assert local.hostname == "other-node"
     self_node.refresh_from_db()
     assert self_node.mac_address == "00:11:22:33:44:55"
+
+
+@pytest.mark.django_db
+def test_get_local_logs_redacted_mac_values(monkeypatch, caplog):
+    """MAC values in Node.get_local warnings must never be logged in clear text."""
+
+    self_node = Node.objects.create(
+        hostname="self-node",
+        mac_address="00:11:22:33:44:55",
+        current_relation=Node.Relation.SELF,
+    )
+    Node._local_cache.clear()
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+
+    def raise_conflict(*args, **kwargs):
+        raise IntegrityError("simulated uniqueness conflict")
+
+    monkeypatch.setattr(Node, "save", raise_conflict)
+
+    caplog.set_level(logging.WARNING, logger="apps.nodes.models.node")
+    Node.get_local()
+
+    conflict_records = [
+        rec
+        for rec in caplog.records
+        if "could not update due to MAC uniqueness conflict" in rec.getMessage()
+    ]
+    assert conflict_records
+    record = conflict_records[-1]
+    assert getattr(record, "runtime_mac_redacted", "").startswith("***REDACTED***-")
+    assert getattr(record, "stored_mac_redacted", "").startswith("***REDACTED***-")
+    assert not hasattr(record, "runtime_mac")
+    assert not hasattr(record, "stored_mac")
+    assert "aa:bb:cc:dd:ee:ff" not in caplog.text
+    assert "00:11:22:33:44:55" not in caplog.text
+
+
+def test_redact_mac_for_log_masks_plaintext_value():
+    """Node MAC log redaction should be deterministic and avoid plain text output."""
+
+    from apps.nodes.models.node import _redact_mac_for_log
+
+    redacted = _redact_mac_for_log("AA-BB-CC-DD-EE-FF")
+    expected_hash = hashlib.sha256("aabbccddeeff".encode("utf-8")).hexdigest()[:12]
+
+    assert redacted == f"***REDACTED***-{expected_hash}"
+    assert _redact_mac_for_log("aabbccddeeff") == redacted

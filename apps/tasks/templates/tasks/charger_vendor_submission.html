@@ -1,0 +1,86 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Charger Vendor Integration Submission" %}{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-xl-8">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h1 class="h3 mb-3">{% trans "Share your chargers for Arthexis integration review" %}</h1>
+        <p class="text-muted mb-4">{% trans "Use this form to tell us about your charger lineup, OCPP support, and operational workflows so we can evaluate how Arthexis can integrate with your platform and field processes." %}</p>
+        <form method="post" novalidate>
+          {% csrf_token %}
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger" role="alert">
+              {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+            </div>
+          {% endif %}
+          <div class="row g-3">
+            <div class="col-md-6">
+              {% include "tasks/includes/form_field.html" with field=form.company_name wrapper_class="" %}
+            </div>
+            <div class="col-md-6">
+              {% include "tasks/includes/form_field.html" with field=form.charger_brand wrapper_class="" %}
+            </div>
+            <div class="col-md-6">
+              {% include "tasks/includes/form_field.html" with field=form.contact_name wrapper_class="" %}
+            </div>
+            <div class="col-md-6">
+              {% include "tasks/includes/form_field.html" with field=form.contact_email wrapper_class="" %}
+            </div>
+            <div class="col-md-6">
+              {% include "tasks/includes/form_field.html" with field=form.contact_phone wrapper_class="" %}
+            </div>
+            <div class="col-md-6">
+              {% include "tasks/includes/form_field.html" with field=form.website wrapper_class="" %}
+            </div>
+          </div>
+
+          {% include "tasks/includes/form_field.html" with field=form.charger_models wrapper_class="mt-4" %}
+          <div class="row g-3 mt-1">
+            <div class="col-md-6">
+              {% include "tasks/includes/form_field.html" with field=form.ocpp_versions wrapper_class="" %}
+            </div>
+            <div class="col-md-6">
+              {% include "tasks/includes/form_field.html" with field=form.api_documentation_url wrapper_class="" %}
+            </div>
+          </div>
+          {% include "tasks/includes/form_field.html" with field=form.connectivity_summary %}
+          <div class="row g-3 mt-1">
+            <div class="col-md-6">
+              {% include "tasks/includes/form_field.html" with field=form.deployment_regions wrapper_class="" %}
+            </div>
+            <div class="col-md-6">
+              {% include "tasks/includes/form_field.html" with field=form.deployment_volume wrapper_class="" %}
+            </div>
+          </div>
+          {% include "tasks/includes/form_field.html" with field=form.certification_summary %}
+          {% include "tasks/includes/form_field.html" with field=form.remote_access_method %}
+          {% include "tasks/includes/form_field.html" with field=form.hardware_notes %}
+          {% include "tasks/includes/form_field.html" with field=form.integration_goals %}
+          {% include "tasks/includes/form_field.html" with field=form.additional_notes %}
+          <div class="mt-4 d-flex flex-column flex-md-row gap-3 align-items-md-center">
+            <button type="submit" class="btn btn-primary">{% trans "Submit charger portfolio" %}</button>
+            <span class="text-muted small">{% trans "We review submissions so Arthexis can integrate with the right charger APIs, OCPP behaviors, and operational workflows instead of building disconnected side systems." %}</span>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-3">{% trans "What we evaluate" %}</h2>
+        <ul class="small text-muted ps-3 mb-0">
+          <li class="mb-2">{% trans "Protocol support, especially OCPP behavior, firmware workflows, and diagnostics." %}</li>
+          <li class="mb-2">{% trans "How Arthexis can model your APIs and business processes through Django apps and migrations." %}</li>
+          <li class="mb-2">{% trans "Operational fit for monitoring, ticketing, remote support, and fleet administration." %}</li>
+          <li>{% trans "What documentation, sandbox access, or sample hardware we may need for a reliable integration plan." %}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

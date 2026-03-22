@@ -28,6 +28,7 @@
   const copyAriaLabel = form.dataset.copyAriaLabel;
   const canCopyStaffDetails = form.dataset.copyStaffDetails === '1';
   const messageField = form.querySelector('input[name="messages"]');
+  const javascriptEnabledField = form.querySelector('input[name="javascript_enabled"]');
   let previousFocus = null;
   let copyFeedbackTimeout = null;
 
@@ -268,7 +269,7 @@
     const ratingValue = Number(value);
     const actionLabel = getRatingLabel(value);
     const displayValue = Number.isFinite(ratingValue) && ratingValue > 0 ? ratingValue : (ratingValue === 0 ? 0 : value);
-    return `${actionLabel} (${displayValue}/5)`;
+    return `${displayValue}/5 (${actionLabel})`;
   };
 
   const getFormDetails = () => {
@@ -370,6 +371,9 @@
     event.preventDefault();
     resetAlerts();
     syncMessageField(getPageMessages());
+    if (javascriptEnabledField) {
+      javascriptEnabledField.value = '1';
+    }
 
     if (submitBtn) {
       submitBtn.disabled = true;

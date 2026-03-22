@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-
 import yaml
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
@@ -26,12 +24,10 @@ from apps.actions.openapi import build_openapi_spec
 from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 
-logger = logging.getLogger(__name__)
-
 
 @admin.register(StaffTask)
 class StaffTaskAdmin(EntityModelAdmin):
-    """Manage available dashboard staff tasks and default visibility."""
+    """Manage available dashboard task panels and default visibility."""
 
     list_display = (
         "label",
@@ -48,7 +44,7 @@ class StaffTaskAdmin(EntityModelAdmin):
 
 @admin.register(StaffTaskPreference)
 class StaffTaskPreferenceAdmin(EntityModelAdmin):
-    """Inspect per-user staff task visibility overrides."""
+    """Inspect per-user task panel visibility overrides."""
 
     list_display = ("user", "task", "is_enabled", "updated_at")
     list_filter = ("is_enabled", "task")
@@ -70,66 +66,6 @@ class DashboardActionAdmin(EntityModelAdmin):
     list_filter = ("target_type", "http_method", "is_active", "content_type__app_label")
     search_fields = ("label", "slug", "admin_url_name", "absolute_url", "caller_sigil")
 
-    def get_urls(self):
-        """Expose an execution endpoint used by recipe-backed dashboard actions."""
-
-        custom_urls = [
-            path(
-                "<int:action_id>/execute/",
-                self.admin_site.admin_view(self.execute_view),
-                name="actions_dashboardaction_execute",
-            )
-        ]
-        return custom_urls + super().get_urls()
-
-    def execute_view(self, request, action_id: int):
-        """Execute a recipe-backed dashboard action and return to the admin index."""
-
-        if request.method.lower() != "post":
-            raise PermissionDenied
-        action = (
-            DashboardAction.objects.filter(
-                pk=action_id,
-                is_active=True,
-                recipe__isnull=False,
-                target_type=DashboardAction.TargetType.RECIPE,
-                http_method=DashboardAction.HttpMethod.POST,
-            )
-            .select_related("recipe", "content_type")
-            .first()
-        )
-        if action is None:
-            raise PermissionDenied
-        if not self.has_change_permission(request, action):
-            raise PermissionDenied
-        if action.caller_sigil and not DashboardAction._is_safe_caller_sigil(action.caller_sigil):
-            self.message_user(
-                request,
-                _("Dashboard action '%(label)s' failed: invalid caller sigil.")
-                % {"label": action.label},
-                level=messages.ERROR,
-            )
-            return redirect("admin:index")
-
-        try:
-            execution = action.recipe.execute(caller=action.caller_sigil or action.content_type.app_label)
-        except Exception as exc:  # pragma: no cover - defensive: recipe runtime failures are dynamic
-            logger.exception("Dashboard action execution failed", extra={"action_id": action.pk})
-            self.message_user(
-                request,
-                _("Dashboard action '%(label)s' failed: %(error)s")
-                % {"label": action.label, "error": exc},
-                level=messages.ERROR,
-            )
-        else:
-            self.message_user(
-                request,
-                _("Dashboard action '%(label)s' executed. Result: %(result)s")
-                % {"label": action.label, "result": execution.result},
-                level=messages.SUCCESS,
-            )
-        return redirect("admin:index")
-
 
 @admin.register(RemoteAction)
 class RemoteActionAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin):
@@ -137,7 +73,7 @@ class RemoteActionAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin
 
     OPENAPI_EXPORT_FILENAME = "my-actions-openapi.yaml"
 
-    list_display = ("display", "slug", "operation_id", "recipe", "owner", "is_active")
+    list_display = ("display", "slug", "operation_id", "owner", "is_active")
     list_filter = ("is_active",)
     search_fields = ("display", "slug", "operation_id")
     readonly_fields = ("uuid", "created_at", "updated_at")

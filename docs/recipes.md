@@ -1,16 +1,22 @@
 # Recipes
 
-The `apps.recipes` app stores scriptable Python snippets that can be reused across the platform for
-custom actions or validation logic. Prefer recipes whenever another app needs to trigger a
-configurable script or run a user-defined validation without shipping new code.
+The `apps.recipes` app represents a legacy script-execution surface that still exists in the codebase, but it does **not** match the suite direction for new work.
 
-## Why use recipes?
+## Project direction
 
-- **Reusable actions**: centralize logic that needs to be executed from multiple workflows.
-- **Custom validations**: make runtime checks configurable without requiring migrations in other apps.
-- **Sigil support**: scripts can reference existing `[SIGILS]` and recipe arguments via `[ARG.*]` tokens.
+- Prefer developed and tested functionality shipped as part of the suite over recipe-like behaviors that force administrators, staff, or users to become programmers.
+- Prefer first-class apps, models, migrations, and guided UI flows when integrating with outside systems.
+- Continue supporting **SIGILS** for field defaults and basic templating without control flow logic.
 
-## Recipe fields
+## Status of this app
+
+Recipes execute server-side code and therefore remain a high-trust administrative feature. They should be treated as migration debt to be reduced over time, not as a preferred extension mechanism for future capabilities.
+
+## Legacy API and usage reference
+
+The feature is still active in the product for supported workflows and maintenance tasks. Use the references below when you need to operate an existing recipe-backed integration while planning a migration into first-class suite functionality.
+
+### Recipe fields
 
 Each recipe includes:
 
@@ -18,9 +24,9 @@ Each recipe includes:
 - **UUID**: stable natural key for integrations and fixtures.
 - **Verbose name**: human-friendly display value.
 - **Script**: the Python snippet to execute.
-- **Result variable**: the variable name that holds the final result (defaults to `result`).
+- **Result variable**: the variable name that holds the final result.
 
-## Running a recipe from code
+### Running a recipe from code
 
 ```python
 from apps.recipes.models import Recipe
@@ -30,12 +36,11 @@ execution = recipe.execute("premium", region="na")
 print(execution.result)
 ```
 
-The `execute()` method accepts positional and keyword arguments. It resolves `[ARG.*]` sigils,
-then resolves all other `[SIGILS]` against the recipe before executing the script.
+The `execute()` method accepts positional and keyword arguments. It resolves `[ARG.*]` placeholders first, then resolves all other `[SIGILS]` before executing the script.
 
-## Running a recipe from the CLI
+### Running a recipe from the CLI
 
-Recipes can be run like a Django management command with the existing helpers:
+Recipes can still be run with the shipped management command:
 
 ```bash
 ./command.sh recipe validate-license premium region=na
@@ -50,12 +55,13 @@ command.bat recipe validate-license premium region=na
 Arguments passed after the recipe identifier are made available as:
 
 - **Positional args** → `[ARG.0]`, `[ARG.1]`, ...
-- **Key/value args** → `[ARG.KEY]` (use `key=value` or `--key=value` syntax)
+- **Key/value args** → `[ARG.KEY]` using `key=value` syntax
 
-## Example recipe script
+### `[ARG.*]` placeholders in scripts and templates
+
+`[ARG.*]` placeholders remain supported for recipe-backed workflows, including existing scripts and shortcut output templates.
 
 ```python
-# Script contents
 allowed = "[ARG.0]" == "premium"
 region = "[ARG.region]"
 
@@ -65,11 +71,8 @@ result = {
 }
 ```
 
-The recipe result is read from the configured result variable (default `result`) and returned from
-`execute()` as `execution.result`.
+The recipe result is read from the configured result variable and returned as `execution.result`.
 
 ## Security considerations
 
-**Warning:** Recipes are executed as Python code on the server. Granting users permission to
-create or edit recipes is equivalent to giving them shell access. Only highly trusted
-administrators should have these permissions.
+**Warning:** Recipes are executed as Python code on the server. Granting users permission to create or edit recipes is equivalent to giving them shell access. Only highly trusted administrators should have these permissions.

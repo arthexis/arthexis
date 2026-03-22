@@ -46,6 +46,21 @@ OPERATOR_LANGUAGE_CHOICES: tuple[tuple[str, str], ...] = (
 
 
 FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]] = {
+    "release-management": (
+        FeatureParameterDefinition(
+            key="execution_mode",
+            label=_("Execution mode"),
+            help_text=_(
+                "Choose suite to use suite tokens/API first with gh/git fallback, "
+                "or binary to prefer local gh/git auth and binaries."
+            ),
+            choices=(
+                ("suite", _("Suite (token/API first, gh/git fallback)")),
+                ("binary", _("Binary (gh/git first)")),
+            ),
+            default="suite",
+        ),
+    ),
     "llm-summary-suite": (
         FeatureParameterDefinition(
             key="model_path",
@@ -91,7 +106,7 @@ FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]]
             label=_("Mobility House backend"),
             help_text=_("Enable or disable the Mobility House simulator backend."),
             choices=(("enabled", _("Enabled")), ("disabled", _("Disabled"))),
-            default="disabled",
+            default="enabled",
         ),
     ),
     "odoo-crm-sync": (

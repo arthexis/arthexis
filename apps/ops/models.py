@@ -10,7 +10,9 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, connection, models, transaction
+from django.db import DatabaseError, IntegrityError, connection, models, transaction
+from django.db.models import F, Value
+from django.db.models.functions import Greatest, Now
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -21,6 +23,25 @@ logger = logging.getLogger(__name__)
 
 
 READ_ONLY_SQL_PATTERN = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
+
+
+def _sanitize_remediation_url(remediation_url: str) -> str:
+    """Return a safe remediation URL for security alert links."""
+
+    candidate = remediation_url.strip()
+    if not candidate:
+        return "/admin/"
+
+    parsed = urlparse(candidate)
+    if not parsed.scheme:
+        if candidate.startswith("//"):
+            return "/admin/"
+        return candidate
+
+    if parsed.scheme in {"http", "https"}:
+        return candidate
+
+    return "/admin/"
 
 
 class OperationScreen(Entity):
@@ -177,6 +198,89 @@ class OperationExecution(Entity):
         """Return execution string summary."""
 
         return f"{self.operation} @ {self.performed_at:%Y-%m-%d %H:%M}"
+
+
+class SecurityAlertEvent(Entity):
+    """Aggregated operational error event used by the security alerts widget."""
+
+    key = models.CharField(max_length=255, unique=True)
+    severity = models.CharField(max_length=20, default="error")
+    message = models.CharField(max_length=255)
+    detail = models.TextField(blank=True)
+    occurrence_count = models.PositiveIntegerField(default=1)
+    last_occurred_at = models.DateTimeField(default=timezone.now)
+    remediation_url = models.CharField(max_length=500, default="/admin/")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-last_occurred_at", "-updated_at")
+        indexes = [
+            models.Index(
+                fields=["is_active", "-last_occurred_at"],
+                name="ops_secalert_active_last",
+            )
+        ]
+        verbose_name = _("Security Alert Event")
+        verbose_name_plural = _("Security Alert Events")
+
+    def __str__(self) -> str:
+        """Return a readable key/message label for admin lists."""
+
+        return f"{self.key}: {self.message}"
+
+    @classmethod
+    def record_occurrence(
+        cls,
+        *,
+        key: str,
+        message: str,
+        detail: str = "",
+        severity: str = "error",
+        remediation_url: str = "/admin/",
+        occurred_at=None,
+    ) -> "SecurityAlertEvent":
+        """Create or update an event entry while incrementing occurrence metadata."""
+
+        event_timestamp = occurred_at or timezone.now()
+        safe_remediation_url = _sanitize_remediation_url(remediation_url)
+        try:
+            with transaction.atomic():
+                return cls.objects.create(
+                    key=key,
+                    severity=severity,
+                    message=message,
+                    detail=detail,
+                    occurrence_count=1,
+                    last_occurred_at=event_timestamp,
+                    remediation_url=safe_remediation_url,
+                    is_active=True,
+                )
+        except IntegrityError:
+            cls.objects.filter(key=key).update(
+                severity=severity,
+                message=message,
+                detail=detail,
+                remediation_url=safe_remediation_url,
+                occurrence_count=F("occurrence_count") + 1,
+                last_occurred_at=Greatest(F("last_occurred_at"), Value(event_timestamp)),
+                is_active=True,
+                updated_at=Now(),
+            )
+        return cls.objects.get(key=key)
+
+    @classmethod
+    def clear_occurrence(cls, *, key: str, occurred_at=None) -> None:
+        """Mark an aggregated event inactive when the source recovers."""
+
+        update_kwargs = {"is_active": False, "updated_at": Now()}
+        if occurred_at is not None:
+            update_kwargs["last_occurred_at"] = Greatest(
+                F("last_occurred_at"),
+                Value(occurred_at),
+            )
+        cls.objects.filter(key=key, is_active=True).update(**update_kwargs)
 
 
 @dataclass(slots=True)
