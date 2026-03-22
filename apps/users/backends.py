@@ -355,7 +355,7 @@ def _collect_local_ip_addresses():
 
 
 def _normalize_ip_candidate(candidate: str) -> str | None:
-    """Normalize a raw IP candidate by stripping ports, brackets, and zones."""
+    """Normalize a raw socket IP candidate by stripping ports, brackets, and zones."""
 
     value = str(candidate or "").strip()
     if not value:
@@ -372,6 +372,24 @@ def _normalize_ip_candidate(candidate: str) -> str | None:
         value = value.split("%", 1)[0]
 
     return value or None
+
+
+def _parse_forwarded_ip_candidate(
+    candidate: str,
+) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """Parse a forwarded IP candidate without relaxing malformed header tokens."""
+
+    value = str(candidate or "").strip()
+    if not value:
+        return None
+
+    if any(token in value for token in ("[", "]", "%")):
+        return None
+
+    try:
+        return ipaddress.ip_address(value)
+    except ValueError:
+        return None
 
 
 class LocalhostAdminBackend(ModelBackend):
@@ -509,12 +527,8 @@ class LocalhostAdminBackend(ModelBackend):
 
         trusted_forwarded_proxies = tuple(self._iter_trusted_forwarded_proxies())
         for candidate in reversed([value.strip() for value in forwarded.split(",")]):
-            normalized_candidate = _normalize_ip_candidate(candidate)
-            if normalized_candidate is None:
-                continue
-            try:
-                candidate_ip = ipaddress.ip_address(normalized_candidate)
-            except ValueError:
+            candidate_ip = _parse_forwarded_ip_candidate(candidate)
+            if candidate_ip is None:
                 continue
             if any(candidate_ip in proxy for proxy in trusted_forwarded_proxies):
                 continue

@@ -116,28 +116,32 @@ class ConnectionFlowMixin:
             else:
                 feature_slugs = [requested_feature_slug, CHARGER_CREATION_FEATURE_SLUG]
 
-            features = list(Feature.objects.filter(slug__in=feature_slugs))
+            features = list(
+                Feature.objects.filter(slug__in=CREATION_FEATURE_FALLBACK_SLUGS)
+            )
             feature_by_slug = {feature.slug: feature for feature in features}
             ordered_features = [
                 feature_by_slug[slug] for slug in feature_slugs if slug in feature_by_slug
             ]
-            if not ordered_features:
+            configured_creation_features = [
+                feature_by_slug[slug]
+                for slug in CREATION_FEATURE_FALLBACK_SLUGS
+                if slug in feature_by_slug
+            ]
+            if not configured_creation_features:
                 logger.info(
                     "Charge point connection allowed without creation feature gates because none of %s are configured.",
-                    ", ".join(feature_slugs),
+                    ", ".join(CREATION_FEATURE_FALLBACK_SLUGS),
                 )
                 return None
 
-            if requested_feature_slug != CHARGER_CREATION_FEATURE_SLUG:
-                requested_feature = feature_by_slug.get(requested_feature_slug)
-                legacy_feature = feature_by_slug.get(CHARGER_CREATION_FEATURE_SLUG)
-                feature_candidates = [
-                    feature
-                    for feature in (requested_feature, legacy_feature)
-                    if feature is not None
-                ]
-            else:
-                feature_candidates = ordered_features
+            feature_candidates = ordered_features
+            if requested_feature_slug != CHARGER_CREATION_FEATURE_SLUG and not ordered_features:
+                logger.info(
+                    "Charge point connection blocked: requested creation feature %s is not configured while other charge-point gates remain configured.",
+                    requested_feature_slug,
+                )
+                return "creation-feature-disabled"
 
             for feature in feature_candidates:
                 if feature.is_enabled_for_node(node=node):

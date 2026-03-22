@@ -233,6 +233,27 @@ def test_new_charge_point_allowed_without_local_node_when_feature_is_global(monk
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_new_charge_point_blocked_when_requested_version_feature_missing_but_other_gate_exists(
+    charge_point_features,
+):
+    """Explicit protocol offers stay gated when only other version gates remain."""
+
+    _local_node, suite_features = charge_point_features
+    suite_features["ocpp-16-charge-point"].is_enabled = False
+    suite_features["ocpp-16-charge-point"].save(update_fields=["is_enabled"])
+    Feature.objects.filter(slug="ocpp-16-charge-point").delete()
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, "/CP-OCPP16-MISSING-GATE")
+        communicator.scope["subprotocols"] = [OCPP_VERSION_16]
+        connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
+        assert connected is False
+
+    async_to_sync(run_scenario)()
+
+
+@pytest.mark.slow
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_new_charge_point_without_subprotocol_uses_any_enabled_creation_feature(
     charge_point_features,
 ):
