@@ -45,14 +45,14 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 
 The script also:
 - Verifies Nginx and Redis availability for roles that require them, writing `redis.env` when Redis is configured.
-- Creates `.venv`, installs the slim runtime dependency set from `requirements.txt` via `scripts/helpers/pip_install.py`, applies migrations, and refreshes environment secrets via `env-refresh.sh`.
+- Creates `.venv`, installs the slim runtime dependency set from `requirements-runtime.txt` via `scripts/helpers/pip_install.py`, applies migrations, and refreshes environment secrets via `env-refresh.sh`.
 - Leaves non-runtime extras (pytest, debug toolbar, Playwright/Selenium, typing tools) out of the base install unless a later workflow explicitly installs them. This keeps production and Docker runtime environments intentionally lean.
 - Writes lock files capturing the selected role, Nginx mode, and enabled subsystems so the runtime helpers know how to behave.
 - Refreshes desktop shortcuts on Linux desktops for quick access to the UI and maintenance commands.
 
 ### 1.2 Windows: `install.bat`
 
-The Windows installer is intentionally simple: it bootstraps `.venv`, installs runtime requirements, applies migrations, and then runs `env-refresh.bat --latest` so developers always start on the latest schema locally. Windows nodes rely on Terminal defaults (development server at port 8888), but you can optionally install a Windows service using `service.bat` once `install.bat` completes. Run `install.bat` again whenever dependencies change, and install optional extras separately when you need test, preview, or debug tooling.
+The Windows installer is intentionally simple: it bootstraps `.venv`, installs runtime requirements, applies migrations, and then runs `env-refresh.bat --latest` so developers always start on the latest schema locally. Windows nodes rely on Terminal defaults (development server at port 8888), but you can optionally install a Windows service using `service.bat` once `install.bat` completes. Run `install.bat` again whenever dependencies change, and install optional extras separately when you need test, preview, or CI-only validation tooling.
 
 ## 2. Runtime helpers
 
@@ -130,7 +130,7 @@ Additional behaviour:
 
 ### 3.2 Windows: `upgrade.bat`
 
-The Windows upgrade helper focuses on Git safety and dependency refreshes. It pulls with rebase and reinstalls dependencies when the `requirements.txt` hash changes, using `scripts/helpers/pip_install.py` when available.
+The Windows upgrade helper focuses on Git safety and dependency refreshes. It pulls with rebase and reinstalls dependencies when the `requirements-runtime.txt` hash changes, using `scripts/helpers/pip_install.py` when available.
 
 ## 4. Uninstallation
 

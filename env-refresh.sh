@@ -174,7 +174,7 @@ pip_install_with_helper() {
 }
 
 celery_requirement() {
-  local requirements_file="$SCRIPT_DIR/requirements.txt"
+  local requirements_file="$SCRIPT_DIR/requirements-runtime.txt"
   if [ -f "$requirements_file" ]; then
     local line
     line=$(grep -E '^celery(\[[^]]+\])?([[:space:]]*[<=>!~].*)?$' "$requirements_file" | head -n 1 || true)
@@ -226,7 +226,7 @@ should_install_preview_dependencies() {
 }
 
 playwright_requirement() {
-  local requirements_file="$SCRIPT_DIR/requirements-ci.txt"
+  local requirements_file="$SCRIPT_DIR/requirements-preview.txt"
   if [ -f "$requirements_file" ]; then
     local line
     line=$(grep -E '^playwright([[:space:]]*[<=>!~].*)?$' "$requirements_file" | head -n 1 || true)
@@ -239,8 +239,8 @@ playwright_requirement() {
 }
 
 selenium_requirement() {
-  # Resolve the selenium requirement from requirements-ci.txt when present.
-  local requirements_file="$SCRIPT_DIR/requirements-ci.txt"
+  # Resolve the selenium requirement from the preview profile when present.
+  local requirements_file="$SCRIPT_DIR/requirements-preview.txt"
   if [[ -f "$requirements_file" ]]; then
     local line
     line=$(grep -E '^[[:space:]]*selenium(\[[^]]*\])?([[:space:]]*[<=>!~][^;]*)?([[:space:]]*;.*)?[[:space:]]*$' "$requirements_file" | head -n 1 || true)
@@ -434,14 +434,20 @@ should_install_hardware_requirements() {
 
 collect_requirement_files() {
   local -n out_array="$1"
+  local runtime_file="$SCRIPT_DIR/requirements-runtime.txt"
   local hardware_file="$SCRIPT_DIR/requirements-hw.txt"
+  local preview_file="$SCRIPT_DIR/requirements-preview.txt"
 
-  if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
-    out_array+=("$SCRIPT_DIR/requirements.txt")
+  if [ -f "$runtime_file" ]; then
+    out_array+=("$runtime_file")
   fi
 
   if [ -f "$hardware_file" ] && should_install_hardware_requirements; then
     out_array+=("$hardware_file")
+  fi
+
+  if [ -f "$preview_file" ] && should_install_preview_dependencies; then
+    out_array+=("$preview_file")
   fi
 }
 

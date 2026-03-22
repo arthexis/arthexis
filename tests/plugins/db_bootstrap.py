@@ -9,7 +9,8 @@ import pytest
 
 _PYTEST_DJANGO_MISSING_ERROR = (
     "Database-backed tests require pytest-django. Install test dependencies "
-    "(for example: `pip install -r requirements-ci.txt`) before running pytest."
+    "(for example: `pip install -r requirements-test.txt` or "
+    "`pip install -r requirements-ci.txt`) before running pytest."
 )
 
 

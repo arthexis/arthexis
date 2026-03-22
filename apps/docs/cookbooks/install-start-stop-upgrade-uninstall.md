@@ -132,11 +132,11 @@ Both upgrade scripts prioritise recoverability before applying new code:
 | `--start` / `--no-start` | Forces services to start after upgrade or keeps them offline afterwards; `--no-start` also accepts the legacy `--no-restart` alias. |
 | `--no-warn` | Suppresses interactive warnings when an action would remove databases without creating a new backup (used together with `--clean` or manual purges). |
 
-During a normal upgrade the script determines the node role, ensures no interrupted git operations are pending, updates dependencies when `requirements.txt` changes, applies Django migrations, and restarts services unless `--no-start`/`--no-restart` was passed.
+During a normal upgrade the script determines the node role, ensures no interrupted git operations are pending, updates dependencies when `requirements-runtime.txt` changes, applies Django migrations, and restarts services unless `--no-start`/`--no-restart` was passed.
 
 ### 3.3 Windows upgrade workflow
 
-`upgrade.bat` pulls the latest changes and refreshes Python dependencies when the MD5 hash of `requirements.txt` changes, using `scripts/helpers/pip_install.py` when present.
+`upgrade.bat` pulls the latest changes and refreshes Python dependencies when the MD5 hash of `requirements-runtime.txt` changes, using `scripts/helpers/pip_install.py` when present.
 
 ## 4. Uninstalling (`uninstall.sh`)
 

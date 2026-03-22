@@ -22,7 +22,7 @@ in issues, pull requests, and reviews.
   ```bash
   python -m venv .venv
   source .venv/bin/activate
-  pip install -r requirements.txt
+  pip install -r requirements-runtime.txt
   ```
 
 ### 2. Run the suite locally

@@ -530,9 +530,22 @@ fi
 
 collect_requirement_files() {
     local -n out_array="$1"
+    local runtime_file="$BASE_DIR/requirements-runtime.txt"
+    local hardware_file="$BASE_DIR/requirements-hw.txt"
+    local video_file="$BASE_DIR/requirements-video.txt"
 
-    mapfile -t out_array < <(find "$BASE_DIR" -maxdepth 1 -type f \
-        \( -name 'requirements.txt' -o -name 'requirements-hw.txt' \) -print | sort)
+    out_array=()
+    if [ -f "$runtime_file" ]; then
+        out_array+=("$runtime_file")
+    fi
+    if [ "$ENABLE_CONTROL" = true ] || [ "$ENABLE_RFID_SERVICE" = true ] || [ "$ENABLE_LCD_SCREEN" = true ]; then
+        if [ -f "$hardware_file" ]; then
+            out_array+=("$hardware_file")
+        fi
+    fi
+    if [ "$ENABLE_CAMERA_SERVICE" = true ] && [ -f "$video_file" ]; then
+        out_array+=("$video_file")
+    fi
 }
 
 compute_requirements_checksum() {

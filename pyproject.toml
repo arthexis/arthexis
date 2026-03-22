@@ -122,15 +122,13 @@ Homepage = "https://arthexis.com"
 [project.optional-dependencies]
 ci = [
   "black==26.3.1",
+  "django-debug-toolbar==6.2.0",
   "django-stubs-ext==6.0.1",
   "django-stubs==6.0.1",
   "import-linter==2.11",
   "mypy==1.19.1",
   "ruff==0.15.6",
   "twine==6.1.0",
-]
-dev = [
-  "django-debug-toolbar==6.2.0",
 ]
 docs = [
   "docutils==0.22.4",
@@ -150,7 +148,7 @@ preview = [
   "playwright==1.58.0",
   "selenium==4.41.0",
 ]
-qa = [
+test = [
   "pytest-django==4.12.0",
   "pytest-timeout==2.4.0",
   "pytest-xdist==3.8.0",

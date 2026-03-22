@@ -159,9 +159,16 @@ print_pending_commit_messages() {
 
 collect_requirement_files() {
   local -n out_array="$1"
+  local runtime_file="$BASE_DIR/requirements-runtime.txt"
+  local hardware_file="$BASE_DIR/requirements-hw.txt"
 
-  mapfile -t out_array < <(find "$BASE_DIR" -maxdepth 1 -type f \
-    \( -name 'requirements.txt' -o -name 'requirements-hw.txt' \) -print | sort)
+  out_array=()
+  if [ -f "$runtime_file" ]; then
+    out_array+=("$runtime_file")
+  fi
+  if [ -f "$hardware_file" ] && [ -n "${ARTHEXIS_INSTALL_HARDWARE_DEPS:-}" ]; then
+    out_array+=("$hardware_file")
+  fi
 }
 
 compute_requirements_checksum() {
@@ -863,14 +870,14 @@ cleanup_non_terminal_git_state() {
 }
 
 install_requirements_if_changed() {
-  local req_file="$BASE_DIR/requirements.txt"
+  local req_file="$BASE_DIR/requirements-runtime.txt"
   local hash_file="$LOCK_DIR/requirements.sha256"
   local venv_python="$BASE_DIR/.venv/bin/python"
   local new_hash=""
   local stored_hash=""
 
   if [ ! -f "$req_file" ]; then
-    echo "requirements.txt not found; skipping dependency sync."
+    echo "requirements-runtime.txt not found; skipping dependency sync."
     return
   fi
 
