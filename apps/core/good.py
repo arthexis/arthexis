@@ -14,7 +14,7 @@ from typing import Iterable
 
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from apps.counters.models import DashboardRule
@@ -34,6 +34,7 @@ ERROR_KEYWORDS = (" trace", "exception", " error", "fatal", "critical")
 MINIMUM_DISK_FREE_GB = 2
 MINIMUM_MEMORY_GB = 2
 LOG_LOOKBACK_DAYS = 7
+DEFAULT_CONNECTIVITY_ENDPOINTS = (("one.one.one.one", 443), ("dns.google", 443))
 
 
 @dataclass(frozen=True)
@@ -198,34 +199,61 @@ def _check_instance_availability() -> Iterable[GoodIssue]:
         )
         return
 
-    preferred_host = node.get_preferred_hostname() or node.hostname or "127.0.0.1"
-    port = node.get_preferred_port()
-    candidates = [
-        ("https", preferred_host, 443 if preferred_host == node.get_base_domain() else port),
-        ("http", preferred_host, port),
-    ]
+    candidates = list(_iter_instance_connection_targets(node))
+    if any(_can_connect(host, candidate_port) for _, host, candidate_port in candidates):
+        return
 
-    if not any(_can_connect(host, candidate_port) for _, host, candidate_port in candidates):
-        target = ", ".join(f"{scheme}://{host}:{candidate_port}" for scheme, host, candidate_port in candidates)
-        yield GoodIssue(
-            key="instance-unreachable",
-            title="Local instance did not accept a TCP connection",
-            detail=f"Checked {target} and could not establish a connection.",
-            severity="important",
-            category="availability",
-        )
+    target = ", ".join(f"{scheme}://{host}:{candidate_port}" for scheme, host, candidate_port in candidates)
+    yield GoodIssue(
+        key="instance-unreachable",
+        title="Local instance did not accept a TCP connection",
+        detail=f"Checked {target} and could not establish a connection.",
+        severity="important",
+        category="availability",
+    )
+
+
+def _iter_instance_connection_targets(node: Node) -> Iterable[tuple[str, str, int]]:
+    """Yield unique TCP connection targets that may reach the local node.
+
+    Args:
+        node: The local node registration being checked.
+
+    Returns:
+        An iterable of ``(scheme, host, port)`` tuples ordered by preference.
+    """
+
+    port = node.get_preferred_port()
+    base_domain = node.get_base_domain()
+    seen: set[tuple[str, str, int]] = set()
+    for host in node.get_remote_host_candidates(resolve_dns=False):
+        if not host:
+            continue
+        targets = [("http", host, port)]
+        if host == base_domain:
+            targets.insert(0, ("https", host, 443))
+        for target in targets:
+            if target in seen:
+                continue
+            seen.add(target)
+            yield target
+
+    if not seen:
+        yield ("http", "127.0.0.1", port)
 
 
 def _check_internet_connectivity() -> Iterable[GoodIssue]:
     """Verify basic outbound internet connectivity for integrations and updates."""
 
-    endpoints = (("1.1.1.1", 53), ("8.8.8.8", 53))
+    endpoints = tuple(getattr(settings, "GOOD_CONNECTIVITY_ENDPOINTS", DEFAULT_CONNECTIVITY_ENDPOINTS))
     if any(_can_connect(host, port, timeout=2.0) for host, port in endpoints):
         return
+
+    endpoint_text = ", ".join(f"{host}:{port}" for host, port in endpoints)
     yield GoodIssue(
         key="internet-offline",
         title="Outbound internet connectivity appears unavailable",
-        detail="Tried TCP connectivity to 1.1.1.1:53 and 8.8.8.8:53 without success.",
+        detail=f"Tried TCP connectivity to {endpoint_text} without success.",
         severity="important",
         category="network",
     )
@@ -247,8 +275,9 @@ def _check_recent_logs() -> Iterable[GoodIssue]:
 
     cutoff_ts = (timezone.now() - timedelta(days=LOG_LOOKBACK_DAYS)).timestamp()
     suspicious = 0
-    latest_path = ""
-    for path in sorted(log_dir.glob("*.log")):
+    example_path = ""
+    log_paths = sorted(log_dir.glob("*.log"), key=_log_sort_mtime, reverse=True)
+    for path in log_paths:
         try:
             stat = path.stat()
         except OSError:
@@ -262,13 +291,17 @@ def _check_recent_logs() -> Iterable[GoodIssue]:
             continue
         if line_count:
             suspicious += line_count
-            latest_path = str(path)
+            if not example_path:
+                example_path = str(path)
 
     if suspicious:
         yield GoodIssue(
             key="recent-log-errors",
             title="Recent filesystem logs contain error-like entries",
-            detail=f"Found {suspicious} suspicious log line(s) within {LOG_LOOKBACK_DAYS} days; latest file: {latest_path}.",
+            detail=(
+                f"Found {suspicious} suspicious log line(s) within {LOG_LOOKBACK_DAYS} days; "
+                f"example recent file: {example_path}."
+            ),
             severity="important",
             category="logs",
         )
@@ -333,10 +366,12 @@ def _check_suite_feature_eligibility() -> Iterable[GoodIssue]:
             )
             continue
         if feature.node_feature_id:
+            node_feature = getattr(feature, "node_feature", None)
+            node_feature_slug = getattr(node_feature, "slug", str(feature.node_feature_id))
             yield GoodIssue(
                 key=f"suite-feature-blocked:{feature.slug}",
                 title=f"Suite feature waiting on node capability: {feature.display}",
-                detail=f"Requires node feature `{feature.node_feature.slug}` before it can activate on this node.",
+                detail=f"Requires node feature `{node_feature_slug}` before it can activate on this node.",
                 severity="minor",
                 category="features",
             )
@@ -352,7 +387,17 @@ def _check_node_feature_eligibility() -> Iterable[GoodIssue]:
         return
 
     for feature in features:
-        result = feature_checks.run(feature, node=node)
+        try:
+            result = feature_checks.run(feature, node=node)
+        except Exception as exc:  # pragma: no cover - defensive against optional integrations
+            yield GoodIssue(
+                key=f"node-feature-check-failed:{feature.slug}",
+                title=f"Node feature check failed: {feature.display}",
+                detail=f"Optional checker raised {exc.__class__.__name__}: {exc}",
+                severity="warning",
+                category="features",
+            )
+            continue
         if result is None or result.success:
             continue
         yield GoodIssue(
@@ -389,7 +434,7 @@ def _check_hardware_requirements() -> Iterable[GoodIssue]:
         )
 
     cpu_count = os.cpu_count() or 0
-    if cpu_count and cpu_count < 2:
+    if 0 < cpu_count < 2:
         yield GoodIssue(
             key="cpu-low",
             title="CPU capacity is minimal",
@@ -412,7 +457,13 @@ def _check_platform_compatibility() -> Iterable[GoodIssue]:
             category="platform",
         )
 
-    if not shutil.which("systemctl"):
+    service_mode = getattr(settings, "ARTHEXIS_SERVICE_MODE", "").strip().lower()
+    if not service_mode:
+        from apps.core.system.filesystem import _read_service_mode
+
+        service_mode = _read_service_mode(Path(settings.BASE_DIR) / "var" / "lock")
+
+    if service_mode != "embedded" and not shutil.which("systemctl"):
         yield GoodIssue(
             key="systemctl-missing",
             title="systemd tooling is unavailable",
@@ -465,7 +516,7 @@ def docs_url() -> str:
 
     try:
         return reverse("docs:docs-document", args=["operations/good-command"])
-    except Exception:
+    except NoReverseMatch:
         return "/docs/operations/good-command/"
 
 
@@ -482,10 +533,26 @@ def _can_connect(host: str, port: int, *, timeout: float = 1.5) -> bool:
 def _is_suspicious_log_line(line: str) -> bool:
     """Return whether a log line looks like an actionable error entry."""
 
-    text = f" {line.strip().lower()}"
-    if not text.strip():
+    text = line.strip().lower()
+    if not text:
         return False
-    return any(keyword in text for keyword in ERROR_KEYWORDS)
+    return any(keyword in f" {text}" for keyword in ERROR_KEYWORDS)
+
+
+def _log_sort_mtime(path: Path) -> float:
+    """Return a best-effort log-file mtime used for recent-file ordering.
+
+    Args:
+        path: Log file path being considered.
+
+    Returns:
+        The file modification timestamp, or ``0.0`` when it cannot be read.
+    """
+
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 def _memory_gib() -> float | None:

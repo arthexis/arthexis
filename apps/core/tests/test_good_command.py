@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import StringIO
+from types import SimpleNamespace
 
 import pytest
 
@@ -145,3 +146,58 @@ def test_good_command_lists_ranked_important_issues(monkeypatch) -> None:
     assert "Issues to consider (highest priority first):" in rendered
     assert "[CRITICAL] Tests failed" in rendered
     assert "[MINOR] Feature missing" in rendered
+
+
+def test_check_internet_connectivity_uses_configurable_named_endpoints(settings, monkeypatch) -> None:
+    """The internet check should avoid hard-coded IP literals and honor settings overrides."""
+
+    settings.GOOD_CONNECTIVITY_ENDPOINTS = (("one.one.one.one", 443), ("dns.google", 443))
+    attempts: list[tuple[str, int, float]] = []
+
+    def fake_can_connect(host: str, port: int, *, timeout: float = 1.5) -> bool:
+        attempts.append((host, port, timeout))
+        return False
+
+    monkeypatch.setattr("apps.core.good._can_connect", fake_can_connect)
+
+    from apps.core.good import _check_internet_connectivity
+
+    issues = list(_check_internet_connectivity())
+
+    assert attempts == [("one.one.one.one", 443, 2.0), ("dns.google", 443, 2.0)]
+    assert issues[0].detail == "Tried TCP connectivity to one.one.one.one:443, dns.google:443 without success."
+
+
+def test_node_feature_checks_report_failures_without_aborting(monkeypatch) -> None:
+    """Optional feature checker exceptions should degrade into a warning issue."""
+
+    feature = SimpleNamespace(slug="llm-summary", display="LLM Summary")
+    monkeypatch.setattr("apps.core.good.Node.get_local", lambda: object())
+    monkeypatch.setattr("apps.core.good.NodeFeature.objects.order_by", lambda *args, **kwargs: [feature])
+
+    def raise_runtime_error(*args, **kwargs):
+        raise RuntimeError("summary app is not migrated")
+
+    monkeypatch.setattr("apps.core.good.feature_checks.run", raise_runtime_error)
+
+    from apps.core.good import _check_node_feature_eligibility
+
+    issues = list(_check_node_feature_eligibility())
+
+    assert len(issues) == 1
+    assert issues[0].key == "node-feature-check-failed:llm-summary"
+    assert issues[0].severity == "warning"
+    assert "RuntimeError" in issues[0].detail
+
+
+def test_platform_check_skips_systemctl_warning_in_embedded_mode(settings, monkeypatch) -> None:
+    """Embedded installs should not be marked down just because systemctl is absent."""
+
+    settings.ARTHEXIS_SERVICE_MODE = "embedded"
+    monkeypatch.setattr("apps.core.good.shutil.which", lambda name: None)
+
+    from apps.core.good import _check_platform_compatibility
+
+    issues = list(_check_platform_compatibility())
+
+    assert not any(issue.key == "systemctl-missing" for issue in issues)

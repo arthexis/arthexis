@@ -12,8 +12,8 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 
 ## Quick links
 - [Auto-Upgrade Flow](auto-upgrade.md)
-- [Good Command](operations/good-command.md)
 - [CodeQL Configuration](development/codeql.md)
+- [Good Command](operations/good-command.md)
 - [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
 - [LCD Screen Hardware](lcd-screen-hardware.md)
 - [Migration Branch Guards](development/migration-branch-guards.md)
