@@ -3,6 +3,11 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, override_settings
 
+from apps.groups.constants import (
+    NETWORK_OPERATOR_GROUP_NAME,
+    PRODUCT_DEVELOPER_GROUP_NAME,
+    RELEASE_MANAGER_GROUP_NAME,
+)
 from apps.users import temp_passwords
 from apps.users.backends import LocalhostAdminBackend, TempPasswordBackend
 from apps.users.system import collect_system_user_issues, ensure_system_user
@@ -19,6 +24,9 @@ def test_ensure_system_user_creates_and_repairs_account():
     assert user.is_staff and user.is_superuser and user.is_active
     assert not user.has_usable_password()
     assert user.operate_as_id is None
+    assert user.groups.filter(name=NETWORK_OPERATOR_GROUP_NAME).exists()
+    assert user.groups.filter(name=PRODUCT_DEVELOPER_GROUP_NAME).exists()
+    assert user.groups.filter(name=RELEASE_MANAGER_GROUP_NAME).exists()
 
     user.is_active = False
     user.is_staff = False

@@ -9,6 +9,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from django.utils import timezone
 
+from apps.groups.constants import EXTERNAL_AGENT_GROUP_NAME
 from apps.users import temp_passwords
 from apps.users.backends import TempPasswordBackend
 
@@ -127,6 +128,39 @@ class PasswordCommandTests(TestCase):
 
         user.refresh_from_db()
         assert user.groups.filter(name="operators").exists()
+
+
+    def test_create_staff_user_defaults_to_external_agent(self):
+        """Creating a staff user without explicit groups should add External Agent."""
+
+        call_command(
+            "password",
+            "default-staff",
+            create=True,
+            staff=True,
+            password="valid-pass-123",
+        )
+
+        user = get_user_model().objects.get(username="default-staff")
+        assert user.groups.filter(name=EXTERNAL_AGENT_GROUP_NAME).exists()
+
+    def test_create_staff_user_with_explicit_group_skips_external_agent_default(self):
+        """Explicit group assignment should suppress the generic staff default."""
+
+        Group.objects.create(name="operators")
+
+        call_command(
+            "password",
+            "explicit-staff",
+            create=True,
+            staff=True,
+            password="valid-pass-123",
+            group="operators",
+        )
+
+        user = get_user_model().objects.get(username="explicit-staff")
+        assert user.groups.filter(name="operators").exists()
+        assert not user.groups.filter(name=EXTERNAL_AGENT_GROUP_NAME).exists()
 
     def test_group_option_requires_existing_group(self):
         """A clear error should be raised when --group references an unknown group."""

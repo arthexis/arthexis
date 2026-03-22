@@ -6,6 +6,8 @@ from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 from django.dispatch import Signal
 
+from apps.groups.security import ensure_default_staff_groups
+
 logger = logging.getLogger(__name__)
 
 
@@ -62,11 +64,14 @@ class EntityUserManager(DjangoUserManager):
                 existing.set_unusable_password()
             existing.is_deleted = False
             existing.save(using=self._db)
+            ensure_default_staff_groups(existing)
             return existing
 
-        return super().create_superuser(
+        user = super().create_superuser(
             username=username, email=email, password=password, **extra_fields
         )
+        ensure_default_staff_groups(user)
+        return user
 
 
 class Entity(models.Model):

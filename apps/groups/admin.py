@@ -58,6 +58,7 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
     )
     filter_horizontal = ("permissions",)
     list_display = ("name", "security_model_label", "app", "parent", "site_template")
+    list_filter = ("app",)
     readonly_fields = ("security_model_label",)
     search_fields = ("name", "app", "parent__name")
 
