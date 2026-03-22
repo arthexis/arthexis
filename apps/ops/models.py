@@ -17,8 +17,9 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
 
-
 logger = logging.getLogger(__name__)
+
+VALIDATION_SQL_DISABLED_MESSAGE = _("Custom SQL validation is disabled for security reasons.")
 
 
 class OperationScreen(Entity):
@@ -88,7 +89,7 @@ class OperationScreen(Entity):
             return None, ""
 
         logger.warning("Blocked validation_sql execution for operation %s", self.pk)
-        return False, _("Custom SQL validation is disabled for security reasons.")
+        return False, VALIDATION_SQL_DISABLED_MESSAGE
 
 
 class OperationLink(Entity):
@@ -157,6 +158,8 @@ class OperationExecution(Entity):
             return
         if self.validation_passed is None:
             passed, output = self.operation.run_validation_sql()
+            if passed is False:
+                raise ValidationError({"validation_sql": output})
             self.validation_passed = passed
             self.validation_output = output
         super().save(*args, **kwargs)
@@ -201,7 +204,7 @@ class SecurityAlertEvent(Entity):
         severity: str = "error",
         remediation_url: str = "/admin/",
         occurred_at=None,
-    ) -> "SecurityAlertEvent":
+    ) -> SecurityAlertEvent:
         """Create or update an event entry while incrementing occurrence metadata."""
 
         event_timestamp = occurred_at or timezone.now()
