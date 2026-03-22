@@ -20,7 +20,7 @@ class OperationScreenValidationSqlTests(TestCase):
 
         passed, output = operation.run_validation_sql()
 
-        self.assertFalse(passed)
+        self.assertIsNone(passed)
         self.assertEqual(output, "Custom SQL validation is disabled for security reasons.")
 
     def test_save_sets_validation_status_without_executing_sql(self):
@@ -39,7 +39,7 @@ class OperationScreenValidationSqlTests(TestCase):
 
         execution = OperationExecution.objects.create(operation=operation, user=user)
 
-        self.assertFalse(execution.validation_passed)
+        self.assertIsNone(execution.validation_passed)
         self.assertEqual(
             execution.validation_output,
             "Custom SQL validation is disabled for security reasons.",

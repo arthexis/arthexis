@@ -88,7 +88,7 @@ class OperationScreen(Entity):
             return None, ""
 
         logger.warning("Blocked validation_sql execution for operation %s", self.pk)
-        return False, _("Custom SQL validation is disabled for security reasons.")
+        return None, _("Custom SQL validation is disabled for security reasons.")
 
 
 class OperationLink(Entity):
