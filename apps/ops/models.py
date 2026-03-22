@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from datetime import timedelta
 from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, IntegrityError, connection, models, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models import F, Value
 from django.db.models.functions import Greatest, Now
 from django.utils import timezone
@@ -18,11 +17,9 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
 
-
 logger = logging.getLogger(__name__)
 
-
-READ_ONLY_SQL_PATTERN = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
+VALIDATION_SQL_DISABLED_MESSAGE = _("Custom SQL validation is disabled for security reasons.")
 
 
 def _sanitize_remediation_url(remediation_url: str) -> str:
@@ -100,28 +97,18 @@ class OperationScreen(Entity):
             raise ValidationError({"start_url": _("Start URL must be HTTP(S) or a relative path.")})
 
     def run_validation_sql(self) -> tuple[bool | None, str]:
-        """Execute optional SQL validation and return pass flag with output."""
+        """Return SQL validation status.
+
+        Free-form SQL execution is intentionally disabled to prevent arbitrary database
+        access through operation configuration.
+        """
 
         sql = (self.validation_sql or "").strip()
         if not sql:
             return None, ""
-        if not READ_ONLY_SQL_PATTERN.match(sql):
-            return False, _("Validation SQL must be a read-only SELECT query.")
 
-        try:
-            with transaction.atomic():
-                with connection.cursor() as cursor:
-                    cursor.execute(sql)
-                    row = cursor.fetchone()
-                transaction.set_rollback(True)
-        except DatabaseError as exc:
-            logger.exception("Validation SQL failed for operation %s", self.pk)
-            return False, str(exc)
-
-        if not row:
-            return False, _("Validation query returned no rows.")
-
-        return bool(row[0]), str(row[0])
+        logger.warning("Blocked validation_sql execution for operation %s", self.pk)
+        return False, VALIDATION_SQL_DISABLED_MESSAGE
 
 
 class OperationLink(Entity):
@@ -190,6 +177,8 @@ class OperationExecution(Entity):
             return
         if self.validation_passed is None:
             passed, output = self.operation.run_validation_sql()
+            if passed is False:
+                raise ValidationError({"validation_sql": output})
             self.validation_passed = passed
             self.validation_output = output
         super().save(*args, **kwargs)
@@ -240,7 +229,7 @@ class SecurityAlertEvent(Entity):
         severity: str = "error",
         remediation_url: str = "/admin/",
         occurred_at=None,
-    ) -> "SecurityAlertEvent":
+    ) -> SecurityAlertEvent:
         """Create or update an event entry while incrementing occurrence metadata."""
 
         event_timestamp = occurred_at or timezone.now()
