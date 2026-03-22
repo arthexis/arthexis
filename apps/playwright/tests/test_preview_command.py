@@ -586,3 +586,97 @@ def test_selenium_networkidle_warns_and_uses_load_wait(monkeypatch, tmp_path) ->
     assert state["wait_checks"] == 1
     assert state["scripts"] == ["return document.readyState"]
     assert "treating --page-ready-state=networkidle as load" in command.stderr.getvalue()
+
+
+def test_selenium_full_page_warns_and_uses_viewport_capture(monkeypatch, tmp_path) -> None:
+    """Selenium should warn when full-page capture is requested but unsupported."""
+
+    command = Command()
+    command.stderr = StringIO()
+    state: dict[str, object] = {
+        "viewport_capture_calls": 0,
+        "save_screenshot_calls": 0,
+    }
+
+    class FakeDriver:
+        """Minimal Selenium driver stub for screenshot capture tests."""
+
+        current_url = "http://127.0.0.1:8000/admin/"
+
+        def get(self, url: str) -> None:
+            """Record the current navigation target."""
+
+            self.current_url = url
+
+        def set_window_size(self, width: int, height: int) -> None:
+            """Accept the requested viewport size."""
+
+        def execute_script(self, script: str) -> str:
+            """Return a completed ready state for wait assertions."""
+
+            return "complete"
+
+        def get_screenshot_as_png(self) -> bytes:
+            """Return PNG bytes for viewport-only captures."""
+
+            state["viewport_capture_calls"] += 1
+            return b"png"
+
+        def quit(self) -> None:
+            """Terminate the fake browser session."""
+
+        def save_screenshot(self, path: str) -> None:
+            """Record unsupported save_screenshot usage."""
+
+            state["save_screenshot_calls"] += 1
+            Path(path).write_bytes(b"png")
+
+    class FakeWebDriverWait:
+        """Immediate WebDriverWait replacement that records each wait."""
+
+        def __init__(self, driver, timeout: int) -> None:
+            self.driver = driver
+            self.timeout = timeout
+
+        def until(self, condition):
+            """Run the wait predicate once and store the attempt."""
+
+            return condition(self.driver)
+
+    class FakeChromeOptions:
+        """Minimal Chrome options stub."""
+
+        def add_argument(self, argument: str) -> None:
+            """Accept option arguments without side effects."""
+
+    fake_driver = FakeDriver()
+
+    monkeypatch.setattr("selenium.webdriver.Chrome", lambda options: fake_driver)
+    monkeypatch.setattr("selenium.webdriver.chrome.options.Options", FakeChromeOptions)
+    monkeypatch.setattr("selenium.webdriver.support.ui.WebDriverWait", FakeWebDriverWait)
+
+    output = tmp_path / "admin-preview.png"
+    command._capture_all_selenium(
+        base_url="http://127.0.0.1:8000",
+        username="",
+        password="",
+        captures=[
+            {
+                "path": "/admin/",
+                "viewport_size": (1440, 1800),
+                "output": output,
+            }
+        ],
+        browser_name="chrome",
+        login_required=False,
+        page_ready_state="load",
+        ready_selectors=[],
+        full_page=True,
+    )
+
+    assert state == {
+        "viewport_capture_calls": 1,
+        "save_screenshot_calls": 0,
+    }
+    assert output.read_bytes() == b"png"
+    assert "treating --full-page as a viewport capture" in command.stderr.getvalue()

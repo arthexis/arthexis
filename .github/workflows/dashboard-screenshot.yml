@@ -25,25 +25,34 @@ on:
 jobs:
   detect-preview-changes:
     name: Detect preview-relevant changes
-    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
     outputs:
-      preview: ${{ steps.filter.outputs.preview }}
+      preview: ${{ steps.decide.outputs.preview }}
     steps:
       - uses: actions/checkout@v6
         with:
           clean: false
 
+      - name: Default to preview capture for non-PR events
+        id: default-preview
+        if: ${{ github.event_name != 'pull_request' }}
+        run: echo "preview=true" >> "$GITHUB_OUTPUT"
+
       - name: Detect UI/admin/template changes
         id: filter
+        if: ${{ github.event_name == 'pull_request' }}
         uses: dorny/paths-filter@v3
         with:
           filters: |
             preview:
               - '.github/workflows/dashboard-screenshot.yml'
+              - 'apps/playwright/management/commands/preview.py'
+              - 'apps/**/context_processors.py'
+              - 'apps/**/context_processors/**/*.py'
+              - 'config/settings/**/*.py'
               - 'templates/**'
               - 'static/**'
               - 'apps/**/templates/**'
@@ -55,6 +64,12 @@ jobs:
               - 'apps/**/forms.py'
               - 'apps/**/forms/**/*.py'
               - 'apps/**/urls.py'
+
+      - name: Choose preview capture flag
+        id: decide
+        run: |
+          preview_flag="${{ steps.default-preview.outputs.preview || steps.filter.outputs.preview || 'false' }}"
+          echo "preview=${preview_flag}" >> "$GITHUB_OUTPUT"
 
   capture-dashboard:
     name: Capture admin dashboard

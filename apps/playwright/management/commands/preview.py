@@ -8,9 +8,9 @@ import re
 import secrets
 import sys
 import time
+from urllib.parse import urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
-from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -107,7 +107,10 @@ class Command(BaseCommand):
             "--full-page",
             action=argparse.BooleanOptionalAction,
             default=True,
-            help="Capture the full page instead of only the active viewport.",
+            help=(
+                "Capture the full page instead of only the active viewport. "
+                "Playwright supports this directly; Selenium falls back to a viewport capture."
+            ),
         )
         parser.add_argument(
             "--ci-fast",
@@ -704,6 +707,13 @@ class Command(BaseCommand):
                         "--page-ready-state=networkidle as load."
                     )
                 )
+            if full_page:
+                self.stderr.write(
+                    self.style.WARNING(
+                        "Selenium does not support true full-page screenshots; treating "
+                        "--full-page as a viewport capture."
+                    )
+                )
 
             for capture in captures:
                 width, height = capture["viewport_size"]
@@ -718,11 +728,8 @@ class Command(BaseCommand):
                     WebDriverWait(driver, 20).until(
                         lambda current_driver, css=selector: current_driver.find_elements(By.CSS_SELECTOR, css)
                     )
-                if full_page:
-                    driver.save_screenshot(str(output))
-                else:
-                    png_data = driver.get_screenshot_as_png()
-                    output.write_bytes(png_data)
+                png_data = driver.get_screenshot_as_png()
+                output.write_bytes(png_data)
         except (TimeoutException, WebDriverException) as exc:
             raise CommandError(self._selenium_runtime_help(exc)) from exc
         finally:

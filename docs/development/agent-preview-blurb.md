@@ -13,6 +13,7 @@ Requirements:
 - Use default engine fallback order (chromium then firefox) unless troubleshooting.
 - Report the generated image diagnostics line (brightness/white ratio/mostly_white).
 - If `mostly_white=True`, treat the preview as suspicious and investigate before finalizing.
+- `--full-page` is honored by Playwright; Selenium falls back to a viewport capture and emits a warning.
 - Attach the screenshot artifact in markdown: ![preview](<artifact_path>)
 
 For routine CI captures, prefer:
