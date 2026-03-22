@@ -36,6 +36,19 @@ def evergo_customer_export_record(db):
     return _create
 
 
+@pytest.fixture
+def evergo_order_for_admin_action(admin_client):
+    """Create an EvergoOrder and its owner profile for admin action tests."""
+
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="reload-action-test@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    return EvergoOrder.objects.create(user=profile, remote_id=8710, order_number="SO-8710")
+
+
 @pytest.mark.django_db
 def test_evergo_admin_load_customers_tool_action_is_registered_on_customers_only(admin_client):
     """Load-customers tool action should be exposed only for customers."""
@@ -469,16 +482,10 @@ def test_evergo_admin_load_customers_wizard_load_all_button_requires_confirmatio
 
 
 @pytest.mark.django_db
-def test_evergo_order_reload_change_action_rejects_get_requests(admin_client):
+def test_evergo_order_reload_change_action_rejects_get_requests(admin_client, evergo_order_for_admin_action):
     """Reload action should reject GET to avoid CSRF-prone state changes."""
 
-    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
-    profile = EvergoUser.objects.create(
-        user=admin_user,
-        evergo_email="reload-get-guard@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
-    )
-    order = EvergoOrder.objects.create(user=profile, remote_id=8711, order_number="SO-8711")
+    order = evergo_order_for_admin_action
 
     action_url = reverse(
         "admin:evergo_evergoorder_actions",
@@ -491,16 +498,12 @@ def test_evergo_order_reload_change_action_rejects_get_requests(admin_client):
 
 @pytest.mark.django_db
 @patch("apps.evergo.models.user.EvergoUser.reload_order_from_remote")
-def test_evergo_order_reload_change_action_allows_post(mock_reload_order, admin_client):
+def test_evergo_order_reload_change_action_allows_post(
+    mock_reload_order, admin_client, evergo_order_for_admin_action
+):
     """Reload action should execute only on POST and redirect back to order change page."""
 
-    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
-    profile = EvergoUser.objects.create(
-        user=admin_user,
-        evergo_email="reload-post-guard@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
-    )
-    order = EvergoOrder.objects.create(user=profile, remote_id=8712, order_number="SO-8712")
+    order = evergo_order_for_admin_action
     mock_reload_order.return_value = order
 
     action_url = reverse(
