@@ -321,6 +321,7 @@ class MobilityHouseChargePointAdapter:
         timeout: float = 60.0,
     ) -> tuple[object, list[object] | None]:
         deadline = time.monotonic() + timeout
+        call: list[object] | None = None
         while True:
             remaining = max(0.1, timeout if not expected_message_id else deadline - time.monotonic())
             incoming = await self._recv(ws, timeout=remaining)
@@ -633,7 +634,6 @@ __all__ = [
     "build_simulator_proposal",
     "ensure_mobilityhouse_ocpp_available",
 ]
-
 
 
 
