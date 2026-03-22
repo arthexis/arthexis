@@ -65,6 +65,10 @@ jobs:
         run: |
           source .venv/bin/activate
           python -m pip install -r requirements-ci.txt
+      - name: Verify editable install import
+        run: |
+          source .venv/bin/activate
+          python scripts/check_editable_install_import.py
       - name: Validate migrations
         run: |
           source .venv/bin/activate
