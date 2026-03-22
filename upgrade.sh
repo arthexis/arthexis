@@ -1986,9 +1986,9 @@ if [ "$CLEAN" -eq 1 ]; then
 fi
 
 # Refresh environment and restart service
-ENV_ARGS=""
+ENV_ARGS="--with-preview-tools"
 if [[ "$CHANNEL" == "unstable" ]]; then
-  ENV_ARGS="--latest"
+  ENV_ARGS="$ENV_ARGS --latest"
 fi
 if [[ $FORCE_ENV_REFRESH -eq 1 ]]; then
   ENV_ARGS="$ENV_ARGS --force-refresh"

@@ -667,7 +667,7 @@ else
 fi
 
 arthexis_timing_start "requirements_install"
-env_refresh_args=(--force-refresh --deps-only)
+env_refresh_args=(--force-refresh --deps-only --with-preview-tools)
 if [ "$CHANNEL" = "unstable" ]; then
     env_refresh_args+=(--latest)
 fi

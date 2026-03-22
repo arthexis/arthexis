@@ -57,7 +57,7 @@ of those roles.
 - **`--control`** – For lab control stations. Enables Celery, LCD control, and writes the `control.lck` flag so future scripts manage the accessory services. Starts services immediately unless you pass `--no-start`, and defaults to fixed upgrades unless you select a channel with `--unstable`/`--latest` or `--stable`.
 - **`--watchtower`** – Cloud-oriented role. Enables Celery, records the `Watchtower` role for downstream tooling, and supports the same auto-upgrade options as the other presets.
 
-During installation, the script ensures the Python virtual environment exists and prepares application metadata and runtime dependencies. Preview/browser-test tooling is now opt-in: `install.sh`, `upgrade.sh`, and a plain `./env-refresh.sh --deps-only` do not install Playwright browser binaries or Selenium unless you explicitly request a preview profile. Nginx configuration is now managed exclusively through `apps.nginx` tooling rather than the lifecycle shell scripts. System prompts appear when prerequisites such as Redis are missing, explaining how to install them on Debian/Ubuntu systems.
+During installation, the script ensures the Python virtual environment exists and prepares application metadata and runtime dependencies. `install.sh` now invokes `env-refresh.sh` with the preview tooling profile so the suite's default Playwright automation features remain runnable immediately after setup, while plain ad-hoc `./env-refresh.sh --deps-only` runs stay lean unless you explicitly request preview tooling. Nginx configuration is now managed exclusively through `apps.nginx` tooling rather than the lifecycle shell scripts. System prompts appear when prerequisites such as Redis are missing, explaining how to install them on Debian/Ubuntu systems.
 
 ### 1.2.1 Preview and browser-test tooling
 
@@ -71,7 +71,7 @@ Use `env-refresh.sh` profiles to control whether browser automation dependencies
 | `./env-refresh.sh --deps-only --with-browser-tests` | Installs the same browser tooling profile for explicit browser-test preparation. |
 | `ARTHEXIS_INSTALL_PROFILE=preview ./env-refresh.sh --deps-only` | Environment-variable form of the preview profile. |
 
-Use one of the opt-in preview commands before running `python manage.py preview ...` or other intentional screenshot capture flows. Keep production/runtime nodes on the default lean profile unless they truly need browser automation tooling.
+Use one of the opt-in preview commands before running `python manage.py preview ...` or other intentional screenshot capture flows. The top-level `install.sh` and `upgrade.sh` scripts already opt into this profile so bundled automation continues to work after standard lifecycle operations; keep ad-hoc runtime refreshes on the default lean profile unless they truly need browser automation tooling.
 
 ### 1.3 Windows installer behaviour
 

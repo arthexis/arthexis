@@ -125,6 +125,8 @@ while [[ $# -gt 0 ]]; do
       ;;
     --with-browser-tests)
       INSTALL_PROFILE=browser-tests
+      shift
+      ;;
     --preview-deps)
       INSTALL_PREVIEW_DEPS=1
       shift
@@ -711,11 +713,12 @@ if should_install_preview_tooling; then
   ensure_selenium_installed
 else
   echo "Skipping preview/browser test tooling for install profile ${INSTALL_PROFILE}."
-if should_install_preview_dependencies; then
-  ensure_playwright_browsers_installed
-  ensure_selenium_installed
-else
-  echo "Preview/browser dependencies not requested; skipping Playwright and Selenium setup."
+  if should_install_preview_dependencies; then
+    ensure_playwright_browsers_installed
+    ensure_selenium_installed
+  else
+    echo "Preview/browser dependencies not requested; skipping Playwright and Selenium setup."
+  fi
 fi
 
 if [ "$DEPS_ONLY" -eq 1 ]; then

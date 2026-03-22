@@ -98,6 +98,19 @@ def test_browser_test_profile_env_var_normalizes_to_browser_tests(tmp_path: Path
     assert "profile=browser-tests" in output
 
 
+def test_install_script_requests_preview_tooling_profile_by_default():
+    install_script = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")
+
+    assert 'env_refresh_args=(--force-refresh --deps-only --with-preview-tools)' in install_script
+
+
+def test_upgrade_script_requests_preview_tooling_profile_by_default():
+    upgrade_script = (REPO_ROOT / "upgrade.sh").read_text(encoding="utf-8")
+
+    assert 'ENV_ARGS="--with-preview-tools"' in upgrade_script
+    assert 'ENV_ARGS="$ENV_ARGS --latest"' in upgrade_script
+    assert 'FAILOVER_CREATED=1 ./env-refresh.sh $ENV_ARGS' in upgrade_script
+
 def test_playwright_host_dependency_install_warns_without_root_access(tmp_path: Path):
     result = _run_bash(
         f"""

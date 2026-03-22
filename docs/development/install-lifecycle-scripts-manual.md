@@ -45,18 +45,19 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 
 The script also:
 - Verifies Nginx and Redis availability for roles that require them, writing `redis.env` when Redis is configured.
-- Creates `.venv`, installs runtime dependencies via `scripts/helpers/pip_install.py`, applies migrations, and refreshes environment secrets via `env-refresh.sh`. Browser preview/test tooling stays opt-in unless you rerun `env-refresh.sh` with a preview profile.
+- Creates `.venv`, installs runtime dependencies via `scripts/helpers/pip_install.py`, applies migrations, and refreshes environment secrets via `env-refresh.sh`. The install flow explicitly provisions the preview/browser tooling profile so the default Playwright automation surface remains runnable after a fresh install, while ad-hoc `env-refresh.sh` runs stay opt-in.
 - Writes lock files capturing the selected role, Nginx mode, and enabled subsystems so the runtime helpers know how to behave.
 - Refreshes desktop shortcuts on Linux desktops for quick access to the UI and maintenance commands.
 
 ### 1.1.1 `env-refresh.sh` install profiles
 
-`env-refresh.sh` now keeps ordinary runtime refreshes lean by default. Unless you opt in, it installs only the base runtime requirements plus any hardware requirements implied by lock files or role selection. Browser automation tooling is no longer installed automatically by `install.sh`, `upgrade.sh`, or a plain `./env-refresh.sh --deps-only`.
+`env-refresh.sh` now keeps ordinary runtime refreshes lean by default. Unless you opt in, it installs only the base runtime requirements plus any hardware requirements implied by lock files or role selection. The main `install.sh` and `upgrade.sh` entrypoints now opt into the preview tooling profile on your behalf so fresh installs and upgrades still provision the Playwright/Selenium runtime required by the automation features enabled in the suite by default; plain ad-hoc `./env-refresh.sh --deps-only` remains lean.
 
 | Command | What it installs |
 | --- | --- |
 | `./env-refresh.sh` | Runtime dependencies only. No Playwright browser binaries or Selenium. |
 | `./env-refresh.sh --deps-only` | Same lean runtime dependency refresh, without database/env updates. |
+| `./install.sh` / `./upgrade.sh` | Lifecycle entrypoints that automatically include the preview tooling profile so bundled Playwright automation remains runnable after installs and upgrades. |
 | `./env-refresh.sh --deps-only --with-preview-tools` | Runtime dependencies plus Playwright, Playwright browser binaries, and Selenium for preview/screenshot workflows. |
 | `ARTHEXIS_INSTALL_PROFILE=preview ./env-refresh.sh --deps-only` | Environment-variable equivalent of the preview tooling profile. |
 | `./env-refresh.sh --deps-only --with-browser-tests` | Alias for the full browser-tooling profile when explicitly preparing browser-driven test environments. |
@@ -137,7 +138,7 @@ Supported options:
 | `--no-warn` | Skips interactive confirmation before destructive database operations (used with `--clean` or uninstall flows). |
 
 Additional behaviour:
-- Before applying migrations it refreshes Nginx maintenance assets, optionally clears the database, reruns `env-refresh.sh` on the lean runtime profile, migrates legacy systemd configurations, and restarts services unless `--no-start`/`--no-restart` was requested.
+- Before applying migrations it refreshes Nginx maintenance assets, optionally clears the database, reruns `env-refresh.sh` with the preview tooling profile to keep bundled Playwright automation dependencies provisioned, migrates legacy systemd configurations, and restarts services unless `--no-start`/`--no-restart` was requested.
 - After restarting, it updates desktop shortcuts so GUI launchers stay current.
 
 ### 3.2 Windows: `upgrade.bat`
