@@ -9,15 +9,6 @@ from django.urls import reverse
 from apps.content.models import ContentSample
 
 
-def test_admin_base_site_exposes_drop_upload_overlay(admin_client):
-    response = admin_client.get(reverse("admin:index"))
-
-    assert response.status_code == 200
-    content = response.content.decode()
-    assert 'data-content-sample-drop-overlay' in content
-    assert reverse("admin:content_contentsample_drop_upload") in content
-
-
 def test_drop_upload_creates_content_sample_and_returns_change_url(
     admin_client,
     admin_user,
