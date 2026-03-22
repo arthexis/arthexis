@@ -51,6 +51,16 @@ class FeedbackIssueConfigurationAdminMixin:
 
     change_actions = ("configure_action",)
 
+    def _can_change_feature(self, request: HttpRequest) -> bool:
+        """Return whether the user can modify feedback feature flags."""
+
+        return request.user.has_perm("features.change_feature")
+
+    def _can_change_package(self, request: HttpRequest) -> bool:
+        """Return whether the user can modify release package settings."""
+
+        return request.user.has_perm("release.change_package")
+
     def get_urls(self):
         """Register a per-object configure route for this admin."""
 
@@ -232,6 +242,12 @@ class FeedbackIssueConfigurationAdminMixin:
         if obj is None:
             raise Http404(_("Object not found."))
         if not self.has_change_permission(request, obj):
+            raise PermissionDenied
+
+        if request.method == "POST" and (
+            not self._can_change_feature(request)
+            or not self._can_change_package(request)
+        ):
             raise PermissionDenied
 
         if request.method == "POST":

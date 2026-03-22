@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.urls import reverse
 from django.utils import timezone
 
@@ -143,3 +144,57 @@ def test_repository_issue_configure_view_returns_403_without_change_permission(c
     )
 
     assert response.status_code == 403
+
+
+def test_repository_issue_configure_view_post_requires_feature_and_package_permissions(
+    client, db
+):
+    """POST should be forbidden if the user cannot change feature/package models."""
+
+    user = get_user_model().objects.create_user(
+        username="staff-restricted",
+        email="restricted@example.com",
+        password="password123",
+        is_staff=True,
+    )
+    issue_change_permission = Permission.objects.get(
+        content_type__app_label="repos",
+        codename="change_repositoryissue",
+    )
+    user.user_permissions.add(issue_change_permission)
+    client.force_login(user)
+
+    feature = Feature.objects.create(
+        slug="feedback-ingestion",
+        display="Feedback Ingestion",
+        is_enabled=False,
+    )
+    package = Package.objects.create(
+        name="suite",
+        repository_url="https://github.com/arthexis/old",
+        is_active=True,
+    )
+    repository = GitHubRepository.objects.create(owner="arthexis", name="arthexis")
+    issue = RepositoryIssue.objects.create(
+        repository=repository,
+        number=105,
+        title="Permissioned post",
+        state="open",
+        created_at=timezone.now(),
+        updated_at=timezone.now(),
+    )
+
+    response = client.post(
+        reverse("admin:repos_repositoryissue_configure", args=[issue.pk]),
+        data={
+            "feedback_ingestion_enabled": "on",
+            "active_repository_url": "https://github.com/arthexis/new-repo",
+        },
+    )
+
+    feature.refresh_from_db()
+    package.refresh_from_db()
+
+    assert response.status_code == 403
+    assert feature.is_enabled is False
+    assert package.repository_url == "https://github.com/arthexis/old"
