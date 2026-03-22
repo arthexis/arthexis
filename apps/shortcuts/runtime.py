@@ -12,11 +12,11 @@ from apps.features.models import Feature
 from apps.features.utils import is_suite_feature_enabled
 from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
-from apps.recipes.utils import resolve_arg_sigils
 from apps.sigils.sigil_resolver import resolve_sigils
 
 from .constants import SHORTCUT_LISTENER_NODE_FEATURE_SLUG, SHORTCUT_MANAGEMENT_FEATURE_SLUG
 from .models import ClipboardPattern, Shortcut
+from .utils import resolve_arg_tokens
 
 
 class ShortcutExecutionError(RuntimeError):
@@ -50,7 +50,7 @@ def render_shortcut_output(template: str, *, context: dict[str, Any]) -> str:
     if not template:
         return ""
     rendered = resolve_sigils(template, current=None)
-    return resolve_arg_sigils(rendered, (), context)
+    return resolve_arg_tokens(rendered, (), context)
 
 
 def _select_pattern(shortcut: Shortcut, clipboard: str) -> ClipboardPattern | None:
