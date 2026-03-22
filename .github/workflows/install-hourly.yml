@@ -102,7 +102,7 @@ jobs:
       - name: Run import contracts
         run: |
           source .venv/bin/activate
-          lint-imports
+          make lint-imports
       - name: Detect pytest xdist arguments
         run: |
           set -Eeuo pipefail
