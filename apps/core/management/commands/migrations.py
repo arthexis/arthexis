@@ -14,6 +14,7 @@ from django.db import connections
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.exceptions import MigrationSchemaMissing
 from django.db.utils import OperationalError
+from django.utils.connection import ConnectionDoesNotExist
 
 
 class Command(BaseCommand):
@@ -219,15 +220,21 @@ class Command(BaseCommand):
             None.
 
         Raises:
-            CommandError: When the migration graph cannot be inspected.
+            CommandError: When the requested database alias is unavailable or the
+                migration graph cannot be inspected for reasons other than an
+                uninitialized migration schema.
         """
 
-        connection = connections[database]
         try:
+            connection = connections[database]
             executor = MigrationExecutor(connection)
             pending = executor.migration_plan(executor.loader.graph.leaf_nodes())
-        except (OperationalError, MigrationSchemaMissing) as exc:
-            raise CommandError(f"Unable to inspect migration state for {database!r}: {exc}") from exc
+        except ConnectionDoesNotExist as exc:
+            raise CommandError(
+                f"Unable to inspect migration state for {database!r}: {exc}"
+            ) from exc
+        except (OperationalError, MigrationSchemaMissing):
+            pending = [database]
 
         if pending:
             self.stdout.write("pending")

@@ -686,7 +686,9 @@ run_env_refresh "${env_refresh_args[@]}"
 arthexis_timing_end "requirements_install" "refreshed"
 arthexis_timing_record "django_migrate" 0 "delegated-to-env-refresh"
 if ls data/*.json >/dev/null 2>&1; then
-    arthexis_timing_record "load_user_data" 0 "delegated-to-env-refresh"
+    arthexis_timing_start "load_user_data"
+    python manage.py loaddata data/*.json
+    arthexis_timing_end "load_user_data"
 else
     arthexis_timing_record "load_user_data" 0 "skipped"
 fi

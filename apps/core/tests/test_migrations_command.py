@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db.migrations.exceptions import MigrationSchemaMissing
+from django.db.utils import OperationalError
 
 
 def _seed_apps_root(base_dir: Path) -> Path:
@@ -64,21 +66,40 @@ def test_migrations_check_runs_makemigrations_check(monkeypatch):
     assert called == [("makemigrations", (), {"check": True, "dry_run": True})]
 
 
-def test_migrations_pending_succeeds_when_plan_exists(monkeypatch):
-    """migrations pending should exit successfully when the executor reports work."""
+@pytest.mark.parametrize(
+    ("leaf_nodes", "plan", "raised_exception", "expected_error"),
+    [
+        (
+            [("core", "0001_initial")],
+            [("core", "0001_initial")],
+            None,
+            None,
+        ),
+        ([], [], None, "no pending migrations"),
+        (None, None, MigrationSchemaMissing("missing schema"), None),
+        (None, None, OperationalError("database unavailable"), None),
+    ],
+    ids=["pending", "clean", "schema-missing", "operational-error"],
+)
+def test_migrations_pending(
+    monkeypatch, leaf_nodes, plan, raised_exception, expected_error
+):
+    """migrations pending should report pending, clean, and bootstrap states."""
 
     class _FakeGraph:
         def leaf_nodes(self):
-            return [("core", "0001_initial")]
+            return leaf_nodes
 
     class _FakeExecutor:
         def __init__(self, connection):
             self.connection = connection
             self.loader = type("Loader", (), {"graph": _FakeGraph()})()
+            if raised_exception is not None:
+                raise raised_exception
 
         def migration_plan(self, targets):
-            assert targets == [("core", "0001_initial")]
-            return [("core", "0001_initial")]
+            assert targets == leaf_nodes
+            return plan
 
     monkeypatch.setattr(
         "apps.core.management.commands.migrations.connections",
@@ -88,37 +109,13 @@ def test_migrations_pending_succeeds_when_plan_exists(monkeypatch):
         "apps.core.management.commands.migrations.MigrationExecutor",
         _FakeExecutor,
     )
+
+    if expected_error is not None:
+        with pytest.raises(CommandError, match=expected_error):
+            call_command("migrations", "pending")
+        return
 
     call_command("migrations", "pending")
-
-
-def test_migrations_pending_fails_when_plan_is_empty(monkeypatch):
-    """migrations pending should fail when the executor reports a clean graph."""
-
-    class _FakeGraph:
-        def leaf_nodes(self):
-            return []
-
-    class _FakeExecutor:
-        def __init__(self, connection):
-            self.connection = connection
-            self.loader = type("Loader", (), {"graph": _FakeGraph()})()
-
-        def migration_plan(self, targets):
-            assert targets == []
-            return []
-
-    monkeypatch.setattr(
-        "apps.core.management.commands.migrations.connections",
-        {"default": object()},
-    )
-    monkeypatch.setattr(
-        "apps.core.management.commands.migrations.MigrationExecutor",
-        _FakeExecutor,
-    )
-
-    with pytest.raises(CommandError, match="no pending migrations"):
-        call_command("migrations", "pending")
 
 
 def test_migrations_rebuild_tags_initial_migration(monkeypatch, settings, tmp_path):
