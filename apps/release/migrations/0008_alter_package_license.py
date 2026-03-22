@@ -2,6 +2,8 @@
 
 from django.db import migrations, models
 
+import apps.release.models.package
+
 
 class Migration(migrations.Migration):
 
@@ -14,7 +16,8 @@ class Migration(migrations.Migration):
             model_name="package",
             name="license",
             field=models.CharField(
-                default="Arthexis Contribution Reciprocity License 1.0", max_length=100
+                default=apps.release.models.package.PackageLicenseDefault(),
+                max_length=100,
             ),
         ),
     ]

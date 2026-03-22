@@ -9,7 +9,7 @@ import pytest
 import tomllib
 
 from apps.release.models import Package
-from apps.release.models.package import SCHEMA_DEFAULT_PACKAGE_LICENSE
+from apps.release.models.package import PackageLicenseDefault
 from apps.release.services.builder import _write_pyproject
 from apps.release.services.defaults import DEFAULT_PACKAGE
 
@@ -76,11 +76,18 @@ def test_repository_package_metadata_uses_license_title(relative_path, loader) -
         assert loaded == expected_license
 
 
-def test_package_license_schema_default_uses_stable_constant() -> None:
+def test_package_license_default_tracks_runtime_metadata_with_stable_deconstruction() -> None:
+    """The ORM default should follow runtime metadata without migration churn."""
+
     field = Package._meta.get_field("license")
 
-    assert field.default == SCHEMA_DEFAULT_PACKAGE_LICENSE
-    assert field.default == DEFAULT_PACKAGE.license
+    assert isinstance(field.default, PackageLicenseDefault)
+    assert field.default() == DEFAULT_PACKAGE.license
+    assert field.default.deconstruct() == (
+        "apps.release.models.package.PackageLicenseDefault",
+        (),
+        {},
+    )
 
 
 def test_write_pyproject_uses_package_license(tmp_path, monkeypatch) -> None:

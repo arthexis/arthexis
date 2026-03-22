@@ -1,13 +1,25 @@
 from __future__ import annotations
 
 from django.db import models
+from django.utils.deconstruct import deconstructible
 
 from apps.base.models import Entity, EntityManager
 
 from .. import DEFAULT_PACKAGE, Package as ReleasePackage
 
 
-SCHEMA_DEFAULT_PACKAGE_LICENSE = "Arthexis Contribution Reciprocity License 1.0"
+@deconstructible
+class PackageLicenseDefault:
+    """Return the runtime package license while serializing as a stable default.
+
+    Returns:
+        The current package license title from ``DEFAULT_PACKAGE``.
+    """
+
+    def __call__(self) -> str:
+        """Return the current runtime package license title."""
+
+        return DEFAULT_PACKAGE.license
 
 
 class PackageManager(EntityManager):
@@ -50,7 +62,7 @@ class Package(Entity):
     python_requires = models.CharField(
         max_length=20, default=DEFAULT_PACKAGE.python_requires
     )
-    license = models.CharField(max_length=100, default=SCHEMA_DEFAULT_PACKAGE_LICENSE)
+    license = models.CharField(max_length=100, default=PackageLicenseDefault())
     repository_url = models.URLField(default=DEFAULT_PACKAGE.repository_url)
     homepage_url = models.URLField(default=DEFAULT_PACKAGE.homepage_url)
     version_path = models.CharField(max_length=255, blank=True, default="")
