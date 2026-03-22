@@ -10,6 +10,36 @@ from django.db import migrations
 
 FEATURE_SLUG = "staff-chat-bridge"
 FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "features__staff_chat_bridge.json"
+REVERSE_FIXTURE_FIELDS = {
+    "display": "Staff Chat Bridge",
+    "summary": "Gates staff-facing chat bridge UI wiring for site and admin chat widgets.",
+    "is_enabled": True,
+    "main_app": ["sites"],
+    "node_feature": None,
+    "admin_requirements": (
+        "Admin base template should only render the chat widget when this suite "
+        "feature is enabled."
+    ),
+    "public_requirements": (
+        "Public base template should only render the chat widget when this suite "
+        "feature is enabled."
+    ),
+    "service_requirements": (
+        "No additional backend services beyond configured pages chat socket path."
+    ),
+    "admin_views": ["admin:index"],
+    "public_views": ["pages:index"],
+    "service_views": ["settings:PAGES_CHAT_SOCKET_PATH"],
+    "code_locations": [
+        "apps/sites/context_processors.py",
+        "apps/sites/templates/pages/base.html",
+        "apps/sites/templates/admin/base_site.html",
+    ],
+    "protocol_coverage": {},
+    "source": "mainstream",
+    "is_seed_data": True,
+    "is_deleted": False,
+}
 
 
 def _load_fixture_fields(path: Path, expected_slug: str) -> dict:
@@ -91,6 +121,51 @@ def refresh_feature(apps, schema_editor):
     application_manager = getattr(Application, "all_objects", Application._base_manager)
     feature_manager = getattr(Feature, "all_objects", Feature._base_manager)
 
+    _update_feature_from_fields(
+        feature_manager=feature_manager,
+        application_manager=application_manager,
+        fields=fields,
+    )
+
+
+def restore_feature(apps, schema_editor):
+    """Restore Staff Chat Bridge metadata that existed before this refresh.
+
+    Parameters:
+        apps: Django migration app registry.
+        schema_editor: Active migration schema editor.
+
+    Returns:
+        None.
+    """
+
+    del schema_editor
+
+    Feature = apps.get_model("features", "Feature")
+    Application = apps.get_model("app", "Application")
+
+    application_manager = getattr(Application, "all_objects", Application._base_manager)
+    feature_manager = getattr(Feature, "all_objects", Feature._base_manager)
+
+    _update_feature_from_fields(
+        feature_manager=feature_manager,
+        application_manager=application_manager,
+        fields=REVERSE_FIXTURE_FIELDS,
+    )
+
+
+def _update_feature_from_fields(*, feature_manager, application_manager, fields: dict) -> None:
+    """Apply a fixture-like field mapping to the Staff Chat Bridge feature.
+
+    Parameters:
+        feature_manager: Historical manager used to write feature rows.
+        application_manager: Historical manager used to resolve ``main_app``.
+        fields: Fixture-style field mapping to persist.
+
+    Returns:
+        None.
+    """
+
     feature_manager.update_or_create(
         slug=FEATURE_SLUG,
         defaults={
@@ -114,20 +189,6 @@ def refresh_feature(apps, schema_editor):
     )
 
 
-def noop_reverse(apps, schema_editor):
-    """Leave Staff Chat Bridge metadata unchanged when reversing this refresh.
-
-    Parameters:
-        apps: Django migration app registry.
-        schema_editor: Active migration schema editor.
-
-    Returns:
-        None.
-    """
-
-    del apps, schema_editor
-
-
 class Migration(migrations.Migration):
     """Refresh Staff Chat Bridge suite feature metadata."""
 
@@ -136,5 +197,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(refresh_feature, noop_reverse),
+        migrations.RunPython(refresh_feature, restore_feature),
     ]

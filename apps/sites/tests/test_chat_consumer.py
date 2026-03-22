@@ -72,26 +72,22 @@ class ChatConsumerPresenceDebounceTests(TestCase):
             )
 
 
-def test_chat_consumer_connect_refuses_when_pages_chat_feature_disabled(monkeypatch):
+def test_chat_consumer_connect_refuses_when_pages_chat_feature_disabled():
     """Pages Chat suite feature should block websocket access even if deployment wiring is on."""
 
     consumer = ChatConsumer()
     consumer.scope = {"session": SimpleNamespace(session_key="visitor-session")}
     consumer.close = mock.AsyncMock()
 
-    monkeypatch.setattr(
-        "apps.sites.consumers.is_pages_chat_runtime_enabled",
-        lambda default=False: False,
-    )
+    consumer._is_pages_chat_runtime_enabled = mock.AsyncMock(return_value=False)
 
     async_to_sync(consumer.connect)()
 
     consumer.close.assert_awaited_once_with()
+    consumer._is_pages_chat_runtime_enabled.assert_awaited_once_with()
 
 
-def test_chat_consumer_connect_refuses_before_session_resolution_when_pages_chat_disabled(
-    monkeypatch,
-):
+def test_chat_consumer_connect_refuses_before_session_resolution_when_pages_chat_disabled():
     """Staff bridge state must not bypass the Pages Chat websocket gate."""
 
     consumer = ChatConsumer()
@@ -102,12 +98,31 @@ def test_chat_consumer_connect_refuses_before_session_resolution_when_pages_chat
     consumer.close = mock.AsyncMock()
     consumer._resolve_session = mock.AsyncMock()
 
-    monkeypatch.setattr(
-        "apps.sites.consumers.is_pages_chat_runtime_enabled",
-        lambda default=False: False,
-    )
+    consumer._is_pages_chat_runtime_enabled = mock.AsyncMock(return_value=False)
 
     async_to_sync(consumer.connect)()
 
     consumer.close.assert_awaited_once_with()
     consumer._resolve_session.assert_not_awaited()
+    consumer._is_pages_chat_runtime_enabled.assert_awaited_once_with()
+
+
+def test_chat_consumer_runtime_gate_wraps_sync_feature_lookup():
+    """Runtime gate should evaluate the feature lookup through Channels' DB wrapper."""
+
+    consumer = ChatConsumer()
+
+    with mock.patch(
+        "apps.sites.consumers.database_sync_to_async",
+        side_effect=lambda func: mock.AsyncMock(
+            side_effect=lambda *args, **kwargs: func(*args, **kwargs)
+        ),
+    ) as wrapped_lookup, mock.patch(
+        "apps.sites.consumers.is_pages_chat_runtime_enabled",
+        return_value=True,
+    ) as gate_lookup:
+        result = async_to_sync(consumer._is_pages_chat_runtime_enabled)()
+
+    assert result is True
+    wrapped_lookup.assert_called_once_with(gate_lookup)
+    gate_lookup.assert_called_once_with(default=False)
