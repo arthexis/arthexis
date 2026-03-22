@@ -32,6 +32,13 @@ CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT = resolve_celery_shutdown_timeout()
 # Legacy alias retained for fixture references and admin guidance.
 CELERY_WORKER_SHUTDOWN_TIMEOUT = CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT
 
+# Explicitly allow only vetted Celery tasks to be dispatched by calendar
+# triggers. Additional tasks can be enabled per deployment via settings
+# overrides.
+CALENDAR_EVENT_TRIGGER_ALLOWED_TASKS = (
+    "apps.content.tasks.run_scheduled_web_samplers",
+)
+
 CELERY_BEAT_SCHEDULE = {
     "heartbeat": {
         "task": "apps.core.tasks.heartbeat",

@@ -4,17 +4,29 @@ from datetime import timedelta, timezone as dt_timezone
 
 from celery import current_app, shared_task
 from celery.exceptions import NotRegistered
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from .models import CalendarEventDispatch, CalendarEventTrigger, GoogleCalendar
+
+
 from .services import (
     CalendarEventWindow,
     GoogleCalendarError,
     GoogleCalendarGateway,
     _extract_event_datetime,
 )
+
+
+def _allowed_calendar_trigger_tasks() -> set[str]:
+    """Return allowlisted Celery task names for calendar event triggers."""
+    return {
+        str(task).strip()
+        for task in getattr(settings, "CALENDAR_EVENT_TRIGGER_ALLOWED_TASKS", ())
+        if str(task).strip()
+    }
 
 
 @shared_task(name="apps.calendars.tasks.sync_google_calendars")
@@ -41,7 +53,10 @@ def run_calendar_event_triggers() -> int:
         .select_related("calendar", "calendar__account")
     )
     now = timezone.now()
+    allowed_tasks = _allowed_calendar_trigger_tasks()
     for trigger in triggers:
+        if trigger.task_name not in allowed_tasks:
+            continue
         horizon = now + timedelta(minutes=max(trigger.lead_time_minutes, 0) + 2)
         window = CalendarEventWindow(time_min=now - timedelta(minutes=2), time_max=horizon)
         gateway = GoogleCalendarGateway(trigger.calendar)

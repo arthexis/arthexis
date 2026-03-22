@@ -1,11 +1,21 @@
 from __future__ import annotations
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
 from apps.gdrive.models import GoogleAccount
+
+
+def _calendar_trigger_allowed_tasks() -> set[str]:
+    """Return configured allowlist for calendar trigger task dispatch."""
+    return {
+        str(task).strip()
+        for task in getattr(settings, "CALENDAR_EVENT_TRIGGER_ALLOWED_TASKS", ())
+        if str(task).strip()
+    }
 
 
 class GoogleCalendar(Entity):
@@ -92,6 +102,17 @@ class CalendarEventTrigger(Entity):
 
     def __str__(self) -> str:  # pragma: no cover
         return self.name
+
+    def clean(self) -> None:
+        """Ensure calendar triggers can only target allowlisted Celery tasks."""
+        super().clean()
+        if self.task_name not in _calendar_trigger_allowed_tasks():
+            raise ValidationError({
+                "task_name": _(
+                    "Task is not permitted for calendar triggers. "
+                    "Update CALENDAR_EVENT_TRIGGER_ALLOWED_TASKS to allow it."
+                )
+            })
 
 
 class CalendarEventDispatch(Entity):
