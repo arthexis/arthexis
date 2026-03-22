@@ -23,10 +23,20 @@ def _is_migration_server_process(cmdline: list[str], base_dir: Path) -> bool:
         return False
 
     legacy_script_path = base_dir / "scripts" / "migration_server.py"
-    if any(part == str(legacy_script_path) for part in parts):
+    legacy_script_suffix = "scripts/migration_server.py"
+    if any(
+        part == str(legacy_script_path)
+        or part == legacy_script_suffix
+        or part.endswith(legacy_script_suffix)
+        for part in parts
+    ):
         return True
 
-    return "utils.devtools.migration_server" in parts
+    for index, part in enumerate(parts[:-1]):
+        if part == "-m" and parts[index + 1] == "utils.devtools.migration_server":
+            return True
+
+    return False
 
 
 def _is_migration_server_running(lock_dir: Path) -> bool:
