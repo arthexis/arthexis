@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.core.management.color import no_style
 from django.db import migrations, models
 
 
@@ -24,19 +25,38 @@ ARCHIVE_FIELDS = (
 )
 
 
+def reset_sequences(models_to_reset, schema_editor):
+    """Reset database sequences for restored models after explicit PK inserts."""
+
+    sql_statements = schema_editor.connection.ops.sequence_reset_sql(
+        no_style(), models_to_reset
+    )
+    if sql_statements:
+        with schema_editor.connection.cursor() as cursor:
+            for statement in sql_statements:
+                cursor.execute(statement)
+
+
 def archive_extensions(apps, schema_editor):
     """Copy hosted JS extension rows into the archival table before deletion."""
 
     ArchivedJsExtension = apps.get_model("extensions", "ArchivedJsExtension")
     JsExtension = apps.get_model("extensions", "JsExtension")
 
-    for extension in JsExtension.objects.all().iterator():
-        defaults = {field: getattr(extension, field) for field in ARCHIVE_FIELDS}
-        ArchivedJsExtension.objects.update_or_create(
+    to_archive = [
+        ArchivedJsExtension(
             original_id=extension.pk,
-            defaults=defaults,
+            **{field: getattr(extension, field) for field in ARCHIVE_FIELDS},
         )
-
+        for extension in JsExtension.objects.all().iterator()
+    ]
+    if to_archive:
+        ArchivedJsExtension.objects.bulk_create(
+            to_archive,
+            update_conflicts=True,
+            unique_fields=["original_id"],
+            update_fields=list(ARCHIVE_FIELDS),
+        )
 
 
 def restore_extensions(apps, schema_editor):
@@ -45,9 +65,21 @@ def restore_extensions(apps, schema_editor):
     ArchivedJsExtension = apps.get_model("extensions", "ArchivedJsExtension")
     JsExtension = apps.get_model("extensions", "JsExtension")
 
-    for archived in ArchivedJsExtension.objects.all().iterator():
-        values = {field: getattr(archived, field) for field in ARCHIVE_FIELDS}
-        JsExtension.objects.update_or_create(id=archived.original_id, defaults=values)
+    to_restore = [
+        JsExtension(
+            id=archived.original_id,
+            **{field: getattr(archived, field) for field in ARCHIVE_FIELDS},
+        )
+        for archived in ArchivedJsExtension.objects.all().iterator()
+    ]
+    if to_restore:
+        JsExtension.objects.bulk_create(
+            to_restore,
+            update_conflicts=True,
+            unique_fields=["id"],
+            update_fields=list(ARCHIVE_FIELDS),
+        )
+    reset_sequences([JsExtension], schema_editor)
 
 
 class Migration(migrations.Migration):
@@ -59,7 +91,15 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="ArchivedJsExtension",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 ("original_id", models.BigIntegerField(unique=True)),
                 ("is_seed_data", models.BooleanField(default=False, editable=False)),
                 ("is_user_data", models.BooleanField(default=False, editable=False)),
