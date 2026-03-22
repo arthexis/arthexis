@@ -305,7 +305,6 @@ include-package-data = true
 "apps.ocpp.migrations" = [ "**/*",]
 "apps.ocpp.models" = [ "**/*",]
 "apps.ocpp.services" = [ "**/*",]
-"apps.ocpp.simulator" = [ "**/*",]
 "apps.ocpp.tests" = [ "**/*",]
 "apps.ocpp.utils" = [ "**/*",]
 "apps.ocpp.views" = [ "**/*",]
