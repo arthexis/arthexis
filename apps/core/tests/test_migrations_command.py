@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 
 def _seed_apps_root(base_dir: Path) -> Path:
@@ -61,6 +62,63 @@ def test_migrations_check_runs_makemigrations_check(monkeypatch):
     call_command("migrations", "check")
 
     assert called == [("makemigrations", (), {"check": True, "dry_run": True})]
+
+
+def test_migrations_pending_succeeds_when_plan_exists(monkeypatch):
+    """migrations pending should exit successfully when the executor reports work."""
+
+    class _FakeGraph:
+        def leaf_nodes(self):
+            return [("core", "0001_initial")]
+
+    class _FakeExecutor:
+        def __init__(self, connection):
+            self.connection = connection
+            self.loader = type("Loader", (), {"graph": _FakeGraph()})()
+
+        def migration_plan(self, targets):
+            assert targets == [("core", "0001_initial")]
+            return [("core", "0001_initial")]
+
+    monkeypatch.setattr(
+        "apps.core.management.commands.migrations.connections",
+        {"default": object()},
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.migrations.MigrationExecutor",
+        _FakeExecutor,
+    )
+
+    call_command("migrations", "pending")
+
+
+def test_migrations_pending_fails_when_plan_is_empty(monkeypatch):
+    """migrations pending should fail when the executor reports a clean graph."""
+
+    class _FakeGraph:
+        def leaf_nodes(self):
+            return []
+
+    class _FakeExecutor:
+        def __init__(self, connection):
+            self.connection = connection
+            self.loader = type("Loader", (), {"graph": _FakeGraph()})()
+
+        def migration_plan(self, targets):
+            assert targets == []
+            return []
+
+    monkeypatch.setattr(
+        "apps.core.management.commands.migrations.connections",
+        {"default": object()},
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.migrations.MigrationExecutor",
+        _FakeExecutor,
+    )
+
+    with pytest.raises(CommandError, match="no pending migrations"):
+        call_command("migrations", "pending")
 
 
 def test_migrations_rebuild_tags_initial_migration(monkeypatch, settings, tmp_path):

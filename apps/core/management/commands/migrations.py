@@ -10,6 +10,10 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
+from django.db import connections
+from django.db.migrations.executor import MigrationExecutor
+from django.db.migrations.exceptions import MigrationSchemaMissing
+from django.db.utils import OperationalError
 
 
 class Command(BaseCommand):
@@ -29,6 +33,15 @@ class Command(BaseCommand):
         subparsers.add_parser(
             "check",
             help="Run makemigrations --check --dry-run.",
+        )
+        pending_parser = subparsers.add_parser(
+            "pending",
+            help="Exit successfully when unapplied migrations exist.",
+        )
+        pending_parser.add_argument(
+            "--database",
+            default="default",
+            help="Database alias used for pending-migration detection.",
         )
 
         clear_parser = subparsers.add_parser(
@@ -69,6 +82,10 @@ class Command(BaseCommand):
             self._clear_migrations(apps_dir)
             return
 
+        if target == "pending":
+            self._pending_migrations(options["database"])
+            return
+
         if target == "rebuild":
             branch_id = options["branch_id"] or f"rebuild-{datetime.now(timezone.utc):%Y%m%d%H%M%S}"
             self._rebuild_migrations(apps_dir, branch_id)
@@ -85,6 +102,8 @@ class Command(BaseCommand):
         call_command("makemigrations", check=True, dry_run=True)
 
     def _clear_migrations(self, apps_dir: Path) -> None:
+        """Remove generated migration modules while keeping package markers."""
+
         if not apps_dir.exists():
             self.stderr.write(f"Apps directory not found: {apps_dir}")
             return
@@ -110,6 +129,8 @@ class Command(BaseCommand):
             self.stdout.write("No migration files found to remove.")
 
     def _rebuild_migrations(self, apps_dir: Path, branch_id: str) -> None:
+        """Regenerate project migrations and tag new initial migrations."""
+
         if not apps_dir.exists():
             self.stderr.write(f"Apps directory not found: {apps_dir}")
             return
@@ -130,9 +151,13 @@ class Command(BaseCommand):
             )
 
     def _collect_project_apps(self, apps_dir: Path) -> list[str]:
+        """Return local app labels that currently expose migrations packages."""
+
         return sorted(path.name for path in apps_dir.iterdir() if (path / "migrations").is_dir())
 
     def _tag_initial_migrations(self, apps_dir: Path, branch_id: str, project_apps: list[str]) -> list[Path]:
+        """Add rebuild guards to regenerated initial migrations."""
+
         tagged: list[Path] = []
         for app_label in project_apps:
             migrations_dir = apps_dir / app_label / "migrations"
@@ -149,6 +174,8 @@ class Command(BaseCommand):
         return tagged
 
     def _inject_guard(self, migration_path: Path, branch_id: str, project_apps: list[str]) -> bool:
+        """Insert a ``BranchTagOperation`` at the top of an initial migration."""
+
         content = migration_path.read_text(encoding="utf-8")
         if "BranchTagOperation" in content:
             return False
@@ -181,3 +208,29 @@ class Command(BaseCommand):
         )
         migration_path.write_text(content.replace(marker, guard_line, 1), encoding="utf-8")
         return True
+
+    def _pending_migrations(self, database: str) -> None:
+        """Report pending migration state with a single database round-trip.
+
+        Parameters:
+            database: Django database alias to inspect.
+
+        Returns:
+            None.
+
+        Raises:
+            CommandError: When the migration graph cannot be inspected.
+        """
+
+        connection = connections[database]
+        try:
+            executor = MigrationExecutor(connection)
+            pending = executor.migration_plan(executor.loader.graph.leaf_nodes())
+        except (OperationalError, MigrationSchemaMissing) as exc:
+            raise CommandError(f"Unable to inspect migration state for {database!r}: {exc}") from exc
+
+        if pending:
+            self.stdout.write("pending")
+            return
+
+        raise CommandError("no pending migrations")

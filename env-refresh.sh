@@ -88,6 +88,7 @@ LOCK_DIR="$SCRIPT_DIR/.locks"
 FORCE_REFRESH=0
 PIP_FRESHNESS_MINUTES=0
 DEPS_ONLY=0
+INSTALL_AND_REFRESH=0
 INSTALL_PREVIEW_DEPS=0
 
 LATEST=0
@@ -114,6 +115,10 @@ while [[ $# -gt 0 ]]; do
       DEPS_ONLY=1
       shift
       ;;
+    --install-and-refresh)
+      INSTALL_AND_REFRESH=1
+      shift
+      ;;
     --preview-deps)
       INSTALL_PREVIEW_DEPS=1
       shift
@@ -123,6 +128,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [ "$DEPS_ONLY" -eq 1 ] && [ "$INSTALL_AND_REFRESH" -eq 1 ]; then
+  echo "Cannot combine --deps-only with --install-and-refresh." >&2
+  exit 1
+fi
 
 if [ ! -f "$PYTHON" ]; then
   if bootstrap_python="$(arthexis_python_bin 2>/dev/null)"; then
@@ -672,6 +682,10 @@ fi
 if [ "$DEPS_ONLY" -eq 1 ]; then
   echo "Dependency refresh complete; skipping env-refresh database updates."
   exit 0
+fi
+
+if [ "$INSTALL_AND_REFRESH" -eq 1 ]; then
+  echo "Dependency refresh complete; continuing with env-refresh in the same transaction."
 fi
 
 install_watch_upgrade_helper || echo "watch-upgrade helper setup failed unexpectedly; delegated auto-upgrades may be unavailable"
