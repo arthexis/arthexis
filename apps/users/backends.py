@@ -354,6 +354,44 @@ def _collect_local_ip_addresses():
     return tuple(sorted(addresses, key=str))
 
 
+def _normalize_ip_candidate(candidate: str) -> str | None:
+    """Normalize a raw socket IP candidate by stripping ports, brackets, and zones."""
+
+    value = str(candidate or "").strip()
+    if not value:
+        return None
+
+    if value.startswith("[") and "]" in value:
+        value = value[1 : value.index("]")]
+    elif ":" in value and value.count(":") == 1:
+        host, port = split_domain_port(value)
+        if host and port:
+            value = host
+
+    if "%" in value:
+        value = value.split("%", 1)[0]
+
+    return value or None
+
+
+def _parse_forwarded_ip_candidate(
+    candidate: str,
+) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """Parse a forwarded IP candidate without relaxing malformed header tokens."""
+
+    value = str(candidate or "").strip()
+    if not value:
+        return None
+
+    if any(token in value for token in ("[", "]", "%")):
+        return None
+
+    try:
+        return ipaddress.ip_address(value)
+    except ValueError:
+        return None
+
+
 class LocalhostAdminBackend(ModelBackend):
     """Allow default admin credentials only from local networks."""
 
@@ -468,17 +506,11 @@ class LocalhostAdminBackend(ModelBackend):
     def _get_remote_ip(self, request):
         """Return the originating client IP, honoring trusted proxy chains only."""
 
-        remote = request.META.get("REMOTE_ADDR", "") if request else ""
-
-        if remote.startswith("[") and "]" in remote:
-            remote = remote[1 : remote.index("]")]
-        elif ":" in remote and remote.count(":") == 1:
-            host, port = split_domain_port(remote)
-            if host and port:
-                remote = host
-
-        if "%" in remote:
-            remote = remote.split("%", 1)[0]
+        remote = _normalize_ip_candidate(
+            request.META.get("REMOTE_ADDR", "") if request else ""
+        )
+        if remote is None:
+            return None
 
         try:
             remote_ip = ipaddress.ip_address(remote)
@@ -495,11 +527,8 @@ class LocalhostAdminBackend(ModelBackend):
 
         trusted_forwarded_proxies = tuple(self._iter_trusted_forwarded_proxies())
         for candidate in reversed([value.strip() for value in forwarded.split(",")]):
-            if not candidate:
-                continue
-            try:
-                candidate_ip = ipaddress.ip_address(candidate)
-            except ValueError:
+            candidate_ip = _parse_forwarded_ip_candidate(candidate)
+            if candidate_ip is None:
                 continue
             if any(candidate_ip in proxy for proxy in trusted_forwarded_proxies):
                 continue

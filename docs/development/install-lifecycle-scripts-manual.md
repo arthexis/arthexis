@@ -65,7 +65,7 @@ Use the preview profile before `python manage.py preview ...` or any intentional
 
 ### 1.2 Windows: `install.bat`
 
-The Windows installer is intentionally simple: it bootstraps `.venv`, installs requirements, applies migrations, and then runs `env-refresh.bat --latest` so developers always start on the latest schema locally. Windows nodes rely on Terminal defaults (development server at port 8888), but you can optionally install a Windows service using `service.bat` once `install.bat` completes. Run `install.bat` again whenever dependencies change.
+The Windows installer is intentionally simple: it bootstraps `.venv`, installs runtime requirements, applies migrations, and then runs `env-refresh.bat --latest` so developers always start on the latest schema locally. Windows nodes rely on Terminal defaults (development server at port 8888), but you can optionally install a Windows service using `service.bat` once `install.bat` completes. Run `install.bat` again whenever dependencies change, and install optional extras separately when you need test, preview, or debug tooling.
 
 ## 2. Runtime helpers
 

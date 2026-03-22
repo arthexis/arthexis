@@ -39,7 +39,6 @@ dependencies = [
   "defusedxml==0.7.1",
   "diff-match-patch==20241021",
   "django-celery-beat==2.8.1",
-  "django-debug-toolbar==6.2.0",
   "django-encrypted-model-fields==0.6.5",
   "django-import-export==4.4.0",
   "django-mermaid==0.1.1",
@@ -73,8 +72,6 @@ dependencies = [
   "pycparser==3.0",
   "pyOpenSSL==26.0.0",
   "PySocks==1.7.1",
-  "pytest-django==4.12.0",
-  "pytest==9.0.2",
   "python-crontab==3.3.0",
   "python-dateutil==2.9.0.post0",
   "python-dotenv==1.2.2",
@@ -129,13 +126,11 @@ ci = [
   "django-stubs==6.0.1",
   "import-linter==2.11",
   "mypy==1.19.1",
-  "playwright==1.58.0",
-  "pytest-timeout==2.4.0",
-  "pytest-xdist==3.8.0",
-  "pytest==9.0.2",
   "ruff==0.15.6",
-  "selenium==4.41.0",
   "twine==6.1.0",
+]
+dev = [
+  "django-debug-toolbar==6.2.0",
 ]
 docs = [
   "docutils==0.22.4",
@@ -150,6 +145,16 @@ nodes = [
   "graphviz==0.21",
   "pyftpdlib==2.2.0",
   "qrcode==8.2",
+]
+preview = [
+  "playwright==1.58.0",
+  "selenium==4.41.0",
+]
+qa = [
+  "pytest-django==4.12.0",
+  "pytest-timeout==2.4.0",
+  "pytest-xdist==3.8.0",
+  "pytest==9.0.2",
 ]
 video = [
   "aiortc==1.14.0",

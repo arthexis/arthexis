@@ -89,6 +89,7 @@ FORCE_REFRESH=0
 PIP_FRESHNESS_MINUTES=0
 DEPS_ONLY=0
 INSTALL_PROFILE="${ARTHEXIS_INSTALL_PROFILE:-runtime}"
+INSTALL_PREVIEW_DEPS=0
 
 LATEST=0
 CLEAN=0
@@ -124,6 +125,8 @@ while [[ $# -gt 0 ]]; do
       ;;
     --with-browser-tests)
       INSTALL_PROFILE=browser-tests
+    --preview-deps)
+      INSTALL_PREVIEW_DEPS=1
       shift
       ;;
     *)
@@ -239,6 +242,20 @@ PY
     echo "  RHEL/Fedora:   sudo dnf install python3-pip" >&2
     return 1
   fi
+}
+
+should_install_preview_dependencies() {
+  case "${ARTHEXIS_INSTALL_PREVIEW_DEPS:-}" in
+    1|true|TRUE|yes|YES)
+      return 0
+      ;;
+  esac
+
+  if [ "$INSTALL_PREVIEW_DEPS" -eq 1 ]; then
+    return 0
+  fi
+
+  return 1
 }
 
 playwright_requirement() {
@@ -694,6 +711,11 @@ if should_install_preview_tooling; then
   ensure_selenium_installed
 else
   echo "Skipping preview/browser test tooling for install profile ${INSTALL_PROFILE}."
+if should_install_preview_dependencies; then
+  ensure_playwright_browsers_installed
+  ensure_selenium_installed
+else
+  echo "Preview/browser dependencies not requested; skipping Playwright and Selenium setup."
 fi
 
 if [ "$DEPS_ONLY" -eq 1 ]; then
