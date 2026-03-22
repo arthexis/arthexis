@@ -33,10 +33,32 @@ def test_is_migration_server_process_accepts_legacy_wrapper_path() -> None:
     )
 
 
+def test_is_migration_server_process_accepts_relative_legacy_wrapper_path() -> None:
+    base_dir = Path("/workspace/arthexis")
+
+    assert _is_migration_server_process(
+        [str(base_dir / ".venv/bin/python"), "scripts/migration_server.py"],
+        base_dir,
+    )
+
+
 def test_is_migration_server_process_rejects_other_commands() -> None:
     base_dir = Path("/workspace/arthexis")
 
     assert not _is_migration_server_process(
         [str(base_dir / ".venv/bin/python"), str(base_dir / "manage.py"), "runserver"],
+        base_dir,
+    )
+
+
+def test_is_migration_server_process_rejects_non_entrypoint_module_argument() -> None:
+    base_dir = Path("/workspace/arthexis")
+
+    assert not _is_migration_server_process(
+        [
+            str(base_dir / ".venv/bin/python"),
+            str(base_dir / "some_script.py"),
+            "--module=utils.devtools.migration_server",
+        ],
         base_dir,
     )
