@@ -5,6 +5,7 @@ export DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-mypy-secret-key}"
 export ARTHEXIS_DISABLE_CELERY="${ARTHEXIS_DISABLE_CELERY:-1}"
 export CELERY_LOG_LEVEL="${CELERY_LOG_LEVEL:-WARNING}"
 export DEBUG="${DEBUG:-0}"
+export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings}"
 
 PYTHON_BIN=".venv/bin/python"
 mypy_output="$(mktemp)"

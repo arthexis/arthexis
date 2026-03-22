@@ -444,7 +444,7 @@ allow_untyped_globals = true
 follow_imports = "silent"
 
 [tool.django-stubs]
-django_settings_module = "config.settings.mypy"
+django_settings_module = "config.settings"
 
 [[tool.mypy.overrides]]
 module = ["psutil"]
