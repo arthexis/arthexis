@@ -88,6 +88,7 @@ LOCK_DIR="$SCRIPT_DIR/.locks"
 FORCE_REFRESH=0
 PIP_FRESHNESS_MINUTES=0
 DEPS_ONLY=0
+INSTALL_PREVIEW_DEPS=0
 
 LATEST=0
 CLEAN=0
@@ -111,6 +112,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --deps-only)
       DEPS_ONLY=1
+      shift
+      ;;
+    --preview-deps)
+      INSTALL_PREVIEW_DEPS=1
       shift
       ;;
     *)
@@ -194,6 +199,20 @@ PY
     echo "  RHEL/Fedora:   sudo dnf install python3-pip" >&2
     return 1
   fi
+}
+
+should_install_preview_dependencies() {
+  case "${ARTHEXIS_INSTALL_PREVIEW_DEPS:-}" in
+    1|true|TRUE|yes|YES)
+      return 0
+      ;;
+  esac
+
+  if [ "$INSTALL_PREVIEW_DEPS" -eq 1 ]; then
+    return 0
+  fi
+
+  return 1
 }
 
 playwright_requirement() {
@@ -643,8 +662,12 @@ else
 fi
 
 ensure_celery_installed
-ensure_playwright_browsers_installed
-ensure_selenium_installed
+if should_install_preview_dependencies; then
+  ensure_playwright_browsers_installed
+  ensure_selenium_installed
+else
+  echo "Preview/browser dependencies not requested; skipping Playwright and Selenium setup."
+fi
 
 if [ "$DEPS_ONLY" -eq 1 ]; then
   echo "Dependency refresh complete; skipping env-refresh database updates."
