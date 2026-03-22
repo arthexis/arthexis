@@ -10,5 +10,6 @@
 .env
 .venv
 venv
+.locks/
 **/node_modules/
 **/media/
