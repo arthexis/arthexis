@@ -1,78 +1,49 @@
 # Recipes
 
-The `apps.recipes` app represents a legacy script-execution surface that still exists in the codebase, but it does **not** match the suite direction for new work.
+The old `apps.recipes` runtime has been decommissioned. Arthexis now treats recipe rows as migration-only legacy data that must be replaced with first-class app behavior before the legacy tables are dropped.
 
-## Project direction
+## Why recipes were removed
 
-- Prefer developed and tested functionality shipped as part of the suite over recipe-like behaviors that force administrators, staff, or users to become programmers.
-- Prefer first-class apps, models, migrations, and guided UI flows when integrating with outside systems.
-- Continue supporting **SIGILS** for field defaults and basic templating without control flow logic.
+- Executable code stored in database rows turned routine administration into ad-hoc programming.
+- The recipe admin and `recipe` management command exposed a server-side code execution surface that did not match the suite direction.
+- The remaining supported behaviors now have clearer homes in typed models, management commands, and operator runbooks.
 
-## Status of this app
+## Inventory and classification
 
-Recipes execute server-side code and therefore remain a high-trust administrative feature. They should be treated as migration debt to be reduced over time, not as a preferred extension mechanism for future capabilities.
+### Fixture inventory
 
-## Legacy API and usage reference
+No current fixture file ships `recipes.recipe` or `recipes.recipeproduct` records.
 
-The feature is still active in the product for supported workflows and maintenance tasks. Use the references below when you need to operate an existing recipe-backed integration while planning a migration into first-class suite functionality.
+### Production-facing references reviewed during decommissioning
 
-### Recipe fields
+| Reference | Classification | Replacement |
+| --- | --- | --- |
+| Shortcut clipboard and output-template behavior | 1. First-class Django app/model workflow | `apps.shortcuts` typed targets and template rendering now own this workflow. |
+| `recipe` CLI command examples such as `validate-license` | 2. Management command or operator runbook | Replace with purpose-built commands in the owning app; do not reintroduce a generic executable-row runner. |
+| Direct `Recipe.objects.get(...).execute(...)` examples | 3. Obsolete behavior that can be archived | Remove from application code and treat as historical migration debt only. |
 
-Each recipe includes:
+## Replacement guidance
 
-- **Slug**: unique identifier used when calling the recipe via CLI.
-- **UUID**: stable natural key for integrations and fixtures.
-- **Verbose name**: human-friendly display value.
-- **Script**: the Python snippet to execute.
-- **Result variable**: the variable name that holds the final result.
+### 1. First-class Django app/model workflow
 
-### Running a recipe from code
+Use the owning app's typed model and runtime instead of a database row that stores executable code.
 
-```python
-from apps.recipes.models import Recipe
+Example: shortcut behaviors now belong in `apps.shortcuts`, where administrators select structured target kinds, identifiers, and payload data. `[ARG.*]` placeholders remain supported for shortcut output templates, but the executable behavior lives in code reviewed with the rest of the app.
 
-recipe = Recipe.objects.get(slug="validate-license")
-execution = recipe.execute("premium", region="na")
-print(execution.result)
-```
+### 2. Management command or operator runbook
 
-The `execute()` method accepts positional and keyword arguments. It resolves `[ARG.*]` placeholders first, then resolves all other `[SIGILS]` before executing the script.
+When an operational task still matters, add a dedicated management command under the app that owns the data and side effects. Document the invocation in that app's operator docs or runbook. Generic recipe execution is intentionally gone.
 
-### Running a recipe from the CLI
+### 3. Obsolete behavior
 
-Recipes can still be run with the shipped management command:
+If a legacy recipe does not map cleanly to a maintained workflow, archive the script in change history or an operator note and do not migrate it back into the product.
 
-```bash
-./command.sh recipe validate-license premium region=na
-```
+## Database upgrade compatibility
 
-On Windows:
+Existing databases can still upgrade through the legacy `recipes` migration path. The migration-only compatibility app preserves historical migrations long enough to:
 
-```bat
-command.bat recipe validate-license premium region=na
-```
+1. satisfy old migration dependencies,
+2. let typed replacements in other apps run, and
+3. drop the obsolete recipe tables once downstream migrations no longer rely on them.
 
-Arguments passed after the recipe identifier are made available as:
-
-- **Positional args** → `[ARG.0]`, `[ARG.1]`, ...
-- **Key/value args** → `[ARG.KEY]` using `key=value` syntax
-
-### `[ARG.*]` placeholders in scripts and templates
-
-`[ARG.*]` placeholders remain supported for recipe-backed workflows, including existing scripts and shortcut output templates.
-
-```python
-allowed = "[ARG.0]" == "premium"
-region = "[ARG.region]"
-
-result = {
-    "allowed": allowed,
-    "region": region,
-}
-```
-
-The recipe result is read from the configured result variable and returned as `execution.result`.
-
-## Security considerations
-
-**Warning:** Recipes are executed as Python code on the server. Granting users permission to create or edit recipes is equivalent to giving them shell access. Only highly trusted administrators should have these permissions.
+This compatibility path is for schema upgrades only. It does **not** restore admin screens, runtime models, or the legacy CLI command.

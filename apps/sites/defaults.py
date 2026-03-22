@@ -50,7 +50,6 @@ DEFAULT_APPLICATION_DESCRIPTIONS: dict[str, str] = {
     "release": "Release management and deployment helpers.",
     "reports": "Reporting pipelines and analytics summaries.",
     "rfid": "RFID tag scanning and notifications.",
-    "recipes": "Scriptable recipes for reusable actions and validations.",
     "repos": "Repository management and release helpers.",
     "screens": "UI screen definitions and templates.",
     "sensors": "Sensor data ingestion and monitoring utilities.",
