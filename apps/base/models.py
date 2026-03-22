@@ -64,12 +64,12 @@ class EntityUserManager(DjangoUserManager):
                 existing.set_unusable_password()
             existing.is_deleted = False
             existing.save(using=self._db)
-            ensure_default_staff_groups(existing)
-            return existing
+            user = existing
+        else:
+            user = super().create_superuser(
+                username=username, email=email, password=password, **extra_fields
+            )
 
-        user = super().create_superuser(
-            username=username, email=email, password=password, **extra_fields
-        )
         ensure_default_staff_groups(user)
         return user
 

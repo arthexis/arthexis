@@ -88,7 +88,8 @@ def ensure_system_user(*, record_updates: bool = False):
     if updates:
         user.save(update_fields=sorted(updates))
 
-    ensure_default_staff_groups(user)
+    added_groups = ensure_default_staff_groups(user)
+    updates.update(f"group:{name}" for name in added_groups)
 
     if record_updates:
         return user, updates

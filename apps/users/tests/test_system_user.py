@@ -34,12 +34,20 @@ def test_ensure_system_user_creates_and_repairs_account():
     user.operate_as = User.objects.create(username="delegate", is_staff=True)
     user.set_password("secret")
     user.save()
+    user.groups.clear()
 
     repaired_user, updated = ensure_system_user(record_updates=True)
     assert repaired_user.pk == user.pk
-    assert {"is_active", "is_staff", "is_superuser", "password", "operate_as"}.issubset(
-        updated
-    )
+    assert {
+        "group:Network Operator",
+        "group:Product Developer",
+        "group:Release Manager",
+        "is_active",
+        "is_staff",
+        "is_superuser",
+        "password",
+        "operate_as",
+    }.issubset(updated)
     assert (
         repaired_user.is_active
         and repaired_user.is_staff
