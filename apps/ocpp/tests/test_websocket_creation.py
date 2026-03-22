@@ -26,7 +26,7 @@ from apps.ocpp.consumers import (
 from apps.ocpp.models import Charger, Simulator
 from apps.simulators import ChargePointSimulator
 from apps.rates.models import RateLimit
-from apps.sites.utils import CHARGE_STATION_MANAGER_GROUP_NAME
+from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME
 from config.asgi import application
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -757,7 +757,7 @@ def test_basic_auth_accepts_charge_station_manager_user():
     manager = get_user_model().objects.create_user(
         username="auth-manager", password="secret"
     )
-    manager.groups.create(name=CHARGE_STATION_MANAGER_GROUP_NAME)
+    manager.groups.create(name=NETWORK_OPERATOR_GROUP_NAME)
     charger = Charger.objects.create(
         charger_id="AUTH-MANAGER", connector_id=None, ws_auth_user=authorized
     )

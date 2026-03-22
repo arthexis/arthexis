@@ -6,6 +6,8 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
+from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME
+
 
 class GroupsCommandTests(TestCase):
     """Coverage for group listing and membership management command behavior."""
@@ -16,14 +18,14 @@ class GroupsCommandTests(TestCase):
         user_model = get_user_model()
         alice = user_model.objects.create_user(username="alice")
         bob = user_model.objects.create_user(username="bob")
-        operators = Group.objects.create(name="operators")
+        operators = Group.objects.create(name=NETWORK_OPERATOR_GROUP_NAME)
         operators.user_set.add(alice, bob)
 
         stdout = io.StringIO()
         call_command("groups", stdout=stdout)
 
         output = stdout.getvalue()
-        assert "operators (2): alice, bob" in output
+        assert f"{NETWORK_OPERATOR_GROUP_NAME} [staff SG] (2): alice, bob" in output
 
     def test_add_and_remove_members(self):
         """The command should allow adding and removing members in one invocation."""

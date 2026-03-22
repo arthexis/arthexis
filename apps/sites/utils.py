@@ -16,6 +16,7 @@ from django.utils.translation import get_language
 
 from apps.celery.utils import celery_feature_enabled
 from apps.features.parameters import get_feature_parameter
+from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME, SITE_OPERATOR_GROUP_NAME
 
 try:  # pragma: no cover - compatibility shim for Django versions without constant
     from django.utils.translation import LANGUAGE_SESSION_KEY
@@ -24,9 +25,6 @@ except ImportError:  # pragma: no cover - fallback when constant is unavailable
 
 
 logger = logging.getLogger(__name__)
-
-SITE_OPERATOR_GROUP_NAME = "Site Operator"
-CHARGE_STATION_MANAGER_GROUP_NAME = "Charge Station Manager"
 
 
 ORIGINAL_REFERER_SESSION_KEY = "pages:original_referer"
@@ -107,8 +105,9 @@ def _user_in_group_by_name(user, group_name: str) -> bool:
 
 
 def user_in_charge_station_manager_group(user) -> bool:
-    """Return ``True`` when ``user`` belongs to the Charge Station Manager group."""
-    return _user_in_group_by_name(user, CHARGE_STATION_MANAGER_GROUP_NAME)
+    """Return ``True`` when ``user`` belongs to the network-operator staff group."""
+
+    return _user_in_group_by_name(user, NETWORK_OPERATOR_GROUP_NAME)
 
 
 def require_site_operator_or_staff(request, *, login_url: str = "pages:login"):

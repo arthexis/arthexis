@@ -18,14 +18,14 @@ def test_security_groups_endpoint_returns_session_user_groups(client):
 
     user_model = get_user_model()
     user = user_model.objects.create_user(username="api-user", password="secret123")
-    group = SecurityGroup.objects.create(name="Operators")
+    group = SecurityGroup.objects.create(name=NETWORK_OPERATOR_GROUP_NAME)
     user.groups.add(group)
     client.force_login(user)
 
     response = client.get("/actions/api/v1/security-groups/")
 
     assert response.status_code == 200
-    assert response.json() == {"groups": ["Operators"]}
+    assert response.json() == {"groups": [NETWORK_OPERATOR_GROUP_NAME]}
 
 
 @pytest.mark.django_db
