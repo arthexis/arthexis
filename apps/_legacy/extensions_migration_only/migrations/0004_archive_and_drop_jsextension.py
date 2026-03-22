@@ -23,6 +23,33 @@ ARCHIVE_FIELDS = (
     "permissions",
     "host_permissions",
 )
+ARCHIVE_BATCH_SIZE = 500
+
+
+def bulk_upsert_in_chunks(queryset, build_instance, manager, unique_fields):
+    """Stream queryset rows into bounded bulk upserts to avoid whole-table materialization."""
+
+    batch = []
+    for source in queryset.iterator():
+        batch.append(build_instance(source))
+        if len(batch) >= ARCHIVE_BATCH_SIZE:
+            manager.bulk_create(
+                batch,
+                update_conflicts=True,
+                unique_fields=unique_fields,
+                update_fields=list(ARCHIVE_FIELDS),
+                batch_size=ARCHIVE_BATCH_SIZE,
+            )
+            batch = []
+
+    if batch:
+        manager.bulk_create(
+            batch,
+            update_conflicts=True,
+            unique_fields=unique_fields,
+            update_fields=list(ARCHIVE_FIELDS),
+            batch_size=ARCHIVE_BATCH_SIZE,
+        )
 
 
 def reset_sequences(models_to_reset, schema_editor):
@@ -43,20 +70,15 @@ def archive_extensions(apps, schema_editor):
     ArchivedJsExtension = apps.get_model("extensions", "ArchivedJsExtension")
     JsExtension = apps.get_model("extensions", "JsExtension")
 
-    to_archive = [
-        ArchivedJsExtension(
+    bulk_upsert_in_chunks(
+        JsExtension.objects.all(),
+        lambda extension: ArchivedJsExtension(
             original_id=extension.pk,
             **{field: getattr(extension, field) for field in ARCHIVE_FIELDS},
-        )
-        for extension in JsExtension.objects.all().iterator()
-    ]
-    if to_archive:
-        ArchivedJsExtension.objects.bulk_create(
-            to_archive,
-            update_conflicts=True,
-            unique_fields=["original_id"],
-            update_fields=list(ARCHIVE_FIELDS),
-        )
+        ),
+        ArchivedJsExtension.objects,
+        ["original_id"],
+    )
 
 
 def restore_extensions(apps, schema_editor):
@@ -65,20 +87,15 @@ def restore_extensions(apps, schema_editor):
     ArchivedJsExtension = apps.get_model("extensions", "ArchivedJsExtension")
     JsExtension = apps.get_model("extensions", "JsExtension")
 
-    to_restore = [
-        JsExtension(
+    bulk_upsert_in_chunks(
+        ArchivedJsExtension.objects.all(),
+        lambda archived: JsExtension(
             id=archived.original_id,
             **{field: getattr(archived, field) for field in ARCHIVE_FIELDS},
-        )
-        for archived in ArchivedJsExtension.objects.all().iterator()
-    ]
-    if to_restore:
-        JsExtension.objects.bulk_create(
-            to_restore,
-            update_conflicts=True,
-            unique_fields=["id"],
-            update_fields=list(ARCHIVE_FIELDS),
-        )
+        ),
+        JsExtension.objects,
+        ["id"],
+    )
     reset_sequences([JsExtension], schema_editor)
 
 
@@ -119,6 +136,13 @@ class Migration(migrations.Migration):
                 ("archived_at", models.DateTimeField(auto_now_add=True)),
             ],
             options={"ordering": ["slug", "original_id"]},
+        ),
+        migrations.AddConstraint(
+            model_name="archivedjsextension",
+            constraint=models.CheckConstraint(
+                condition=models.Q(manifest_version__in=(2, 3)),
+                name="extensions_archivedjsextension_manifest_version_valid",
+            ),
         ),
         migrations.RunPython(archive_extensions, restore_extensions),
         migrations.DeleteModel(name="JsExtension"),

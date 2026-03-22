@@ -279,18 +279,7 @@ def remove_github_resolve_comments_extension(apps, schema_editor):
     if extension is None:
         return
 
-    seeded_keys = (
-        "name",
-        "description",
-        "version",
-        "manifest_version",
-        "matches",
-        "permissions",
-        "host_permissions",
-        "content_script",
-        "options_page",
-    )
-    if all(getattr(extension, key) == defaults[key] for key in seeded_keys):
+    if all(getattr(extension, key) == value for key, value in defaults.items()):
         extension.delete()
 
 

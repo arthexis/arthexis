@@ -27,6 +27,12 @@ class ArchivedJsExtension(models.Model):
     archived_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(manifest_version__in=(2, 3)),
+                name="extensions_archivedjsextension_manifest_version_valid",
+            )
+        ]
         ordering = ["slug", "original_id"]
 
 
