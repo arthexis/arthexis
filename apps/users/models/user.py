@@ -315,11 +315,6 @@ class User(Entity, AbstractUser):
         ordered_numbers = self.phone_numbers.order_by("priority", "pk")
         return list(ordered_numbers)
 
-    def get_phone_numbers_by_priority(self):
-        """Backward-compatible alias for :meth:`get_phones_by_priority`."""
-
-        return self.get_phones_by_priority()
-
     @property
     def odoo_employee(self):
         return self._direct_profile("OdooEmployee", app_label="odoo")
