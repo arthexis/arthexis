@@ -11,7 +11,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.app.models import Application
-from apps.features.admin import FeatureAdmin
+from apps.features.admin import FeatureAdmin, SourceAppListFilter
 from apps.features.models import Feature
 
 
@@ -172,9 +172,7 @@ def test_feature_admin_source_app_filter_lookups_include_feature_apps(rf):
     request = rf.get("/")
     admin_instance = FeatureAdmin(Feature, admin.site)
     source_app_filter = next(
-        list_filter
-        for list_filter in admin_instance.get_list_filter(request)
-        if getattr(list_filter, "__name__", "") == "SourceAppListFilter"
+        list_filter for list_filter in admin_instance.get_list_filter(request) if list_filter is SourceAppListFilter
     )
     list_filter = source_app_filter(request, {}, Feature, admin_instance)
 
