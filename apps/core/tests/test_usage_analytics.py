@@ -205,4 +205,3 @@ class UsageAnalyticsBootstrapFallbackTests(TestCase):
             side_effect=OperationalError("no such table: features_feature"),
         ):
             self.assertFalse(usage_analytics_enabled())
-
