@@ -65,12 +65,4 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.certs.tasks.refresh_certificate_expirations",
         "schedule": crontab(minute=0, hour=2),
     },
-    "google_calendar_snapshot_sync": {
-        "task": "apps.calendars.tasks.sync_google_calendars",
-        "schedule": timedelta(hours=1),
-    },
-    "google_calendar_trigger_runner": {
-        "task": "apps.calendars.tasks.run_calendar_event_triggers",
-        "schedule": timedelta(minutes=15),
-    },
 }
