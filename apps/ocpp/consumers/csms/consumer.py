@@ -9,6 +9,7 @@ import re
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from apps.energy.models import CustomerAccount
 from apps.links.models import Reference
@@ -2887,7 +2888,15 @@ class CSMSConsumer(
             self._reconcile_reported_charging_profiles(report, charger=charger)
             self._persist_reported_charging_profiles(report, charger=charger)
 
-        await database_sync_to_async(_persist_and_reconcile)()
+        try:
+            await database_sync_to_async(_persist_and_reconcile)()
+        except ValidationError as exc:
+            store.add_log(
+                self.store_key,
+                f"ReportChargingProfiles ignored: {exc}",
+                log_type="charger",
+            )
+            return {}
         self._log_ocpp201_notification("ReportChargingProfiles", payload)
         return {}
 
