@@ -1862,6 +1862,56 @@ async def test_report_charging_profiles_rejects_invalid_schedule_values(monkeypa
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_rolls_back_partial_profile_writes(monkeypatch):
+    """Schedule validation failures should not leave orphaned charging profiles."""
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key("report-partial-write", 1)
+    consumer.charger_id = "report-partial-write"
+    consumer.charger = None
+    consumer.aggregate_charger = None
+    consumer.connector_value = 1
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    logs: list[str] = []
+    monkeypatch.setattr(
+        store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry)
+    )
+
+    result = await consumer._handle_report_charging_profiles_action(
+        {
+            "requestId": 24,
+            "evseId": 1,
+            "chargingProfile": {
+                "chargingProfileId": 4,
+                "stackLevel": 1,
+                "chargingProfilePurpose": ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+                "chargingProfileKind": ChargingProfile.Kind.ABSOLUTE,
+                "chargingSchedule": {
+                    "chargingRateUnit": ChargingProfile.RateUnit.AMP,
+                    "duration": 60,
+                    "chargingSchedulePeriod": [
+                        {"startPeriod": 0, "limit": 8, "numberPhases": 2}
+                    ],
+                },
+            },
+        },
+        "msg-rcp-partial-write-1",
+        "",
+        "",
+    )
+
+    assert result == {}
+    assert any(entry.startswith("ReportChargingProfiles ignored:") for entry in logs)
+    assert any("number_phases must be 1 or 3" in entry for entry in logs)
+    count = await database_sync_to_async(ChargingProfile.objects.count)()
+    assert count == 0
+    schedule_count = await database_sync_to_async(ChargingSchedule.objects.count)()
+    assert schedule_count == 0
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
 async def test_report_charging_profiles_ignores_invalid_profile_values(monkeypatch):
     """Malformed profile values should be logged instead of crashing persistence."""
 
