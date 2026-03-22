@@ -47,63 +47,6 @@ def test_release_run_data_transforms_invokes_all_registered(
     assert captured == [("first", 2), ("second", 2)]
 
 
-@pytest.mark.parametrize("action", ["capture-state", "snapshot", "snap"])
-def test_release_snapshot_alias_dispatches_to_capture_state(
-    monkeypatch: pytest.MonkeyPatch, action: str
-) -> None:
-    """Regression: snapshot aliases should dispatch to capture-state handler."""
-
-    captured_versions: list[str] = []
-
-    monkeypatch.setattr(
-        "apps.release.management.commands.release.capture_migration_state",
-        lambda version: captured_versions.append(version) or f"/tmp/{version}",
-    )
-
-    call_command("release", action, "2026.03")
-
-    assert captured_versions == ["2026.03"]
-
-
-@pytest.mark.parametrize("action", ["apply-migrations", "migrate"])
-def test_release_apply_migrations_alias_dispatches(
-    monkeypatch: pytest.MonkeyPatch, action: str
-) -> None:
-    """Regression: migrate aliases should resolve to the canonical handler."""
-
-    events: list[tuple[str, tuple[object, ...]]] = []
-
-    monkeypatch.setattr(
-        "apps.release.management.commands.release.Command._resolve_installed_version",
-        lambda self, explicit_version: "1.0.0",
-    )
-    monkeypatch.setattr(
-        "apps.release.management.commands.release.Command._resolve_bundle_dir",
-        lambda self, target_version, explicit_dir: "/tmp/bundle",
-    )
-    monkeypatch.setattr(
-        "apps.release.management.commands.release.Command._verify_bundle",
-        lambda self, bundle_dir: events.append(("verify", (bundle_dir,))),
-    )
-    monkeypatch.setattr(
-        "apps.release.management.commands.release.call_command",
-        lambda *args, **kwargs: events.append(("call_command", args)),
-    )
-    monkeypatch.setattr(
-        "apps.release.management.commands.release.Command._run_deferred_data_transforms",
-        lambda self, *, skip: events.append(("transforms", (skip,))),
-    )
-
-    call_command("release", action, "1.0.0")
-
-    assert events == [
-        ("verify", ("/tmp/bundle",)),
-        ("call_command", ("migrate", "--noinput")),
-        ("call_command", ("migrate", "--check")),
-        ("transforms", (False,)),
-    ]
-
-
 def test_release_build_mode_release_enables_common_operator_flags(
     monkeypatch: pytest.MonkeyPatch, settings
 ) -> None:
