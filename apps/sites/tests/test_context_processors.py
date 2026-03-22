@@ -7,6 +7,7 @@ from django.db.utils import OperationalError
 from django.test import RequestFactory
 
 from apps.features.models import Feature
+from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME
 from apps.groups.models import SecurityGroup
 from apps.modules.models import Module
 from apps.nodes.models import NodeFeature, NodeRole
@@ -353,10 +354,10 @@ def test_nav_links_excludes_group_gated_module_for_non_member(monkeypatch):
     cache.clear()
 
     role = NodeRole.objects.create(name="Terminal")
-    group = SecurityGroup.objects.create(name="Operators")
+    group = SecurityGroup.objects.create(name=NETWORK_OPERATOR_GROUP_NAME)
     module = Module.objects.create(
         path="/ops/",
-        menu="Operators",
+        menu=NETWORK_OPERATOR_GROUP_NAME,
         security_group=group,
         security_mode=Module.SECURITY_EXCLUSIVE,
     )

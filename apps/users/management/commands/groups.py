@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.groups.constants import STAFF_SECURITY_GROUP_NAMES
 from apps.users.management.commands.utils import coerce_option_list
 
 
@@ -92,7 +93,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Updated membership for group '{group.name}'."))
 
     def _list_groups(self) -> None:
-        """Render all groups with current member counts and usernames."""
+        """Render all groups with current member counts and staff-group markers."""
 
         groups = Group.objects.order_by("name")
         if not groups.exists():
@@ -102,4 +103,5 @@ class Command(BaseCommand):
         for group in groups:
             members = list(group.user_set.order_by("username").values_list("username", flat=True))
             members_text = ", ".join(members) if members else "(no members)"
-            self.stdout.write(f"{group.name} ({len(members)}): {members_text}")
+            marker = " [staff SG]" if group.name in STAFF_SECURITY_GROUP_NAMES else ""
+            self.stdout.write(f"{group.name}{marker} ({len(members)}): {members_text}")

@@ -12,6 +12,7 @@ from django.test import RequestFactory
 from django.utils import timezone
 
 from apps.actions.models import DashboardAction, RemoteAction, RemoteActionToken
+from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME
 from apps.actions.openapi import build_openapi_spec
 from apps.groups.models import SecurityGroup
 
@@ -22,7 +23,7 @@ def test_security_groups_endpoint_returns_authorized_user_groups(client):
 
     user_model = get_user_model()
     user = user_model.objects.create_user(username="api-user", password="secret123")
-    group = SecurityGroup.objects.create(name="Operators")
+    group = SecurityGroup.objects.create(name=NETWORK_OPERATOR_GROUP_NAME)
     user.groups.add(group)
     _, raw_key = RemoteActionToken.issue_for_user(user)
 
@@ -32,7 +33,7 @@ def test_security_groups_endpoint_returns_authorized_user_groups(client):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"groups": ["Operators"]}
+    assert response.json() == {"groups": [NETWORK_OPERATOR_GROUP_NAME]}
 
 
 @pytest.mark.django_db
