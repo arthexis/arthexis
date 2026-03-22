@@ -51,6 +51,38 @@ kill_from_pid_file() {
   rm -f "$pid_file"
 }
 
+kill_vscode_runserver() {
+  local state_file="$LOCK_DIR/vscode_runserver.json"
+
+  if [ ! -f "$state_file" ]; then
+    return 0
+  fi
+
+  local pid
+  pid=$(python3 - <<'PY' "$state_file"
+import json
+import sys
+from pathlib import Path
+
+state_path = Path(sys.argv[1])
+try:
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+except (FileNotFoundError, json.JSONDecodeError, OSError):
+    print("")
+else:
+    pid = payload.get("pid")
+    print(pid if isinstance(pid, int) else "")
+PY
+)
+
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    echo "Stopping VS Code runserver process (PID $pid) from $state_file"
+    kill "$pid" 2>/dev/null || true
+  fi
+
+  rm -f "$state_file"
+}
+
 # Use non-interactive sudo by default, but on WSL with a TTY allow a
 # one-time credential prompt so upgrade flows can continue.
 SUDO="sudo -n"
@@ -380,13 +412,16 @@ kill_from_pid_file "$CELERY_BEAT_PID_FILE" "Celery beat"
 if [ "$SKIP_LCD_STOP" != "1" ] && [ "$SKIP_LCD_STOP" != "true" ]; then
   kill_from_pid_file "$LCD_PID_FILE" "LCD screen"
 fi
+kill_vscode_runserver
 
 # Fall back to stopping locally-run processes
 PATTERN="manage.py runserver"
 if [ "$ALL" = true ]; then
   pkill -f "$PATTERN" || true
 else
-pkill -f "$PATTERN 0.0.0.0:$PORT" || true
+  pkill -f "$PATTERN 0.0.0.0:$PORT" || true
+  pkill -f "$PATTERN 127.0.0.1:$PORT" || true
+  pkill -f "$PATTERN \\[::1\\]:$PORT" || true
 fi
 # Also stop any Celery components started by start.sh
 pkill -f "celery -A config" || true

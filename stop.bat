@@ -76,11 +76,14 @@ call :stop_pidfile "%LOCK_DIR%\celery_beat.pid" "Celery beat"
 if /I not "%ARTHEXIS_SKIP_LCD_STOP%"=="1" if /I not "%ARTHEXIS_SKIP_LCD_STOP%"=="true" (
     call :stop_pidfile "%LOCK_DIR%\lcd.pid" "LCD screen"
 )
+call :stop_vscode_runserver "%LOCK_DIR%\vscode_runserver.json"
 
 if defined ALL (
     call :kill_by_commandline "manage.py runserver"
 ) else (
     call :kill_by_commandline "manage.py runserver 0.0.0.0:%PORT%"
+    call :kill_by_commandline "manage.py runserver 127.0.0.1:%PORT%"
+    call :kill_by_commandline "manage.py runserver [::1]:%PORT%"
 )
 call :kill_by_commandline "celery -A config"
 call :kill_by_commandline "manage.py rfid_service"
@@ -104,6 +107,19 @@ if defined FOUND_PID (
 )
 del /f /q "%PID_FILE%"
 set "FOUND_PID="
+exit /b 0
+
+:stop_vscode_runserver
+set "STATE_FILE=%~1"
+if not exist "%STATE_FILE%" exit /b 0
+set "STATE_PID="
+for /f %%p in ('powershell -NoProfile -Command "$payload = Get-Content -LiteralPath ''%STATE_FILE%'' -Raw | ConvertFrom-Json; if ($payload.pid -is [int]) { $payload.pid }"') do set STATE_PID=%%p
+if defined STATE_PID (
+    echo Stopping VS Code runserver process (PID %STATE_PID%) from %STATE_FILE%
+    taskkill /PID %STATE_PID% /T /F >nul 2>&1
+)
+del /f /q "%STATE_FILE%"
+set "STATE_PID="
 exit /b 0
 
 :kill_by_commandline
