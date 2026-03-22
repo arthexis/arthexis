@@ -83,7 +83,7 @@ if defined ALL (
 ) else (
     call :kill_by_commandline "manage.py runserver 0.0.0.0:%PORT%"
     call :kill_by_commandline "manage.py runserver 127.0.0.1:%PORT%"
-    call :kill_by_commandline "manage.py runserver [::1]:%PORT%"
+    call :kill_by_commandline "manage.py runserver ``[::1``]:%PORT%"
 )
 call :kill_by_commandline "celery -A config"
 call :kill_by_commandline "manage.py rfid_service"
