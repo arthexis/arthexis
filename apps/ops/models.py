@@ -38,9 +38,6 @@ def _sanitize_remediation_url(remediation_url: str) -> str:
     if parsed.scheme in {"http", "https"}:
         return candidate
 
-    return "/admin/"
-
-
 class OperationScreen(Entity):
     """Defines an operation that staff can execute through one or more screens."""
 
@@ -108,7 +105,7 @@ class OperationScreen(Entity):
             return None, ""
 
         logger.warning("Blocked validation_sql execution for operation %s", self.pk)
-        return False, VALIDATION_SQL_DISABLED_MESSAGE
+        return None, _("Custom SQL validation is disabled for security reasons.")
 
 
 class OperationLink(Entity):
