@@ -212,6 +212,62 @@ def test_status_view_disables_event_admin_links_when_admin_urls_missing(
     assert "admin/ocpp/transaction/1234/change/" not in html
 
 
+
+
+@pytest.mark.django_db
+def test_status_view_hides_non_transaction_events_for_non_staff(client):
+    """Non-staff users should not receive non-transaction log details."""
+
+    user = get_user_model().objects.create_user(
+        username="status-events-non-staff", password="pass"
+    )
+    client.force_login(user)
+    charger = Charger.objects.create(charger_id="STATUS-EVENTS-NON-STAFF", connector_id=1)
+    identity = store.identity_key(charger.charger_id, charger.connector_id)
+    store.add_log(
+        identity,
+        "DiagnosticsStatusNotification: status=Uploaded, location=https://diag.example/upload?token=secret",
+    )
+
+    response = client.get(
+        reverse(
+            "ocpp:charger-status-connector",
+            args=[charger.charger_id, charger.connector_slug],
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.context["non_transaction_events"] == []
+    html = response.content.decode()
+    assert "diag.example" not in html
+
+
+@pytest.mark.django_db
+def test_status_view_shows_non_transaction_events_for_staff(client):
+    """Staff users should keep access to non-transaction events in status view."""
+
+    user = get_user_model().objects.create_user(
+        username="status-events-staff", password="pass", is_staff=True
+    )
+    client.force_login(user)
+    charger = Charger.objects.create(charger_id="STATUS-EVENTS-STAFF", connector_id=1)
+    identity = store.identity_key(charger.charger_id, charger.connector_id)
+    store.add_log(identity, "Connected websocket")
+
+    response = client.get(
+        reverse(
+            "ocpp:charger-status-connector",
+            args=[charger.charger_id, charger.connector_slug],
+        )
+    )
+
+    assert response.status_code == 200
+    assert any(
+        item["event"] == "Connected websocket"
+        for item in response.context["non_transaction_events"]
+    )
+
+
 @pytest.mark.django_db
 def test_status_view_legacy_status_path_is_available(client):
     """Regression: legacy charger status path should render instead of 404."""

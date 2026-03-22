@@ -521,7 +521,9 @@ def charger_status(request, cid, connector=None):
     connector_overview = [
         item for item in overview if item["charger"].connector_id is not None
     ]
-    non_transaction_events = _important_non_transaction_events(charger, charger)
+    non_transaction_events = []
+    if request.user.is_staff:
+        non_transaction_events = _important_non_transaction_events(charger, charger)
     show_connector_tabs = False
     show_connector_overview_cards = (
         charger.connector_id is None and connector_count > 1
