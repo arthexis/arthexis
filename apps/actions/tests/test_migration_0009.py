@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import importlib
 
-import pytest
 from django.db import connection
+import pytest
 
 
 migration = importlib.import_module(
@@ -46,14 +46,21 @@ def test_clear_archive_tables_removes_prior_archived_rows():
     schema_editor = _SchemaEditorStub()
 
     with connection.cursor() as cursor:
+        for table_name in (
+            migration.REMOTE_ACTION_ARCHIVE_TABLE,
+            migration.REMOTE_ACTION_TOKEN_ARCHIVE_TABLE,
+            migration.DASHBOARD_ACTION_ARCHIVE_TABLE,
+        ):
+            cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+
         cursor.execute(
-            f"CREATE TABLE IF NOT EXISTS {migration.REMOTE_ACTION_ARCHIVE_TABLE} (id INTEGER PRIMARY KEY, archived_at TEXT)"
+            f"CREATE TABLE {migration.REMOTE_ACTION_ARCHIVE_TABLE} (id INTEGER PRIMARY KEY, archived_at TEXT)"
         )
         cursor.execute(
-            f"CREATE TABLE IF NOT EXISTS {migration.REMOTE_ACTION_TOKEN_ARCHIVE_TABLE} (id INTEGER PRIMARY KEY, archived_at TEXT)"
+            f"CREATE TABLE {migration.REMOTE_ACTION_TOKEN_ARCHIVE_TABLE} (id INTEGER PRIMARY KEY, archived_at TEXT)"
         )
         cursor.execute(
-            f'CREATE TABLE IF NOT EXISTS {migration.DASHBOARD_ACTION_ARCHIVE_TABLE} (id INTEGER PRIMARY KEY, "order" INTEGER, archived_at TEXT)'
+            f'CREATE TABLE {migration.DASHBOARD_ACTION_ARCHIVE_TABLE} (id INTEGER PRIMARY KEY, "order" INTEGER, archived_at TEXT)'
         )
         cursor.execute(
             f"INSERT INTO {migration.REMOTE_ACTION_ARCHIVE_TABLE} (id, archived_at) VALUES (1, CURRENT_TIMESTAMP)"
