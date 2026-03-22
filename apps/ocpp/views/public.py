@@ -438,6 +438,12 @@ def charger_status(request, cid, connector=None):
         }
         for mode, label in date_view_options.items()
     ]
+    pagination_params = request.GET.copy()
+    pagination_params.pop("page", None)
+    pagination_query = pagination_params.urlencode()
+    session_params = request.GET.copy()
+    session_params.pop("session", None)
+    session_query = session_params.urlencode()
     chart_data = build_charger_chart_payload(
         user=request.user,
         cid=cid,
