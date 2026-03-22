@@ -24,6 +24,7 @@ def test_drop_upload_creates_content_sample_and_returns_change_url(
     tmp_path,
 ):
     original_log_dir = settings.LOG_DIR
+    original_count = ContentSample.objects.count()
     settings.LOG_DIR = tmp_path
     try:
         response = admin_client.post(
@@ -44,6 +45,8 @@ def test_drop_upload_creates_content_sample_and_returns_change_url(
     assert response.status_code == 201
     payload = response.json()
 
+    assert ContentSample.objects.count() == original_count + 1
+
     sample = ContentSample.objects.get(pk=payload["sample_id"])
     assert sample.user == admin_user
     assert sample.kind == ContentSample.TEXT
@@ -58,3 +61,31 @@ def test_drop_upload_creates_content_sample_and_returns_change_url(
     assert sample_path.is_absolute()
     assert sample_path.exists()
     assert sample_path.read_text() == "hello drag and drop"
+
+
+def test_drop_upload_rejects_files_that_exceed_size_limit(
+    admin_client,
+    settings,
+    tmp_path,
+):
+    settings.LOG_DIR = tmp_path
+    settings.CONTENT_DROP_MAX_UPLOAD_SIZE = 8
+    original_count = ContentSample.objects.count()
+
+    response = admin_client.post(
+        reverse("admin:content_contentsample_drop_upload"),
+        {
+            "file": SimpleUploadedFile(
+                "notes.txt",
+                b"0123456789",
+                content_type="text/plain",
+            )
+        },
+        HTTP_ACCEPT="application/json",
+        HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "File exceeds the allowed size."}
+    assert ContentSample.objects.count() == original_count
+    assert not list(tmp_path.glob("content-drops/*"))

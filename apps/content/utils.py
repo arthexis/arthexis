@@ -12,8 +12,10 @@ import subprocess
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 from django.utils.text import get_valid_filename
+from django.utils.translation import gettext_lazy as _
 
 from .classifiers import run_default_classifiers, suppress_default_classifiers
 from .models import ContentSample
@@ -28,7 +30,7 @@ except Exception:  # pragma: no cover - fallback when dependency is unavailable
 
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
 DEFAULT_SCREENSHOT_RESOLUTION = (1280, 720)
-CONTENT_DROP_DIR = settings.LOG_DIR / "content-drops"
+DEFAULT_MAX_CONTENT_DROP_SIZE = 10 * 1024 * 1024
 _RUNSERVER_PORT_PATTERN = re.compile(r":(\d{2,5})(?:\D|$)")
 _RUNSERVER_PORT_FLAG_PATTERN = re.compile(r"--port(?:=|\s+)(\d{2,5})", re.IGNORECASE)
 
@@ -46,26 +48,56 @@ def _detect_uploaded_sample_kind(uploaded_file: UploadedFile) -> str:
     return ContentSample.TEXT
 
 
+def _get_content_drop_dir() -> Path:
+    """Return the repository-local directory used for admin drag-and-drop uploads."""
+
+    return settings.LOG_DIR / "content-drops"
+
+
 def _build_uploaded_sample_path(filename: str) -> Path:
     """Return a unique repository-local storage path for an uploaded content sample."""
 
-    CONTENT_DROP_DIR.mkdir(parents=True, exist_ok=True)
+    content_drop_dir = _get_content_drop_dir()
+    content_drop_dir.mkdir(parents=True, exist_ok=True)
     safe_name = get_valid_filename(Path(filename or "upload.bin").name) or "upload.bin"
     stem = Path(safe_name).stem or "upload"
     suffix = Path(safe_name).suffix
-    return CONTENT_DROP_DIR / f"{stem}-{uuid.uuid4().hex}{suffix}"
+    return content_drop_dir / f"{stem}-{uuid.uuid4().hex}{suffix}"
+
+
+def _get_max_content_drop_size() -> int:
+    """Return the maximum allowed size for admin drag-and-drop uploads in bytes."""
+
+    return int(
+        getattr(settings, "CONTENT_DROP_MAX_UPLOAD_SIZE", DEFAULT_MAX_CONTENT_DROP_SIZE)
+    )
+
+
+def _validate_uploaded_content_sample(uploaded_file: UploadedFile) -> None:
+    """Validate an uploaded content sample before it is persisted.
+
+    Parameters:
+        uploaded_file: Incoming Django uploaded file object.
+
+    Raises:
+        ValidationError: If the upload exceeds the configured size limit.
+    """
+
+    size = getattr(uploaded_file, "size", 0) or 0
+    if size > _get_max_content_drop_size():
+        raise ValidationError(_("File exceeds the allowed size."))
 
 
 def _read_uploaded_text(path: Path, *, limit: int = 100_000) -> str | None:
     """Return decoded text content for uploaded files when feasible."""
 
     try:
-        payload = path.read_bytes()
+        with path.open("rb") as handle:
+            snippet = handle.read(limit)
     except OSError:
         return None
-    if b"\x00" in payload:
+    if b"\x00" in snippet:
         return None
-    snippet = payload[:limit]
     try:
         return snippet.decode("utf-8")
     except UnicodeDecodeError:
@@ -87,6 +119,7 @@ def create_uploaded_content_sample(
         The newly created or duplicate-linked content sample.
     """
 
+    _validate_uploaded_content_sample(uploaded_file)
     destination = _build_uploaded_sample_path(uploaded_file.name)
     with destination.open("wb") as handle:
         for chunk in uploaded_file.chunks():
@@ -125,9 +158,12 @@ def save_content_sample(
     original = path
     if not path.is_absolute():
         path = settings.LOG_DIR / path
+    digest = hashlib.sha256()
     with path.open("rb") as fh:
-        digest = hashlib.sha256(fh.read()).hexdigest()
-    existing = ContentSample.objects.filter(hash=digest).first()
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    digest_hex = digest.hexdigest()
+    existing = ContentSample.objects.filter(hash=digest_hex).first()
     if existing:
         if link_duplicates:
             logger.info("Duplicate %s; reusing existing sample", duplicate_log_context)
@@ -139,7 +175,7 @@ def save_content_sample(
         "node": node,
         "path": stored_path,
         "method": method,
-        "hash": digest,
+        "hash": digest_hex,
         "kind": kind,
     }
     if transaction_uuid is not None:

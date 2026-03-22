@@ -5,7 +5,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib import admin, messages
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import NoReverseMatch, path, reverse
@@ -140,10 +140,18 @@ class ContentSampleAdmin(EntityModelAdmin):
             self.message_user(request, _("No file was uploaded."), level=messages.ERROR)
             return redirect(request.META.get("HTTP_REFERER", reverse("admin:index")))
 
-        sample = create_uploaded_content_sample(
-            uploaded_file=uploaded_file,
-            user=request.user,
-        )
+        try:
+            sample = create_uploaded_content_sample(
+                uploaded_file=uploaded_file,
+                user=request.user,
+            )
+        except ValidationError as exc:
+            message = exc.messages[0] if exc.messages else _("The uploaded file is invalid.")
+            response = JsonResponse({"error": message}, status=400)
+            if self._wants_json_response(request):
+                return response
+            self.message_user(request, message, level=messages.ERROR)
+            return redirect(request.META.get("HTTP_REFERER", reverse("admin:index")))
         change_url = reverse("admin:content_contentsample_change", args=[sample.pk])
 
         if self._wants_json_response(request):
