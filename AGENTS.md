@@ -20,38 +20,6 @@ Agents must prioritize **clarity, correctness, and harmony with the existing cod
 
 Agents must **not overprotect admins** or artificially restrict capabilities unless there is a clear security concern.
 
----
-
-# Cost Visibility
-
-Agents must treat development time and delivery resources as first-class costs that are part of every request, even when they are not explicitly called out. These costs must be surfaced so product managers can evaluate tradeoffs clearly.
-
-## Request Planning
-
-For every meaningful request, agents must account for and communicate the expected cost profile, including:
-
-* estimated implementation time, expressed in hours
-* testing and validation time, expressed in hours
-* review and coordination overhead, expressed in hours when it is time-based
-* infrastructure, tooling, or third-party service usage when relevant
-* ongoing maintenance or operational burden when relevant
-
-When presenting options, agents should note material cost differences between approaches and identify the main cost drivers.
-
-## Work Summaries
-
-All work summaries, handoffs, and similar completion reports must include a concise cost section that makes invisible effort visible to product managers, unless the response must remain in a fixed schema or other machine-readable format that cannot accommodate additional prose. In those format-constrained cases, include the cost information only where the output contract provides a suitable field. The section should include:
-
-* estimated development time spent, and total expected time for ongoing work, both expressed in hours
-* notable resource consumption or external service costs
-* any important follow-up or maintenance costs still implied by the change
-
-If a cost is negligible or no external spend is involved, state that explicitly rather than omitting the category.
-
-When reporting development time, agents must always estimate it in hours rather than minutes, days, or vague ranges.
-
----
-
 # GitHub Interaction
 
 When retrieving GitHub metadata (issues, PRs, discussions, etc.):
