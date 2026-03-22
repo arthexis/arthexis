@@ -58,6 +58,13 @@ def test_repository_issue_configure_view_updates_feature_and_repository(client, 
             "is_enabled": False,
         },
     )
+    github_reporting_feature, _ = Feature.objects.update_or_create(
+        slug="github-issue-reporting",
+        defaults={
+            "display": "GitHub Issue Reporting",
+            "is_enabled": False,
+        },
+    )
     package = Package.objects.create(
         name="suite",
         repository_url="https://github.com/arthexis/old",
@@ -77,16 +84,19 @@ def test_repository_issue_configure_view_updates_feature_and_repository(client, 
         reverse("admin:repos_repositoryissue_configure", args=[issue.pk]),
         data={
             "feedback_ingestion_enabled": "on",
+            "github_issue_reporting_enabled": "on",
             "active_repository_url": "https://github.com/arthexis/new-repo",
         },
         follow=True,
     )
 
     feature.refresh_from_db()
+    github_reporting_feature.refresh_from_db()
     package.refresh_from_db()
 
     assert response.status_code == 200
     assert feature.is_enabled is True
+    assert github_reporting_feature.is_enabled is True
     assert package.repository_url == "https://github.com/arthexis/new-repo"
 
 
@@ -175,7 +185,9 @@ def test_repository_issue_configure_view_renders_when_feature_table_is_unavailab
     )
 
     assert response.status_code == 200
-    assert "Disabled or missing" in response.content.decode()
+    content = response.content.decode()
+    assert "Disabled or missing" in content
+    assert "Automatic GitHub exception reporting" in content
 
 
 def test_repository_issue_configure_view_warns_when_feature_table_is_unavailable_on_save(
@@ -209,6 +221,7 @@ def test_repository_issue_configure_view_warns_when_feature_table_is_unavailable
         reverse("admin:repos_repositoryissue_configure", args=[issue.pk]),
         data={
             "feedback_ingestion_enabled": "on",
+            "github_issue_reporting_enabled": "on",
             "active_repository_url": "https://github.com/arthexis/new-repo",
         },
         follow=True,
