@@ -76,6 +76,7 @@ def test_legacy_camera_shim_remains_importable_for_prototype_integrations():
 
 
 def test_removed_runtime_apps_only_remain_available_through_explicit_legacy_shims():
+    assert "apps.extensions" not in settings_apps.LOCAL_APPS
     assert "apps.fitbit" not in settings_apps.LOCAL_APPS
     assert "apps.prompts" not in settings_apps.LOCAL_APPS
     assert "apps.socials" not in settings_apps.LOCAL_APPS
@@ -103,6 +104,7 @@ def test_legacy_migration_apps_are_kept_sorted_for_maintainability():
 
 def test_legacy_runtime_packages_are_derived_from_legacy_migration_apps():
     assert settings_apps._legacy_runtime_app_packages() == {
+        "apps.extensions",
         "apps.prompts",
         "apps.socials",
         "apps.survey",
