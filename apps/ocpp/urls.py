@@ -61,6 +61,7 @@ urlpatterns = [
         name="charger-log-connector",
     ),
     path("c/<str:cid>/status/", views.charger_status, name="charger-status"),
+    path("c/<str:cid>/status/chart/", views.charger_status_chart, name="charger-status-chart"),
     path(
         "charger/<str:cid>/status/", views.charger_status, name="charger-status-legacy"
     ),
@@ -73,6 +74,11 @@ urlpatterns = [
         "c/<str:cid>/connector/<slug:connector>/status/",
         views.charger_status,
         name="charger-status-connector",
+    ),
+    path(
+        "c/<str:cid>/connector/<slug:connector>/status/chart/",
+        views.charger_status_chart,
+        name="charger-status-chart-connector",
     ),
     path("rfid/validator/", include("apps.cards.urls")),
     path(

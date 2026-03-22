@@ -30,14 +30,12 @@ def _write_app(apps_root: Path, relative_parts: tuple[str, ...]) -> None:
 def test_hidden_prototype_apps_require_explicit_activation(monkeypatch, tmp_path):
     apps_root = tmp_path / "apps"
     _write_app(apps_root, ("public_updates",))
-    _write_app(apps_root, ("_legacy", "fitbit_migration_only"))
     _write_app(apps_root, ("_prototypes", "vision_lab"))
     monkeypatch.setattr(settings_apps, "APPS_DIR", apps_root)
 
     discovered = settings_apps._load_local_apps()
 
     assert "apps.public_updates" in discovered
-    assert "apps._legacy.fitbit_migration_only" not in discovered
     assert "apps._prototypes.vision_lab" not in discovered
 
     monkeypatch.setenv("ARTHEXIS_PROTOTYPE_APP", "apps._prototypes.vision_lab")
@@ -78,13 +76,18 @@ def test_legacy_camera_shim_remains_importable_for_prototype_integrations():
 
 
 def test_removed_runtime_apps_only_remain_available_through_explicit_legacy_shims():
-    """Retired apps should only remain when a dedicated legacy shim still exists."""
-
+    assert "apps.fitbit" not in settings_apps.LOCAL_APPS
+    assert "apps.prompts" not in settings_apps.LOCAL_APPS
     assert "apps.socials" not in settings_apps.LOCAL_APPS
     assert "apps.survey" not in settings_apps.LOCAL_APPS
-    assert "socials" not in settings_apps.MIGRATION_MODULES
-    assert not any(
-        "socials_migration_only" in app for app in settings_apps.LEGACY_MIGRATION_APPS
+    assert (
+        "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig"
+        in settings_apps.LEGACY_MIGRATION_APPS
+    )
+    assert settings_apps.MIGRATION_MODULES["socials"] == "apps.socials.migrations"
+    assert (
+        "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig"
+        in settings_apps.LEGACY_MIGRATION_APPS
     )
     assert (
         "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig"

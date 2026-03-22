@@ -46,6 +46,23 @@ def test_migrations_clear_removes_non_init_files(settings, tmp_path):
     assert (apps_dir / "catalog" / "migrations" / "__init__.py").exists()
 
 
+def test_migrations_check_runs_makemigrations_check(monkeypatch):
+    """migrations check should forward to Django's dry-run migration check."""
+
+    called: list[tuple[str, tuple, dict]] = []
+
+    def _fake_call_command(name, *args, **kwargs):
+        called.append((name, args, kwargs))
+
+    monkeypatch.setattr(
+        "apps.core.management.commands.migrations.call_command", _fake_call_command
+    )
+
+    call_command("migrations", "check")
+
+    assert called == [("makemigrations", (), {"check": True, "dry_run": True})]
+
+
 def test_migrations_rebuild_tags_initial_migration(monkeypatch, settings, tmp_path):
     """migrations rebuild should clear, regenerate, and tag initial migrations."""
 
@@ -103,10 +120,14 @@ def test_migrations_rebuild_escapes_branch_id(monkeypatch, settings, tmp_path):
     assert "import os; os.system" in content
 
 
-def test_migrations_rebuild_accepts_branch_id(monkeypatch):
+def test_migrations_rebuild_accepts_branch_id(monkeypatch, settings, tmp_path):
     """migrations rebuild should call makemigrations during rebuild flow."""
 
     called: list[tuple[str, tuple, dict]] = []
+    apps_dir = _seed_apps_root(tmp_path)
+    settings.BASE_DIR = tmp_path
+    settings.APPS_DIR = apps_dir
+    _seed_app_migrations(apps_dir, "catalog")
 
     def _fake_call_command(name, *args, **kwargs):
         called.append((name, args, kwargs))

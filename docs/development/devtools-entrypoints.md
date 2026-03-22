@@ -1,8 +1,10 @@
-# Developer script entrypoints
+# Developer devtools entrypoints
 
-Developer launcher modules now live under `utils/devtools/`, while the executable entrypoints remain:
+Developer launcher modules under `utils/devtools/` should be invoked through the module entrypoints directly from the repository root so the checkout is available on `sys.path`:
 
-- `python scripts/test_server.py`
-- `python scripts/migration_server.py`
+- `cd /path/to/arthexis && .venv/bin/python -m utils.devtools.test_server`
+- `cd /path/to/arthexis && .venv/bin/python -m utils.devtools.migration_server`
 
-Management commands continue to delegate to the same shared modules, so editors and shell scripts should keep targeting the `scripts/` entrypoints rather than importing an app-shaped package.
+For cron jobs, systemd units, editor tasks, and other non-interactive launchers, set the working directory to the checkout root before calling these commands. The removed `scripts/*.py` shims inferred the repository root automatically, but the module entrypoints require the repository root to already be the current working directory.
+
+Editor configs and shell scripts should target these module entrypoints directly rather than the removed compatibility shims in `scripts/`.

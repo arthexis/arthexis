@@ -15,13 +15,21 @@ from django.core.management.base import BaseCommand, CommandError
 class Command(BaseCommand):
     """Run migration maintenance workflows for project-local apps."""
 
-    help = "Run migration maintenance workflows (clear, rebuild) for apps.* packages."
+    help = (
+        "Run migration maintenance workflows "
+        "(check, clear, rebuild) for apps.* packages."
+    )
 
     def add_arguments(self, parser):
         """Register subcommands for migration maintenance tasks."""
 
         subparsers = parser.add_subparsers(dest="target")
         subparsers.required = True
+
+        subparsers.add_parser(
+            "check",
+            help="Run makemigrations --check --dry-run.",
+        )
 
         clear_parser = subparsers.add_parser(
             "clear", help="Remove all app migration files except __init__.py."
@@ -53,6 +61,10 @@ class Command(BaseCommand):
         target = options["target"]
         apps_dir = self._resolve_apps_dir(options.get("apps_dir"))
 
+        if target == "check":
+            self._check_migrations()
+            return
+
         if target == "clear":
             self._clear_migrations(apps_dir)
             return
@@ -66,6 +78,11 @@ class Command(BaseCommand):
 
     def _resolve_apps_dir(self, apps_dir_option: str | None) -> Path:
         return Path(apps_dir_option or getattr(settings, "APPS_DIR", Path(settings.BASE_DIR) / "apps"))
+
+    def _check_migrations(self) -> None:
+        """Run Django's pending-migration detection without writing files."""
+
+        call_command("makemigrations", check=True, dry_run=True)
 
     def _clear_migrations(self, apps_dir: Path) -> None:
         if not apps_dir.exists():

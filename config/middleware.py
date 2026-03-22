@@ -6,7 +6,7 @@ from django.http import HttpResponsePermanentRedirect
 from django.http.request import split_domain_port
 from django.urls import Resolver404, resolve
 
-from apps.core.analytics import record_request_event
+from apps.core.analytics import record_request_event, usage_analytics_enabled
 from apps.core.models import UsageEvent
 from apps.nodes.models import Node
 from utils.sites import get_site
@@ -114,7 +114,7 @@ class UsageAnalyticsMiddleware:
         )
 
     def __call__(self, request):
-        if not getattr(settings, "ENABLE_USAGE_ANALYTICS", False):
+        if not usage_analytics_enabled():
             return self.get_response(request)
 
         if not self._should_track(request):

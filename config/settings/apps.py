@@ -78,12 +78,18 @@ def _to_module_path(path: Path) -> str:
 
 
 LEGACY_MIGRATION_APPS = [
+    "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig",
+    "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig",
     "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
     "apps.selenium",
     "config.legacy_mermaid",
 ]
 NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",
+}
+RETIRED_RUNTIME_APP_PACKAGES = {
+    "apps.prompts",
+    "apps.socials",
 }
 
 
@@ -133,7 +139,6 @@ INSTALLED_APPS = (
         "django_object_actions",
         "django.contrib.sites",
         "channels",
-        "graphene_django",
         "apps.celery.beat_app.CeleryBeatConfig",
     ]
     + LOCAL_APPS

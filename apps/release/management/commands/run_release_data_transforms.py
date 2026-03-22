@@ -1,4 +1,4 @@
-"""Backwards-compatible alias for ``release run-data-transforms``."""
+"""Supported alias for ``release run-data-transforms``."""
 
 from __future__ import annotations
 
@@ -7,11 +7,13 @@ from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    """Delegate legacy entrypoint to ``release run-data-transforms``."""
+    """Delegate the alias entrypoint to ``release run-data-transforms``."""
 
-    help = "Alias for `release run-data-transforms` (kept for compatibility)."
+    help = "Alias for `release run-data-transforms` (supported synonym)."
 
     def add_arguments(self, parser):
+        """Register arguments accepted by the supported alias."""
+
         parser.add_argument(
             "transform",
             nargs="?",
@@ -25,6 +27,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        """Forward the alias command to the consolidated release CLI."""
+
+        self.stdout.write("`run_release_data_transforms` is a supported alias for `release run-data-transforms`.")
         command_args = ["release", "run-data-transforms"]
         transform = options.get("transform")
         if transform:
