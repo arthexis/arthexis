@@ -89,7 +89,9 @@ def _load_checkpoint(name: str, *, base_dir: Path | None = None) -> dict[str, ob
     return payload
 
 
-def _store_checkpoint(name: str, payload: dict[str, object], *, base_dir: Path | None = None) -> None:
+def _store_checkpoint(
+    name: str, payload: dict[str, object], *, base_dir: Path | None = None
+) -> None:
     """Persist checkpoint payload for a transform."""
 
     path = _checkpoint_dir(base_dir) / f"{name}.json"
@@ -102,7 +104,9 @@ def _store_checkpoint(name: str, payload: dict[str, object], *, base_dir: Path |
     tmp_path.replace(path)
 
 
-def _run_package_release_version_normalization(checkpoint: dict[str, object]) -> TransformResult:
+def _run_package_release_version_normalization(
+    checkpoint: dict[str, object],
+) -> TransformResult:
     """Normalize package release versions in bounded batches."""
 
     from apps.release.models import PackageRelease
@@ -136,7 +140,8 @@ def _run_package_release_version_normalization(checkpoint: dict[str, object]) ->
                     release.save(update_fields=["version"])
             except IntegrityError:
                 logger.warning(
-                    "Skipping release version normalization due to collision for release pk=%s", release.pk
+                    "Skipping release version normalization due to collision for release pk=%s",
+                    release.pk,
                 )
             else:
                 updated += 1
@@ -199,7 +204,9 @@ def _normalized_video_device_slug(name: str) -> str:
     return slug or uuid.uuid4().hex[:12]
 
 
-def _run_video_device_name_slug_normalization(checkpoint: dict[str, object]) -> TransformResult:
+def _run_video_device_name_slug_normalization(
+    checkpoint: dict[str, object],
+) -> TransformResult:
     """Populate empty legacy video-device names and slugs in batches."""
 
     from apps.video.models.device import VideoDevice
@@ -235,7 +242,9 @@ def _run_video_device_name_slug_normalization(checkpoint: dict[str, object]) -> 
     return TransformResult(updated=len(updates), processed=len(items), complete=False)
 
 
-def _run_video_device_default_name_cleanup(checkpoint: dict[str, object]) -> TransformResult:
+def _run_video_device_default_name_cleanup(
+    checkpoint: dict[str, object],
+) -> TransformResult:
     """Rename legacy ``BASE (migrate)`` video-device placeholders in batches."""
 
     from django.utils.text import slugify
@@ -284,18 +293,33 @@ def _run_sql_report_archival(checkpoint: dict[str, object]) -> TransformResult:
     except (TypeError, ValueError):
         last_pk = 0
 
+    raw_cutoff_pk = checkpoint.get("cutoff_pk")
+    if raw_cutoff_pk is None:
+        cutoff_pk = (
+            SQLReport.objects.order_by("-pk").values_list("pk", flat=True).first() or 0
+        )
+        checkpoint["cutoff_pk"] = cutoff_pk
+    else:
+        try:
+            cutoff_pk = int(raw_cutoff_pk)
+        except (TypeError, ValueError):
+            cutoff_pk = 0
+            checkpoint["cutoff_pk"] = cutoff_pk
+
     items = list(
-        SQLReport.objects.filter(pk__gt=last_pk)
-        .order_by("pk")[:_REPORT_ARCHIVE_BATCH_SIZE]
+        SQLReport.objects.filter(pk__gt=last_pk, pk__lte=cutoff_pk).order_by("pk")[
+            :_REPORT_ARCHIVE_BATCH_SIZE
+        ]
     )
     if not items:
         return TransformResult(updated=0, processed=0, complete=True)
 
-    updated = 0
+    reports_to_update: list[SQLReport] = []
     for report in items:
         legacy_definition = {
             "database_alias": report.database_alias or "default",
-            "html_template_name": report.html_template_name or "reports/sql/default_report.html",
+            "html_template_name": report.html_template_name
+            or "reports/sql/default_report.html",
             "query": report.query or "",
         }
         next_values = {
@@ -306,13 +330,33 @@ def _run_sql_report_archival(checkpoint: dict[str, object]) -> TransformResult:
             "schedule_interval_minutes": 0,
             "next_scheduled_run_at": None,
         }
-        changed = any(getattr(report, key) != value for key, value in next_values.items())
-        if changed:
-            SQLReport.objects.filter(pk=report.pk).update(**next_values)
-            updated += 1
+        changed = any(
+            getattr(report, key) != value for key, value in next_values.items()
+        )
+        if not changed:
+            continue
+        for key, value in next_values.items():
+            setattr(report, key, value)
+        reports_to_update.append(report)
+
+    if reports_to_update:
+        SQLReport.objects.bulk_update(
+            reports_to_update,
+            [
+                "legacy_definition",
+                "parameters",
+                "report_type",
+                "schedule_enabled",
+                "schedule_interval_minutes",
+                "next_scheduled_run_at",
+            ],
+            batch_size=_REPORT_ARCHIVE_BATCH_SIZE,
+        )
 
     checkpoint["last_pk"] = items[-1].pk
-    return TransformResult(updated=updated, processed=len(items), complete=False)
+    return TransformResult(
+        updated=len(reports_to_update), processed=len(items), complete=False
+    )
 
 
 def _run_sql_report_product_archival(checkpoint: dict[str, object]) -> TransformResult:
@@ -334,7 +378,7 @@ def _run_sql_report_product_archival(checkpoint: dict[str, object]) -> Transform
     if not items:
         return TransformResult(updated=0, processed=0, complete=True)
 
-    updated = 0
+    products_to_update: list[SQLReportProduct] = []
     for product in items:
         report = product.report
         legacy_definition = report.legacy_definition or {}
@@ -349,16 +393,36 @@ def _run_sql_report_product_archival(checkpoint: dict[str, object]) -> Transform
                 "resolved_sql": product.resolved_sql or "",
             },
         }
-        changed = any(getattr(product, key) != value for key, value in next_values.items())
-        if changed:
-            SQLReportProduct.objects.filter(pk=product.pk).update(**next_values)
-            updated += 1
+        changed = any(
+            getattr(product, key) != value for key, value in next_values.items()
+        )
+        if not changed:
+            continue
+        for key, value in next_values.items():
+            setattr(product, key, value)
+        products_to_update.append(product)
+
+    if products_to_update:
+        SQLReportProduct.objects.bulk_update(
+            products_to_update,
+            [
+                "report_type",
+                "parameters",
+                "renderer_template_name",
+                "execution_details",
+            ],
+            batch_size=_REPORT_PRODUCT_ARCHIVE_BATCH_SIZE,
+        )
 
     checkpoint["last_pk"] = items[-1].pk
-    return TransformResult(updated=updated, processed=len(items), complete=False)
+    return TransformResult(
+        updated=len(products_to_update), processed=len(items), complete=False
+    )
 
 
-def _run_ocpp_forwarder_default_enablement(checkpoint: dict[str, object]) -> TransformResult:
+def _run_ocpp_forwarder_default_enablement(
+    checkpoint: dict[str, object],
+) -> TransformResult:
     """Enable legacy OCPP forwarders and transaction export defaults in batches."""
 
     from apps.ocpp.models.charger import Charger
@@ -385,7 +449,9 @@ def _run_ocpp_forwarder_default_enablement(checkpoint: dict[str, object]) -> Tra
         checkpoint["last_pk"] = 0
 
     ids = list(
-        Charger.objects.filter(pk__gt=int(checkpoint.get("last_pk", 0)), export_transactions=False)
+        Charger.objects.filter(
+            pk__gt=int(checkpoint.get("last_pk", 0)), export_transactions=False
+        )
         .order_by("pk")
         .values_list("pk", flat=True)[:_OCPP_EXPORT_DEFAULT_BATCH_SIZE]
     )
@@ -398,7 +464,9 @@ def _run_ocpp_forwarder_default_enablement(checkpoint: dict[str, object]) -> Tra
     return TransformResult(updated=updated, processed=len(ids), complete=False)
 
 
-def _run_ocpp_charging_station_linking(checkpoint: dict[str, object]) -> TransformResult:
+def _run_ocpp_charging_station_linking(
+    checkpoint: dict[str, object],
+) -> TransformResult:
     """Create charging stations and link existing charge points in batches."""
 
     from apps.ocpp.models.charger import Charger
@@ -439,14 +507,18 @@ def _run_ocpp_charging_station_linking(checkpoint: dict[str, object]) -> Transfo
             for station in ChargingStation.objects.filter(station_id__in=station_ids)
         }
 
-    updated = 0
+    charger_ids_by_station_pk: dict[int, list[int]] = {}
     for charger in chargers:
         station = existing.get(charger.charger_id)
         if station is None:
             continue
-        updated += Charger.objects.filter(pk=charger.pk, charging_station__isnull=True).update(
-            charging_station=station
-        )
+        charger_ids_by_station_pk.setdefault(station.pk, []).append(charger.pk)
+
+    updated = 0
+    for station_pk, charger_pks in charger_ids_by_station_pk.items():
+        updated += Charger.objects.filter(
+            pk__in=charger_pks, charging_station__isnull=True
+        ).update(charging_station_id=station_pk)
 
     checkpoint["last_pk"] = chargers[-1].pk
     return TransformResult(updated=updated, processed=len(chargers), complete=False)
@@ -457,10 +529,15 @@ def _run_nodes_legacy_cleanup(checkpoint: dict[str, object]) -> TransformResult:
 
     del checkpoint
 
-    from apps.nodes.tasks import DEFERRED_NODE_MIGRATION_BATCH_SIZE, run_deferred_node_migrations
+    from apps.nodes.tasks import (
+        DEFERRED_NODE_MIGRATION_BATCH_SIZE,
+        run_deferred_node_migrations,
+    )
 
     result = run_deferred_node_migrations(batch_size=DEFERRED_NODE_MIGRATION_BATCH_SIZE)
-    processed = int(result.get("role_updates", 0)) + int(result.get("node_deletions", 0))
+    processed = int(result.get("role_updates", 0)) + int(
+        result.get("node_deletions", 0)
+    )
     return TransformResult(
         updated=processed,
         processed=processed,
@@ -474,17 +551,17 @@ TRANSFORMS: dict[str, TransformRunner] = {
     "ocpp.enable_forwarders_and_exports": _run_ocpp_forwarder_default_enablement,
     "ocpp.link_charging_stations": _run_ocpp_charging_station_linking,
     "release.normalize_package_release_versions": _run_package_release_version_normalization,
-    "reports.archive_sql_report_products": _run_sql_report_product_archival,
     "reports.archive_sql_reports": _run_sql_report_archival,
+    "reports.archive_sql_report_products": _run_sql_report_product_archival,
     "video.normalize_base_device_name": _run_video_device_default_name_cleanup,
     "video.populate_device_names": _run_video_device_name_slug_normalization,
 }
 
 
 def list_transform_names() -> list[str]:
-    """Return registered transform names in deterministic order."""
+    """Return registered transform names in deterministic execution order."""
 
-    return sorted(TRANSFORMS.keys())
+    return list(TRANSFORMS)
 
 
 def run_transform(name: str, *, base_dir: Path | None = None) -> TransformResult:
