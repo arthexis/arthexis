@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 import tomllib
 
+from apps.release.models import Package
+from apps.release.models.package import SCHEMA_DEFAULT_PACKAGE_LICENSE
 from apps.release.services.builder import _write_pyproject
 from apps.release.services.defaults import DEFAULT_PACKAGE
 
@@ -72,6 +74,13 @@ def test_repository_package_metadata_uses_license_title(relative_path, loader) -
         assert loaded == ("LicenseRef-ArthexisReciprocity", ("LICENSE",))
     else:
         assert loaded == expected_license
+
+
+def test_package_license_schema_default_uses_stable_constant() -> None:
+    field = Package._meta.get_field("license")
+
+    assert field.default == SCHEMA_DEFAULT_PACKAGE_LICENSE
+    assert field.default == DEFAULT_PACKAGE.license
 
 
 def test_write_pyproject_uses_package_license(tmp_path, monkeypatch) -> None:

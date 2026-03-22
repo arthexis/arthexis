@@ -216,6 +216,12 @@ class SecurityAlertEvent(Entity):
 
     class Meta:
         ordering = ("-last_occurred_at", "-updated_at")
+        indexes = [
+            models.Index(
+                fields=["is_active", "-last_occurred_at"],
+                name="ops_secalert_active_last",
+            )
+        ]
         verbose_name = _("Security Alert Event")
         verbose_name_plural = _("Security Alert Events")
 

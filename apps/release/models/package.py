@@ -7,8 +7,25 @@ from apps.base.models import Entity, EntityManager
 from .. import DEFAULT_PACKAGE, Package as ReleasePackage
 
 
+SCHEMA_DEFAULT_PACKAGE_LICENSE = "Arthexis Contribution Reciprocity License 1.0"
+
+
 class PackageManager(EntityManager):
+    """Manager for :class:`Package` natural-key lookups."""
+
     def get_by_natural_key(self, name):
+        """Return the package identified by its natural key.
+
+        Parameters:
+            name: Package name used as the natural key.
+
+        Returns:
+            The matching package instance.
+
+        Raises:
+            Package.DoesNotExist: If no package exists for ``name``.
+        """
+
         return self.get(name=name)
 
 
@@ -18,6 +35,12 @@ class Package(Entity):
     objects = PackageManager()
 
     def natural_key(self):
+        """Return the package natural key tuple.
+
+        Returns:
+            A one-item tuple containing the package name.
+        """
+
         return (self.name,)
 
     name = models.CharField(max_length=100, default=DEFAULT_PACKAGE.name, unique=True)
@@ -27,7 +50,7 @@ class Package(Entity):
     python_requires = models.CharField(
         max_length=20, default=DEFAULT_PACKAGE.python_requires
     )
-    license = models.CharField(max_length=100, default=DEFAULT_PACKAGE.license)
+    license = models.CharField(max_length=100, default=SCHEMA_DEFAULT_PACKAGE_LICENSE)
     repository_url = models.URLField(default=DEFAULT_PACKAGE.repository_url)
     homepage_url = models.URLField(default=DEFAULT_PACKAGE.homepage_url)
     version_path = models.CharField(max_length=255, blank=True, default="")
@@ -60,15 +83,28 @@ class Package(Entity):
         ]
 
     def __str__(self) -> str:  # pragma: no cover - trivial
+        """Return the package name for human-readable displays."""
+
         return self.name
 
     def save(self, *args, **kwargs):
+        """Persist the package while preserving a single active package.
+
+        Parameters:
+            *args: Positional arguments forwarded to ``models.Model.save``.
+            **kwargs: Keyword arguments forwarded to ``models.Model.save``.
+
+        Returns:
+            None.
+        """
+
         if self.is_active:
             type(self).objects.exclude(pk=self.pk).update(is_active=False)
         super().save(*args, **kwargs)
 
     def to_package(self) -> ReleasePackage:
         """Return a :class:`ReleasePackage` instance from package data."""
+
         repositories = [
             repo.to_target() for repo in self.package_repositories.all().order_by("pk")
         ]
