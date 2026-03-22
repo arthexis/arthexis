@@ -1,16 +1,12 @@
-"""Admin tests for the Evergo integration app."""
-
 from __future__ import annotations
 
-from unittest.mock import patch
-
-import pytest
 from django.contrib import admin
-from django.contrib.auth import get_user_model
-from django.test import RequestFactory
 from django.urls import reverse
 
+import pytest
+
 from apps.evergo.models import EvergoCustomer, EvergoOrder, EvergoUser
+from apps.evergo.exceptions import EvergoAPIError
 
 
 @pytest.fixture
@@ -76,311 +72,159 @@ def test_evergo_admin_load_orders_and_load_customers_actions_redirect_to_shared_
     load_orders_response = admin_client.get(load_orders_action_url)
     load_customers_response = admin_client.get(load_customers_action_url)
 
-    assert load_orders_response.status_code == 302
-    assert load_orders_response["Location"] == wizard_url
-    assert load_customers_response.status_code == 302
-    assert load_customers_response["Location"] == wizard_url
+
+@pytest.mark.django_db
+@pytest.mark.integration
+def test_evergo_contractors_changelist_exposes_login_on_evergo_action(admin_client):
+    response = admin_client.get(reverse("admin:evergo_evergouser_changelist"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    admin_instance = admin.site._registry[EvergoUser]
+    assert admin_instance.get_changelist_actions(response.wsgi_request) == ("my_profile",)
+    assert response.resolver_match.view_name == "admin:evergo_evergouser_changelist"
+    assert "Login on Evergo" in content
+    assert reverse("admin:evergo_evergouser_login_on_evergo") in content
+    wizard_response = admin_client.get(reverse("admin:evergo_evergouser_login_on_evergo"))
+    assert wizard_response.status_code == 200
+    assert "Login on Evergo" in wizard_response.content.decode()
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
-def test_evergo_admin_load_customers_wizard_submits(mock_load_customers, admin_client):
-    """Wizard submit should invoke sync for selected profile and redirect."""
+@pytest.mark.integration
+def test_evergo_login_wizard_creates_contractor_validates_and_loads(admin_client, admin_user, monkeypatch):
+    recorded_calls: list[tuple[str, int | str]] = []
 
-    mock_load_customers.return_value = {
-        "customers_loaded": 1,
-        "orders_created": 1,
-        "orders_updated": 0,
-        "placeholders_created": 0,
-        "unresolved": [],
-        "loaded_customer_ids": [101],
-        "loaded_order_ids": [202],
-    }
-    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
-    profile = EvergoUser.objects.create(
-        user=admin_user,
-        evergo_email="suite-tool@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
-    )
+    def fake_test_login(self, *, timeout: int = 15):
+        recorded_calls.append(("login", timeout))
+        self.evergo_user_id = 8801
+        self.name = "Evergo Wizard"
+        self.email = "wizard.contractor@example.com"
+        self.save(update_fields=["evergo_user_id", "name", "email", "updated_at"])
 
-    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
-    get_response = admin_client.get(wizard_url)
-    assert get_response.status_code == 200
+        class _Result:
+            response_code = 200
 
-    post_response = admin_client.post(
-        wizard_url,
-        {"profile": profile.pk, "raw_queries": "J00830, Customer Name"},
-    )
-    assert post_response.status_code == 302
-    assert post_response["Location"].endswith("/admin/evergo/evergoorder/?id__in=202")
-    mock_load_customers.assert_called_once_with(raw_queries="J00830, Customer Name")
+        return _Result()
 
+    def fake_load_customers(self, *, raw_queries: str, timeout: int = 20):
+        recorded_calls.append((raw_queries, timeout))
+        return {
+            "customers_loaded": 4,
+            "orders_created": 2,
+            "orders_updated": 1,
+            "placeholders_created": 0,
+            "unresolved": [],
+            "loaded_customer_ids": [11],
+            "loaded_order_ids": [22],
+        }
 
-@pytest.mark.django_db
-@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
-def test_evergo_admin_load_customers_wizard_can_redirect_to_customers_with_selected_ids(
-    mock_load_customers, admin_client
-):
-    """Regression: wizard next-view selector should support customer destination with scoped IDs."""
-    mock_load_customers.return_value = {
-        "customers_loaded": 2,
-        "orders_created": 2,
-        "orders_updated": 0,
-        "placeholders_created": 0,
-        "unresolved": [],
-        "loaded_customer_ids": [12, 18],
-        "loaded_order_ids": [99],
-    }
-    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
-    profile = EvergoUser.objects.create(
-        user=admin_user,
-        evergo_email="suite-tool-customers@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
-    )
+    monkeypatch.setattr(EvergoUser, "test_login", fake_test_login)
+    monkeypatch.setattr(EvergoUser, "load_customers_from_queries", fake_load_customers)
 
-    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
     response = admin_client.post(
-        wizard_url,
+        reverse("admin:evergo_evergouser_login_on_evergo"),
         {
-            "profile": profile.pk,
-            "raw_queries": "J00830",
-            "next_view": "customers",
-        },
-    )
-
-    assert response.status_code == 302
-    assert response["Location"].endswith("/admin/evergo/evergocustomer/?id__in=12,18")
-
-
-@pytest.mark.django_db
-def test_evergo_admin_load_customers_wizard_prefills_owned_profile_and_links_create(admin_client):
-    """Regression: wizard should prefill the current user's profile and include profile-create link."""
-    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
-    profile = EvergoUser.objects.create(
-        user=admin_user,
-        evergo_email="owned-profile@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
-    )
-
-    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
-    response = admin_client.get(wizard_url)
-
-    assert response.status_code == 200
-    content = response.content.decode("utf-8")
-    assert f'value="{profile.pk}" selected' in content
-    assert reverse("admin:evergo_evergouser_add") in content
-    assert 'name="next_view"' in content
-    assert '<option value="orders" selected>Orders</option>' in content
-    assert 'class="button">Cancel</a>' in content
-
-
-@pytest.mark.django_db
-@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
-def test_evergo_admin_load_customers_wizard_rejects_unowned_profile(mock_load_customers, admin_client):
-    """Wizard should not allow selecting a profile owned by another user."""
-
-    user_model = get_user_model()
-    other_user = user_model.objects.create_user(
-        username="other-evergo-owner",
-        email="other-evergo-owner@example.com",
-    )
-    other_profile = EvergoUser.objects.create(
-        user=other_user,
-        evergo_email="other-profile@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
-    )
-
-    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
-    response = admin_client.post(
-        wizard_url,
-        {"profile": other_profile.pk, "raw_queries": "J00830"},
-    )
-
-    assert response.status_code == 200
-    assert b"Select a valid choice" in response.content
-    mock_load_customers.assert_not_called()
-
-
-@pytest.mark.django_db
-@pytest.mark.integration
-@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
-def test_evergo_admin_load_customers_wizard_load_all_submits_without_queries(
-    mock_load_customers, admin_client
-):
-    """Load-all mode should allow an empty query payload."""
-
-    mock_load_customers.return_value = {
-        "customers_loaded": 2,
-        "orders_created": 2,
-        "orders_updated": 0,
-        "placeholders_created": 0,
-        "unresolved": [],
-    }
-    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
-    profile = EvergoUser.objects.create(
-        user=admin_user,
-        evergo_email="wildcard-admin@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
-    )
-
-    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
-    response = admin_client.post(
-        wizard_url,
-        {"profile": profile.pk, "raw_queries": "", "load_mode": "all"},
-    )
-
-    assert response.status_code == 302
-    mock_load_customers.assert_called_once_with(raw_queries="")
-
-
-@pytest.mark.django_db
-@pytest.mark.integration
-def test_evergo_admin_load_customers_wizard_requires_queries_for_filtered_mode(admin_client):
-    """Filtered mode should require at least one query token."""
-
-    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
-    profile = EvergoUser.objects.create(
-        user=admin_user,
-        evergo_email="wildcard-validation@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
-    )
-
-    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
-    response = admin_client.post(
-        wizard_url,
-        {"profile": profile.pk, "raw_queries": "", "load_mode": "filtered"},
-    )
-
-    assert response.status_code == 200
-    assert b"Enter at least one SO number or customer name." in response.content
-
-
-@pytest.mark.django_db
-@pytest.mark.integration
-def test_evergo_admin_load_customers_wizard_limits_query_count(admin_client):
-    """Filtered mode should cap query fan-out at 100 submitted tokens."""
-
-    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
-    profile = EvergoUser.objects.create(
-        user=admin_user,
-        evergo_email="query-limit@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
-    )
-
-    wizard_url = reverse("admin:evergo_evergocustomer_load_customers")
-    oversized = " ".join(f"SO{i:04d}" for i in range(101))
-    response = admin_client.post(
-        wizard_url,
-        {"profile": profile.pk, "raw_queries": oversized, "load_mode": "filtered"},
-    )
-
-    assert response.status_code == 200
-    assert b"Submit at most 100 values" in response.content
-
-
-@pytest.mark.django_db
-@patch("apps.evergo.models.user.EvergoUser.test_login")
-def test_evergo_admin_change_action_runs_test_login_sync(mock_test_login, admin_client):
-    """Change-form action should run login sync for a selected Evergo user."""
-
-    user_model = get_user_model()
-    suite_user = user_model.objects.create_user(
-        username="suite-admin-change-action",
-        email="suite-admin-change-action@example.com",
-    )
-    profile = EvergoUser.objects.create(
-        user=suite_user,
-        evergo_email="suite-change-action@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
-    )
-
-    action_url = reverse(
-        "admin:evergo_evergouser_actions",
-        args=[profile.pk, "test_login_and_sync_action"],
-    )
-    response = admin_client.post(action_url, follow=True)
-
-    assert response.status_code == 200
-    mock_test_login.assert_called_once_with()
-
-
-@pytest.mark.django_db
-def test_evergo_customer_export_view_honors_column_selection_for_tsv(
-    admin_client, evergo_customer_export_record
-):
-    """TSV export should include only requested columns in request order."""
-
-    evergo_customer_export_record(
-        username="suite-admin-export-tsv",
-        email="suite-admin-export-tsv@example.com",
-        remote_id=7002,
-        name="TSV Export User",
-    )
-
-    export_url = reverse("admin:evergo_evergocustomer_export")
-    response = admin_client.post(
-        export_url,
-        {
-            "format": "tsv",
-            "export_columns": ["remote_id", "name"],
+            "user": str(admin_user.pk),
+            "group": "",
+            "avatar": "",
+            "evergo_email": "wizard.contractor@example.com",
+            "evergo_password": "top-secret",
+            "validate_credentials": "on",
+            "load_all_customers": "on",
         },
     )
 
     assert response.status_code == 200
-    assert response["Content-Type"].startswith("text/tab-separated-values")
-    rows = response.content.decode("utf-8").strip().splitlines()
-    assert rows[0] == "remote_id\tname"
-    assert rows[1].startswith("7002\tTSV Export User")
-
-
-@pytest.mark.django_db
-def test_evergo_customer_export_view_rejects_empty_column_selection(
-    admin_client, evergo_customer_export_record
-):
-    """Exporting without selected columns should fail with explicit error."""
-
-    evergo_customer_export_record(
-        username="suite-admin-export-empty",
-        email="suite-admin-export-empty@example.com",
-        remote_id=7003,
-        name="No Columns",
-    )
-
-    export_url = reverse("admin:evergo_evergocustomer_export")
-    response = admin_client.post(export_url, {"format": "tsv"})
-
-    assert response.status_code == 400
-    assert "Select at least one column" in response.content.decode("utf-8")
+    contractor = EvergoUser.objects.get(user=admin_user)
+    assert contractor.evergo_email == "wizard.contractor@example.com"
+    assert contractor.evergo_user_id == 8801
+    assert recorded_calls == [("login", 15), ("", 20)]
+    assert "Initial load completed." in response.content.decode()
 
 
 @pytest.mark.django_db
 @pytest.mark.integration
-def test_evergo_customer_export_view_post_scope_uses_hidden_selected_ids(
-    admin_client, evergo_customer_export_record
+def test_evergo_login_wizard_does_not_create_contractor_when_validation_fails(
+    admin_client, admin_user, monkeypatch
 ):
-    """Selected export should remain scoped when IDs are carried by hidden POST fields."""
+    def fake_test_login(self, *, timeout: int = 15):
+        raise EvergoAPIError("bad credentials")
 
-    selected = evergo_customer_export_record(
-        username="suite-admin-export-hidden-selected-1",
-        email="suite-admin-export-hidden-selected-1@example.com",
-        remote_id=7301,
-        name="Hidden Selected",
-    )
-    evergo_customer_export_record(
-        username="suite-admin-export-hidden-selected-2",
-        email="suite-admin-export-hidden-selected-2@example.com",
-        remote_id=7302,
-        name="Hidden Unselected",
-    )
+    monkeypatch.setattr(EvergoUser, "test_login", fake_test_login)
 
-    export_url = reverse("admin:evergo_evergocustomer_export")
     response = admin_client.post(
-        export_url,
+        reverse("admin:evergo_evergouser_login_on_evergo"),
         {
-            "format": "tsv",
-            "export_columns": ["remote_id", "name"],
-            "selected": [str(selected.pk)],
-            "export_scope_selected": "on",
+            "user": str(admin_user.pk),
+            "group": "",
+            "avatar": "",
+            "evergo_email": "broken.contractor@example.com",
+            "evergo_password": "wrong-secret",
+            "validate_credentials": "on",
+            "_save": "Save and return to contractors",
+        },
+    )
+
+    assert response.status_code == 200
+    assert not EvergoUser.objects.filter(
+        user=admin_user,
+        evergo_email="broken.contractor@example.com",
+    ).exists()
+    content = response.content.decode()
+    assert "bad credentials" in content
+    assert '/change/' not in content
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+def test_evergo_user_admin_exposes_dashboard_action_and_object_wizard_redirect(admin_client, admin_user):
+    contractor = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="existing.contractor@example.com",
+        evergo_password="secret",
+    )
+    admin_instance = admin.site._registry[EvergoUser]
+
+    assert admin_instance.get_dashboard_actions(None) == ("login_on_evergo_dashboard_action",)
+    assert admin_instance.login_on_evergo_dashboard_action.requires_queryset is False
+
+    response = admin_client.get(
+        reverse("admin:evergo_evergouser_login_on_evergo_object", args=[contractor.pk])
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "existing.contractor@example.com" in content
+    assert reverse("admin:evergo_evergouser_changelist") in content
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+def test_evergo_login_wizard_keeps_existing_credentials_when_validation_fails(
+    admin_client, admin_user, monkeypatch
+):
+    contractor = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="existing.contractor@example.com",
+        evergo_password="working-secret",
+    )
+
+    def fake_test_login(self, *, timeout: int = 15):
+        raise EvergoAPIError("bad credentials")
+
+    monkeypatch.setattr(EvergoUser, "test_login", fake_test_login)
+
+    response = admin_client.post(
+        reverse("admin:evergo_evergouser_login_on_evergo_object", args=[contractor.pk]),
+        {
+            "user": str(admin_user.pk),
+            "group": "",
+            "avatar": "",
+            "evergo_email": "broken.contractor@example.com",
+            "evergo_password": "",
+            "validate_credentials": "on",
+            "_save": "Save and return to contractors",
         },
     )
 

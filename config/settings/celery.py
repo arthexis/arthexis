@@ -7,11 +7,15 @@ from celery.schedules import crontab
 
 from apps.celery.utils import resolve_celery_shutdown_timeout
 
+from .base import NODE_ROLE
+from .broker import resolve_celery_broker_url
 from .i18n import TIME_ZONE
 from .logging import LOGGING
 
-_ENV_CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "").strip()
-CELERY_BROKER_URL = _ENV_CELERY_BROKER_URL or "memory://localhost/"
+
+CELERY_BROKER_URL = resolve_celery_broker_url(node_role=NODE_ROLE)
+# Legacy alias retained for older deployments that still export BROKER_URL.
+BROKER_URL = CELERY_BROKER_URL
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
 # Keep Celery Beat schedules in memory to avoid database-backed scheduling
 # (e.g., django-celery-beat), which can contend with migrations.
@@ -57,20 +61,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.ocpp.tasks.schedule_power_projection_requests",
         "schedule": crontab(minute=0, hour=1),
     },
-    "web_request_sampling": {
-        "task": "apps.content.tasks.run_scheduled_web_samplers",
-        "schedule": timedelta(minutes=30),
-    },
     "certificate_expiration_refresh": {
         "task": "apps.certs.tasks.refresh_certificate_expirations",
         "schedule": crontab(minute=0, hour=2),
-    },
-    "google_calendar_snapshot_sync": {
-        "task": "apps.calendars.tasks.sync_google_calendars",
-        "schedule": timedelta(hours=1),
-    },
-    "google_calendar_trigger_runner": {
-        "task": "apps.calendars.tasks.run_calendar_event_triggers",
-        "schedule": timedelta(minutes=15),
     },
 }

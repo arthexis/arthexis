@@ -9,11 +9,15 @@ from urllib.parse import quote_plus
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.sites.models import Site
 from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.translation import gettext as _
+
+from apps.features.utils import is_pages_chat_runtime_enabled, is_suite_feature_enabled
+from apps.sites.context_processors import _build_chat_context
 
 from .exceptions import EvergoAPIError, EvergoPhaseSubmissionError
 from .forms import EvergoDashboardLookupForm, EvergoOrderTrackingForm
@@ -46,6 +50,46 @@ TRACKING_PREFILL_SOURCE_KEYS = (
 )
 
 
+def _parse_user_story_attachment_limit() -> int:
+    """Return the configured attachment limit with a safe integer fallback.
+
+    Returns:
+        int: Parsed attachment limit, or ``3`` when the setting is invalid.
+    """
+
+    raw_limit = getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)
+    try:
+        return int(raw_limit)
+    except (TypeError, ValueError):
+        return 3
+
+
+def _build_public_widget_context(*, user) -> dict[str, object]:
+    """Return chat and feedback flags for Evergo public pages.
+
+    Parameters:
+        user: Current authenticated Django user viewing the page.
+
+    Returns:
+        dict[str, object]: Template context flags required by shared public widgets.
+    """
+
+    feedback_ingestion_enabled = is_suite_feature_enabled("feedback-ingestion", default=True)
+    pages_chat_enabled = is_pages_chat_runtime_enabled(default=False)
+    site = Site.objects.get_current()
+    chat_context = _build_chat_context(
+        site,
+        user,
+        pages_chat_enabled=pages_chat_enabled,
+    )
+    return {
+        "chat_enabled": chat_context["chat_enabled"],
+        "chat_socket_path": chat_context["chat_socket_path"],
+        "feedback_ingestion_enabled": feedback_ingestion_enabled,
+        "user_story_attachment_limit": _parse_user_story_attachment_limit(),
+    }
+
+
 def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
     """Normalize common encoding artifacts in user-facing Evergo text."""
     normalized = str(value or "").strip()
@@ -54,11 +98,13 @@ def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
     return DISPLAY_TEXT_FIXUPS.get(normalized, normalized)
 
 
+@login_required
 def customer_public_detail(request, pk: int) -> HttpResponse:
     """Render a public Evergo customer profile and artifacts."""
     customer = get_object_or_404(
-        EvergoCustomer.objects.select_related("latest_order").prefetch_related("artifacts"),
+        EvergoCustomer.objects.select_related("latest_order", "user__user").prefetch_related("artifacts"),
         pk=pk,
+        user__user=request.user,
     )
     artifacts = list(customer.artifacts.all())
     address = customer.address.strip()
@@ -78,9 +124,15 @@ def customer_public_detail(request, pk: int) -> HttpResponse:
     return render(request, "evergo/customer_public_detail.html", context)
 
 
+@login_required
 def customer_artifact_download(request, pk: int, artifact_id: int) -> HttpResponse:
     """Download a PDF artifact attached to a customer profile."""
-    artifact = get_object_or_404(EvergoArtifact, pk=artifact_id, customer_id=pk)
+    artifact = get_object_or_404(
+        EvergoArtifact.objects.select_related("customer__user__user"),
+        pk=artifact_id,
+        customer_id=pk,
+        customer__user__user=request.user,
+    )
     if not artifact.is_pdf:
         raise Http404("Only PDF artifacts can be downloaded from this endpoint.")
 
@@ -243,19 +295,45 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
     )
     profile = order.user
     brands = profile.fetch_charger_brand_options()
+    remote_image_urls: dict[str, str] = {}
 
     if request.method == "POST":
         form = EvergoOrderTrackingForm(request.POST, request.FILES, charger_brands=brands)
-        missing_images = [name for name in IMAGE_FIELD_NAMES if not form.files.get(name)]
+        remote_initial_data, _, remote_image_urls = _load_remote_phase_one_initial_data(
+            profile=profile,
+            order_id=order_id,
+        )
+        missing_images = [
+            name
+            for name in IMAGE_FIELD_NAMES
+            if not form.files.get(name) and not remote_image_urls.get(name)
+        ]
         if form.is_valid():
             if missing_images and request.POST.get("confirm_missing_images") != "1":
                 form.add_error(None, "Confirma que deseas continuar con imágenes faltantes.")
             else:
                 payload = _build_phase_one_payload(form.cleaned_data)
-                files = ensure_image_payload({name: form.cleaned_data.get(name) for name in IMAGE_FIELD_NAMES})
+                image_inputs: dict[str, object] = {}
+                for name in IMAGE_FIELD_NAMES:
+                    image_value = form.cleaned_data.get(name)
+                    if image_value is not None:
+                        image_inputs[name] = image_value
+                    elif not remote_image_urls.get(name):
+                        image_inputs[name] = None
+                files = ensure_image_payload(image_inputs)
+                merged_step_values = dict(remote_initial_data)
+                merged_step_values.update(form.cleaned_data)
+                step_completion = _compute_tracking_step_completion(
+                    _build_tracking_step_values(values=merged_step_values, remote_image_urls=remote_image_urls)
+                )
                 messages.info(request, "Inicio de envío: 0/4 pasos completados.")
                 try:
-                    result = profile.submit_tracking_phase_one(order_id=order_id, payload=payload, files=files)
+                    result = profile.submit_tracking_phase_one(
+                        order_id=order_id,
+                        payload=payload,
+                        files=files,
+                        step_completion=step_completion,
+                    )
                 except EvergoPhaseSubmissionError as exc:
                     messages.warning(
                         request,
@@ -265,16 +343,30 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
                 except EvergoAPIError as exc:
                     form.add_error(None, str(exc))
                 else:
-                    completed_steps = int(result.get("completed_steps") or 4)
+                    completed_steps_raw = result.get("completed_steps")
+                    completed_steps = 4 if completed_steps_raw is None else int(completed_steps_raw)
                     messages.success(
                         request,
                         f"Orden enviada correctamente. {completed_steps}/4 pasos completados.",
                     )
                     return redirect("evergo:order-tracking-public", order_id=order_id)
     else:
-        remote_initial_data = _load_remote_phase_one_initial_data(profile=profile, order_id=order_id)
+        remote_initial_data, remote_prefill_errors, remote_image_urls = _load_remote_phase_one_initial_data(
+            profile=profile,
+            order_id=order_id,
+        )
         form = EvergoOrderTrackingForm(charger_brands=brands, initial=remote_initial_data)
+        for field_name, error_message in remote_prefill_errors.items():
+            if field_name in form.fields:
+                form.fields[field_name].help_text = error_message
         missing_images = []
+
+    image_field_rows = _build_image_field_rows(form=form, remote_image_urls=remote_image_urls)
+    step_status_values = _build_tracking_step_values(
+        values=form.cleaned_data if form.is_bound else form.initial,
+        remote_image_urls=remote_image_urls,
+    )
+    step_statuses = _build_tracking_step_statuses(step_status_values)
 
     return render(
         request,
@@ -286,25 +378,104 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
             "form": form,
             "missing_images": missing_images,
             "image_field_names": IMAGE_FIELD_NAMES,
-            "image_fields": [form[name] for name in IMAGE_FIELD_NAMES],
+            "image_field_rows_main": image_field_rows[:6],
+            "image_field_rows_extra": image_field_rows[6:],
             "collapsed_defaults": COLLAPSED_DEFAULT_FIELDS,
             "collapsed_fields": [form[name] for name in COLLAPSED_DEFAULT_FIELDS],
+            "step_statuses": step_statuses,
             "evergo_so_url": (
                 EVERGO_PORTAL_ORDER_URL_TEMPLATE.format(order_id=order.remote_id)
                 if order.remote_id is not None
                 else ""
             ),
+            **_build_public_widget_context(user=request.user),
         },
     )
 
 
-def _load_remote_phase_one_initial_data(*, profile: EvergoUser, order_id: int) -> dict[str, object]:
-    """Load and normalize phase-one defaults from the latest WS API order detail payload."""
+def _load_remote_phase_one_initial_data(
+    *, profile: EvergoUser, order_id: int
+) -> tuple[dict[str, object], dict[str, str], dict[str, str]]:
+    """Load phase-one defaults, field errors, and remote image URLs from order detail payload."""
     try:
         order_payload = profile.fetch_order_detail(order_id=order_id)
     except (EvergoAPIError, OSError):
+        return {}, {
+            field_name: "No se pudo cargar este dato desde Evergo API. Captúralo manualmente."
+            for field_name in TRACKING_PRIMARY_FIELDS
+        }, {}
+
+    initial_data = _extract_phase_one_initial_data(order_payload)
+    missing_prefill_errors = {
+        field_name: "Dato faltante en Evergo API. Captúralo manualmente."
+        for field_name in TRACKING_PRIMARY_FIELDS
+        if field_name not in initial_data
+    }
+    return initial_data, missing_prefill_errors, _extract_remote_tracking_image_urls(order_payload)
+
+
+def _build_image_field_rows(*, form: EvergoOrderTrackingForm, remote_image_urls: dict[str, str]) -> list[dict[str, object]]:
+    """Build template rows combining image fields with their remotely stored preview URLs."""
+    return [
+        {
+            "field": form[field_name],
+            "remote_url": remote_image_urls.get(field_name, ""),
+        }
+        for field_name in IMAGE_FIELD_NAMES
+    ]
+
+
+def _build_tracking_step_values(*, values: dict[str, object], remote_image_urls: dict[str, str]) -> dict[str, object]:
+    """Merge current form values with persisted remote image URLs for step completion display."""
+    step_values = dict(values)
+    step_values.update({field_name: url for field_name, url in remote_image_urls.items() if url})
+    return step_values
+
+
+def _extract_remote_tracking_image_urls(order_payload: dict[str, object]) -> dict[str, str]:
+    """Extract safe HTTP(S) URLs for tracking image fields from variable Evergo payload shapes."""
+    if not isinstance(order_payload, dict):
         return {}
-    return _extract_phase_one_initial_data(order_payload)
+
+    candidate_sources: list[dict[str, object]] = []
+    for key in TRACKING_PREFILL_SOURCE_KEYS:
+        source = order_payload.get(key)
+        if isinstance(source, dict):
+            candidate_sources.append(source)
+    candidate_sources.append(order_payload)
+
+    remote_urls: dict[str, str] = {}
+    for field_name in IMAGE_FIELD_NAMES:
+        for source in candidate_sources:
+            normalized_url = _normalize_remote_image_url(value=source.get(field_name))
+            if normalized_url:
+                remote_urls[field_name] = normalized_url
+                break
+    return remote_urls
+
+
+def _normalize_remote_image_url(*, value: object) -> str | None:
+    """Normalize remote image URL candidates to safe HTTP(S) absolute URLs."""
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate.startswith(("http://", "https://")):
+            return candidate
+        return None
+
+    if isinstance(value, dict):
+        for key in ("url", "file", "path", "imagen", "image", "foto", "archivo"):
+            normalized = _normalize_remote_image_url(value=value.get(key))
+            if normalized:
+                return normalized
+        return None
+
+    if isinstance(value, list):
+        for item in value:
+            normalized = _normalize_remote_image_url(value=item)
+            if normalized:
+                return normalized
+
+    return None
 
 
 def _extract_phase_one_initial_data(order_payload: dict[str, object]) -> dict[str, object]:
@@ -440,6 +611,50 @@ TRACKING_PREFILL_FIELDS = [
     "voltaje_neutro_tierra",
 ]
 
+TRACKING_PRIMARY_FIELDS = [
+    "metraje_visita_tecnica",
+    "programacion_cargador",
+    "capacidad_itm_principal",
+    "fecha_visita",
+    "voltaje_fase_fase",
+    "voltaje_fase_tierra",
+    "voltaje_fase_neutro",
+    "voltaje_neutro_tierra",
+    "prueba_carga",
+    "marca_cargador",
+    "numero_serie",
+]
+
+STEP_VISITA_REQUIRED_FIELDS = TRACKING_PRIMARY_FIELDS
+
+STEP_ASSIGN_REQUIRED_FIELDS = [
+    "fecha_visita",
+]
+
+STEP_INSTALL_REQUIRED_FIELDS = TRACKING_PRIMARY_FIELDS + [
+    "foto_tablero",
+    "foto_medidor",
+    "foto_tierra",
+    "foto_ruta_cableado",
+    "foto_ubicacion_cargador",
+    "foto_general",
+    "foto_hoja_visita",
+    "foto_interruptor_principal",
+]
+
+STEP_MONTAJE_REQUIRED_FIELDS = STEP_INSTALL_REQUIRED_FIELDS + [
+    "foto_panoramica_estacion",
+    "foto_numero_serie_cargador",
+    "foto_interruptor_instalado",
+    "foto_conexion_cargador",
+    "foto_preparacion_cfe",
+    "foto_hoja_reporte_instalacion",
+    "foto_voltaje_fase_fase",
+    "foto_voltaje_fase_tierra",
+    "foto_voltaje_fase_neutro",
+    "foto_voltaje_neutro_tierra",
+]
+
 TRACKING_INT_FIELDS = {
     "metraje_visita_tecnica",
     "capacidad_itm_principal",
@@ -451,6 +666,51 @@ TRACKING_DECIMAL_FIELDS = {
     "voltaje_fase_neutro",
     "voltaje_neutro_tierra",
 }
+
+
+def _has_tracking_value(value: object) -> bool:
+    """Return True when a tracking form value should count as filled."""
+    return value not in (None, "")
+
+
+def _is_step_complete(*, values: dict[str, object], required_fields: list[str]) -> bool:
+    """Return whether all required fields for a step are present in current values."""
+    return all(_has_tracking_value(values.get(field_name)) for field_name in required_fields)
+
+
+def _compute_tracking_step_completion(cleaned_data: dict[str, object]) -> dict[str, bool]:
+    """Compute submit-time step completion gates based on current form payload."""
+    visita_complete = _is_step_complete(values=cleaned_data, required_fields=STEP_VISITA_REQUIRED_FIELDS)
+    assign_complete = _is_step_complete(values=cleaned_data, required_fields=STEP_ASSIGN_REQUIRED_FIELDS)
+    install_fields_complete = _is_step_complete(values=cleaned_data, required_fields=STEP_INSTALL_REQUIRED_FIELDS)
+    install_complete = visita_complete and install_fields_complete
+    montage_fields_complete = _is_step_complete(values=cleaned_data, required_fields=STEP_MONTAJE_REQUIRED_FIELDS)
+    montage_complete = install_complete and montage_fields_complete
+    return {
+        "visita": visita_complete,
+        "assign": assign_complete,
+        "install": install_complete,
+        "montage": montage_complete,
+    }
+
+
+def _build_tracking_step_statuses(values: dict[str, object]) -> list[dict[str, object]]:
+    """Build UI metadata describing which integration steps are currently complete."""
+    completion = _compute_tracking_step_completion(values)
+    steps = [
+        ("visita", "1. Visita técnica"),
+        ("assign", "2. Asignar técnico"),
+        ("install", "3. Reporte de instalación"),
+        ("montage", "4. Montaje-Conexión"),
+    ]
+    return [
+        {
+            "key": key,
+            "label": label,
+            "complete": completion[key],
+        }
+        for key, label in steps
+    ]
 
 
 def _build_phase_one_payload(cleaned_data: dict[str, object]) -> dict[str, object]:

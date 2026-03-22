@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import socket
 import sys
 import time
 from datetime import datetime, timedelta, timezone as datetime_timezone
@@ -25,6 +24,8 @@ from apps.screens.startup_notifications import (
     LCD_UPTIME_LOCK_FILE,
     read_lcd_lock_file,
 )
+
+from utils.service_probe import detect_runserver_port, probe_admin_login
 
 from .event_utils import parse_event_expiry, parse_event_expiry_candidate
 from .logging import BASE_DIR
@@ -373,6 +374,10 @@ def _parse_start_timestamp(raw: object) -> datetime | None:
 
 
 def _suite_port(base_dir: Path = BASE_DIR) -> str:
+    live_port = detect_runserver_port()
+    if live_port is not None:
+        return str(live_port)
+
     port_value = (os.getenv("PORT") or "").strip() or SUITE_PORT_DEFAULT
     lock_path = Path(base_dir) / ".locks" / uptime_utils.STARTUP_DURATION_LOCK_NAME
     try:
@@ -406,14 +411,8 @@ def _suite_reachable(
     if now_value - last_checked < SUITE_REACHABILITY_CACHE_SECONDS:
         return bool(_SUITE_REACHABILITY_CACHE["is_up"])
 
-    is_up = False
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(timeout)
-        try:
-            sock.connect(("127.0.0.1", port))
-            is_up = True
-        except OSError:
-            pass
+    result = probe_admin_login(port, timeout=timeout)
+    is_up = result.reachable
 
     _SUITE_REACHABILITY_CACHE["checked_at"] = now_value
     _SUITE_REACHABILITY_CACHE["is_up"] = is_up

@@ -12,6 +12,7 @@
   const card = overlay.querySelector('.user-story-card');
   const successAlert = document.getElementById('user-story-success');
   const errorAlert = document.getElementById('user-story-error');
+  const feedbackTextareas = form.querySelectorAll('textarea');
   const commentField = document.getElementById('user-story-comments');
   const counter = document.getElementById('user-story-char-count');
   const submitBtn = form.querySelector('button[type="submit"]');
@@ -27,6 +28,7 @@
   const copyAriaLabel = form.dataset.copyAriaLabel;
   const canCopyStaffDetails = form.dataset.copyStaffDetails === '1';
   const messageField = form.querySelector('input[name="messages"]');
+  const javascriptEnabledField = form.querySelector('input[name="javascript_enabled"]');
   let previousFocus = null;
   let copyFeedbackTimeout = null;
 
@@ -41,6 +43,43 @@
     if (counter && commentField) {
       counter.textContent = commentField.value.length;
     }
+  };
+
+  const resizeTextarea = (field, { force = false } = {}) => {
+    if (!field) {
+      return;
+    }
+
+    if (!force && overlay.hasAttribute('hidden')) {
+      return;
+    }
+
+    field.style.height = 'auto';
+
+    const computed = window.getComputedStyle(field);
+    const borderTop = parseFloat(computed.borderTopWidth) || 0;
+    const borderBottom = parseFloat(computed.borderBottomWidth) || 0;
+    const nextHeight = field.scrollHeight + borderTop + borderBottom;
+
+    if (!force && nextHeight === 0) {
+      return;
+    }
+
+    field.style.height = `${nextHeight}px`;
+  };
+
+  const resizeFeedbackTextareas = options => {
+    feedbackTextareas.forEach(textarea => resizeTextarea(textarea, options));
+  };
+
+  const initializeTextareaAutoExpand = () => {
+    if (!feedbackTextareas.length) {
+      return;
+    }
+
+    feedbackTextareas.forEach(textarea => {
+      textarea.addEventListener('input', () => resizeTextarea(textarea));
+    });
   };
 
   const setRatingHintText = ratingValue => {
@@ -86,6 +125,7 @@
       overlay.classList.add('show');
       document.body.classList.add('user-story-open');
       toggle.setAttribute('aria-expanded', 'true');
+      resizeFeedbackTextareas();
       if (card) {
         card.focus();
       }
@@ -145,6 +185,8 @@
     commentField.addEventListener('input', setCharCount);
     setCharCount();
   }
+
+  initializeTextareaAutoExpand();
 
   if (ratingInputs && ratingInputs.length) {
     ratingInputs.forEach(input => {
@@ -227,7 +269,7 @@
     const ratingValue = Number(value);
     const actionLabel = getRatingLabel(value);
     const displayValue = Number.isFinite(ratingValue) && ratingValue > 0 ? ratingValue : (ratingValue === 0 ? 0 : value);
-    return `${actionLabel} (${displayValue}/5)`;
+    return `${displayValue}/5 (${actionLabel})`;
   };
 
   const getFormDetails = () => {
@@ -329,6 +371,9 @@
     event.preventDefault();
     resetAlerts();
     syncMessageField(getPageMessages());
+    if (javascriptEnabledField) {
+      javascriptEnabledField.value = '1';
+    }
 
     if (submitBtn) {
       submitBtn.disabled = true;
@@ -348,6 +393,7 @@
         form.reset();
         setCharCount();
         setRatingHint();
+        resizeFeedbackTextareas({ force: true });
         if (successAlert) {
           successAlert.textContent = defaultSuccessMessage;
           successAlert.classList.remove('is-hidden');

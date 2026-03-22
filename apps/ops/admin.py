@@ -6,7 +6,12 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from .models import OperationExecution, OperationLink, OperationScreen
+from .models import (
+    OperationExecution,
+    OperationLink,
+    OperationScreen,
+    SecurityAlertEvent,
+)
 
 
 class OperationLinkInline(admin.TabularInline):
@@ -86,3 +91,14 @@ class OperationLinkAdmin(admin.ModelAdmin):
 
     list_display = ("label", "operation", "priority", "url")
     search_fields = ("label", "url", "operation__title")
+
+
+@admin.register(SecurityAlertEvent)
+class SecurityAlertEventAdmin(admin.ModelAdmin):
+    """Admin for aggregated security alert event records."""
+
+    list_display = ("key", "severity", "message", "occurrence_count", "last_occurred_at", "is_active")
+    list_filter = ("severity", "is_active", "last_occurred_at")
+    search_fields = ("key", "message", "detail")
+    readonly_fields = ("occurrence_count", "last_occurred_at", "created_at", "updated_at")
+

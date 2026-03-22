@@ -7,11 +7,14 @@ from apps.features.management.feature_ops import (
     get_feature_state,
     list_node_features,
     list_suite_features,
+    refresh_and_report_local_node_features,
     reset_all_suite_features,
     set_feature_enabled,
 )
+from apps.special.registry import special_command
 
 
+@special_command(singular="feature", plural="features", keystone_model="features.Feature")
 class Command(BaseCommand):
     """List suite/node features and support fixture-based reset workflows."""
 
@@ -48,6 +51,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Reload all suite features from mainstream fixtures.",
         )
+        parser.add_argument(
+            "--refresh-node",
+            action="store_true",
+            help="Refresh auto-managed feature assignments for the local node.",
+        )
 
     def handle(self, *args, **options) -> None:
         """Execute feature listing, optional single-feature operation, and reset flow."""
@@ -57,6 +65,7 @@ class Command(BaseCommand):
         include_enabled = bool(options.get("enabled"))
         include_disabled = bool(options.get("disabled"))
         reset_all = bool(options.get("reset_all"))
+        refresh_node = bool(options.get("refresh_node"))
 
         if reset_all:
             if kind == FeatureKind.NODE:
@@ -72,6 +81,10 @@ class Command(BaseCommand):
                     f"Reloaded {fixture_count} mainstream fixtures."
                 )
             )
+
+
+        if refresh_node:
+            refresh_and_report_local_node_features(self)
 
         if slug:
             if include_enabled and include_disabled:

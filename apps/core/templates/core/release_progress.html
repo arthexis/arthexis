@@ -192,6 +192,36 @@
     color: var(--link-fg);
     font-weight: 600;
   }
+  .status-guidance {
+    margin: 0.75rem 0 1.25rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--hairline-color);
+    border-left-width: 4px;
+    border-radius: 6px;
+    background: var(--body-bg);
+  }
+  .status-guidance h2 {
+    margin: 0 0 0.35rem;
+    font-size: 1rem;
+  }
+  .status-guidance p {
+    margin: 0;
+  }
+  .status-guidance.tone-info {
+    border-left-color: var(--link-fg);
+  }
+  .status-guidance.tone-warning {
+    border-left-color: var(--warning-fg, #c09853);
+    background: rgba(var(--warning-rgb, 192, 152, 83), 0.12);
+  }
+  .status-guidance.tone-error {
+    border-left-color: var(--error-fg, #ba2121);
+    background: rgba(var(--error-rgb, 186, 33, 33), 0.08);
+  }
+  .status-guidance.tone-success {
+    border-left-color: var(--success-fg, #198754);
+    background: rgba(var(--success-rgb, 25, 135, 84), 0.1);
+  }
 </style>
 {% endblock %}
 
@@ -212,6 +242,10 @@
 <h1>{{ action|capfirst }} {{ release.package.name }} {{ release.version }}</h1>
 <div class="release-progress-layout">
   <div class="progress-column">
+    <div class="status-guidance tone-{{ status_guidance.tone }}">
+      <h2>{{ status_guidance.title }}</h2>
+      <p>{{ status_guidance.message }}</p>
+    </div>
     <div class="progress-actions">
       <form method="get" class="dry-run-form">
         <input type="hidden" name="set_dry_run" value="1">

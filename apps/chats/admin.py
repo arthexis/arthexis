@@ -1,67 +1,28 @@
-from django import forms
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 
 from apps.chats.models import ChatAvatar
-from apps.core.admin import OwnableAdminMixin, ProfileFormMixin, ProfileInlineFormSet
-from apps.socials.models import BlueskyProfile, DiscordProfile
-
-
-class BlueskyProfileInlineForm(ProfileFormMixin, forms.ModelForm):
-    profile_fields = BlueskyProfile.profile_fields
-
-    class Meta:
-        model = BlueskyProfile
-        fields = ("handle", "domain", "did")
-
-
-class DiscordProfileInlineForm(ProfileFormMixin, forms.ModelForm):
-    profile_fields = DiscordProfile.profile_fields
-
-    class Meta:
-        model = DiscordProfile
-        fields = (
-            "application_id",
-            "public_key",
-            "guild_id",
-            "bot_token",
-            "default_channel_id",
-        )
-
-
-class BlueskyProfileInline(admin.StackedInline):
-    model = BlueskyProfile
-    form = BlueskyProfileInlineForm
-    formset = ProfileInlineFormSet
-    fk_name = "avatar"
-    extra = 1
-    max_num = 1
-    can_delete = True
-    verbose_name = _("Bluesky Identity")
-    verbose_name_plural = _("Bluesky Identities")
-    template = "admin/edit_inline/profile_stacked.html"
-
-
-class DiscordProfileInline(admin.StackedInline):
-    model = DiscordProfile
-    form = DiscordProfileInlineForm
-    formset = ProfileInlineFormSet
-    fk_name = "avatar"
-    extra = 1
-    max_num = 1
-    can_delete = True
-    verbose_name = _("Discord Identity")
-    verbose_name_plural = _("Discord Identities")
-    template = "admin/edit_inline/profile_stacked.html"
+from apps.core.admin import OwnableAdminMixin
 
 
 @admin.register(ChatAvatar)
 class ChatAvatarAdmin(OwnableAdminMixin, admin.ModelAdmin):
+    """Admin configuration for chat avatars."""
+
     list_display = ("name", "owner_display", "is_enabled")
     search_fields = ("name", "user__username", "group__name")
     list_filter = ("is_enabled",)
-    inlines = [BlueskyProfileInline, DiscordProfileInline]
+    inlines = []
 
     @admin.display(description=_("Owner"))
     def owner_display(self, obj):
+        """Return the owner label shown for a chat avatar in admin lists.
+
+        Parameters:
+            obj (ChatAvatar): Avatar instance being rendered in the changelist.
+
+        Returns:
+            str: Owner display text returned by the avatar instance.
+        """
+
         return obj.owner_display()

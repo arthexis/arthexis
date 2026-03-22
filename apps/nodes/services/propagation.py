@@ -10,9 +10,9 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-from apps.nodes.models.core.node import Node
-from apps.nodes.models.core.role import NodeRole
-from apps.nodes.models.core.utils import _upgrade_in_progress
+from apps.nodes.models.node import Node
+from apps.nodes.models.role import NodeRole
+from apps.nodes.models.utils import _upgrade_in_progress
 from apps.nodes.models.features import NodeFeature
 
 logger = logging.getLogger(__name__)
@@ -111,7 +111,7 @@ def propagate(message, seen: list[str] | None = None) -> None:
     """Propagate ``message`` to eligible peers."""
     from apps.core.notifications import notify
     import requests
-    from apps.nodes.models.core.net_message import PendingNetMessage
+    from apps.nodes.models.net_message import PendingNetMessage
 
     if message.is_expired:
         if not message.complete:

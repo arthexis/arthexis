@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.utils.translation import gettext
 
 from apps.chats.models import ChatMessage, ChatSession
+from apps.features.utils import is_pages_chat_runtime_enabled
 from apps.core.channel_metrics import websocket_connected, websocket_disconnected
 
 
@@ -29,7 +30,7 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
     group_name: str = ""
 
     async def connect(self):
-        if not getattr(settings, "PAGES_CHAT_ENABLED", False):
+        if not await self._is_pages_chat_runtime_enabled():
             await self.close()
             return
         scope_session = self.scope.get("session")
@@ -216,6 +217,16 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             full_name = user.get_full_name() if hasattr(user, "get_full_name") else ""
             return full_name or user.get_username()
         return gettext("Visitor")
+
+    async def _is_pages_chat_runtime_enabled(self) -> bool:
+        """Return whether the public chat runtime is available for this socket.
+
+        Returns:
+            bool: ``True`` when deployment wiring and suite feature state allow
+            the visitor chat runtime to accept websocket connections.
+        """
+
+        return await database_sync_to_async(is_pages_chat_runtime_enabled)(default=False)
 
     async def _resolve_session(self, requested_uuid: str | None, user):
         return await database_sync_to_async(self._resolve_session_sync)(

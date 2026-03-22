@@ -58,6 +58,13 @@ DEFAULT_STAFF_TASKS: tuple[dict[str, object], ...] = (
         "order": 70,
     },
     {
+        "slug": "reports",
+        "label": "Reports",
+        "description": "Run system reports and provide query parameters.",
+        "admin_url_name": "admin:system-reports",
+        "order": 75,
+    },
+    {
         "slug": "seed",
         "label": "Seed",
         "description": "Load baseline data into the system.",
@@ -74,7 +81,7 @@ DEFAULT_STAFF_TASKS: tuple[dict[str, object], ...] = (
     {
         "slug": "tasks",
         "label": "Tasks",
-        "description": "Open the staff tasks overview and toggles.",
+        "description": "Open the task panels overview and toggles.",
         "admin_url_name": "admin:system",
         "order": 100,
     },
@@ -102,10 +109,8 @@ def visible_staff_tasks_for_user(user) -> list[dict[str, str]]:
     if not getattr(user, "is_staff", False):
         return []
 
+    ensure_default_staff_tasks_exist()
     tasks = list(StaffTask.objects.filter(is_active=True).order_by("order", "label"))
-    if not tasks:
-        ensure_default_staff_tasks_exist()
-        tasks = list(StaffTask.objects.filter(is_active=True).order_by("order", "label"))
     if not tasks:
         return []
 
@@ -132,19 +137,19 @@ def visible_staff_tasks_for_user(user) -> list[dict[str, str]]:
 
 
 def ensure_default_staff_tasks_exist() -> None:
-    """Backfill default staff tasks when the table is empty."""
+    """Backfill missing default staff tasks in existing and new environments."""
 
-    if StaffTask.objects.exists():
-        return
     for task in DEFAULT_STAFF_TASKS:
-        StaffTask.objects.create(
+        StaffTask.objects.get_or_create(
             slug=task["slug"],
-            label=task["label"],
-            description=task["description"],
-            admin_url_name=task["admin_url_name"],
-            order=task["order"],
-            default_enabled=True,
-            staff_only=True,
-            superuser_only=bool(task.get("superuser_only", False)),
-            is_active=True,
+            defaults={
+                "label": task["label"],
+                "description": task["description"],
+                "admin_url_name": task["admin_url_name"],
+                "order": task["order"],
+                "default_enabled": True,
+                "staff_only": True,
+                "superuser_only": bool(task.get("superuser_only", False)),
+                "is_active": True,
+            },
         )

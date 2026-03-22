@@ -9,6 +9,12 @@ from apps.core.models import UsageEvent
 
 @staff_member_required
 def usage_analytics_summary(request):
+    """Return the current usage analytics summary for staff users.
+
+    Historical analytics remain viewable even when collection is disabled. The
+    response payload includes the live collection state.
+    """
+
     days_param = request.GET.get("days")
     try:
         days = int(days_param) if days_param else 30

@@ -1,0 +1,26 @@
+{% load i18n %}
+<h1>{{ report.name }}</h1>
+<p>{% trans "Executed" %}: {{ query_result.executed_at }}</p>
+<p>{% trans "Database" %}: {{ query_result.database_alias }}</p>
+<p>{% trans "Rows" %}: {{ query_result.row_count }}</p>
+
+{% if query_result.columns %}
+<table>
+  <thead>
+    <tr>
+      {% for column in query_result.columns %}
+      <th>{{ column }}</th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in query_result.rows %}
+    <tr>
+      {% for value in row %}
+      <td>{{ value }}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

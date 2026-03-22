@@ -28,10 +28,22 @@ _RULE_MODEL_CONTEXT: ContextVar[str | None] = ContextVar(
 # message and concise error strings rather than introducing custom phrases.
 
 
-def rule_success(message: str = DEFAULT_SUCCESS_MESSAGE) -> dict[str, object]:
+def rule_success(
+    message: str = DEFAULT_SUCCESS_MESSAGE,
+    *,
+    is_default_message: bool | None = None,
+) -> dict[str, object]:
     """Return a serializable success payload for dashboard rules."""
 
-    return {"success": True, "message": str(message), "icon": SUCCESS_ICON}
+    if is_default_message is None:
+        is_default_message = message is DEFAULT_SUCCESS_MESSAGE
+
+    return {
+        "success": True,
+        "message": str(message),
+        "icon": SUCCESS_ICON,
+        "is_default_message": is_default_message,
+    }
 
 
 def rule_failure(message: str) -> dict[str, object]:

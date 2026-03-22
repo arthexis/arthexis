@@ -15,7 +15,7 @@ from apps.discovery.services import record_discovery_item, start_discovery
 from apps.locals.user_data import EntityModelAdmin
 from apps.odoo.models import OdooEmployee, OdooProduct
 from apps.odoo.sync_features import (
-    ODOO_SYNC_EMPLOYEE_IMPORT_FEATURE_SLUG,
+    ODOO_SYNC_EMPLOYEE_IMPORT_PARAMETER_KEY,
     is_odoo_sync_integration_enabled,
 )
 
@@ -261,8 +261,8 @@ class OdooEmployeeAdmin(
             )
 
         if not is_odoo_sync_integration_enabled(
-            ODOO_SYNC_EMPLOYEE_IMPORT_FEATURE_SLUG,
-            default=False,
+            ODOO_SYNC_EMPLOYEE_IMPORT_PARAMETER_KEY,
+            default=True,
         ):
             self.message_user(
                 request,

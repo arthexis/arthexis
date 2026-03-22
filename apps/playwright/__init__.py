@@ -1,0 +1,1 @@
+"""Playwright automation app."""

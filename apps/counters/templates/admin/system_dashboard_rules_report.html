@@ -2,11 +2,7 @@
 {% load i18n %}
 
 {% block breadcrumbs %}
-<div class="breadcrumbs">
-  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
-  &rsaquo; <a href="{% url 'admin:system' %}">{% trans 'System' %}</a>
-  &rsaquo; {% trans "Dashboard Rules" %}
-</div>
+{% include "admin/includes/task_panel_breadcrumb.html" with page_title="Dashboard Rules" %}
 {% endblock %}
 
 {% block content %}
@@ -37,7 +33,7 @@
               <td>
                 {% if entry.status %}
                   <span class="dashboard-rule-status {% if entry.status.success %}is-success{% else %}is-failure{% endif %}">
-                    {{ entry.status.icon }} {{ entry.status.message }}
+                    {{ entry.status.icon }}{% if not entry.status.success or not entry.status.is_default_message %} {{ entry.status.message }}{% endif %}
                   </span>
                 {% else %}
                   <span class="help">{% trans "No result available." %}</span>

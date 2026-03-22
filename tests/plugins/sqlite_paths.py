@@ -69,8 +69,31 @@ def ensure_clean_test_databases(base_dir: Path) -> None:
         base_dir / "test_db.sqlite3",
         base_dir / "work" / "test_db.sqlite3",
         base_dir / "work" / "test_db" / "test_db.sqlite3",
+        Path("/dev/shm") / "arthexis" / "test_db.sqlite3",
+        Path(tempfile.gettempdir()) / "arthexis" / "test_db.sqlite3",
     ]
 
     for path in candidates:
-        if path.exists():
-            path.unlink()
+        _remove_sqlite_artifacts(path)
+
+
+def _remove_sqlite_artifacts(db_path: Path) -> None:
+    """Best-effort removal of SQLite database files and sidecar artifacts."""
+
+    artifacts = [
+        db_path,
+        Path(f"{db_path}-shm"),
+        Path(f"{db_path}-wal"),
+        Path(f"{db_path}-journal"),
+    ]
+
+    for artifact in artifacts:
+        try:
+            if not artifact.exists():
+                continue
+            if artifact.is_dir():
+                shutil.rmtree(artifact, ignore_errors=True)
+                continue
+            artifact.unlink(missing_ok=True)
+        except OSError:
+            continue

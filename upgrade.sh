@@ -651,48 +651,7 @@ camera_systemd_unit_present() {
   _prefixed_systemd_unit_present "camera" "$1"
 }
 
-video_camera_feature_state() {
-  if [ -z "$PYTHON_BIN" ]; then
-    return 1
-  fi
 
-  "$PYTHON_BIN" - "$BASE_DIR" <<'PY'
-import os
-import sys
-from pathlib import Path
-
-base_dir = Path(sys.argv[1])
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-sys.path.insert(0, str(base_dir))
-
-try:
-    import django
-
-    django.setup()
-except Exception:
-    print("unknown")
-    sys.exit(0)
-
-try:
-    from apps.nodes.models import NodeFeature
-except Exception:
-    print("unknown")
-    sys.exit(0)
-
-feature = NodeFeature.objects.filter(slug="video-cam").first()
-if not feature:
-    print("disabled")
-    sys.exit(0)
-
-try:
-    enabled = bool(feature.is_enabled)
-except Exception:
-    print("unknown")
-    sys.exit(0)
-
-print("enabled" if enabled else "disabled")
-PY
-}
 
 _prefixed_systemd_unit_present() {
   local prefix="$1"
@@ -2041,7 +2000,7 @@ arthexis_timing_end "env_refresh"
 
 if [ -n "${PYTHON_BIN:-}" ] && ls data/*.json >/dev/null 2>&1; then
   arthexis_timing_start "load_user_data"
-  "$PYTHON_BIN" manage.py load_user_data data/*.json
+  "$PYTHON_BIN" manage.py loaddata data/*.json
   arthexis_timing_end "load_user_data"
 elif [ -n "${PYTHON_BIN:-}" ]; then
   arthexis_timing_record "load_user_data" 0 "skipped"
@@ -2081,18 +2040,17 @@ if [[ $CLEAR_WORK -eq 1 ]]; then
   clear_workdir_before_restart
 fi
 
-if [ -n "$SERVICE_NAME" ]; then
-  camera_feature_state="$(video_camera_feature_state || true)"
-  if [ "$camera_feature_state" = "enabled" ]; then
-    touch "$LOCK_DIR/$ARTHEXIS_CAMERA_SERVICE_LOCK"
-    if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-      arthexis_install_camera_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
-    fi
-  elif [ "$camera_feature_state" = "disabled" ]; then
-    rm -f "$LOCK_DIR/$ARTHEXIS_CAMERA_SERVICE_LOCK"
-    if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-      arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "camera-${SERVICE_NAME}.service"
-    fi
+if [ -n "${PYTHON_BIN:-}" ]; then
+  arthexis_timing_start "reconcile_node_features_services"
+  "$PYTHON_BIN" manage.py reconcile_node_features_services
+  arthexis_timing_end "reconcile_node_features_services"
+fi
+
+if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+  if camera_service_configured; then
+    arthexis_install_camera_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
+  else
+    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "camera-${SERVICE_NAME}.service"
   fi
 fi
 

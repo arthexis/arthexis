@@ -4,7 +4,14 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.locals.user_data import EntityModelAdmin
 from apps.tasks.forms import TaskCategoryAdminForm
-from apps.tasks.models import ManualSkill, ManualTaskReport, ManualTaskRequest, TaskCategory
+from apps.tasks.models import (
+    ChargerVendorSubmission,
+    GitHubIssueTemplate,
+    ManualSkill,
+    ManualTaskReport,
+    ManualTaskRequest,
+    TaskCategory,
+)
 
 
 @admin.register(TaskCategory)
@@ -30,7 +37,18 @@ class TaskCategoryAdmin(EntityModelAdmin):
     filter_horizontal = ("odoo_products",)
     readonly_fields = ("image_metadata",)
     fieldsets = (
-        (None, {"fields": ("name", "description", "image_media", "image_upload", "image_metadata")}),
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "description",
+                    "image_media",
+                    "image_upload",
+                    "image_metadata",
+                )
+            },
+        ),
         (
             _("Fulfillment"),
             {
@@ -60,6 +78,37 @@ class TaskCategoryAdmin(EntityModelAdmin):
         }
 
 
+@admin.register(ChargerVendorSubmission)
+class ChargerVendorSubmissionAdmin(EntityModelAdmin):
+    """Admin review surface for public charger vendor intake submissions."""
+
+    list_display = (
+        "company_name",
+        "charger_brand",
+        "contact_name",
+        "contact_email",
+        "review_status",
+        "reviewed_at",
+        "reviewed_by",
+    )
+    list_filter = ("review_status", "reviewed_at")
+    search_fields = (
+        "company_name",
+        "charger_brand",
+        "contact_name",
+        "contact_email",
+        "charger_models",
+        "integration_goals",
+    )
+    raw_id_fields = ("reviewed_by",)
+
+
+@admin.register(GitHubIssueTemplate)
+class GitHubIssueTemplateAdmin(EntityModelAdmin):
+    list_display = ("name", "labels")
+    search_fields = ("name", "title_template", "body_template", "labels")
+
+
 @admin.register(ManualTaskRequest)
 class ManualTaskRequestAdmin(EntityModelAdmin):
     list_display = (
@@ -74,6 +123,8 @@ class ManualTaskRequestAdmin(EntityModelAdmin):
         "scheduled_end",
         "is_periodic",
         "enable_notifications",
+        "github_issue_trigger",
+        "github_issue_opened_at",
     )
     list_filter = (
         "node",
@@ -81,6 +132,7 @@ class ManualTaskRequestAdmin(EntityModelAdmin):
         "enable_notifications",
         "category",
         "is_periodic",
+        "github_issue_trigger",
     )
     search_fields = (
         "description",
@@ -100,10 +152,16 @@ class ManualTaskRequestAdmin(EntityModelAdmin):
         "assigned_group",
         "manager",
         "requestor",
+        "github_issue_template",
     )
     filter_horizontal = ("odoo_products", "required_skills")
     date_hierarchy = "scheduled_start"
     actions = ("make_cp_reservations",)
+    readonly_fields = (
+        "github_issue_number",
+        "github_issue_url",
+        "github_issue_opened_at",
+    )
     fieldsets = (
         (
             None,
@@ -122,6 +180,12 @@ class ManualTaskRequestAdmin(EntityModelAdmin):
                     "period",
                     "period_deadline",
                     "enable_notifications",
+                    "github_issue_template",
+                    "github_issue_trigger",
+                    "github_issue_overdue_after",
+                    "github_issue_number",
+                    "github_issue_url",
+                    "github_issue_opened_at",
                 )
             },
         ),
@@ -150,15 +214,13 @@ class ManualTaskRequestAdmin(EntityModelAdmin):
                 for message in self._normalize_validation_error(exc):
                     self.message_user(
                         request,
-                        _("%(task)s: %(message)s")
-                        % {"task": task, "message": message},
+                        _("%(task)s: %(message)s") % {"task": task, "message": message},
                         level=messages.WARNING,
                     )
             except Exception as exc:  # pragma: no cover - defensive guard
                 self.message_user(
                     request,
-                    _("%(task)s: %(error)s")
-                    % {"task": task, "error": str(exc)},
+                    _("%(task)s: %(error)s") % {"task": task, "error": str(exc)},
                     level=messages.ERROR,
                 )
             else:

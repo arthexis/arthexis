@@ -1,4 +1,5 @@
 OCPP_VERSION_16 = "ocpp1.6"
+OCPP_SUBPROTOCOL_16J = "ocpp1.6j"
 OCPP_VERSION_201 = "ocpp2.0.1"
 OCPP_VERSION_21 = "ocpp2.1"
 

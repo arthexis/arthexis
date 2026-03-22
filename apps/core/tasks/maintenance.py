@@ -19,7 +19,7 @@ def _poll_emails() -> None:
     except Exception:  # pragma: no cover - app not ready
         return
 
-    for collector in EmailCollector.objects.all():
+    for collector in EmailCollector.objects.filter(is_enabled=True):
         collector.collect()
 
 

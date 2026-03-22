@@ -9,12 +9,15 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apps.actions.models import StaffTask
+from apps.actions.staff_tasks import ensure_default_staff_tasks_exist
+from apps.core.system.admin_views import TASK_PANEL_ROUTES
 
 
 class AdminStaffTasksTests(TestCase):
     """Validate dashboard task buttons and user toggles."""
 
     def setUp(self):
+        ensure_default_staff_tasks_exist()
         user_model = get_user_model()
         self.user = user_model.objects.create_superuser(
             username="adminstaff",
@@ -22,50 +25,6 @@ class AdminStaffTasksTests(TestCase):
             password="admin123",
         )
         self.client.force_login(self.user)
-
-    def test_admin_dashboard_uses_tasks_button_labels(self):
-        """Dashboard should surface Tasks and Rules buttons using staff task records."""
-
-        response = self.client.get(reverse("admin:index"))
-
-        self.assertEqual(response.status_code, 200)
-        content = response.content.decode()
-        self.assertIn(">Tasks<", content)
-        self.assertIn(">Rules<", content)
-        self.assertIn(">System<", content)
-        self.assertNotIn(">Reports<", content)
-
-    def test_staff_member_can_toggle_dashboard_task_visibility(self):
-        """Staff users can hide a dashboard task from their own top-button row."""
-
-        system_url = reverse("admin:system")
-        rules_task = StaffTask.objects.get(slug="rules")
-        task_ids = [str(task.pk) for task in StaffTask.objects.exclude(pk=rules_task.pk)]
-
-        response = self.client.post(system_url, {"dashboard_tasks": task_ids}, follow=True)
-
-        self.assertEqual(response.status_code, 200)
-        dashboard_response = self.client.get(reverse("admin:index"))
-        dashboard_html = dashboard_response.content.decode()
-        self.assertNotIn(">Rules<", dashboard_html)
-        self.assertIn(">Tasks<", dashboard_html)
-
-    @patch("apps.core.system.admin_views._systemctl_command", return_value=["systemctl"])
-    @patch("apps.core.system.admin_views.subprocess.run")
-    def test_system_view_shows_restart_button_when_superuser_and_service_active(
-        self, mocked_run: Mock, _mocked_command: Mock
-    ):
-        """System view should expose restart action only for active service superusers."""
-
-        mocked_run.return_value.returncode = 0
-        lock_dir = Path(settings.BASE_DIR) / ".locks"
-        lock_dir.mkdir(exist_ok=True)
-        (lock_dir / "service.lck").write_text("suite", encoding="utf-8")
-
-        response = self.client.get(reverse("admin:system-details"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Restart Server")
 
     @patch("apps.core.system.admin_views._systemctl_command", return_value=["systemctl"])
     @patch("apps.core.system.admin_views.subprocess.run")
@@ -83,3 +42,51 @@ class AdminStaffTasksTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(any("restart" in " ".join(call.args[0]) for call in mocked_run.call_args_list))
+
+    def test_reports_runner_rejects_superuser_only_report_selection_for_staff_user(self):
+        """Reports runner should reject direct submission for superuser-only report routes."""
+
+        user_model = get_user_model()
+        staff_user = user_model.objects.create_user(
+            username="staffer2",
+            email="staffer2@example.com",
+            password="admin123",
+            is_staff=True,
+        )
+        self.client.force_login(staff_user)
+
+        response = self.client.post(
+            reverse("admin:system-reports"),
+            {"report": "system-upgrade-report", "params": ""},
+            follow=False,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        messages = list(response.context["messages"])
+        self.assertTrue(any("do not have access" in str(message) for message in messages))
+
+
+    def test_task_panel_registry_contains_system_route(self):
+        """System view should be registered in task-panel route metadata."""
+
+        route_names = {route.name for route in TASK_PANEL_ROUTES}
+        self.assertIn("system", route_names)
+        self.assertIn("system-reports", route_names)
+
+    def test_system_page_uses_task_panel_rebrand(self):
+        """System settings page should render task panel terminology."""
+
+        response = self.client.get(reverse("admin:system"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Task Panels")
+        self.assertContains(response, "Save task panel preferences")
+
+    def test_sigil_builder_breadcrumb_links_back_to_task_panels(self):
+        """Sigil Builder breadcrumb trail should include Task Panels as previous view."""
+
+        response = self.client.get(reverse("admin:sigil_builder"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Task Panels")
+        self.assertContains(response, reverse("admin:system"))

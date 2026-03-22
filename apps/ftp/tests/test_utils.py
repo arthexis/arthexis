@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME
 from apps.groups.models import SecurityGroup
 
 from ..models import FTPFolder
@@ -21,7 +22,7 @@ class BuildUserMountsTests(TestCase):
         self.member = get_user_model().objects.create_user(
             username="member", password="secret123"
         )
-        self.group = SecurityGroup.objects.create(name="Operators")
+        self.group = SecurityGroup.objects.create(name=NETWORK_OPERATOR_GROUP_NAME)
         self.member.groups.add(self.group)
 
     def _assert_is_link(self, link_path: Path) -> None:

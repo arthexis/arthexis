@@ -7,8 +7,9 @@
 **/*.pyo
 **/*.pyd
 **/*.sqlite3
+**/media/
+**/node_modules/
 .env
+.locks/
 .venv
 venv
-**/node_modules/
-**/media/

@@ -6,6 +6,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.nodes.feature_detection import is_local_node_feature_active
 from apps.screens.lcd import (
     LCDController,
     LCDTimings,
@@ -35,6 +36,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:
+        if not is_local_node_feature_active("lcd-screen"):
+            raise CommandError("lcd-screen feature is not active on this node")
+
         base_dir = Path(settings.BASE_DIR)
         lock_file = self._resolve_lock_file(base_dir, options.get("lock_file"))
         service_name = self._resolve_service_name(base_dir, options.get("service_name"))
