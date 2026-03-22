@@ -11,15 +11,9 @@ ACRONYM_MAP = {
 
 
 def assign_acronyms(apps, schema_editor):
-    NodeRole = apps.get_model("nodes", "NodeRole")
-    for name, acronym in ACRONYM_MAP.items():
-        try:
-            role = NodeRole.objects.get(name=name)
-        except NodeRole.DoesNotExist:
-            continue
-        if role.acronym != acronym:
-            role.acronym = acronym
-            role.save(update_fields=["acronym"])
+    """Defer acronym backfill to the existing deferred node migration task."""
+
+    del apps, schema_editor
 
 
 def remove_acronyms(apps, schema_editor):
