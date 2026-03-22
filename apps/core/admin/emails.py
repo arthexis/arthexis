@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib import admin, messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Max
 from django.shortcuts import redirect
 from django.template import TemplateDoesNotExist
@@ -238,6 +238,13 @@ class EmailInboxAdmin(
             self.message_user(request, _("Unknown inbox."), messages.ERROR)
             return redirect("..")
 
+        if request.method == "POST":
+            if not self.has_change_permission(request, inbox):
+                raise PermissionDenied
+        elif not self.has_view_permission(request, inbox):
+            raise PermissionDenied
+
+        can_change = self.has_change_permission(request, inbox)
         collector = inbox.collectors.order_by("id").first() or EmailCollector(inbox=inbox)
         results = []
         if request.method == "POST":
@@ -263,6 +270,12 @@ class EmailInboxAdmin(
         else:
             form = EmailCollectorSetupForm(instance=collector)
             form.fields["additional_inboxes"].queryset = EmailInbox.objects.exclude(pk=inbox.pk)
+            if not can_change:
+                for field in form.fields.values():
+                    field.disabled = True
+                form.fields["test_now"].help_text = _(
+                    "Live testing is unavailable without change permission."
+                )
 
         context = {
             **self.admin_site.each_context(request),
@@ -272,6 +285,7 @@ class EmailInboxAdmin(
             "form": form,
             "collector": collector,
             "results": results,
+            "can_change": can_change,
             "change_url": reverse("admin:emails_emailinbox_change", args=[inbox.pk]),
         }
         return TemplateResponse(request, "admin/core/emailinbox/setup_collector.html", context)
