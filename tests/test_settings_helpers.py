@@ -19,10 +19,10 @@ def test_validate_host_with_subnets_accepts_trailing_dot_ip_host():
     assert is_allowed is True
 
 
-def test_validate_host_with_subnets_uses_first_forwarded_host_value():
+def test_validate_host_with_subnets_rejects_comma_separated_host_value():
     is_allowed = validate_host_with_subnets(
         "10.42.0.1,127.0.0.1",
         ["10.42.0.0/16"],
     )
 
-    assert is_allowed is True
+    assert is_allowed is False
