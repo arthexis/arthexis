@@ -103,18 +103,6 @@ def create_manual_task_github_issue(manual_task_id: int, trigger: str) -> str | 
     return issue_url
 
 
-@shared_task(name="apps.content.tasks.run_scheduled_web_samplers")
-def run_scheduled_web_samplers() -> list[int]:
-    """Execute any web request samplers that are due."""
-
-    from apps.content.web_sampling import schedule_pending_samplers
-
-    executed = schedule_pending_samplers()
-    if executed:
-        logger.info("Executed %s scheduled web samplers", len(executed))
-    return executed
-
-
 @shared_task(name="apps.playwright.tasks.run_scheduled_website_screenshots")
 def run_scheduled_website_screenshots() -> list[int]:
     """Execute due Playwright website screenshot schedules."""

@@ -11,7 +11,7 @@ from django.shortcuts import redirect
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
-from parler.admin import TranslatableAdmin, TranslatableTabularInline
+from parler.admin import TranslatableAdmin
 
 from apps.audio.models import AudioSample
 from apps.content.models import (
@@ -19,8 +19,6 @@ from apps.content.models import (
     ContentClassifier,
     ContentSample,
     ContentTag,
-    WebRequestSampler,
-    WebRequestStep,
     WebSample,
     WebSampleAttachment,
 )
@@ -29,14 +27,10 @@ from apps.content.utils import (
     create_uploaded_content_sample,
     save_screenshot,
 )
-from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node, NodeFeature
 from apps.video.models import VideoDevice
 from apps.video.utils import DEFAULT_CAMERA_RESOLUTION, capture_rpi_snapshot
-
-from .web_sampling import execute_sampler
-
 
 @admin.register(ContentTag)
 class ContentTagAdmin(TranslatableAdmin, EntityModelAdmin):
@@ -287,59 +281,27 @@ class ContentSampleAdmin(EntityModelAdmin):
         )
 
 
-class WebRequestStepInline(TranslatableTabularInline):
-    model = WebRequestStep
-    extra = 0
-    fields = (
-        "order",
-        "slug",
-        "name",
-        "curl_command",
-        "save_as_content",
-        "attachment_kind",
-    )
-
-
-@admin.register(WebRequestSampler)
-class WebRequestSamplerAdmin(OwnableAdminMixin, TranslatableAdmin, EntityModelAdmin):
-    list_display = (
-        "label",
-        "slug",
-        "sampling_period_minutes",
-        "last_sampled_at",
-        "user",
-        "group",
-    )
-    search_fields = ("label", "slug", "description")
-    list_filter = ("sampling_period_minutes", "user", "group")
-    actions = ("execute_selected_samplers",)
-    inlines = (WebRequestStepInline,)
-
-    @admin.action(description="Execute selected Samplers")
-    def execute_selected_samplers(self, request, queryset):
-        executed = 0
-        for sampler in queryset:
-            try:
-                execute_sampler(sampler, user=request.user)
-                executed += 1
-            except Exception as exc:  # pragma: no cover - admin message only
-                self.message_user(request, str(exc), level=messages.ERROR)
-        if executed:
-            self.message_user(
-                request,
-                f"Executed {executed} sampler(s)",
-                level=messages.SUCCESS,
-            )
-
-
 class WebSampleAttachmentInline(admin.TabularInline):
     model = WebSampleAttachment
     extra = 0
-    readonly_fields = ("content_sample", "uri", "step")
+    readonly_fields = (
+        "content_sample",
+        "legacy_step_id",
+        "step_slug",
+        "step_name",
+        "uri",
+    )
 
 
 @admin.register(WebSample)
 class WebSampleAdmin(EntityModelAdmin):
-    list_display = ("sampler", "executed_by", "created_at")
-    readonly_fields = ("document", "executed_by", "created_at")
+    list_display = ("sampler_label", "sampler_slug", "executed_by", "created_at")
+    readonly_fields = (
+        "legacy_sampler_id",
+        "sampler_slug",
+        "sampler_label",
+        "document",
+        "executed_by",
+        "created_at",
+    )
     inlines = (WebSampleAttachmentInline,)
