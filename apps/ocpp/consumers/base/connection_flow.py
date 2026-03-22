@@ -83,20 +83,19 @@ class ConnectionFlowMixin:
         _register_log_names_for_identity(self.charger_id, None, friendly_name)
 
     async def _allow_charge_point_connection_legacy(
-        self, _existing_charger: Charger | None
+        self, existing_charger: Charger | None
     ) -> bool:
-        """Always accept OCPP websocket connections.
+        """Gate new charge-point websocket admissions using suite feature state."""
 
-        The legacy ``charge-points`` node feature has been retired and must no
-        longer gate websocket admission. We still inspect suite feature state for
-        telemetry and operational visibility, but we do not block the connection.
-        """
+        if existing_charger is not None:
+            self._charge_point_connection_reason = None
+            return True
 
         def _resolve_feature_reason() -> str | None:
             node = Node.get_local()
             if not node:
                 logger.warning(
-                    "Charge point connection allowed because no local node is registered."
+                    "Charge point connection blocked: no local node is registered."
                 )
                 return "node-missing"
 
@@ -111,13 +110,13 @@ class ConnectionFlowMixin:
                 ).first()
             if not feature:
                 logger.warning(
-                    "Charge point creation feature %s missing; allowing websocket admission.",
+                    "Charge point connection blocked: creation feature %s is missing.",
                     requested_feature_slug,
                 )
                 return "creation-feature-missing"
             if not feature.is_enabled:
                 logger.info(
-                    "Charge point creation feature %s disabled; allowing websocket admission.",
+                    "Charge point connection blocked: creation feature %s is disabled.",
                     feature.slug,
                 )
                 return "creation-feature-disabled"
@@ -126,7 +125,7 @@ class ConnectionFlowMixin:
         self._charge_point_connection_reason = await database_sync_to_async(
             _resolve_feature_reason
         )()
-        return True
+        return self._charge_point_connection_reason is None
 
     async def _allow_charge_point_connection(
         self, existing_charger: Charger | None
