@@ -9,6 +9,8 @@ import re
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.utils import timezone
 from apps.energy.models import CustomerAccount
 from apps.links.models import Reference
@@ -1776,42 +1778,43 @@ class CSMSConsumer(
         if charger is None:
             return None
 
-        for profile in report.profiles:
-            profile_obj, _created = ChargingProfile.objects.update_or_create(
-                charger=charger,
-                connector_id=profile.connector_id,
-                charging_profile_id=profile.profile_id,
-                defaults={
-                    "stack_level": profile.stack_level,
-                    "purpose": profile.purpose,
-                    "kind": profile.kind,
-                    "recurrency_kind": profile.recurrency_kind,
-                    "transaction_id": profile.transaction_id,
-                    "valid_from": profile.valid_from,
-                    "valid_to": profile.valid_to,
-                },
-            )
-            ChargingSchedule.objects.update_or_create(
-                profile=profile_obj,
-                defaults={
-                    "charging_rate_unit": profile.schedule.charging_rate_unit,
-                    "duration_seconds": profile.schedule.duration_seconds,
-                    "start_schedule": profile.schedule.start_schedule,
-                    "charging_schedule_periods": [
-                        {
-                            "start_period": period.start_period,
-                            "limit": period.limit,
-                            **(
-                                {"number_phases": period.number_phases}
-                                if period.number_phases is not None
-                                else {}
-                            ),
-                            **(
-                                {"phase_to_use": period.phase_to_use}
-                                if period.phase_to_use is not None
-                                else {}
-                            ),
-                        }
+        with transaction.atomic():
+            for profile in report.profiles:
+                profile_obj, _created = ChargingProfile.objects.update_or_create(
+                    charger=charger,
+                    connector_id=profile.connector_id,
+                    charging_profile_id=profile.profile_id,
+                    defaults={
+                        "stack_level": profile.stack_level,
+                        "purpose": profile.purpose,
+                        "kind": profile.kind,
+                        "recurrency_kind": profile.recurrency_kind,
+                        "transaction_id": profile.transaction_id,
+                        "valid_from": profile.valid_from,
+                        "valid_to": profile.valid_to,
+                    },
+                )
+                ChargingSchedule.objects.update_or_create(
+                    profile=profile_obj,
+                    defaults={
+                        "charging_rate_unit": profile.schedule.charging_rate_unit,
+                        "duration_seconds": profile.schedule.duration_seconds,
+                        "start_schedule": profile.schedule.start_schedule,
+                        "charging_schedule_periods": [
+                            {
+                                "start_period": period.start_period,
+                                "limit": period.limit,
+                                **(
+                                    {"number_phases": period.number_phases}
+                                    if period.number_phases is not None
+                                    else {}
+                                ),
+                                **(
+                                    {"phase_to_use": period.phase_to_use}
+                                    if period.phase_to_use is not None
+                                    else {}
+                                ),
+                            }
                         for period in profile.schedule.periods
                     ],
                     "min_charging_rate": profile.schedule.min_charging_rate,
@@ -2887,8 +2890,15 @@ class CSMSConsumer(
             self._reconcile_reported_charging_profiles(report, charger=charger)
             self._persist_reported_charging_profiles(report, charger=charger)
 
-        await database_sync_to_async(_persist_and_reconcile)()
-        self._log_ocpp201_notification("ReportChargingProfiles", payload)
+        try:
+            await database_sync_to_async(_persist_and_reconcile)()
+            self._log_ocpp201_notification("ReportChargingProfiles", payload)
+        except ValidationError as exc:
+            store.add_log(
+                self.store_key,
+                f"ReportChargingProfiles ignored: {exc}",
+                log_type="charger",
+            )
         return {}
 
     async def _handle_security_event_notification_action_legacy(

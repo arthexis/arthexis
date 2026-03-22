@@ -266,7 +266,7 @@ class RunserverSession:
 
 
 def _ensure_runserver_default_bind(args: list[str], *, default_port: int = 8888) -> None:
-    """Ensure runserver defaults to an explicit bind when no addrport is provided.
+    """Ensure runserver defaults to loopback-only bind addresses.
 
     Args:
         args: Command-line arguments where ``args[0]`` is expected to be ``runserver``.
@@ -304,10 +304,10 @@ def _ensure_runserver_default_bind(args: list[str], *, default_port: int = 8888)
         return
 
     if "--ipv6" in args or "-6" in args:
-        args.append(f"[::]:{default_port}")
+        args.append(f"[::1]:{default_port}")
         return
 
-    args.append(f"0.0.0.0:{default_port}")
+    args.append(f"127.0.0.1:{default_port}")
 
 
 def _run_runserver(base_dir: Path, argv: list[str], is_debug_session: bool) -> None:

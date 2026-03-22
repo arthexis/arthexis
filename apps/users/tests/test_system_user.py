@@ -3,6 +3,11 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, override_settings
 
+from apps.groups.constants import (
+    NETWORK_OPERATOR_GROUP_NAME,
+    PRODUCT_DEVELOPER_GROUP_NAME,
+    RELEASE_MANAGER_GROUP_NAME,
+)
 from apps.users import temp_passwords
 from apps.users.backends import LocalhostAdminBackend, TempPasswordBackend
 from apps.users.system import collect_system_user_issues, ensure_system_user
@@ -19,6 +24,9 @@ def test_ensure_system_user_creates_and_repairs_account():
     assert user.is_staff and user.is_superuser and user.is_active
     assert not user.has_usable_password()
     assert user.operate_as_id is None
+    assert user.groups.filter(name=NETWORK_OPERATOR_GROUP_NAME).exists()
+    assert user.groups.filter(name=PRODUCT_DEVELOPER_GROUP_NAME).exists()
+    assert user.groups.filter(name=RELEASE_MANAGER_GROUP_NAME).exists()
 
     user.is_active = False
     user.is_staff = False
@@ -26,12 +34,20 @@ def test_ensure_system_user_creates_and_repairs_account():
     user.operate_as = User.objects.create(username="delegate", is_staff=True)
     user.set_password("secret")
     user.save()
+    user.groups.clear()
 
     repaired_user, updated = ensure_system_user(record_updates=True)
     assert repaired_user.pk == user.pk
-    assert {"is_active", "is_staff", "is_superuser", "password", "operate_as"}.issubset(
-        updated
-    )
+    assert {
+        "group:Network Operator",
+        "group:Product Developer",
+        "group:Release Manager",
+        "is_active",
+        "is_staff",
+        "is_superuser",
+        "password",
+        "operate_as",
+    }.issubset(updated)
     assert (
         repaired_user.is_active
         and repaired_user.is_staff

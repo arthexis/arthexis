@@ -48,5 +48,5 @@ class SecurityGroup(Group):
         """Return a short label describing the group's place in the security model."""
 
         if self.is_canonical_staff_group:
-            return _("Canonical staff security group")
-        return _("Context-specific security group")
+            return _("Basic staff security group")
+        return _("User-facing security group")

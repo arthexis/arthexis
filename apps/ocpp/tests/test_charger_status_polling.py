@@ -4,9 +4,11 @@ import uuid
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.urls import NoReverseMatch, reverse
+from django.urls import NoReverseMatch
+from django.urls import reverse
 from django.utils import timezone
 
+from apps.groups.models import SecurityGroup
 from apps.ocpp import store
 from apps.ocpp.models import Charger, Transaction
 
@@ -305,6 +307,111 @@ def test_status_view_disables_event_admin_links_when_admin_urls_missing(
     html = response.content.decode()
     assert "1234" in html
     assert "admin/ocpp/transaction/1234/change/" not in html
+
+
+@pytest.mark.django_db
+def test_status_view_filters_sensitive_non_transaction_events_for_non_privileged_users(
+    client,
+):
+    """Non-privileged viewers should keep benign events while hiding sensitive logs."""
+
+    user = get_user_model().objects.create_user(
+        username="status-events-non-staff", password="pass"
+    )
+    client.force_login(user)
+    charger = Charger.objects.create(
+        charger_id="STATUS-EVENTS-NON-STAFF", connector_id=1
+    )
+    identity = store.identity_key(charger.charger_id, charger.connector_id)
+    store.add_log(identity, "Connected websocket")
+    store.add_log(
+        identity,
+        "DiagnosticsStatusNotification: status=Uploaded, location=https://diag.example/upload?token=%2A%2A%2AREDACTED%2A%2A%2A",
+    )
+
+    response = client.get(
+        reverse(
+            "ocpp:charger-status-connector",
+            args=[charger.charger_id, charger.connector_slug],
+        )
+    )
+
+    assert response.status_code == 200
+    events = response.context["non_transaction_events"]
+    assert any(item["event"] == "Connected websocket" for item in events)
+    assert not any(item["event"] == "DiagnosticsStatusNotification" for item in events)
+    html = response.content.decode()
+    assert "diag.example" not in html
+
+
+@pytest.mark.django_db
+def test_status_view_shows_sensitive_non_transaction_events_for_owner_group_members(
+    client,
+):
+    """Owner-group users should keep access to sensitive non-transaction events."""
+
+    user = get_user_model().objects.create_user(
+        username="status-events-owner-group", password="pass"
+    )
+    security_group = SecurityGroup.objects.create(name="Diagnostics Viewers")
+    user.groups.add(security_group)
+    client.force_login(user)
+    charger = Charger.objects.create(
+        charger_id="STATUS-EVENTS-OWNER-GROUP", connector_id=1
+    )
+    charger.owner_groups.add(security_group)
+    identity = store.identity_key(charger.charger_id, charger.connector_id)
+    store.add_log(
+        identity,
+        "DiagnosticsStatusNotification: status=Uploaded, location=https://diag.example/upload?token=%2A%2A%2AREDACTED%2A%2A%2A",
+    )
+
+    response = client.get(
+        reverse(
+            "ocpp:charger-status-connector",
+            args=[charger.charger_id, charger.connector_slug],
+        )
+    )
+
+    assert response.status_code == 200
+    assert any(
+        item["event"] == "DiagnosticsStatusNotification"
+        for item in response.context["non_transaction_events"]
+    )
+
+
+@pytest.mark.django_db
+def test_status_view_shows_non_transaction_events_for_staff(client):
+    """Staff users should keep access to non-transaction events in status view."""
+
+    user = get_user_model().objects.create_user(
+        username="status-events-staff", password="pass", is_staff=True
+    )
+    client.force_login(user)
+    charger = Charger.objects.create(charger_id="STATUS-EVENTS-STAFF", connector_id=1)
+    identity = store.identity_key(charger.charger_id, charger.connector_id)
+    store.add_log(identity, "Connected websocket")
+    store.add_log(
+        identity,
+        "DiagnosticsStatusNotification: status=Uploaded, location=https://diag.example/upload?token=%2A%2A%2AREDACTED%2A%2A%2A",
+    )
+
+    response = client.get(
+        reverse(
+            "ocpp:charger-status-connector",
+            args=[charger.charger_id, charger.connector_slug],
+        )
+    )
+
+    assert response.status_code == 200
+    assert any(
+        item["event"] == "Connected websocket"
+        for item in response.context["non_transaction_events"]
+    )
+    assert any(
+        item["event"] == "DiagnosticsStatusNotification"
+        for item in response.context["non_transaction_events"]
+    )
 
 
 @pytest.mark.django_db

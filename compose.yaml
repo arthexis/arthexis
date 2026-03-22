@@ -26,6 +26,7 @@ services:
       - "${PORT:-8888}:${PORT:-8888}"
     volumes:
       - arthexis_db:/app/data
+      - arthexis_locks:/app/.locks
       - arthexis_media:/app/media
     depends_on:
       redis:
@@ -74,5 +75,6 @@ services:
 
 volumes:
   arthexis_db:
+  arthexis_locks:
   arthexis_media:
   redis_data:

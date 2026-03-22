@@ -8,7 +8,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.utils.html import format_html
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 from django.utils import timezone
@@ -735,12 +735,17 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
 
     def reload_from_evergo_action(self, request, obj):
         """Change-view action to refresh one order snapshot from Evergo."""
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+
         refreshed_order = self._reload_order_from_evergo(request, obj)
         target_pk = refreshed_order.pk if refreshed_order is not None else obj.pk
         return HttpResponseRedirect(reverse("admin:evergo_evergoorder_change", args=[target_pk]))
 
     reload_from_evergo_action.label = _("Reload from Evergo")
     reload_from_evergo_action.short_description = _("Reload from Evergo")
+    reload_from_evergo_action.methods = ("POST",)
+    reload_from_evergo_action.button_type = "form"
 
 
 @admin.register(EvergoOrderFieldValue)

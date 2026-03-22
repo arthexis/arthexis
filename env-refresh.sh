@@ -88,6 +88,8 @@ LOCK_DIR="$SCRIPT_DIR/.locks"
 FORCE_REFRESH=0
 PIP_FRESHNESS_MINUTES=0
 DEPS_ONLY=0
+INSTALL_AND_REFRESH=0
+INSTALL_PREVIEW_DEPS=0
 
 LATEST=0
 CLEAN=0
@@ -113,11 +115,24 @@ while [[ $# -gt 0 ]]; do
       DEPS_ONLY=1
       shift
       ;;
+    --install-and-refresh)
+      INSTALL_AND_REFRESH=1
+      shift
+      ;;
+    --preview-deps)
+      INSTALL_PREVIEW_DEPS=1
+      shift
+      ;;
     *)
       break
       ;;
   esac
 done
+
+if [ "$DEPS_ONLY" -eq 1 ] && [ "$INSTALL_AND_REFRESH" -eq 1 ]; then
+  echo "Cannot combine --deps-only with --install-and-refresh." >&2
+  exit 1
+fi
 
 if [ ! -f "$PYTHON" ]; then
   if bootstrap_python="$(arthexis_python_bin 2>/dev/null)"; then
@@ -194,6 +209,20 @@ PY
     echo "  RHEL/Fedora:   sudo dnf install python3-pip" >&2
     return 1
   fi
+}
+
+should_install_preview_dependencies() {
+  case "${ARTHEXIS_INSTALL_PREVIEW_DEPS:-}" in
+    1|true|TRUE|yes|YES)
+      return 0
+      ;;
+  esac
+
+  if [ "$INSTALL_PREVIEW_DEPS" -eq 1 ]; then
+    return 0
+  fi
+
+  return 1
 }
 
 playwright_requirement() {
@@ -643,12 +672,20 @@ else
 fi
 
 ensure_celery_installed
-ensure_playwright_browsers_installed
-ensure_selenium_installed
+if should_install_preview_dependencies; then
+  ensure_playwright_browsers_installed
+  ensure_selenium_installed
+else
+  echo "Preview/browser dependencies not requested; skipping Playwright and Selenium setup."
+fi
 
 if [ "$DEPS_ONLY" -eq 1 ]; then
   echo "Dependency refresh complete; skipping env-refresh database updates."
   exit 0
+fi
+
+if [ "$INSTALL_AND_REFRESH" -eq 1 ]; then
+  echo "Dependency refresh complete; continuing with env-refresh in the same transaction."
 fi
 
 install_watch_upgrade_helper || echo "watch-upgrade helper setup failed unexpectedly; delegated auto-upgrades may be unavailable"
