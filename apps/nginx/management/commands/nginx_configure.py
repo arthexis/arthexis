@@ -7,23 +7,24 @@ from apps.nginx.management.commands.nginx import ConfigureMixin
 
 
 class Command(ConfigureMixin, BaseCommand):
-    """Deprecated management command forwarding to ``nginx --configure``.
+    """Supported management command alias forwarding to ``nginx --configure``.
 
-    The command is retained for backward compatibility and always prints a
-    deprecation notice before delegating to the consolidated nginx CLI.
+    The alias is retained as a synonym for operators who still prefer the
+    dedicated entrypoint, while delegating execution to the consolidated nginx
+    CLI.
     """
 
-    help = "Deprecated alias for `nginx --configure`."  # noqa: A003 - django requires 'help'
+    help = "Alias for `nginx --configure`."  # noqa: A003 - django requires 'help'
 
     def add_arguments(self, parser):
-        """Accept legacy flags and forward them to ``nginx --configure``."""
+        """Accept alias flags and forward them to ``nginx --configure``."""
 
         self.add_configure_arguments(parser)
 
     def handle(self, *args, **options):
-        """Forward the legacy command to the consolidated nginx CLI."""
+        """Forward the alias command to the consolidated nginx CLI."""
 
-        self.stdout.write("`nginx_configure` is deprecated; use `nginx --configure` instead.")
+        self.stdout.write("`nginx_configure` is a supported alias for `nginx --configure`.")
         call_command(
             "nginx",
             "--configure",
@@ -33,7 +34,7 @@ class Command(ConfigureMixin, BaseCommand):
         )
 
     def _forwarded_args(self, options: dict[str, object]) -> list[str]:
-        """Convert parsed legacy options back into CLI flags for forwarding.
+        """Convert parsed alias options back into CLI flags for forwarding.
 
         Parameters:
             options: Parsed option values for ``mode``, ``port``, ``role``,
