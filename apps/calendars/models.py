@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
@@ -46,6 +48,18 @@ class GoogleCalendar(Entity):
     class Meta:
         verbose_name = _("Google Calendar")
         verbose_name_plural = _("Google Calendars")
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(is_enabled=False) | Q(account__isnull=False),
+                name="calendar_enabled_requires_account",
+            )
+        ]
+
+    def clean(self) -> None:
+        """Require an account before an outbound calendar destination can be enabled."""
+        super().clean()
+        if self.is_enabled and self.account_id is None:
+            raise ValidationError({"account": _("Enabled calendars must have a Google account.")})
 
     def __str__(self) -> str:  # pragma: no cover
         return self.name

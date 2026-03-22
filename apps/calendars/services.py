@@ -35,7 +35,12 @@ class GoogleCalendarGateway:
         headers["Authorization"] = f"Bearer {token}"
         headers.setdefault("Accept", "application/json")
         headers.setdefault("Content-Type", "application/json")
-        response = requests.request(method, url, headers=headers, timeout=30, **kwargs)
+        try:
+            response = requests.request(method, url, headers=headers, timeout=30, **kwargs)
+        except requests.RequestException as exc:
+            raise GoogleCalendarRequestError(
+                "Google Calendar API request failed before a response was received."
+            ) from exc
         if response.status_code >= 400:
             raise GoogleCalendarRequestError(
                 f"Google Calendar API request failed ({response.status_code}): {response.text}"
@@ -60,6 +65,8 @@ class GoogleCalendarGateway:
         """Create an event on the configured Google Calendar and return the API payload."""
         start = _coerce_aware_datetime(starts_at)
         end = _coerce_aware_datetime(ends_at) if ends_at else None
+        if end is not None and end < start:
+            raise GoogleCalendarError("Event end must not be earlier than start.")
         calendar_id = quote(self.calendar.calendar_id, safe="")
         timezone_value = timezone_name or self.calendar.timezone or timezone.get_current_timezone_name()
         body: dict[str, Any] = {
