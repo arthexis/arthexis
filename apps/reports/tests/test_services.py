@@ -1,6 +1,9 @@
 from datetime import timedelta
 
+import importlib
+
 import pytest
+from django.apps import apps as django_apps
 from django.utils import timezone
 
 from apps.reports.models import SQLReport, SQLReportProduct
@@ -31,6 +34,24 @@ def test_run_named_report_generates_html_and_pdf_products():
     report.refresh_from_db()
     assert report.last_run_at is not None
     assert report.last_run_duration is not None
+
+
+@pytest.mark.django_db
+def test_schedule_enabled_reports_default_next_run_at_on_save():
+    """Enabled schedules should default the next run timestamp when omitted."""
+
+    before = timezone.now()
+    report = SQLReport.objects.create(
+        name="Scheduled report",
+        report_type=SQLReport.ReportType.SIGIL_ROOTS,
+        parameters={"context_type": "all"},
+        schedule_enabled=True,
+        schedule_interval_minutes=15,
+    )
+    after = timezone.now()
+
+    assert report.next_scheduled_run_at is not None
+    assert before <= report.next_scheduled_run_at <= after
 
 
 @pytest.mark.django_db
@@ -112,6 +133,32 @@ def test_run_due_scheduled_reports_skips_archived_legacy_reports():
     assert processed == 1
     assert not SQLReportProduct.objects.filter(report=archived).exists()
     assert SQLReportProduct.objects.filter(report=healthy).exists()
+
+
+@pytest.mark.django_db
+def test_archiving_legacy_reports_clears_schedule_state():
+    """Archived legacy reports should no longer look scheduled after migration."""
+
+    migration = importlib.import_module(
+        "apps.reports.migrations.0004_named_reports_and_legacy_archive"
+    )
+    report = SQLReport.objects.create(
+        name="Migrated legacy report",
+        report_type=SQLReport.ReportType.SIGIL_ROOTS,
+        parameters={"context_type": "all"},
+        schedule_enabled=True,
+        schedule_interval_minutes=30,
+        next_scheduled_run_at=timezone.now(),
+    )
+
+    migration.archive_sql_reports(django_apps, None)
+    report.refresh_from_db()
+
+    assert report.report_type == SQLReport.ReportType.LEGACY_ARCHIVED
+    assert not report.schedule_enabled
+    assert report.schedule_interval_minutes == 0
+    assert report.next_scheduled_run_at is None
+    assert report.legacy_definition["database_alias"] == "default"
 
 
 @pytest.mark.django_db

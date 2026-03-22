@@ -20,8 +20,19 @@ def archive_sql_reports(apps, schema_editor):
         }
         report.parameters = {}
         report.report_type = LEGACY_REPORT_TYPE
+        report.schedule_enabled = False
+        report.schedule_interval_minutes = 0
+        report.next_scheduled_run_at = None
         report.save(
-            update_fields=["legacy_definition", "parameters", "report_type", "updated_at"]
+            update_fields=[
+                "legacy_definition",
+                "parameters",
+                "report_type",
+                "schedule_enabled",
+                "schedule_interval_minutes",
+                "next_scheduled_run_at",
+                "updated_at",
+            ]
         )
 
 

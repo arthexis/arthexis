@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
@@ -104,10 +105,13 @@ class SQLReport(Entity):
                 "Archived legacy SQL reports must preserve the original definition."
             )
 
-        if self.schedule_enabled and self.schedule_interval_minutes <= 0:
-            errors["schedule_interval_minutes"] = _(
-                "Set a positive interval when scheduling is enabled."
-            )
+        if self.schedule_enabled:
+            if self.schedule_interval_minutes <= 0:
+                errors["schedule_interval_minutes"] = _(
+                    "Set a positive interval when scheduling is enabled."
+                )
+            elif self.next_scheduled_run_at is None:
+                self.next_scheduled_run_at = timezone.now()
 
         if errors:
             raise ValidationError(errors)
