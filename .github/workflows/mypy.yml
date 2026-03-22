@@ -6,7 +6,6 @@ x-mypy-paths: &mypy-paths
   - 'CONTRIBUTING.md'
   - 'Makefile'
   - 'docs/development/mypy-adoption-checklist.md'
-  - 'config/settings/mypy.py'
   - 'pyproject.toml'
   - 'scripts/run_mypy.sh'
   - 'scripts/generate_requirements.py'

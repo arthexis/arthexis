@@ -16,7 +16,15 @@ The current MyPy-owned paths are recorded in `pyproject.toml` under `[tool.mypy]
 - `apps/core/modeling/`
 - `apps/core/system_ui.py`
 
-Django-aware checking is enabled through the `mypy_django_plugin.main` plugin with `config.settings.mypy` as the settings module. Keep new ownership additions small enough that `mypy` stays green before adding the next path.
+Django-aware checking is enabled through the `mypy_django_plugin.main` plugin with `config.settings` as the settings module. Use the same environment assumptions as `scripts/run_mypy.sh` when invoking MyPy directly:
+
+- `DJANGO_SETTINGS_MODULE=config.settings`
+- `DJANGO_SECRET_KEY=mypy-secret-key`
+- `ARTHEXIS_DISABLE_CELERY=1`
+- `CELERY_LOG_LEVEL=WARNING`
+- `DEBUG=0`
+
+That keeps MyPy aligned with the canonical Django settings package without maintaining a dedicated shim module. Keep new ownership additions small enough that `mypy` stays green before adding the next path.
 
 ## Rollout order per app
 
