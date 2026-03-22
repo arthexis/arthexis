@@ -1,33 +1,12 @@
 from __future__ import annotations
 
+from django.contrib.auth.models import Permission
 from django.urls import reverse
 
 import pytest
 
 from apps.emails.models import EmailCollector, EmailInbox
 from apps.users.models import User
-
-
-@pytest.mark.integration
-@pytest.mark.django_db
-def test_setup_collector_tool_redirects_to_wizard(admin_client, admin_user):
-    """The inbox setup collector changelist tool redirects to the wizard endpoint."""
-
-    inbox = EmailInbox.objects.create(
-        user=admin_user,
-        username="admin-inbox@example.com",
-        host="imap.example.com",
-        port=993,
-        password="secret",
-    )
-
-    response = admin_client.post(
-        reverse("admin:emails_emailinbox_actions", kwargs={"tool": "setup_collector"}),
-        {"_selected_action": [str(inbox.pk)]},
-    )
-
-    assert response.status_code == 302
-    assert response.url == reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
 
 
 @pytest.mark.integration
@@ -102,7 +81,6 @@ def test_setup_collector_view_saves_collector_and_runs_preview(admin_client, adm
             "notification_subject": "",
             "notification_message": "",
             "notification_recipients": "",
-            "notification_recipe": "",
             "additional_inboxes": [str(additional.pk)],
             "test_now": "on",
         },
@@ -148,7 +126,6 @@ def test_setup_collector_view_reports_non_validation_test_errors(admin_client, a
             "notification_subject": "",
             "notification_message": "",
             "notification_recipients": "",
-            "notification_recipe": "",
             "additional_inboxes": [],
             "test_now": "on",
         },
@@ -156,27 +133,95 @@ def test_setup_collector_view_reports_non_validation_test_errors(admin_client, a
     )
 
     assert response.status_code == 200
-    messages = [str(message) for message in response.context["messages"]]
-    assert "Mailbox unavailable" in messages
+    messages = list(response.context["messages"])
+    assert any("Mailbox unavailable" in str(message) for message in messages)
 
 
 @pytest.mark.integration
 @pytest.mark.django_db
-def test_email_inbox_change_form_includes_setup_collector_link(admin_client, admin_user):
-    """The inbox change form should expose a direct link to the collector builder."""
+def test_setup_collector_view_forbids_staff_without_view_permission(client, admin_user):
+    """Staff users without inbox view permission cannot open setup wizard."""
 
     inbox = EmailInbox.objects.create(
         user=admin_user,
-        username="change-link@example.com",
+        username="secured-inbox@example.com",
         host="imap.example.com",
         port=993,
         password="secret",
     )
+    staff_user = User.objects.create_user(username="staff-no-view", is_staff=True)
+    client.force_login(staff_user)
 
-    response = admin_client.get(
-        reverse("admin:emails_emailinbox_change", args=[inbox.pk])
+    response = client.get(
+        reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.integration
+@pytest.mark.django_db
+def test_setup_collector_view_renders_read_only_for_view_only_staff(client, admin_user):
+    """Staff users with only inbox view permission should get a read-only setup preview."""
+
+    inbox = EmailInbox.objects.create(
+        user=admin_user,
+        username="view-only-inbox@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+    )
+    collector = EmailCollector.objects.create(inbox=inbox, name="Existing")
+    viewer = User.objects.create_user(username="staff-view-only", is_staff=True)
+    viewer.user_permissions.add(Permission.objects.get(codename="view_emailinbox"))
+    client.force_login(viewer)
+
+    response = client.get(
+        reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
     )
 
     assert response.status_code == 200
-    setup_url = reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
-    assert f'href="{setup_url}"' in response.rendered_content
+    content = response.content.decode()
+    assert 'value="Existing"' in content
+    assert 'value="Save and run test"' not in content
+    assert "not permission to change it" in content
+    assert 'name="name"' in content
+    assert 'disabled' in content
+
+
+@pytest.mark.integration
+@pytest.mark.django_db
+def test_setup_collector_view_forbids_staff_without_change_permission(client, admin_user):
+    """Staff users without inbox change permission cannot update collectors."""
+
+    inbox = EmailInbox.objects.create(
+        user=admin_user,
+        username="secured-update@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+    )
+    staff_user = User.objects.create_user(username="staff-no-change", is_staff=True)
+    client.force_login(staff_user)
+
+    response = client.post(
+        reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk]),
+        {
+            "name": "Blocked Collector",
+            "subject": "invoice",
+            "sender": "sender@example.com",
+            "body": "",
+            "fragment": "",
+            "use_regular_expressions": "",
+            "notification_mode": EmailCollector.NOTIFY_NONE,
+            "notification_subject": "",
+            "notification_message": "",
+            "notification_recipients": "",
+            "notification_recipe": "",
+            "additional_inboxes": [],
+            "test_now": "on",
+        },
+    )
+
+    assert response.status_code == 403
+    assert not inbox.collectors.filter(name="Blocked Collector").exists()

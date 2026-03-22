@@ -14,6 +14,7 @@ from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.cards.models import RFID
+from apps.groups.constants import EXTERNAL_AGENT_GROUP_NAME
 from apps.groups.models import SecurityGroup
 from apps.locals.user_data import EntityModelAdmin
 from apps.odoo.models import OdooEmployee
@@ -241,7 +242,9 @@ class CustomerAccountAdmin(EntityModelAdmin):
 
     @staticmethod
     def _odoo_security_group() -> SecurityGroup:
-        group, _ = SecurityGroup.objects.get_or_create(name="Odoo User")
+        """Return the canonical external-agent group for Odoo-linked users."""
+
+        group, _ = SecurityGroup.objects.get_or_create(name=EXTERNAL_AGENT_GROUP_NAME)
         return group
 
     def _ensure_odoo_user_group(self, user):

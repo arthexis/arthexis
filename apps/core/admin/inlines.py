@@ -134,7 +134,6 @@ class EmailCollectorInline(admin.TabularInline):
     fields = (
         "name",
         "notification_mode",
-        "notification_recipe",
         "collector_change_link",
     )
     readonly_fields = ("collector_change_link",)

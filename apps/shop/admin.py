@@ -1,5 +1,7 @@
 from django.contrib import admin
+from django.urls import reverse
 
+from apps.core.admin.mixins import PublicViewLinksAdminMixin
 from .models import Shop, ShopOrder, ShopOrderItem, ShopProduct
 
 
@@ -11,7 +13,7 @@ class ShopProductInline(admin.TabularInline):
 
 
 @admin.register(Shop)
-class ShopAdmin(admin.ModelAdmin):
+class ShopAdmin(PublicViewLinksAdminMixin, admin.ModelAdmin):
     """Admin configuration for storefront records."""
 
     list_display = (
@@ -37,6 +39,18 @@ class ShopAdmin(admin.ModelAdmin):
     search_fields = ("name", "slug")
     inlines = (ShopProductInline,)
 
+    def get_view_on_site_url(self, obj=None):
+        """Return the public storefront entry point."""
+
+        del obj
+        return reverse("shop:index")
+
+    def get_public_view_links(self, obj=None) -> list[dict[str, str]]:
+        """Return public storefront routes relevant to the admin."""
+
+        del obj
+        return [{"label": "View on site: Storefront", "url": reverse("shop:index")}]
+
 
 @admin.register(ShopProduct)
 class ShopProductAdmin(admin.ModelAdmin):
@@ -57,7 +71,7 @@ class ShopOrderItemInline(admin.TabularInline):
 
 
 @admin.register(ShopOrder)
-class ShopOrderAdmin(admin.ModelAdmin):
+class ShopOrderAdmin(PublicViewLinksAdminMixin, admin.ModelAdmin):
     """Admin interface for placed orders and fulfillment tracking."""
 
     list_display = (
@@ -74,6 +88,26 @@ class ShopOrderAdmin(admin.ModelAdmin):
     search_fields = ("order_number", "customer_name", "customer_email", "tracking_number")
     readonly_fields = ("order_number", "tracking_token", "created_at", "updated_at")
     inlines = (ShopOrderItemInline,)
+
+    def get_view_on_site_url(self, obj=None):
+        """Return the public order tracking route for the supplied order."""
+
+        if obj is None:
+            return None
+        return reverse("shop:order_tracking", kwargs={"tracking_token": obj.tracking_token})
+
+    def get_public_view_links(self, obj=None) -> list[dict[str, str]]:
+        """Return public storefront and order-tracking routes for the admin."""
+
+        links = [{"label": "View on site: Storefront", "url": reverse("shop:index")}]
+        if obj is not None:
+            links.append(
+                {
+                    "label": "View on site: Order tracking",
+                    "url": self.get_view_on_site_url(obj),
+                }
+            )
+        return links
 
 
 @admin.register(ShopOrderItem)

@@ -1,5 +1,4 @@
-"""
-WSGI config for config project.
+"""WSGI config for config project.
 
 It exposes the WSGI callable as a module-level variable named ``application``.
 
@@ -8,10 +7,14 @@ https://docs.djangoproject.com/en/5.2/howto/deployment/wsgi/
 """
 
 import os
+
 from config.loadenv import loadenv
-from django.core.wsgi import get_wsgi_application
+from config.sqlite_driver import bootstrap_sqlite_driver
 
 loadenv()
+bootstrap_sqlite_driver()
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
+from django.core.wsgi import get_wsgi_application
 
 application = get_wsgi_application()

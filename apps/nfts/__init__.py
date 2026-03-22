@@ -1,1 +1,0 @@
-"""NFT application package."""

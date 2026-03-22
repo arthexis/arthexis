@@ -33,6 +33,15 @@ def _is_private_package_path(path: Path) -> bool:
     return any(part.startswith((".", "_")) for part in path.parts)
 
 
+def _has_django_app_marker(path: Path, marker: str) -> bool:
+    """Return whether *path* contains a discovery marker for a conventional Django app."""
+
+    marker_path = path / marker
+    if marker == "migrations":
+        return (marker_path / "__init__.py").exists()
+    return marker_path.exists()
+
+
 def _is_django_app_dir(path: Path) -> bool:
     """Return whether the given directory looks like a conventional Django app package."""
 
@@ -46,6 +55,10 @@ def _is_django_app_dir(path: Path) -> bool:
     if not (path / "__init__.py").exists():
         return False
 
+    module_path = _to_module_path(path)
+    if module_path in NON_DJANGO_UTILITY_PACKAGES | _legacy_runtime_app_packages():
+        return False
+
     if (path / "apps.py").exists():
         return True
 
@@ -53,7 +66,7 @@ def _is_django_app_dir(path: Path) -> bool:
         return False
 
     return any(
-        (path / marker).exists()
+        _has_django_app_marker(path, marker)
         for marker in ("models.py", "admin.py", "migrations", "templates", "static")
     )
 
@@ -62,6 +75,43 @@ def _to_module_path(path: Path) -> str:
     """Convert an app directory into its importable ``apps.*`` module path."""
 
     return f"apps.{'.'.join(path.relative_to(APPS_DIR).parts)}"
+
+
+def _legacy_runtime_app_packages() -> set[str]:
+    """Return retired runtime app packages implied by ``LEGACY_MIGRATION_APPS``.
+
+    Returns:
+        A set of legacy runtime package names that should stay out of automatic
+        local app discovery because their migrations are preserved through
+        ``LEGACY_MIGRATION_APPS`` shims instead.
+    """
+
+    retired_packages: set[str] = set()
+    for app_path in LEGACY_MIGRATION_APPS:
+        legacy_marker = "apps._legacy."
+        migration_suffix = "_migration_only.apps."
+        if legacy_marker not in app_path or migration_suffix not in app_path:
+            continue
+
+        legacy_name = app_path.split(legacy_marker, maxsplit=1)[1].split(
+            migration_suffix, maxsplit=1
+        )[0]
+        retired_packages.add(f"apps.{legacy_name.removesuffix('_migration_only')}")
+
+    return retired_packages
+
+
+LEGACY_MIGRATION_APPS = [
+    "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig",
+    "apps._legacy.recipes_migration_only.apps.RecipesMigrationOnlyConfig",
+    "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig",
+    "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
+    "apps.selenium",
+    "config.legacy_mermaid",
+]
+NON_DJANGO_UTILITY_PACKAGES = {
+    "apps.camera",
+}
 
 
 def _load_local_apps() -> list[str]:
@@ -93,25 +143,28 @@ def _load_active_prototype_app() -> list[str]:
 
 LOCAL_APPS = _load_local_apps() + _load_active_prototype_app()
 
-INSTALLED_APPS = [
-    "apps.whitenoise",
-    "django.contrib.admin",
-    "django.contrib.admindocs",
-    "config.auth_app.AuthConfig",
-    "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django_otp",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
-    "django_mermaid.apps.MermaidConfig",
-    "parler",
-    "import_export",
-    "django_object_actions",
-    "django.contrib.sites",
-    "channels",
-    "graphene_django",
-    "apps.celery.beat_app.CeleryBeatConfig",
-] + LOCAL_APPS
+INSTALLED_APPS = (
+    [
+        "apps.whitenoise",
+        "django.contrib.admin",
+        "django.contrib.admindocs",
+        "config.auth_app.AuthConfig",
+        "django.contrib.contenttypes",
+        "django.contrib.sessions",
+        "django_otp",
+        "django.contrib.messages",
+        "django.contrib.staticfiles",
+        "django_mermaid.apps.MermaidConfig",
+        "parler",
+        "import_export",
+        "django_object_actions",
+        "django.contrib.sites",
+        "channels",
+        "apps.celery.beat_app.CeleryBeatConfig",
+    ]
+    + LOCAL_APPS
+    + LEGACY_MIGRATION_APPS
+)
 
 if HAS_DEBUG_TOOLBAR:
     INSTALLED_APPS.append("debug_toolbar")
@@ -122,6 +175,7 @@ SITE_ID = 1
 
 MIGRATION_MODULES = {
     "sites": "apps.core.sites_migrations",
+    "socials": "apps.socials.migrations",
     # Pin django_celery_beat migrations to a local copy so we can override
     # upstream changes that introduce optional dependencies (e.g. Google
     # Calendar profile) and avoid InvalidBases errors during migrate.

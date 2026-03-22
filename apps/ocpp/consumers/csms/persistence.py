@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
+import logging
+
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from apps.ocpp.models import Charger
+
+
+logger = logging.getLogger(__name__)
 
 
 def update_status_notification_records(
@@ -46,6 +53,100 @@ def persist_legacy_meter_values(*, charger_pk: int, payload: dict) -> None:
     """Persist latest MeterValues payload on the charger record."""
 
     Charger.objects.filter(pk=charger_pk).update(last_meter_values=payload)
+
+
+def _ocpp_security_event_key(*, charger_id: str, connector_value: int | str | None) -> str:
+    """Return a deterministic security event key for a charger status stream."""
+
+    connector_label = "aggregate" if connector_value is None else str(connector_value)
+    key = f"ocpp-charger-{charger_id}-{connector_label}-error"
+    if len(key) <= 255:
+        return key
+
+    charger_hash = hashlib.sha256(charger_id.encode("utf-8")).hexdigest()[:40]
+    connector_hash = hashlib.sha256(connector_label.encode("utf-8")).hexdigest()[:16]
+    return f"ocpp-charger-{charger_hash}-{connector_hash}-error"
+
+
+def sync_charger_error_security_event(
+    *,
+    charger_id: str,
+    connector_value: int | str | None,
+    status: str,
+    error_code: str,
+    status_timestamp,
+) -> None:
+    """Persist OCPP fault/error state into ``SecurityAlertEvent`` records.
+
+    Connected charger StatusNotification payloads call this helper to keep the
+    ops security widget aligned with active charger errors.
+    """
+
+    from apps.ops.models import SecurityAlertEvent
+
+    normalized_status = (status or "").strip()
+    normalized_error_code = (error_code or "").strip()
+    normalized_error_casefold = normalized_error_code.casefold()
+    is_error = normalized_status.casefold() == "faulted" or (
+        bool(normalized_error_code) and normalized_error_casefold != "noerror"
+    )
+
+    key = _ocpp_security_event_key(
+        charger_id=charger_id,
+        connector_value=connector_value,
+    )
+    existing = SecurityAlertEvent.objects.filter(key=key).first()
+
+    if not is_error:
+        if existing and existing.is_active:
+            SecurityAlertEvent.clear_occurrence(key=key, occurred_at=status_timestamp)
+        return
+
+    connector_label = "aggregate" if connector_value is None else str(connector_value)
+    status_label = normalized_status or "Unknown"
+    detail = (
+        f"charger_id={charger_id}; connector={connector_label}; "
+        f"status={status_label}; error_code={normalized_error_code or 'None'}"
+    )
+    message = f"OCPP charger {charger_id} connector {connector_label} reported {status_label}."
+    event_timestamp = status_timestamp or timezone.now()
+
+    if existing and existing.is_active and existing.last_occurred_at == event_timestamp:
+        existing.severity = "error"
+        existing.message = message
+        existing.detail = detail
+        existing.remediation_url = existing.remediation_url or "/admin/ocpp/charger/"
+        existing.save(
+            update_fields=["severity", "message", "detail", "remediation_url", "updated_at"]
+        )
+        return
+
+    try:
+        remediation_url = reverse("admin:ocpp_charger_changelist")
+    except NoReverseMatch:
+        remediation_url = "/admin/ocpp/charger/"
+
+    if existing and (
+        not existing.is_active
+        and existing.last_occurred_at is not None
+        and event_timestamp < existing.last_occurred_at
+    ):
+        logger.debug(
+            "Ignoring stale fault replay for key=%s at %s (last=%s)",
+            key,
+            event_timestamp,
+            existing.last_occurred_at,
+        )
+        return
+
+    SecurityAlertEvent.record_occurrence(
+        key=key,
+        severity="error",
+        message=message,
+        detail=detail,
+        remediation_url=remediation_url,
+        occurred_at=event_timestamp,
+    )
 
 
 def update_availability_state_records(

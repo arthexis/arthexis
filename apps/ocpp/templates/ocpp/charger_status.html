@@ -5,7 +5,7 @@
 {% block title %}{{ charger.display_name|default:charger.name|default:charger.charger_id }} - {% trans "Status" %}{% endblock %}
 
 {% block content %}
-<div id="status-content" data-chart-animate="{{ chart_should_animate|yesno:'true,false,false' }}" data-status-should-poll="{{ status_should_poll|yesno:'true,false,false' }}" data-graphql-chart-url="{{ graphql_chart_url }}" data-graphql-chart-cid="{{ graphql_chart_cid }}"{% if graphql_chart_connector %} data-graphql-chart-connector="{{ graphql_chart_connector }}"{% endif %}{% if graphql_chart_session %} data-graphql-chart-session="{{ graphql_chart_session }}"{% endif %}>
+<div id="status-content" data-chart-animate="{{ chart_should_animate|yesno:'true,false,false' }}" data-status-should-poll="{{ status_should_poll|yesno:'true,false,false' }}" data-chart-url="{{ chart_data_url }}"{% if chart_session %} data-chart-session="{{ chart_session }}"{% endif %}>
   {% if show_connector_tabs and connector_links %}
   <div class="mb-3">
     <div class="nav nav-pills flex-wrap gap-2">
@@ -566,37 +566,25 @@
     }
   }
 
-  function fetchGraphqlChartPayload(root) {
+  function fetchChartPayload(root) {
     if (!root) {
       return Promise.resolve(null);
     }
-    const endpoint = root.getAttribute('data-graphql-chart-url');
-    const cid = root.getAttribute('data-graphql-chart-cid');
-    if (!endpoint || !cid) {
+    const endpoint = root.getAttribute('data-chart-url');
+    if (!endpoint) {
       return Promise.resolve(null);
     }
-    const connector = root.getAttribute('data-graphql-chart-connector');
-    const session = root.getAttribute('data-graphql-chart-session');
-    const query = `query ChargerChart($cid: String!, $connector: String, $sessionId: String) {
-      chargerChart(cid: $cid, connector: $connector, sessionId: $sessionId) {
-        labels
-        datasets { label connectorId values }
-      }
-    }`;
-    return fetch(endpoint, {
-      method: 'POST',
+    const session = root.getAttribute('data-chart-session');
+    const url = new URL(endpoint, window.location.origin);
+    if (session) {
+      url.searchParams.set('session', session);
+    }
+    return fetch(url.toString(), {
+      method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest'
       },
-      body: JSON.stringify({
-        query,
-        variables: {
-          cid,
-          connector: connector || null,
-          sessionId: session || null
-        }
-      })
     })
       .then((resp) => {
         if (!resp.ok) {
@@ -605,20 +593,10 @@
         return resp.json();
       })
       .then((payload) => {
-        if (!payload || payload.errors || !payload.data || !payload.data.chargerChart) {
+        if (!payload || !Array.isArray(payload.labels) || !Array.isArray(payload.datasets)) {
           return null;
         }
-        const chart = payload.data.chargerChart;
-        return {
-          labels: Array.isArray(chart.labels) ? chart.labels : [],
-          datasets: Array.isArray(chart.datasets)
-            ? chart.datasets.map((dataset) => ({
-                label: dataset.label,
-                connector_id: dataset.connectorId,
-                values: dataset.values
-              }))
-            : []
-        };
+        return payload;
       })
       .catch(() => null);
   }
@@ -795,8 +773,8 @@
           if (htmlPayload && Array.isArray(htmlPayload.datasets) && htmlPayload.datasets.length) {
             applyAndRender(htmlPayload);
           } else {
-            fetchGraphqlChartPayload(current).then((graphqlPayload) => {
-              applyAndRender(graphqlPayload || htmlPayload);
+            fetchChartPayload(current).then((chartPayload) => {
+              applyAndRender(chartPayload || htmlPayload);
             });
           }
           changedIds.forEach(id => {
@@ -820,8 +798,8 @@
       const chartChanged = applyChartPayload(htmlPayload);
       renderChart(chartChanged);
     } else {
-      fetchGraphqlChartPayload(statusRoot).then((graphqlPayload) => {
-        const payload = graphqlPayload || htmlPayload;
+      fetchChartPayload(statusRoot).then((chartPayload) => {
+        const payload = chartPayload || htmlPayload;
         const chartChanged = applyChartPayload(payload);
         renderChart(chartChanged);
       });

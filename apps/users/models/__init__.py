@@ -1,9 +1,10 @@
 """Model exports for the users app."""
 
-from .user import User
-from .profile import Profile
 from .chat_profile import ChatProfile
 from .passkey_credential import PasskeyCredential
+from .profile import Profile
+from .user import User
+from .user_flag import UserFlag
 from .user_phone_number import UserPhoneNumber
 
 __all__ = [
@@ -11,5 +12,6 @@ __all__ = [
     "PasskeyCredential",
     "Profile",
     "User",
+    "UserFlag",
     "UserPhoneNumber",
 ]

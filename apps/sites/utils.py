@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -15,6 +16,7 @@ from django.utils.translation import get_language
 
 from apps.celery.utils import celery_feature_enabled
 from apps.features.parameters import get_feature_parameter
+from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME, SITE_OPERATOR_GROUP_NAME
 
 try:  # pragma: no cover - compatibility shim for Django versions without constant
     from django.utils.translation import LANGUAGE_SESSION_KEY
@@ -23,9 +25,6 @@ except ImportError:  # pragma: no cover - fallback when constant is unavailable
 
 
 logger = logging.getLogger(__name__)
-
-SITE_OPERATOR_GROUP_NAME = "Site Operator"
-CHARGE_STATION_MANAGER_GROUP_NAME = "Charge Station Manager"
 
 
 ORIGINAL_REFERER_SESSION_KEY = "pages:original_referer"
@@ -50,6 +49,32 @@ def landing(label=None):
     def decorator(view):
         view.landing = True
         view.landing_label = label or view.__name__.replace("_", " ").title()
+        return view
+
+    return decorator
+
+
+def module_pill_link_validation(
+    validator: Callable[..., bool],
+    *,
+    parameter_getter: Callable[..., dict[str, object]] | None = None,
+    cache_ttl: int = 60,
+):
+    """Attach a navigation-link visibility validator to a landing view.
+
+    Parameters:
+        validator: Callable returning ``True`` when the landing should appear.
+        parameter_getter: Optional callable returning cache parameters for ``validator``.
+        cache_ttl: Cache lifetime in seconds for validation results.
+
+    Returns:
+        A decorator that enriches a view with validation metadata.
+    """
+
+    def decorator(view):
+        view.module_pill_link_validator = validator
+        view.module_pill_link_validator_parameter_getter = parameter_getter
+        view.module_pill_link_validator_cache_ttl = cache_ttl
         return view
 
     return decorator
@@ -80,8 +105,9 @@ def _user_in_group_by_name(user, group_name: str) -> bool:
 
 
 def user_in_charge_station_manager_group(user) -> bool:
-    """Return ``True`` when ``user`` belongs to the Charge Station Manager group."""
-    return _user_in_group_by_name(user, CHARGE_STATION_MANAGER_GROUP_NAME)
+    """Return ``True`` when ``user`` belongs to the network-operator staff group."""
+
+    return _user_in_group_by_name(user, NETWORK_OPERATOR_GROUP_NAME)
 
 
 def require_site_operator_or_staff(request, *, login_url: str = "pages:login"):

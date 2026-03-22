@@ -439,6 +439,168 @@ document.addEventListener('DOMContentLoaded', function () {
     <script src="{% static 'pages/js/chat.js' %}" defer></script>
   {% endif %}
   {% include "admin/ops/active_operation_banner.html" %}
+
+  {% include "shortcuts/includes/client_shortcuts_setup.html" %}
+
+  {% if request.user.is_authenticated and request.user.is_staff %}
+    <div
+      id="content-sample-drop-overlay"
+      class="content-sample-drop-overlay"
+      data-content-sample-drop-overlay
+      data-upload-url="{% url 'admin:content_contentsample_drop_upload' %}"
+      data-drop-title="{% trans 'Drop file to create content sample' %}"
+      data-drop-help="{% trans 'Release anywhere to upload the file into Content Samples.' %}"
+      data-drop-uploading="{% trans 'Uploading…' %}"
+      data-drop-error="{% trans 'Upload failed. Please try again.' %}"
+      hidden
+    >
+      <div class="content-sample-drop-overlay__card" aria-live="polite">
+        <div class="content-sample-drop-overlay__icon" aria-hidden="true">⇪</div>
+        <h2 class="content-sample-drop-overlay__title">{% trans "Drop file to create content sample" %}</h2>
+        <p class="content-sample-drop-overlay__help">{% trans "Release anywhere to upload the file into Content Samples." %}</p>
+        <p class="content-sample-drop-overlay__status" data-content-sample-drop-status></p>
+      </div>
+    </div>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        const overlay = document.querySelector('[data-content-sample-drop-overlay]');
+        if (!overlay) {
+          return;
+        }
+
+        const statusEl = overlay.querySelector('[data-content-sample-drop-status]');
+        const uploadUrl = overlay.dataset.uploadUrl;
+        const uploadingText = overlay.dataset.dropUploading || 'Uploading…';
+        const errorText = overlay.dataset.dropError || 'Upload failed. Please try again.';
+        let dragDepth = 0;
+        let uploading = false;
+
+        function getCsrfToken() {
+          const input = document.querySelector('input[name=csrfmiddlewaretoken]');
+          if (input && input.value) {
+            return input.value;
+          }
+          const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+          return match ? decodeURIComponent(match[1]) : '';
+        }
+
+        function showOverlay() {
+          if (uploading) {
+            return;
+          }
+          document.body.classList.add('content-sample-drop-open');
+          overlay.hidden = false;
+          requestAnimationFrame(function () {
+            overlay.classList.add('show');
+          });
+        }
+
+        function hideOverlay() {
+          dragDepth = 0;
+          overlay.classList.remove('show');
+          document.body.classList.remove('content-sample-drop-open');
+          window.setTimeout(function () {
+            if (!overlay.classList.contains('show')) {
+              overlay.hidden = true;
+            }
+          }, 180);
+        }
+
+        function hasFiles(event) {
+          const types = event.dataTransfer && event.dataTransfer.types;
+          return Boolean(types && Array.from(types).includes('Files'));
+        }
+
+        function setStatus(message) {
+          if (statusEl) {
+            statusEl.textContent = message || '';
+          }
+        }
+
+        async function uploadFile(file) {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('source_url', window.location.href);
+          const response = await fetch(uploadUrl, {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin',
+            headers: {
+              'Accept': 'application/json',
+              'X-CSRFToken': getCsrfToken(),
+              'X-Requested-With': 'XMLHttpRequest'
+            }
+          });
+          if (!response.ok) {
+            throw new Error('Upload failed');
+          }
+          return response.json();
+        }
+
+        document.addEventListener('dragenter', function (event) {
+          if (!hasFiles(event)) {
+            return;
+          }
+          dragDepth += 1;
+          showOverlay();
+        });
+
+        document.addEventListener('dragover', function (event) {
+          if (!hasFiles(event)) {
+            return;
+          }
+          event.preventDefault();
+          if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = 'copy';
+          }
+          showOverlay();
+        });
+
+        document.addEventListener('dragleave', function (event) {
+          if (!hasFiles(event)) {
+            return;
+          }
+          dragDepth = Math.max(0, dragDepth - 1);
+          if (dragDepth === 0 && event.target === document.documentElement) {
+            hideOverlay();
+          }
+        });
+
+        document.addEventListener('drop', async function (event) {
+          if (!hasFiles(event)) {
+            return;
+          }
+          event.preventDefault();
+          const files = event.dataTransfer ? Array.from(event.dataTransfer.files || []) : [];
+          hideOverlay();
+          if (!files.length || uploading) {
+            return;
+          }
+
+          uploading = true;
+          showOverlay();
+          setStatus(uploadingText);
+
+          try {
+            const payload = await uploadFile(files[0]);
+            if (payload && payload.change_url) {
+              window.location.assign(payload.change_url);
+              return;
+            }
+            throw new Error('Missing change URL');
+          } catch (error) {
+            setStatus(errorText);
+            window.setTimeout(function () {
+              hideOverlay();
+              setStatus('');
+            }, 1500);
+          } finally {
+            uploading = false;
+          }
+        });
+      });
+    </script>
+  {% endif %}
   {% if feedback_ingestion_enabled %}
     {% if not request.resolver_match or request.resolver_match.url_name != "login" %}
       {% include "admin/includes/user_story_feedback.html" %}

@@ -5,20 +5,21 @@ from datetime import datetime, time, timedelta
 
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.utils.html import format_html
-from django.shortcuts import render
 from django.http import HttpResponseRedirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
-from apps.core.admin import OwnableAdminMixin, SaveBeforeChangeAction
+from apps.core.admin import OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction
 from apps.core.admin.mixins import _build_credentials_actions
 
 from .exceptions import EvergoAPIError
-from .forms import EvergoLoadCustomersForm
+from .forms import EvergoContractorLoginWizardForm, EvergoLoadCustomersForm
 from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
@@ -35,6 +36,154 @@ def _parse_selected_ids_query_param(request) -> list[int]:
         except (TypeError, ValueError):
             continue
     return selected_ids
+
+
+def _initialize_contract_login_results(saved_contractor):
+    """Return the default result payload shown after wizard validation attempts."""
+    return {"contractor": saved_contractor, "validated": None, "loaded": None}
+
+
+def _run_contract_login_validation(admin_instance, request, form, contractor, *, show_setup_results: bool):
+    """Validate Evergo credentials and optionally run the initial customer import."""
+    setup_results = _initialize_contract_login_results(contractor) if show_setup_results else None
+    if not form.cleaned_data.get("validate_credentials"):
+        return setup_results
+
+    login_result = contractor.test_login()
+    success_message = _(
+        "Evergo login succeeded for %(contractor)s (status %(status)s)."
+    ) % {"contractor": str(contractor), "status": login_result.response_code}
+    admin_instance.message_user(request, success_message, level=messages.SUCCESS)
+    if setup_results is not None:
+        setup_results["validated"] = {"ok": True, "message": success_message}
+
+    if not form.cleaned_data.get("load_all_customers"):
+        return setup_results
+
+    try:
+        summary = contractor.load_customers_from_queries(raw_queries="")
+    except EvergoAPIError as exc:
+        admin_instance.message_user(
+            request,
+            _("Initial customer load failed for %(contractor)s: %(error)s")
+            % {"contractor": str(contractor), "error": exc},
+            level=messages.ERROR,
+        )
+        if setup_results is not None:
+            setup_results["loaded"] = {"ok": False, "message": str(exc)}
+        return setup_results
+
+    load_message = _(
+        "Initial load completed. Customers: %(customers)s | "
+        "Orders created: %(created)s | Orders updated: %(updated)s | "
+        "Placeholders: %(placeholders)s"
+    ) % {
+        "customers": summary["customers_loaded"],
+        "created": summary["orders_created"],
+        "updated": summary["orders_updated"],
+        "placeholders": summary["placeholders_created"],
+    }
+    admin_instance.message_user(request, load_message, level=messages.SUCCESS)
+    if setup_results is not None:
+        setup_results["loaded"] = {"ok": True, "message": load_message, "summary": summary}
+    return setup_results
+
+
+def _save_contractor_and_maybe_validate(admin_instance, request, form, profile):
+    """Persist wizard changes and rollback validation failures for both create and update flows."""
+    show_setup_results = form.cleaned_data.get("validate_credentials") or form.cleaned_data.get("load_all_customers")
+
+    try:
+        with transaction.atomic():
+            contractor = form.save()
+            setup_results = _run_contract_login_validation(
+                admin_instance,
+                request,
+                form,
+                contractor,
+                show_setup_results=show_setup_results,
+            )
+    except EvergoAPIError as exc:
+        contractor = profile if profile is not None else form.save(commit=False)
+        if profile is not None:
+            contractor.refresh_from_db()
+        else:
+            contractor.pk = None
+            contractor._state.adding = True
+        admin_instance.message_user(
+            request,
+            _("Evergo validation failed for %(contractor)s: %(error)s")
+            % {"contractor": str(contractor), "error": exc},
+            level=messages.ERROR,
+        )
+        setup_results = None
+        if show_setup_results:
+            setup_results = _initialize_contract_login_results(contractor)
+            setup_results["validated"] = {"ok": False, "message": str(exc)}
+        return contractor, setup_results
+
+    return contractor, setup_results
+
+
+def _handle_contract_login_wizard_post(admin_instance, request, profile, opts, changelist_url):
+    """Bind, validate, and process contractor wizard submissions."""
+    instance = profile if profile is not None else admin_instance.model()
+    form = EvergoContractorLoginWizardForm(request.POST, instance=instance)
+    setup_results = None
+    if not form.is_valid():
+        return form, setup_results
+
+    contractor, setup_results = _save_contractor_and_maybe_validate(admin_instance, request, form, profile)
+    if "_continue" in request.POST and not setup_results and contractor.pk:
+        return redirect(reverse(f"admin:{opts.app_label}_{opts.model_name}_change", args=[contractor.pk])), setup_results
+    if "_save" in request.POST and not setup_results:
+        return redirect(changelist_url), setup_results
+    return form, setup_results
+
+
+def _contractor_login_wizard_admin_view(admin_instance, request, object_id: str | None = None):
+    """Render and process the Evergo contractor signup/login wizard."""
+    opts = admin_instance.model._meta
+    changelist_url = reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
+    profile = None
+    if object_id is not None:
+        profile = get_object_or_404(admin_instance.get_queryset(request), pk=object_id)
+
+    permission_granted = (
+        admin_instance.has_change_permission(request, obj=profile)
+        if profile is not None
+        else admin_instance.has_add_permission(request)
+    )
+    if not permission_granted:
+        raise PermissionDenied
+
+    setup_results = None
+    if request.method == "POST":
+        form_or_response, setup_results = _handle_contract_login_wizard_post(
+            admin_instance,
+            request,
+            profile,
+            opts,
+            changelist_url,
+        )
+        if hasattr(form_or_response, "status_code"):
+            return form_or_response
+        form = form_or_response
+    else:
+        instance = profile if profile is not None else admin_instance.model()
+        form = EvergoContractorLoginWizardForm(instance=instance)
+
+    context = {
+        **admin_instance.admin_site.each_context(request),
+        "opts": opts,
+        "title": _("Login on Evergo"),
+        "form": form,
+        "original": profile,
+        "profile": profile,
+        "setup_results": setup_results,
+        "changelist_url": changelist_url,
+    }
+    return render(request, "admin/evergo/contractor_login_wizard.html", context)
 
 
 def _load_customers_admin_view(admin_instance, request):
@@ -118,11 +267,15 @@ def _load_customers_admin_view(admin_instance, request):
 
 @admin.register(EvergoUser)
 class EvergoUserAdmin(
-    SaveBeforeChangeAction, OwnableAdminMixin, DjangoObjectActions, admin.ModelAdmin
+    SaveBeforeChangeAction, OwnableAdminMixin, ProfileAdminMixin, DjangoObjectActions, admin.ModelAdmin
 ):
     """Manage Evergo users and allow login verification from admin actions."""
 
     change_form_template = "django_object_actions/change_form.html"
+    dashboard_actions = ("login_on_evergo_dashboard_action",)
+    LOGIN_ON_EVERGO_LABEL = _("Login on Evergo")
+
+    changelist_actions = ("my_profile",)
 
     list_display = (
         "evergo_email",
@@ -155,7 +308,7 @@ class EvergoUserAdmin(
         "updated_at",
     )
     actions = ("_test_login_and_sync_bulk_action",)
-    change_actions = ("test_login_and_sync_action",)
+    change_actions = ("login_on_evergo_action", "test_login_and_sync_action", "my_profile_action")
     fieldsets = (
         (
             "Ownership",
@@ -235,6 +388,77 @@ class EvergoUserAdmin(
         "_test_login_and_sync",
         _("Test and Sync"),
     )
+
+    def get_dashboard_actions(self, request):
+        """Return global dashboard shortcuts exposed for Evergo contractors."""
+        return self.dashboard_actions
+
+    def changelist_view(self, request, extra_context=None):
+        """Inject a single Evergo wizard button into the changelist toolbar markup."""
+        response = super().changelist_view(request, extra_context=extra_context)
+        content = getattr(response, "rendered_content", "")
+        label = str(self.LOGIN_ON_EVERGO_LABEL)
+        if not content or label in content:
+            return response
+
+        link_markup = format_html(
+            '<li><a href="{}" class="addlink">{}</a></li>',
+            reverse("admin:evergo_evergouser_login_on_evergo"),
+            label,
+        )
+        response.content = content.replace('<ul class="object-tools">', f'<ul class="object-tools">{link_markup}', 1)
+        return response
+
+    def get_urls(self):
+        """Register Evergo contractor signup/login wizard routes."""
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "login-on-evergo/",
+                self.admin_site.admin_view(self.login_on_evergo_view),
+                name="evergo_evergouser_login_on_evergo",
+            ),
+            path(
+                "<path:object_id>/login-on-evergo/",
+                self.admin_site.admin_view(self.login_on_evergo_object_view),
+                name="evergo_evergouser_login_on_evergo_object",
+            ),
+        ]
+        return custom_urls + urls
+
+    def login_on_evergo_wizard(self, request, queryset=None):
+        """Open the contractor signup/login wizard from the changelist."""
+        return redirect(reverse("admin:evergo_evergouser_login_on_evergo"))
+
+    login_on_evergo_wizard.label = LOGIN_ON_EVERGO_LABEL
+    login_on_evergo_wizard.short_description = LOGIN_ON_EVERGO_LABEL
+    login_on_evergo_wizard.requires_queryset = False
+    login_on_evergo_wizard.dashboard_url = "admin:evergo_evergouser_login_on_evergo"
+
+    def login_on_evergo_dashboard_action(self, request, queryset=None):
+        """Expose the contractor login wizard from the admin dashboard."""
+        return redirect(reverse("admin:evergo_evergouser_login_on_evergo"))
+
+    login_on_evergo_dashboard_action.label = LOGIN_ON_EVERGO_LABEL
+    login_on_evergo_dashboard_action.short_description = LOGIN_ON_EVERGO_LABEL
+    login_on_evergo_dashboard_action.requires_queryset = False
+    login_on_evergo_dashboard_action.dashboard_url = "admin:evergo_evergouser_login_on_evergo"
+
+    def login_on_evergo_action(self, request, obj):
+        """Open the wizard prefilled with the selected contractor record."""
+        return redirect(reverse("admin:evergo_evergouser_login_on_evergo_object", args=[obj.pk]))
+
+    login_on_evergo_action.label = LOGIN_ON_EVERGO_LABEL
+    login_on_evergo_action.short_description = LOGIN_ON_EVERGO_LABEL
+
+    def login_on_evergo_view(self, request):
+        """Render the contractor signup/login wizard without a preselected contractor."""
+        return _contractor_login_wizard_admin_view(self, request)
+
+    def login_on_evergo_object_view(self, request, object_id):
+        """Render the contractor signup/login wizard for one existing contractor."""
+        return _contractor_login_wizard_admin_view(self, request, object_id=object_id)
+
 
 
 @admin.register(EvergoOrder)

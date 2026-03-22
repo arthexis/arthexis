@@ -1,1 +1,0 @@
-"""Stored prompt tracking app."""

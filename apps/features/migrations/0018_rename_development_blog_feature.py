@@ -10,7 +10,15 @@ NEW_DISPLAY = "Development Blog"
 
 
 def rename_development_blog_feature(apps, schema_editor):
-    """Rename the seeded development blog feature slug and display."""
+    """Rename the seeded development blog feature slug and display.
+
+    Parameters:
+        apps: Django migration app registry.
+        schema_editor: Active migration schema editor.
+
+    Returns:
+        None.
+    """
 
     Feature = apps.get_model("features", "Feature")
     FeatureTest = apps.get_model("features", "FeatureTest")
@@ -41,7 +49,15 @@ def rename_development_blog_feature(apps, schema_editor):
 
 
 def rollback_development_blog_feature(apps, schema_editor):
-    """Restore the seeded development blog feature slug and display."""
+    """Restore the seeded development blog feature slug and display.
+
+    Parameters:
+        apps: Django migration app registry.
+        schema_editor: Active migration schema editor.
+
+    Returns:
+        None.
+    """
 
     Feature = apps.get_model("features", "Feature")
     FeatureTest = apps.get_model("features", "FeatureTest")

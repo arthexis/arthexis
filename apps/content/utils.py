@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 import hashlib
 import logging
+import mimetypes
 import os
+from pathlib import Path
 import platform
 import re
 import subprocess
+import uuid
 
 from django.conf import settings
+from django.core.files.uploadedfile import UploadedFile
+from django.utils.text import get_valid_filename
 
 from .classifiers import run_default_classifiers, suppress_default_classifiers
 from .models import ContentSample
@@ -24,8 +28,84 @@ except Exception:  # pragma: no cover - fallback when dependency is unavailable
 
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
 DEFAULT_SCREENSHOT_RESOLUTION = (1280, 720)
+CONTENT_DROP_DIR = settings.LOG_DIR / "content-drops"
 _RUNSERVER_PORT_PATTERN = re.compile(r":(\d{2,5})(?:\D|$)")
 _RUNSERVER_PORT_FLAG_PATTERN = re.compile(r"--port(?:=|\s+)(\d{2,5})", re.IGNORECASE)
+
+
+def _detect_uploaded_sample_kind(uploaded_file: UploadedFile) -> str:
+    """Return the most suitable :class:`ContentSample` kind for an uploaded file."""
+
+    content_type = (uploaded_file.content_type or "").lower()
+    guessed_type, _ = mimetypes.guess_type(uploaded_file.name)
+    media_type = content_type or (guessed_type or "").lower()
+    if media_type.startswith("image/"):
+        return ContentSample.IMAGE
+    if media_type.startswith("audio/"):
+        return ContentSample.AUDIO
+    return ContentSample.TEXT
+
+
+def _build_uploaded_sample_path(filename: str) -> Path:
+    """Return a unique repository-local storage path for an uploaded content sample."""
+
+    CONTENT_DROP_DIR.mkdir(parents=True, exist_ok=True)
+    safe_name = get_valid_filename(Path(filename or "upload.bin").name) or "upload.bin"
+    stem = Path(safe_name).stem or "upload"
+    suffix = Path(safe_name).suffix
+    return CONTENT_DROP_DIR / f"{stem}-{uuid.uuid4().hex}{suffix}"
+
+
+def _read_uploaded_text(path: Path, *, limit: int = 100_000) -> str | None:
+    """Return decoded text content for uploaded files when feasible."""
+
+    try:
+        payload = path.read_bytes()
+    except OSError:
+        return None
+    if b"\x00" in payload:
+        return None
+    snippet = payload[:limit]
+    try:
+        return snippet.decode("utf-8")
+    except UnicodeDecodeError:
+        return snippet.decode("utf-8", errors="replace")
+
+
+def create_uploaded_content_sample(
+    *,
+    uploaded_file: UploadedFile,
+    user=None,
+) -> ContentSample:
+    """Persist a drag-and-drop upload as a :class:`ContentSample`.
+
+    Parameters:
+        uploaded_file: Incoming Django uploaded file object.
+        user: Optional authenticated user recorded on the sample.
+
+    Returns:
+        The newly created or duplicate-linked content sample.
+    """
+
+    destination = _build_uploaded_sample_path(uploaded_file.name)
+    with destination.open("wb") as handle:
+        for chunk in uploaded_file.chunks():
+            handle.write(chunk)
+
+    kind = _detect_uploaded_sample_kind(uploaded_file)
+    content = _read_uploaded_text(destination) if kind == ContentSample.TEXT else None
+    sample = save_content_sample(
+        path=destination,
+        kind=kind,
+        method="ADMIN_DROP",
+        user=user,
+        link_duplicates=True,
+        content=content,
+        duplicate_log_context="drag-and-drop content sample",
+    )
+    if sample.path != destination.as_posix():
+        destination.unlink(missing_ok=True)
+    return sample
 
 
 def save_content_sample(

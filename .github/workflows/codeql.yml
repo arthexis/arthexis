@@ -1,6 +1,37 @@
 name: CodeQL
 
 on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - '**/*.py'
+      - '**/requirements*.txt'
+      - '**/pyproject.toml'
+      - '**/Pipfile'
+      - '**/Pipfile.lock'
+      - '.github/workflows/codeql.yml'
+      - '.github/workflows/security-scan.yml'
+      - '.github/codeql/**'
+      - '.github/actions/**'
+      - 'Dockerfile'
+      - '**/Dockerfile'
+      - '**/*.sh'
+  pull_request:
+    paths:
+      - '**/*.py'
+      - '**/requirements*.txt'
+      - '**/pyproject.toml'
+      - '**/Pipfile'
+      - '**/Pipfile.lock'
+      - '.github/workflows/codeql.yml'
+      - '.github/workflows/security-scan.yml'
+      - '.github/codeql/**'
+      - '.github/actions/**'
+      - 'Dockerfile'
+      - '**/Dockerfile'
+      - '**/*.sh'
   schedule:
     - cron: "15 3 1 * *"
   workflow_dispatch:
@@ -13,11 +44,23 @@ jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
+    # Runtime expectations:
+    # - Runs on relevant code, dependency, workflow, container, and script changes in PRs and protected branches.
+    # - Monthly schedule preserves baseline coverage for changes that might bypass path filters.
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           clean: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Upgrade pip tooling for dependency detection
+        run: |
+          python -m pip install --upgrade pip setuptools wheel pyyaml
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4

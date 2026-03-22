@@ -5,7 +5,13 @@ env:
   PLAYWRIGHT_VERSION: '1.45.2'
   NODE_OPTIONS: '--no-deprecation'
 
+concurrency:
+  group: dashboard-screenshot-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
+  schedule:
+    - cron: '17 6 * * *'
   pull_request:
     types:
       - opened
@@ -21,9 +27,8 @@ jobs:
   capture-dashboard:
     name: Capture admin dashboard
     runs-on: ubuntu-latest
-    concurrency:
-      group: screenshot-${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: true
+    permissions:
+      contents: read
     steps:
       - name: Ensure workspace is writable
         run: sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE"
@@ -357,3 +362,156 @@ jobs:
           if [ -f /tmp/django-server.log ]; then
             echo "Server log tail:" && tail -n 20 /tmp/django-server.log || true
           fi
+
+  notify_failure:
+    if: ${{ always() && needs.capture-dashboard.result == 'failure' && github.event_name == 'schedule' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    needs:
+      - capture-dashboard
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update screenshot failure issue
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const title = 'Dashboard screenshot workflow is failing';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const runApiUrl = `${context.apiUrl}/repos/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const marker = '<!-- dashboard-screenshot-failure -->';
+            let runData = null;
+            let failedSteps = '';
+
+            try {
+              const { data: fetchedRunData } = await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+              });
+              runData = fetchedRunData;
+
+              const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+                per_page: 100,
+              });
+
+              const failedJobs = jobsData.jobs.filter((job) => job.conclusion === 'failure');
+              failedSteps = failedJobs
+                .map((job) => {
+                  const failedStep = (job.steps || []).find((step) => step.conclusion === 'failure');
+                  if (!failedStep) {
+                    return `- ${job.name}`;
+                  }
+                  return `- ${job.name}: ${failedStep.name}`;
+                })
+                .join('\n');
+            } catch (error) {
+              core.warning(`Failed to fetch screenshot workflow metadata: ${error.message}`);
+            }
+
+            const body = [
+              marker,
+              '',
+              'The daily **Screenshot** workflow failed.',
+              '',
+              `- Workflow run: ${runUrl}`,
+              `- Workflow run API: ${runApiUrl}`,
+              `- Branch/ref: ${context.ref}`,
+              `- Commit: ${context.sha}`,
+              `- Triggered by: ${runData?.event ?? context.eventName}`,
+              '',
+              '## Failure details',
+              '',
+              failedSteps ? failedSteps : '- Unable to identify failed steps from workflow metadata.',
+              '',
+              'Please investigate and close this issue once resolved.',
+            ].join('\n');
+
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            const existing = openIssues.find((issue) => issue.title === title && issue.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: [
+                  'Another daily screenshot workflow failure was detected.',
+                  '',
+                  `- Workflow run: ${runUrl}`,
+                  `- Commit: ${context.sha}`,
+                  '',
+                  failedSteps ? `### Failed steps\n${failedSteps}` : '### Failed steps\n- Unable to identify failed steps from workflow metadata.',
+                ].join('\n'),
+              });
+              core.info(`Updated existing issue #${existing.number}.`);
+              return;
+            }
+
+            const created = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+            });
+            core.info(`Created issue #${created.data.number}.`);
+
+  notify_recovery:
+    if: ${{ always() && needs.capture-dashboard.result == 'success' && github.event_name == 'schedule' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    needs:
+      - capture-dashboard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Comment and close screenshot failure issue when recovered
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const title = 'Dashboard screenshot workflow is failing';
+            const marker = '<!-- dashboard-screenshot-failure -->';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            const existing = openIssues.find((issue) => issue.title === title && issue.body?.includes(marker));
+            if (!existing) {
+              core.info('No open screenshot workflow issue found to close.');
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: existing.number,
+              body: [
+                'Daily screenshot workflow recovered successfully ✅',
+                '',
+                `- Passing workflow run: ${runUrl}`,
+                `- Commit: ${context.sha}`,
+                '',
+                'Closing this issue because the screenshot workflow is now passing.',
+              ].join('\n'),
+            });
+
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: existing.number,
+              state: 'closed',
+            });
+            core.info(`Closed screenshot workflow issue #${existing.number}.`);

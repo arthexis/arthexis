@@ -18,7 +18,7 @@ from typing import Iterable, Iterator
 
 from django.utils import timezone
 
-from apps.loggers.paths import select_log_dir
+from utils.loggers.paths import select_log_dir
 
 from . import state
 

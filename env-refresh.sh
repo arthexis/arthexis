@@ -209,6 +209,40 @@ playwright_requirement() {
   echo "playwright"
 }
 
+selenium_requirement() {
+  # Resolve the selenium requirement from requirements-ci.txt when present.
+  local requirements_file="$SCRIPT_DIR/requirements-ci.txt"
+  if [[ -f "$requirements_file" ]]; then
+    local line
+    line=$(grep -E '^[[:space:]]*selenium(\[[^]]*\])?([[:space:]]*[<=>!~][^;]*)?([[:space:]]*;.*)?[[:space:]]*$' "$requirements_file" | head -n 1 || true)
+    if [[ -n "$line" ]]; then
+      echo "$line"
+      return 0
+    fi
+  fi
+  echo "selenium"
+}
+
+ensure_selenium_installed() {
+  # Ensure selenium is importable, installing it from the pinned requirement when needed.
+  if "$PYTHON" -c 'import importlib; importlib.import_module("selenium")' >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local -a selenium_pip_args=(--cache-dir "$PIP_CACHE_DIR")
+  if [[ "$USE_SYSTEM_PYTHON" -eq 1 ]]; then
+    selenium_pip_args+=(--user)
+  fi
+
+  local selenium_req
+  selenium_req=$(selenium_requirement)
+  echo "Selenium not found; attempting to install ${selenium_req}." >&2
+  if ! pip_install_with_helper "${selenium_pip_args[@]}" "$selenium_req"; then
+    echo "Selenium installation failed. Ensure pip and Python venv support are installed." >&2
+    return 1
+  fi
+}
+
 playwright_version() {
   "$PYTHON" - <<'PY'
 import importlib.metadata
@@ -239,10 +273,67 @@ ensure_playwright_installed() {
   fi
 }
 
+playwright_missing_host_dependencies() {
+  "$PYTHON" - <<'PY'
+import sys
+
+try:
+    from playwright.sync_api import Error, sync_playwright
+except Exception as exc:
+    print(exc, file=sys.stderr)
+    raise SystemExit(1)
+
+try:
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        browser.close()
+except Error as exc:
+    message = str(exc)
+    if "Host system is missing dependencies" in message:
+        print(message, file=sys.stderr)
+        raise SystemExit(10)
+    print(message, file=sys.stderr)
+    raise SystemExit(1)
+PY
+}
+
+ensure_playwright_host_dependencies() {
+  if [ "${ARTHEXIS_SKIP_PLAYWRIGHT_INSTALL_DEPS:-0}" = "1" ]; then
+    echo "Skipping Playwright host dependency installation because ARTHEXIS_SKIP_PLAYWRIGHT_INSTALL_DEPS=1."
+    return 0
+  fi
+
+  if [ "$(uname -s)" != "Linux" ]; then
+    return 0
+  fi
+
+  local -a install_deps_cmd=("$PYTHON" -m playwright install-deps chromium firefox)
+  if [ "$(id -u)" -eq 0 ]; then
+    echo "Installing Playwright host libraries for Linux."
+    if ! "${install_deps_cmd[@]}"; then
+      echo "Warning: Host dependency installation failed, but continuing to verification." >&2
+    fi
+    return 0
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    echo "Installing Playwright host libraries for Linux via sudo."
+    if ! sudo -n "${install_deps_cmd[@]}"; then
+      echo "Warning: Host dependency installation via sudo failed, but continuing to verification." >&2
+    fi
+    return 0
+  fi
+
+  echo "Warning: Playwright browser binaries are installed, but Linux host libraries may still be missing." >&2
+  echo "Run '$PYTHON -m playwright install-deps chromium firefox' with root access if preview capture still fails." >&2
+  return 0
+}
+
 ensure_playwright_browsers_installed() {
   local browser_marker_file="$LOCK_DIR/playwright.version"
   local current_version=""
   local stored_version=""
+  local verify_status=0
 
   if ! ensure_playwright_installed; then
     return 1
@@ -254,18 +345,38 @@ ensure_playwright_browsers_installed() {
     stored_version="$(cat "$browser_marker_file")"
   fi
 
-  if [ "$FORCE_REFRESH" -eq 0 ] && [ "$current_version" = "$stored_version" ]; then
+  if [ "$FORCE_REFRESH" -ne 0 ] || [ "$current_version" != "$stored_version" ]; then
+    echo "Installing Playwright browser runtimes (chromium, firefox) for version ${current_version}."
+    if ! "$PYTHON" -m playwright install chromium firefox; then
+      echo "Playwright browser runtime installation failed." >&2
+      return 1
+    fi
+  else
     echo "playwright browsers already installed for version ${current_version}; skipping"
-    return 0
   fi
 
-  echo "Installing Playwright browser runtimes (chromium, firefox) for version ${current_version}."
-  if ! "$PYTHON" -m playwright install chromium firefox; then
-    echo "Playwright browser runtime installation failed." >&2
+  if ! ensure_playwright_host_dependencies; then
+    echo "Playwright host dependency installation failed." >&2
     return 1
   fi
 
-  printf '%s\n' "$current_version" > "$browser_marker_file"
+  set +e
+  playwright_missing_host_dependencies
+  verify_status=$?
+  set -e
+  if [ "$verify_status" -ne 0 ]; then
+    if [ "$verify_status" -eq 10 ]; then
+      echo "Warning: Playwright browser runtimes are installed, but this Linux environment is still missing host libraries for browser execution." >&2
+      echo "Run '$PYTHON -m playwright install-deps chromium firefox' or install the packages reported above." >&2
+    else
+      echo "Warning: Playwright browser verification failed after installation." >&2
+    fi
+    return 0
+  fi
+
+  if [ "$FORCE_REFRESH" -ne 0 ] || [ "$current_version" != "$stored_version" ]; then
+    printf '%s\n' "$current_version" > "$browser_marker_file"
+  fi
 }
 
 should_install_hardware_requirements() {
@@ -387,6 +498,10 @@ install_watch_upgrade_helper() {
   fi
 }
 
+if [ "${ARTHEXIS_ENV_REFRESH_SOURCE_ONLY:-0}" = "1" ]; then
+  return 0 2>/dev/null || exit 0
+fi
+
 
 mkdir -p "$LOCK_DIR"
 mkdir -p "$PIP_CACHE_DIR"
@@ -504,7 +619,9 @@ else
   PIP_SECTION_START_MS=$(now_ms)
   for req_file in "${install_targets[@]}"; do
     FILE_INSTALL_START_MS=$(now_ms)
-    if ! pip_install_with_helper "${pip_args[@]}" -r "$req_file"; then
+    if pip_install_with_helper "${pip_args[@]}" -r "$req_file"; then
+      :
+    else
       pip_status=$?
       show_pip_failure "$pip_status"
       exit "$pip_status"
@@ -527,6 +644,7 @@ fi
 
 ensure_celery_installed
 ensure_playwright_browsers_installed
+ensure_selenium_installed
 
 if [ "$DEPS_ONLY" -eq 1 ]; then
   echo "Dependency refresh complete; skipping env-refresh database updates."
