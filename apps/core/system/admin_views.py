@@ -93,9 +93,7 @@ def _system_view(request):
                 continue
             if task.superuser_only and not request.user.is_superuser:
                 continue
-            try:
-                reverse(task.admin_url_name)
-            except NoReverseMatch:
+            if not task.resolve_url():
                 continue
             enabled = task.pk in selected_task_ids
             if enabled == task.default_enabled:
@@ -115,9 +113,8 @@ def _system_view(request):
             continue
         if task.superuser_only and not request.user.is_superuser:
             continue
-        try:
-            task_url = reverse(task.admin_url_name)
-        except NoReverseMatch:
+        task_url = task.resolve_url()
+        if not task_url:
             continue
         pref = task_pref_map.get(task.pk)
         is_enabled = pref.is_enabled if pref is not None else task.default_enabled
@@ -187,7 +184,7 @@ def _collect_admin_report_routes(user) -> list[dict[str, str]]:
     ensure_default_staff_tasks_exist()
     routes: list[dict[str, str]] = []
     restricted_routes = set(
-        StaffTask.objects.filter(superuser_only=True).values_list("admin_url_name", flat=True)
+        StaffTask.objects.filter(superuser_only=True).values_list("action_name", flat=True)
     )
 
     def _walk(patterns: list[URLPattern | URLResolver]) -> None:
@@ -201,7 +198,7 @@ def _collect_admin_report_routes(user) -> list[dict[str, str]]:
                 continue
             if route_name.endswith("-data"):
                 continue
-            if f"admin:{route_name}" in restricted_routes and not user.is_superuser:
+            if route_name == "system-upgrade-report" and "upgrade" in restricted_routes and not user.is_superuser:
                 continue
 
             try:

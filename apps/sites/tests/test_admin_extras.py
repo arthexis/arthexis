@@ -190,7 +190,7 @@ def changelist_my_profile_admin():
                 "Dashboard Launch",
             ],
             {
-                "Configured Action": "post",
+                "Configured Action": "get",
                 "Row Action": "get",
                 "Profile for admin-actions-super": "get",
                 "Changelist Tool": "get",
@@ -201,7 +201,7 @@ def changelist_my_profile_admin():
             "staff",
             ["Configured Action", "Row Action", "Changelist Tool"],
             {
-                "Configured Action": "post",
+                "Configured Action": "get",
                 "Row Action": "get",
                 "Changelist Tool": "get",
             },
@@ -209,7 +209,7 @@ def changelist_my_profile_admin():
         (
             "restricted",
             ["Configured Action"],
-            {"Configured Action": "post"},
+            {"Configured Action": "get"},
         ),
     ],
 )
@@ -229,9 +229,7 @@ def test_model_admin_actions_visibility_by_role(
         content_type=content_type,
         slug="configured-action",
         label="Configured Action",
-        http_method=DashboardAction.HttpMethod.POST,
-        target_type=DashboardAction.TargetType.ABSOLUTE_URL,
-        absolute_url="/configured-action/",
+        action_name="groups",
         is_active=True,
     )
     request = request_factory.get("/admin/tests/testresult/")
@@ -246,10 +244,12 @@ def test_model_admin_actions_visibility_by_role(
     assert "Delete" not in {action["label"] for action in actions}
 
     if role == "superuser":
+        assert actions[0]["url"] == "/actions/api/v1/security-groups/"
         assert actions[2]["url"] == f"/profile/{request.user.pk}/"
         assert actions[3]["url"].endswith("/test/tools/changelist_tool/")
         assert actions[4]["url"].endswith("/test/dashboard-action/")
     elif role == "staff":
+        assert actions[0]["url"] == "/actions/api/v1/security-groups/"
         assert actions[2]["url"].endswith("/test/tools/changelist_tool/")
 
 
