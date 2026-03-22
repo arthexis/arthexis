@@ -659,14 +659,14 @@ def _important_non_transaction_events(
                     payload = json.loads(payload_text)
                 except json.JSONDecodeError:
                     continue
-            status_value = str(payload.get("status") or "").strip()
-            if not status_value:
-                continue
-            severity, severity_color, severity_label = _event_meta(
-                "Status", status_value
-            )
-            events.append(
-                {
+                dedupe_identity = _row_identity_for_dedupe(source_key, payload)
+                status_value = str(payload.get("status") or "").strip()
+                if not status_value:
+                    continue
+                severity, severity_color, severity_label = _event_meta(
+                    "Status", status_value
+                )
+                row = {
                     "timestamp": entry.timestamp,
                     "event": "Status",
                     "details": status_value,
@@ -678,7 +678,9 @@ def _important_non_transaction_events(
             elif message.startswith(important_prefixes):
                 event_name, _, detail_text = message.partition(":")
                 details = detail_text.strip() or "-"
-                severity, severity_color, severity_label = _event_meta(event_name, details)
+                severity, severity_color, severity_label = _event_meta(
+                    event_name, details
+                )
                 row = {
                     "timestamp": entry.timestamp,
                     "event": event_name.strip(),

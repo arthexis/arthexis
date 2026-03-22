@@ -4,11 +4,11 @@ import uuid
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
 from django.urls import NoReverseMatch
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.groups.models import SecurityGroup
 from apps.ocpp import store
 from apps.ocpp.models import Charger, Transaction
 
@@ -353,7 +353,7 @@ def test_status_view_shows_sensitive_non_transaction_events_for_owner_group_memb
     user = get_user_model().objects.create_user(
         username="status-events-owner-group", password="pass"
     )
-    security_group = Group.objects.create(name="Diagnostics Viewers")
+    security_group = SecurityGroup.objects.create(name="Diagnostics Viewers")
     user.groups.add(security_group)
     client.force_login(user)
     charger = Charger.objects.create(
@@ -391,6 +391,10 @@ def test_status_view_shows_non_transaction_events_for_staff(client):
     charger = Charger.objects.create(charger_id="STATUS-EVENTS-STAFF", connector_id=1)
     identity = store.identity_key(charger.charger_id, charger.connector_id)
     store.add_log(identity, "Connected websocket")
+    store.add_log(
+        identity,
+        "DiagnosticsStatusNotification: status=Uploaded, location=https://diag.example/upload?token=%2A%2A%2AREDACTED%2A%2A%2A",
+    )
 
     response = client.get(
         reverse(
@@ -402,6 +406,10 @@ def test_status_view_shows_non_transaction_events_for_staff(client):
     assert response.status_code == 200
     assert any(
         item["event"] == "Connected websocket"
+        for item in response.context["non_transaction_events"]
+    )
+    assert any(
+        item["event"] == "DiagnosticsStatusNotification"
         for item in response.context["non_transaction_events"]
     )
 
