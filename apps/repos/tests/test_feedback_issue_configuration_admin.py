@@ -100,6 +100,32 @@ def test_repository_issue_configure_view_updates_feature_and_repository(client, 
     assert package.repository_url == "https://github.com/arthexis/new-repo"
 
 
+def test_repository_issue_configure_view_uses_legacy_disabled_default_without_creating_feature(
+    client, db, settings
+):
+    """A plain GET should honor the legacy disabled default without enabling the feature."""
+
+    settings.GITHUB_ISSUE_REPORTING_ENABLED = False
+    admin_client = _create_admin_client(client)
+    repository = GitHubRepository.objects.create(owner="arthexis", name="arthexis")
+    issue = RepositoryIssue.objects.create(
+        repository=repository,
+        number=107,
+        title="Legacy default",
+        state="open",
+        created_at=timezone.now(),
+        updated_at=timezone.now(),
+    )
+
+    response = admin_client.get(
+        reverse("admin:repos_repositoryissue_configure", args=[issue.pk])
+    )
+
+    assert response.status_code == 200
+    assert Feature.objects.filter(slug="github-issue-reporting").exists() is False
+    assert response.context["form"].initial["github_issue_reporting_enabled"] is False
+
+
 def test_repository_issue_configure_view_ignores_gh_token_for_issue_checks(
     client, db, monkeypatch
 ):

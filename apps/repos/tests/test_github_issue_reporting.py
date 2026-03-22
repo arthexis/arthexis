@@ -145,3 +145,21 @@ def test_signal_configuration_connects_runtime_gated_handler(db, monkeypatch, se
         _configure_github_issue_reporting()
 
     assert len(enqueued) == 1
+
+
+def test_already_queued_reports_still_run_after_feature_is_disabled(
+    db, settings, caplog
+):
+    """Queued reports should still execute even if the feature is later disabled."""
+
+    settings.GITHUB_ISSUE_REPORTING_ENABLED = True
+    _set_github_issue_reporting_feature(enabled=False)
+
+    from apps.tasks.tasks import report_exception_to_github
+
+    payload = {"fingerprint": "queued-before-disable"}
+
+    with caplog.at_level("INFO"):
+        report_exception_to_github(payload)
+
+    assert "Queued GitHub issue report for queued-before-disable" in caplog.text

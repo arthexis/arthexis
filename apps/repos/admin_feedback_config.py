@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from django import forms
+from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db.utils import OperationalError, ProgrammingError
@@ -147,17 +148,27 @@ class FeedbackIssueConfigurationAdminMixin:
         except (OperationalError, ProgrammingError):
             return None
 
+    def _github_issue_reporting_default_enabled(self) -> bool:
+        """Return the legacy default used before the suite feature exists."""
+
+        return bool(getattr(settings, "GITHUB_ISSUE_REPORTING_ENABLED", True))
+
     def _get_or_create_github_issue_reporting_feature(
         self,
+        *,
+        enabled: bool | None = None,
     ) -> tuple[Feature | None, bool]:
         """Return the automatic GitHub issue reporting feature when persistence is available."""
+
+        if enabled is None:
+            enabled = self._github_issue_reporting_default_enabled()
 
         try:
             return Feature.objects.get_or_create(
                 slug=GITHUB_ISSUE_REPORTING_FEATURE_SLUG,
                 defaults={
                     "display": "GitHub Issue Reporting",
-                    "is_enabled": True,
+                    "is_enabled": enabled,
                 },
             )
         except (OperationalError, ProgrammingError):
@@ -271,17 +282,17 @@ class FeedbackIssueConfigurationAdminMixin:
     def _initial_form_values(self) -> dict[str, object]:
         """Return initial values for editable configuration fields."""
 
-        feature, _created = self._get_or_create_feedback_feature()
-        github_issue_reporting_feature, _created = (
-            self._get_or_create_github_issue_reporting_feature()
-        )
+        feature = self._get_feedback_feature()
+        github_issue_reporting_feature = self._get_github_issue_reporting_feature()
         active_package = self._active_package()
+        github_issue_reporting_enabled = (
+            github_issue_reporting_feature.is_enabled
+            if github_issue_reporting_feature is not None
+            else self._github_issue_reporting_default_enabled()
+        )
         return {
             "feedback_ingestion_enabled": bool(feature and feature.is_enabled),
-            "github_issue_reporting_enabled": bool(
-                github_issue_reporting_feature
-                and github_issue_reporting_feature.is_enabled
-            ),
+            "github_issue_reporting_enabled": bool(github_issue_reporting_enabled),
             "active_repository_url": (
                 active_package.repository_url if active_package else ""
             ),
@@ -309,11 +320,13 @@ class FeedbackIssueConfigurationAdminMixin:
             feature.is_enabled = enabled
             feature.save(update_fields=["is_enabled"])
 
-        github_issue_reporting_feature, _created = (
-            self._get_or_create_github_issue_reporting_feature()
-        )
         github_issue_reporting_enabled = bool(
             form.cleaned_data["github_issue_reporting_enabled"]
+        )
+        github_issue_reporting_feature, _created = (
+            self._get_or_create_github_issue_reporting_feature(
+                enabled=github_issue_reporting_enabled
+            )
         )
         if github_issue_reporting_feature is None:
             self.message_user(

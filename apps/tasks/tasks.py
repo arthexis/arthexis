@@ -15,7 +15,6 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-from apps.repos.issue_reporting import is_github_issue_reporting_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -142,13 +141,6 @@ def report_exception_to_github(payload: dict[str, Any]) -> None:
     replace it with an implementation that forwards ``payload`` to the
     automation responsible for creating GitHub issues.
     """
-
-    if not is_github_issue_reporting_enabled():
-        logger.info(
-            "Skipping GitHub issue report for %s because the suite feature is disabled",
-            payload.get("fingerprint", "<unknown>"),
-        )
-        return
 
     logger.info(
         "Queued GitHub issue report for %s", payload.get("fingerprint", "<unknown>")
