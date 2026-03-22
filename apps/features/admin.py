@@ -16,6 +16,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _, ngettext
 from django_object_actions import DjangoObjectActions
 
+from apps.app.models import Application
 from apps.locals.user_data import EntityModelAdmin
 from apps.services.celery_workers import (
     CELERY_WORKERS_FEATURE_SLUG,

@@ -10,6 +10,7 @@ from django.test import RequestFactory
 from django.test import override_settings
 from django.urls import reverse
 
+from apps.app.models import Application
 from apps.features.admin import FeatureAdmin
 from apps.features.models import Feature
 
@@ -159,3 +160,22 @@ def test_feature_admin_form_supports_dynamic_parameter_fieldsets(django_user_mod
 
     assert "param__arthexis_backend" in form_class.base_fields
     assert "param__mobilityhouse_backend" in form_class.base_fields
+
+
+@pytest.mark.django_db
+def test_feature_admin_source_app_filter_lookups_include_feature_apps(rf):
+    """Regression: source-app list filter lookups should resolve app labels safely."""
+
+    app = Application.objects.create(name="admin-filter-app")
+    Feature.objects.create(slug="filter-target", display="Filter Target", main_app=app)
+
+    request = rf.get("/")
+    admin_instance = FeatureAdmin(Feature, admin.site)
+    source_app_filter = next(
+        list_filter
+        for list_filter in admin_instance.get_list_filter(request)
+        if getattr(list_filter, "__name__", "") == "SourceAppListFilter"
+    )
+    list_filter = source_app_filter(request, {}, Feature, admin_instance)
+
+    assert (str(app.pk), app.display_name) in list_filter.lookups(request, admin_instance)
