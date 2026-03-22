@@ -84,11 +84,7 @@ def test_removed_runtime_apps_only_remain_available_through_explicit_legacy_shim
         "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig"
         in settings_apps.LEGACY_MIGRATION_APPS
     )
-    assert settings_apps.MIGRATION_MODULES["socials"] == "apps.socials.migrations"
-    assert (
-        "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig"
-        in settings_apps.LEGACY_MIGRATION_APPS
-    )
+    assert "socials" not in settings_apps.MIGRATION_MODULES
     assert (
         "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig"
         in settings_apps.LEGACY_MIGRATION_APPS
