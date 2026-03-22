@@ -72,7 +72,11 @@
       </fieldset>
 
       <div class="submit-row">
-        <input type="submit" class="default" value="{% trans 'Save and run test' %}">
+        {% if can_change %}
+          <input type="submit" class="default" value="{% trans 'Save and run test' %}">
+        {% else %}
+          <p class="help">{% trans "You have view access to this collector configuration, but not permission to change it." %}</p>
+        {% endif %}
         <a href="{{ change_url }}" class="closelink">{% trans "Back to inbox" %}</a>
       </div>
     </form>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.contrib.auth.models import Permission
 from django.urls import reverse
 
 import pytest
@@ -133,7 +134,7 @@ def test_setup_collector_view_reports_non_validation_test_errors(admin_client, a
 
     assert response.status_code == 200
     messages = list(response.context["messages"])
-    assert any("Select exactly one inbox to start setup." in str(message) for message in messages)
+    assert any("Mailbox unavailable" in str(message) for message in messages)
 
 
 @pytest.mark.integration
@@ -156,6 +157,36 @@ def test_setup_collector_view_forbids_staff_without_view_permission(client, admi
     )
 
     assert response.status_code == 403
+
+
+@pytest.mark.integration
+@pytest.mark.django_db
+def test_setup_collector_view_renders_read_only_for_view_only_staff(client, admin_user):
+    """Staff users with only inbox view permission should get a read-only setup preview."""
+
+    inbox = EmailInbox.objects.create(
+        user=admin_user,
+        username="view-only-inbox@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+    )
+    collector = EmailCollector.objects.create(inbox=inbox, name="Existing")
+    viewer = User.objects.create_user(username="staff-view-only", is_staff=True)
+    viewer.user_permissions.add(Permission.objects.get(codename="view_emailinbox"))
+    client.force_login(viewer)
+
+    response = client.get(
+        reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'value="Existing"' in content
+    assert 'value="Save and run test"' not in content
+    assert "not permission to change it" in content
+    assert 'name="name"' in content
+    assert 'disabled' in content
 
 
 @pytest.mark.integration
