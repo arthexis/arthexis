@@ -11,6 +11,7 @@ from django.shortcuts import redirect
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from parler.admin import TranslatableAdmin
 
 from apps.audio.models import AudioSample
@@ -22,9 +23,11 @@ from apps.content.models import (
     WebSample,
     WebSampleAttachment,
 )
+from apps.content.upload_handlers import MaxContentDropUploadSizeHandler
 from apps.content.utils import (
     capture_screenshot,
     create_uploaded_content_sample,
+    get_max_content_drop_size,
     save_screenshot,
 )
 from apps.locals.user_data import EntityModelAdmin
@@ -98,7 +101,7 @@ class ContentSampleAdmin(EntityModelAdmin):
             ),
             path(
                 "drop-upload/",
-                self.admin_site.admin_view(self.drop_upload),
+                self.admin_site.admin_view(csrf_exempt(self.drop_upload)),
                 name="content_contentsample_drop_upload",
             ),
             path(
@@ -127,18 +130,37 @@ class ContentSampleAdmin(EntityModelAdmin):
     def drop_upload(self, request):
         """Create a content sample from a drag-and-drop upload and return its admin URL."""
 
+        request.upload_handlers = [
+            MaxContentDropUploadSizeHandler(
+                request,
+                max_size=get_max_content_drop_size(),
+            ),
+            *request.upload_handlers,
+        ]
+
+        @csrf_protect
+        def protected_view(inner_request):
+            return self._drop_upload(inner_request)
+
+        return protected_view(request)
+
+    def _drop_upload(self, request):
+        """Handle a validated admin drag-and-drop upload after CSRF protection."""
+
         if request.method != "POST":
             raise PermissionDenied
         if not self.has_add_permission(request):
             raise PermissionDenied
 
         uploaded_file = request.FILES.get("file")
+        upload_error = getattr(request, "content_drop_upload_error", None)
+        if upload_error is not None:
+            return self._handle_drop_upload_error(request, upload_error)
         if uploaded_file is None:
-            response = JsonResponse({"error": _("No file was uploaded.")}, status=400)
-            if self._wants_json_response(request):
-                return response
-            self.message_user(request, _("No file was uploaded."), level=messages.ERROR)
-            return redirect(request.META.get("HTTP_REFERER", reverse("admin:index")))
+            return self._handle_drop_upload_error(
+                request,
+                ValidationError(_("No file was uploaded.")),
+            )
 
         try:
             sample = create_uploaded_content_sample(
@@ -146,12 +168,7 @@ class ContentSampleAdmin(EntityModelAdmin):
                 user=request.user,
             )
         except ValidationError as exc:
-            message = exc.messages[0] if exc.messages else _("The uploaded file is invalid.")
-            response = JsonResponse({"error": message}, status=400)
-            if self._wants_json_response(request):
-                return response
-            self.message_user(request, message, level=messages.ERROR)
-            return redirect(request.META.get("HTTP_REFERER", reverse("admin:index")))
+            return self._handle_drop_upload_error(request, exc)
         change_url = reverse("admin:content_contentsample_change", args=[sample.pk])
 
         if self._wants_json_response(request):
@@ -168,6 +185,25 @@ class ContentSampleAdmin(EntityModelAdmin):
             level=messages.SUCCESS,
         )
         return redirect(change_url)
+
+    def _handle_drop_upload_error(self, request, error: ValidationError):
+        """Return the standard JSON-or-redirect response for invalid uploads.
+
+        Parameters:
+            request: Active admin request.
+            error: Validation failure describing why the upload was rejected.
+
+        Returns:
+            A JSON 400 response for XHR callers or an admin redirect with a
+            flashed error message.
+        """
+
+        message = error.messages[0] if error.messages else _("The uploaded file is invalid.")
+        response = JsonResponse({"error": message}, status=400)
+        if self._wants_json_response(request):
+            return response
+        self.message_user(request, message, level=messages.ERROR)
+        return redirect(request.META.get("HTTP_REFERER", reverse("admin:index")))
 
     def take_snapshot(self, request, object_id):
         del object_id

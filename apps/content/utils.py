@@ -65,7 +65,7 @@ def _build_uploaded_sample_path(filename: str) -> Path:
     return content_drop_dir / f"{stem}-{uuid.uuid4().hex}{suffix}"
 
 
-def _get_max_content_drop_size() -> int:
+def get_max_content_drop_size() -> int:
     """Return the maximum allowed size for admin drag-and-drop uploads in bytes."""
 
     return int(
@@ -84,7 +84,7 @@ def _validate_uploaded_content_sample(uploaded_file: UploadedFile) -> None:
     """
 
     size = getattr(uploaded_file, "size", 0) or 0
-    if size > _get_max_content_drop_size():
+    if size > get_max_content_drop_size():
         raise ValidationError(_("File exceeds the allowed size."))
 
 
