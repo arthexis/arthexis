@@ -56,7 +56,7 @@ def _is_django_app_dir(path: Path) -> bool:
         return False
 
     module_path = _to_module_path(path)
-    if module_path in NON_DJANGO_UTILITY_PACKAGES | RETIRED_RUNTIME_APP_PACKAGES:
+    if module_path in NON_DJANGO_UTILITY_PACKAGES | _legacy_runtime_app_packages():
         return False
 
     if (path / "apps.py").exists():
@@ -77,6 +77,30 @@ def _to_module_path(path: Path) -> str:
     return f"apps.{'.'.join(path.relative_to(APPS_DIR).parts)}"
 
 
+def _legacy_runtime_app_packages() -> set[str]:
+    """Return retired runtime app packages implied by ``LEGACY_MIGRATION_APPS``.
+
+    Returns:
+        A set of legacy runtime package names that should stay out of automatic
+        local app discovery because their migrations are preserved through
+        ``LEGACY_MIGRATION_APPS`` shims instead.
+    """
+
+    retired_packages: set[str] = set()
+    for app_path in LEGACY_MIGRATION_APPS:
+        legacy_marker = "apps._legacy."
+        migration_suffix = "_migration_only.apps."
+        if legacy_marker not in app_path or migration_suffix not in app_path:
+            continue
+
+        legacy_name = app_path.split(legacy_marker, maxsplit=1)[1].split(
+            migration_suffix, maxsplit=1
+        )[0]
+        retired_packages.add(f"apps.{legacy_name.removesuffix('_migration_only')}")
+
+    return retired_packages
+
+
 LEGACY_MIGRATION_APPS = [
     "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig",
     "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig",
@@ -86,10 +110,6 @@ LEGACY_MIGRATION_APPS = [
 ]
 NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",
-}
-RETIRED_RUNTIME_APP_PACKAGES = {
-    "apps.prompts",
-    "apps.socials",
 }
 
 

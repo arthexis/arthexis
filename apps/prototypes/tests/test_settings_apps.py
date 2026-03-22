@@ -99,3 +99,11 @@ def test_legacy_migration_apps_are_kept_sorted_for_maintainability():
     assert settings_apps.LEGACY_MIGRATION_APPS == sorted(
         settings_apps.LEGACY_MIGRATION_APPS
     )
+
+
+def test_legacy_runtime_packages_are_derived_from_legacy_migration_apps():
+    assert settings_apps._legacy_runtime_app_packages() == {
+        "apps.prompts",
+        "apps.socials",
+        "apps.survey",
+    }
