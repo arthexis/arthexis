@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from unittest import TestCase, mock
 
+from asgiref.sync import async_to_sync
 from django.core.cache import cache
 
 from apps.sites.consumers import (
@@ -69,3 +70,44 @@ class ChatConsumerPresenceDebounceTests(TestCase):
                 consumer._presence_flap_window_seconds(),
                 DEFAULT_PRESENCE_FLAP_WINDOW_SECONDS,
             )
+
+
+def test_chat_consumer_connect_refuses_when_pages_chat_feature_disabled(monkeypatch):
+    """Pages Chat suite feature should block websocket access even if deployment wiring is on."""
+
+    consumer = ChatConsumer()
+    consumer.scope = {"session": SimpleNamespace(session_key="visitor-session")}
+    consumer.close = mock.AsyncMock()
+
+    monkeypatch.setattr(
+        "apps.sites.consumers.is_pages_chat_runtime_enabled",
+        lambda default=False: False,
+    )
+
+    async_to_sync(consumer.connect)()
+
+    consumer.close.assert_awaited_once_with()
+
+
+def test_chat_consumer_connect_refuses_before_session_resolution_when_pages_chat_disabled(
+    monkeypatch,
+):
+    """Staff bridge state must not bypass the Pages Chat websocket gate."""
+
+    consumer = ChatConsumer()
+    consumer.scope = {
+        "session": SimpleNamespace(session_key="visitor-session"),
+        "user": SimpleNamespace(is_staff=True),
+    }
+    consumer.close = mock.AsyncMock()
+    consumer._resolve_session = mock.AsyncMock()
+
+    monkeypatch.setattr(
+        "apps.sites.consumers.is_pages_chat_runtime_enabled",
+        lambda default=False: False,
+    )
+
+    async_to_sync(consumer.connect)()
+
+    consumer.close.assert_awaited_once_with()
+    consumer._resolve_session.assert_not_awaited()

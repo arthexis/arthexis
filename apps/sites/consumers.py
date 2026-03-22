@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.utils.translation import gettext
 
 from apps.chats.models import ChatMessage, ChatSession
+from apps.features.utils import is_pages_chat_runtime_enabled
 from apps.core.channel_metrics import websocket_connected, websocket_disconnected
 
 
@@ -29,7 +30,7 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
     group_name: str = ""
 
     async def connect(self):
-        if not getattr(settings, "PAGES_CHAT_ENABLED", False):
+        if not is_pages_chat_runtime_enabled(default=False):
             await self.close()
             return
         scope_session = self.scope.get("session")

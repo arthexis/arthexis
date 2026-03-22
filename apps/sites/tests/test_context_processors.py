@@ -32,17 +32,17 @@ class _AnonymousUser:
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ("is_enabled", "enable_public_chat", "expected_chat_enabled"),
+    ("pages_chat_feature_enabled", "enable_public_chat", "expected_chat_enabled"),
     [
         (False, True, False),
         (True, False, False),
         (True, True, True),
     ],
 )
-def test_nav_links_chat_enabled_requires_feature_and_site_or_profile(
-    monkeypatch, settings, is_enabled, enable_public_chat, expected_chat_enabled
+def test_nav_links_chat_enabled_requires_pages_chat_feature_and_site_or_profile(
+    monkeypatch, settings, pages_chat_feature_enabled, enable_public_chat, expected_chat_enabled
 ):
-    """Regression: chat enablement requires suite feature and a site/user opt-in signal."""
+    """Regression: visitor chat requires the Pages Chat suite feature and a public opt-in signal."""
 
     cache.clear()
     request = RequestFactory().get("/")
@@ -60,8 +60,12 @@ def test_nav_links_chat_enabled_requires_feature_and_site_or_profile(
     )
 
     Feature.objects.update_or_create(
+        slug="pages-chat",
+        defaults={"display": "Pages Chat", "is_enabled": pages_chat_feature_enabled},
+    )
+    Feature.objects.update_or_create(
         slug="staff-chat-bridge",
-        defaults={"display": "Staff Chat Bridge", "is_enabled": is_enabled},
+        defaults={"display": "Staff Chat Bridge", "is_enabled": True},
     )
 
     context = context_processors.nav_links(request)
@@ -450,3 +454,38 @@ def test_nav_links_prefers_most_specific_current_module(monkeypatch):
 
     assert context["current_module"].pk == child.pk
     assert request.current_module.pk == child.pk
+
+
+@pytest.mark.django_db
+def test_nav_links_staff_bridge_does_not_reenable_visitor_chat_when_pages_chat_disabled(
+    monkeypatch, settings
+):
+    """Staff bridge feature should not leak visitor chat when Pages Chat is disabled."""
+
+    cache.clear()
+    request = RequestFactory().get("/")
+    settings.PAGES_CHAT_ENABLED = True
+
+    monkeypatch.setattr(
+        context_processors.Node, "get_local", staticmethod(lambda: None)
+    )
+    monkeypatch.setattr(
+        context_processors,
+        "get_site",
+        lambda _request: types.SimpleNamespace(
+            id=1, template=None, enable_public_chat=True
+        ),
+    )
+
+    Feature.objects.update_or_create(
+        slug="pages-chat",
+        defaults={"display": "Pages Chat", "is_enabled": False},
+    )
+    Feature.objects.update_or_create(
+        slug="staff-chat-bridge",
+        defaults={"display": "Staff Chat Bridge", "is_enabled": True},
+    )
+
+    context = context_processors.nav_links(request)
+
+    assert context["chat_enabled"] is False

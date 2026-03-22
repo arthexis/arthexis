@@ -16,7 +16,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
-from apps.features.utils import is_suite_feature_enabled
+from apps.features.utils import is_pages_chat_runtime_enabled, is_suite_feature_enabled
 from apps.sites.context_processors import _build_chat_context
 
 from .exceptions import EvergoAPIError, EvergoPhaseSubmissionError
@@ -75,7 +75,7 @@ def _build_public_widget_context(*, user) -> dict[str, object]:
     """
 
     feedback_ingestion_enabled = is_suite_feature_enabled("feedback-ingestion", default=True)
-    pages_chat_enabled = bool(getattr(settings, "PAGES_CHAT_ENABLED", False))
+    pages_chat_enabled = is_pages_chat_runtime_enabled(default=False)
     site = Site.objects.get_current()
     chat_context = _build_chat_context(
         site,
