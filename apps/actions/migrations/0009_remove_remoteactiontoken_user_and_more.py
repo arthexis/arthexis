@@ -26,6 +26,25 @@ KNOWN_ACTION_BY_ROUTE = {
 }
 
 
+def _legacy_route_for_action_name(action_name: str) -> tuple[str, str]:
+    """Return the legacy target metadata used during rollback.
+
+    Parameters:
+        action_name: Named internal action being rolled back.
+
+    Returns:
+        A ``(target_type, route)`` tuple for the legacy dashboard action fields.
+    """
+
+    for route, known_action_name in KNOWN_ACTION_BY_ROUTE.items():
+        if known_action_name != action_name:
+            continue
+        if route.startswith("admin:"):
+            return ("admin_url", route)
+        return ("absolute_url", route)
+    return ("admin_url", "")
+
+
 def _create_archive_tables(schema_editor) -> None:
     """Create archive tables used to preserve removed generic action rows."""
 
@@ -95,8 +114,21 @@ def _create_archive_tables(schema_editor) -> None:
 
 
 
+def _clear_archive_tables(schema_editor) -> None:
+    """Remove prior archived rows so the migration can be reapplied after rollback."""
+
+    for table_name in (
+        DASHBOARD_ACTION_ARCHIVE_TABLE,
+        REMOTE_ACTION_ARCHIVE_TABLE,
+        REMOTE_ACTION_TOKEN_ARCHIVE_TABLE,
+    ):
+        schema_editor.execute(f"DELETE FROM {table_name}")
+
+
 def _archive_remote_rows(schema_editor) -> None:
     """Copy generic remote action rows into archive tables."""
+
+    _clear_archive_tables(schema_editor)
 
     schema_editor.execute(
         f'''
@@ -189,14 +221,12 @@ def reverse_migrate_actions(apps, schema_editor) -> None:
     RemoteActionToken = apps.get_model("actions", "RemoteActionToken")
     StaffTask = apps.get_model("actions", "StaffTask")
 
-    reverse_route_map = {value: key for key, value in KNOWN_ACTION_BY_ROUTE.items() if key.startswith("admin:")}
-
     for action in DashboardAction.objects.all():
-        route = reverse_route_map.get(action.action_name, "")
-        action.admin_url_name = route
-        action.absolute_url = ""
+        target_type, route = _legacy_route_for_action_name(action.action_name)
+        action.admin_url_name = route if target_type == "admin_url" else ""
+        action.absolute_url = route if target_type == "absolute_url" else ""
         action.http_method = "get"
-        action.target_type = "admin_url"
+        action.target_type = target_type
         action.caller_sigil = ""
         action.save(
             update_fields=[
@@ -217,8 +247,10 @@ def reverse_migrate_actions(apps, schema_editor) -> None:
         groups_task.save(update_fields=["slug", "label", "description", "admin_url_name"])
 
     for task in StaffTask.objects.exclude(admin_url_name="admin:actions_remoteaction_my_openapi_spec"):
-        task.admin_url_name = reverse_route_map.get(task.action_name, task.admin_url_name)
-        task.save(update_fields=["admin_url_name"])
+        target_type, route = _legacy_route_for_action_name(task.action_name)
+        if target_type == "admin_url" and route:
+            task.admin_url_name = route
+            task.save(update_fields=["admin_url_name"])
 
     with schema_editor.connection.cursor() as cursor:
         cursor.execute(

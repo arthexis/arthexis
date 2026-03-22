@@ -135,10 +135,14 @@ def visible_staff_tasks_for_user(user) -> list[dict[str, str]]:
 
 
 def ensure_default_staff_tasks_exist() -> None:
-    """Backfill missing default staff tasks in existing and new environments."""
+    """Backfill missing default staff tasks in existing and new environments.
+
+    Existing rows are left intact so operator edits to labels, ordering, and
+    visibility remain persistent after the defaults have been seeded once.
+    """
 
     for task in DEFAULT_STAFF_TASKS:
-        StaffTask.objects.update_or_create(
+        StaffTask.objects.get_or_create(
             slug=task["slug"],
             defaults={
                 "label": task["label"],

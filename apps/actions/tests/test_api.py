@@ -72,3 +72,31 @@ def test_staff_task_resolves_named_internal_action_for_visible_tasks():
 
     assert any(task["slug"] == "groups" and task["url"] == "/actions/api/v1/security-groups/" for task in tasks)
     assert StaffTask.objects.filter(slug="actions").exists() is False
+
+
+@pytest.mark.django_db
+def test_ensure_default_staff_tasks_exist_preserves_existing_seeded_task_edits():
+    """Regression: reseeding should not overwrite operator changes to seeded tasks."""
+
+    StaffTask.objects.create(
+        slug="groups",
+        label="Customized Groups",
+        description="Customized description.",
+        action_name="groups",
+        order=5,
+        default_enabled=False,
+        staff_only=False,
+        superuser_only=True,
+        is_active=False,
+    )
+
+    ensure_default_staff_tasks_exist()
+
+    task = StaffTask.objects.get(slug="groups")
+    assert task.label == "Customized Groups"
+    assert task.description == "Customized description."
+    assert task.order == 5
+    assert task.default_enabled is False
+    assert task.staff_only is False
+    assert task.superuser_only is True
+    assert task.is_active is False

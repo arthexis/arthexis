@@ -454,13 +454,14 @@ def _configured_dashboard_action_descriptors(model):
         content_type=content_type,
         is_active=True,
     ):
+        rendered_action = configured_action.as_rendered_action()
         descriptors.append(
             {
                 "action_key": _model_admin_action_key(configured_action.slug),
                 "label": configured_action.display_label,
-                "url": configured_action.resolve_url(),
-                "method": configured_action.as_rendered_action()["method"],
-                "is_discover": configured_action.as_rendered_action()["is_discover"],
+                "url": rendered_action["url"],
+                "method": rendered_action["method"],
+                "is_discover": rendered_action["is_discover"],
             }
         )
     return descriptors
