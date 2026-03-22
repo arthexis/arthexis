@@ -50,6 +50,8 @@ from webauthn.helpers.exceptions import (
 from apps.chats.models import ChatSession
 from apps.core.models import InviteLead
 from apps.emails import mailer
+from apps.features.utils import is_suite_feature_enabled
+from apps.meta.models import WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG
 from apps.nodes.models import Node
 from apps.nodes.utils import ensure_feature_enabled
 from apps.users.models import PasskeyCredential
@@ -898,6 +900,16 @@ def whatsapp_webhook(request):
         return HttpResponseNotAllowed(["POST"])
     if not getattr(settings, "PAGES_WHATSAPP_ENABLED", False):
         return HttpResponse(status=503)
+    if not is_suite_feature_enabled(WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG, default=True):
+        return JsonResponse(
+            {
+                "status": "accepted",
+                "detail": _(
+                    "WhatsApp chat bridge is disabled; payload accepted without session activity."
+                ),
+            },
+            status=202,
+        )
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
     except json.JSONDecodeError:

@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
+from apps.chats.models import ChatSession
 from apps.energy.models import ClientReport
 from apps.features.models import Feature
 from apps.modules.models import Module
@@ -209,6 +210,77 @@ def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
         content_type="application/json",
     )
     assert disabled.status_code == 503
+
+
+def test_whatsapp_webhook_disabled_suite_feature_returns_accepted_without_session_activity(
+    client, settings
+):
+    """Disabled WhatsApp suite feature should not create sessions from webhook traffic."""
+
+    settings.PAGES_WHATSAPP_ENABLED = True
+    Feature.objects.update_or_create(
+        slug="whatsapp-chat-bridge",
+        defaults={"display": "WhatsApp Chat Bridge", "is_enabled": False},
+    )
+
+    response = client.post(
+        reverse("pages:whatsapp-webhook"),
+        data=json.dumps({"from": "+15551234", "message": "Hello"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "accepted"
+    assert ChatSession.objects.count() == 0
+
+
+def test_whatsapp_webhook_enabled_feature_creates_session_and_message(client, settings):
+    """Enabled WhatsApp suite feature should continue bridging inbound session traffic."""
+
+    settings.PAGES_WHATSAPP_ENABLED = True
+    Feature.objects.update_or_create(
+        slug="whatsapp-chat-bridge",
+        defaults={"display": "WhatsApp Chat Bridge", "is_enabled": True},
+    )
+
+    response = client.post(
+        reverse("pages:whatsapp-webhook"),
+        data=json.dumps({"from": "+15557654321", "message": "Hello"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 201
+    session = ChatSession.objects.get(whatsapp_number="+15557654321")
+    assert session.messages.count() == 1
+    assert session.messages.get().body == "Hello"
+
+
+def test_existing_whatsapp_session_does_not_accept_new_messages_when_feature_is_disabled(
+    client, settings
+):
+    """Existing WhatsApp sessions should stop receiving bridged webhook messages when disabled."""
+
+    settings.PAGES_WHATSAPP_ENABLED = True
+    session = ChatSession.objects.create(
+        visitor_key="whatsapp:+15550000000",
+        whatsapp_number="+15550000000",
+    )
+    session.add_message(content="Earlier", display_name="+15550000000", source="whatsapp")
+    Feature.objects.update_or_create(
+        slug="whatsapp-chat-bridge",
+        defaults={"display": "WhatsApp Chat Bridge", "is_enabled": False},
+    )
+
+    response = client.post(
+        reverse("pages:whatsapp-webhook"),
+        data=json.dumps({"from": "+15550000000", "message": "Blocked"}),
+        content_type="application/json",
+    )
+
+    session.refresh_from_db()
+    assert response.status_code == 202
+    assert session.messages.count() == 1
+    assert session.messages.get().body == "Earlier"
 
 
 def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
