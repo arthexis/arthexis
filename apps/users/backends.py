@@ -354,6 +354,26 @@ def _collect_local_ip_addresses():
     return tuple(sorted(addresses, key=str))
 
 
+def _normalize_ip_candidate(candidate: str) -> str | None:
+    """Normalize a raw IP candidate by stripping ports, brackets, and zones."""
+
+    value = str(candidate or "").strip()
+    if not value:
+        return None
+
+    if value.startswith("[") and "]" in value:
+        value = value[1 : value.index("]")]
+    elif ":" in value and value.count(":") == 1:
+        host, port = split_domain_port(value)
+        if host and port:
+            value = host
+
+    if "%" in value:
+        value = value.split("%", 1)[0]
+
+    return value or None
+
+
 class LocalhostAdminBackend(ModelBackend):
     """Allow default admin credentials only from local networks."""
 
@@ -468,17 +488,11 @@ class LocalhostAdminBackend(ModelBackend):
     def _get_remote_ip(self, request):
         """Return the originating client IP, honoring trusted proxy chains only."""
 
-        remote = request.META.get("REMOTE_ADDR", "") if request else ""
-
-        if remote.startswith("[") and "]" in remote:
-            remote = remote[1 : remote.index("]")]
-        elif ":" in remote and remote.count(":") == 1:
-            host, port = split_domain_port(remote)
-            if host and port:
-                remote = host
-
-        if "%" in remote:
-            remote = remote.split("%", 1)[0]
+        remote = _normalize_ip_candidate(
+            request.META.get("REMOTE_ADDR", "") if request else ""
+        )
+        if remote is None:
+            return None
 
         try:
             remote_ip = ipaddress.ip_address(remote)
@@ -495,10 +509,11 @@ class LocalhostAdminBackend(ModelBackend):
 
         trusted_forwarded_proxies = tuple(self._iter_trusted_forwarded_proxies())
         for candidate in reversed([value.strip() for value in forwarded.split(",")]):
-            if not candidate:
+            normalized_candidate = _normalize_ip_candidate(candidate)
+            if normalized_candidate is None:
                 continue
             try:
-                candidate_ip = ipaddress.ip_address(candidate)
+                candidate_ip = ipaddress.ip_address(normalized_candidate)
             except ValueError:
                 continue
             if any(candidate_ip in proxy for proxy in trusted_forwarded_proxies):

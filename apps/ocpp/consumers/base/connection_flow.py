@@ -98,18 +98,23 @@ class ConnectionFlowMixin:
         def _resolve_feature_reason() -> str | None:
             node = Node.get_local()
             offered_subprotocols = self._get_offered_subprotocols()
-            requested_version = self._canonicalize_ocpp_subprotocol(
-                self._select_subprotocol(offered_subprotocols, None)
-            )
+            offered_subprotocols_were_explicit = "subprotocols" in self.scope
+            requested_version = None
+            if offered_subprotocols:
+                requested_version = self._canonicalize_ocpp_subprotocol(
+                    self._select_subprotocol(offered_subprotocols, None)
+                )
+            elif not offered_subprotocols_were_explicit:
+                requested_version = getattr(self, "ocpp_version", None) or "ocpp1.6"
+
             requested_feature_slug = OCPP_VERSION_FEATURE_SLUGS.get(
                 requested_version,
                 CHARGER_CREATION_FEATURE_SLUG,
             )
-            feature_slugs = [requested_feature_slug]
             if requested_feature_slug == CHARGER_CREATION_FEATURE_SLUG:
                 feature_slugs = CREATION_FEATURE_FALLBACK_SLUGS
-            elif CHARGER_CREATION_FEATURE_SLUG not in feature_slugs:
-                feature_slugs.append(CHARGER_CREATION_FEATURE_SLUG)
+            else:
+                feature_slugs = [requested_feature_slug, CHARGER_CREATION_FEATURE_SLUG]
 
             features = list(Feature.objects.filter(slug__in=feature_slugs))
             feature_by_slug = {feature.slug: feature for feature in features}
@@ -117,15 +122,30 @@ class ConnectionFlowMixin:
                 feature_by_slug[slug] for slug in feature_slugs if slug in feature_by_slug
             ]
             if not ordered_features:
-                logger.warning(
-                    "Charge point connection blocked: creation features %s are missing.",
+                logger.info(
+                    "Charge point connection allowed without creation feature gates because none of %s are configured.",
                     ", ".join(feature_slugs),
                 )
-                return "creation-feature-missing"
-            for feature in ordered_features:
+                return None
+
+            if requested_feature_slug != CHARGER_CREATION_FEATURE_SLUG:
+                requested_feature = feature_by_slug.get(requested_feature_slug)
+                legacy_feature = feature_by_slug.get(CHARGER_CREATION_FEATURE_SLUG)
+                feature_candidates = [
+                    feature
+                    for feature in (requested_feature, legacy_feature)
+                    if feature is not None
+                ]
+            else:
+                feature_candidates = ordered_features
+
+            for feature in feature_candidates:
                 if feature.is_enabled_for_node(node=node):
                     return None
-            enabled_globally = [feature.slug for feature in ordered_features if feature.is_enabled]
+
+            enabled_globally = [
+                feature.slug for feature in feature_candidates if feature.is_enabled
+            ]
             if enabled_globally:
                 logger.info(
                     "Charge point connection blocked: creation features %s require an unavailable node capability.",
@@ -134,7 +154,7 @@ class ConnectionFlowMixin:
                 return "creation-node-feature-disabled"
             logger.info(
                 "Charge point connection blocked: creation features %s are disabled.",
-                ", ".join(feature.slug for feature in ordered_features),
+                ", ".join(feature.slug for feature in feature_candidates),
             )
             return "creation-feature-disabled"
 

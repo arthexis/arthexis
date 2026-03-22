@@ -183,6 +183,7 @@ def test_new_charge_point_blocked_when_creation_feature_disabled(
 
     async def run_scenario():
         communicator = WebsocketCommunicator(application, "/CP-CREATION-FEATURE-OFF")
+        communicator.scope["subprotocols"] = [OCPP_VERSION_16]
         connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
 
