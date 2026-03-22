@@ -425,6 +425,10 @@ def test_order_tracking_public_renders_feedback_and_chat_icons_when_enabled(_, c
     """Regression: tracking view should expose feedback/chat quick actions when enabled by permissions."""
     settings.PAGES_CHAT_ENABLED = True
     Feature.objects.update_or_create(
+        slug="pages-chat",
+        defaults={"display": "Pages Chat", "is_enabled": True},
+    )
+    Feature.objects.update_or_create(
         slug="staff-chat-bridge",
         defaults={"display": "Staff Chat Bridge", "is_enabled": True},
     )
@@ -469,6 +473,10 @@ def test_order_tracking_public_reuses_public_chat_site_enablement(
 
     settings.PAGES_CHAT_ENABLED = True
     Feature.objects.update_or_create(
+        slug="pages-chat",
+        defaults={"display": "Pages Chat", "is_enabled": True},
+    )
+    Feature.objects.update_or_create(
         slug="staff-chat-bridge",
         defaults={"display": "Staff Chat Bridge", "is_enabled": True},
     )
@@ -496,7 +504,11 @@ def test_order_tracking_public_reuses_public_chat_site_enablement(
 @patch("apps.evergo.views.EvergoUser.fetch_order_detail", return_value={})
 def test_order_tracking_public_hides_feedback_and_chat_icons_when_disabled(_, client, settings):
     """Regression: tracking view should hide feedback/chat quick actions when permissions disable them."""
-    settings.PAGES_CHAT_ENABLED = False
+    settings.PAGES_CHAT_ENABLED = True
+    Feature.objects.update_or_create(
+        slug="pages-chat",
+        defaults={"display": "Pages Chat", "is_enabled": False},
+    )
     Feature.objects.update_or_create(
         slug="feedback-ingestion",
         defaults={"display": "Feedback Ingestion", "is_enabled": False},

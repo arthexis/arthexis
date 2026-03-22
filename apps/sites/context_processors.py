@@ -9,7 +9,10 @@ from django.shortcuts import resolve_url
 from django.urls import Resolver404, resolve
 from django.utils.encoding import force_str
 
-from apps.features.utils import is_suite_feature_enabled
+from apps.features.utils import (
+    is_pages_chat_runtime_enabled,
+    is_suite_feature_enabled,
+)
 from apps.groups.models import SecurityGroup
 from apps.links.models import Reference
 from apps.links.reference_utils import filter_visible_references
@@ -417,7 +420,16 @@ def _load_header_references(request, site, node):
 
 
 def _build_chat_context(site, user, *, pages_chat_enabled: bool):
-    """Return chat-related context flags for the current request."""
+    """Return chat-related context flags for the current request.
+
+    Parameters:
+        site: Current Django site-like object.
+        user: Current request user.
+        pages_chat_enabled: Deployment/runtime prerequisite for pages chat.
+
+    Returns:
+        dict[str, object]: Chat widget flags for public and staff templates.
+    """
 
     user_is_authenticated = getattr(user, "is_authenticated", False)
     user_has_pk = getattr(user, "pk", None) is not None
@@ -435,16 +447,18 @@ def _build_chat_context(site, user, *, pages_chat_enabled: bool):
             profile = None
         user_chat_opt_in = bool(profile and profile.contact_via_chat)
 
-    staff_chat_bridge_allowed = user_is_authenticated and (
-        user_is_staff or user_is_superuser
+    pages_chat_runtime_enabled = bool(pages_chat_enabled)
+    public_chat_enabled = bool(
+        pages_chat_runtime_enabled and (site_public_chat_enabled or user_chat_opt_in)
     )
-    chat_enabled = bool(
-        pages_chat_enabled
+    staff_chat_bridge_allowed = bool(
+        pages_chat_runtime_enabled
         and staff_chat_bridge_enabled
-        and (site_public_chat_enabled or user_chat_opt_in or staff_chat_bridge_allowed)
+        and user_is_authenticated
+        and (user_is_staff or user_is_superuser)
     )
     return {
-        "chat_enabled": chat_enabled,
+        "chat_enabled": public_chat_enabled or staff_chat_bridge_allowed,
         "chat_opt_in_checked": user_chat_opt_in,
         "chat_socket_path": getattr(
             settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/"
@@ -524,7 +538,7 @@ def nav_links(request):
     feedback_ingestion_enabled = is_suite_feature_enabled(
         "feedback-ingestion", default=True
     )
-    pages_chat_enabled = bool(getattr(settings, "PAGES_CHAT_ENABLED", False))
+    pages_chat_enabled = is_pages_chat_runtime_enabled(default=False)
     feature_checker = FeatureChecker()
     user_group_names, user_group_ids = _get_user_group_membership(user)
     user_cache_key = getattr(user, "pk", None) if user_is_authenticated else "anonymous"
