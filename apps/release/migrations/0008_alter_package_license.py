@@ -6,6 +6,7 @@ import apps.release.models.package
 
 
 class Migration(migrations.Migration):
+    """Alter Package.license to use the deconstructible runtime default."""
 
     dependencies = [
         ("release", "0007_remove_release_manager"),
