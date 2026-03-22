@@ -6,5 +6,37 @@
       "permissions": [],
       "parent": null
     }
+  },
+  {
+    "model": "groups.securitygroup",
+    "fields": {
+      "name": "Network Operator",
+      "permissions": [],
+      "parent": null
+    }
+  },
+  {
+    "model": "groups.securitygroup",
+    "fields": {
+      "name": "Product Developer",
+      "permissions": [],
+      "parent": null
+    }
+  },
+  {
+    "model": "groups.securitygroup",
+    "fields": {
+      "name": "Release Manager",
+      "permissions": [],
+      "parent": null
+    }
+  },
+  {
+    "model": "groups.securitygroup",
+    "fields": {
+      "name": "External Agent",
+      "permissions": [],
+      "parent": null
+    }
   }
 ]

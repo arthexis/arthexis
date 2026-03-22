@@ -10,18 +10,40 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
+from django.db import connections
+from django.db.migrations.executor import MigrationExecutor
+from django.db.migrations.exceptions import MigrationSchemaMissing
+from django.db.utils import OperationalError
+from django.utils.connection import ConnectionDoesNotExist
 
 
 class Command(BaseCommand):
     """Run migration maintenance workflows for project-local apps."""
 
-    help = "Run migration maintenance workflows (clear, rebuild) for apps.* packages."
+    help = (
+        "Run migration maintenance workflows "
+        "(check, clear, rebuild) for apps.* packages."
+    )
 
     def add_arguments(self, parser):
         """Register subcommands for migration maintenance tasks."""
 
         subparsers = parser.add_subparsers(dest="target")
         subparsers.required = True
+
+        subparsers.add_parser(
+            "check",
+            help="Run makemigrations --check --dry-run.",
+        )
+        pending_parser = subparsers.add_parser(
+            "pending",
+            help="Exit successfully when unapplied migrations exist.",
+        )
+        pending_parser.add_argument(
+            "--database",
+            default="default",
+            help="Database alias used for pending-migration detection.",
+        )
 
         clear_parser = subparsers.add_parser(
             "clear", help="Remove all app migration files except __init__.py."
@@ -53,8 +75,16 @@ class Command(BaseCommand):
         target = options["target"]
         apps_dir = self._resolve_apps_dir(options.get("apps_dir"))
 
+        if target == "check":
+            self._check_migrations()
+            return
+
         if target == "clear":
             self._clear_migrations(apps_dir)
+            return
+
+        if target == "pending":
+            self._pending_migrations(options["database"])
             return
 
         if target == "rebuild":
@@ -67,7 +97,14 @@ class Command(BaseCommand):
     def _resolve_apps_dir(self, apps_dir_option: str | None) -> Path:
         return Path(apps_dir_option or getattr(settings, "APPS_DIR", Path(settings.BASE_DIR) / "apps"))
 
+    def _check_migrations(self) -> None:
+        """Run Django's pending-migration detection without writing files."""
+
+        call_command("makemigrations", check=True, dry_run=True)
+
     def _clear_migrations(self, apps_dir: Path) -> None:
+        """Remove generated migration modules while keeping package markers."""
+
         if not apps_dir.exists():
             self.stderr.write(f"Apps directory not found: {apps_dir}")
             return
@@ -93,6 +130,8 @@ class Command(BaseCommand):
             self.stdout.write("No migration files found to remove.")
 
     def _rebuild_migrations(self, apps_dir: Path, branch_id: str) -> None:
+        """Regenerate project migrations and tag new initial migrations."""
+
         if not apps_dir.exists():
             self.stderr.write(f"Apps directory not found: {apps_dir}")
             return
@@ -113,9 +152,13 @@ class Command(BaseCommand):
             )
 
     def _collect_project_apps(self, apps_dir: Path) -> list[str]:
+        """Return local app labels that currently expose migrations packages."""
+
         return sorted(path.name for path in apps_dir.iterdir() if (path / "migrations").is_dir())
 
     def _tag_initial_migrations(self, apps_dir: Path, branch_id: str, project_apps: list[str]) -> list[Path]:
+        """Add rebuild guards to regenerated initial migrations."""
+
         tagged: list[Path] = []
         for app_label in project_apps:
             migrations_dir = apps_dir / app_label / "migrations"
@@ -132,6 +175,8 @@ class Command(BaseCommand):
         return tagged
 
     def _inject_guard(self, migration_path: Path, branch_id: str, project_apps: list[str]) -> bool:
+        """Insert a ``BranchTagOperation`` at the top of an initial migration."""
+
         content = migration_path.read_text(encoding="utf-8")
         if "BranchTagOperation" in content:
             return False
@@ -164,3 +209,35 @@ class Command(BaseCommand):
         )
         migration_path.write_text(content.replace(marker, guard_line, 1), encoding="utf-8")
         return True
+
+    def _pending_migrations(self, database: str) -> None:
+        """Report pending migration state with a single database round-trip.
+
+        Parameters:
+            database: Django database alias to inspect.
+
+        Returns:
+            None.
+
+        Raises:
+            CommandError: When the requested database alias is unavailable or the
+                migration graph cannot be inspected for reasons other than an
+                uninitialized migration schema.
+        """
+
+        try:
+            connection = connections[database]
+            executor = MigrationExecutor(connection)
+            pending = executor.migration_plan(executor.loader.graph.leaf_nodes())
+        except ConnectionDoesNotExist as exc:
+            raise CommandError(
+                f"Unable to inspect migration state for {database!r}: {exc}"
+            ) from exc
+        except (OperationalError, MigrationSchemaMissing):
+            pending = [database]
+
+        if pending:
+            self.stdout.write("pending")
+            return
+
+        raise CommandError("no pending migrations")

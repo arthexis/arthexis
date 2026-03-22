@@ -1,13 +1,18 @@
 import json
+import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone as dt_timezone
+from datetime import datetime, time, timedelta
+from datetime import timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 from types import SimpleNamespace
+from urllib.parse import urljoin
 
+from asgiref.sync import async_to_sync
+from django.conf import settings
 from django.contrib import messages
-from django.http import (Http404, HttpResponse, JsonResponse)
+from django.http import Http404, HttpResponse, JsonResponse
 from django.http.request import split_domain_port
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
@@ -15,18 +20,12 @@ from django.template.loader import render_to_string
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
-from django.utils.translation import gettext_lazy as _, gettext, ngettext
-from django.utils.encoding import force_str
-from django.utils.text import slugify
-from django.urls import NoReverseMatch, reverse
-from django.conf import settings
-from django.utils import translation, timezone, formats
-from django.db.utils import OperationalError, ProgrammingError
 from django.core.exceptions import ValidationError
+from django.core.paginator import Paginator
 from django.db.models import (
     ExpressionWrapper,
-    FloatField,
     F,
+    FloatField,
     OuterRef,
     Q,
     Subquery,
@@ -34,42 +33,48 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Coalesce
-from urllib.parse import urljoin
+from django.db.utils import OperationalError, ProgrammingError
+from django.http import Http404, HttpResponse, JsonResponse
+from django.http.request import split_domain_port
+from django.shortcuts import get_object_or_404, redirect, render, resolve_url
+from django.template.loader import render_to_string
+from django.urls import NoReverseMatch, reverse
+from django.utils import formats, timezone, translation
+from django.utils.dateparse import parse_datetime
+from django.utils.encoding import force_str
+from django.utils.text import slugify
+from django.utils.translation import gettext, ngettext
+from django.utils.translation import gettext_lazy as _
+from django.views.decorators.csrf import csrf_exempt
 
-from asgiref.sync import async_to_sync
-
-from utils.api import api_login_required
-
-from apps.nodes.models import NetMessage, Node
+from apps.cards.models import RFID as CoreRFID
 from apps.locale.models import Language
+from apps.nodes.models import NetMessage, Node
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
-
-from apps.sites.utils import landing
-from apps.cards.models import RFID as CoreRFID
-
-from django.utils.dateparse import parse_datetime
-
-from .. import store
-from ..status_resets import clear_stale_cached_statuses
-from ..models import (
-    Transaction,
-    Charger,
-    ChargerLogRequest,
-    DataTransferMessage,
-    ChargingProfile,
-    CPReservation,
-    CPFirmware,
-    CPFirmwareDeployment,
-    Simulator,
-    annotate_transaction_energy_bounds,
-)
 from apps.simulators.evcs import (
     _start_simulator,
     _stop_simulator,
     get_simulator_state,
 )
-from ..status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
+from apps.sites.utils import landing
+from utils.api import api_login_required
+
+from .. import store
+from ..models import (
+    Charger,
+    ChargerLogRequest,
+    ChargingProfile,
+    CPFirmware,
+    CPFirmwareDeployment,
+    CPReservation,
+    DataTransferMessage,
+    Simulator,
+    Transaction,
+    annotate_transaction_energy_bounds,
+)
+from ..status_display import ERROR_OK_VALUES, STATUS_BADGE_MAP
+from ..status_resets import clear_stale_cached_statuses
 from .actions.common import (
     CALL_ACTION_LABELS,
     CALL_EXPECTED_STATUSES,
@@ -81,6 +86,10 @@ from .actions.common import (
     _get_or_create_charger,
     _normalize_connector_slug,
     _parse_request_body,
+)
+
+_PREFIXED_STATUS_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?\s+(StatusNotification processed:)",
 )
 
 
@@ -154,7 +163,22 @@ def _visible_error_code(value: str | None) -> str | None:
 def _visible_chargers(user):
     """Return chargers visible to ``user`` on public dashboards."""
 
-    return Charger.visible_for_user(user).prefetch_related("owner_users", "owner_groups")
+    return Charger.visible_for_user(user).prefetch_related(
+        "owner_users", "owner_groups"
+    )
+
+
+def _landing_requires_chargers(*, request, landing, **kwargs) -> bool:
+    """Return ``True`` when at least one charger exists for this user."""
+
+    return _visible_chargers(request.user).exists()
+
+
+def _landing_visibility_params(*, request, landing) -> dict[str, object]:
+    """Return cache parameters used for landing visibility checks."""
+
+    user = getattr(request, "user", None)
+    return {"user_id": getattr(user, "pk", "anon") or "anon"}
 
 
 def _charger_last_seen(charger: Charger | object):
@@ -266,7 +290,9 @@ def _connector_overview(
     """Return connector metadata used for navigation and summaries."""
 
     overview: list[dict] = []
-    sibling_connectors = connectors if connectors is not None else _connector_set(charger)
+    sibling_connectors = (
+        connectors if connectors is not None else _connector_set(charger)
+    )
     for sibling in sibling_connectors:
         if user is not None and not sibling.is_visible_to(user):
             continue
@@ -287,9 +313,7 @@ def _connector_overview(
                 "last_status_timestamp": sibling.last_status_timestamp,
                 "last_status_vendor_info": sibling.last_status_vendor_info,
                 "tx": tx_obj,
-                "rfid_details": _transaction_rfid_details(
-                    tx_obj, cache=rfid_cache
-                ),
+                "rfid_details": _transaction_rfid_details(tx_obj, cache=rfid_cache),
                 "connected": store.is_connected(
                     sibling.charger_id, sibling.connector_id
                 ),
@@ -363,7 +387,9 @@ def _is_untracked_origin(
     local_pk = getattr(local_node, "pk", None)
     if local_pk is not None and origin.pk == local_pk:
         return False
-    last_seen = getattr(origin, "last_seen", None) or getattr(origin, "last_updated", None)
+    last_seen = getattr(origin, "last_seen", None) or getattr(
+        origin, "last_updated", None
+    )
     if last_seen is None:
         return True
     if timezone.is_naive(last_seen):
@@ -455,10 +481,7 @@ def _collect_status_events(
             continue
 
         if event_time < window_start:
-            if (
-                latest_before_window is None
-                or event_time > latest_before_window[0]
-            ):
+            if latest_before_window is None or event_time > latest_before_window[0]:
                 latest_before_window = (event_time, status_bucket)
             break
         if event_time > window_end:
@@ -481,6 +504,7 @@ def _important_non_transaction_events(
     connector: Charger,
     *,
     limit: int = 5,
+    include_sensitive: bool = True,
 ) -> list[dict[str, str | int | datetime | None]]:
     """Return recent notable non-transaction events for the status page."""
 
@@ -513,16 +537,22 @@ def _important_non_transaction_events(
         "MeterValues queued:",
         "MeterValues received:",
     )
-    important_prefixes = (
+    important_prefixes = [
         "Connected",
         "Closed",
         "Heartbeat",
         "BootNotification",
         "Authorize",
-        "DiagnosticsStatusNotification",
-        "FirmwareStatusNotification",
-        "SecurityEventNotification",
-    )
+    ]
+    if include_sensitive:
+        important_prefixes.extend(
+            [
+                "DiagnosticsStatusNotification",
+                "FirmwareStatusNotification",
+                "SecurityEventNotification",
+            ]
+        )
+    important_prefixes = tuple(important_prefixes)
 
     warning_statuses = {"faulted", "suspendedev", "suspendedevse", "unavailable"}
     error_statuses = {"error", "offline", "closed", "rejected"}
@@ -560,31 +590,83 @@ def _important_non_transaction_events(
         return None
 
     events: list[dict[str, str | int | datetime | None]] = []
-    for entry in store.iter_log_entries(keys, log_type="charger"):
-        if len(entry.text) < 24:
-            continue
-        message = entry.text[24:].strip()
-        if message.startswith(excluded_prefixes):
-            continue
-        if message.startswith(status_prefix):
-            payload_text = message.split(":", 1)[1].strip()
+    deduped_rows: dict[
+        tuple[str, str, int | None, str | int | None, datetime | None],
+        dict[str, str | int | datetime | None],
+    ] = {}
+
+    def _row_identity_for_dedupe(
+        source_key: str,
+        payload: dict[str, object] | None = None,
+    ) -> str | int | None:
+        """Return the connector identity component used for event deduplication."""
+
+        if payload is not None:
+            connector_value = payload.get("connectorId")
             try:
-                payload = json.loads(payload_text)
-            except json.JSONDecodeError:
+                return int(connector_value)
+            except (TypeError, ValueError):
+                pass
+        if store.IDENTITY_SEPARATOR in source_key:
+            _, slug = source_key.split(store.IDENTITY_SEPARATOR, 1)
+            if slug in {store.AGGREGATE_SLUG, store.PENDING_SLUG}:
+                return None
+            try:
+                return int(slug)
+            except (TypeError, ValueError):
+                return slug
+        return None
+
+    def _event_dedupe_key(
+        row: dict[str, str | int | datetime | None],
+        identity: str | int | None,
+    ) -> tuple[str, str, int | None, str | int | None, datetime | None] | None:
+        """Return a stable dedupe key for non-transaction event rows."""
+
+        timestamp = row.get("timestamp")
+        event_name = row.get("event")
+        details = row.get("details")
+        if not isinstance(event_name, str):
+            return None
+        if not isinstance(details, str):
+            return None
+        if timestamp is not None and not isinstance(timestamp, datetime):
+            return None
+        event_id = row.get("event_id")
+        if not isinstance(event_id, int):
+            event_id = None
+        if event_name == "Status":
+            return event_name, details, event_id, identity, None
+        return event_name, details, event_id, identity, timestamp
+
+    for source_key in keys:
+        for entry in store.iter_log_entries(source_key, log_type="charger"):
+            if len(entry.text) < 24:
                 continue
-            if connector_id is not None:
+            message = entry.text[24:].strip()
+            prefixed_match = _PREFIXED_STATUS_PATTERN.match(message)
+            if prefixed_match is not None:
+                message = message[prefixed_match.start(1) :]
+            if message.startswith(excluded_prefixes):
+                continue
+
+            row: dict[str, str | int | datetime | None] | None = None
+            dedupe_identity = _row_identity_for_dedupe(source_key)
+
+            if message.startswith(status_prefix):
+                payload_text = message.split(":", 1)[1].strip()
                 try:
-                    payload_connector_id = int(payload.get("connectorId"))
-                except (TypeError, ValueError):
-                    payload_connector_id = None
-                if payload_connector_id not in {None, connector_id}:
+                    payload = json.loads(payload_text)
+                except json.JSONDecodeError:
                     continue
-            status_value = str(payload.get("status") or "").strip()
-            if not status_value:
-                continue
-            severity, severity_color, severity_label = _event_meta("Status", status_value)
-            events.append(
-                {
+                dedupe_identity = _row_identity_for_dedupe(source_key, payload)
+                status_value = str(payload.get("status") or "").strip()
+                if not status_value:
+                    continue
+                severity, severity_color, severity_label = _event_meta(
+                    "Status", status_value
+                )
+                row = {
                     "timestamp": entry.timestamp,
                     "event": "Status",
                     "details": status_value,
@@ -593,24 +675,46 @@ def _important_non_transaction_events(
                     "severity_label": severity_label,
                     "event_id": _transaction_id_from_payload(payload),
                 }
-            )
-            continue
-        if not message.startswith(important_prefixes):
-            continue
-        event_name, _, detail_text = message.partition(":")
-        details = detail_text.strip() or "-"
-        severity, severity_color, severity_label = _event_meta(event_name, details)
-        events.append(
-            {
-                "timestamp": entry.timestamp,
-                "event": event_name.strip(),
-                "details": details,
-                "severity": severity,
-                "severity_color": severity_color,
-                "severity_label": severity_label,
-                "event_id": None,
-            }
-        )
+            elif message.startswith(important_prefixes):
+                event_name, _, detail_text = message.partition(":")
+                details = detail_text.strip() or "-"
+                severity, severity_color, severity_label = _event_meta(
+                    event_name, details
+                )
+                row = {
+                    "timestamp": entry.timestamp,
+                    "event": event_name.strip(),
+                    "details": details,
+                    "severity": severity,
+                    "severity_color": severity_color,
+                    "severity_label": severity_label,
+                    "event_id": None,
+                }
+
+            if row is None:
+                continue
+            dedupe_key = _event_dedupe_key(row, dedupe_identity)
+            if dedupe_key is not None:
+                existing = deduped_rows.get(dedupe_key)
+                if existing is None:
+                    deduped_rows[dedupe_key] = row
+                    continue
+
+                existing_timestamp = existing.get("timestamp")
+                row_timestamp = row.get("timestamp")
+
+                if existing_timestamp is None and row_timestamp is not None:
+                    deduped_rows[dedupe_key] = row
+                elif (
+                    isinstance(existing_timestamp, datetime)
+                    and isinstance(row_timestamp, datetime)
+                    and row_timestamp > existing_timestamp
+                ):
+                    deduped_rows[dedupe_key] = row
+                continue
+            events.append(row)
+
+    events.extend(deduped_rows.values())
 
     return sorted(events, key=lambda item: item["timestamp"], reverse=True)[:limit]
 
@@ -675,9 +779,7 @@ def _usage_timeline(
         if (
             fallback_state == "offline"
             and fallback_source == "connection"
-            and _is_untracked_origin(
-                connector, local_node, window_end, active_delta
-            )
+            and _is_untracked_origin(connector, local_node, window_end, active_delta)
         ):
             fallback_state = "untracked"
         current_state = fallback_state
@@ -783,8 +885,9 @@ def _supported_language_codes() -> list[str]:
     try:
         codes = [
             str(code).strip()
-            for code in Language.objects.filter(is_deleted=False)
-            .values_list("code", flat=True)
+            for code in Language.objects.filter(is_deleted=False).values_list(
+                "code", flat=True
+            )
             if str(code).strip()
         ]
     except (OperationalError, ProgrammingError):
@@ -906,7 +1009,9 @@ def _active_transaction_for_charger(charger: Charger) -> Transaction | None:
     return tx_obj
 
 
-def _is_superseded_open_transaction(charger: Charger, tx_obj: Transaction | None) -> bool:
+def _is_superseded_open_transaction(
+    charger: Charger, tx_obj: Transaction | None
+) -> bool:
     """Return whether ``tx_obj`` was superseded by a newer transaction.
 
     Some chargers fail to send ``StopTransaction`` and leave an old row with
@@ -995,7 +1100,11 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
     normalized_status = status_value.casefold() if status_value else ""
 
     aggregate_state = _aggregate_dashboard_state(charger)
-    if aggregate_state is not None and normalized_status in {"", "available", "charging"}:
+    if aggregate_state is not None and normalized_status in {
+        "",
+        "available",
+        "charging",
+    }:
         return aggregate_state
 
     has_session = _has_active_session(tx_obj)
@@ -1021,7 +1130,9 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
             # Some chargers continue reporting "Charging" after a session ends.
             # When no active transaction exists, surface the state as available
             # so the UI reflects the actual behaviour at the site.
-            label, color = STATUS_BADGE_MAP.get("available", (_("Available"), "#0d6efd"))
+            label, color = STATUS_BADGE_MAP.get(
+                "available", (_("Available"), "#0d6efd")
+            )
         elif error_code and error_code_lower not in ERROR_OK_VALUES:
             label = _("%(status)s (%(error)s)") % {
                 "status": label,
@@ -1039,9 +1150,7 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
     last_seen = _charger_last_seen(charger)
     if last_seen:
         if timezone.is_naive(last_seen):
-            last_seen = timezone.make_aware(
-                last_seen, timezone.get_current_timezone()
-            )
+            last_seen = timezone.make_aware(last_seen, timezone.get_current_timezone())
         if timezone.now() - last_seen <= _remote_node_active_delta():
             if has_session:
                 return STATUS_BADGE_MAP["charging"]

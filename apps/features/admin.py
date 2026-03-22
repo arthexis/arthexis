@@ -17,6 +17,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 from django_object_actions import DjangoObjectActions
 
 from apps.core.admin import OwnableAdminMixin
+from apps.core.admin.mixins import PublicViewLinksAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 from apps.services.celery_workers import (
     CELERY_WORKERS_FEATURE_SLUG,
@@ -178,11 +179,17 @@ class FeatureAdminForm(forms.ModelForm):
 
 
 @admin.register(Feature)
-class FeatureAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin):
+class FeatureAdmin(
+    PublicViewLinksAdminMixin,
+    DjangoObjectActions,
+    OwnableAdminMixin,
+    EntityModelAdmin,
+):
     form = FeatureAdminForm
     change_list_template = "django_object_actions/change_list.html"
     changelist_actions = ("reload_base",)
     actions = ("toggle_selected_feature",)
+    view_on_site = True
 
     list_display = (
         "display",

@@ -5,15 +5,15 @@ creating large one-off cleanup projects.
 
 ## 1. Expand Ruff to include import and modernization checks
 
-Current pre-commit Ruff usage is focused on parser/runtime failures
+Current Ruff usage is focused on parser/runtime failures
 (`E9`, `F823`). Add low-noise rule sets in phases:
 
 1. `I` (import sorting)
 2. `UP` (safe Python upgrades)
 3. `B` (selected bugbear checks)
 
-Start in CI report mode first (`--exit-zero`) so maintainers can prioritize real
-issues before enforcing.
+Start in non-blocking report mode first (`--exit-zero`) so maintainers can prioritize real
+issues before deciding whether to enforce.
 
 ## 2. Run Ruff and Black with shared line length settings
 

@@ -1,17 +1,17 @@
-import pytest
+"""Regression coverage for node registration and visitor proxy flows."""
 
 import json
 import logging
 import socket
 from uuid import uuid4
 
+import pytest
 import requests
-
+from django.contrib.sites.models import Site
 from django.urls import reverse
 
 from apps.nodes.models import Node
 from apps.nodes.views import registration as registration_views
-from django.contrib.sites.models import Site
 
 
 @pytest.mark.django_db
@@ -21,7 +21,9 @@ def test_node_info_registers_missing_local(client, monkeypatch):
     Node._local_cache.clear()
 
     monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: expected_mac))
-    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda _, *__: ([], [])))
+    monkeypatch.setattr(
+        Node, "_resolve_ip_addresses", classmethod(lambda _, *__: ([], []))
+    )
     monkeypatch.setattr(socket, "gethostname", lambda: "test-host")
     monkeypatch.setattr(socket, "getfqdn", lambda *_: "test-host.local")
     monkeypatch.setattr(socket, "gethostbyname", lambda *_: "127.0.0.1")
@@ -56,8 +58,10 @@ def test_node_info_registers_missing_local(client, monkeypatch):
         created_node.features.values_list("slug", flat=True)
     )
 
+
 @pytest.mark.django_db
 def test_node_info_uses_site_domain_port(monkeypatch, client):
+    """Ensure node-info prefers the site-derived port when node has a base site."""
     domain = f"{uuid4().hex}.example.com"
     site = Site.objects.create(domain=domain, name="Example", require_https=False)
     node = Node.objects.create(
@@ -77,8 +81,10 @@ def test_node_info_uses_site_domain_port(monkeypatch, client):
     payload = response.json()
     assert payload["port"] == 443
 
+
 @pytest.mark.django_db
 def test_resolve_visitor_base_defaults_to_loopback():
+    """Node admin should use loopback defaults for visitor registration base URL."""
     from django.contrib.admin.sites import AdminSite
     from django.test import RequestFactory
 
@@ -88,8 +94,8 @@ def test_resolve_visitor_base_defaults_to_loopback():
     node_admin = NodeAdmin(Node, admin_site)
     request = RequestFactory().get("/")
 
-    visitor_base, visitor_host, visitor_port, visitor_scheme = node_admin._resolve_visitor_base(
-        request
+    visitor_base, visitor_host, visitor_port, visitor_scheme = (
+        node_admin._resolve_visitor_base(request)
     )
 
     assert visitor_base == "https://127.0.0.1:443"
@@ -97,7 +103,10 @@ def test_resolve_visitor_base_defaults_to_loopback():
     assert visitor_port == 443
     assert visitor_scheme == "https"
 
+
+@pytest.mark.django_db
 def test_register_visitor_proxy_success(admin_client, monkeypatch):
+    """Visitor registration should succeed when both info and register endpoints respond."""
     node = Node.objects.create(
         hostname="local",
         address="198.51.100.1",
@@ -112,7 +121,13 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
     def fake_getaddrinfo(host, port, *args, **kwargs):
         if host == "visitor.test":
             return [
-                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 443))
+                (
+                    socket.AF_INET,
+                    socket.SOCK_STREAM,
+                    6,
+                    "",
+                    ("93.184.216.34", port or 443),
+                )
             ]
         raise OSError("unknown host")
 
@@ -173,8 +188,10 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
     assert body["host"]["id"]
     assert body["visitor"]["id"] == 2
 
+
 @pytest.mark.django_db
 def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
+    """Registration should retry with port 8000 after :8888 connect timeouts."""
     node = Node.objects.create(
         hostname="local",
         address="198.51.100.1",
@@ -189,7 +206,13 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     def fake_getaddrinfo(host, port, *args, **kwargs):
         if host == "visitor.test":
             return [
-                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 443))
+                (
+                    socket.AF_INET,
+                    socket.SOCK_STREAM,
+                    6,
+                    "",
+                    ("93.184.216.34", port or 443),
+                )
             ]
         raise OSError("unknown host")
 
@@ -264,8 +287,10 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     assert session.requests[2][1].startswith("https://93.184.216.34:8888")
     assert session.requests[3][1].startswith("https://93.184.216.34:8000")
 
+
 @pytest.mark.django_db
 def test_register_visitor_telemetry_logs(client, caplog):
+    """Telemetry endpoint should record structured registration diagnostics."""
     url = reverse("register-telemetry")
     payload = {
         "stage": "integration-test",
@@ -287,8 +312,10 @@ def test_register_visitor_telemetry_logs(client, caplog):
     assert response.json() == {"status": "ok"}
     assert "telemetry stage=integration-test" in caplog.text
 
+
 @pytest.mark.django_db
 def test_register_visitor_telemetry_adds_route_ip(client, caplog, monkeypatch):
+    """Telemetry logging should include the routed host IP when available."""
     url = reverse("register-telemetry")
     payload = {
         "stage": "integration-test",

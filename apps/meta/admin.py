@@ -2,22 +2,30 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
+from apps.features.utils import is_suite_feature_enabled
 from apps.locals.user_data import EntityModelAdmin
 from apps.meta.models import WhatsAppWebhook, WhatsAppWebhookMessage
 
 
 @admin.register(WhatsAppWebhook)
 class WhatsAppWebhookAdmin(EntityModelAdmin):
-    list_display = ("bridge", "route_key", "webhook_url_preview")
+    list_display = ("bridge", "suite_feature_state", "route_key", "webhook_url_preview")
     readonly_fields = (
         "webhook_path_preview",
         "webhook_url_preview",
         "verification_instructions",
+        "suite_feature_requirements",
         "is_seed_data",
         "is_user_data",
         "is_deleted",
     )
     search_fields = ("bridge__phone_number_id", "route_key", "bridge__site__domain")
+
+    @admin.display(description=_("Suite feature"))
+    def suite_feature_state(self, obj):
+        if is_suite_feature_enabled(obj.bridge.suite_feature_slug(), default=True):
+            return _("Enabled")
+        return _("Disabled")
 
     @admin.display(description=_("Webhook path"))
     def webhook_path_preview(self, obj):
@@ -47,8 +55,12 @@ class WhatsAppWebhookAdmin(EntityModelAdmin):
             ),
         )
 
+    @admin.display(description=_("Feature contract"))
+    def suite_feature_requirements(self, obj):
+        return obj.suite_feature_disable_summary()
+
     fieldsets = (
-        (None, {"fields": ("bridge", "route_key", "verify_token")}),
+        (None, {"fields": ("bridge", "route_key", "verify_token", "suite_feature_requirements")}),
         (
             _("Webhook configuration guidance"),
             {
@@ -83,6 +95,7 @@ class WhatsAppWebhookMessageAdmin(EntityModelAdmin):
     search_fields = ("message_id", "from_phone", "wa_id", "text_body")
     readonly_fields = (
         "webhook",
+        "suite_feature_state",
         "message_id",
         "messaging_product",
         "from_phone",
@@ -99,6 +112,15 @@ class WhatsAppWebhookMessageAdmin(EntityModelAdmin):
         "is_user_data",
         "is_deleted",
     )
+
+    @admin.display(description=_("Suite feature when viewed"))
+    def suite_feature_state(self, obj):
+        if is_suite_feature_enabled(
+            obj.webhook.bridge.suite_feature_slug(),
+            default=True,
+        ):
+            return _("Enabled")
+        return _("Disabled")
 
 
 __all__ = ["admin"]

@@ -1,16 +1,31 @@
-from django.contrib import admin
-from django.http import HttpResponseRedirect
-from django.urls import path, reverse
+from django import forms
+from django.contrib import admin, messages
+from django.db.models import QuerySet
+from django.http import HttpRequest
+from django.utils.html import format_html_join
 from django.utils.translation import gettext_lazy as _
 
 from .models import SQLReport, SQLReportProduct
+from .report_definitions import report_catalog
+from .services import run_sql_report
+
+
+class SQLReportAdminForm(forms.ModelForm):
+    """Admin form that validates named report parameters."""
+
+    class Meta:
+        model = SQLReport
+        fields = "__all__"
+        widgets = {
+            "parameters": forms.Textarea(attrs={"rows": 8, "class": "vLargeTextField"}),
+        }
 
 
 class SQLReportProductInline(admin.TabularInline):
     model = SQLReportProduct
     extra = 0
     can_delete = False
-    fields = ("created_at", "database_alias", "row_count", "duration_ms")
+    fields = ("created_at", "report_type", "row_count", "duration_ms", "renderer_template_name")
     readonly_fields = fields
 
     def has_add_permission(self, request, obj=None):  # pragma: no cover - admin hook
@@ -19,24 +34,34 @@ class SQLReportProductInline(admin.TabularInline):
 
 @admin.register(SQLReport)
 class SQLReportAdmin(admin.ModelAdmin):
+    form = SQLReportAdminForm
     list_display = (
         "name",
-        "database_alias",
+        "report_type",
         "schedule_enabled",
         "next_scheduled_run_at",
         "last_run_at",
         "last_run_duration",
         "updated_at",
     )
-    search_fields = ("name", "query", "html_template_name")
-    readonly_fields = ("created_at", "updated_at", "last_run_at", "last_run_duration")
+    list_filter = ("report_type", "schedule_enabled")
+    search_fields = ("name", "report_type")
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "last_run_at",
+        "last_run_duration",
+        "maintained_report_catalog",
+        "legacy_definition",
+    )
     inlines = [SQLReportProductInline]
+    actions = ["run_selected_reports"]
 
     fieldsets = (
-        (None, {"fields": ("name", "database_alias", "query")}),
+        (None, {"fields": ("name", "report_type", "parameters")}),
         (
-            _("Products"),
-            {"fields": ("html_template_name",)},
+            _("Maintained catalog"),
+            {"fields": ("maintained_report_catalog", "legacy_definition")},
         ),
         (
             _("Scheduling"),
@@ -54,46 +79,68 @@ class SQLReportAdmin(admin.ModelAdmin):
         ),
     )
 
-    changelist_actions = ["open_system"]
+    def maintained_report_catalog(self, obj: SQLReport | None = None) -> str:
+        """Render the shipped report catalog for administrators."""
 
-    def get_changelist_actions(self, request):  # pragma: no cover - admin hook
-        parent = getattr(super(), "get_changelist_actions", None)
-        actions = []
-        if callable(parent):
-            parent_actions = parent(request)
-            if parent_actions:
-                actions.extend(parent_actions)
-        if "open_system" not in actions:
-            actions.append("open_system")
-        return actions
+        return format_html_join(
+            "",
+            "<div><strong>{}</strong> <code>{}</code><br><span>{}</span><br><small>Template: {}</small><br><small>Defaults: {}</small></div><br>",
+            [
+                (
+                    item["label"],
+                    item["key"],
+                    item["description"],
+                    item["template_name"],
+                    item["default_parameters"],
+                )
+                for item in report_catalog()
+            ],
+        )
 
-    def get_urls(self):  # pragma: no cover - admin hook
-        urls = super().get_urls()
-        custom = [
-            path(
-                "system-sql-report/",
-                self.admin_site.admin_view(self.open_system),
-                name="reports_sqlreport_open_system",
-            )
-        ]
-        return custom + urls
+    maintained_report_catalog.short_description = _("Shipped reports")
 
-    def open_system(self, request, queryset=None):
-        return HttpResponseRedirect(reverse("admin:system-sql-report"))
+    @admin.action(description=_("Run selected reports"))
+    def run_selected_reports(self, request: HttpRequest, queryset: QuerySet[SQLReport]) -> None:
+        """Execute selected reports and report success or failure in admin."""
 
-    open_system.short_description = _("Run SQL")
-    open_system.label = _("Run SQL")
-    open_system.requires_queryset = False
+        successes = 0
+        failures: list[str] = []
+        for report in queryset:
+            result, product = run_sql_report(report)
+            if result.error:
+                failures.append(f"{report.name}: {result.error}")
+                continue
+            successes += 1
+            if product is not None:
+                messages.success(
+                    request,
+                    _("%(name)s ran successfully and produced product %(product_id)s.")
+                    % {"name": report.name, "product_id": product.pk},
+                )
+
+        if failures:
+            messages.warning(request, " | ".join(failures))
+        if not successes and not failures:
+            messages.info(request, _("No reports were selected."))
 
 
 @admin.register(SQLReportProduct)
 class SQLReportProductAdmin(admin.ModelAdmin):
-    list_display = ("report", "created_at", "database_alias", "row_count", "duration_ms")
-    list_filter = ("database_alias", "created_at")
+    list_display = (
+        "report",
+        "report_type",
+        "created_at",
+        "row_count",
+        "duration_ms",
+        "renderer_template_name",
+    )
+    list_filter = ("report_type", "created_at")
     readonly_fields = (
         "report",
-        "database_alias",
-        "resolved_sql",
+        "report_type",
+        "parameters",
+        "renderer_template_name",
+        "execution_details",
         "row_count",
         "duration_ms",
         "html_content",

@@ -9,7 +9,6 @@ from django.db.models import Q
 from parler.models import TranslatableModel, TranslatedFields
 
 from apps.core.entity import Entity
-from apps.core.models import Ownable
 
 
 class ContentSample(Entity):
@@ -137,74 +136,12 @@ class ContentClassification(Entity):
         return f"{self.sample} → {self.tag}"
 
 
-class WebRequestSampler(TranslatableModel, Ownable):
-    """Sequence of cURL requests that collect web sampling data."""
-
-    owner_required = False
-
-    slug = models.SlugField(max_length=100, unique=True)
-    translations = TranslatedFields(
-        label=models.CharField(max_length=150),
-        description=models.TextField(blank=True),
-    )
-    sampling_period_minutes = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Minutes between automatic samples. Leave blank to disable scheduling.",
-    )
-    last_sampled_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        ordering = ["translations__label"]
-        verbose_name = "Web Request Sampler"
-        verbose_name_plural = "Web Request Samplers"
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.safe_translation_getter("label", any_language=True) or self.slug
-
-
-class WebRequestStep(TranslatableModel, Entity):
-    """Individual cURL call that belongs to a :class:`WebRequestSampler`."""
-
-    sampler = models.ForeignKey(
-        WebRequestSampler, on_delete=models.CASCADE, related_name="steps"
-    )
-    order = models.PositiveIntegerField(default=0)
-    slug = models.SlugField(max_length=100)
-    translations = TranslatedFields(
-        name=models.CharField(max_length=150, blank=True),
-    )
-    curl_command = models.TextField(
-        help_text="Full cURL command or arguments to execute when sampling."
-    )
-    save_as_content = models.BooleanField(
-        default=False,
-        help_text="Store the response body as a Content Sample attachment.",
-    )
-    attachment_kind = models.CharField(
-        max_length=10,
-        choices=ContentSample.KIND_CHOICES,
-        default=ContentSample.TEXT,
-        help_text="Kind to assign when saving the response as a Content Sample.",
-    )
-
-    class Meta:
-        ordering = ["order", "id"]
-        unique_together = ("sampler", "slug")
-        verbose_name = "Web Request Step"
-        verbose_name_plural = "Web Request Steps"
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        name = self.safe_translation_getter("name", any_language=True)
-        return name or f"{self.sampler} step {self.slug}"
-
-
 class WebSample(Entity):
-    """Collected data from executing a :class:`WebRequestSampler`."""
+    """Historical record captured by a retired web sampler configuration."""
 
-    sampler = models.ForeignKey(
-        WebRequestSampler, on_delete=models.CASCADE, related_name="web_samples"
-    )
+    legacy_sampler_id = models.PositiveIntegerField(null=True, blank=True)
+    sampler_slug = models.SlugField(max_length=100, blank=True)
+    sampler_label = models.CharField(max_length=150, blank=True)
     executed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -217,30 +154,31 @@ class WebSample(Entity):
 
     class Meta:
         ordering = ["-created_at"]
-        verbose_name = "Web Sample"
-        verbose_name_plural = "Web Samples"
+        verbose_name = "Historical Web Sample"
+        verbose_name_plural = "Historical Web Samples"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.sampler} @ {self.created_at:%Y-%m-%d %H:%M:%S}"
+        label = self.sampler_label or self.sampler_slug or "web sample"
+        return f"{label} @ {self.created_at:%Y-%m-%d %H:%M:%S}"
 
 
 class WebSampleAttachment(Entity):
-    """Link between a :class:`WebSample` and a stored :class:`ContentSample`."""
+    """Read-only attachment metadata preserved from a historical web sample."""
 
     sample = models.ForeignKey(
         WebSample, on_delete=models.CASCADE, related_name="attachments"
     )
-    step = models.ForeignKey(
-        WebRequestStep, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    legacy_step_id = models.PositiveIntegerField(null=True, blank=True)
+    step_slug = models.SlugField(max_length=100, blank=True)
+    step_name = models.CharField(max_length=150, blank=True)
     uri = models.CharField(max_length=500)
     content_sample = models.ForeignKey(
         ContentSample, on_delete=models.CASCADE, related_name="web_attachments"
     )
 
     class Meta:
-        verbose_name = "Web Sample Attachment"
-        verbose_name_plural = "Web Sample Attachments"
+        verbose_name = "Historical Web Sample Attachment"
+        verbose_name_plural = "Historical Web Sample Attachments"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"Attachment for {self.sample}"

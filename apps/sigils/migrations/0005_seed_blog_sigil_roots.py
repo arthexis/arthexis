@@ -1,45 +1,27 @@
-"""Add sigil roots for development blog entities and code citation helpers."""
+"""Retire blog sigil seed roots after the blog app removal."""
 
 from django.db import migrations
 
 
-def seed_blog_roots(apps, schema_editor):
-    del schema_editor
-    SigilRoot = apps.get_model("sigils", "SigilRoot")
+def noop_seed_roots(apps, schema_editor):
+    """Keep historical migration state stable without seeding removed blog roots."""
 
-    SigilRoot.objects.update_or_create(
-        prefix="blog",
-        defaults={
-            "context_type": "request",
-            "content_type": None,
-            "is_seed_data": True,
-            "is_deleted": False,
-        },
-    )
-    SigilRoot.objects.update_or_create(
-        prefix="code",
-        defaults={
-            "context_type": "request",
-            "content_type": None,
-            "is_seed_data": True,
-            "is_deleted": False,
-        },
-    )
+    del apps, schema_editor
 
 
-def unseed_blog_roots(apps, schema_editor):
-    del schema_editor
-    SigilRoot = apps.get_model("sigils", "SigilRoot")
-    SigilRoot.objects.filter(prefix__in=["blog", "code"]).update(is_seed_data=False)
+def noop_unseed_roots(apps, schema_editor):
+    """Reverse the retired blog root migration without touching live sigil data."""
+
+    del apps, schema_editor
 
 
 class Migration(migrations.Migration):
+    """Retire historical blog sigil root seeding."""
 
     dependencies = [
         ("sigils", "0004_protect_sigil_roots"),
-        ("blog", "0001_initial"),
     ]
 
     operations = [
-        migrations.RunPython(seed_blog_roots, unseed_blog_roots),
+        migrations.RunPython(noop_seed_roots, noop_unseed_roots),
     ]

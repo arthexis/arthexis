@@ -4,37 +4,32 @@ from pathlib import Path
 
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import redirect
+from django.views.decorators.http import require_GET
 from django.utils import translation
 from django.utils.translation import gettext as _
 
-from apps.maps.models import Location
 from apps.docs import rendering
 from apps.locale.models import Language
-from apps.sites.utils import get_request_language_code, require_site_operator_or_staff
+from apps.maps.models import Location
+from apps.ocpp.services import ChargerAccessDeniedError, build_charger_chart_payload
+from apps.sites.utils import (get_request_language_code, landing,
+                              module_pill_link_validation,
+                              require_site_operator_or_staff)
 
-from .common import *  # noqa: F401,F403
-from .common import (
-    _charger_state,
-    _clear_stale_statuses_for_view,
-    _connector_overview,
-    _connector_set,
-    _default_language_code,
-    _ensure_charger_access,
-    _get_charger,
-    _important_non_transaction_events,
-    _landing_page_translations,
-    _live_sessions,
-    _charging_limit_details,
-    _reverse_connector_url,
-    _supported_language_codes,
-    _transaction_rfid_details,
-    _usage_timeline,
-    _visible_error_code,
-    _visible_chargers,
-)
 from ..models import PublicConnectorPage, PublicScanEvent, StationModel
+from .common import *  # noqa: F401,F403
+from .common import (_charger_state, _charging_limit_details,
+                     _clear_stale_statuses_for_view, _connector_overview,
+                     _connector_set, _default_language_code,
+                     _ensure_charger_access, _get_charger,
+                     _important_non_transaction_events,
+                     _landing_page_translations, _landing_requires_chargers,
+                     _landing_visibility_params, _live_sessions,
+                     _reverse_connector_url, _supported_language_codes,
+                     _transaction_rfid_details, _usage_timeline,
+                     _visible_chargers, _visible_error_code)
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +50,23 @@ def _hash_ip(value: str) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+@landing("Charging Station Map")
+@module_pill_link_validation(
+    _landing_requires_chargers,
+    parameter_getter=_landing_visibility_params,
+)
 def charging_station_map(request):
+    """Render the charging map for authorized operator/staff users.
+
+    Parameters:
+        request: Incoming HTTP request containing user/session context.
+
+    Returns:
+        HttpResponse: Rendered charging map page or an auth redirect response.
+
+    Raises:
+        Http404: Propagated if downstream data access raises it.
+    """
     auth_response = require_site_operator_or_staff(request)
     if auth_response is not None:
         return auth_response
@@ -98,9 +109,7 @@ def charger_page(request, cid, connector=None):
     """Public landing page for a charger displaying usage guidance or progress."""
     _clear_stale_statuses_for_view()
     charger, connector_slug = _get_charger(cid, connector)
-    access_response = _ensure_charger_access(
-        request.user, charger, request=request
-    )
+    access_response = _ensure_charger_access(request.user, charger, request=request)
     if access_response is not None:
         return access_response
 
@@ -109,7 +118,8 @@ def charger_page(request, cid, connector=None):
             (
                 sibling
                 for sibling in _connector_set(charger)
-                if sibling.connector_id is not None and sibling.is_visible_to(request.user)
+                if sibling.connector_id is not None
+                and sibling.is_visible_to(request.user)
             ),
             None,
         )
@@ -152,7 +162,9 @@ def charger_page(request, cid, connector=None):
         )
         if tx:
             active_connector_count = 1
-    state_source = tx if charger.connector_id is not None else (sessions if sessions else None)
+    state_source = (
+        tx if charger.connector_id is not None else (sessions if sessions else None)
+    )
     state, color = _charger_state(charger, state_source)
     language_cookie = request.COOKIES.get(settings.LANGUAGE_COOKIE_NAME)
     available_languages = _supported_language_codes()
@@ -163,9 +175,7 @@ def charger_page(request, cid, connector=None):
         language_candidates.append(connector_language)
     if charger.connector_id is not None:
         parent_language = (
-            Charger.objects.filter(
-                charger_id=charger.charger_id, connector_id=None
-            )
+            Charger.objects.filter(charger_id=charger.charger_id, connector_id=None)
             .values_list("language__code", flat=True)
             .first()
             or ""
@@ -182,13 +192,10 @@ def charger_page(request, cid, connector=None):
         if code in supported_languages:
             charger_language = code
             break
-    if (
-        charger_language
-        and (
-            not language_cookie
-            or language_cookie not in supported_languages
-            or language_cookie != charger_language
-        )
+    if charger_language and (
+        not language_cookie
+        or language_cookie not in supported_languages
+        or language_cookie != charger_language
     ):
         translation.activate(charger_language)
     current_language = translation.get_language()
@@ -268,7 +275,9 @@ def public_connector_page(request, slug):
     tx = None
     if charger.connector_id is not None and sessions:
         tx = sessions[0][1]
-    state_source = tx if charger.connector_id is not None else (sessions if sessions else None)
+    state_source = (
+        tx if charger.connector_id is not None else (sessions if sessions else None)
+    )
     state, color = _charger_state(charger, state_source)
 
     instructions_html, _ = rendering.render_markdown_with_toc(
@@ -340,15 +349,11 @@ def public_connector_page(request, slug):
 @login_required
 def charger_status(request, cid, connector=None):
     charger, connector_slug = _get_charger(cid, connector)
-    access_response = _ensure_charger_access(
-        request.user, charger, request=request
-    )
+    access_response = _ensure_charger_access(request.user, charger, request=request)
     if access_response is not None:
         return access_response
     connectors = [
-        item
-        for item in _connector_set(charger)
-        if item.is_visible_to(request.user)
+        item for item in _connector_set(charger) if item.is_visible_to(request.user)
     ]
     connector_count = len(
         [item for item in connectors if item.connector_id is not None]
@@ -427,81 +432,18 @@ def charger_status(request, cid, connector=None):
         }
         for mode, label in date_view_options.items()
     ]
-    chart_data = {"labels": [], "datasets": []}
     pagination_params = request.GET.copy()
-    pagination_params["dates"] = date_view
     pagination_params.pop("page", None)
     pagination_query = pagination_params.urlencode()
     session_params = request.GET.copy()
-    session_params["dates"] = date_view
     session_params.pop("session", None)
-    session_params.pop("page", None)
     session_query = session_params.urlencode()
-
-    def _series_from_transaction(tx):
-        points: list[tuple[str, float]] = []
-        readings = list(
-            tx.meter_values.filter(energy__isnull=False).order_by("timestamp")
-        )
-        start_val = None
-        if tx.meter_start is not None:
-            start_val = float(tx.meter_start) / 1000.0
-        for reading in readings:
-            try:
-                val = float(reading.energy)
-            except (TypeError, ValueError):
-                continue
-            if start_val is None:
-                start_val = val
-            total = val - start_val
-            points.append((reading.timestamp.isoformat(), max(total, 0.0)))
-        return points
-
-    if tx_obj and (charger.connector_id is not None or past_session):
-        series_points = _series_from_transaction(tx_obj)
-        if series_points:
-            chart_data["labels"] = [ts for ts, _ in series_points]
-            connector_id = None
-            if tx_obj.charger and tx_obj.charger.connector_id is not None:
-                connector_id = tx_obj.charger.connector_id
-            elif charger.connector_id is not None:
-                connector_id = charger.connector_id
-            chart_data["datasets"].append(
-                {
-                    "label": str(
-                        tx_obj.charger.connector_label
-                        if tx_obj.charger and tx_obj.charger.connector_id is not None
-                        else charger.connector_label
-                    ),
-                    "values": [value for _, value in series_points],
-                    "connector_id": connector_id,
-                }
-            )
-    elif charger.connector_id is None:
-        dataset_points: list[tuple[str, list[tuple[str, float]], int]] = []
-        for sibling, sibling_tx in sessions:
-            if sibling.connector_id is None or not sibling_tx:
-                continue
-            points = _series_from_transaction(sibling_tx)
-            if not points:
-                continue
-            dataset_points.append(
-                (str(sibling.connector_label), points, sibling.connector_id)
-            )
-        if dataset_points:
-            all_labels: list[str] = sorted(
-                {ts for _, points, _ in dataset_points for ts, _ in points}
-            )
-            chart_data["labels"] = all_labels
-            for label, points, connector_id in dataset_points:
-                value_map = {ts: val for ts, val in points}
-                chart_data["datasets"].append(
-                    {
-                        "label": label,
-                        "values": [value_map.get(ts) for ts in all_labels],
-                        "connector_id": connector_id,
-                    }
-                )
+    chart_data = build_charger_chart_payload(
+        user=request.user,
+        cid=cid,
+        connector=connector_slug,
+        session_id=session_id,
+    )
     rfid_cache: dict[str, dict[str, str | None]] = {}
     overview = _connector_overview(
         charger,
@@ -521,14 +463,17 @@ def charger_status(request, cid, connector=None):
     connector_overview = [
         item for item in overview if item["charger"].connector_id is not None
     ]
-    non_transaction_events = _important_non_transaction_events(charger, charger)
+    can_view_sensitive_non_transaction_events = request.user.is_staff or (
+        charger.has_owner_scope() and charger.is_visible_to(request.user)
+    )
+    non_transaction_events = _important_non_transaction_events(
+        charger,
+        charger,
+        include_sensitive=can_view_sensitive_non_transaction_events,
+    )
     show_connector_tabs = False
-    show_connector_overview_cards = (
-        charger.connector_id is None and connector_count > 1
-    )
-    usage_timeline, usage_timeline_window = _usage_timeline(
-        charger, connector_overview
-    )
+    show_connector_overview_cards = charger.connector_id is None and connector_count > 1
+    usage_timeline, usage_timeline_window = _usage_timeline(charger, connector_overview)
     search_url = _reverse_connector_url("charger-session-search", cid, connector_slug)
     configuration_url = None
     transactions_admin_url = None
@@ -542,9 +487,7 @@ def charger_status(request, cid, connector=None):
         except NoReverseMatch:  # pragma: no cover - admin may be disabled
             transactions_admin_url = None
     is_connected = store.is_connected(cid, charger.connector_id)
-    has_active_session = bool(
-        live_tx if charger.connector_id is not None else sessions
-    )
+    has_active_session = bool(live_tx if charger.connector_id is not None else sessions)
     can_remote_start = (
         charger.connector_id is not None
         and is_connected
@@ -566,10 +509,7 @@ def charger_status(request, cid, connector=None):
 
     tx_rfid_details = _transaction_rfid_details(tx_obj, cache=rfid_cache)
 
-    try:
-        graphql_chart_url = reverse("graphql:endpoint")
-    except NoReverseMatch:
-        graphql_chart_url = None
+    chart_data_url = _reverse_connector_url("charger-status-chart", cid, connector_slug)
 
     return render(
         request,
@@ -613,10 +553,8 @@ def charger_status(request, cid, connector=None):
             "session_query": session_query,
             "chart_should_animate": chart_should_animate,
             "status_should_poll": status_should_poll,
-            "graphql_chart_url": graphql_chart_url,
-            "graphql_chart_cid": cid,
-            "graphql_chart_connector": connector_slug,
-            "graphql_chart_session": session_id,
+            "chart_data_url": chart_data_url,
+            "chart_session": session_id,
             "usage_timeline": usage_timeline,
             "usage_timeline_window": usage_timeline_window,
             "charger_error_code": _visible_error_code(charger.last_error_code),
@@ -629,11 +567,41 @@ def charger_status(request, cid, connector=None):
 
 
 @login_required
+@require_GET
+def charger_status_chart(request, cid, connector=None):
+    """Return charger status chart data for authenticated users as JSON.
+
+    Parameters:
+        request: Incoming authenticated HTTP request.
+        cid: Charger identifier.
+        connector: Optional connector slug from the URL.
+
+    Returns:
+        JsonResponse: Chart payload matching the charger status template contract.
+
+    Raises:
+        Http404: Propagated when the charger cannot be found.
+    """
+
+    session_id = request.GET.get("session") or None
+    try:
+        payload = build_charger_chart_payload(
+            user=request.user,
+            cid=cid,
+            connector=connector,
+            session_id=session_id,
+        )
+    except ChargerAccessDeniedError as exc:
+        return JsonResponse({"detail": str(exc)}, status=404)
+    except Transaction.DoesNotExist as exc:
+        return JsonResponse({"detail": str(exc)}, status=404)
+    return JsonResponse(payload)
+
+
+@login_required
 def charger_session_search(request, cid, connector=None):
     charger, connector_slug = _get_charger(cid, connector)
-    access_response = _ensure_charger_access(
-        request.user, charger, request=request
-    )
+    access_response = _ensure_charger_access(request.user, charger, request=request)
     if access_response is not None:
         return access_response
     connectors = _connector_set(charger)
@@ -685,9 +653,7 @@ def charger_session_search(request, cid, connector=None):
             if details:
                 label_value = str(details.get("label") or "").strip() or None
             tx.rfid_label = label_value
-    overview = _connector_overview(
-        charger, request.user, connectors=connectors
-    )
+    overview = _connector_overview(charger, request.user, connectors=connectors)
     connector_links = [
         {
             "slug": item["slug"],
@@ -724,16 +690,12 @@ def charger_log_page(request, cid, connector=None):
     status_url = None
     if log_type == "charger":
         charger, connector_slug = _get_charger(cid, connector)
-        access_response = _ensure_charger_access(
-            request.user, charger, request=request
-        )
+        access_response = _ensure_charger_access(request.user, charger, request=request)
         if access_response is not None:
             return access_response
         connectors = _connector_set(charger)
         log_key = store.identity_key(cid, charger.connector_id)
-        overview = _connector_overview(
-            charger, request.user, connectors=connectors
-        )
+        overview = _connector_overview(charger, request.user, connectors=connectors)
         connector_links = [
             {
                 "slug": item["slug"],
@@ -785,9 +747,7 @@ def charger_log_page(request, cid, connector=None):
         response = HttpResponse(
             download_content, content_type="text/plain; charset=utf-8"
         )
-        response["Content-Disposition"] = (
-            f'attachment; filename="{download_filename}"'
-        )
+        response["Content-Disposition"] = f'attachment; filename="{download_filename}"'
         return response
 
     log_entries = list(
@@ -798,7 +758,9 @@ def charger_log_page(request, cid, connector=None):
     download_params["download"] = "1"
     download_params.pop("limit", None)
     download_query = download_params.urlencode()
-    log_download_url = f"{request.path}?{download_query}" if download_query else request.path
+    log_download_url = (
+        f"{request.path}?{download_query}" if download_query else request.path
+    )
 
     limit_label = limit_options[limit_index]["label"]
     log_content = "\n".join(log_entries)
@@ -891,4 +853,4 @@ def supported_charger_detail(request, station_model_id: int):
             "images": images,
             "documents": documents,
         },
-    )
+)

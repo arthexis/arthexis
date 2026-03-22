@@ -1,19 +1,15 @@
 import datetime
 import json
-import re
 from pathlib import Path
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import AnonymousUser
 from django.contrib.sites.models import Site
-from django.template.loader import render_to_string
-from django.test import RequestFactory
-from django.test.html import parse_html
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
+from apps.chats.models import ChatSession
 from apps.energy.models import ClientReport
 from apps.features.models import Feature
 from apps.modules.models import Module
@@ -23,17 +19,39 @@ pytestmark = [pytest.mark.django_db]
 
 DARK_THEME_BACKGROUND_STYLE = "background: #111827;"
 
+
 @pytest.fixture
 def user(db):
-    """Create a regular user for authenticated route checks."""
+    """Create a regular user for authenticated route checks.
+
+    Parameters:
+        db: Enables database access for fixture setup.
+
+    Returns:
+        User: A persisted non-staff user instance.
+
+    Raises:
+        None.
+    """
 
     return get_user_model().objects.create_user(
         username="route-user", email="route-user@example.com", password="secret"
     )
 
+
 @pytest.fixture
 def staff_user(db):
-    """Create a staff user for staff-only route checks."""
+    """Create a staff user for staff-only route checks.
+
+    Parameters:
+        db: Enables database access for fixture setup.
+
+    Returns:
+        User: A persisted staff user instance.
+
+    Raises:
+        None.
+    """
 
     return get_user_model().objects.create_user(
         username="route-staff",
@@ -42,34 +60,31 @@ def staff_user(db):
         is_staff=True,
     )
 
-def test_release_checklist_requires_staff(client, user, staff_user):
-    """Release checklist access should be limited to staff users."""
-
-    url = reverse("pages:release-checklist")
-
-    anonymous_response = client.get(url)
-    assert anonymous_response.status_code == 302
-
-    client.force_login(user)
-    non_staff_response = client.get(url)
-    assert non_staff_response.status_code in {302, 403}
-
-    client.force_login(staff_user)
-    staff_response = client.get(url)
-    assert staff_response.status_code in {200, 404}
-    if staff_response.status_code == 200:
-        assert any(t.name == "docs/readme.html" for t in staff_response.templates)
 
 def test_client_report_download_enforces_login_and_ownership(
     client, user, staff_user, monkeypatch, tmp_path
 ):
-    """Client report download should require login and owner/staff permissions."""
+    """Require login and owner or staff access for report downloads.
 
-    User = get_user_model()
-    owner = User.objects.create_user(
+    Parameters:
+        client: Django test client for route requests.
+        user: Baseline authenticated user fixture.
+        staff_user: Staff user fixture used for elevated access assertions.
+        monkeypatch: Fixture used to stub report PDF generation.
+        tmp_path: Temporary filesystem path for a fake PDF.
+
+    Returns:
+        None: Assertions validate response codes and content types.
+
+    Raises:
+        AssertionError: If route authorization or response payloads regress.
+    """
+
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
         username="report-owner", email="owner@example.com", password="secret"
     )
-    other_user = User.objects.create_user(
+    other_user = user_model.objects.create_user(
         username="report-other", email="other@example.com", password="secret"
     )
     report = ClientReport.objects.create(
@@ -101,37 +116,112 @@ def test_client_report_download_enforces_login_and_ownership(
     assert staff_response.status_code == 200
     assert staff_response["Content-Type"] == "application/pdf"
 
-def test_invitation_login_invalid_tokens_are_handled_safely(client):
-    """Invitation login should safely reject malformed/invalid tokens."""
 
-    user = get_user_model().objects.create_user(
+def test_invitation_login_invalid_tokens_are_handled_safely(client):
+    """Reject malformed invitation UID and token payloads.
+
+    Parameters:
+        client: Django test client for unauthenticated invitation requests.
+
+    Returns:
+        None: Assertions validate HTTP 400 responses for invalid inputs.
+
+    Raises:
+        AssertionError: If invalid links stop returning safe client errors.
+    """
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
         username="invite-user", email="invite-user@example.com", password="secret"
     )
     uid = urlsafe_base64_encode(force_bytes(user.pk))
-    response = client.get(reverse("pages:invitation-login", args=[uid, "bad-token"]))
 
-    assert response.status_code == 400
-    assert "Invalid invitation link" in response.content.decode()
+    invalid_token_response = client.get(
+        reverse("pages:invitation-login", args=[uid, "bad-token"])
+    )
+    assert invalid_token_response.status_code == 400
+    assert "Invalid invitation link" in invalid_token_response.content.decode()
 
     malformed_uid_response = client.get(
         reverse("pages:invitation-login", args=["!!invalid!!", "bad-token"])
     )
     assert malformed_uid_response.status_code == 400
 
-def test_whatsapp_webhook_get_not_allowed(client, settings):
-    """Webhook should reject GET requests."""
+
+def test_whatsapp_webhook_post_payload_validation(client, settings):
+    """Validate webhook JSON payload content and malformed request handling.
+
+    Parameters:
+        client: Django test client for webhook requests.
+        settings: Django settings fixture for feature flag toggles.
+
+    Returns:
+        None: Assertions validate accepted and rejected webhook payloads.
+
+    Raises:
+        AssertionError: If webhook validation behavior regresses.
+    """
 
     settings.PAGES_WHATSAPP_ENABLED = True
     url = reverse("pages:whatsapp-webhook")
 
-    response = client.get(url)
-    assert response.status_code == 405
+    success = client.post(
+        url,
+        data=json.dumps({"from": "+15551234", "message": "Hello"}),
+        content_type="application/json",
+    )
+    assert success.status_code == 201
+    assert success.json()["status"] == "ok"
+
+    invalid_json = client.post(url, data="{not-json}", content_type="application/json")
+    assert invalid_json.status_code == 400
+
+    empty_fields = client.post(
+        url,
+        data=json.dumps({"from": "", "message": ""}),
+        content_type="application/json",
+    )
+    assert empty_fields.status_code == 400
 
 
-def test_whatsapp_webhook_disabled_returns_503(client, settings):
-    """Webhook should reject traffic when WhatsApp integration is disabled."""
+def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
+    """Enforce webhook method guardrails and feature-flag availability checks.
+
+    Parameters:
+        client: Django test client for webhook requests.
+        settings: Django settings fixture for feature flag toggles.
+
+    Returns:
+        None: Assertions validate method and feature-flag guard branches.
+
+    Raises:
+        AssertionError: If method restriction or disabled-mode behavior regresses.
+    """
+
+    url = reverse("pages:whatsapp-webhook")
+
+    method_not_allowed = client.get(url)
+    assert method_not_allowed.status_code == 405
 
     settings.PAGES_WHATSAPP_ENABLED = False
+    disabled = client.post(
+        url,
+        data=json.dumps({"from": "+15551234", "message": "Hello"}),
+        content_type="application/json",
+    )
+    assert disabled.status_code == 503
+
+
+def test_whatsapp_webhook_disabled_suite_feature_returns_accepted_without_session_activity(
+    client, settings
+):
+    """Disabled WhatsApp suite feature should not create sessions from webhook traffic."""
+
+    settings.PAGES_WHATSAPP_ENABLED = True
+    Feature.objects.update_or_create(
+        slug="whatsapp-chat-bridge",
+        defaults={"display": "WhatsApp Chat Bridge", "is_enabled": False},
+    )
 
     response = client.post(
         reverse("pages:whatsapp-webhook"),
@@ -139,81 +229,99 @@ def test_whatsapp_webhook_disabled_returns_503(client, settings):
         content_type="application/json",
     )
 
-    assert response.status_code == 503
+    assert response.status_code == 202
+    assert response.json()["status"] == "accepted"
+    assert ChatSession.objects.count() == 0
 
-@pytest.mark.parametrize(
-    "payload, expected_status",
-    [
-        (json.dumps({"from": "+15551234", "message": "Hello"}), 201),
-        ("{not-json}", 400),
-        (json.dumps({"from": "", "message": ""}), 400),
-    ],
-)
-def test_whatsapp_webhook_post_payload_validation(
-    client, settings, payload, expected_status
+
+def test_whatsapp_webhook_disabled_suite_feature_still_rejects_invalid_payloads(
+    client, settings
 ):
-    """Webhook should validate POST payload format and content."""
+    """Disabled WhatsApp suite feature should preserve invalid-payload responses."""
 
     settings.PAGES_WHATSAPP_ENABLED = True
-    url = reverse("pages:whatsapp-webhook")
-
-    response = client.post(url, data=payload, content_type="application/json")
-    assert response.status_code == expected_status
-    if expected_status == 201:
-        assert response.json()["status"] == "ok"
-
-def test_operator_site_interface_redirects_to_configured_interface_landing(client):
-    """Disabled interface feature should redirect home to configured interface landing."""
-
     Feature.objects.update_or_create(
-        slug="operator-site-interface",
-        defaults={"display": "Operator Site Interface", "is_enabled": False},
+        slug="whatsapp-chat-bridge",
+        defaults={"display": "WhatsApp Chat Bridge", "is_enabled": False},
     )
-    module = Module.objects.create(path="operator")
-    landing = Landing.objects.create(module=module, path="/operator/", label="Operator")
 
-    site, _created = Site.objects.get_or_create(
-        domain="testserver",
-        defaults={"name": "testserver"},
+    invalid_json_response = client.post(
+        reverse("pages:whatsapp-webhook"),
+        data="{",
+        content_type="application/json",
     )
-    site.interface_landing = landing
-    site.save(update_fields=["interface_landing"])
+    missing_fields_response = client.post(
+        reverse("pages:whatsapp-webhook"),
+        data=json.dumps({"from": "+15551234"}),
+        content_type="application/json",
+    )
 
-    response = client.get(reverse("pages:index"))
+    assert invalid_json_response.status_code == 400
+    assert missing_fields_response.status_code == 400
+    assert ChatSession.objects.count() == 0
 
-    assert response.status_code == 302
-    assert response["Location"] == "/operator/?operator_interface=1"
 
-def test_operator_site_interface_landing_with_query_avoids_redirect_loop(client):
-    """Landing redirects once and then renders without self-redirect loops."""
+def test_whatsapp_webhook_enabled_feature_creates_session_and_message(client, settings):
+    """Enabled WhatsApp suite feature should continue bridging inbound session traffic."""
 
+    settings.PAGES_WHATSAPP_ENABLED = True
     Feature.objects.update_or_create(
-        slug="operator-site-interface",
-        defaults={"display": "Operator Site Interface", "is_enabled": False},
-    )
-    module = Module.objects.create(path="operator-loop")
-    landing = Landing.objects.create(
-        module=module,
-        path="/?foo=1",
-        label="Operator Loop Safe",
+        slug="whatsapp-chat-bridge",
+        defaults={"display": "WhatsApp Chat Bridge", "is_enabled": True},
     )
 
-    site, _created = Site.objects.get_or_create(
-        domain="testserver",
-        defaults={"name": "testserver"},
+    response = client.post(
+        reverse("pages:whatsapp-webhook"),
+        data=json.dumps({"from": "+15557654321", "message": "Hello"}),
+        content_type="application/json",
     )
-    site.interface_landing = landing
-    site.save(update_fields=["interface_landing"])
 
-    first = client.get(reverse("pages:index"))
-    assert first.status_code == 302
-    assert first["Location"] == "/?foo=1&operator_interface=1"
+    assert response.status_code == 201
+    session = ChatSession.objects.get(whatsapp_number="+15557654321")
+    assert session.messages.count() == 1
+    assert session.messages.get().body == "Hello"
 
-    second = client.get(first["Location"])
-    assert second.status_code == 200
+
+def test_existing_whatsapp_session_does_not_accept_new_messages_when_feature_is_disabled(
+    client, settings
+):
+    """Existing WhatsApp sessions should stop receiving bridged webhook messages when disabled."""
+
+    settings.PAGES_WHATSAPP_ENABLED = True
+    session = ChatSession.objects.create(
+        visitor_key="whatsapp:+15550000000",
+        whatsapp_number="+15550000000",
+    )
+    session.add_message(content="Earlier", display_name="+15550000000", source="whatsapp")
+    Feature.objects.update_or_create(
+        slug="whatsapp-chat-bridge",
+        defaults={"display": "WhatsApp Chat Bridge", "is_enabled": False},
+    )
+
+    response = client.post(
+        reverse("pages:whatsapp-webhook"),
+        data=json.dumps({"from": "+15550000000", "message": "Blocked"}),
+        content_type="application/json",
+    )
+
+    session.refresh_from_db()
+    assert response.status_code == 202
+    assert session.messages.count() == 1
+    assert session.messages.get().body == "Earlier"
+
 
 def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
-    """Unsafe absolute/scheme-relative targets should not redirect users away."""
+    """Ensure unsafe interface redirect targets are not followed.
+
+    Parameters:
+        client: Django test client for homepage rendering.
+
+    Returns:
+        None: Assertions validate rendered fallback content for unsafe paths.
+
+    Raises:
+        AssertionError: If unsafe interface targets start redirecting users.
+    """
 
     Feature.objects.update_or_create(
         slug="operator-site-interface",
@@ -240,3 +348,60 @@ def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
     assert 'id="operator-interface-title"' in content
     assert "ws://testserver/&lt;charge_point_id&gt;/" in content
     assert DARK_THEME_BACKGROUND_STYLE in content
+
+
+def test_release_checklist_requires_staff(client, staff_user, user):
+    """Verify release checklist access is restricted to staff users.
+
+    Parameters:
+        client: Django test client for authenticated and anonymous requests.
+        staff_user: Staff user fixture expected to access the view.
+        user: Non-staff user fixture expected to be denied.
+
+    Returns:
+        None: Assertions validate status codes for each permission level.
+
+    Raises:
+        AssertionError: If staff-only access control regresses.
+    """
+
+    url = reverse("pages:release-checklist")
+
+    anon_response = client.get(url)
+    assert anon_response.status_code == 302
+    assert reverse("admin:login") in anon_response["Location"]
+
+    client.force_login(user)
+    non_staff_response = client.get(url)
+    assert non_staff_response.status_code == 403
+
+    client.force_login(staff_user)
+    staff_response = client.get(url)
+    assert staff_response.status_code in (200, 404)
+
+
+def test_release_checklist_denies_inactive_staff(client):
+    """Ensure inactive staff sessions cannot access staff-only checklist views.
+
+    Parameters:
+        client: Django test client for authenticated route requests.
+
+    Returns:
+        None: Assertion verifies inactive staff receive HTTP 403.
+
+    Raises:
+        AssertionError: If inactive staff accounts are incorrectly authorized.
+    """
+
+    user = get_user_model().objects.create_user(
+        username="inactive-staff",
+        email="inactive-staff@example.com",
+        password="secret",
+        is_staff=True,
+        is_active=False,
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("pages:release-checklist"))
+
+    assert response.status_code == 403

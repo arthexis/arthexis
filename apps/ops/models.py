@@ -17,9 +17,26 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
 
-
 logger = logging.getLogger(__name__)
 
+VALIDATION_SQL_DISABLED_MESSAGE = _("Custom SQL validation is disabled for security reasons.")
+
+
+def _sanitize_remediation_url(remediation_url: str) -> str:
+    """Return a safe remediation URL for security alert links."""
+
+    candidate = remediation_url.strip()
+    if not candidate:
+        return "/admin/"
+
+    parsed = urlparse(candidate)
+    if not parsed.scheme:
+        if candidate.startswith("//"):
+            return "/admin/"
+        return candidate
+
+    if parsed.scheme in {"http", "https"}:
+        return candidate
 
 class OperationScreen(Entity):
     """Defines an operation that staff can execute through one or more screens."""
@@ -157,6 +174,8 @@ class OperationExecution(Entity):
             return
         if self.validation_passed is None:
             passed, output = self.operation.run_validation_sql()
+            if passed is False:
+                raise ValidationError({"validation_sql": output})
             self.validation_passed = passed
             self.validation_output = output
         super().save(*args, **kwargs)
@@ -183,6 +202,12 @@ class SecurityAlertEvent(Entity):
 
     class Meta:
         ordering = ("-last_occurred_at", "-updated_at")
+        indexes = [
+            models.Index(
+                fields=["is_active", "-last_occurred_at"],
+                name="ops_secalert_active_last",
+            )
+        ]
         verbose_name = _("Security Alert Event")
         verbose_name_plural = _("Security Alert Events")
 
@@ -201,10 +226,11 @@ class SecurityAlertEvent(Entity):
         severity: str = "error",
         remediation_url: str = "/admin/",
         occurred_at=None,
-    ) -> "SecurityAlertEvent":
+    ) -> SecurityAlertEvent:
         """Create or update an event entry while incrementing occurrence metadata."""
 
         event_timestamp = occurred_at or timezone.now()
+        safe_remediation_url = _sanitize_remediation_url(remediation_url)
         try:
             with transaction.atomic():
                 return cls.objects.create(
@@ -214,7 +240,7 @@ class SecurityAlertEvent(Entity):
                     detail=detail,
                     occurrence_count=1,
                     last_occurred_at=event_timestamp,
-                    remediation_url=remediation_url,
+                    remediation_url=safe_remediation_url,
                     is_active=True,
                 )
         except IntegrityError:
@@ -222,7 +248,7 @@ class SecurityAlertEvent(Entity):
                 severity=severity,
                 message=message,
                 detail=detail,
-                remediation_url=remediation_url,
+                remediation_url=safe_remediation_url,
                 occurrence_count=F("occurrence_count") + 1,
                 last_occurred_at=Greatest(F("last_occurred_at"), Value(event_timestamp)),
                 is_active=True,

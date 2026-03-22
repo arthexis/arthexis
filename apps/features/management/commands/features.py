@@ -11,8 +11,10 @@ from apps.features.management.feature_ops import (
     reset_all_suite_features,
     set_feature_enabled,
 )
+from apps.special.registry import special_command
 
 
+@special_command(singular="feature", plural="features", keystone_model="features.Feature")
 class Command(BaseCommand):
     """List suite/node features and support fixture-based reset workflows."""
 

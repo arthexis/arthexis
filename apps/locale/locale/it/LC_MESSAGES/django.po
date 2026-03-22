@@ -946,15 +946,15 @@ msgstr ""
 msgid "Config"
 msgstr ""
 
-#: core/fields.py:109
+#: sigils/fields.py:357
 msgid "Semicolons are not allowed in conditions."
 msgstr ""
 
-#: core/fields.py:113
+#: sigils/fields.py:361
 msgid "SQL comments are not allowed in conditions."
 msgstr ""
 
-#: core/fields.py:118
+#: sigils/fields.py:367
 #, python-format
 msgid "Disallowed keyword in condition: %(keyword)s"
 msgstr ""

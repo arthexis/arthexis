@@ -52,8 +52,12 @@ jobs:
         run: |
           source .venv/bin/activate
           python scripts/check_migration_conflicts.py
-          python manage.py makemigrations --check --dry-run
+          python manage.py migrations check
           python manage.py migrate --noinput --database default
+      - name: Install CI dependencies
+        run: |
+          source .venv/bin/activate
+          python -m pip install -r requirements-ci.txt
       - name: Run tests
         run: |
           set -o pipefail

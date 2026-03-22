@@ -1,4 +1,4 @@
-"""Backwards-compatible alias for ``release apply-migrations``."""
+"""Supported alias for ``release apply-migrations``."""
 
 from __future__ import annotations
 
@@ -7,11 +7,13 @@ from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    """Delegate legacy entrypoint to ``release apply-migrations``."""
+    """Delegate the alias entrypoint to ``release apply-migrations``."""
 
-    help = "Alias for `release apply-migrations` (kept for compatibility)."
+    help = "Alias for `release apply-migrations` (supported synonym)."
 
     def add_arguments(self, parser):
+        """Register arguments accepted by the supported alias."""
+
         parser.add_argument("target_version", help="Target release version")
         parser.add_argument(
             "--installed-version",
@@ -35,6 +37,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        """Forward the alias command to the consolidated release CLI."""
+
+        self.stdout.write("`apply_release_migrations` is a supported alias for `release apply-migrations`.")
         call_command(
             "release",
             "apply-migrations",

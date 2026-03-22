@@ -182,15 +182,9 @@ def _ensure_fixture_applications_exist(*, fixture_paths: list[Path]) -> None:
 
 
 def _ensure_reset_baseline_features() -> None:
-    """Restore baseline suite features that are seeded by migrations, not fixtures."""
+    """Restore baseline suite feature state that is seeded by migrations, not fixtures."""
 
-    Feature.objects.update_or_create(
-        slug="development-blog",
-        defaults={
-            "display": "Development Blog",
-            "is_enabled": True,
-        },
-    )
+    Feature.objects.filter(slug="development-blog").delete()
 
 
 def reset_all_suite_features() -> tuple[int, int]:

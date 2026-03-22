@@ -23,9 +23,9 @@ from apps.cards.node_features import RFID_SCANNER_SLUG
 from apps.cards.rfid_service import rfid_service_enabled, run_service, service_available, service_endpoint
 from apps.cards.scanner import scan_sources
 from apps.cards.utils import drain_stdin, user_requested_stop
-from apps.loggers.handlers import RFIDFileHandler
 from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.nodes.models import Node
+from utils.loggers.handlers import RFIDFileHandler
 
 
 class Command(BaseCommand):

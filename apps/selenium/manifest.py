@@ -1,3 +1,5 @@
-"""Legacy migration-only package; no runtime app manifest entries."""
+"""Manifest entries for Django app loading."""
 
-DJANGO_APPS: list[str] = []
+DJANGO_APPS = [
+    "apps.selenium",
+]

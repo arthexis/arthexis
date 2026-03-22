@@ -13,15 +13,15 @@ from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.release import DEFAULT_PACKAGE, ReleaseError, build
 from apps.release.domain import (
     capture_migration_state,
     list_transform_names,
     prepare_release,
     run_transform,
 )
-from apps.release.models import PackageRelease
-from apps.release import DEFAULT_PACKAGE, ReleaseError, build
 from apps.release.models import Package as PackageModel
+from apps.release.models import PackageRelease
 
 REQUIRED_PACKAGE_FIELDS = (
     "name",
@@ -34,6 +34,19 @@ REQUIRED_PACKAGE_FIELDS = (
     "homepage_url",
 )
 RELEASE_VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+ACTION_ALIASES = {
+    "clean": "clean-logs",
+    "migrate": "apply-migrations",
+    "snap": "capture-state",
+    "snapshot": "capture-state",
+    "transforms": "run-data-transforms",
+    "xforms": "run-data-transforms",
+}
+BUILD_MODE_FLAGS = {
+    "package": {"dist": True, "test": True},
+    "publish": {"dist": True, "test": True, "twine": True},
+    "release": {"dist": True, "git": True, "tag": True, "test": True, "twine": True},
+}
 
 
 class BundleVerificationError(CommandError):
@@ -63,8 +76,8 @@ class Command(BaseCommand):
     """Run release-related actions from a single command entrypoint."""
 
     help = (
-        "Run release actions (prepare, build, capture-state, clean-logs, "
-        "check-pypi, apply-migrations, run-data-transforms)."
+        "Run release actions (prepare, build, snap/capture-state, clean/clean-logs, "
+        "check-pypi, migrate/apply-migrations, xforms/run-data-transforms)."
     )
 
     def add_arguments(self, parser):
@@ -81,6 +94,14 @@ class Command(BaseCommand):
             "build", help="Build the project and optionally upload to PyPI."
         )
         build_parser.add_argument("--bump", action="store_true", help="Increment patch version")
+        build_parser.add_argument(
+            "--mode",
+            choices=sorted(BUILD_MODE_FLAGS),
+            help=(
+                "Named workflow preset: package builds dists and runs tests; publish adds "
+                "Twine upload; release adds git commit/push and tagging."
+            ),
+        )
         build_parser.add_argument("--dist", action="store_true", help="Build distribution")
         build_parser.add_argument("--twine", action="store_true", help="Upload with Twine")
         build_parser.add_argument("--git", action="store_true", help="Commit and push changes")
@@ -98,13 +119,16 @@ class Command(BaseCommand):
         )
 
         capture_parser = subparsers.add_parser(
-            "capture-state", help="Capture migration plan and schema artifacts for a release"
+            "capture-state",
+            aliases=["snapshot", "snap"],
+            help="snap/capture-state: capture migration plan and schema artifacts for a release",
         )
         capture_parser.add_argument("version", help="Release version to snapshot")
 
         clean_parser = subparsers.add_parser(
             "clean-logs",
-            help="Remove release publish logs and associated lock files so the flow can restart.",
+            aliases=["clean"],
+            help="clean/clean-logs: remove release publish logs and lock files so the flow can restart.",
         )
         clean_parser.add_argument(
             "releases",
@@ -133,9 +157,10 @@ class Command(BaseCommand):
 
         migration_parser = subparsers.add_parser(
             "apply-migrations",
+            aliases=["migrate"],
             help=(
-                "Apply release migration bundle deltas for installed versions and "
-                "fall back to `manage.py migrate` on bundle mismatch."
+                "migrate/apply-migrations: apply release migration bundle deltas for installed "
+                "versions and fall back to `manage.py migrate` on bundle mismatch."
             ),
         )
         migration_parser.add_argument("target_version", help="Target release version")
@@ -162,9 +187,10 @@ class Command(BaseCommand):
 
         transforms_parser = subparsers.add_parser(
             "run-data-transforms",
+            aliases=["transforms", "xforms"],
             help=(
-                "Run idempotent, checkpointed data transforms moved out of "
-                "schema-critical migrations."
+                "xforms/run-data-transforms: run idempotent, checkpointed data transforms moved "
+                "out of schema-critical migrations."
             ),
         )
         transforms_parser.add_argument(
@@ -182,7 +208,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Dispatch to the selected release action."""
 
-        action = options["action"]
+        action = ACTION_ALIASES.get(options["action"], options["action"])
         handler_name = f"_handle_{action.replace('-', '_')}"
         handler = getattr(self, handler_name, None)
         if handler:
@@ -210,14 +236,15 @@ class Command(BaseCommand):
 
     def _handle_build(self, options: dict[str, object]) -> int:
         package = self._get_package(options.get("package"))
+        build_options = self._resolve_build_options(options)
         try:
             build(
-                bump=bool(options["bump"]),
-                tests=bool(options["test"]),
-                dist=bool(options["dist"]),
-                twine=bool(options["twine"]),
-                git=bool(options["git"]),
-                tag=bool(options["tag"]),
+                bump=build_options["bump"],
+                tests=build_options["test"],
+                dist=build_options["dist"],
+                twine=build_options["twine"],
+                git=build_options["git"],
+                tag=build_options["tag"],
                 all=bool(options["all"]),
                 force=bool(options["force"]),
                 stash=bool(options["stash"]),
@@ -227,6 +254,24 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR(str(exc)))
             return 1
         return 0
+
+    def _resolve_build_options(self, options: dict[str, object]) -> dict[str, bool]:
+        """Return normalized build flags after applying any named workflow preset."""
+
+        build_options = {
+            "bump": bool(options["bump"]),
+            "dist": bool(options["dist"]),
+            "git": bool(options["git"]),
+            "tag": bool(options["tag"]),
+            "test": bool(options["test"]),
+            "twine": bool(options["twine"]),
+        }
+
+        mode = options.get("mode")
+        if mode:
+            build_options.update(BUILD_MODE_FLAGS.get(str(mode), {}))
+
+        return build_options
 
     def _handle_clean_logs(self, options: dict[str, object]) -> None:
         releases: list[str] = list(options.get("releases") or [])

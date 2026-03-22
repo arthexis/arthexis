@@ -146,7 +146,8 @@ def test_features_command_reset_all_reloads_mainstream_fixtures() -> None:
     assert "Dropped" in output
     assert "Reloaded" in output
     assert not Feature.objects.filter(slug="temporary-local").exists()
-    assert Feature.objects.filter(slug="development-blog").exists()
+    assert Feature.objects.filter(slug="shortcut-management").exists()
+    assert not Feature.objects.filter(slug="development-blog").exists()
 
 
 @pytest.mark.django_db

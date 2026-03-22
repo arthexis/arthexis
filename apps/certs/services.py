@@ -178,7 +178,7 @@ def _build_missing_certbot_guidance(base_message: str) -> str:
         base_message,
         (
             f"certbot is required to provision Let's Encrypt certificates on {distro_name}. "
-            "Install certbot, then rerun the https command."
+            "Install certbot, then rerun the HTTPS command."
         ),
         "Supported Arthexis hosts and recommended commands:",
         "- Ubuntu 22.04 / 24.04 & Debian-based hosts: sudo apt update && sudo apt install -y certbot",

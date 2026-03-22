@@ -1,9 +1,8 @@
 """Default configuration for the pages application."""
+
 from __future__ import annotations
 
-from typing import Dict
-
-DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
+DEFAULT_APPLICATION_DESCRIPTIONS: dict[str, str] = {
     "app": "Application registry and metadata.",
     "actions": "Remote actions API, bearer token management, and OpenAPI export.",
     "audio": "Audio playback, capture, and signal processing helpers.",
@@ -51,15 +50,12 @@ DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
     "release": "Release management and deployment helpers.",
     "reports": "Reporting pipelines and analytics summaries.",
     "rfid": "RFID tag scanning and notifications.",
-    "recipes": "Scriptable recipes for reusable actions and validations.",
     "repos": "Repository management and release helpers.",
     "screens": "UI screen definitions and templates.",
     "sensors": "Sensor data ingestion and monitoring utilities.",
     "sigils": "Sigil handling and certificate helpers.",
     "sites": "Site management, domains, and tenancy helpers.",
-    "socials": "Social integrations and sharing utilities.",
     "summary": "Aggregated dashboards and executive summaries.",
-    "survey": "Survey collection and response management.",
     "teams": "Identity, Entitlements and Access Controls.",
     "tasks": "Task execution and job tracking.",
     "terms": "Terms, policies, and legal content management.",
@@ -69,5 +65,4 @@ DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
     "vehicle": "Vehicle management and telemetry.",
     "video": "Video capture, playback, and streaming helpers.",
     "widgets": "Reusable UI widgets and embed components.",
-    "wikis": "Wiki pages and collaborative documentation.",
 }

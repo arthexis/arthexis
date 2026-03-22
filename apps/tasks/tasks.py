@@ -15,6 +15,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_SLEEP_SECONDS = 30
@@ -102,18 +103,6 @@ def create_manual_task_github_issue(manual_task_id: int, trigger: str) -> str | 
     return issue_url
 
 
-@shared_task(name="apps.content.tasks.run_scheduled_web_samplers")
-def run_scheduled_web_samplers() -> list[int]:
-    """Execute any web request samplers that are due."""
-
-    from apps.content.web_sampling import schedule_pending_samplers
-
-    executed = schedule_pending_samplers()
-    if executed:
-        logger.info("Executed %s scheduled web samplers", len(executed))
-    return executed
-
-
 @shared_task(name="apps.playwright.tasks.run_scheduled_website_screenshots")
 def run_scheduled_website_screenshots() -> list[int]:
     """Execute due Playwright website screenshot schedules."""
@@ -129,6 +118,12 @@ def run_scheduled_website_screenshots() -> list[int]:
 @shared_task(name="apps.repos.tasks.report_exception_to_github")
 def report_exception_to_github(payload: dict[str, Any]) -> None:
     """Send exception context to the GitHub issue helper.
+
+    Parameters:
+        payload: Serialized request exception data queued by the repos app.
+
+    Returns:
+        ``None``.
 
     The task is intentionally light-weight in this repository. Deployments can
     replace it with an implementation that forwards ``payload`` to the

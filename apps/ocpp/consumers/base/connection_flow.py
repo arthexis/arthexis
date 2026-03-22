@@ -26,6 +26,10 @@ OCPP_VERSION_FEATURE_SLUGS = {
     "ocpp2.0.1": "ocpp-201-charge-point",
     "ocpp2.1": "ocpp-21-charge-point",
 }
+CREATION_FEATURE_FALLBACK_SLUGS = [
+    CHARGER_CREATION_FEATURE_SLUG,
+    *OCPP_VERSION_FEATURE_SLUGS.values(),
+]
 
 
 class ConnectionFlowMixin:
@@ -83,50 +87,85 @@ class ConnectionFlowMixin:
         _register_log_names_for_identity(self.charger_id, None, friendly_name)
 
     async def _allow_charge_point_connection_legacy(
-        self, _existing_charger: Charger | None
+        self, existing_charger: Charger | None
     ) -> bool:
-        """Always accept OCPP websocket connections.
+        """Gate new charge-point websocket admissions using suite feature state."""
 
-        The legacy ``charge-points`` node feature has been retired and must no
-        longer gate websocket admission. We still inspect suite feature state for
-        telemetry and operational visibility, but we do not block the connection.
-        """
+        if existing_charger is not None:
+            self._charge_point_connection_reason = None
+            return True
 
         def _resolve_feature_reason() -> str | None:
             node = Node.get_local()
-            if not node:
-                logger.warning(
-                    "Charge point connection allowed because no local node is registered."
+            offered_subprotocols = self._get_offered_subprotocols()
+            offered_subprotocols_were_explicit = "subprotocols" in self.scope
+            requested_version = None
+            if offered_subprotocols:
+                requested_version = self._canonicalize_ocpp_subprotocol(
+                    self._select_subprotocol(offered_subprotocols, None)
                 )
-                return "node-missing"
+            elif not offered_subprotocols_were_explicit:
+                requested_version = getattr(self, "ocpp_version", None) or "ocpp1.6"
 
             requested_feature_slug = OCPP_VERSION_FEATURE_SLUGS.get(
-                getattr(self, "ocpp_version", ""),
+                requested_version,
                 CHARGER_CREATION_FEATURE_SLUG,
             )
-            feature = Feature.objects.filter(slug=requested_feature_slug).first()
-            if not feature and requested_feature_slug != CHARGER_CREATION_FEATURE_SLUG:
-                feature = Feature.objects.filter(
-                    slug=CHARGER_CREATION_FEATURE_SLUG
-                ).first()
-            if not feature:
-                logger.warning(
-                    "Charge point creation feature %s missing; allowing websocket admission.",
+            if requested_feature_slug == CHARGER_CREATION_FEATURE_SLUG:
+                feature_slugs = CREATION_FEATURE_FALLBACK_SLUGS
+            else:
+                feature_slugs = [requested_feature_slug, CHARGER_CREATION_FEATURE_SLUG]
+
+            features = list(
+                Feature.objects.filter(slug__in=CREATION_FEATURE_FALLBACK_SLUGS)
+            )
+            feature_by_slug = {feature.slug: feature for feature in features}
+            ordered_features = [
+                feature_by_slug[slug] for slug in feature_slugs if slug in feature_by_slug
+            ]
+            configured_creation_features = [
+                feature_by_slug[slug]
+                for slug in CREATION_FEATURE_FALLBACK_SLUGS
+                if slug in feature_by_slug
+            ]
+            if not configured_creation_features:
+                logger.info(
+                    "Charge point connection allowed without creation feature gates because none of %s are configured.",
+                    ", ".join(CREATION_FEATURE_FALLBACK_SLUGS),
+                )
+                return None
+
+            feature_candidates = ordered_features
+            if requested_feature_slug != CHARGER_CREATION_FEATURE_SLUG and not ordered_features:
+                logger.info(
+                    "Charge point connection blocked: requested creation feature %s is not configured while other charge-point gates remain configured.",
                     requested_feature_slug,
                 )
-                return "creation-feature-missing"
-            if not feature.is_enabled:
-                logger.info(
-                    "Charge point creation feature %s disabled; allowing websocket admission.",
-                    feature.slug,
-                )
                 return "creation-feature-disabled"
-            return None
+
+            for feature in feature_candidates:
+                if feature.is_enabled_for_node(node=node):
+                    return None
+
+            enabled_globally = [
+                feature.slug for feature in feature_candidates if feature.is_enabled
+            ]
+            if enabled_globally:
+                logger.info(
+                    "Charge point connection blocked: creation features %s require an unavailable node capability.",
+                    ", ".join(enabled_globally),
+                )
+                return "creation-node-feature-disabled"
+            logger.info(
+                "Charge point connection blocked: creation features %s are disabled.",
+                ", ".join(feature.slug for feature in feature_candidates),
+            )
+            return "creation-feature-disabled"
 
         self._charge_point_connection_reason = await database_sync_to_async(
             _resolve_feature_reason
         )()
-        return True
+        return self._charge_point_connection_reason is None
 
     async def _allow_charge_point_connection(
         self, existing_charger: Charger | None

@@ -87,6 +87,59 @@ class EvergoLoadCustomersForm(forms.Form):
         return cleaned_data
 
 
+class EvergoContractorLoginWizardForm(forms.ModelForm):
+    """Collect contractor ownership, credentials, and setup options for the admin wizard."""
+
+    validate_credentials = forms.BooleanField(
+        initial=True,
+        required=False,
+        label="Validate credentials now",
+        help_text="Run an Evergo login immediately after saving the contractor.",
+    )
+    load_all_customers = forms.BooleanField(
+        initial=False,
+        required=False,
+        label="Load all customers after validation",
+        help_text="Optionally perform the initial full customer and order load for this contractor.",
+    )
+
+    class Meta:
+        model = EvergoUser
+        fields = ("user", "group", "avatar", "evergo_email", "evergo_password")
+
+    def __init__(self, *args, **kwargs):
+        """Prefill first-time contractor setup defaults for a smoother signup flow."""
+        super().__init__(*args, **kwargs)
+        self.fields["evergo_password"].widget = forms.PasswordInput()
+        if self.instance.pk:
+            self.fields["evergo_password"].required = False
+        self.fields["user"].required = False
+        self.fields["group"].required = False
+        self.fields["avatar"].required = False
+        self.fields["evergo_email"].help_text = "Email used to sign in to the Evergo contractor portal."
+        self.fields["evergo_password"].help_text = "Password used to sign in to the Evergo contractor portal."
+
+    def clean(self):
+        """Require a single owner and force validation before optional initial loading."""
+        cleaned_data = super().clean()
+        if self.instance.pk and not cleaned_data.get("evergo_password"):
+            cleaned_data["evergo_password"] = self.instance.evergo_password
+
+        owners = [
+            field_name
+            for field_name in ("user", "group", "avatar")
+            if cleaned_data.get(field_name) is not None
+        ]
+        if not owners:
+            raise ValidationError("Choose a user, security group, or avatar owner for this contractor.")
+        if cleaned_data.get("load_all_customers") and not cleaned_data.get("validate_credentials"):
+            self.add_error(
+                "load_all_customers",
+                "Enable credential validation before running the initial customer load.",
+            )
+        return cleaned_data
+
+
 class EvergoOrderTrackingForm(forms.Form):
     """Collect phase-one data for the public Evergo order tracking flow."""
 

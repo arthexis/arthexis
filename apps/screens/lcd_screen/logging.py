@@ -6,7 +6,7 @@ import logging
 import os
 from pathlib import Path
 
-from apps.loggers.rotation import build_daily_rotating_file_handler
+from utils.loggers.rotation import build_daily_rotating_file_handler
 
 
 def _resolve_base_dir() -> Path:

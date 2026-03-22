@@ -49,7 +49,7 @@ class Transaction(Entity):
     vin = models.CharField(
         max_length=17,
         blank=True,
-        help_text=_("Deprecated. Use VID instead."),
+        help_text=_("Use VID instead."),
     )
     ocpp_transaction_id = models.CharField(
         max_length=128,

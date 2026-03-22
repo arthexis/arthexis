@@ -9,11 +9,15 @@ from urllib.parse import quote_plus
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.sites.models import Site
 from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.translation import gettext as _
+
+from apps.features.utils import is_pages_chat_runtime_enabled, is_suite_feature_enabled
+from apps.sites.context_processors import _build_chat_context
 
 from .exceptions import EvergoAPIError, EvergoPhaseSubmissionError
 from .forms import EvergoDashboardLookupForm, EvergoOrderTrackingForm
@@ -46,6 +50,46 @@ TRACKING_PREFILL_SOURCE_KEYS = (
 )
 
 
+def _parse_user_story_attachment_limit() -> int:
+    """Return the configured attachment limit with a safe integer fallback.
+
+    Returns:
+        int: Parsed attachment limit, or ``3`` when the setting is invalid.
+    """
+
+    raw_limit = getattr(settings, "USER_STORY_ATTACHMENT_LIMIT", 3)
+    try:
+        return int(raw_limit)
+    except (TypeError, ValueError):
+        return 3
+
+
+def _build_public_widget_context(*, user) -> dict[str, object]:
+    """Return chat and feedback flags for Evergo public pages.
+
+    Parameters:
+        user: Current authenticated Django user viewing the page.
+
+    Returns:
+        dict[str, object]: Template context flags required by shared public widgets.
+    """
+
+    feedback_ingestion_enabled = is_suite_feature_enabled("feedback-ingestion", default=True)
+    pages_chat_enabled = is_pages_chat_runtime_enabled(default=False)
+    site = Site.objects.get_current()
+    chat_context = _build_chat_context(
+        site,
+        user,
+        pages_chat_enabled=pages_chat_enabled,
+    )
+    return {
+        "chat_enabled": chat_context["chat_enabled"],
+        "chat_socket_path": chat_context["chat_socket_path"],
+        "feedback_ingestion_enabled": feedback_ingestion_enabled,
+        "user_story_attachment_limit": _parse_user_story_attachment_limit(),
+    }
+
+
 def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
     """Normalize common encoding artifacts in user-facing Evergo text."""
     normalized = str(value or "").strip()
@@ -54,11 +98,13 @@ def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
     return DISPLAY_TEXT_FIXUPS.get(normalized, normalized)
 
 
+@login_required
 def customer_public_detail(request, pk: int) -> HttpResponse:
     """Render a public Evergo customer profile and artifacts."""
     customer = get_object_or_404(
-        EvergoCustomer.objects.select_related("latest_order").prefetch_related("artifacts"),
+        EvergoCustomer.objects.select_related("latest_order", "user__user").prefetch_related("artifacts"),
         pk=pk,
+        user__user=request.user,
     )
     artifacts = list(customer.artifacts.all())
     address = customer.address.strip()
@@ -78,9 +124,15 @@ def customer_public_detail(request, pk: int) -> HttpResponse:
     return render(request, "evergo/customer_public_detail.html", context)
 
 
+@login_required
 def customer_artifact_download(request, pk: int, artifact_id: int) -> HttpResponse:
     """Download a PDF artifact attached to a customer profile."""
-    artifact = get_object_or_404(EvergoArtifact, pk=artifact_id, customer_id=pk)
+    artifact = get_object_or_404(
+        EvergoArtifact.objects.select_related("customer__user__user"),
+        pk=artifact_id,
+        customer_id=pk,
+        customer__user__user=request.user,
+    )
     if not artifact.is_pdf:
         raise Http404("Only PDF artifacts can be downloaded from this endpoint.")
 
@@ -261,7 +313,14 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
                 form.add_error(None, "Confirma que deseas continuar con imágenes faltantes.")
             else:
                 payload = _build_phase_one_payload(form.cleaned_data)
-                files = ensure_image_payload({name: form.cleaned_data.get(name) for name in IMAGE_FIELD_NAMES})
+                image_inputs: dict[str, object] = {}
+                for name in IMAGE_FIELD_NAMES:
+                    image_value = form.cleaned_data.get(name)
+                    if image_value is not None:
+                        image_inputs[name] = image_value
+                    elif not remote_image_urls.get(name):
+                        image_inputs[name] = None
+                files = ensure_image_payload(image_inputs)
                 merged_step_values = dict(remote_initial_data)
                 merged_step_values.update(form.cleaned_data)
                 step_completion = _compute_tracking_step_completion(
@@ -329,6 +388,7 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
                 if order.remote_id is not None
                 else ""
             ),
+            **_build_public_widget_context(user=request.user),
         },
     )
 
