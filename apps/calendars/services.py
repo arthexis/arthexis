@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone as dt_timezone
-from typing import Any
+from datetime import datetime, timezone as dt_timezone
+from typing import Any, Iterable
 from urllib.parse import quote
 
 import requests
-from django.db import transaction
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 
-from .models import CalendarEventSnapshot, GoogleCalendar
+from .models import GoogleCalendar
 
 
 class GoogleCalendarError(RuntimeError):
@@ -21,16 +18,8 @@ class GoogleCalendarRequestError(GoogleCalendarError):
     """Raised when Google Calendar API returns an error response."""
 
 
-@dataclass(frozen=True)
-class CalendarEventWindow:
-    """Time window used to query calendar events from Google API."""
-
-    time_min: datetime
-    time_max: datetime
-
-
 class GoogleCalendarGateway:
-    """Gateway wrapping Google Calendar API operations for tracked calendars."""
+    """Gateway wrapping outbound Google Calendar event publishing."""
 
     base_url = "https://www.googleapis.com/calendar/v3/calendars"
 
@@ -40,11 +29,12 @@ class GoogleCalendarGateway:
 
     def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
         if not self.account:
-            raise GoogleCalendarError("Tracked calendar has no Google account configured.")
+            raise GoogleCalendarError("Calendar destination has no Google account configured.")
         token = self.account.get_access_token()
         headers = kwargs.pop("headers", {})
         headers["Authorization"] = f"Bearer {token}"
         headers.setdefault("Accept", "application/json")
+        headers.setdefault("Content-Type", "application/json")
         response = requests.request(method, url, headers=headers, timeout=30, **kwargs)
         if response.status_code >= 400:
             raise GoogleCalendarRequestError(
@@ -55,74 +45,49 @@ class GoogleCalendarGateway:
             raise GoogleCalendarRequestError("Google Calendar API returned a non-object payload.")
         return payload
 
-    def fetch_calendar_metadata(self) -> dict[str, Any]:
-        """Fetch and persist metadata for the tracked calendar."""
+    def create_event(
+        self,
+        *,
+        summary: str,
+        starts_at: datetime,
+        ends_at: datetime | None = None,
+        description: str = "",
+        location: str = "",
+        attendees: Iterable[str] = (),
+        timezone_name: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Create an event on the configured Google Calendar and return the API payload."""
+        start = _coerce_aware_datetime(starts_at)
+        end = _coerce_aware_datetime(ends_at) if ends_at else None
         calendar_id = quote(self.calendar.calendar_id, safe="")
-        payload = self._request("GET", f"{self.base_url}/{calendar_id}")
-        self.calendar.name = payload.get("summary") or self.calendar.name
-        self.calendar.timezone = payload.get("timeZone") or self.calendar.timezone
-        self.calendar.metadata = payload
-        self.calendar.save(update_fields=["name", "timezone", "metadata"])
-        return payload
-
-    def list_events(self, window: CalendarEventWindow) -> list[dict[str, Any]]:
-        """List events between ``time_min`` and ``time_max`` ordered by start time."""
-        calendar_id = quote(self.calendar.calendar_id, safe="")
-        payload = self._request(
-            "GET",
-            f"{self.base_url}/{calendar_id}/events",
-            params={
-                "singleEvents": "true",
-                "orderBy": "startTime",
-                "timeMin": window.time_min.astimezone(dt_timezone.utc).isoformat(),
-                "timeMax": window.time_max.astimezone(dt_timezone.utc).isoformat(),
+        timezone_value = timezone_name or self.calendar.timezone or timezone.get_current_timezone_name()
+        body: dict[str, Any] = {
+            "summary": summary,
+            "start": {
+                "dateTime": start.isoformat(),
+                "timeZone": timezone_value,
             },
-        )
-        items = payload.get("items") or []
-        return [item for item in items if isinstance(item, dict)]
-
-    @transaction.atomic
-    def sync_event_snapshots(self, horizon_minutes: int = 1440) -> int:
-        """Synchronize upcoming events into local snapshot records."""
-        now = timezone.now()
-        window = CalendarEventWindow(time_min=now - timedelta(minutes=5), time_max=now + timedelta(minutes=horizon_minutes))
-        events = self.list_events(window)
-        synced = 0
-        for event in events:
-            event_id = str(event.get("id") or "").strip()
-            if not event_id:
-                continue
-            starts_at = _extract_event_datetime(event.get("start") or {})
-            ends_at = _extract_event_datetime(event.get("end") or {})
-            updated = parse_datetime(str(event.get("updated") or ""))
-            if updated is None:
-                updated = now
-            CalendarEventSnapshot.objects.update_or_create(
-                calendar=self.calendar,
-                event_id=event_id,
-                defaults={
-                    "summary": str(event.get("summary") or ""),
-                    "location": str(event.get("location") or ""),
-                    "starts_at": starts_at,
-                    "ends_at": ends_at,
-                    "event_updated": updated,
-                    "raw": event,
-                },
-            )
-            synced += 1
-        return synced
+        }
+        if end is not None:
+            body["end"] = {
+                "dateTime": end.isoformat(),
+                "timeZone": timezone_value,
+            }
+        if description:
+            body["description"] = description
+        if location:
+            body["location"] = location
+        attendee_list = [str(email).strip() for email in attendees if str(email).strip()]
+        if attendee_list:
+            body["attendees"] = [{"email": email} for email in attendee_list]
+        if metadata:
+            body["extendedProperties"] = {"private": {k: str(v) for k, v in metadata.items()}}
+        return self._request("POST", f"{self.base_url}/{calendar_id}/events", json=body)
 
 
-def _extract_event_datetime(data: dict[str, Any]) -> datetime | None:
-    """Extract RFC3339 datetime from Google event ``start``/``end`` payload."""
-    date_time = data.get("dateTime")
-    if date_time:
-        parsed = parse_datetime(str(date_time))
-        if parsed is not None:
-            return parsed
-    date_only = data.get("date")
-    if date_only:
-        parsed = parse_datetime(f"{date_only}T00:00:00+00:00")
-        if parsed is not None:
-            return parsed
-    return None
+def _coerce_aware_datetime(value: datetime) -> datetime:
+    """Return an aware datetime, assuming UTC for naive values."""
+    if timezone.is_naive(value):
+        return timezone.make_aware(value, timezone=dt_timezone.utc)
+    return value
