@@ -1,6 +1,6 @@
 """Compatibility re-exports for session-backed release context helpers.
 
-Deprecated import path: ``release_publish.state.context``.
+Legacy import path: ``release_publish.state.context``.
 """
 
 from ..context import (  # noqa: F401

@@ -239,6 +239,15 @@
       }
       resetUnread();
       overlay.removeAttribute('hidden');
+      if (typeof drawer.showModal === 'function' && !drawer.open) {
+        try {
+          drawer.showModal();
+        } catch (error) {
+          drawer.setAttribute('open', '');
+        }
+      } else if (!drawer.open) {
+        drawer.setAttribute('open', '');
+      }
       window.requestAnimationFrame(() => {
         overlay.classList.add('show');
         drawer.classList.add('open');
@@ -272,6 +281,15 @@
         : null;
       previousFocus = null;
       window.setTimeout(() => {
+        if (typeof drawer.close === 'function' && drawer.open) {
+          try {
+            drawer.close();
+          } catch (error) {
+            drawer.removeAttribute('open');
+          }
+        } else {
+          drawer.removeAttribute('open');
+        }
         overlay.setAttribute('hidden', '');
         if (focusTarget) {
           try {

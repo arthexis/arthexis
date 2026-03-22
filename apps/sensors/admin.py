@@ -211,9 +211,8 @@ class UsbTrackerAdmin(admin.ModelAdmin):
         "name",
         "slug",
         "required_file_path",
-        "recipe",
-        "cooldown_seconds",
-        "last_triggered_at",
+        "last_matched_at",
+        "last_match_path",
         "is_active",
     )
     search_fields = ("name", "slug", "required_file_path")
@@ -221,9 +220,6 @@ class UsbTrackerAdmin(admin.ModelAdmin):
     readonly_fields = (
         "last_checked_at",
         "last_matched_at",
-        "last_triggered_at",
         "last_match_path",
-        "last_match_signature",
-        "last_recipe_result",
         "last_error",
     )

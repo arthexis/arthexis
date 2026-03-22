@@ -1,7 +1,10 @@
 from django import forms
 from django.contrib import admin, messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.db.models import Max
 from django.shortcuts import redirect
+from django.template import TemplateDoesNotExist
+from django.template.loader import select_template
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
@@ -11,6 +14,7 @@ from apps.locals.user_data import EntityModelAdmin
 
 from .forms import EmailInboxAdminForm
 from .inlines import EmailCollectorInline
+from .metrics import annotate_enabled_total, format_enabled_total
 from .mixins import OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction
 
 
@@ -21,12 +25,14 @@ class EmailCollectorAdmin(EntityModelAdmin):
     list_display = (
         "name",
         "inbox",
+        "is_enabled",
         "subject",
         "sender",
         "body",
         "fragment",
         "notification_mode",
     )
+    list_filter = ("is_enabled", "notification_mode")
     search_fields = (
         "name",
         "subject",
@@ -36,8 +42,6 @@ class EmailCollectorAdmin(EntityModelAdmin):
         "notification_subject",
         "notification_message",
         "notification_recipients",
-        "notification_recipe__slug",
-        "notification_recipe__display",
     )
     actions = ["preview_messages"]
 
@@ -67,9 +71,25 @@ class EmailCollectorAdmin(EntityModelAdmin):
             "opts": self.model._meta,
             "queryset": queryset,
         }
-        return TemplateResponse(
-            request, "admin/core/emailcollector/preview.html", context
-        )
+        try:
+            template_name = select_template(
+                [
+                    f"admin/{self.model._meta.app_label}/{self.model._meta.model_name}/preview.html",
+                    "admin/core/emailcollector/preview.html",
+                ]
+            ).template.name
+        except TemplateDoesNotExist:
+            self.message_user(
+                request,
+                _("Preview template is not configured for Email Collectors."),
+                messages.ERROR,
+            )
+            changelist_url = reverse(
+                f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist"
+            )
+            return redirect(changelist_url)
+
+        return TemplateResponse(request, template_name, context)
 
 
 class EmailSearchForm(forms.Form):
@@ -109,7 +129,6 @@ class EmailCollectorSetupForm(forms.ModelForm):
             "notification_subject",
             "notification_message",
             "notification_recipients",
-            "notification_recipe",
             "additional_inboxes",
         )
 
@@ -118,7 +137,15 @@ class EmailInboxAdmin(
     OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
 ):
     form = EmailInboxAdminForm
-    list_display = ("owner_label", "username", "host", "protocol", "is_enabled")
+    list_display = (
+        "username",
+        "owner_label",
+        "collector_count",
+        "last_used_at",
+        "host",
+        "protocol",
+        "is_enabled",
+    )
     actions = ["test_connection", "search_inbox", "test_collectors"]
     change_actions = [
         "setup_collector_action",
@@ -128,6 +155,27 @@ class EmailInboxAdmin(
     changelist_actions = ["setup_collector", "my_profile"]
     change_form_template = "admin/core/emailinbox/change_form.html"
     inlines = [EmailCollectorInline]
+
+    def get_queryset(self, request):
+        queryset = annotate_enabled_total(
+            super().get_queryset(request),
+            "collectors",
+            total_alias="total_collectors",
+            enabled_alias="enabled_collectors",
+        )
+        return queryset.annotate(last_transaction_at=Max("transactions__processed_at"))
+
+    @admin.display(description=_("Collectors"), ordering="enabled_collectors")
+    def collector_count(self, obj):
+        return format_enabled_total(
+            obj,
+            enabled_attr="enabled_collectors",
+            total_attr="total_collectors",
+        )
+
+    @admin.display(description=_("Last used"), ordering="last_transaction_at")
+    def last_used_at(self, obj):
+        return obj.last_transaction_at or "-"
 
     def get_urls(self):
         urls = super().get_urls()
@@ -190,6 +238,13 @@ class EmailInboxAdmin(
             self.message_user(request, _("Unknown inbox."), messages.ERROR)
             return redirect("..")
 
+        if request.method == "POST":
+            if not self.has_change_permission(request, inbox):
+                raise PermissionDenied
+        elif not self.has_view_permission(request, inbox):
+            raise PermissionDenied
+
+        can_change = self.has_change_permission(request, inbox)
         collector = inbox.collectors.order_by("id").first() or EmailCollector(inbox=inbox)
         results = []
         if request.method == "POST":
@@ -215,6 +270,12 @@ class EmailInboxAdmin(
         else:
             form = EmailCollectorSetupForm(instance=collector)
             form.fields["additional_inboxes"].queryset = EmailInbox.objects.exclude(pk=inbox.pk)
+            if not can_change:
+                for field in form.fields.values():
+                    field.disabled = True
+                form.fields["test_now"].help_text = _(
+                    "Live testing is unavailable without change permission."
+                )
 
         context = {
             **self.admin_site.each_context(request),
@@ -224,6 +285,7 @@ class EmailInboxAdmin(
             "form": form,
             "collector": collector,
             "results": results,
+            "can_change": can_change,
             "change_url": reverse("admin:emails_emailinbox_change", args=[inbox.pk]),
         }
         return TemplateResponse(request, "admin/core/emailinbox/setup_collector.html", context)
@@ -241,10 +303,15 @@ class EmailInboxAdmin(
         return redirect("..")
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        """Inject admin utility links into the inbox change form context."""
+
         extra_context = extra_context or {}
         if object_id:
             extra_context["test_url"] = reverse(
                 "admin:emails_emailinbox_test", args=[object_id]
+            )
+            extra_context["setup_collector_url"] = reverse(
+                "admin:emails_emailinbox_setup_collector", args=[object_id]
             )
         return super().changeform_view(request, object_id, form_url, extra_context)
 
@@ -270,7 +337,7 @@ class EmailInboxAdmin(
                 self.message_user(request, f"{inbox}: {exc}", level=messages.ERROR)
 
     def _test_collectors(self, request, inbox):
-        for collector in inbox.collectors.all():
+        for collector in inbox.collectors.filter(is_enabled=True):
             before = collector.artifacts.count()
             try:
                 collector.collect(limit=1)

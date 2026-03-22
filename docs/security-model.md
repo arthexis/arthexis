@@ -2,6 +2,26 @@
 
 This project standardizes models that belong to either a single user or a security group using the `Ownable` abstract base class located in `apps/core/models/ownable.py`. Ownable models expose shared behaviors, admin helpers, and sigil shortcuts so that ownership works consistently across the platform.
 
+## Security group model
+
+Arthexis now centers staff permissions around five canonical security groups:
+
+1. **Site Operator** — staff with physical access to node hardware.
+2. **Network Operator** — staff who can coordinate or execute multi-node actions.
+3. **Product Developer** — staff who can submit codebase changes.
+4. **Release Manager** — staff who can merge changes and authorize releases.
+5. **External Agent** — minimal-access staff accounts for third-party collaborators.
+
+These groups are the default staff grouping model for the suite. App-specific staff access should be expressed by assigning permissions to one or more of these groups instead of creating a new staff taxonomy for each subsystem.
+
+### Public site users and avatars
+
+Public site users are modeled separately from staff. `ChatAvatar` instances behave like security-group identities for public-site and chat-facing workflows, but they do not replace the five canonical staff groups. In practice:
+
+- **Staff permissions** should flow through the five canonical security groups.
+- **Public site behavior** may depend on avatars and avatar-owned profiles.
+- **Ownable records** may still belong to a context-specific security group when a domain model truly requires it, but staff authorization should prefer the canonical set.
+
 ## Key behaviors
 
 - **Mutually exclusive owners:** An Ownable record must be owned by exactly one user *or* one security group. Validation runs in both the admin UI and model `clean()` method to block multiple owners and to require one owner on the models that use this security layer.

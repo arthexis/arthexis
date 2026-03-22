@@ -2,8 +2,12 @@ from django.contrib.auth.models import Group
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from .constants import STAFF_SECURITY_GROUP_NAMES
+
 
 class SecurityGroup(Group):
+    """Staff-facing security group model shared across the suite."""
+
     app = models.CharField(
         max_length=100,
         blank=True,
@@ -32,3 +36,17 @@ class SecurityGroup(Group):
         verbose_name = "Security Group"
         verbose_name_plural = "Security Groups"
         db_table = "core_securitygroup"
+
+    @property
+    def is_canonical_staff_group(self) -> bool:
+        """Return whether this group is one of the five canonical staff groups."""
+
+        return self.name in STAFF_SECURITY_GROUP_NAMES
+
+    @property
+    def security_model_label(self) -> str:
+        """Return a short label describing the group's place in the security model."""
+
+        if self.is_canonical_staff_group:
+            return _("Canonical staff security group")
+        return _("Context-specific security group")

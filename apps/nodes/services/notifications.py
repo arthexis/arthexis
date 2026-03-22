@@ -9,7 +9,7 @@ from urllib.parse import urlparse, urlunsplit
 
 from cryptography.hazmat.primitives import serialization
 
-from apps.nodes.models.core.utils import _format_upgrade_body
+from apps.nodes.models.utils import _format_upgrade_body
 
 logger = logging.getLogger(__name__)
 

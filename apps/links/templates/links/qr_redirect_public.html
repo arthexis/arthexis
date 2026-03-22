@@ -23,15 +23,13 @@
           {% endfor %}
         </ul>
       </nav>
-      <div class="card bg-body-tertiary border-0 shadow-sm mt-4 reader-qr-card">
-        <div class="card-body">
-          <div class="reader-qr-image">
-            <img
-              src="{{ qr_data_uri }}"
-              alt="{% trans 'QR code linking to this redirect' %}"
-              class="img-fluid"
-            >
-          </div>
+      <div class="reader-qr-card mt-4">
+        <div class="reader-qr-image">
+          <img
+            src="{{ qr_data_uri }}"
+            alt="{% trans 'QR code linking to this redirect' %}"
+            class="img-fluid"
+          >
         </div>
       </div>
     </div>

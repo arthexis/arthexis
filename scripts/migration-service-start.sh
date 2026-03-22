@@ -27,4 +27,4 @@ for env_file in *.env; do
   set +a
 done
 
-python "$BASE_DIR/scripts/migration_server.py"
+"$BASE_DIR/.venv/bin/python" -m utils.devtools.migration_server

@@ -45,6 +45,7 @@ STARTUP_REPORT_DEFAULT_LIMIT = 50
 STARTUP_CLOCK_DRIFT_THRESHOLD = timedelta(minutes=5)
 
 
+
 @dataclass(frozen=True)
 class SystemField:
     """Metadata describing a single entry on the system admin page."""
@@ -239,6 +240,11 @@ def _gather_info(auto_upgrade_next_check: Callable[[], str]) -> dict:
     running = False
     service_status = ""
     service = info["service"]
+
+    process_running, process_port = _detect_runserver_process()
+    if process_running:
+        detected_port = process_port
+
     if service and shutil.which("systemctl"):
         try:
             result = subprocess.run(
@@ -256,17 +262,14 @@ def _gather_info(auto_upgrade_next_check: Callable[[], str]) -> dict:
         except Exception:
             pass
     else:
-        process_running, process_port = _detect_runserver_process()
-        if process_running:
-            running = True
-            detected_port = process_port
+        running = process_running
 
-        if not running or detected_port is None:
-            probe_running, probe_port = _probe_ports(_port_candidates(default_port))
-            if probe_running:
-                running = True
-                if detected_port is None:
-                    detected_port = probe_port
+    if not running or detected_port is None:
+        probe_running, probe_port = _probe_ports(_port_candidates(default_port))
+        if probe_running:
+            running = True
+            if detected_port is None:
+                detected_port = probe_port
 
     info["running"] = running
     info["port"] = detected_port if detected_port is not None else default_port
@@ -391,3 +394,15 @@ def _read_startup_report(
         "limit": normalized_limit,
         "clock_warning": clock_warning,
     }
+
+# Legacy compatibility re-exports.
+# Prefer importing these from ``apps.core.system_ui``.
+build_nginx_report = _build_nginx_report
+build_services_report = _build_services_report
+build_system_fields = _build_system_fields
+format_timestamp = _format_timestamp
+gather_info = _gather_info
+read_startup_report = _read_startup_report
+suite_uptime_details = _suite_uptime_details
+system_boot_time = _system_boot_time
+systemd_unit_status = _systemd_unit_status

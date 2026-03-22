@@ -1,0 +1,1 @@
+"""Prototype management app."""

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable, Mapping, MutableMapping
 from urllib.parse import urlsplit
 
+from django.conf import settings
 from django.core.management.utils import get_random_secret_key
 from django.http import request as http_request
 from django.http.request import split_domain_port
@@ -21,6 +22,7 @@ from apps.celery.utils import resolve_celery_shutdown_timeout
 
 __all__ = [
     "extract_ip_from_host",
+    "install_normalize_forwarded_host",
     "install_validate_host_with_subnets",
     "load_secret_key",
     "load_site_config_allowed_hosts",
@@ -124,15 +126,30 @@ def strip_ipv6_brackets(host: str) -> str:
     return host
 
 
+def normalize_forwarded_host_header(host: str) -> str:
+    """Return the first host value from a forwarded-host header chain.
+
+    Parameters:
+        host: Raw ``X-Forwarded-Host`` header value, which may contain a
+            comma-separated proxy chain.
+
+    Returns:
+        The first host token with surrounding whitespace removed.
+    """
+
+    return (host or "").split(",", 1)[0].strip()
+
+
 def extract_ip_from_host(host: str):
     """Return an :mod:`ipaddress` object for ``host`` when possible."""
 
-    candidate = strip_ipv6_brackets(host)
+    normalized_host = (host or "").strip().rstrip(".")
+    candidate = strip_ipv6_brackets(normalized_host)
     try:
         return ipaddress.ip_address(candidate)
     except ValueError:
-        domain, _port = split_domain_port(host)
-        if domain and domain != host:
+        domain, _port = split_domain_port(normalized_host)
+        if domain and domain != normalized_host:
             candidate = strip_ipv6_brackets(domain)
             try:
                 return ipaddress.ip_address(candidate)
@@ -147,9 +164,11 @@ def validate_host_with_subnets(host, allowed_hosts, original_validate=None):
     if original_validate is None:
         original_validate = http_request.validate_host
 
-    ip = extract_ip_from_host(host)
+    normalized_host = (host or "").strip().rstrip(".")
+
+    ip = extract_ip_from_host(normalized_host)
     if ip is None:
-        return original_validate(host, allowed_hosts)
+        return original_validate(normalized_host, allowed_hosts)
 
     for pattern in allowed_hosts:
         try:
@@ -158,7 +177,37 @@ def validate_host_with_subnets(host, allowed_hosts, original_validate=None):
             continue
         if ip in network:
             return True
-    return original_validate(host, allowed_hosts)
+    return original_validate(normalized_host, allowed_hosts)
+
+
+def install_normalize_forwarded_host() -> None:
+    """Monkeypatch Django to normalize ``X-Forwarded-Host`` chains.
+
+    Parameters:
+        None.
+
+    Returns:
+        None.
+
+    Raised Exceptions:
+        None. This helper preserves Django's original behavior unless
+        ``USE_X_FORWARDED_HOST`` is enabled and the forwarded-host header is
+        present.
+    """
+
+    original_get_raw_host = http_request.HttpRequest._get_raw_host
+
+    def _patched(self):
+        if settings.USE_X_FORWARDED_HOST and self.META.get("HTTP_X_FORWARDED_HOST"):
+            forwarded_host = self.META["HTTP_X_FORWARDED_HOST"]
+            self.META["HTTP_X_FORWARDED_HOST"] = normalize_forwarded_host_header(forwarded_host)
+            try:
+                return original_get_raw_host(self)
+            finally:
+                self.META["HTTP_X_FORWARDED_HOST"] = forwarded_host
+        return original_get_raw_host(self)
+
+    http_request.HttpRequest._get_raw_host = _patched
 
 
 def install_validate_host_with_subnets() -> None:

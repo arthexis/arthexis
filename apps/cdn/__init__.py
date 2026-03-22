@@ -1,0 +1,1 @@
+"""CDN configuration app."""

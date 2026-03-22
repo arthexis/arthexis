@@ -1,5 +1,7 @@
 """Tests for charger status polling behavior in the status page context."""
 
+import uuid
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -148,6 +150,100 @@ def test_status_view_aggregate_includes_events_from_all_connectors(client):
     names = {item["event"] for item in events}
     assert "Connected connector-a" in names
     assert "Connected connector-b" in names
+
+
+@pytest.mark.django_db
+def test_status_view_aggregate_deduplicates_events_from_multiple_identities(client):
+    """Aggregate status view should collapse duplicate rows shared across keys."""
+
+    user = get_user_model().objects.create_user(
+        username="status-events-deduplicated", password="pass"
+    )
+    client.force_login(user)
+    charger = Charger.objects.create(
+        charger_id=f"STATUS-EVENTS-DEDUPE-{uuid.uuid4().hex[:8]}"
+    )
+    connector_a = Charger.objects.create(charger_id=charger.charger_id, connector_id=1)
+    connector_b = Charger.objects.create(charger_id=charger.charger_id, connector_id=2)
+
+    duplicate_message = (
+        'StatusNotification processed: {"connectorId": 1, "status": "Preparing"}'
+    )
+    store.add_log(
+        store.identity_key(charger.charger_id, connector_a.connector_id),
+        "Connected connector-a-unique",
+    )
+    store.add_log(
+        store.identity_key(charger.charger_id, connector_b.connector_id),
+        "Connected connector-b-unique",
+    )
+    store.add_log(
+        store.identity_key(charger.charger_id, None),
+        duplicate_message,
+        log_type="charger",
+    )
+    store.add_log(
+        store.identity_key(charger.charger_id, connector_a.connector_id),
+        duplicate_message,
+        log_type="charger",
+    )
+
+    response = client.get(reverse("ocpp:charger-status", args=[charger.charger_id]))
+
+    assert response.status_code == 200
+    events = response.context["non_transaction_events"]
+    deduped_status_rows = [
+        row
+        for row in events
+        if row["event"] == "Status" and row["details"] == "Preparing"
+    ]
+    assert len(deduped_status_rows) == 1
+    event_names = {row["event"] for row in events}
+    assert "Connected connector-a-unique" in event_names
+    assert "Connected connector-b-unique" in event_names
+
+
+@pytest.mark.django_db
+def test_status_view_aggregate_keeps_distinct_connector_status_rows(client):
+    """Aggregate status view should preserve connector-specific status rows."""
+
+    user = get_user_model().objects.create_user(
+        username="status-events-by-connector", password="pass"
+    )
+    client.force_login(user)
+    charger = Charger.objects.create(
+        charger_id=f"STATUS-EVENTS-BY-CONNECTOR-{uuid.uuid4().hex[:8]}"
+    )
+    connector_a = Charger.objects.create(charger_id=charger.charger_id, connector_id=1)
+    connector_b = Charger.objects.create(charger_id=charger.charger_id, connector_id=2)
+
+    connector_a_message = (
+        'StatusNotification processed: {"connectorId": 1, "status": "Available"}'
+    )
+    connector_b_message = (
+        'StatusNotification processed: {"connectorId": 2, "status": "Available"}'
+    )
+    store.add_log(
+        store.identity_key(charger.charger_id, connector_a.connector_id),
+        connector_a_message,
+        log_type="charger",
+    )
+    store.add_log(
+        store.identity_key(charger.charger_id, connector_b.connector_id),
+        connector_b_message,
+        log_type="charger",
+    )
+
+    response = client.get(reverse("ocpp:charger-status", args=[charger.charger_id]))
+
+    assert response.status_code == 200
+    events = response.context["non_transaction_events"]
+    connector_status_rows = [
+        row
+        for row in events
+        if row["event"] == "Status" and row["details"] == "Available"
+    ]
+    assert len(connector_status_rows) == 2
 
 
 @pytest.mark.django_db

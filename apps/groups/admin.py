@@ -41,13 +41,30 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
     form = SecurityGroupAdminForm
     change_form_template = "admin/groups/securitygroup/change_form.html"
     fieldsets = (
-        (None, {"fields": ("name", "app", "parent", "site_template", "users", "permissions")}),
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "security_model_label",
+                    "app",
+                    "parent",
+                    "site_template",
+                    "users",
+                    "permissions",
+                )
+            },
+        ),
     )
     filter_horizontal = ("permissions",)
-    list_display = ("name", "app", "parent", "site_template")
+    list_display = ("name", "security_model_label", "app", "parent", "site_template")
+    readonly_fields = ("security_model_label",)
     search_fields = ("name", "app", "parent__name")
 
     def get_readonly_fields(self, request, obj=None):
+        readonly_fields = list(super().get_readonly_fields(request, obj))
+        if "security_model_label" not in readonly_fields:
+            readonly_fields.append("security_model_label")
         if obj is not None and obj.pk == request.user.groups.first():  # type: ignore[comparison-overlap]
             messages.warning(
                 request,
@@ -55,7 +72,7 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
                     "You are editing the first group assigned to your account. Changing it may affect your permissions."
                 ),
             )
-        return super().get_readonly_fields(request, obj)
+        return readonly_fields
 
     def get_fieldsets(self, request, obj=None):
         fieldsets = list(super().get_fieldsets(request, obj))

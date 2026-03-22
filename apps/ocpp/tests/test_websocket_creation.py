@@ -26,7 +26,7 @@ from apps.ocpp.consumers import (
 from apps.ocpp.models import Charger, Simulator
 from apps.simulators import ChargePointSimulator
 from apps.rates.models import RateLimit
-from apps.sites.utils import CHARGE_STATION_MANAGER_GROUP_NAME
+from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME
 from config.asgi import application
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -88,18 +88,27 @@ def local_node(monkeypatch):
 
 @pytest.fixture
 def charge_point_features(local_node):
-    """Return local node plus suite feature used for OCPP admission tests."""
+    """Return local node plus suite features used for OCPP admission tests."""
 
-    suite_feature, _ = Feature.objects.get_or_create(
-        slug="ocpp-16-charge-point",
-        defaults={"display": "OCPP 1.6 Charge Point"},
-    )
-    suite_feature.is_enabled = True
-    suite_feature.save(update_fields=["is_enabled"])
-    return local_node, suite_feature
+    feature_map = {}
+    for slug, display in [
+        ("ocpp-16-charge-point", "OCPP 1.6 Charge Point"),
+        ("ocpp-201-charge-point", "OCPP 2.0.1 Charge Point"),
+        ("ocpp-21-charge-point", "OCPP 2.1 Charge Point"),
+    ]:
+        suite_feature, _ = Feature.objects.get_or_create(
+            slug=slug,
+            defaults={"display": display},
+        )
+        suite_feature.is_enabled = True
+        suite_feature.save(update_fields=["is_enabled"])
+        feature_map[slug] = suite_feature
+    return local_node, feature_map
+
+
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-def test_charge_point_created_for_new_websocket_path():
+def test_charge_point_created_for_new_websocket_path(charge_point_features):
     async def run_scenario():
         serial = "CP-UNUSED-PATH"
         path = f"/{serial}"
@@ -150,7 +159,7 @@ def test_ocpp_connection_allowed_without_legacy_charge_point_node_feature(
 ):
     """Regression: websocket admission no longer depends on node feature toggles."""
 
-    _local_node, _suite_feature = charge_point_features
+    _local_node, _suite_features = charge_point_features
 
     async def run_scenario():
         communicator = WebsocketCommunicator(application, "/CP-NODE-FEATURE-OFF")
@@ -163,20 +172,20 @@ def test_ocpp_connection_allowed_without_legacy_charge_point_node_feature(
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-def test_new_charge_point_allowed_when_creation_feature_disabled(
+def test_new_charge_point_blocked_when_creation_feature_disabled(
     charge_point_features,
 ):
-    """Regression: suite feature state must not block websocket admission."""
+    """New charge points are rejected when creation feature is disabled."""
 
-    _local_node, suite_feature = charge_point_features
-    suite_feature.is_enabled = False
-    suite_feature.save(update_fields=["is_enabled"])
+    _local_node, suite_features = charge_point_features
+    suite_features["ocpp-16-charge-point"].is_enabled = False
+    suite_features["ocpp-16-charge-point"].save(update_fields=["is_enabled"])
 
     async def run_scenario():
         communicator = WebsocketCommunicator(application, "/CP-CREATION-FEATURE-OFF")
+        communicator.scope["subprotocols"] = [OCPP_VERSION_16]
         connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
-        assert connected is True
-        await _finalize_communicator(communicator)
+        assert connected is False
 
     async_to_sync(run_scenario)()
 
@@ -186,13 +195,75 @@ def test_new_charge_point_allowed_when_creation_feature_disabled(
 def test_known_charge_point_allowed_when_creation_feature_disabled(
     charge_point_features,
 ):
-    _local_node, suite_feature = charge_point_features
-    suite_feature.is_enabled = False
-    suite_feature.save(update_fields=["is_enabled"])
+    _local_node, suite_features = charge_point_features
+    suite_features["ocpp-16-charge-point"].is_enabled = False
+    suite_features["ocpp-16-charge-point"].save(update_fields=["is_enabled"])
     Charger.objects.create(charger_id="CP-KNOWN", connector_id=None)
 
     async def run_scenario():
         communicator = WebsocketCommunicator(application, "/CP-KNOWN")
+        connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
+        assert connected is True
+        await _finalize_communicator(communicator)
+
+    async_to_sync(run_scenario)()
+
+
+@pytest.mark.slow
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_new_charge_point_allowed_without_local_node_when_feature_is_global(monkeypatch):
+    suite_feature, _ = Feature.objects.get_or_create(
+        slug="ocpp-16-charge-point",
+        defaults={"display": "OCPP 1.6 Charge Point"},
+    )
+    suite_feature.is_enabled = True
+    suite_feature.save(update_fields=["is_enabled"])
+    Node._local_cache.clear()
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: None))
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, "/CP-NODE-OPTIONAL")
+        communicator.scope["subprotocols"] = [OCPP_VERSION_16]
+        connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
+        assert connected is True
+        await _finalize_communicator(communicator)
+
+    async_to_sync(run_scenario)()
+
+
+@pytest.mark.slow
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_new_charge_point_blocked_when_requested_version_feature_missing_but_other_gate_exists(
+    charge_point_features,
+):
+    """Explicit protocol offers stay gated when only other version gates remain."""
+
+    _local_node, suite_features = charge_point_features
+    suite_features["ocpp-16-charge-point"].is_enabled = False
+    suite_features["ocpp-16-charge-point"].save(update_fields=["is_enabled"])
+    Feature.objects.filter(slug="ocpp-16-charge-point").delete()
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, "/CP-OCPP16-MISSING-GATE")
+        communicator.scope["subprotocols"] = [OCPP_VERSION_16]
+        connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
+        assert connected is False
+
+    async_to_sync(run_scenario)()
+
+
+@pytest.mark.slow
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_new_charge_point_without_subprotocol_uses_any_enabled_creation_feature(
+    charge_point_features,
+):
+    _local_node, suite_features = charge_point_features
+    suite_features["ocpp-16-charge-point"].is_enabled = False
+    suite_features["ocpp-16-charge-point"].save(update_fields=["is_enabled"])
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, "/CP-OCPP2-UNKNOWN")
+        communicator.scope["subprotocols"] = []
         connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
         await _finalize_communicator(communicator)
@@ -757,7 +828,7 @@ def test_basic_auth_accepts_charge_station_manager_user():
     manager = get_user_model().objects.create_user(
         username="auth-manager", password="secret"
     )
-    manager.groups.create(name=CHARGE_STATION_MANAGER_GROUP_NAME)
+    manager.groups.create(name=NETWORK_OPERATOR_GROUP_NAME)
     charger = Charger.objects.create(
         charger_id="AUTH-MANAGER", connector_id=None, ws_auth_user=authorized
     )

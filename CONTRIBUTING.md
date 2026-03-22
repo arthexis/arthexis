@@ -62,6 +62,41 @@ python manage.py runserver 0.0.0.0:8888
   ```bash
   python -m black .
   ```
+- Check import resolution with the canonical standalone checker:
+  ```bash
+  make check-imports
+  ```
+- Run **Pyright** for editor-friendly import diagnostics across the broader repository:
+  ```bash
+  pyright
+  ```
+- Run **MyPy** through the root developer workflow for the approved incremental rollout:
+  ```bash
+  make mypy
+  ```
+  This shells through `scripts/run_mypy.sh` so local runs and CI share the same noise-filtered, Django-aware invocation.
+  The repo-root `pyproject.toml` is the source of truth for the enforced MyPy baseline under
+  `[tool.mypy].files`, and the current approved paths are:
+  - `scripts/generate_requirements.py`
+  - `scripts/sort_pyproject_deps.py`
+  - `apps/protocols/`
+  - `apps/repos/github.py`
+  - `apps/repos/services/github.py`
+  - `apps/core/services/health.py`
+  - `apps/core/services/health_checks.py`
+  - `apps/core/modeling/`
+  - `apps/core/system_ui.py`
+  The local `.pre-commit-config.yaml` hook and the dedicated GitHub Actions MyPy workflow are
+  intentionally scoped to those validated paths so excluded apps stay out of the blocking
+  rollout until their own adoption step is complete.
+- When MyPy needs a suppression, prefer the narrowest possible scope: fix the types first,
+  then use a targeted `[[tool.mypy.overrides]]` entry or a line-level ignore with the exact
+  error code and a short reason. Avoid broad package-wide ignores for convenience, and record
+  persistent rollout debt in `docs/development/mypy-adoption-checklist.md`.
+- Treat **Pyright** and **MyPy** as complementary signals here: Pyright remains the wider,
+  editor-friendly import and flow-analysis pass, while MyPy is the blocking, Django-aware
+  enforcement gate for the explicitly approved rollout paths. Keep both green when touching
+  shared modules.
 - Prefer clear, well-documented functions over clever shortcuts.
 
 ### Documentation changes

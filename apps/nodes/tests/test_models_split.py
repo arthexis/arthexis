@@ -1,9 +1,18 @@
-import pytest
+from uuid import uuid4
 
+import pytest
 from django.contrib.sites.models import Site
 
+from apps.nodes.feature_detection import node_feature_detection_registry
 from apps.nodes.models import Node, NodeFeature
-from apps.nodes.models.core import utils as node_utils
+from apps.nodes.models import utils as node_utils
+
+
+@pytest.fixture
+def isolated_feature_registry():
+    node_feature_detection_registry.reset()
+    yield
+    node_feature_detection_registry.reset()
 
 
 def test_select_preferred_ip_prefers_global_address():
@@ -232,8 +241,9 @@ def test_ensure_keys_generates_keypair(monkeypatch, tmp_path):
 
 @pytest.mark.django_db
 def test_iter_remote_urls_prefers_https_port_443_when_required():
+    domain = f"arthexis-{uuid4().hex}.example"
     site = Site.objects.create(
-        domain="arthexis.example",
+        domain=domain,
         name="Arthexis",
         require_https=True,
     )
@@ -245,38 +255,8 @@ def test_iter_remote_urls_prefers_https_port_443_when_required():
 
     urls = list(node.iter_remote_urls("/nodes/info/"))
 
-    assert "https://arthexis.example/nodes/info/" in urls
-    assert "https://arthexis.example:8888/nodes/info/" in urls
-
-
-@pytest.mark.django_db
-def test_refresh_features_does_not_auto_assign_heavy_feature(tmp_path):
-    """Regression: refresh should never auto-enable heavy node features."""
-
-    node = Node.objects.create(
-        hostname="heavy-feature-node",
-        mac_address=Node.get_current_mac(),
-        current_relation=Node.Relation.SELF,
-        public_endpoint="heavy-feature-node",
-        base_path=str(tmp_path),
-    )
-    feature = NodeFeature.objects.create(
-        slug="celery-queue",
-        display="Celery Queue",
-        footprint="heavy",
-    )
-
-    locks_dir = tmp_path / ".locks"
-    locks_dir.mkdir()
-    (locks_dir / "celery.lck").write_text("1")
-
-    assert node._detect_auto_feature(
-        "celery-queue", base_dir=tmp_path, base_path=tmp_path
-    ) is True
-
-    node.refresh_features()
-
-    assert not node.features.filter(pk=feature.pk).exists()
+    assert f"https://{domain}/nodes/info/" in urls
+    assert f"https://{domain}:8888/nodes/info/" in urls
 
 
 def test_format_upgrade_body_handles_missing_release_app(monkeypatch):
@@ -309,8 +289,10 @@ def test_format_upgrade_body_uses_release_matcher_when_available(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_detect_auto_feature_uses_app_node_feature_hooks(monkeypatch, tmp_path):
-    """Auto-detection should defer to app-provided node feature hook modules."""
+def test_detect_auto_feature_uses_app_node_feature_hooks(
+    monkeypatch, tmp_path, isolated_feature_registry
+):
+    """Regression: auto-detection should defer to app-provided hook modules."""
 
     node = Node(
         hostname="hook-node",

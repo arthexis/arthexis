@@ -1,14 +1,17 @@
+from __future__ import annotations
+
 import base64
 from pathlib import Path
 
 from django.conf import settings
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
-from parler.admin import TranslatableAdmin, TranslatableTabularInline
+from parler.admin import TranslatableAdmin
 
 from apps.audio.models import AudioSample
 from apps.content.models import (
@@ -16,22 +19,18 @@ from apps.content.models import (
     ContentClassifier,
     ContentSample,
     ContentTag,
-    WebRequestSampler,
-    WebRequestStep,
     WebSample,
     WebSampleAttachment,
 )
-from apps.locals.user_data import EntityModelAdmin
-from apps.core.admin import OwnableAdminMixin
-from apps.nodes.models import Node, NodeFeature
-from apps.content.utils import capture_screenshot, save_screenshot
-from apps.video.models import VideoDevice
-from apps.video.utils import (
-    DEFAULT_CAMERA_RESOLUTION,
-    capture_rpi_snapshot,
+from apps.content.utils import (
+    capture_screenshot,
+    create_uploaded_content_sample,
+    save_screenshot,
 )
-from .web_sampling import execute_sampler
-
+from apps.locals.user_data import EntityModelAdmin
+from apps.nodes.models import Node, NodeFeature
+from apps.video.models import VideoDevice
+from apps.video.utils import DEFAULT_CAMERA_RESOLUTION, capture_rpi_snapshot
 
 @admin.register(ContentTag)
 class ContentTagAdmin(TranslatableAdmin, EntityModelAdmin):
@@ -67,6 +66,16 @@ class ContentSampleAdmin(EntityModelAdmin):
             file_path = settings.LOG_DIR / file_path
         return file_path
 
+    @staticmethod
+    def _wants_json_response(request) -> bool:
+        """Return whether the caller expects a JSON payload instead of a redirect."""
+
+        accept = request.headers.get("Accept", "")
+        return (
+            request.headers.get("X-Requested-With") == "XMLHttpRequest"
+            or "application/json" in accept
+        )
+
     def _get_sample_preview(self, obj: ContentSample | None) -> str | None:
         if not obj or obj.kind != ContentSample.IMAGE or not obj.path:
             return None
@@ -86,6 +95,11 @@ class ContentSampleAdmin(EntityModelAdmin):
                 "capture/",
                 self.admin_site.admin_view(self.capture_now),
                 name="nodes_contentsample_capture",
+            ),
+            path(
+                "drop-upload/",
+                self.admin_site.admin_view(self.drop_upload),
+                name="content_contentsample_drop_upload",
             ),
             path(
                 "<path:object_id>/take-snapshot/",
@@ -109,6 +123,43 @@ class ContentSampleAdmin(EntityModelAdmin):
         else:
             self.message_user(request, "Duplicate screenshot; not saved", messages.INFO)
         return redirect("..")
+
+    def drop_upload(self, request):
+        """Create a content sample from a drag-and-drop upload and return its admin URL."""
+
+        if request.method != "POST":
+            raise PermissionDenied
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+
+        uploaded_file = request.FILES.get("file")
+        if uploaded_file is None:
+            response = JsonResponse({"error": _("No file was uploaded.")}, status=400)
+            if self._wants_json_response(request):
+                return response
+            self.message_user(request, _("No file was uploaded."), level=messages.ERROR)
+            return redirect(request.META.get("HTTP_REFERER", reverse("admin:index")))
+
+        sample = create_uploaded_content_sample(
+            uploaded_file=uploaded_file,
+            user=request.user,
+        )
+        change_url = reverse("admin:content_contentsample_change", args=[sample.pk])
+
+        if self._wants_json_response(request):
+            return JsonResponse({"change_url": change_url, "sample_id": sample.pk}, status=201)
+
+        self.message_user(
+            request,
+            format_html(
+                '{} <a href="{}">{}</a>',
+                _("Content sample uploaded."),
+                change_url,
+                _("View sample"),
+            ),
+            level=messages.SUCCESS,
+        )
+        return redirect(change_url)
 
     def take_snapshot(self, request, object_id):
         del object_id
@@ -230,59 +281,27 @@ class ContentSampleAdmin(EntityModelAdmin):
         )
 
 
-class WebRequestStepInline(TranslatableTabularInline):
-    model = WebRequestStep
-    extra = 0
-    fields = (
-        "order",
-        "slug",
-        "name",
-        "curl_command",
-        "save_as_content",
-        "attachment_kind",
-    )
-
-
-@admin.register(WebRequestSampler)
-class WebRequestSamplerAdmin(OwnableAdminMixin, TranslatableAdmin, EntityModelAdmin):
-    list_display = (
-        "label",
-        "slug",
-        "sampling_period_minutes",
-        "last_sampled_at",
-        "user",
-        "group",
-    )
-    search_fields = ("label", "slug", "description")
-    list_filter = ("sampling_period_minutes", "user", "group")
-    actions = ("execute_selected_samplers",)
-    inlines = (WebRequestStepInline,)
-
-    @admin.action(description="Execute selected Samplers")
-    def execute_selected_samplers(self, request, queryset):
-        executed = 0
-        for sampler in queryset:
-            try:
-                execute_sampler(sampler, user=request.user)
-                executed += 1
-            except Exception as exc:  # pragma: no cover - admin message only
-                self.message_user(request, str(exc), level=messages.ERROR)
-        if executed:
-            self.message_user(
-                request,
-                f"Executed {executed} sampler(s)",
-                level=messages.SUCCESS,
-            )
-
-
 class WebSampleAttachmentInline(admin.TabularInline):
     model = WebSampleAttachment
     extra = 0
-    readonly_fields = ("content_sample", "uri", "step")
+    readonly_fields = (
+        "content_sample",
+        "legacy_step_id",
+        "step_slug",
+        "step_name",
+        "uri",
+    )
 
 
 @admin.register(WebSample)
 class WebSampleAdmin(EntityModelAdmin):
-    list_display = ("sampler", "executed_by", "created_at")
-    readonly_fields = ("document", "executed_by", "created_at")
+    list_display = ("sampler_label", "sampler_slug", "executed_by", "created_at")
+    readonly_fields = (
+        "legacy_sampler_id",
+        "sampler_slug",
+        "sampler_label",
+        "document",
+        "executed_by",
+        "created_at",
+    )
     inlines = (WebSampleAttachmentInline,)

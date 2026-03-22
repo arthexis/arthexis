@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import base64
 import ast
+import base64
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,9 +15,13 @@ import sys
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractBaseUser
+from django.db.utils import OperationalError, ProgrammingError
 
 from apps.desktop.models import DesktopShortcut, RegisteredExtension
 from apps.nodes.models import Node
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -34,6 +39,7 @@ class DesktopSyncResult:
     installed: int = 0
     skipped: int = 0
     removed: int = 0
+    skipped_db_unavailable: bool = False
 
 
 def build_windows_registry_command(extension: RegisteredExtension) -> str:
@@ -63,7 +69,11 @@ def register_extension_with_os(extension: RegisteredExtension) -> RegistrationRe
             ),
         )
 
-    import winreg  # type: ignore[import-not-found]
+    try:
+        "optional-import: winreg is only available on Windows."
+        import winreg  # type: ignore[import-not-found]
+    except ImportError as exc:  # pragma: no cover - defensive on non-standard Windows envs
+        return RegistrationResult(False, f"Windows registry module unavailable: {exc}")
 
     prog_id = f"Arthexis.Desktop{extension.extension.lstrip('.').upper()}"
     command_value = build_windows_registry_command(extension)
@@ -124,6 +134,22 @@ def detect_desktop_dir(base_dir: Path, username: str) -> Path | None:
 
     desktop_candidate.mkdir(parents=True, exist_ok=True)
     return desktop_candidate
+
+
+def detect_applications_dir(base_dir: Path, username: str) -> Path | None:
+    """Return the local applications launcher directory for ``username``."""
+
+    base_dir = Path(base_dir).resolve()
+    if not str(base_dir).startswith("/home/"):
+        return None
+
+    home_dir = Path("/home") / username
+    if not home_dir.exists():
+        return None
+
+    applications_dir = home_dir / ".local" / "share" / "applications"
+    applications_dir.mkdir(parents=True, exist_ok=True)
+    return applications_dir
 
 
 def user_has_desktop_ui(base_dir: Path, username: str) -> bool:
@@ -227,6 +253,42 @@ def _build_exec(shortcut: DesktopShortcut, port: int) -> str:
     return shlex.join([sys.executable, "-m", "webbrowser", "-t", target_url])
 
 
+def _shortcut_target_dirs(shortcut: DesktopShortcut, *, base_dir: Path, username: str) -> list[Path]:
+    """Resolve all target directories for ``shortcut`` launcher file output."""
+
+    dirs: list[Path] = []
+    if shortcut.install_location in {
+        DesktopShortcut.InstallLocation.DESKTOP,
+        DesktopShortcut.InstallLocation.BOTH,
+    }:
+        desktop_dir = detect_desktop_dir(base_dir, username)
+        if desktop_dir is not None:
+            dirs.append(desktop_dir)
+
+    if shortcut.install_location in {
+        DesktopShortcut.InstallLocation.APPLICATIONS,
+        DesktopShortcut.InstallLocation.BOTH,
+    }:
+        applications_dir = detect_applications_dir(base_dir, username)
+        if applications_dir is not None:
+            dirs.append(applications_dir)
+
+    return dirs
+
+
+def _all_managed_dirs(*, base_dir: Path, username: str) -> list[Path]:
+    """Return all known directories where managed launchers may exist."""
+
+    dirs: list[Path] = []
+    desktop_dir = detect_desktop_dir(base_dir, username)
+    applications_dir = detect_applications_dir(base_dir, username)
+    if desktop_dir is not None:
+        dirs.append(desktop_dir)
+    if applications_dir is not None:
+        dirs.append(applications_dir)
+    return dirs
+
+
 def should_install_shortcut(
     shortcut: DesktopShortcut,
     *,
@@ -324,8 +386,14 @@ def render_shortcut_desktop_entry(shortcut: DesktopShortcut, *, exec_value: str,
 def sync_desktop_shortcuts(*, base_dir: Path, username: str, port: int, remove_stale: bool = True) -> DesktopSyncResult:
     """Synchronize desktop shortcut files from ``DesktopShortcut`` records."""
 
-    desktop_dir = detect_desktop_dir(base_dir, username)
-    if desktop_dir is None:
+    try:
+        DesktopShortcut.objects.exists()
+    except (OperationalError, ProgrammingError) as exc:
+        logger.warning("Desktop shortcut sync skipped because database is unavailable: %s", exc)
+        return DesktopSyncResult(skipped_db_unavailable=True)
+
+    managed_dirs = _all_managed_dirs(base_dir=base_dir, username=username)
+    if not managed_dirs:
         return DesktopSyncResult(skipped=DesktopShortcut.objects.count())
 
     installed_files: set[Path] = set()
@@ -333,34 +401,36 @@ def sync_desktop_shortcuts(*, base_dir: Path, username: str, port: int, remove_s
 
     shortcuts = DesktopShortcut.objects.prefetch_related("required_features", "required_groups")
     for shortcut in shortcuts:
-        target = desktop_dir / f"{shortcut.desktop_filename}.desktop"
+        target_dirs = _shortcut_target_dirs(shortcut, base_dir=base_dir, username=username)
+        targets = [target_dir / f"{shortcut.desktop_filename}.desktop" for target_dir in target_dirs]
         if not should_install_shortcut(shortcut, base_dir=base_dir, username=username):
             result.skipped += 1
-            if target.exists():
-                target.unlink()
-                result.removed += 1
+            for target in targets:
+                if target.exists():
+                    target.unlink()
+                    result.removed += 1
             continue
 
         exec_value = _build_exec(shortcut, port)
         icon_value = _icon_value(shortcut, username)
         rendered = render_shortcut_desktop_entry(shortcut, exec_value=exec_value, icon_value=icon_value)
-        target.write_text(rendered, encoding="utf-8")
-        target.chmod(0o755)
-        installed_files.add(target)
-        result.installed += 1
+        for target in targets:
+            target.write_text(rendered, encoding="utf-8")
+            target.chmod(0o755)
+            installed_files.add(target)
+            result.installed += 1
 
     if remove_stale:
-        for stale in desktop_dir.glob("*.desktop"):
-            try:
-                is_managed = "X-Arthexis-Managed=true" in stale.read_text(encoding="utf-8")
-            except OSError:
-                is_managed = False
-            if not is_managed:
-                continue
-            if stale not in installed_files and not DesktopShortcut.objects.filter(
-                desktop_filename=stale.stem
-            ).exists():
-                stale.unlink(missing_ok=True)
-                result.removed += 1
+        for managed_dir in managed_dirs:
+            for stale in managed_dir.glob("*.desktop"):
+                try:
+                    is_managed = "X-Arthexis-Managed=true" in stale.read_text(encoding="utf-8")
+                except OSError:
+                    is_managed = False
+                if not is_managed:
+                    continue
+                if stale not in installed_files:
+                    stale.unlink(missing_ok=True)
+                    result.removed += 1
 
     return result

@@ -50,6 +50,8 @@ from webauthn.helpers.exceptions import (
 from apps.chats.models import ChatSession
 from apps.core.models import InviteLead
 from apps.emails import mailer
+from apps.features.utils import is_suite_feature_enabled
+from apps.meta.models import WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG
 from apps.nodes.models import Node
 from apps.nodes.utils import ensure_feature_enabled
 from apps.users.models import PasskeyCredential
@@ -69,7 +71,7 @@ PASSKEY_CHALLENGE_SESSION_KEY = "passkey_login_challenge"
 
 
 class _GraphvizDeprecationFilter(logging.Filter):
-    """Filter out Graphviz debug logs about positional arg deprecations."""
+    """Filter out Graphviz debug logs about positional arg legacy warnings."""
 
     _MESSAGE_PREFIX = "deprecate positional args:"
 
@@ -894,6 +896,8 @@ def admin_user_tools(request):
 # WhatsApp callbacks originate outside the site and cannot include CSRF tokens.
 @csrf_exempt
 def whatsapp_webhook(request):
+    """Accept site-level WhatsApp webhook payloads and bridge valid traffic into chat."""
+
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
     if not getattr(settings, "PAGES_WHATSAPP_ENABLED", False):
@@ -908,6 +912,16 @@ def whatsapp_webhook(request):
     if not from_number or not text:
         return HttpResponseBadRequest(
             _("Missing WhatsApp sender or message body."),
+        )
+    if not is_suite_feature_enabled(WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG, default=True):
+        return JsonResponse(
+            {
+                "status": "accepted",
+                "detail": _(
+                    "WhatsApp chat bridge is disabled; payload accepted without session activity."
+                ),
+            },
+            status=202,
         )
     display_name = (payload.get("display_name") or from_number).strip()
 

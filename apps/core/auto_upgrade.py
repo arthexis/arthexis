@@ -260,6 +260,12 @@ def set_auto_upgrade_fast_lane(enabled: bool, base_dir: Path | None = None) -> b
 
 
 def _resolve_policy_interval_minutes() -> int:
+    """Resolve the active auto-upgrade interval in minutes.
+
+    Returns:
+        int: The smallest active policy interval, clamped to at least one minute.
+    """
+
     try:  # pragma: no cover - optional dependency failures
         from apps.nodes.models import Node, UpgradePolicy
         from django.db import DatabaseError
@@ -286,6 +292,31 @@ def _resolve_policy_interval_minutes() -> int:
     if not intervals:
         return AUTO_UPGRADE_INTERVAL_MINUTES.get("unstable", AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES)
     return max(1, min(intervals))
+
+
+def _get_or_create_interval_schedule(*, every: int, period: str):
+    """Return a unique beat interval schedule for the provided cadence.
+
+    Parameters:
+        every: The numeric interval amount to match.
+        period: The django-celery-beat period constant to match.
+
+    Returns:
+        IntervalSchedule: An existing schedule when one already matches, otherwise
+        a newly created schedule.
+
+    Raises:
+        OperationalError: Propagated when the database is not ready.
+        ProgrammingError: Propagated when the beat tables are not available yet.
+    """
+
+    from django_celery_beat.models import IntervalSchedule
+
+    queryset = IntervalSchedule.objects.filter(every=every, period=period).order_by("pk")
+    schedule = queryset.first()
+    if schedule is not None:
+        return schedule
+    return IntervalSchedule.objects.create(every=every, period=period)
 
 
 def ensure_auto_upgrade_periodic_task(
@@ -323,8 +354,9 @@ def ensure_auto_upgrade_periodic_task(
 
     try:
         description = "Upgrade policy checks run every %s minutes." % interval_minutes
-        schedule, _ = IntervalSchedule.objects.get_or_create(
-            every=interval_minutes, period=IntervalSchedule.MINUTES
+        schedule = _get_or_create_interval_schedule(
+            every=interval_minutes,
+            period=IntervalSchedule.MINUTES,
         )
         defaults = {
             "interval": schedule,

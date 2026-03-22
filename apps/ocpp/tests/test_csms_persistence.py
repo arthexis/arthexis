@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 from django.utils import timezone
 
 from apps.ocpp.consumers.csms.persistence import (
     persist_legacy_meter_values,
+    sync_charger_error_security_event,
     update_availability_state_records,
     update_status_notification_records,
 )
 from apps.ocpp.models import Charger
+from apps.ops.models import SecurityAlertEvent
 
 
 @pytest.fixture
@@ -199,3 +203,147 @@ def test_persist_legacy_meter_values_updates_only_targeted_charger(charger_rows)
 
     assert connector_two.last_meter_values == payload
     assert other_aggregate.last_meter_values == {}
+
+
+@pytest.mark.django_db
+def test_sync_charger_error_security_event_records_faulted_status(charger_rows):
+    """Faulted charger statuses should create active ops security events."""
+
+    timestamp = timezone.now()
+
+    sync_charger_error_security_event(
+        charger_id="CP-100",
+        connector_value=1,
+        status="Faulted",
+        error_code="ConnectorLockFailure",
+        status_timestamp=timestamp,
+    )
+
+    event = SecurityAlertEvent.objects.get(key="ocpp-charger-CP-100-1-error")
+
+    assert event.is_active is True
+    assert event.occurrence_count == 1
+    assert event.last_occurred_at == timestamp
+    assert "Faulted" in event.message
+
+
+@pytest.mark.django_db
+def test_sync_charger_error_security_event_avoids_duplicate_same_timestamp(charger_rows):
+    """Repeated payloads with same timestamp should not inflate occurrence counts."""
+
+    timestamp = timezone.now()
+
+    sync_charger_error_security_event(
+        charger_id="CP-100",
+        connector_value=2,
+        status="Faulted",
+        error_code="E-CONN-2",
+        status_timestamp=timestamp,
+    )
+    sync_charger_error_security_event(
+        charger_id="CP-100",
+        connector_value=2,
+        status="Faulted",
+        error_code="E-CONN-2",
+        status_timestamp=timestamp,
+    )
+
+    event = SecurityAlertEvent.objects.get(key="ocpp-charger-CP-100-2-error")
+    assert event.occurrence_count == 1
+
+
+@pytest.mark.django_db
+def test_sync_charger_error_security_event_deactivates_when_status_recovers(charger_rows):
+    """Recovered chargers should deactivate previously active OCPP security events."""
+
+    timestamp = timezone.now()
+
+    sync_charger_error_security_event(
+        charger_id="CP-100",
+        connector_value=None,
+        status="Faulted",
+        error_code="InternalError",
+        status_timestamp=timestamp,
+    )
+    sync_charger_error_security_event(
+        charger_id="CP-100",
+        connector_value=None,
+        status="Available",
+        error_code="NoError",
+        status_timestamp=timestamp + timedelta(minutes=1),
+    )
+
+    event = SecurityAlertEvent.objects.get(key="ocpp-charger-CP-100-aggregate-error")
+    assert event.is_active is False
+
+
+@pytest.mark.django_db
+def test_sync_charger_error_security_event_ignores_stale_fault_after_recovery(charger_rows):
+    """Older fault replays should not reactivate an event after a newer recovery."""
+
+    faulted_at = timezone.now()
+    recovered_at = faulted_at + timedelta(minutes=2)
+
+    sync_charger_error_security_event(
+        charger_id="CP-100",
+        connector_value=1,
+        status="Faulted",
+        error_code="ConnectorLockFailure",
+        status_timestamp=faulted_at,
+    )
+    sync_charger_error_security_event(
+        charger_id="CP-100",
+        connector_value=1,
+        status="Available",
+        error_code="NoError",
+        status_timestamp=recovered_at,
+    )
+    sync_charger_error_security_event(
+        charger_id="CP-100",
+        connector_value=1,
+        status="Faulted",
+        error_code="ConnectorLockFailure",
+        status_timestamp=faulted_at,
+    )
+
+    event = SecurityAlertEvent.objects.get(key="ocpp-charger-CP-100-1-error")
+    assert event.is_active is False
+    assert event.last_occurred_at == recovered_at
+
+
+@pytest.mark.django_db
+def test_sync_charger_error_security_event_supports_long_charger_id_key(charger_rows):
+    """Long charger IDs should persist without exceeding key length limits."""
+
+    long_charger_id = "C" * 100
+
+    sync_charger_error_security_event(
+        charger_id=long_charger_id,
+        connector_value=None,
+        status="Faulted",
+        error_code="InternalError",
+        status_timestamp=timezone.now(),
+    )
+
+    event = SecurityAlertEvent.objects.get(key=f"ocpp-charger-{long_charger_id}-aggregate-error")
+    assert len(event.key) > 120
+
+
+@pytest.mark.django_db
+def test_sync_charger_error_security_event_hashes_very_long_key(charger_rows):
+    """Very long charger IDs should be reduced to a safe deterministic key."""
+
+    long_charger_id = "CHARGER-" + ("X" * 300)
+
+    sync_charger_error_security_event(
+        charger_id=long_charger_id,
+        connector_value="connector-with-very-long-label-" + ("Y" * 120),
+        status="Faulted",
+        error_code="InternalError",
+        status_timestamp=timezone.now(),
+    )
+
+    event = SecurityAlertEvent.objects.get()
+    assert len(event.key) <= 255
+    assert event.key.startswith("ocpp-charger-")
+    assert event.key.endswith("-error")

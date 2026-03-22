@@ -615,9 +615,9 @@ def run_deferred_node_migrations(
     )
 
     role_map = {
-        "Terminal": "TERM",
+        "Terminal": "TRMN",
         "Control": "CTRL",
-        "Satellite": "SATL",
+        "Satellite": "STLT",
         "Watchtower": "WTTW",
         "Constellation": "CONS",
     }

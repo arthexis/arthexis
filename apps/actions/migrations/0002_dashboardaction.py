@@ -4,46 +4,12 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
-def seed_pyxel_open_viewport_action(apps, schema_editor):
-    """Seed the Pyxel dashboard row action as a declarative DashboardAction."""
-
-    content_type_model = apps.get_model("contenttypes", "ContentType")
-    dashboard_action_model = apps.get_model("actions", "DashboardAction")
-    content_type, _created = content_type_model.objects.get_or_create(app_label="pyxel", model="pyxelviewport")
-
-    dashboard_action_model.objects.update_or_create(
-        content_type=content_type,
-        slug="open-viewport",
-        defaults={
-            "label": "Open Viewport",
-            "http_method": "post",
-            "target_type": "admin_url",
-            "admin_url_name": "admin-pyxel-open-viewport",
-            "caller_sigil": "pyxel.dashboard",
-            "is_active": True,
-            "order": 0,
-        },
-    )
-
-
-def unseed_pyxel_open_viewport_action(apps, schema_editor):
-    """Remove the seeded Pyxel declarative dashboard action."""
-
-    content_type_model = apps.get_model("contenttypes", "ContentType")
-    dashboard_action_model = apps.get_model("actions", "DashboardAction")
-    content_type = content_type_model.objects.filter(app_label="pyxel", model="pyxelviewport").first()
-    if content_type is None:
-        return
-    dashboard_action_model.objects.filter(content_type=content_type, slug="open-viewport").delete()
-
-
 class Migration(migrations.Migration):
 
     dependencies = [
         ("actions", "0001_initial"),
         ("contenttypes", "0002_remove_content_type_name"),
         ("recipes", "0003_recipeproduct"),
-        ("pyxel", "0003_seed_default_viewports"),
     ]
 
     operations = [
@@ -125,5 +91,4 @@ class Migration(migrations.Migration):
                 ],
             },
         ),
-        migrations.RunPython(seed_pyxel_open_viewport_action, unseed_pyxel_open_viewport_action),
     ]

@@ -53,13 +53,13 @@ def security_groups(request: HttpRequest) -> JsonResponse:
 @csrf_exempt
 @require_POST
 def invoke_action(request: HttpRequest, slug: str) -> JsonResponse:
-    """Invoke a remote action by slug if token user has access."""
+    """Validate and echo a remote action invocation for an authorized bearer token."""
 
     token, error_response = _resolve_bearer_token(request)
     if error_response:
         return error_response
 
-    action = RemoteAction.objects.filter(slug=slug, is_active=True).select_related("recipe", "user", "group").first()
+    action = RemoteAction.objects.filter(slug=slug, is_active=True).select_related("user", "group").first()
     if action is None:
         return JsonResponse({"detail": "Remote action not found."}, status=404)
 
@@ -81,9 +81,8 @@ def invoke_action(request: HttpRequest, slug: str) -> JsonResponse:
     if not _is_json_primitive(args) or not _is_json_primitive(kwargs):
         return JsonResponse({"detail": "Payload args/kwargs must be JSON primitive values only."}, status=400)
 
-    try:
-        execution = action.recipe.execute(*args, **kwargs)
-    except Exception as exc:
-        return JsonResponse({"detail": str(exc)}, status=400)
-
-    return JsonResponse({"action": action.slug, "result": execution.result})
+    return JsonResponse({
+        "action": action.slug,
+        "args": args,
+        "kwargs": kwargs,
+    })

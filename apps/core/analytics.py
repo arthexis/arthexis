@@ -13,14 +13,34 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.utils import timezone
 
+from apps.features.utils import is_suite_feature_enabled
+
 from .models import UsageEvent
 
 logger = logging.getLogger(__name__)
 _state = threading.local()
+USAGE_ANALYTICS_FEATURE_SLUG = "usage-analytics"
 
 
 def usage_analytics_enabled() -> bool:
-    return bool(getattr(settings, "ENABLE_USAGE_ANALYTICS", False))
+    """Return whether usage analytics collection is currently enabled.
+
+    The suite feature is authoritative when the feature table is available. Early
+    bootstrap states still fall back to ``settings.ENABLE_USAGE_ANALYTICS`` via the
+    defensive suite-feature helper.
+    """
+
+    default_enabled = bool(getattr(settings, "ENABLE_USAGE_ANALYTICS", False))
+    return is_suite_feature_enabled(
+        USAGE_ANALYTICS_FEATURE_SLUG,
+        default=default_enabled,
+    )
+
+
+def usage_analytics_collection_paused() -> bool:
+    """Return whether collection is paused while historical analytics stay viewable."""
+
+    return not usage_analytics_enabled()
 
 
 def _derive_app_label_from_model(model_label: str) -> str:
@@ -113,6 +133,10 @@ def _flush_buffer():
     if not buffer:
         return
 
+    if not usage_analytics_enabled():
+        _reset_buffer()
+        return
+
     try:
         for (model_label, action), payload in buffer.items():
             metadata = dict(payload.get("metadata") or {})
@@ -169,6 +193,12 @@ def _usage_post_delete(sender, instance, **kwargs):
 
 
 def build_usage_summary(days: int = 30, queryset: QuerySet[UsageEvent] | None = None) -> dict:
+    """Build a usage analytics summary for the requested time window.
+
+    Historical analytics remain viewable even when collection is disabled, so the
+    returned payload also reports the current collection state.
+    """
+
     qs = queryset if queryset is not None else UsageEvent.objects.all()
     start = timezone.now() - datetime.timedelta(days=max(days, 1))
     qs = qs.filter(timestamp__gte=start)
@@ -209,6 +239,8 @@ def build_usage_summary(days: int = 30, queryset: QuerySet[UsageEvent] | None = 
         ]
 
     return {
+        "analytics_enabled": usage_analytics_enabled(),
+        "collection_paused": usage_analytics_collection_paused(),
         "range_start": start.isoformat(),
         "daily_counts": _serialize(daily_counts, {"day": "day", "count": "count"}),
         "weekly_counts": _serialize(weekly_counts, {"week": "week", "count": "count"}),
