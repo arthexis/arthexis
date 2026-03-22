@@ -127,3 +127,63 @@ def test_setup_collector_tool_rejects_multiple_selected_inboxes(admin_client, ad
     assert response.status_code == 200
     messages = list(response.context["messages"])
     assert any("Select exactly one inbox to start setup." in str(message) for message in messages)
+
+
+@pytest.mark.integration
+@pytest.mark.django_db
+def test_setup_collector_view_forbids_staff_without_view_permission(client, admin_user):
+    """Staff users without inbox view permission cannot open setup wizard."""
+
+    inbox = EmailInbox.objects.create(
+        user=admin_user,
+        username="secured-inbox@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+    )
+    staff_user = User.objects.create_user(username="staff-no-view", is_staff=True)
+    client.force_login(staff_user)
+
+    response = client.get(
+        reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk])
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.integration
+@pytest.mark.django_db
+def test_setup_collector_view_forbids_staff_without_change_permission(client, admin_user):
+    """Staff users without inbox change permission cannot update collectors."""
+
+    inbox = EmailInbox.objects.create(
+        user=admin_user,
+        username="secured-update@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+    )
+    staff_user = User.objects.create_user(username="staff-no-change", is_staff=True)
+    client.force_login(staff_user)
+
+    response = client.post(
+        reverse("admin:emails_emailinbox_setup_collector", args=[inbox.pk]),
+        {
+            "name": "Blocked Collector",
+            "subject": "invoice",
+            "sender": "sender@example.com",
+            "body": "",
+            "fragment": "",
+            "use_regular_expressions": "",
+            "notification_mode": EmailCollector.NOTIFY_NONE,
+            "notification_subject": "",
+            "notification_message": "",
+            "notification_recipients": "",
+            "notification_recipe": "",
+            "additional_inboxes": [],
+            "test_now": "on",
+        },
+    )
+
+    assert response.status_code == 403
+    assert not inbox.collectors.filter(name="Blocked Collector").exists()

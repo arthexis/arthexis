@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib import admin, messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -183,6 +183,12 @@ class EmailInboxAdmin(
         if not inbox:
             self.message_user(request, _("Unknown inbox."), messages.ERROR)
             return redirect("..")
+
+        if request.method == "POST":
+            if not self.has_change_permission(request, inbox):
+                raise PermissionDenied
+        elif not self.has_view_permission(request, inbox):
+            raise PermissionDenied
 
         collector = inbox.collectors.order_by("id").first() or EmailCollector(inbox=inbox)
         results = []
