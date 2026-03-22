@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -30,8 +30,7 @@ def test_evergo_user_rejects_empty_email_at_database_level():
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.requests.Session")
-def test_test_login_populates_remote_fields(mock_session_cls):
+def test_test_login_populates_remote_fields(monkeypatch):
     """Evergo login should persist the expected profile fields from the API payload."""
     User = get_user_model()
     suite_user = User.objects.create_user(username="suite", email="suite@example.com")
@@ -41,9 +40,7 @@ def test_test_login_populates_remote_fields(mock_session_cls):
         evergo_password="top-secret",  # noqa: S106
     )
 
-    mock_response = Mock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
+    response_payload = {
         "id": 58642,
         "name": "Reginaldo Gutiérrez",
         "email": "reginaldocts@evergo.com",
@@ -62,12 +59,18 @@ def test_test_login_populates_remote_fields(mock_session_cls):
             }
         ],
     }
-    mock_session = mock_session_cls.return_value.__enter__.return_value
-    mock_prime_response = Mock()
-    mock_prime_response.raise_for_status.return_value = None
-    mock_session.get.return_value = mock_prime_response
-    mock_session.cookies.get.return_value = "mocked-xsrf-token"
-    mock_session.post.return_value = mock_response
+    class _FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return response_payload
+
+    monkeypatch.setattr(EvergoUser, "_prime_session", lambda self, **_: "token")
+    monkeypatch.setattr(
+        "apps.evergo.models.user.requests.Session",
+        lambda: Mock(__enter__=Mock(return_value=Mock(post=Mock(return_value=_FakeResponse()))), __exit__=Mock(return_value=False)),
+    )
 
     result = profile.test_login()
     profile.refresh_from_db()
@@ -90,8 +93,7 @@ def test_test_login_populates_remote_fields(mock_session_cls):
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.requests.Session")
-def test_test_login_raises_specific_error_for_419(mock_session_cls):
+def test_test_login_raises_specific_error_for_419(monkeypatch):
     """Evergo login should surface a specific CSRF/session message when backend responds 419."""
     User = get_user_model()
     suite_user = User.objects.create_user(
@@ -103,23 +105,25 @@ def test_test_login_raises_specific_error_for_419(mock_session_cls):
         evergo_password="top-secret",  # noqa: S106
     )
 
-    mock_session = mock_session_cls.return_value.__enter__.return_value
-    mock_prime_response = Mock()
-    mock_prime_response.raise_for_status.return_value = None
-    mock_session.get.return_value = mock_prime_response
-    mock_session.cookies.get.return_value = "mocked-xsrf-token"
+    class _FakeResponse:
+        status_code = 419
 
-    mock_response = Mock()
-    mock_response.status_code = 419
-    mock_session.post.return_value = mock_response
+        @staticmethod
+        def json():
+            return {}
+
+    monkeypatch.setattr(EvergoUser, "_prime_session", lambda self, **_: "token")
+    monkeypatch.setattr(
+        "apps.evergo.models.user.requests.Session",
+        lambda: Mock(__enter__=Mock(return_value=Mock(post=Mock(return_value=_FakeResponse()))), __exit__=Mock(return_value=False)),
+    )
 
     with pytest.raises(EvergoAPIError, match="status 419"):
         profile.test_login()
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.requests.Session")
-def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_cls):
+def test_load_orders_syncs_only_assigned_orders_and_catalog_values(monkeypatch):
     """Load orders should upsert assigned orders and refresh learned dropdown field values."""
     User = get_user_model()
     suite_user = User.objects.create_user(
@@ -132,21 +136,9 @@ def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_
         evergo_user_id=58642,
     )
 
-    mock_session = mock_session_cls.return_value.__enter__.return_value
-    mock_prime_response = Mock()
-    mock_prime_response.raise_for_status.return_value = None
-    mock_session.get.return_value = mock_prime_response
-    mock_session.cookies.get.return_value = "mocked-xsrf-token"
-
-    def _response(payload):
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = payload
-        return response
-
-    def request_side_effect(*, method, url, **kwargs):
+    def request_side_effect(self, *, session, timeout, method, url, **kwargs):
         if url.endswith("/login"):
-            return _response(
+            return (
                 {
                     "id": 58642,
                     "name": "Reginaldo Gutiérrez",
@@ -155,9 +147,9 @@ def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_
                 }
             )
         if "catalogs/sitios/all" in url:
-            return _response([{"id": 36, "nombre": "Geely"}])
+            return [{"id": 36, "nombre": "Geely"}]
         if "search-ingenieros" in url:
-            return _response(
+            return (
                 [
                     {
                         "id": 58642,
@@ -167,9 +159,9 @@ def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_
                 ]
             )
         if "catalogs/orden-estatus" in url:
-            return _response([{"id": 8, "nombre": "Orden concluida"}])
+            return [{"id": 8, "nombre": "Orden concluida"}]
         if "ordenes/instalador-coordinador" in url:
-            return _response(
+            return (
                 {
                     "current_page": 1,
                     "last_page": 1,
@@ -222,8 +214,8 @@ def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_
                 }
             )
         raise AssertionError(f"Unexpected URL {url}")
-
-    mock_session.request.side_effect = request_side_effect
+    monkeypatch.setattr(EvergoUser, "_login_session", lambda self, **_: None)
+    monkeypatch.setattr(EvergoUser, "_request_json", request_side_effect)
 
     created, updated = profile.load_orders()
 
@@ -252,9 +244,8 @@ def test_load_orders_syncs_only_assigned_orders_and_catalog_values(mock_session_
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.requests.Session")
 def test_load_customers_from_queries_creates_customer_and_placeholder_order(
-    mock_session_cls,
+    monkeypatch,
 ):
     """Regression: customer wizard should create customer rows and provisional SO placeholders."""
     User = get_user_model()
@@ -268,26 +259,14 @@ def test_load_customers_from_queries_creates_customer_and_placeholder_order(
         evergo_user_id=58642,
     )
 
-    mock_session = mock_session_cls.return_value.__enter__.return_value
-    mock_prime_response = Mock()
-    mock_prime_response.raise_for_status.return_value = None
-    mock_session.get.return_value = mock_prime_response
-    mock_session.cookies.get.return_value = "mocked-xsrf-token"
-
-    def _response(payload):
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = payload
-        return response
-
-    def request_side_effect(*, method, url, params=None, **kwargs):
+    def request_side_effect(self, *, session, timeout, method, url, params=None, **kwargs):
         if url.endswith("/login"):
-            return _response(
+            return (
                 {"id": 58642, "name": "Reginaldo", "email": "reginaldocts@evergo.com"}
             )
         if "ordenes/instalador-coordinador" in url:
             if params and params.get("numero") == "J00830":
-                return _response(
+                return (
                     {
                         "current_page": 1,
                         "last_page": 1,
@@ -313,12 +292,12 @@ def test_load_customers_from_queries_creates_customer_and_placeholder_order(
                     }
                 )
             if params and params.get("numero") == "BAD999":
-                return _response({"current_page": 1, "last_page": 1, "data": []})
+                return {"current_page": 1, "last_page": 1, "data": []}
             if params and params.get("cliente") == "irma ravize":
-                return _response({"current_page": 1, "last_page": 1, "data": []})
+                return {"current_page": 1, "last_page": 1, "data": []}
         raise AssertionError(f"Unexpected URL {url} params={params}")
-
-    mock_session.request.side_effect = request_side_effect
+    monkeypatch.setattr(EvergoUser, "_login_session", lambda self, **_: None)
+    monkeypatch.setattr(EvergoUser, "_request_json", request_side_effect)
 
     summary = profile.load_customers_from_queries(
         raw_queries="J00830; BAD999; irma ravize"
@@ -474,9 +453,8 @@ def test_upsert_customer_prefers_municipio_over_ciudad_in_computed_address():
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.requests.Session")
 def test_load_customers_from_queries_without_filters_uses_access_scope(
-    mock_session_cls,
+    monkeypatch,
 ):
     """Regression: empty query should request all accessible customers for the engineer profile."""
     user_model = get_user_model()
@@ -490,21 +468,9 @@ def test_load_customers_from_queries_without_filters_uses_access_scope(
         evergo_user_id=58642,
     )
 
-    mock_session = mock_session_cls.return_value.__enter__.return_value
-    mock_prime_response = Mock()
-    mock_prime_response.raise_for_status.return_value = None
-    mock_session.get.return_value = mock_prime_response
-    mock_session.cookies.get.return_value = "mocked-xsrf-token"
-
-    def _response(payload):
-        response = Mock()
-        response.status_code = 200
-        response.json.return_value = payload
-        return response
-
-    def request_side_effect(*, method, url, params=None, **kwargs):
+    def request_side_effect(self, *, session, timeout, method, url, params=None, **kwargs):
         if url.endswith("/login"):
-            return _response(
+            return (
                 {
                     "id": 58642,
                     "name": "Load All User",
@@ -515,7 +481,7 @@ def test_load_customers_from_queries_without_filters_uses_access_scope(
             assert params is not None
             assert params.get("numero") == ""
             assert params.get("cliente") == ""
-            return _response(
+            return (
                 {
                     "current_page": 1,
                     "last_page": 1,
@@ -535,8 +501,8 @@ def test_load_customers_from_queries_without_filters_uses_access_scope(
                 }
             )
         raise AssertionError(f"Unexpected URL {url} params={params}")
-
-    mock_session.request.side_effect = request_side_effect
+    monkeypatch.setattr(EvergoUser, "_login_session", lambda self, **_: None)
+    monkeypatch.setattr(EvergoUser, "_request_json", request_side_effect)
 
     summary = profile.load_customers_from_queries(raw_queries="")
 
@@ -547,9 +513,8 @@ def test_load_customers_from_queries_without_filters_uses_access_scope(
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.EvergoUser.fetch_order_detail")
 def test_reload_customer_from_remote_rebuilds_customer_and_order(
-    mock_fetch_order_detail,
+    monkeypatch,
 ):
     """Regression: reloading one customer should delete stale snapshots and recreate from remote payload."""
     user_model = get_user_model()
@@ -578,7 +543,10 @@ def test_reload_customer_from_remote_rebuilds_customer_and_order(
         raw_payload={"stale": True},
     )
 
-    mock_fetch_order_detail.return_value = {
+    monkeypatch.setattr(
+        EvergoUser,
+        "fetch_order_detail",
+        lambda self, **_: {
         "id": 777,
         "numero_orden": "GLY01228",
         "updated_at": "2026-01-13T02:18:42.000000Z",
@@ -589,7 +557,8 @@ def test_reload_customer_from_remote_rebuilds_customer_and_order(
             "calle": "Nueva",
             "num_ext": "15",
         },
-    }
+        },
+    )
 
     stale_customer_pk = stale_customer.pk
     stale_order_pk = stale_order.pk
@@ -608,9 +577,8 @@ def test_reload_customer_from_remote_rebuilds_customer_and_order(
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
 def test_reload_customer_from_remote_uses_name_lookup_when_latest_order_missing(
-    mock_load_customers,
+    monkeypatch,
 ):
     """Fallback reload should locate refreshed customer by original name when no latest order exists."""
     user_model = get_user_model()
@@ -632,17 +600,17 @@ def test_reload_customer_from_remote_uses_name_lookup_when_latest_order_missing(
         latest_order=None,
     )
 
-    def load_side_effect(*, raw_queries, timeout=20):
+    def load_side_effect(self, *, raw_queries, timeout=20):
         assert "GLY12345" in raw_queries
         EvergoCustomer.objects.create(
-            user=profile,
+            user=self,
             remote_id=2901,
             name="Customer Name Match",
             latest_so="GLY12345",
         )
         return {"customers_loaded": 1}
 
-    mock_load_customers.side_effect = load_side_effect
+    monkeypatch.setattr(EvergoUser, "load_customers_from_queries", load_side_effect)
 
     refreshed = profile.reload_customer_from_remote(customer=stale_customer)
 
@@ -651,9 +619,8 @@ def test_reload_customer_from_remote_uses_name_lookup_when_latest_order_missing(
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
 def test_reload_customer_from_remote_renames_stale_snapshot_before_name_fallback(
-    mock_load_customers,
+    monkeypatch,
 ):
     """Fallback reload should prevent the stale row from being reused by name-only upserts."""
     user_model = get_user_model()
@@ -675,9 +642,9 @@ def test_reload_customer_from_remote_renames_stale_snapshot_before_name_fallback
         latest_order=None,
     )
 
-    def load_side_effect(*, raw_queries, timeout=20):
+    def load_side_effect(self, *, raw_queries, timeout=20):
         assert "GLY12345" in raw_queries
-        profile._upsert_customer_from_order(
+        self._upsert_customer_from_order(
             {
                 "id": 87001,
                 "numero_orden": "GLY12345",
@@ -688,7 +655,7 @@ def test_reload_customer_from_remote_renames_stale_snapshot_before_name_fallback
         )
         return {"customers_loaded": 0}
 
-    mock_load_customers.side_effect = load_side_effect
+    monkeypatch.setattr(EvergoUser, "load_customers_from_queries", load_side_effect)
 
     refreshed = profile.reload_customer_from_remote(customer=stale_customer)
 
@@ -698,8 +665,7 @@ def test_reload_customer_from_remote_renames_stale_snapshot_before_name_fallback
 
 
 @pytest.mark.django_db
-@patch("apps.evergo.models.user.EvergoUser.load_customers_from_queries")
-def test_reload_customer_from_remote_rolls_back_on_reload_failure(mock_load_customers):
+def test_reload_customer_from_remote_rolls_back_on_reload_failure(monkeypatch):
     """Customer snapshot should remain if remote fallback reload fails."""
     user_model = get_user_model()
     owner = user_model.objects.create_user(
@@ -719,7 +685,11 @@ def test_reload_customer_from_remote_rolls_back_on_reload_failure(mock_load_cust
         latest_so="GLY54321",
         latest_order=None,
     )
-    mock_load_customers.return_value = {"customers_loaded": 0}
+    monkeypatch.setattr(
+        EvergoUser,
+        "load_customers_from_queries",
+        lambda self, **_: {"customers_loaded": 0},
+    )
 
     stale_pk = stale_customer.pk
 
@@ -728,3 +698,73 @@ def test_reload_customer_from_remote_rolls_back_on_reload_failure(mock_load_cust
 
     assert stale_pk is not None
     assert EvergoCustomer.objects.filter(pk=stale_pk).exists()
+
+
+@pytest.mark.django_db
+def test_submit_tracking_phase_one_skips_visita_request_when_incomplete(
+    monkeypatch,
+):
+    """Regression: visita endpoint must not be called when visita completion is False."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-phase-one", email="suite-phase-one@example.com")
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="suite-phase-one@example.com",
+        evergo_password="secret",
+        evergo_user_id=58642,
+    )
+
+    calls: list[str] = []
+
+    def _fake_request_json(self, *, session, timeout, method, url, **kwargs):
+        return {}
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def post(self, *args, **kwargs):
+            calls.append("post")
+            response = Mock()
+            response.status_code = 200
+            response.content = b"{}"
+            response.json.return_value = {}
+            return response
+
+    monkeypatch.setattr(EvergoUser, "_login_session", lambda self, **_: None)
+    monkeypatch.setattr(EvergoUser, "_request_json", _fake_request_json)
+    monkeypatch.setattr("apps.evergo.models.user.requests.Session", _FakeSession)
+
+    result = profile.submit_tracking_phase_one(
+        order_id=30316,
+        payload={"fecha_visita": "2026-03-10 10:00:00"},
+        files={},
+        step_completion={"visita": False, "assign": False, "install": False, "montage": False},
+    )
+
+    assert calls == []
+    assert result["phase_1_status"] is None
+    assert result["phase_1_payload"] == {}
+    assert result["completed_steps"] == 0
+
+
+@pytest.mark.django_db
+def test_submit_tracking_phase_one_handles_non_json_payload_responses():
+    """Regression: non-JSON response bodies should not crash payload extraction."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="suite-phase-json", email="suite-phase-json@example.com")
+    profile = EvergoUser.objects.create(
+        user=suite_user,
+        evergo_email="suite-phase-json@example.com",
+        evergo_password="secret",
+        evergo_user_id=58642,
+    )
+
+    broken_response = Mock()
+    broken_response.content = b"<html>error</html>"
+    broken_response.json.side_effect = ValueError("invalid json")
+
+    assert profile._safe_json_extract(broken_response) == {}

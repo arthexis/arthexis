@@ -3,9 +3,11 @@ import os
 import re
 import subprocess
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from django.utils import timezone
 from django.core.exceptions import ValidationError
+from django.utils import timezone
+from typing import Any
 
 from apps.cards.models import RFID
 from apps.core.notifications import notify_async
@@ -435,6 +437,273 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
     return result
 
 
+@dataclass
+class ReaderStrategy:
+    """RFID reader access details for a single read session.
+
+    Attributes:
+        mfrc: Active MFRC522-compatible reader instance.
+        cleanup_gpio: Whether GPIO cleanup should run on exit.
+        source: Human-readable strategy label for diagnostics/tests.
+    """
+
+    mfrc: Any
+    cleanup_gpio: bool
+    source: str
+
+
+def _build_error_payload(exc: Exception) -> dict:
+    """Convert hardware exceptions into a consistent response payload."""
+
+    payload = {"error": str(exc)}
+    errno_value = getattr(exc, "errno", None)
+    if errno_value is not None:
+        payload["errno"] = errno_value
+    return payload
+
+
+def _init_provided_reader_strategy(
+    mfrc,
+    *,
+    cleanup: bool,
+) -> tuple[ReaderStrategy | None, dict | None]:
+    """Wrap an injected reader instance in a strategy payload."""
+
+    if mfrc is None:
+        return None, {"error": "RFID reader instance is required"}
+    return ReaderStrategy(mfrc=mfrc, cleanup_gpio=cleanup, source="provided"), None
+
+
+def _init_default_reader_strategy(
+    *,
+    cleanup: bool,
+) -> tuple[ReaderStrategy | None, dict | None]:
+    """Create the default MFRC522 reader strategy from local hardware settings."""
+
+    try:
+        from mfrc522 import MFRC522  # type: ignore
+
+        spi_bus, spi_device = resolve_spi_bus_device()
+        reader = MFRC522(
+            bus=spi_bus,
+            device=spi_device,
+            pin_mode=GPIO_PIN_MODE_BCM,
+            pin_rst=DEFAULT_RST_PIN,
+        )
+    except Exception as exc:  # pragma: no cover - hardware dependent
+        return None, _build_error_payload(exc)
+    return ReaderStrategy(mfrc=reader, cleanup_gpio=cleanup, source="default"), None
+
+
+def _initialize_reader_strategy(
+    mfrc=None,
+    *,
+    cleanup: bool = True,
+) -> tuple[ReaderStrategy | None, dict | None]:
+    """Return a reader strategy or a specific initialization failure payload."""
+
+    if mfrc is not None:
+        return _init_provided_reader_strategy(mfrc, cleanup=cleanup)
+    return _init_default_reader_strategy(cleanup=cleanup)
+
+
+def _sleep_between_read_attempts(
+    *,
+    use_irq: bool,
+    poll_interval: float | None,
+) -> None:
+    """Apply retry delay rules for polling-based reads."""
+
+    if use_irq:
+        return
+    if poll_interval:
+        time.sleep(poll_interval)
+
+
+def _read_card_via_polling(
+    strategy: ReaderStrategy,
+    *,
+    timeout: float,
+    poll_interval: float | None,
+    use_irq: bool,
+) -> tuple[list[int], bool] | None:
+    """Poll the reader until a UID is detected or the timeout expires."""
+
+    end = time.time() + timeout
+    while time.time() < end:  # pragma: no cover - hardware loop
+        status, _tag_type = strategy.mfrc.MFRC522_Request(strategy.mfrc.PICC_REQIDL)
+        if status == strategy.mfrc.MI_OK:
+            status, uid = strategy.mfrc.MFRC522_Anticoll()
+            if status == strategy.mfrc.MI_OK:
+                uid_bytes = list(uid or [])
+                selected = False
+                try:
+                    if uid_bytes:
+                        selected = bool(strategy.mfrc.MFRC522_SelectTag(uid_bytes))
+                except Exception:
+                    selected = False
+                return uid_bytes, selected
+        _sleep_between_read_attempts(use_irq=use_irq, poll_interval=poll_interval)
+    return None
+
+
+def _decode_scanned_rfid(uid_bytes: list[int]) -> dict:
+    """Normalize raw UID bytes into the RFID payload used by scanner flows."""
+
+    rfid = "".join(f"{value:02X}" for value in uid_bytes)
+    kind = RFID.NTAG215 if len(uid_bytes) > 5 else RFID.CLASSIC
+    return {"uid": uid_bytes, "rfid": rfid, "kind": kind}
+
+
+def _read_basic_tag_data(decoded_card: dict) -> tuple[RFID, bool, dict]:
+    """Register a scanned card and build the standard response payload."""
+
+    tag, created = RFID.register_scan(decoded_card["rfid"], kind=decoded_card["kind"])
+    result = _build_tag_response(
+        tag,
+        decoded_card["rfid"],
+        created=created,
+        kind=decoded_card["kind"],
+    )
+    return tag, created, result
+
+
+def _read_deep_classic_tag_data(mfrc, tag, uid: list[int], result: dict) -> dict:
+    """Enrich a classic-tag response with authenticated block dump data."""
+
+    keys: dict[str, object] = {}
+    if hasattr(tag, "key_a"):
+        key_a_value = _normalize_key(getattr(tag, "key_a", ""))
+        keys["a"] = key_a_value or (getattr(tag, "key_a", "") or "")
+        keys["a_verified"] = bool(getattr(tag, "key_a_verified", False))
+    if hasattr(tag, "key_b"):
+        key_b_value = _normalize_key(getattr(tag, "key_b", ""))
+        keys["b"] = key_b_value or (getattr(tag, "key_b", "") or "")
+        keys["b_verified"] = bool(getattr(tag, "key_b_verified", False))
+
+    result["keys"] = keys
+    result["deep_read"] = True
+
+    dump = []
+    pending_updates: set[str] = set()
+    key_candidates = {
+        "A": _build_key_candidates(tag, "key_a", "key_a_verified"),
+        "B": _build_key_candidates(tag, "key_b", "key_b_verified"),
+    }
+
+    for block in range(64):
+        try:
+            used_key = None
+            used_value = None
+            used_bytes: list[int] | None = None
+            status = mfrc.MI_ERR
+
+            for key_value, key_bytes in key_candidates["A"]:
+                status = mfrc.MFRC522_Auth(mfrc.PICC_AUTHENT1A, block, key_bytes, uid)
+                if status == mfrc.MI_OK:
+                    used_key = "A"
+                    used_value = key_value
+                    used_bytes = key_bytes
+                    break
+
+            if status != mfrc.MI_OK:
+                for key_value, key_bytes in key_candidates["B"]:
+                    status = mfrc.MFRC522_Auth(
+                        mfrc.PICC_AUTHENT1B,
+                        block,
+                        key_bytes,
+                        uid,
+                    )
+                    if status == mfrc.MI_OK:
+                        used_key = "B"
+                        used_value = key_value
+                        used_bytes = key_bytes
+                        break
+
+            if status == mfrc.MI_OK:
+                read_status = mfrc.MFRC522_Read(block)
+                if isinstance(read_status, tuple):
+                    read_state, data = read_status
+                else:
+                    read_state, data = (mfrc.MI_OK, read_status)
+                if read_state == mfrc.MI_OK and data is not None:
+                    entry = {"block": block, "data": list(data)}
+                    if used_key:
+                        entry["key"] = used_key
+                    dump.append(entry)
+
+                    if used_key == "A" and used_value:
+                        if used_value != keys.get("a"):
+                            keys["a"] = used_value
+                        if not keys.get("a_verified"):
+                            keys["a_verified"] = True
+                        if (
+                            not getattr(tag, "key_a_verified", False)
+                            or getattr(tag, "key_a", "").upper() != used_value
+                        ):
+                            setattr(tag, "key_a", used_value)
+                            setattr(tag, "key_a_verified", True)
+                            pending_updates.update({"key_a", "key_a_verified"})
+                        if used_bytes is not None:
+                            key_candidates["A"] = [(used_value, used_bytes)]
+
+                    if used_key == "B" and used_value:
+                        if used_value != keys.get("b"):
+                            keys["b"] = used_value
+                        if not keys.get("b_verified"):
+                            keys["b_verified"] = True
+                        if (
+                            not getattr(tag, "key_b_verified", False)
+                            or getattr(tag, "key_b", "").upper() != used_value
+                        ):
+                            setattr(tag, "key_b", used_value)
+                            setattr(tag, "key_b_verified", True)
+                            pending_updates.update({"key_b", "key_b_verified"})
+                        if used_bytes is not None:
+                            key_candidates["B"] = [(used_value, used_bytes)]
+        except Exception as exc:
+            logger.debug("Failed to read block %d for classic tag: %s", block, exc)
+            continue
+
+    if pending_updates:
+        tag.save(update_fields=sorted(pending_updates))
+
+    result["dump"] = dump
+    if getattr(tag, "data", None) != dump:
+        tag.data = [dict(entry) for entry in dump]
+        tag.save(update_fields=["data"])
+    return result
+
+
+def _finalize_reader_session(
+    strategy: ReaderStrategy,
+    *,
+    cleanup: bool,
+    selected: bool,
+) -> None:
+    """Release crypto state and optionally cleanup GPIO for a read session."""
+
+    if strategy.mfrc is not None and selected:
+        try:
+            strategy.mfrc.MFRC522_StopCrypto1()
+        except Exception:
+            pass
+
+    if not cleanup or not strategy.cleanup_gpio:
+        return
+
+    try:
+        import RPi.GPIO as GPIO  # pragma: no cover - hardware dependent
+    except Exception:  # pragma: no cover - hardware dependent
+        GPIO = None
+
+    if GPIO:
+        try:
+            GPIO.cleanup()
+        except Exception:
+            pass
+
+
 def enable_deep_read(duration: float | None = None) -> bool:
     """Enable deep read mode until it is explicitly disabled."""
 
@@ -468,188 +737,42 @@ def read_rfid(
             to skip sleeping (useful when hardware interrupts are configured).
         use_irq: If ``True``, do not sleep between polls regardless of
             ``poll_interval``.
+
+    Returns:
+        Scanner payload for the detected RFID tag or an error/empty payload.
     """
-    try:
-        if mfrc is None:
-            from mfrc522 import MFRC522  # type: ignore
 
-            spi_bus, spi_device = resolve_spi_bus_device()
-            mfrc = MFRC522(
-                bus=spi_bus,
-                device=spi_device,
-                pin_mode=GPIO_PIN_MODE_BCM,
-                pin_rst=DEFAULT_RST_PIN,
-            )
+    strategy, failure = _initialize_reader_strategy(mfrc, cleanup=cleanup)
+    if failure is not None:
+        return failure
+    assert strategy is not None
+
+    selected = False
+    rfid = None
+    try:
+        detected_card = _read_card_via_polling(
+            strategy,
+            timeout=timeout,
+            poll_interval=poll_interval,
+            use_irq=use_irq,
+        )
+        if detected_card is None:
+            return {"rfid": None, "label_id": None}
+
+        uid_bytes, selected = detected_card
+        decoded_card = _decode_scanned_rfid(uid_bytes)
+        rfid = decoded_card["rfid"]
+        tag, _created, result = _read_basic_tag_data(decoded_card)
+
+        if tag.kind == RFID.CLASSIC and _deep_read_enabled:
+            return _read_deep_classic_tag_data(strategy.mfrc, tag, uid_bytes, result)
+        return result
     except Exception as exc:  # pragma: no cover - hardware dependent
-        payload = {"error": str(exc)}
-        errno_value = getattr(exc, "errno", None)
-        if errno_value is not None:
-            payload["errno"] = errno_value
-        return payload
-
-    try:
-        import RPi.GPIO as GPIO  # pragma: no cover - hardware dependent
-    except Exception:  # pragma: no cover - hardware dependent
-        GPIO = None
-
-    try:
-        end = time.time() + timeout
-        selected = False
-        while time.time() < end:  # pragma: no cover - hardware loop
-            (status, _tag_type) = mfrc.MFRC522_Request(mfrc.PICC_REQIDL)
-            if status == mfrc.MI_OK:
-                (status, uid) = mfrc.MFRC522_Anticoll()
-                if status == mfrc.MI_OK:
-                    uid_bytes = uid or []
-                    try:
-                        if uid_bytes:
-                            selected = bool(mfrc.MFRC522_SelectTag(uid_bytes))
-                        else:
-                            selected = False
-                    except Exception:
-                        selected = False
-                    rfid = "".join(f"{x:02X}" for x in uid_bytes)
-                    kind = RFID.NTAG215 if len(uid_bytes) > 5 else RFID.CLASSIC
-                    tag, created = RFID.register_scan(rfid, kind=kind)
-                    result = _build_tag_response(
-                        tag,
-                        rfid,
-                        created=created,
-                        kind=kind,
-                    )
-                    deep_read_active = tag.kind == RFID.CLASSIC and _deep_read_enabled
-                    if deep_read_active:
-                        keys: dict[str, object] = {}
-                        if hasattr(tag, "key_a"):
-                            key_a_value = _normalize_key(getattr(tag, "key_a", ""))
-                            keys["a"] = key_a_value or (getattr(tag, "key_a", "") or "")
-                            keys["a_verified"] = bool(
-                                getattr(tag, "key_a_verified", False)
-                            )
-                        if hasattr(tag, "key_b"):
-                            key_b_value = _normalize_key(getattr(tag, "key_b", ""))
-                            keys["b"] = key_b_value or (getattr(tag, "key_b", "") or "")
-                            keys["b_verified"] = bool(
-                                getattr(tag, "key_b_verified", False)
-                            )
-
-                        result["keys"] = keys
-                        result["deep_read"] = True
-
-                        dump = []
-                        pending_updates: set[str] = set()
-                        key_candidates = {
-                            "A": _build_key_candidates(tag, "key_a", "key_a_verified"),
-                            "B": _build_key_candidates(tag, "key_b", "key_b_verified"),
-                        }
-
-                        for block in range(64):
-                            try:
-                                used_key = None
-                                used_value = None
-                                used_bytes: list[int] | None = None
-                                status = mfrc.MI_ERR
-
-                                for key_value, key_bytes in key_candidates["A"]:
-                                    status = mfrc.MFRC522_Auth(
-                                        mfrc.PICC_AUTHENT1A, block, key_bytes, uid
-                                    )
-                                    if status == mfrc.MI_OK:
-                                        used_key = "A"
-                                        used_value = key_value
-                                        used_bytes = key_bytes
-                                        break
-
-                                if status != mfrc.MI_OK:
-                                    for key_value, key_bytes in key_candidates["B"]:
-                                        status = mfrc.MFRC522_Auth(
-                                            mfrc.PICC_AUTHENT1B,
-                                            block,
-                                            key_bytes,
-                                            uid,
-                                        )
-                                        if status == mfrc.MI_OK:
-                                            used_key = "B"
-                                            used_value = key_value
-                                            used_bytes = key_bytes
-                                            break
-
-                                if status == mfrc.MI_OK:
-                                    read_status = mfrc.MFRC522_Read(block)
-                                    if isinstance(read_status, tuple):
-                                        r, data = read_status
-                                    else:
-                                        r, data = (mfrc.MI_OK, read_status)
-                                    if r == mfrc.MI_OK and data is not None:
-                                        entry = {"block": block, "data": list(data)}
-                                        if used_key:
-                                            entry["key"] = used_key
-                                        dump.append(entry)
-
-                                        if used_key == "A" and used_value:
-                                            if used_value != keys.get("a"):
-                                                keys["a"] = used_value
-                                            if not keys.get("a_verified"):
-                                                keys["a_verified"] = True
-                                            if not getattr(tag, "key_a_verified", False) or getattr(
-                                                tag, "key_a", ""
-                                            ).upper() != used_value:
-                                                setattr(tag, "key_a", used_value)
-                                                setattr(tag, "key_a_verified", True)
-                                                pending_updates.update(
-                                                    {"key_a", "key_a_verified"}
-                                                )
-                                            if used_bytes is not None:
-                                                key_candidates["A"] = [(used_value, used_bytes)]
-
-                                        if used_key == "B" and used_value:
-                                            if used_value != keys.get("b"):
-                                                keys["b"] = used_value
-                                            if not keys.get("b_verified"):
-                                                keys["b_verified"] = True
-                                            if not getattr(tag, "key_b_verified", False) or getattr(
-                                                tag, "key_b", ""
-                                            ).upper() != used_value:
-                                                setattr(tag, "key_b", used_value)
-                                                setattr(tag, "key_b_verified", True)
-                                                pending_updates.update(
-                                                    {"key_b", "key_b_verified"}
-                                                )
-                                            if used_bytes is not None:
-                                                key_candidates["B"] = [(used_value, used_bytes)]
-                            except Exception:
-                                continue
-
-                        if pending_updates:
-                            tag.save(update_fields=sorted(pending_updates))
-
-                        result["dump"] = dump
-                        if getattr(tag, "data", None) != dump:
-                            tag.data = [dict(entry) for entry in dump]
-                            tag.save(update_fields=["data"])
-                    return result
-            if not use_irq and poll_interval:
-                time.sleep(poll_interval)
-        return {"rfid": None, "label_id": None}
-    except Exception as exc:  # pragma: no cover - hardware dependent
-        if "rfid" in locals():
+        if rfid:
             notify_async(f"RFID {rfid}", "Read failed")
-        payload = {"error": str(exc)}
-        errno_value = getattr(exc, "errno", None)
-        if errno_value is not None:
-            payload["errno"] = errno_value
-        return payload
+        return _build_error_payload(exc)
     finally:  # pragma: no cover - cleanup hardware
-        if "mfrc" in locals() and mfrc is not None and selected:
-            try:
-                mfrc.MFRC522_StopCrypto1()
-            except Exception:
-                pass
-        if cleanup and GPIO:
-            try:
-                GPIO.cleanup()
-            except Exception:
-                pass
+        _finalize_reader_session(strategy, cleanup=cleanup, selected=selected)
 
 
 def validate_rfid_value(

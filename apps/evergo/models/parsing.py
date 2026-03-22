@@ -74,12 +74,3 @@ def placeholder_remote_id(*, order_number: str) -> int:
     digest = hashlib.sha256(order_number.strip().upper().encode("utf-8")).hexdigest()[:12]
     return 1_500_000_000 + (int(digest, 16) % 500_000_000)
 
-
-# Backward-compatible aliases for previous module-private helper names.
-_first_dict = first_dict
-_nested_dict = nested_dict
-_nested_int = nested_int
-_nested_name = nested_name
-_parse_dt = parse_dt
-_placeholder_remote_id = placeholder_remote_id
-_to_int = to_int

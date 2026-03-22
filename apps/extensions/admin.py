@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponse
@@ -10,12 +9,13 @@ from django.shortcuts import get_object_or_404
 from django.urls import path, reverse
 from django.utils.html import format_html
 
+from apps.core.admin.mixins import PublicViewLinksAdminMixin
 from apps.extensions.archive import build_extension_archive_response
 from apps.extensions.models import JsExtension
 
 
 @admin.register(JsExtension)
-class JsExtensionAdmin(admin.ModelAdmin):
+class JsExtensionAdmin(PublicViewLinksAdminMixin, admin.ModelAdmin):
     """Admin configuration for hosted JavaScript extensions."""
 
     list_display = (
@@ -30,6 +30,7 @@ class JsExtensionAdmin(admin.ModelAdmin):
     search_fields = ("name", "slug", "description")
     prepopulated_fields = {"slug": ("name",)}
     readonly_fields = ("download_archive_link",)
+    view_on_site = False
     fieldsets = (
         (
             "Identity",
@@ -70,6 +71,57 @@ class JsExtensionAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+    def get_view_on_site_url(self, obj=None):
+        """Return the public extension catalog or manifest route."""
+
+        if obj is None:
+            return reverse("extensions:catalog")
+        if not obj.is_enabled:
+            return None
+        return reverse("extensions:manifest", args=[obj.slug])
+
+    def get_public_view_links(self, obj=None) -> list[dict[str, str]]:
+        """Return public extension routes that admins may need to inspect."""
+
+        links = [{"label": "View on site: Catalog", "url": reverse("extensions:catalog")}]
+        if obj is None or not obj.is_enabled:
+            return links
+
+        links.extend(
+            [
+                {
+                    "label": "View on site: Manifest",
+                    "url": reverse("extensions:manifest", args=[obj.slug]),
+                },
+                {
+                    "label": "View on site: Download ZIP",
+                    "url": reverse("extensions:download", args=[obj.slug]),
+                },
+            ]
+        )
+        if obj.content_script or obj.match_patterns:
+            links.append(
+                {
+                    "label": "View on site: Content script",
+                    "url": reverse("extensions:content", args=[obj.slug]),
+                }
+            )
+        if obj.background_script:
+            links.append(
+                {
+                    "label": "View on site: Background script",
+                    "url": reverse("extensions:background", args=[obj.slug]),
+                }
+            )
+        if obj.options_page:
+            links.append(
+                {
+                    "label": "View on site: Options page",
+                    "url": reverse("extensions:options", args=[obj.slug]),
+                }
+            )
+        return links
 
     def get_urls(self):
         """Register custom admin endpoints for extension downloads."""

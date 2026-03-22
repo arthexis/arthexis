@@ -1,0 +1,57 @@
+project Arthexis_Ada is
+   for Source_Dirs use ("src", "apps", "apps/**");
+   for Object_Dir use "obj";
+   for Main use ();
+
+   package Naming is
+      for Spec ("Apps.Core.Functions.Core_Functions") use
+        "apps/core/functions/core_functions.ads";
+      for Body ("Apps.Core.Functions.Core_Functions") use
+        "apps/core/functions/core_functions.adb";
+
+      for Spec ("Apps.Core.Models.Core_Models") use
+        "apps/core/models/core_models.ads";
+      for Body ("Apps.Core.Models.Core_Models") use
+        "apps/core/models/core_models.adb";
+
+      for Spec ("Apps.Core.Templates.Core_Templates") use
+        "apps/core/templates/core_templates.ads";
+
+      for Spec ("Apps.Core.Triggers.Core_Triggers") use
+        "apps/core/triggers/core_triggers.ads";
+      for Body ("Apps.Core.Triggers.Core_Triggers") use
+        "apps/core/triggers/core_triggers.adb";
+
+      for Spec ("Apps.Core.Views.Core_Views") use
+        "apps/core/views/core_views.ads";
+      for Body ("Apps.Core.Views.Core_Views") use
+        "apps/core/views/core_views.adb";
+
+      for Spec ("Apps.OCPP.Functions.OCPP_Functions") use
+        "apps/ocpp/functions/ocpp_functions.ads";
+      for Body ("Apps.OCPP.Functions.OCPP_Functions") use
+        "apps/ocpp/functions/ocpp_functions.adb";
+
+      for Spec ("Apps.OCPP.Models.OCPP_Models") use
+        "apps/ocpp/models/ocpp_models.ads";
+      for Body ("Apps.OCPP.Models.OCPP_Models") use
+        "apps/ocpp/models/ocpp_models.adb";
+
+      for Spec ("Apps.OCPP.Templates.OCPP_Templates") use
+        "apps/ocpp/templates/ocpp_templates.ads";
+
+      for Spec ("Apps.OCPP.Triggers.OCPP_Triggers") use
+        "apps/ocpp/triggers/ocpp_triggers.ads";
+      for Body ("Apps.OCPP.Triggers.OCPP_Triggers") use
+        "apps/ocpp/triggers/ocpp_triggers.adb";
+
+      for Spec ("Apps.OCPP.Views.OCPP_Views") use
+        "apps/ocpp/views/ocpp_views.ads";
+      for Body ("Apps.OCPP.Views.OCPP_Views") use
+        "apps/ocpp/views/ocpp_views.adb";
+   end Naming;
+
+   package Compiler is
+      for Default_Switches ("Ada") use ("-gnat2022");
+   end Compiler;
+end Arthexis_Ada;

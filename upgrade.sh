@@ -2000,7 +2000,7 @@ arthexis_timing_end "env_refresh"
 
 if [ -n "${PYTHON_BIN:-}" ] && ls data/*.json >/dev/null 2>&1; then
   arthexis_timing_start "load_user_data"
-  "$PYTHON_BIN" manage.py load_user_data data/*.json
+  "$PYTHON_BIN" manage.py loaddata data/*.json
   arthexis_timing_end "load_user_data"
 elif [ -n "${PYTHON_BIN:-}" ]; then
   arthexis_timing_record "load_user_data" 0 "skipped"

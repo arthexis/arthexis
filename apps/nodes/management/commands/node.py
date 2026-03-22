@@ -7,9 +7,9 @@ import ipaddress
 import itertools
 import json
 import logging
-import socket
 import re
 import shutil
+import socket
 import subprocess
 import textwrap
 import time
@@ -28,6 +28,7 @@ from django.urls import reverse
 from requests import RequestException
 
 from apps.content.utils import capture_and_save_screenshot
+from apps.features.management.feature_ops import refresh_and_report_local_node_features
 from apps.nodes.models import NetMessage, Node, PendingNetMessage
 from apps.nodes.tasks import poll_peers
 from apps.nodes.views import node_info, register_node
@@ -43,6 +44,13 @@ class Command(BaseCommand):
         "Preferred usage: python manage.py node <action>."
     )
     TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+    ACTION_ALIASES = {
+        "curl": "register_curl",
+        "purge": "purge_nodes",
+        "purge-messages": "purge_net_messages",
+        "refresh": "refresh_features",
+        "register-curl": "register_curl",
+    }
 
     def add_arguments(self, parser):
         """Register action-specific arguments."""
@@ -62,9 +70,10 @@ class Command(BaseCommand):
 
         register_curl_parser = subparsers.add_parser(
             "register_curl",
+            aliases=["register-curl", "curl"],
             help="Generate a curl-based visitor registration script.",
             description=(
-                "Example: python manage.py node register_curl https://host:8888 "
+                "Example: python manage.py node curl https://host:8888 "
                 "--local-base https://localhost:8888"
             ),
         )
@@ -127,12 +136,21 @@ class Command(BaseCommand):
             description="Example: python manage.py node ready",
         )
 
+        subparsers.add_parser(
+            "refresh_features",
+            aliases=["refresh"],
+            help="Refresh auto-managed features for the local node.",
+            description="Example: python manage.py node refresh",
+        )
+
         message_parser = subparsers.add_parser(
             "message",
             help="Broadcast a network message.",
             description="Example: python manage.py node message Subject 'Body text'",
         )
-        message_parser.add_argument("subject", help="Subject or first line of the message")
+        message_parser.add_argument(
+            "subject", help="Subject or first line of the message"
+        )
         message_parser.add_argument(
             "body",
             nargs="?",
@@ -164,8 +182,9 @@ class Command(BaseCommand):
 
         purge_nodes_parser = subparsers.add_parser(
             "purge_nodes",
+            aliases=["purge"],
             help="Delete soft-deleted and duplicate nodes.",
-            description="Example: python manage.py node purge_nodes --remove-anonymous",
+            description="Example: python manage.py node purge --remove-anonymous",
         )
         purge_nodes_parser.add_argument(
             "--remove-anonymous",
@@ -176,8 +195,9 @@ class Command(BaseCommand):
 
         subparsers.add_parser(
             "purge_net_messages",
+            aliases=["purge-messages"],
             help="Delete all net messages and pending deliveries.",
-            description="Example: python manage.py node purge_net_messages",
+            description="Example: python manage.py node purge-messages",
         )
 
         screenshot_parser = subparsers.add_parser(
@@ -207,7 +227,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Dispatch an action to the corresponding handler."""
 
-        action = options["action"]
+        action = self.ACTION_ALIASES.get(options["action"], options["action"])
         handler = getattr(self, f"_handle_{action}", None)
         if handler is None:
             raise CommandError(f"Unsupported node action: {action}")
@@ -449,6 +469,11 @@ class Command(BaseCommand):
     def _handle_ready(self, **options):
         self._run_registration_checks()
 
+    def _handle_refresh_features(self, **options):
+        """Refresh auto-managed features for the local node."""
+
+        refresh_and_report_local_node_features(self)
+
     def _handle_message(self, **options):
         """Broadcast a net message across nodes."""
 
@@ -520,7 +545,8 @@ class Command(BaseCommand):
             )
             self.stdout.write(
                 self.style.WARNING(
-                    "Skipped nodes missing deduplication keys: " f"{skipped_descriptions}"
+                    "Skipped nodes missing deduplication keys: "
+                    f"{skipped_descriptions}"
                 )
             )
 
@@ -536,7 +562,9 @@ class Command(BaseCommand):
             message = f"Deleted {message_count} net message{suffix}"
             if pending_count:
                 pending_label = (
-                    "pending queue entry" if pending_count == 1 else "pending queue entries"
+                    "pending queue entry"
+                    if pending_count == 1
+                    else "pending queue entries"
                 )
                 message = f"{message}, cleared {pending_count} {pending_label}"
             related = deleted - message_count - pending_count
@@ -563,7 +591,9 @@ class Command(BaseCommand):
 
         try:
             while True:
-                path = capture_and_save_screenshot(url=url, method="COMMAND", local=local_capture)
+                path = capture_and_save_screenshot(
+                    url=url, method="COMMAND", local=local_capture
+                )
                 path_str = path.as_posix() if path else ""
                 self.stdout.write(path_str)
                 last_path = path
@@ -598,7 +628,9 @@ class Command(BaseCommand):
         json_body=None,
     ):
         try:
-            response = session.request(method=method, url=url, json=json_body, timeout=10)
+            response = session.request(
+                method=method, url=url, json=json_body, timeout=10
+            )
         except RequestException as exc:
             raise CommandError(f"Unable to reach {url}: {exc}") from exc
 
@@ -756,7 +788,9 @@ class Command(BaseCommand):
         if parsed.scheme != "https":
             raise CommandError(f"{label} base URL must use https: {raw}")
         if re.search(r"[^A-Za-z0-9.\-:\[\]]", parsed.netloc):
-            raise CommandError(f"{label} base URL contains unsupported characters: {raw}")
+            raise CommandError(
+                f"{label} base URL contains unsupported characters: {raw}"
+            )
         if any((parsed.username, parsed.password, parsed.query, parsed.fragment)):
             raise CommandError(
                 f"{label} base URL must not include credentials, query params, or fragments: {raw}"
@@ -809,7 +843,9 @@ class Command(BaseCommand):
             raise CommandError("At least one interface is required")
         return interfaces
 
-    def _iter_interface_hosts(self, interface_name: str, max_hosts: int) -> Iterable[str]:
+    def _iter_interface_hosts(
+        self, interface_name: str, max_hosts: int
+    ) -> Iterable[str]:
         addresses = psutil.net_if_addrs().get(interface_name)
         if not addresses:
             return
@@ -915,29 +951,41 @@ class Command(BaseCommand):
 
         if created:
             self.stdout.write(
-                self.style.SUCCESS(f"Registered current node as {node.hostname}:{node.port}.")
+                self.style.SUCCESS(
+                    f"Registered current node as {node.hostname}:{node.port}."
+                )
             )
         else:
-            self.stdout.write(f"Current node record refreshed ({node.hostname}:{node.port}).")
+            self.stdout.write(
+                f"Current node record refreshed ({node.hostname}:{node.port})."
+            )
 
         security_dir = node.get_base_path() / "security"
         priv_path = security_dir / f"{node.public_endpoint}"
         pub_path = security_dir / f"{node.public_endpoint}.pub"
 
-        missing_files = [path.name for path in (priv_path, pub_path) if not path.exists()]
+        missing_files = [
+            path.name for path in (priv_path, pub_path) if not path.exists()
+        ]
         if missing_files:
             ready = False
             self.stderr.write(
-                self.style.ERROR("Missing security key files: " + ", ".join(sorted(missing_files)))
+                self.style.ERROR(
+                    "Missing security key files: " + ", ".join(sorted(missing_files))
+                )
             )
         else:
             self.stdout.write(self.style.SUCCESS("Security key files are present."))
 
         if node.public_key:
-            self.stdout.write(self.style.SUCCESS("Public key is stored in the database."))
+            self.stdout.write(
+                self.style.SUCCESS("Public key is stored in the database.")
+            )
         else:
             ready = False
-            self.stderr.write(self.style.ERROR("Public key is not stored in the database."))
+            self.stderr.write(
+                self.style.ERROR("Public key is not stored in the database.")
+            )
 
         session = requests.Session()
         session.verify = False
@@ -955,12 +1003,16 @@ class Command(BaseCommand):
             if info_response.status_code != 200:
                 ready = False
                 self.stderr.write(
-                    self.style.ERROR(f"/nodes/info/ returned status {info_response.status_code}.")
+                    self.style.ERROR(
+                        f"/nodes/info/ returned status {info_response.status_code}."
+                    )
                 )
                 info_data = {}
             else:
                 self.stdout.write(
-                    self.style.SUCCESS("Local /nodes/info/ endpoint responded successfully.")
+                    self.style.SUCCESS(
+                        "Local /nodes/info/ endpoint responded successfully."
+                    )
                 )
                 try:
                     info_data = info_response.json()
@@ -1005,7 +1057,9 @@ class Command(BaseCommand):
                 )
             else:
                 ready = False
-                self.stderr.write(self.style.ERROR("CORS preflight for /nodes/register/ failed."))
+                self.stderr.write(
+                    self.style.ERROR("CORS preflight for /nodes/register/ failed.")
+                )
 
         if info_data.get("token_signature"):
             payload = {
@@ -1057,7 +1111,9 @@ class Command(BaseCommand):
             )
 
         if not ready:
-            raise CommandError("Visitor registration is not ready. Review the errors above and retry.")
+            raise CommandError(
+                "Visitor registration is not ready. Review the errors above and retry."
+            )
 
         self.stdout.write(self.style.SUCCESS("Visitor registration checks passed."))
 
@@ -1100,7 +1156,9 @@ class Command(BaseCommand):
                 col_widths[index] = max(col_widths[index], len(cell))
 
         def _render_row(row: list[str]) -> str:
-            return " | ".join(cell.ljust(col_widths[idx]) for idx, cell in enumerate(row))
+            return " | ".join(
+                cell.ljust(col_widths[idx]) for idx, cell in enumerate(row)
+            )
 
         separator = "-+-".join("-" * width for width in col_widths)
         lines = [_render_row(headers), separator]

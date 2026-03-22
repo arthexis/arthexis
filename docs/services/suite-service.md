@@ -32,3 +32,17 @@ The Suite service is the primary systemd unit that runs the Arthexis software su
 ## Notes
 - If the suite service name is missing, the Suite Services Report still lists the service rows as **Not configured** for reference.
 - On Windows, use `service.bat install --name <service-name>` after running `install.bat`. The helper relies on NSSM to register the Windows service.
+
+## Rename an existing service
+Use the rename helper when you need to change the base suite service name for an existing node:
+
+```bash
+scripts/rename_service --new-name <new-service-name>
+```
+
+Optional flags:
+- `--old-name <current-service-name>` to override `.locks/service.lck` detection.
+- `--start` to start the renamed units after provisioning.
+- `--dry-run` to preview what the script would do.
+
+The helper preserves companion lock selections and renames the managed unit stack (`<name>`, `celery-<name>`, `celery-beat-<name>`, `lcd-<name>`, `rfid-<name>`, `camera-<name>`) when running in systemd mode.

@@ -30,7 +30,7 @@ def test_run_calendar_event_triggers_dispatches_once(monkeypatch):
     trigger = CalendarEventTrigger.objects.create(
         calendar=calendar,
         name="Run sampler",
-        task_name="apps.content.tasks.run_scheduled_web_samplers",
+        task_name="apps.playwright.tasks.run_scheduled_website_screenshots",
         lead_time_minutes=0,
         summary_contains="Deploy",
     )
@@ -136,7 +136,7 @@ def test_run_calendar_event_triggers_handles_naive_datetime(monkeypatch):
     trigger = CalendarEventTrigger.objects.create(
         calendar=calendar,
         name="Run naive",
-        task_name="apps.content.tasks.run_scheduled_web_samplers",
+        task_name="apps.playwright.tasks.run_scheduled_website_screenshots",
         lead_time_minutes=0,
     )
 

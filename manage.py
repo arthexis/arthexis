@@ -8,13 +8,13 @@ import sys
 import threading
 import time
 import uuid
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Callable, Sequence
 
 from config.admin_urls import admin_mount_path
 from config.loadenv import loadenv
+from config.sqlite_driver import bootstrap_sqlite_driver
 from utils import revision
-
 
 _RUNSERVER_STARTED_AT: float | None = None
 
@@ -60,10 +60,10 @@ def _print_version(base_dir: Path) -> None:
 def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
     _print_version(base_dir)
     try:
-        from django.core.management import execute_from_command_line
         from daphne.management.commands.runserver import (
             Command as DaphneRunserver,
         )
+        from django.core.management import execute_from_command_line
         from django.core.management.commands import runserver as core_runserver
 
         try:
@@ -265,6 +265,51 @@ class RunserverSession:
             time.sleep(self.poll_interval)
 
 
+def _ensure_runserver_default_bind(args: list[str], *, default_port: int = 8888) -> None:
+    """Ensure runserver defaults to an explicit bind when no addrport is provided.
+
+    Args:
+        args: Command-line arguments where ``args[0]`` is expected to be ``runserver``.
+        default_port: Port used for default bindings.
+
+    Returns:
+        None. The ``args`` list is mutated in place.
+
+    Raises:
+        None.
+    """
+
+    if not args or args[0] != "runserver":
+        return
+
+    options_with_values = {"--verbosity", "-v", "--settings", "--pythonpath"}
+    skip_next = False
+    has_addrport = False
+    for argument in args[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if argument == "--addrport" or argument.startswith("--addrport="):
+            has_addrport = True
+            break
+        if argument in options_with_values:
+            skip_next = True
+            continue
+        if argument.startswith("-"):
+            continue
+        has_addrport = True
+        break
+
+    if has_addrport:
+        return
+
+    if "--ipv6" in args or "-6" in args:
+        args.append(f"[::]:{default_port}")
+        return
+
+    args.append(f"0.0.0.0:{default_port}")
+
+
 def _run_runserver(base_dir: Path, argv: list[str], is_debug_session: bool) -> None:
     global _RUNSERVER_STARTED_AT
     _RUNSERVER_STARTED_AT = time.monotonic()
@@ -293,6 +338,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     base_dir = Path(__file__).resolve().parent
     loadenv()
+    bootstrap_sqlite_driver()
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
     args = list(argv or sys.argv[1:])
@@ -314,6 +360,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     is_runserver = bool(args) and args[0] == "runserver"
     is_debug_session = debug_flag or "DEBUGPY_LAUNCHER_PORT" in os.environ
     if is_runserver:
+        _ensure_runserver_default_bind(args)
         if is_debug_session:
             os.environ["DEBUG"] = "1"
         else:
@@ -321,7 +368,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         if "--noreload" not in args:
             args.insert(1, "--noreload")
     try:
-        if celery_enabled:
+        if celery_enabled and is_runserver:
             worker = subprocess.Popen(
                 [
                     sys.executable,

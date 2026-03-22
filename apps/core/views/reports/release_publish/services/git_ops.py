@@ -1,6 +1,6 @@
 """Compatibility re-exports for git operations.
 
-Deprecated import path: ``release_publish.services.git_ops``.
+Legacy import path: ``release_publish.services.git_ops``.
 """
 
 from ..git_ops import (  # noqa: F401

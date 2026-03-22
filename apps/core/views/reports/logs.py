@@ -10,7 +10,7 @@ from pathlib import Path
 import requests
 from django.conf import settings
 
-from apps.loggers.paths import select_log_dir
+from utils.loggers.paths import select_log_dir
 
 from .common import MAX_PYPI_PUBLISH_LOG_SIZE
 

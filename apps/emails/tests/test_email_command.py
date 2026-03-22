@@ -1,309 +1,409 @@
-"""Tests for the email management command."""
+"""Regression tests for the verb-based email management command."""
 
 from __future__ import annotations
 
-import io
 import json
+from io import StringIO
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
-from django.core.management.base import CommandError
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from apps.emails.models import EmailBridge, EmailInbox, EmailOutbox
 
 
-pytestmark = pytest.mark.django_db
-
-
-def _create_owner(username: str):
-    """Create and return a basic user for ownership tests."""
+@pytest.fixture()
+def owner(db):
+    """Create a reusable profile owner for email command tests."""
 
     return get_user_model().objects.create_user(
-        username=username,
-        email=f"{username}@example.com",
-        password="password",
+        username="email-command-owner",
+        email="email-command-owner@example.com",
     )
 
 
-def _create_inbox(owner, username: str) -> EmailInbox:
-    """Create an inbox profile for tests."""
+def test_email_inbox_subcommand_creates_and_reports_inbox(owner):
+    """The inbox subcommand should create an inbox and support positional lookup."""
 
-    return EmailInbox.objects.create(
+    create_stdout = StringIO()
+    call_command(
+        "email",
+        "inbox",
+        "--owner-user",
+        str(owner.pk),
+        "--username",
+        "alerts@example.com",
+        "--host",
+        "imap.example.com",
+        "--port",
+        "993",
+        "--protocol",
+        EmailInbox.IMAP,
+        "--password",
+        "secret",
+        "--priority",
+        "7",
+        "--ssl",
+        stdout=create_stdout,
+    )
+
+    inbox = EmailInbox.objects.get(username="alerts@example.com")
+    assert f"Configured inbox #{inbox.pk}" in create_stdout.getvalue()
+    assert inbox.use_ssl is True
+
+    report_stdout = StringIO()
+    call_command("email", "inbox", str(inbox.pk), stdout=report_stdout)
+    payload = json.loads(report_stdout.getvalue())
+    assert payload == [
+        {
+            "host": "imap.example.com",
+            "id": inbox.pk,
+            "is_enabled": True,
+            "owner": owner.username,
+            "port": 993,
+            "priority": 7,
+            "protocol": EmailInbox.IMAP,
+            "use_ssl": True,
+            "username": "alerts@example.com",
+        }
+    ]
+
+
+def test_email_outbox_subcommand_updates_positional_outbox(owner):
+    """The outbox subcommand should update the selected outbox via positional id."""
+
+    outbox = EmailOutbox.objects.create(
         user=owner,
-        username=username,
+        host="smtp.old.example.com",
+        port=587,
+        username="old@example.com",
+        password="old-pass",
+        from_email="old@example.com",
+    )
+
+    stdout = StringIO()
+    call_command(
+        "email",
+        "outbox",
+        str(outbox.pk),
+        "--host",
+        "smtp.example.com",
+        "--from",
+        "ops@example.com",
+        "--tls",
+        "--priority",
+        "4",
+        stdout=stdout,
+    )
+
+    outbox.refresh_from_db()
+    assert f"Configured outbox #{outbox.pk}" in stdout.getvalue()
+    assert outbox.host == "smtp.example.com"
+    assert outbox.from_email == "ops@example.com"
+    assert outbox.use_tls is True
+    assert outbox.priority == 4
+
+
+def test_email_bridge_subcommand_creates_and_reports_bridge(owner):
+    """The bridge subcommand should keep bridge-specific options grouped together."""
+
+    inbox = EmailInbox.objects.create(
+        user=owner,
+        username="bridge-inbox@example.com",
         host="imap.example.com",
         port=993,
         password="secret",
         protocol=EmailInbox.IMAP,
-        use_ssl=True,
-        is_enabled=True,
-        priority=1,
     )
-
-
-def _create_outbox(owner, username: str) -> EmailOutbox:
-    """Create an outbox profile for tests."""
-
-    return EmailOutbox.objects.create(
+    outbox = EmailOutbox.objects.create(
         user=owner,
         host="smtp.example.com",
         port=587,
-        username=username,
+        username="bridge-outbox@example.com",
         password="secret",
-        use_tls=True,
-        use_ssl=False,
-        from_email=username,
-        is_enabled=True,
-        priority=1,
+        from_email="bridge-outbox@example.com",
     )
 
-
-def test_email_command_reports_configurations():
-    """Calling the command with no flags should report inbox/outbox/bridge data."""
-
-    owner = _create_owner("report-owner")
-    inbox = _create_inbox(owner, "report-inbox@example.com")
-    outbox = _create_outbox(owner, "report-outbox@example.com")
-    EmailBridge.objects.create(name="bridge-a", inbox=inbox, outbox=outbox)
-
-    stdout = io.StringIO()
-    call_command("email", stdout=stdout)
-
-    payload = json.loads(stdout.getvalue())
-    assert payload["inboxes"][0]["username"] == "report-inbox@example.com"
-    assert payload["outboxes"][0]["username"] == "report-outbox@example.com"
-    assert payload["bridges"][0]["name"] == "bridge-a"
-
-
-def test_email_command_configures_profiles_and_bridge():
-    """Configuration flags should create inbox/outbox and bridge records."""
-
-    owner = _create_owner("config-owner")
-    stdout = io.StringIO()
-
+    create_stdout = StringIO()
     call_command(
         "email",
-        "--owner-user",
-        str(owner.pk),
-        "--inbox-username",
-        "cli-inbox@example.com",
-        "--inbox-host",
-        "imap.cli.example.com",
-        "--inbox-password",
-        "secret",
-        stdout=stdout,
-    )
-    inbox = EmailInbox.objects.get(username="cli-inbox@example.com")
-
-    call_command(
-        "email",
-        "--owner-user",
-        str(owner.pk),
-        "--outbox-host",
-        "smtp.cli.example.com",
-        "--outbox-username",
-        "cli-outbox@example.com",
-        "--outbox-password",
-        "secret",
-        "--outbox-from-email",
-        "cli-outbox@example.com",
-        stdout=stdout,
-    )
-    outbox = EmailOutbox.objects.get(username="cli-outbox@example.com")
-
-    call_command(
-        "email",
-        "--bridge-name",
-        "cli bridge",
-        "--bridge-inbox",
+        "bridge",
+        "--name",
+        "Primary bridge",
+        "--inbox",
         str(inbox.pk),
-        "--bridge-outbox",
-        str(outbox.pk),
-        stdout=stdout,
-    )
-
-    bridge = EmailBridge.objects.get(name="cli bridge")
-    assert bridge.inbox_id == inbox.pk
-    assert bridge.outbox_id == outbox.pk
-
-
-def test_email_command_send_uses_mailer(monkeypatch):
-    """Send flags should delegate to apps.emails.mailer.send."""
-
-    owner = _create_owner("send-owner")
-    outbox = _create_outbox(owner, "send-outbox@example.com")
-    captured: dict[str, object] = {}
-
-    def _fake_send(subject, message, recipients, **kwargs):
-        captured["subject"] = subject
-        captured["message"] = message
-        captured["recipients"] = recipients
-        captured["kwargs"] = kwargs
-        return None
-
-    monkeypatch.setattr("apps.emails.mailer.send", _fake_send)
-
-    call_command(
-        "email",
-        "--send",
         "--outbox",
         str(outbox.pk),
-        "--to",
-        "alpha@example.com,beta@example.com",
-        "--subject",
-        "CLI Subject",
-        "--message",
-        "CLI Body",
+        stdout=create_stdout,
     )
 
-    assert captured["subject"] == "CLI Subject"
-    assert captured["message"] == "CLI Body"
-    assert captured["recipients"] == ["alpha@example.com", "beta@example.com"]
-    assert captured["kwargs"]["outbox"].pk == outbox.pk
+    bridge = EmailBridge.objects.get(name="Primary bridge")
+    assert f"Configured bridge #{bridge.pk}" in create_stdout.getvalue()
+
+    report_stdout = StringIO()
+    call_command("email", "bridge", str(bridge.pk), stdout=report_stdout)
+    payload = json.loads(report_stdout.getvalue())
+    assert payload == [
+        {
+            "id": bridge.pk,
+            "inbox_id": inbox.pk,
+            "name": "Primary bridge",
+            "outbox_id": outbox.pk,
+        }
+    ]
 
 
-def test_email_command_search_uses_inbox(monkeypatch):
-    """Search flags should use inbox.search_messages and print JSON results."""
+def test_email_send_subcommand_uses_short_aliases(monkeypatch, owner):
+    """The send subcommand should support the short recipient, subject, message, and from flags."""
 
-    owner = _create_owner("search-owner")
-    inbox = _create_inbox(owner, "search-inbox@example.com")
+    outbox = EmailOutbox.objects.create(
+        user=owner,
+        host="smtp.example.com",
+        port=587,
+        username="sender@example.com",
+        password="secret",
+        from_email="sender@example.com",
+    )
+    sent = {}
 
-    def _fake_search_messages(*, subject, from_address, body, limit, use_regular_expressions):
-        return [
+    def fake_send(subject, message, recipients, from_email=None, outbox=None, fail_silently=False):
+        sent.update(
             {
                 "subject": subject,
-                "from": from_address,
-                "body": body,
-                "date": "Mon, 01 Jan 2024 00:00:00 +0000",
-                "limit": limit,
-                "regex": use_regular_expressions,
+                "message": message,
+                "recipients": recipients,
+                "from_email": from_email,
+                "outbox": outbox,
+                "fail_silently": fail_silently,
             }
-        ]
+        )
 
-    monkeypatch.setattr(inbox, "search_messages", _fake_search_messages)
-    monkeypatch.setattr(
-        "apps.emails.management.commands.email.EmailInbox.objects.get",
-        lambda *args, **kwargs: inbox,
+    monkeypatch.setattr("apps.emails.mailer.send", fake_send)
+
+    stdout = StringIO()
+    call_command(
+        "email",
+        "send",
+        str(outbox.pk),
+        "-t",
+        "alice@example.com,bob@example.com",
+        "-s",
+        "Deploy complete",
+        "-m",
+        "Everything shipped.",
+        "-f",
+        "ops@example.com",
+        stdout=stdout,
     )
 
-    stdout = io.StringIO()
+    assert "Sent email to alice@example.com, bob@example.com" in stdout.getvalue()
+    assert sent == {
+        "subject": "Deploy complete",
+        "message": "Everything shipped.",
+        "recipients": ["alice@example.com", "bob@example.com"],
+        "from_email": "ops@example.com",
+        "outbox": outbox,
+        "fail_silently": False,
+    }
+
+
+def test_email_search_subcommand_uses_aliases(monkeypatch, owner):
+    """The search subcommand should route filters through the selected inbox."""
+
+    inbox = EmailInbox.objects.create(
+        user=owner,
+        username="search@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+        protocol=EmailInbox.IMAP,
+    )
+
+    def fake_search_messages(**kwargs):
+        assert kwargs == {
+            "subject": "invoice",
+            "from_address": "billing@example.com",
+            "body": "paid",
+            "limit": 2,
+            "use_regular_expressions": True,
+        }
+        return [{"subject": "invoice", "from": "billing@example.com"}]
+
+    monkeypatch.setattr(EmailInbox, "search_messages", lambda self, **kwargs: fake_search_messages(**kwargs))
+
+    stdout = StringIO()
+    call_command(
+        "email",
+        "search",
+        str(inbox.pk),
+        "-s",
+        "invoice",
+        "-f",
+        "billing@example.com",
+        "-b",
+        "paid",
+        "-n",
+        "2",
+        "-r",
+        stdout=stdout,
+    )
+
+    assert json.loads(stdout.getvalue()) == [{"from": "billing@example.com", "subject": "invoice"}]
+
+
+def test_email_list_subcommand_reports_all_sections(owner):
+    """The list subcommand should emit the grouped report output."""
+
+    inbox = EmailInbox.objects.create(
+        user=owner,
+        username="list-inbox@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+        protocol=EmailInbox.IMAP,
+    )
+    outbox = EmailOutbox.objects.create(
+        user=owner,
+        host="smtp.example.com",
+        port=587,
+        username="list-outbox@example.com",
+        password="secret",
+        from_email="list-outbox@example.com",
+    )
+    EmailBridge.objects.create(name="Listed bridge", inbox=inbox, outbox=outbox)
+
+    stdout = StringIO()
+    call_command("email", "list", stdout=stdout)
+    payload = json.loads(stdout.getvalue())
+
+    assert payload["inboxes"][0]["id"] == inbox.pk
+    assert payload["outboxes"][0]["id"] == outbox.pk
+    assert payload["bridges"][0]["name"] == "Listed bridge"
+
+
+def test_email_legacy_flat_flags_remain_supported(monkeypatch, owner):
+    """The legacy flat send/search flags should continue to work as a compatibility path."""
+
+    inbox = EmailInbox.objects.create(
+        user=owner,
+        username="legacy-search@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+        protocol=EmailInbox.IMAP,
+    )
+    results = [{"subject": "legacy"}]
+    monkeypatch.setattr(EmailInbox, "search_messages", lambda self, **kwargs: results)
+
+    stdout = StringIO()
     call_command(
         "email",
         "--search",
         "--inbox",
         str(inbox.pk),
         "--subject",
-        "match me",
-        "--search-from",
-        "sender@example.com",
-        "--search-body",
-        "needle",
-        "--search-limit",
-        "3",
-        "--regex",
+        "legacy",
         stdout=stdout,
     )
 
-    payload = json.loads(stdout.getvalue())
-    assert payload[0]["subject"] == "match me"
-    assert payload[0]["from"] == "sender@example.com"
-    assert payload[0]["body"] == "needle"
-    assert payload[0]["limit"] == 3
-    assert payload[0]["regex"] is True
+    assert json.loads(stdout.getvalue()) == results
 
 
-def test_email_command_inbox_priority_can_be_reset_to_zero():
-    """Inbox updates should treat --inbox-priority 0 as a valid change."""
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (("search", "-n", "0"), "--limit must be a positive integer."),
+        (("send",), "send requires --to with at least one recipient."),
+    ],
+)
+def test_email_subcommand_validation_errors(args, message):
+    """The command should keep validation failures specific to each action."""
 
-    owner = _create_owner("priority-owner")
-    inbox = _create_inbox(owner, "priority-inbox@example.com")
-    inbox.priority = 5
-    inbox.save(update_fields=["priority"])
+    with pytest.raises(CommandError, match=message):
+        call_command("email", *args)
 
-    call_command(
-        "email",
-        "--inbox",
-        str(inbox.pk),
-        "--inbox-priority",
-        "0",
+
+def test_email_send_subcommand_accepts_trailing_django_base_options(monkeypatch, owner):
+    """The send subcommand should keep Django base options valid after verb arguments."""
+
+    outbox = EmailOutbox.objects.create(
+        user=owner,
+        host="smtp.example.com",
+        port=587,
+        username="sender@example.com",
+        password="secret",
+        from_email="sender@example.com",
     )
+    sent = {}
 
-    inbox.refresh_from_db()
-    assert inbox.priority == 0
+    def fake_send(subject, message, recipients, from_email=None, outbox=None, fail_silently=False):
+        sent.update(
+            {
+                "subject": subject,
+                "message": message,
+                "recipients": recipients,
+                "from_email": from_email,
+                "outbox": outbox,
+                "fail_silently": fail_silently,
+            }
+        )
 
+    monkeypatch.setattr("apps.emails.mailer.send", fake_send)
 
-def test_email_command_send_from_email_overrides_outbox(monkeypatch):
-    """--from-email should override the selected outbox sender address."""
-
-    owner = _create_owner("send-override-owner")
-    outbox = _create_outbox(owner, "send-override-outbox@example.com")
-    captured: dict[str, object] = {}
-
-    def _fake_send(subject, message, recipients, **kwargs):
-        captured["kwargs"] = kwargs
-        return None
-
-    monkeypatch.setattr("apps.emails.mailer.send", _fake_send)
-
+    stdout = StringIO()
     call_command(
         "email",
-        "--send",
-        "--outbox",
+        "send",
         str(outbox.pk),
-        "--to",
-        "alpha@example.com",
-        "--from-email",
-        "override@example.com",
+        "-t",
+        "alice@example.com",
+        "--verbosity",
+        "2",
+        stdout=stdout,
     )
 
-    assert captured["kwargs"]["from_email"] == "override@example.com"
-    assert captured["kwargs"]["outbox"].from_email == "override@example.com"
+    assert "Sent email to alice@example.com" in stdout.getvalue()
+    assert sent["outbox"] == outbox
+    assert sent["recipients"] == ["alice@example.com"]
 
 
-def test_email_command_search_wraps_validation_error(monkeypatch):
-    """Search should present inbox validation issues as CommandError."""
+def test_email_legacy_bridge_selector_reports_requested_bridge(owner):
+    """The legacy bridge selector should still validate and filter bridge reports."""
 
-    owner = _create_owner("search-validation-owner")
-    inbox = _create_inbox(owner, "search-validation@example.com")
-
-    def _fake_search_messages(**kwargs):
-        raise ValidationError("Invalid search pattern")
-
-    monkeypatch.setattr(inbox, "search_messages", _fake_search_messages)
-    monkeypatch.setattr(
-        "apps.emails.management.commands.email.EmailInbox.objects.get",
-        lambda *args, **kwargs: inbox,
+    inbox = EmailInbox.objects.create(
+        user=owner,
+        username="legacy-bridge-inbox@example.com",
+        host="imap.example.com",
+        port=993,
+        password="secret",
+        protocol=EmailInbox.IMAP,
     )
+    outbox = EmailOutbox.objects.create(
+        user=owner,
+        host="smtp.example.com",
+        port=587,
+        username="legacy-bridge-outbox@example.com",
+        password="secret",
+        from_email="legacy-bridge-outbox@example.com",
+    )
+    bridge = EmailBridge.objects.create(name="Legacy bridge", inbox=inbox, outbox=outbox)
 
-    with pytest.raises(CommandError, match="Search failed: "):
-        call_command("email", "--search", "--inbox", str(inbox.pk), "--regex", "--subject", "(")
+    stdout = StringIO()
+    call_command("email", "--bridge", str(bridge.pk), stdout=stdout)
 
-
-def test_email_command_search_rejects_non_positive_limit():
-    """Search should reject non-positive limits to keep message slicing predictable."""
-
-    with pytest.raises(CommandError, match="--search-limit must be a positive integer"):
-        call_command("email", "--search", "--search-limit", "0")
-
-
-def test_email_command_bridge_flag_zero_surfaces_not_found():
-    """Explicit --bridge 0 should attempt lookup and fail clearly."""
-
-    with pytest.raises(CommandError, match="Bridge not found: 0"):
-        call_command("email", "--bridge", "0", "--bridge-name", "renamed")
-
-
-def test_email_command_inbox_flag_zero_surfaces_not_found():
-    """Explicit --inbox 0 should not fall through to create mode."""
-
-    with pytest.raises(CommandError, match="Inbox not found: 0"):
-        call_command("email", "--inbox", "0", "--inbox-host", "imap.invalid")
+    assert json.loads(stdout.getvalue()) == [
+        {
+            "id": bridge.pk,
+            "inbox_id": inbox.pk,
+            "name": "Legacy bridge",
+            "outbox_id": outbox.pk,
+        }
+    ]
 
 
-def test_email_command_outbox_flag_zero_surfaces_not_found():
-    """Explicit --outbox 0 should not fall through to create mode."""
+def test_email_legacy_bridge_selector_raises_for_missing_bridge(db):
+    """The legacy bridge selector should keep the not-found validation behavior."""
 
-    with pytest.raises(CommandError, match="Outbox not found: 0"):
-        call_command("email", "--outbox", "0", "--outbox-host", "smtp.invalid")
+    with pytest.raises(CommandError, match="Bridge not found: 999999"):
+        call_command("email", "--bridge", "999999")

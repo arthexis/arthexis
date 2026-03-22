@@ -9,6 +9,8 @@ from django.utils.translation import gettext_lazy as _, ngettext
 from apps.core.admin import OwnableAdminMixin
 from .models import (
     PlaywrightBrowser,
+    PlaywrightEngineFeatureDisabledError,
+    PlaywrightRuntimeDisabledError,
     PlaywrightScript,
     SessionCookie,
     WebsiteScreenshotRun,
@@ -31,6 +33,9 @@ class PlaywrightBrowserAdmin(admin.ModelAdmin):
         for browser in queryset:
             try:
                 driver = browser.create_driver()
+            except (PlaywrightEngineFeatureDisabledError, PlaywrightRuntimeDisabledError) as exc:
+                self.message_user(request, str(exc), level=messages.WARNING)
+                continue
             except Exception as exc:  # pragma: no cover
                 logger.exception("Unable to start browser %s", browser)
                 self.message_user(request, _("Failed to start %(browser)s: %(error)s") % {"browser": browser, "error": exc}, level=messages.ERROR)
@@ -61,10 +66,14 @@ class PlaywrightScriptAdmin(admin.ModelAdmin):
         for script in queryset:
             try:
                 script.execute(browser=browser)
-                executed += 1
+            except (PlaywrightEngineFeatureDisabledError, PlaywrightRuntimeDisabledError) as exc:
+                self.message_user(request, str(exc), level=messages.WARNING)
+                continue
             except Exception as exc:  # pragma: no cover
                 logger.exception("Failed to execute script %s", script)
                 self.message_user(request, _("Failed to execute %(script)s: %(error)s") % {"script": script, "error": exc}, level=messages.ERROR)
+                continue
+            executed += 1
         if executed:
             self.message_user(
                 request,
@@ -101,6 +110,9 @@ class WebsiteScreenshotScheduleAdmin(admin.ModelAdmin):
         for schedule in queryset:
             try:
                 execute_website_screenshot_schedule(schedule, user=request.user)
+            except (PlaywrightEngineFeatureDisabledError, PlaywrightRuntimeDisabledError) as exc:
+                self.message_user(request, str(exc), level=messages.WARNING)
+                continue
             except Exception as exc:
                 self.message_user(request, _("Failed %(slug)s: %(error)s") % {"slug": schedule.slug, "error": exc}, level=messages.ERROR)
                 continue

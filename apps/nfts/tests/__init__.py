@@ -1,1 +1,0 @@
-"""NFT tests package."""

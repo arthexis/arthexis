@@ -12,6 +12,7 @@ from django.middleware.csrf import CsrfViewMiddleware
 from config.request_utils import is_https_request
 from config.settings_helpers import (
     extract_ip_from_host,
+    install_normalize_forwarded_host,
     install_validate_host_with_subnets,
     load_site_config_allowed_hosts,
     resolve_local_fqdn,
@@ -20,13 +21,16 @@ from config.settings_helpers import (
 
 from .base import BASE_DIR
 
+install_normalize_forwarded_host()
 install_validate_host_with_subnets()
 
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
     "testserver",
+    "10.42.0.1",
     "10.42.0.0/16",
+    "192.168.129.10",
     "192.168.0.0/16",
     "arthexis.com",
     "www.arthexis.com",

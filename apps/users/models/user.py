@@ -315,11 +315,6 @@ class User(Entity, AbstractUser):
         ordered_numbers = self.phone_numbers.order_by("priority", "pk")
         return list(ordered_numbers)
 
-    def get_phone_numbers_by_priority(self):
-        """Backward-compatible alias for :meth:`get_phones_by_priority`."""
-
-        return self.get_phones_by_priority()
-
     @property
     def odoo_employee(self):
         return self._direct_profile("OdooEmployee", app_label="odoo")
@@ -327,23 +322,6 @@ class User(Entity, AbstractUser):
     @property
     def odoo_profile(self):
         return self.odoo_employee
-
-    @property
-    def social_profile(self):
-        avatars = getattr(self, "chat_avatars", None)
-        if avatars is None:
-            return None
-
-        for avatar in avatars.all():
-            for app_label, model_name in (
-                ("socials", "BlueskyProfile"),
-                ("socials", "DiscordProfile"),
-            ):
-                model = apps.get_model(app_label, model_name)
-                profile = model.objects.filter(avatar=avatar).first()
-                if profile is not None:
-                    return profile
-        return None
 
     class Meta(AbstractUser.Meta):
         verbose_name = _("User")

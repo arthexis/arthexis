@@ -6,13 +6,13 @@ from datetime import timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
 from django.test import RequestFactory
 from django.utils import timezone
 
-from apps.actions.models import RemoteActionToken
-from apps.ops import security_alerts
-from apps.ops.models import OperationScreen
+from apps.ops import security_alerts, widgets as ops_widgets
+from apps.ops.models import SecurityAlertEvent
 from apps.widgets.models import WidgetZone
 from apps.widgets.services import render_zone_widgets, sync_registered_widgets
 
@@ -20,203 +20,132 @@ from apps.widgets.services import render_zone_widgets, sync_registered_widgets
 pytestmark = pytest.mark.django_db
 
 
-def test_build_security_alerts_includes_alerts_from_all_sources(monkeypatch):
-    """Regression: aggregator should surface token, credential, and operations alerts."""
+def test_build_security_alerts_includes_active_error_events_only() -> None:
+    """Aggregator should include active persisted error events only."""
 
-    user = get_user_model().objects.create_user(username="security-alerts-user")
-    RemoteActionToken.issue_for_user(
-        user,
-        expires_at=timezone.now() + timedelta(hours=2),
+    SecurityAlertEvent.record_occurrence(
+        key="event-active",
+        message="Active worker failure.",
+        detail="traceback",
+        remediation_url="/admin/system/dashboard-rules-report/",
     )
-    OperationScreen.objects.create(
-        title="Required operation",
-        slug="required-operation",
-        description="Must be completed.",
-        start_url="/admin/",
-        is_required=True,
-        is_active=True,
+    SecurityAlertEvent.record_occurrence(
+        key="event-recovered",
+        message="Recovered worker failure.",
+        detail="traceback",
+        remediation_url="/admin/system/dashboard-rules-report/",
     )
-    monkeypatch.setattr(
-        security_alerts,
-        "_CREDENTIAL_RULE_SOURCES",
-        (
-            security_alerts.DashboardRuleAlertSource(
-                evaluator=lambda: {
-                    "success": False,
-                    "message": "Configure an Email Inbox.",
-                },
-                remediation_url_name="admin:system-dashboard-rules-report",
-            ),
-        ),
-    )
+    SecurityAlertEvent.clear_occurrence(key="event-recovered")
 
     alerts = security_alerts.build_security_alerts()
 
-    messages = {alert["message"] for alert in alerts}
-    severities = {alert["severity"] for alert in alerts}
-
-    assert any("remote action token" in message.lower() for message in messages)
-    assert "Configure an Email Inbox." in messages
-    assert any("required operation" in message.lower() for message in messages)
-    assert severities == {"error", "warning"}
-    assert all(alert["remediation_url"] for alert in alerts)
+    assert [alert["message"] for alert in alerts] == ["Active worker failure."]
+    assert alerts[0]["severity"] == "error"
 
 
-def test_build_security_alerts_returns_empty_list_when_all_checks_pass(monkeypatch):
-    """Return an empty list when no source reports an active alert."""
+def test_build_security_alerts_isolates_collector_failures(monkeypatch) -> None:
+    """Collector exceptions should be isolated and recorded as active events."""
 
-    monkeypatch.setattr(
-        security_alerts,
-        "_CREDENTIAL_RULE_SOURCES",
-        (
-            security_alerts.DashboardRuleAlertSource(
-                evaluator=lambda: {"success": True, "message": "All rules met."},
-                remediation_url_name="admin:system-dashboard-rules-report",
-            ),
-        ),
-    )
-
-    assert security_alerts.build_security_alerts() == []
-
-
-def test_security_alert_widget_template_renders_empty_state():
-    """Template should render a clear empty-state helper when no alerts exist."""
-
-    html = render_to_string("widgets/security_alerts.html", {"alerts": []})
-
-    assert "No active security alerts." in html
-
-
-def test_security_alert_widget_template_uses_plain_link_for_remediation():
-    """Regression: remediation control should render as a link, not a button-styled anchor."""
-
-    html = render_to_string(
-        "widgets/security_alerts.html",
-        {
-            "alerts": [
-                {
-                    "severity": "warning",
-                    "message": "Token expires soon.",
-                    "remediation_url": "/admin/actions/remoteactiontoken/",
-                }
-            ]
-        },
-    )
-
-    assert 'href="/admin/actions/remoteactiontoken/"' in html
-    assert 'class="button"' not in html
-
-
-def test_build_security_alerts_isolates_collector_failures(monkeypatch):
-    """One collector failure should not suppress alerts from other collectors."""
-
-    def _boom():
+    def _boom(now=None) -> list[security_alerts.SecurityAlert]:
         raise RuntimeError("collector exploded")
 
-    monkeypatch.setattr(
-        security_alerts,
-        "expiring_remote_action_token_alerts",
-        _boom,
-    )
-    monkeypatch.setattr(
-        security_alerts,
-        "credential_readiness_dashboard_rule_alerts",
-        lambda: [
-            security_alerts.SecurityAlert(
-                severity="error",
-                message="Credential issue",
-                remediation_url="/admin/system/dashboard-rules-report/",
-            )
-        ],
-    )
-    monkeypatch.setattr(
-        security_alerts,
-        "operations_security_alerts",
-        lambda: [
-            security_alerts.SecurityAlert(
-                severity="warning",
-                message="Ops issue",
-                remediation_url="/admin/ops/operationscreen/",
-            )
-        ],
-    )
+    monkeypatch.setattr(security_alerts, "error_event_security_alerts", _boom)
 
     alerts = security_alerts.build_security_alerts()
 
-    assert [alert["severity"] for alert in alerts] == ["error", "warning"]
-    assert [alert["message"] for alert in alerts] == ["Credential issue", "Ops issue"]
+    assert alerts == []
+    persisted_event = SecurityAlertEvent.objects.get(key="security-alert-source-error-events")
+    assert persisted_event.occurrence_count == 1
 
+def test_record_occurrence_keeps_last_occurred_at_monotonic() -> None:
+    """Older occurrences should not move last_occurred_at backwards."""
 
-def test_security_alert_widget_template_renders_translated_severity_and_colored_badges():
-    """Severity label should be translated and rendered with badge classes."""
-
-    html = render_to_string(
-        "widgets/security_alerts.html",
-        {
-            "alerts": [
-                {
-                    "severity": "error",
-                    "message": "Credential readiness failed.",
-                    "remediation_url": "/admin/system/dashboard-rules-report/",
-                },
-                {
-                    "severity": "info",
-                    "message": "Heads up.",
-                    "remediation_url": "/admin/",
-                },
-            ]
-        },
+    first_seen = timezone.now()
+    SecurityAlertEvent.record_occurrence(
+        key="event-monotonic",
+        message="Monotonic event.",
+        detail="first",
+        remediation_url="/admin/system/dashboard-rules-report/",
+        occurred_at=first_seen,
+    )
+    SecurityAlertEvent.record_occurrence(
+        key="event-monotonic",
+        message="Monotonic event.",
+        detail="older replay",
+        remediation_url="/admin/system/dashboard-rules-report/",
+        occurred_at=first_seen - timedelta(minutes=5),
     )
 
-    assert "Error" in html
-    assert "Info" in html
-    assert "security-alert__severity--error" in html
-    assert "security-alert__severity--info" in html
+    event = SecurityAlertEvent.objects.get(key="event-monotonic")
+    assert event.occurrence_count == 2
+    assert event.last_occurred_at == first_seen
 
 
-def test_security_alert_widget_registered_path_respects_staff_permissions(monkeypatch):
-    """Exercise registered widget rendering pipeline for staff and non-staff users."""
+def test_record_occurrence_sanitizes_unsafe_remediation_urls() -> None:
+    """Unsafe URL schemes should be replaced with the admin fallback."""
 
-    monkeypatch.setattr(
-        security_alerts,
-        "build_security_alerts",
-        lambda: [
-            {
-                "severity": "warning",
-                "message": "Token expires soon.",
-                "remediation_url": "/admin/actions/remoteactiontoken/",
-            }
-        ],
+    SecurityAlertEvent.record_occurrence(
+        key="event-unsafe-url",
+        message="Unsafe link attempt.",
+        remediation_url="javascript:alert(1)",
     )
 
-    sync_registered_widgets()
-    request_factory = RequestFactory()
-    User = get_user_model()
+    event = SecurityAlertEvent.objects.get(key="event-unsafe-url")
+    assert event.remediation_url == "/admin/"
 
-    staff_user = User.objects.create_user(username="alerts-staff", is_staff=True)
-    staff_request = request_factory.get("/")
-    staff_request.user = staff_user
 
-    rendered_for_staff = render_zone_widgets(
-        request=staff_request,
-        zone_slug=WidgetZone.ZONE_SIDEBAR,
+def test_record_occurrence_keeps_safe_absolute_remediation_urls() -> None:
+    """HTTP(S) remediation URLs should remain unchanged."""
+
+    SecurityAlertEvent.record_occurrence(
+        key="event-safe-url",
+        message="Safe link.",
+        remediation_url="https://example.com/remediate",
     )
 
-    security_widget_html = [
-        item.html
-        for item in rendered_for_staff
-        if item.widget.slug == "security-alerts"
-    ]
-    assert security_widget_html
-    assert 'href="/admin/actions/remoteactiontoken/"' in security_widget_html[0]
-    assert 'class="button"' not in security_widget_html[0]
+    event = SecurityAlertEvent.objects.get(key="event-safe-url")
+    assert event.remediation_url == "https://example.com/remediate"
 
-    non_staff_user = User.objects.create_user(username="alerts-user", is_staff=False)
-    non_staff_request = request_factory.get("/")
-    non_staff_request.user = non_staff_user
 
-    rendered_for_non_staff = render_zone_widgets(
-        request=non_staff_request,
-        zone_slug=WidgetZone.ZONE_SIDEBAR,
+def test_build_security_alerts_clears_collector_failure_on_success(monkeypatch) -> None:
+    """Collector failure events should be deactivated after successful collection."""
+
+    SecurityAlertEvent.record_occurrence(
+        key="security-alert-source-error-events",
+        message="Security alert source failed.",
+        detail="error_events: boom",
+        remediation_url="/admin/system/dashboard-rules-report/",
     )
-    assert all(item.widget.slug != "security-alerts" for item in rendered_for_non_staff)
+
+    monkeypatch.setattr(security_alerts, "error_event_security_alerts", lambda now=None: [])
+
+    alerts = security_alerts.build_security_alerts()
+
+    assert alerts == []
+    persisted_event = SecurityAlertEvent.objects.get(key="security-alert-source-error-events")
+    assert persisted_event.is_active is False
+
+def test_error_event_security_alerts_surface_last_seen_and_count() -> None:
+    """Recorded event alerts should expose summary with timestamp and occurrence count."""
+
+    event = SecurityAlertEvent.record_occurrence(
+        key="event-email-worker",
+        message="Email worker failed.",
+        detail="smtp timeout",
+        remediation_url="/admin/system/dashboard-rules-report/",
+    )
+    SecurityAlertEvent.record_occurrence(
+        key="event-email-worker",
+        message="Email worker failed.",
+        detail="smtp timeout",
+        remediation_url="/admin/system/dashboard-rules-report/",
+    )
+    event.refresh_from_db()
+
+    alerts = security_alerts.error_event_security_alerts(
+        now=event.last_occurred_at + timedelta(minutes=1)
+    )
+
+    assert len(alerts) == 1
+    assert alerts[0].message == "Email worker failed."
+    assert "Count: 2" in alerts[0].summary

@@ -1,4 +1,4 @@
-"""Backward-compatible wrapper for the charge point simulator."""
+"""Backward-compatible wrapper for the legacy OCPP simulator import path."""
 
 from apps.simulators import ChargePointSimulator, SimulatorConfig
 

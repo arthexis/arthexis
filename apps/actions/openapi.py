@@ -72,7 +72,7 @@ def build_openapi_spec(
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "description": "Optional arguments passed to the linked recipe.",
+                                "description": "Optional JSON arguments supplied with the remote action invocation.",
                                 "properties": {
                                     "args": {"type": "array", "items": {}},
                                     "kwargs": {"type": "object", "additionalProperties": True},
@@ -83,14 +83,15 @@ def build_openapi_spec(
                 },
                 "responses": {
                     "200": {
-                        "description": "Remote action executed successfully.",
+                        "description": "Remote action invocation accepted.",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "type": "object",
                                     "properties": {
                                         "action": {"type": "string"},
-                                        "result": {},
+                                        "args": {"type": "array", "items": {}},
+                                        "kwargs": {"type": "object", "additionalProperties": True},
                                     },
                                 }
                             }
@@ -134,7 +135,7 @@ def build_openapi_spec(
         "openapi": "3.1.0",
         "info": {
             "title": "Remote Actions API",
-            "description": "User-scoped API spec for invoking remote recipe-backed actions.",
+            "description": "User-scoped API spec for invoking remote actions.",
             "version": "1.0.0",
         },
         "servers": [{"url": _server_url_for_request(request), "description": "Current server"}],
