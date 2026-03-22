@@ -6,12 +6,12 @@ env:
   NODE_OPTIONS: '--no-deprecation'
 
 concurrency:
-  group: dashboard-screenshot-${{ github.ref }}
+  group: dashboard-screenshot-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 on:
   schedule:
-    - cron: '0 6 * * *'
+    - cron: '17 6 * * *'
   pull_request:
     types:
       - opened
