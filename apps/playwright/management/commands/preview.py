@@ -136,7 +136,7 @@ class Command(BaseCommand):
 
             normalized_options = self._normalize_options(options)
             base_url = normalized_options["base_url"].rstrip("/")
-            if options.get("wait_for_suite", False):
+            if normalized_options.get("wait_for_suite", False):
                 self._wait_for_suite_ready(
                     base_url=base_url,
                     timeout_seconds=normalized_options.get("suite_timeout", 60),
@@ -697,6 +697,14 @@ class Command(BaseCommand):
                     pass
                 self._validate_login_success(driver.current_url, login_url)
 
+            if page_ready_state == "networkidle":
+                self.stderr.write(
+                    self.style.WARNING(
+                        "Selenium does not support waiting for networkidle; treating "
+                        "--page-ready-state=networkidle as load."
+                    )
+                )
+
             for capture in captures:
                 width, height = capture["viewport_size"]
                 output = capture["output"]
@@ -706,11 +714,6 @@ class Command(BaseCommand):
                 WebDriverWait(driver, 20).until(
                     lambda current_driver: current_driver.execute_script("return document.readyState") == "complete"
                 )
-                if page_ready_state == "networkidle":
-                    WebDriverWait(driver, 20).until(
-                        lambda current_driver: current_driver.execute_script("return document.readyState")
-                        == "complete"
-                    )
                 for selector in ready_selectors:
                     WebDriverWait(driver, 20).until(
                         lambda current_driver, css=selector: current_driver.find_elements(By.CSS_SELECTOR, css)
