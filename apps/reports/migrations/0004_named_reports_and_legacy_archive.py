@@ -8,61 +8,15 @@ DEFAULT_TEMPLATE = "reports/sql/default_report.html"
 
 
 def archive_sql_reports(apps, schema_editor):
-    """Archive legacy free-form SQL report definitions before dropping columns."""
+    """Defer report archival to the checkpointed release transform pipeline."""
 
-    SQLReport = apps.get_model("reports", "SQLReport")
-
-    for report in SQLReport.objects.all():
-        report.legacy_definition = {
-            "database_alias": getattr(report, "database_alias", "default"),
-            "html_template_name": getattr(report, "html_template_name", DEFAULT_TEMPLATE),
-            "query": getattr(report, "query", ""),
-        }
-        report.parameters = {}
-        report.report_type = LEGACY_REPORT_TYPE
-        report.schedule_enabled = False
-        report.schedule_interval_minutes = 0
-        report.next_scheduled_run_at = None
-        report.save(
-            update_fields=[
-                "legacy_definition",
-                "parameters",
-                "report_type",
-                "schedule_enabled",
-                "schedule_interval_minutes",
-                "next_scheduled_run_at",
-                "updated_at",
-            ]
-        )
+    del apps, schema_editor
 
 
 def copy_product_metadata(apps, schema_editor):
-    """Copy legacy product metadata into structured archival fields."""
+    """Defer product archival to the checkpointed release transform pipeline."""
 
-    SQLReport = apps.get_model("reports", "SQLReport")
-    SQLReportProduct = apps.get_model("reports", "SQLReportProduct")
-    report_lookup = {report.pk: report for report in SQLReport.objects.all()}
-
-    for product in SQLReportProduct.objects.select_related("report"):
-        parent = report_lookup.get(product.report_id)
-        legacy_definition = getattr(parent, "legacy_definition", None) or {}
-        product.report_type = getattr(parent, "report_type", LEGACY_REPORT_TYPE)
-        product.parameters = {}
-        product.renderer_template_name = legacy_definition.get(
-            "html_template_name", DEFAULT_TEMPLATE
-        )
-        product.execution_details = {
-            "database_alias": getattr(product, "database_alias", "default"),
-            "resolved_sql": getattr(product, "resolved_sql", ""),
-        }
-        product.save(
-            update_fields=[
-                "report_type",
-                "parameters",
-                "renderer_template_name",
-                "execution_details",
-            ]
-        )
+    del apps, schema_editor
 
 
 class Migration(migrations.Migration):

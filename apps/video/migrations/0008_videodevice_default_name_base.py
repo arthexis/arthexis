@@ -3,26 +3,9 @@ from django.utils.text import slugify
 
 
 def update_videodevice_default_name(apps, schema_editor):
-    VideoDevice = apps.get_model("video", "VideoDevice")
-    old_name = "BASE (migrate)"
-    new_name = "BASE"
-    old_slug = slugify(old_name)
-    new_slug = slugify(new_name)
-    devices_to_update = []
+    """Defer legacy default-name cleanup to the release transform pipeline."""
 
-    for device in VideoDevice.objects.filter(name=old_name):
-        device.name = new_name
-        slug = (device.slug or "").strip()
-        if not slug or slug == old_slug:
-            device.slug = new_slug
-        devices_to_update.append(device)
-
-    if devices_to_update:
-        VideoDevice.objects.bulk_update(
-            devices_to_update,
-            ["name", "slug"],
-            batch_size=500,
-        )
+    del apps, schema_editor, slugify
 
 
 class Migration(migrations.Migration):

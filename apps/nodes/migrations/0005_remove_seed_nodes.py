@@ -2,8 +2,9 @@ from django.db import migrations
 
 
 def remove_seed_nodes(apps, schema_editor):
-    Node = apps.get_model("nodes", "Node")
-    Node.objects.filter(is_seed_data=True).delete()
+    """Defer seed-node cleanup to the existing deferred node migration task."""
+
+    del apps, schema_editor
 
 
 class Migration(migrations.Migration):

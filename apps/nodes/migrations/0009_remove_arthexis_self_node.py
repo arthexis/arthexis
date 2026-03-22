@@ -3,16 +3,9 @@ from django.db.models import Q
 
 
 def remove_arthexis_self_node(apps, schema_editor):
-    Node = apps.get_model("nodes", "Node")
-    Node.objects.filter(
-        Q(current_relation="SELF")
-        & (
-            Q(hostname="arthexis.com")
-            | Q(network_hostname="arthexis.com")
-            | Q(address="arthexis.com")
-            | Q(public_endpoint="arthexis")
-        )
-    ).delete()
+    """Defer legacy self-node cleanup to the existing deferred node migration task."""
+
+    del apps, schema_editor, Q
 
 
 class Migration(migrations.Migration):

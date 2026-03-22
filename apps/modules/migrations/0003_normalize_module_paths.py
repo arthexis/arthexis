@@ -2,6 +2,8 @@ from django.db import migrations
 
 
 def normalize(path):
+    """Return the normalized module path used by the historical migration."""
+
     if path is None:
         return None
     stripped = str(path).strip("/")
@@ -9,28 +11,9 @@ def normalize(path):
 
 
 def forwards(apps, schema_editor):
-    Module = apps.get_model("modules", "Module")
-    taken_paths = set(Module.objects.values_list("path", flat=True))
+    """Defer path normalization to the checkpointed release transform pipeline."""
 
-    for module in Module.objects.order_by("id"):
-        normalized = normalize(module.path)
-        if normalized == module.path:
-            continue
-
-        # Avoid collisions when multiple rows normalize to the same path.
-        taken_paths.discard(module.path)
-        target = normalized
-        if target in taken_paths:
-            base = normalized.strip("/")
-            counter = 0
-            while target in taken_paths:
-                suffix = f"{base}-{module.pk}" if counter == 0 else f"{base}-{module.pk}-{counter}"
-                target = normalize(suffix)
-                counter += 1
-
-        module.path = target
-        module.save(update_fields=["path"])
-        taken_paths.add(target)
+    del apps, schema_editor
 
 
 class Migration(migrations.Migration):
