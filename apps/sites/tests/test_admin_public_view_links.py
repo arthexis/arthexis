@@ -7,7 +7,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.urls import reverse
 
-from apps.extensions.models import JsExtension
 from apps.shop.models import Shop, ShopOrder
 from apps.terms.models import Term
 
@@ -104,58 +103,3 @@ def test_shop_admin_pages_show_storefront_and_tracking_links(client, admin_user)
         reverse("shop:order_tracking", kwargs={"tracking_token": order.tracking_token})
         in content
     )
-
-
-def test_extension_admin_shows_catalog_and_asset_links_for_enabled_extensions(client, admin_user):
-    """Enabled JS extension admin pages should expose catalog and served asset routes."""
-
-    client.force_login(admin_user)
-    extension = JsExtension.objects.create(
-        slug="ops-helper",
-        name="Ops Helper",
-        content_script="console.log('ready')",
-        background_script="console.log('background')",
-        options_page="<html><body>Options</body></html>",
-    )
-
-    changelist_response = client.get(reverse("admin:extensions_jsextension_changelist"))
-    assert changelist_response.status_code == 200
-    assert reverse("extensions:catalog") in changelist_response.content.decode()
-
-    change_response = client.get(
-        reverse("admin:extensions_jsextension_change", args=[extension.pk])
-    )
-    assert change_response.status_code == 200
-    content = change_response.content.decode()
-    assert reverse("extensions:catalog") in content
-    assert reverse("extensions:manifest", args=[extension.slug]) in content
-    assert reverse("extensions:download", args=[extension.slug]) in content
-    assert reverse("extensions:content", args=[extension.slug]) in content
-    assert reverse("extensions:background", args=[extension.slug]) in content
-    assert reverse("extensions:options", args=[extension.slug]) in content
-
-
-def test_extension_admin_hides_asset_links_for_disabled_extensions(client, admin_user):
-    """Disabled JS extension admin pages should not advertise dead asset routes."""
-
-    client.force_login(admin_user)
-    extension = JsExtension.objects.create(
-        slug="disabled-helper",
-        name="Disabled Helper",
-        is_enabled=False,
-        content_script="console.log('ready')",
-        background_script="console.log('background')",
-        options_page="<html><body>Options</body></html>",
-    )
-
-    change_response = client.get(
-        reverse("admin:extensions_jsextension_change", args=[extension.pk])
-    )
-    assert change_response.status_code == 200
-    content = change_response.content.decode()
-    assert reverse("extensions:catalog") in content
-    assert reverse("extensions:manifest", args=[extension.slug]) not in content
-    assert reverse("extensions:download", args=[extension.slug]) not in content
-    assert reverse("extensions:content", args=[extension.slug]) not in content
-    assert reverse("extensions:background", args=[extension.slug]) not in content
-    assert reverse("extensions:options", args=[extension.slug]) not in content

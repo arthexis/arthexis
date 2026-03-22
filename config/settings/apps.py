@@ -106,6 +106,7 @@ def _legacy_runtime_app_packages() -> set[str]:
 
 LEGACY_MIGRATION_APPS = [
     "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig",
+    "apps._legacy.extensions_migration_only.apps.ExtensionsMigrationOnlyConfig",
     "apps._legacy.recipes_migration_only.apps.RecipesMigrationOnlyConfig",
     "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig",
     "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
