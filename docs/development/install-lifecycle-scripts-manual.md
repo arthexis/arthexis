@@ -45,9 +45,23 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 
 The script also:
 - Verifies Nginx and Redis availability for roles that require them, writing `redis.env` when Redis is configured.
-- Creates `.venv`, installs dependencies via `scripts/helpers/pip_install.py`, applies migrations, and refreshes environment secrets via `env-refresh.sh`.
+- Creates `.venv`, installs runtime dependencies via `scripts/helpers/pip_install.py`, applies migrations, and refreshes environment secrets via `env-refresh.sh`. Browser preview/test tooling stays opt-in unless you rerun `env-refresh.sh` with a preview profile.
 - Writes lock files capturing the selected role, Nginx mode, and enabled subsystems so the runtime helpers know how to behave.
 - Refreshes desktop shortcuts on Linux desktops for quick access to the UI and maintenance commands.
+
+### 1.1.1 `env-refresh.sh` install profiles
+
+`env-refresh.sh` now keeps ordinary runtime refreshes lean by default. Unless you opt in, it installs only the base runtime requirements plus any hardware requirements implied by lock files or role selection. Browser automation tooling is no longer installed automatically by `install.sh`, `upgrade.sh`, or a plain `./env-refresh.sh --deps-only`.
+
+| Command | What it installs |
+| --- | --- |
+| `./env-refresh.sh` | Runtime dependencies only. No Playwright browser binaries or Selenium. |
+| `./env-refresh.sh --deps-only` | Same lean runtime dependency refresh, without database/env updates. |
+| `./env-refresh.sh --deps-only --with-preview-tools` | Runtime dependencies plus Playwright, Playwright browser binaries, and Selenium for preview/screenshot workflows. |
+| `ARTHEXIS_INSTALL_PROFILE=preview ./env-refresh.sh --deps-only` | Environment-variable equivalent of the preview tooling profile. |
+| `./env-refresh.sh --deps-only --with-browser-tests` | Alias for the full browser-tooling profile when explicitly preparing browser-driven test environments. |
+
+Use the preview profile before `python manage.py preview ...` or any intentional screenshot capture flow. Keep runtime nodes on the default profile unless they actively need browser automation.
 
 ### 1.2 Windows: `install.bat`
 
@@ -123,7 +137,7 @@ Supported options:
 | `--no-warn` | Skips interactive confirmation before destructive database operations (used with `--clean` or uninstall flows). |
 
 Additional behaviour:
-- Before applying migrations it refreshes Nginx maintenance assets, optionally clears the database, reruns `env-refresh.sh`, migrates legacy systemd configurations, and restarts services unless `--no-start`/`--no-restart` was requested.
+- Before applying migrations it refreshes Nginx maintenance assets, optionally clears the database, reruns `env-refresh.sh` on the lean runtime profile, migrates legacy systemd configurations, and restarts services unless `--no-start`/`--no-restart` was requested.
 - After restarting, it updates desktop shortcuts so GUI launchers stay current.
 
 ### 3.2 Windows: `upgrade.bat`

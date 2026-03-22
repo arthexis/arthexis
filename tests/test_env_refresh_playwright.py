@@ -28,6 +28,76 @@ def _run_bash(script: str, *, tmp_path: Path) -> subprocess.CompletedProcess[str
     )
 
 
+def test_preview_tooling_is_skipped_for_runtime_profile(tmp_path: Path):
+    result = _run_bash(
+        """
+        source ./env-refresh.sh
+        INSTALL_PROFILE=runtime
+        ensure_playwright_installed() { echo should-not-run >&2; return 99; }
+        ensure_playwright_browsers_installed() { echo should-not-run >&2; return 99; }
+        ensure_selenium_installed() { echo should-not-run >&2; return 99; }
+        if should_install_preview_tooling; then
+          echo unexpected-enable >&2
+          exit 1
+        fi
+        echo profile=$INSTALL_PROFILE
+        """,
+        tmp_path=tmp_path,
+    )
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "profile=runtime" in output
+    assert "unexpected-enable" not in output
+    assert "should-not-run" not in output
+
+
+def test_preview_tooling_profile_aliases_enable_browser_setup(tmp_path: Path):
+    result = _run_bash(
+        """
+        source ./env-refresh.sh --with-preview-tools
+        ensure_playwright_installed() { echo playwright; }
+        ensure_playwright_browsers_installed() { echo browsers; }
+        ensure_selenium_installed() { echo selenium; }
+        if ! should_install_preview_tooling; then
+          echo preview-disabled >&2
+          exit 1
+        fi
+        ensure_playwright_installed
+        ensure_playwright_browsers_installed
+        ensure_selenium_installed
+        echo profile=$INSTALL_PROFILE
+        """,
+        tmp_path=tmp_path,
+    )
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "profile=preview" in output
+    assert "playwright" in output
+    assert "browsers" in output
+    assert "selenium" in output
+
+
+def test_browser_test_profile_env_var_normalizes_to_browser_tests(tmp_path: Path):
+    result = _run_bash(
+        """
+        export ARTHEXIS_INSTALL_PROFILE=CI
+        source ./env-refresh.sh
+        if ! should_install_preview_tooling; then
+          echo browser-tests-disabled >&2
+          exit 1
+        fi
+        echo profile=$INSTALL_PROFILE
+        """,
+        tmp_path=tmp_path,
+    )
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "profile=browser-tests" in output
+
+
 def test_playwright_host_dependency_install_warns_without_root_access(tmp_path: Path):
     result = _run_bash(
         f"""

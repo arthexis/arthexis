@@ -99,7 +99,7 @@ Agents must run relevant tests after code changes.
 ### Test Execution
 
 * Execute tests and **fix errors introduced by changes**.
-* Prefer validated repository entrypoints over ad-hoc interpreter calls. Run `./env-refresh.sh --deps-only` before Django or pytest commands when the environment may be unbootstrapped.
+* Prefer validated repository entrypoints over ad-hoc interpreter calls. Run `./env-refresh.sh --deps-only` before Django or pytest commands when the environment may be unbootstrapped. Add `--with-preview-tools` when you intentionally need screenshot or browser-test tooling.
 * Use `.venv/bin/python` (or the repo's validated wrapper/management entrypoints) instead of bare `python` when invoking `manage.py` or `pytest` directly.
 * Prefer `python manage.py test run -- ...` and `python manage.py migrations check` over raw `python -m pytest` / `makemigrations --check` when those entrypoints cover the task.
 * Avoid creating tests for **micro-behaviors** unless:
@@ -203,13 +203,14 @@ This allows multiple pages to be captured in one run.
 Before running previews:
 
 ```
-./env-refresh.sh --deps-only
+./env-refresh.sh --deps-only --with-preview-tools
 ```
 
-This ensures:
+This opt-in preview profile ensures:
 
-* Playwright dependencies
+* Playwright Python dependencies
 * browser binaries
+* Selenium support for browser-driven tooling
 * preview tooling
 
 are correctly installed.

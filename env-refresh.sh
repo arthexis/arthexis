@@ -88,6 +88,7 @@ LOCK_DIR="$SCRIPT_DIR/.locks"
 FORCE_REFRESH=0
 PIP_FRESHNESS_MINUTES=0
 DEPS_ONLY=0
+INSTALL_PROFILE="${ARTHEXIS_INSTALL_PROFILE:-runtime}"
 
 LATEST=0
 CLEAN=0
@@ -113,11 +114,55 @@ while [[ $# -gt 0 ]]; do
       DEPS_ONLY=1
       shift
       ;;
+    --install-profile)
+      INSTALL_PROFILE="$2"
+      shift 2
+      ;;
+    --with-preview-tools)
+      INSTALL_PROFILE=preview
+      shift
+      ;;
+    --with-browser-tests)
+      INSTALL_PROFILE=browser-tests
+      shift
+      ;;
     *)
       break
       ;;
   esac
 done
+
+normalize_install_profile() {
+  local profile="${1:-runtime}"
+
+  case "${profile,,}" in
+    runtime|default|lean|core)
+      echo "runtime"
+      ;;
+    preview|preview-tools|screenshots)
+      echo "preview"
+      ;;
+    browser-tests|browser_test|test-tools|full|ci)
+      echo "browser-tests"
+      ;;
+    *)
+      echo "Unknown install profile: ${profile}. Expected runtime, preview, or browser-tests." >&2
+      exit 1
+      ;;
+  esac
+}
+
+should_install_preview_tooling() {
+  case "$INSTALL_PROFILE" in
+    preview|browser-tests)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+INSTALL_PROFILE=$(normalize_install_profile "$INSTALL_PROFILE")
 
 if [ ! -f "$PYTHON" ]; then
   if bootstrap_python="$(arthexis_python_bin 2>/dev/null)"; then
@@ -643,8 +688,13 @@ else
 fi
 
 ensure_celery_installed
-ensure_playwright_browsers_installed
-ensure_selenium_installed
+if should_install_preview_tooling; then
+  ensure_playwright_installed
+  ensure_playwright_browsers_installed
+  ensure_selenium_installed
+else
+  echo "Skipping preview/browser test tooling for install profile ${INSTALL_PROFILE}."
+fi
 
 if [ "$DEPS_ONLY" -eq 1 ]; then
   echo "Dependency refresh complete; skipping env-refresh database updates."
