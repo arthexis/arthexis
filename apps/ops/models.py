@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from datetime import timedelta
 from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, IntegrityError, connection, models, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models import F, Value
 from django.db.models.functions import Greatest, Now
 from django.utils import timezone
@@ -20,9 +19,6 @@ from apps.base.models import Entity
 
 
 logger = logging.getLogger(__name__)
-
-
-READ_ONLY_SQL_PATTERN = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
 
 
 class OperationScreen(Entity):
@@ -81,28 +77,18 @@ class OperationScreen(Entity):
             raise ValidationError({"start_url": _("Start URL must be HTTP(S) or a relative path.")})
 
     def run_validation_sql(self) -> tuple[bool | None, str]:
-        """Execute optional SQL validation and return pass flag with output."""
+        """Return SQL validation status.
+
+        Free-form SQL execution is intentionally disabled to prevent arbitrary database
+        access through operation configuration.
+        """
 
         sql = (self.validation_sql or "").strip()
         if not sql:
             return None, ""
-        if not READ_ONLY_SQL_PATTERN.match(sql):
-            return False, _("Validation SQL must be a read-only SELECT query.")
 
-        try:
-            with transaction.atomic():
-                with connection.cursor() as cursor:
-                    cursor.execute(sql)
-                    row = cursor.fetchone()
-                transaction.set_rollback(True)
-        except DatabaseError as exc:
-            logger.exception("Validation SQL failed for operation %s", self.pk)
-            return False, str(exc)
-
-        if not row:
-            return False, _("Validation query returned no rows.")
-
-        return bool(row[0]), str(row[0])
+        logger.warning("Blocked validation_sql execution for operation %s", self.pk)
+        return False, _("Custom SQL validation is disabled for security reasons.")
 
 
 class OperationLink(Entity):
