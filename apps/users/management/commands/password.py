@@ -10,6 +10,7 @@ from django.db.models import Q
 from django.db.utils import OperationalError
 from django.utils import timezone
 
+from apps.groups.security import ensure_default_staff_groups
 from apps.users import temp_passwords
 from apps.users.management.commands.utils import coerce_option_list
 
@@ -164,6 +165,7 @@ class Command(BaseCommand):
             self._update_user(user, staff=staff, superuser=superuser)
         if groups:
             self._assign_groups(user, groups)
+        ensure_default_staff_groups(user, explicit_group_names=groups)
 
         if delete_password:
             self._delete_password(user)

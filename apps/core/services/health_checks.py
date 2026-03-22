@@ -20,6 +20,7 @@ from django.utils import timezone
 
 from apps.cards.reader import validate_rfid_value
 from apps.core.notifications import NotificationManager, notify
+from apps.groups.security import ensure_default_staff_groups
 from apps.core.system_ui import format_timestamp
 from apps.core.system.upgrade import (
     _auto_upgrade_next_check,
@@ -142,6 +143,7 @@ def _create_admin(user_model, username):
     from apps.locals.models import ensure_admin_favorites
 
     ensure_admin_favorites(user)
+    ensure_default_staff_groups(user)
     return user
 
 
@@ -178,9 +180,12 @@ def run_check_admin(*, stdout, style, force: bool = False, **_kwargs) -> None:
         updated = _repair_admin(user)
         if updated:
             user.save(update_fields=sorted(updated))
+        added_groups = ensure_default_staff_groups(user)
+        if updated or added_groups:
+            changes = sorted(updated) + [f"group:{name}" for name in added_groups]
             stdout.write(
                 style.SUCCESS(
-                    f"Repaired default admin account {username!r}: {', '.join(sorted(updated))}."
+                    f"Repaired default admin account {username!r}: {', '.join(changes)}."
                 )
             )
         else:
