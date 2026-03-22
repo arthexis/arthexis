@@ -406,3 +406,90 @@ def test_wait_for_suite_ready_rejects_non_positive_timeout() -> None:
         command._wait_for_suite_ready(
             base_url="http://127.0.0.1:8000", timeout_seconds=0
         )
+
+
+def test_normalize_options_applies_ci_fast_defaults() -> None:
+    """CI-fast preset should collapse preview captures to the fast single-browser path."""
+
+    command = Command()
+
+    normalized = command._normalize_options(
+        {
+            "base_url": "http://127.0.0.1:8000",
+            "paths": ["/admin/"],
+            "output": "media/previews/admin-preview.png",
+            "output_dir": "",
+            "viewports": "desktop,mobile",
+            "backend": "playwright,selenium",
+            "engine": "chromium,firefox",
+            "no_login": False,
+            "wait_for_suite": False,
+            "suite_timeout": 60,
+            "page_ready_state": "networkidle",
+            "ready_selectors": [],
+            "full_page": True,
+            "ci_fast": True,
+        }
+    )
+
+    assert normalized["backend"] == "playwright"
+    assert normalized["engine"] == "chromium"
+    assert normalized["viewports"] == "desktop"
+    assert normalized["page_ready_state"] == "domcontentloaded"
+    assert normalized["full_page"] is False
+
+
+def test_handle_passes_effective_capture_options_to_backend(monkeypatch) -> None:
+    """Preview should forward normalized readiness and screenshot options to the backend."""
+
+    command = Command()
+    state: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        command,
+        "_create_throwaway_admin_user",
+        lambda: ("preview-user", "preview-pass", 99),
+    )
+    monkeypatch.setattr(command, "_delete_throwaway_admin_user", lambda _: None)
+    monkeypatch.setattr(command, "_build_capture_plan", lambda **kwargs: [])
+    monkeypatch.setattr(command, "_print_reports", lambda captures: None)
+
+    def _capture_with_backend(**kwargs):
+        state.update(
+            {
+                "backend": kwargs["backend"],
+                "engines": kwargs["engines"],
+                "page_ready_state": kwargs["page_ready_state"],
+                "ready_selectors": kwargs["ready_selectors"],
+                "full_page": kwargs["full_page"],
+            }
+        )
+
+    monkeypatch.setattr(command, "_capture_with_backend", _capture_with_backend)
+
+    command.handle(
+        base_url="http://127.0.0.1:8000",
+        paths=["/admin/"],
+        username=None,
+        password=None,
+        output="media/previews/admin-preview.png",
+        output_dir="",
+        viewports="desktop,mobile",
+        backend="playwright,selenium",
+        engine="chromium,firefox",
+        no_login=False,
+        wait_for_suite=False,
+        suite_timeout=60,
+        page_ready_state="load",
+        ready_selectors=["#content", ".dashboard"],
+        full_page=False,
+        ci_fast=False,
+    )
+
+    assert state == {
+        "backend": "playwright",
+        "engines": ["chromium", "firefox"],
+        "page_ready_state": "load",
+        "ready_selectors": ["#content", ".dashboard"],
+        "full_page": False,
+    }

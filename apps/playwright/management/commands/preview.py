@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 import re
 import secrets
@@ -89,6 +90,33 @@ class Command(BaseCommand):
             type=int,
             help="Maximum seconds to wait when --wait-for-suite is enabled.",
         )
+        parser.add_argument(
+            "--page-ready-state",
+            default="networkidle",
+            choices=("domcontentloaded", "load", "networkidle"),
+            help="Browser load state to wait for before capturing each page.",
+        )
+        parser.add_argument(
+            "--ready-selector",
+            dest="ready_selectors",
+            action="append",
+            default=[],
+            help="CSS selector to wait for after each navigation. Repeat for multiple selectors.",
+        )
+        parser.add_argument(
+            "--full-page",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help="Capture the full page instead of only the active viewport.",
+        )
+        parser.add_argument(
+            "--ci-fast",
+            action="store_true",
+            help=(
+                "Optimize for routine CI by forcing a single desktop Playwright/Chromium "
+                "capture with faster load-state defaults."
+            ),
+        )
 
     def handle(self, *args, **options):
         """Capture screenshots for all requested paths and viewport profiles."""
@@ -106,28 +134,29 @@ class Command(BaseCommand):
                     )
                 )
 
-            base_url = options["base_url"].rstrip("/")
+            normalized_options = self._normalize_options(options)
+            base_url = normalized_options["base_url"].rstrip("/")
             if options.get("wait_for_suite", False):
                 self._wait_for_suite_ready(
                     base_url=base_url,
-                    timeout_seconds=options.get("suite_timeout", 60),
+                    timeout_seconds=normalized_options.get("suite_timeout", 60),
                 )
 
-            if not options["no_login"]:
+            if not normalized_options["no_login"]:
                 preview_username, preview_password, preview_user_id = self._create_throwaway_admin_user()
 
-            output = Path(options["output"])
+            output = Path(normalized_options["output"])
             if not output.is_absolute():
                 output = settings.BASE_DIR / output
 
-            output_dir = Path(options["output_dir"]) if options["output_dir"] else output.parent
+            output_dir = Path(normalized_options["output_dir"]) if normalized_options["output_dir"] else output.parent
             if not output_dir.is_absolute():
                 output_dir = settings.BASE_DIR / output_dir
             output_dir.mkdir(parents=True, exist_ok=True)
 
             default_admin_path = f"/{getattr(settings, 'ADMIN_URL_PATH', 'admin/').strip('/')}/"
-            paths = options["paths"] or [default_admin_path]
-            viewport_names = [item.strip() for item in options["viewports"].split(",") if item.strip()]
+            paths = normalized_options["paths"] or [default_admin_path]
+            viewport_names = [item.strip() for item in normalized_options["viewports"].split(",") if item.strip()]
             if not viewport_names:
                 raise CommandError("At least one viewport profile must be provided via --viewports.")
 
@@ -140,7 +169,7 @@ class Command(BaseCommand):
                     + ", ".join(DEFAULT_VIEWPORTS)
                 )
 
-            backends = [item.strip().lower() for item in options["backend"].split(",") if item.strip()]
+            backends = [item.strip().lower() for item in normalized_options["backend"].split(",") if item.strip()]
             if not backends:
                 raise CommandError("At least one backend must be provided via --backend.")
 
@@ -153,7 +182,7 @@ class Command(BaseCommand):
                     + ", ".join(SUPPORTED_BACKENDS)
                 )
 
-            engines = [item.strip().lower() for item in options["engine"].split(",") if item.strip()]
+            engines = [item.strip().lower() for item in normalized_options["engine"].split(",") if item.strip()]
             if not engines:
                 raise CommandError("At least one engine must be provided via --engine.")
 
@@ -174,7 +203,10 @@ class Command(BaseCommand):
                         password=preview_password,
                         captures=captures,
                         engines=engines,
-                        login_required=not options["no_login"],
+                        login_required=not normalized_options["no_login"],
+                        page_ready_state=normalized_options["page_ready_state"],
+                        ready_selectors=normalized_options["ready_selectors"],
+                        full_page=normalized_options["full_page"],
                     )
                     self._print_reports(captures)
                     return
@@ -199,6 +231,29 @@ class Command(BaseCommand):
                         f"{preview_user_id}: {exc}"
                     )
                 )
+
+    def _normalize_options(self, options: dict[str, object]) -> dict[str, object]:
+        """Return effective preview options after applying convenience presets.
+
+        Args:
+            options (dict[str, object]): Parsed command options from Django.
+
+        Returns:
+            dict[str, object]: Normalized options used by the preview workflow.
+        """
+
+        normalized = dict(options)
+        normalized.setdefault("page_ready_state", "networkidle")
+        normalized.setdefault("ready_selectors", [])
+        normalized.setdefault("full_page", True)
+        normalized.setdefault("ci_fast", False)
+        if normalized.get("ci_fast", False):
+            normalized["backend"] = "playwright"
+            normalized["engine"] = "chromium"
+            normalized["viewports"] = "desktop"
+            normalized["page_ready_state"] = "domcontentloaded"
+            normalized["full_page"] = False
+        return normalized
 
     def _build_capture_plan(
         self,
@@ -357,6 +412,9 @@ class Command(BaseCommand):
         captures: list[dict[str, object]],
         engines: list[str],
         login_required: bool,
+        page_ready_state: str,
+        ready_selectors: list[str],
+        full_page: bool,
     ) -> None:
         """Capture screenshots using the selected backend and engine fallback order."""
 
@@ -368,6 +426,9 @@ class Command(BaseCommand):
                 captures=captures,
                 engines=engines,
                 login_required=login_required,
+                page_ready_state=page_ready_state,
+                ready_selectors=ready_selectors,
+                full_page=full_page,
             )
             return
 
@@ -379,6 +440,9 @@ class Command(BaseCommand):
                 captures=captures,
                 engines=engines,
                 login_required=login_required,
+                page_ready_state=page_ready_state,
+                ready_selectors=ready_selectors,
+                full_page=full_page,
             )
             return
 
@@ -432,6 +496,9 @@ class Command(BaseCommand):
         captures: list[dict[str, object]],
         engines: list[str],
         login_required: bool,
+        page_ready_state: str,
+        ready_selectors: list[str],
+        full_page: bool,
     ) -> None:
         """Capture screenshots using Playwright engines in fallback order."""
 
@@ -446,6 +513,9 @@ class Command(BaseCommand):
                     captures=captures,
                     engine=engine,
                     login_required=login_required,
+                    page_ready_state=page_ready_state,
+                    ready_selectors=ready_selectors,
+                    full_page=full_page,
                 )
                 self._assert_capture_outputs_exist(
                     captures=captures,
@@ -467,6 +537,9 @@ class Command(BaseCommand):
         captures: list[dict[str, object]],
         engine: str,
         login_required: bool,
+        page_ready_state: str,
+        ready_selectors: list[str],
+        full_page: bool,
     ) -> None:
         """Use Playwright to login once and capture all requested screenshots."""
 
@@ -490,11 +563,11 @@ class Command(BaseCommand):
                 context = browser.new_context()
                 page = context.new_page()
                 if login_required:
-                    page.goto(login_url, wait_until="networkidle")
+                    page.goto(login_url, wait_until=page_ready_state)
                     page.fill("#id_username", username)
                     page.fill("#id_password", password)
                     page.click("input[type='submit']")
-                    page.wait_for_load_state("networkidle")
+                    page.wait_for_load_state(page_ready_state)
                     self._validate_login_success(page.url, login_url)
 
                 for capture in captures:
@@ -502,8 +575,10 @@ class Command(BaseCommand):
                     output = capture["output"]
                     output.parent.mkdir(parents=True, exist_ok=True)
                     page.set_viewport_size({"width": width, "height": height})
-                    page.goto(f"{base_url}{capture['path']}", wait_until="networkidle")
-                    page.screenshot(path=str(output), full_page=True)
+                    page.goto(f"{base_url}{capture['path']}", wait_until=page_ready_state)
+                    for selector in ready_selectors:
+                        page.wait_for_selector(selector)
+                    page.screenshot(path=str(output), full_page=full_page)
 
                 context.close()
                 browser.close()
@@ -521,6 +596,9 @@ class Command(BaseCommand):
         captures: list[dict[str, object]],
         engines: list[str],
         login_required: bool,
+        page_ready_state: str,
+        ready_selectors: list[str],
+        full_page: bool,
     ) -> None:
         """Capture screenshots using Selenium browser fallback derived from engine order."""
 
@@ -542,6 +620,9 @@ class Command(BaseCommand):
                     captures=captures,
                     browser_name=browser_name,
                     login_required=login_required,
+                    page_ready_state=page_ready_state,
+                    ready_selectors=ready_selectors,
+                    full_page=full_page,
                 )
                 self._assert_capture_outputs_exist(
                     captures=captures,
@@ -563,6 +644,9 @@ class Command(BaseCommand):
         captures: list[dict[str, object]],
         browser_name: str,
         login_required: bool,
+        page_ready_state: str,
+        ready_selectors: list[str],
+        full_page: bool,
     ) -> None:
         """Use Selenium WebDriver to login once and capture requested screenshots."""
 
@@ -622,7 +706,20 @@ class Command(BaseCommand):
                 WebDriverWait(driver, 20).until(
                     lambda current_driver: current_driver.execute_script("return document.readyState") == "complete"
                 )
-                driver.save_screenshot(str(output))
+                if page_ready_state == "networkidle":
+                    WebDriverWait(driver, 20).until(
+                        lambda current_driver: current_driver.execute_script("return document.readyState")
+                        == "complete"
+                    )
+                for selector in ready_selectors:
+                    WebDriverWait(driver, 20).until(
+                        lambda current_driver, css=selector: current_driver.find_elements(By.CSS_SELECTOR, css)
+                    )
+                if full_page:
+                    driver.save_screenshot(str(output))
+                else:
+                    png_data = driver.get_screenshot_as_png()
+                    output.write_bytes(png_data)
         except (TimeoutException, WebDriverException) as exc:
             raise CommandError(self._selenium_runtime_help(exc)) from exc
         finally:

@@ -2,7 +2,6 @@ name: Screenshot
 
 env:
   PYTHONDONTWRITEBYTECODE: '1'
-  PLAYWRIGHT_VERSION: '1.45.2'
   NODE_OPTIONS: '--no-deprecation'
 
 concurrency:
@@ -24,8 +23,44 @@ on:
   workflow_dispatch:
 
 jobs:
+  detect-preview-changes:
+    name: Detect preview-relevant changes
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      preview: ${{ steps.filter.outputs.preview }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+
+      - name: Detect UI/admin/template changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            preview:
+              - '.github/workflows/dashboard-screenshot.yml'
+              - 'templates/**'
+              - 'static/**'
+              - 'apps/**/templates/**'
+              - 'apps/**/static/**'
+              - 'apps/**/admin.py'
+              - 'apps/**/admin/**/*.py'
+              - 'apps/**/views.py'
+              - 'apps/**/views/**/*.py'
+              - 'apps/**/forms.py'
+              - 'apps/**/forms/**/*.py'
+              - 'apps/**/urls.py'
+
   capture-dashboard:
     name: Capture admin dashboard
+    needs:
+      - detect-preview-changes
+    if: ${{ github.event_name != 'pull_request' || needs.detect-preview-changes.outputs.preview == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,25 +80,33 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          key: pip-${{ runner.os }}-preview-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'env-refresh.sh') }}
           restore-keys: |
-            pip-${{ runner.os }}-
+            pip-${{ runner.os }}-preview-
 
       - name: Cache virtualenv
         uses: actions/cache@v5
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          key: venv-${{ runner.os }}-preview-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh', 'env-refresh.sh') }}
           restore-keys: |
-            venv-${{ runner.os }}-
+            venv-${{ runner.os }}-preview-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'requirements-ci.txt', 'env-refresh.sh') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
 
       - name: Install suite from repository
         run: |
           ./install.sh --clean --no-start
-      - name: Install preview dependencies
+
+      - name: Install preview/browser dependencies
         run: |
-          source .venv/bin/activate
-          python -m pip install '.[preview]'
+          ./env-refresh.sh --deps-only --preview-deps
 
       - name: Prepare database and admin account
         run: |
@@ -166,195 +209,60 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-
-      - name: Cache npm
-        uses: actions/cache@v5
-        with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}
-          restore-keys: |
-            npm-${{ runner.os }}-
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
-
-      - name: Install Playwright Chromium
+      - name: Capture authenticated previews
         run: |
-          npm install --no-save playwright@"${PLAYWRIGHT_VERSION}"
-          npx playwright install --with-deps chromium
-
-      - name: Capture dashboard screenshot
-        env:
-          BASE_URL: http://localhost:8888/admin/login/?next=/admin/
-          ADMIN_USERNAME: admin
-          ADMIN_PASSWORD: admin
-        run: |
-          mkdir -p artifacts
-          cat > artifacts/capture.js <<'NODE'
-          const { chromium } = require('playwright');
-
-          const baseUrl = process.env.BASE_URL || 'http://localhost:8888/admin/login/?next=/admin/';
-          const username = process.env.ADMIN_USERNAME || 'admin';
-          const password = process.env.ADMIN_PASSWORD || 'admin';
-
-          (async () => {
-            const browser = await chromium.launch({ headless: true });
-            const page = await browser.newPage();
-
-            await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
-            await page.fill('input[name="username"]', username);
-            await page.fill('input[name="password"]', password);
-            await Promise.all([
-              page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-              page.click('input[type="submit"], button[type="submit"]'),
-            ]);
-            await page.waitForLoadState('domcontentloaded');
-            await page.screenshot({ path: 'artifacts/admin-dashboard.png', fullPage: true });
-
-            await browser.close();
-          })().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
-          NODE
-
-          node artifacts/capture.js
+          source .venv/bin/activate
+          python manage.py preview \
+            --base-url http://127.0.0.1:8888 \
+            --wait-for-suite \
+            --suite-timeout 60 \
+            --ci-fast \
+            --ready-selector "body" \
+            --path /admin/ \
+            --path /ocpp/cpms/dashboard/ \
+            --output-dir artifacts
 
       - name: Upload dashboard screenshot
         uses: actions/upload-artifact@v7
         with:
           name: admin-dashboard
-          path: artifacts/admin-dashboard.png
+          path: artifacts/admin-desktop.png
 
       - name: Capture public screenshot
         if: ${{ github.event_name != 'pull_request' }}
-        env:
-          BASE_URL: http://localhost:8888/
         run: |
-          mkdir -p artifacts
-          cat > artifacts/capture-public.js <<'NODE'
-          const { chromium } = require('playwright');
-
-          const baseUrl = process.env.BASE_URL || 'http://localhost:8888/';
-
-          (async () => {
-            const browser = await chromium.launch({ headless: true });
-            const page = await browser.newPage();
-
-            await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
-            await page.waitForLoadState('domcontentloaded');
-            await page.screenshot({ path: 'artifacts/public-site.png', fullPage: true });
-
-            await browser.close();
-          })().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
-          NODE
-
-          node artifacts/capture-public.js
+          source .venv/bin/activate
+          python manage.py preview \
+            --base-url http://127.0.0.1:8888 \
+            --wait-for-suite \
+            --suite-timeout 60 \
+            --ci-fast \
+            --no-login \
+            --ready-selector "body" \
+            --path / \
+            --path /ocpp/c/SIM-CP-1/ \
+            --output-dir artifacts
 
       - name: Upload public screenshot
         if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@v7
         with:
           name: public-site
-          path: artifacts/public-site.png
-
-      - name: Capture OCPP dashboard screenshot
-        if: ${{ github.event_name != 'pull_request' }}
-        env:
-          BASE_URL: http://localhost:8888
-          ADMIN_USERNAME: admin
-          ADMIN_PASSWORD: admin
-        run: |
-          mkdir -p artifacts
-          cat > artifacts/capture-ocpp.js <<'NODE'
-          const { chromium } = require('playwright');
-
-          const baseUrl = process.env.BASE_URL || 'http://localhost:8888';
-          const username = process.env.ADMIN_USERNAME || 'admin';
-          const password = process.env.ADMIN_PASSWORD || 'admin';
-          const loginUrl = `${baseUrl}/login/?next=/ocpp/cpms/dashboard/`;
-          const dashboardUrl = `${baseUrl}/ocpp/cpms/dashboard/`;
-
-          (async () => {
-            const browser = await chromium.launch({ headless: true });
-            const page = await browser.newPage();
-
-            await page.goto(loginUrl, { waitUntil: 'domcontentloaded' });
-            await page.fill('input[name="username"]', username);
-            await page.fill('input[name="password"]', password);
-            await Promise.all([
-              page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-              page.click('button[type="submit"], input[type="submit"]'),
-            ]);
-
-            await page.goto(dashboardUrl, { waitUntil: 'domcontentloaded' });
-            await page.waitForLoadState('domcontentloaded');
-            await page.waitForTimeout(1000);
-            await page.screenshot({ path: 'artifacts/ocpp-dashboard.png', fullPage: true });
-
-            await browser.close();
-          })().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
-          NODE
-
-          node artifacts/capture-ocpp.js
+          path: artifacts/root-desktop.png
 
       - name: Upload OCPP dashboard screenshot
         if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@v7
         with:
           name: ocpp-dashboard
-          path: artifacts/ocpp-dashboard.png
-
-      - name: Capture EVCS public screenshot
-        if: ${{ github.event_name != 'pull_request' }}
-        env:
-          BASE_URL: http://localhost:8888
-        run: |
-          mkdir -p artifacts
-          cat > artifacts/capture-evcs.js <<'NODE'
-          const { chromium } = require('playwright');
-
-          const baseUrl = process.env.BASE_URL || 'http://localhost:8888';
-          const publicUrl = `${baseUrl}/ocpp/c/SIM-CP-1/`;
-
-          (async () => {
-            const browser = await chromium.launch({ headless: true });
-            const page = await browser.newPage();
-
-            await page.goto(publicUrl, { waitUntil: 'domcontentloaded' });
-            await page.waitForLoadState('domcontentloaded');
-            await page.waitForTimeout(1000);
-            await page.screenshot({ path: 'artifacts/evcs-public.png', fullPage: true });
-
-            await browser.close();
-          })().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
-          NODE
-
-          node artifacts/capture-evcs.js
+          path: artifacts/ocpp-cpms-dashboard-desktop.png
 
       - name: Upload EVCS public screenshot
         if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@v7
         with:
           name: evcs-public
-          path: artifacts/evcs-public.png
+          path: artifacts/ocpp-c-sim-cp-1-desktop.png
 
       - name: Stop application server
         if: always()
