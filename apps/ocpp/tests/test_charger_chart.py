@@ -1,4 +1,4 @@
-"""Tests for GraphQL charger chart service helpers."""
+"""Tests for charger chart payload helpers and JSON endpoints."""
 
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -8,15 +8,18 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.graphql.services import build_charger_chart_payload
 from apps.ocpp.models import Charger, MeterValue, Transaction
+from apps.ocpp.services import build_charger_chart_payload
 
 
 @pytest.mark.django_db
 def test_build_charger_chart_payload_returns_single_connector_dataset():
     """Service should return chart labels and values for a connector session."""
 
-    user = get_user_model().objects.create_user(username="gql-user", password="secret")
+    user = get_user_model().objects.create_user(
+        username="chart-user",
+        password="secret",
+    )
     charger = Charger.objects.create(charger_id="GQL-CP-1", connector_id=1)
     start = timezone.make_aware(datetime(2025, 1, 1, 10, 0, 0))
     tx = Transaction.objects.create(
@@ -42,7 +45,11 @@ def test_build_charger_chart_payload_returns_single_connector_dataset():
         energy=Decimal("101.000"),
     )
 
-    payload = build_charger_chart_payload(user=user, cid="GQL-CP-1", connector="1")
+    payload = build_charger_chart_payload(
+        user=user,
+        cid="GQL-CP-1",
+        connector="1",
+    )
 
     assert len(payload["labels"]) == 2
     assert len(payload["datasets"]) == 1
@@ -51,13 +58,17 @@ def test_build_charger_chart_payload_returns_single_connector_dataset():
 
 
 @pytest.mark.django_db
-def test_graphql_endpoint_returns_chart_data(client):
-    """GraphQL endpoint should expose charger chart data for authenticated users."""
+def test_charger_status_chart_endpoint_returns_chart_data(client):
+    """JSON endpoint should expose charger chart data for authenticated users."""
 
-    user = get_user_model().objects.create_user(username="gql-client", password="secret")
+    get_user_model().objects.create_user(username="chart-client", password="secret")
     charger = Charger.objects.create(charger_id="GQL-CP-2", connector_id=1)
     start = timezone.now()
-    tx = Transaction.objects.create(charger=charger, start_time=start, meter_start=50000)
+    tx = Transaction.objects.create(
+        charger=charger,
+        start_time=start,
+        meter_start=50000,
+    )
     MeterValue.objects.create(
         charger=charger,
         transaction=tx,
@@ -67,19 +78,15 @@ def test_graphql_endpoint_returns_chart_data(client):
         energy=Decimal("50.250"),
     )
 
-    assert client.login(username="gql-client", password="secret")
+    assert client.login(username="chart-client", password="secret")
 
-    response = client.post(
-        reverse("graphql:endpoint"),
-        data={
-            "query": "query { chargerChart(cid: \"GQL-CP-2\", connector: \"1\") { labels datasets { label connectorId values } } }"
-        },
-        content_type="application/json",
+    response = client.get(
+        reverse("ocpp:charger-status-chart-connector", args=["GQL-CP-2", "1"]),
+        {"session": str(tx.pk)},
     )
 
     assert response.status_code == 200
     payload = response.json()
-    assert "errors" not in payload
-    datasets = payload["data"]["chargerChart"]["datasets"]
+    datasets = payload["datasets"]
     assert len(datasets) == 1
-    assert datasets[0]["connectorId"] == 1
+    assert datasets[0]["connector_id"] == 1

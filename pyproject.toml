@@ -50,7 +50,6 @@ dependencies = [
   "Django==5.2.12",
   "dnspython==2.7.0",
   "filelock==3.25.2",
-  "graphene-django==3.2.3",
   "h11==0.16.0",
   "httpcore==1.0.9",
   "httpx==0.28.1",
@@ -316,7 +315,6 @@ include-package-data = true
 "apps.odoo.tests" = [ "**/*",]
 "apps.payments" = [ "**/*",]
 "apps.payments.migrations" = [ "**/*",]
-"apps.prompts" = [ "**/*",]
 "apps.protocols" = [ "**/*",]
 "apps.protocols.migrations" = [ "**/*",]
 "apps.protocols.tests" = [ "**/*",]
