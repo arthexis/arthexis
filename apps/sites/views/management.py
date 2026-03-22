@@ -896,20 +896,12 @@ def admin_user_tools(request):
 # WhatsApp callbacks originate outside the site and cannot include CSRF tokens.
 @csrf_exempt
 def whatsapp_webhook(request):
+    """Accept site-level WhatsApp webhook payloads and bridge valid traffic into chat."""
+
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
     if not getattr(settings, "PAGES_WHATSAPP_ENABLED", False):
         return HttpResponse(status=503)
-    if not is_suite_feature_enabled(WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG, default=True):
-        return JsonResponse(
-            {
-                "status": "accepted",
-                "detail": _(
-                    "WhatsApp chat bridge is disabled; payload accepted without session activity."
-                ),
-            },
-            status=202,
-        )
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
     except json.JSONDecodeError:
@@ -920,6 +912,16 @@ def whatsapp_webhook(request):
     if not from_number or not text:
         return HttpResponseBadRequest(
             _("Missing WhatsApp sender or message body."),
+        )
+    if not is_suite_feature_enabled(WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG, default=True):
+        return JsonResponse(
+            {
+                "status": "accepted",
+                "detail": _(
+                    "WhatsApp chat bridge is disabled; payload accepted without session activity."
+                ),
+            },
+            status=202,
         )
     display_name = (payload.get("display_name") or from_number).strip()
 

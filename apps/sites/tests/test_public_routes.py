@@ -234,6 +234,33 @@ def test_whatsapp_webhook_disabled_suite_feature_returns_accepted_without_sessio
     assert ChatSession.objects.count() == 0
 
 
+def test_whatsapp_webhook_disabled_suite_feature_still_rejects_invalid_payloads(
+    client, settings
+):
+    """Disabled WhatsApp suite feature should preserve invalid-payload responses."""
+
+    settings.PAGES_WHATSAPP_ENABLED = True
+    Feature.objects.update_or_create(
+        slug="whatsapp-chat-bridge",
+        defaults={"display": "WhatsApp Chat Bridge", "is_enabled": False},
+    )
+
+    invalid_json_response = client.post(
+        reverse("pages:whatsapp-webhook"),
+        data="{",
+        content_type="application/json",
+    )
+    missing_fields_response = client.post(
+        reverse("pages:whatsapp-webhook"),
+        data=json.dumps({"from": "+15551234"}),
+        content_type="application/json",
+    )
+
+    assert invalid_json_response.status_code == 400
+    assert missing_fields_response.status_code == 400
+    assert ChatSession.objects.count() == 0
+
+
 def test_whatsapp_webhook_enabled_feature_creates_session_and_message(client, settings):
     """Enabled WhatsApp suite feature should continue bridging inbound session traffic."""
 
