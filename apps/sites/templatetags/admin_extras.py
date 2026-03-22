@@ -457,11 +457,10 @@ def _configured_dashboard_action_descriptors(model):
         descriptors.append(
             {
                 "action_key": _model_admin_action_key(configured_action.slug),
-                "label": configured_action.label,
+                "label": configured_action.display_label,
                 "url": configured_action.resolve_url(),
-                "method": configured_action.http_method,
-                "caller_sigil": configured_action.caller_sigil,
-                "is_discover": configured_action.label.strip().lower() == "discover",
+                "method": configured_action.as_rendered_action()["method"],
+                "is_discover": configured_action.as_rendered_action()["is_discover"],
             }
         )
     return descriptors
@@ -511,7 +510,6 @@ def _build_model_admin_action_descriptor(
         ),
         "url": _model_admin_action_url(model_admin, action_name, func, request, source),
         "method": getattr(func, "dashboard_method", "get") if source == "dashboard" else "get",
-        "caller_sigil": "",
         "is_discover": eligibility["is_discover"],
     }
     if not descriptor["url"]:
@@ -589,14 +587,12 @@ def _normalized_model_admin_actions(request, model_admin):
 def _format_model_admin_action(descriptor):
     """Return the template payload for a normalized admin action descriptor."""
 
-    action = DashboardAction.from_legacy(
-        label=str(descriptor["label"]),
-        method=str(descriptor["method"]),
-        url=descriptor["url"],
-        caller_sigil=str(descriptor["caller_sigil"]),
-    ).as_rendered_action()
-    action["is_discover"] = bool(descriptor["is_discover"]) or bool(action["is_discover"])
-    return action
+    return {
+        "url": descriptor["url"],
+        "label": str(descriptor["label"]),
+        "method": str(descriptor["method"]),
+        "is_discover": bool(descriptor["is_discover"]),
+    }
 
 
 @register.simple_tag(takes_context=True)
