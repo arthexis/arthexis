@@ -466,3 +466,49 @@ def test_evergo_admin_load_customers_wizard_load_all_button_requires_confirmatio
     content = response.content.decode("utf-8")
     assert "Load all customers" in content
     assert "return confirm('This will sync every customer available to this profile. Continue?');" in content
+
+
+@pytest.mark.django_db
+def test_evergo_order_reload_change_action_rejects_get_requests(admin_client):
+    """Reload action should reject GET to avoid CSRF-prone state changes."""
+
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="reload-get-guard@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    order = EvergoOrder.objects.create(user=profile, remote_id=8711, order_number="SO-8711")
+
+    action_url = reverse(
+        "admin:evergo_evergoorder_actions",
+        args=[order.pk, "reload_from_evergo_action"],
+    )
+    response = admin_client.get(action_url)
+
+    assert response.status_code == 405
+
+
+@pytest.mark.django_db
+@patch("apps.evergo.models.user.EvergoUser.reload_order_from_remote")
+def test_evergo_order_reload_change_action_allows_post(mock_reload_order, admin_client):
+    """Reload action should execute only on POST and redirect back to order change page."""
+
+    admin_user = admin_client.get(reverse("admin:index")).wsgi_request.user
+    profile = EvergoUser.objects.create(
+        user=admin_user,
+        evergo_email="reload-post-guard@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    order = EvergoOrder.objects.create(user=profile, remote_id=8712, order_number="SO-8712")
+    mock_reload_order.return_value = order
+
+    action_url = reverse(
+        "admin:evergo_evergoorder_actions",
+        args=[order.pk, "reload_from_evergo_action"],
+    )
+    response = admin_client.post(action_url)
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("admin:evergo_evergoorder_change", args=[order.pk])
+    mock_reload_order.assert_called_once_with(order=order)
