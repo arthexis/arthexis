@@ -60,6 +60,10 @@ jobs:
       - name: Install suite from repository
         run: |
           ./install.sh --clean --no-start
+      - name: Install preview dependencies
+        run: |
+          source .venv/bin/activate
+          python -m pip install '.[preview]'
 
       - name: Prepare database and admin account
         run: |

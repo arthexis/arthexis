@@ -96,7 +96,10 @@ def _legacy_runtime_app_packages() -> set[str]:
         legacy_name = app_path.split(legacy_marker, maxsplit=1)[1].split(
             migration_suffix, maxsplit=1
         )[0]
-        retired_packages.add(f"apps.{legacy_name.removesuffix('_migration_only')}")
+        runtime_package = f"apps.{legacy_name.removesuffix('_migration_only')}"
+        if runtime_package == "apps.recipes":
+            continue
+        retired_packages.add(runtime_package)
 
     return retired_packages
 

@@ -45,13 +45,14 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 
 The script also:
 - Verifies Nginx and Redis availability for roles that require them, writing `redis.env` when Redis is configured.
-- Creates `.venv`, installs dependencies via `scripts/helpers/pip_install.py`, applies migrations, and refreshes environment secrets via `env-refresh.sh`.
+- Creates `.venv`, installs the slim runtime dependency set from `requirements.txt` via `scripts/helpers/pip_install.py`, applies migrations, and refreshes environment secrets via `env-refresh.sh`.
+- Leaves non-runtime extras (pytest, debug toolbar, Playwright/Selenium, typing tools) out of the base install unless a later workflow explicitly installs them. This keeps production and Docker runtime environments intentionally lean.
 - Writes lock files capturing the selected role, Nginx mode, and enabled subsystems so the runtime helpers know how to behave.
 - Refreshes desktop shortcuts on Linux desktops for quick access to the UI and maintenance commands.
 
 ### 1.2 Windows: `install.bat`
 
-The Windows installer is intentionally simple: it bootstraps `.venv`, installs requirements, applies migrations, and then runs `env-refresh.bat --latest` so developers always start on the latest schema locally. Windows nodes rely on Terminal defaults (development server at port 8888), but you can optionally install a Windows service using `service.bat` once `install.bat` completes. Run `install.bat` again whenever dependencies change.
+The Windows installer is intentionally simple: it bootstraps `.venv`, installs runtime requirements, applies migrations, and then runs `env-refresh.bat --latest` so developers always start on the latest schema locally. Windows nodes rely on Terminal defaults (development server at port 8888), but you can optionally install a Windows service using `service.bat` once `install.bat` completes. Run `install.bat` again whenever dependencies change, and install optional extras separately when you need test, preview, or debug tooling.
 
 ## 2. Runtime helpers
 
@@ -124,6 +125,7 @@ Supported options:
 
 Additional behaviour:
 - Before applying migrations it refreshes Nginx maintenance assets, optionally clears the database, reruns `env-refresh.sh`, migrates legacy systemd configurations, and restarts services unless `--no-start`/`--no-restart` was requested.
+- `env-refresh.sh` now keeps Playwright/Selenium setup opt-in (`--preview-deps` or `ARTHEXIS_INSTALL_PREVIEW_DEPS=1`) so normal production refreshes do not pull browser tooling into the base runtime environment.
 - After restarting, it updates desktop shortcuts so GUI launchers stay current.
 
 ### 3.2 Windows: `upgrade.bat`

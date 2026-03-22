@@ -377,7 +377,7 @@ class UserStoryForm(forms.ModelForm):
         if self.user is not None and self.user.is_authenticated:
             instance.user = self.user
         instance.contact_via_chat = bool(self.cleaned_data.get("contact_via_chat"))
-        instance.javascript_enabled = self.cleaned_data.get("javascript_enabled") == "1"
+        instance.javascript_enabled = self.cleaned_data.get("javascript_enabled", False)
         screenshot_file = self.cleaned_data.get("screenshot")
         if screenshot_file:
             instance.screenshot = screenshot_file
