@@ -6,6 +6,29 @@ from pathlib import Path
 from .system_ops import _read_process_cmdline, _read_process_start_time
 
 
+def _is_migration_server_process(cmdline: list[str], base_dir: Path) -> bool:
+    """Return whether *cmdline* belongs to the migration server entrypoint.
+
+    Args:
+        cmdline: Raw process command-line parts.
+        base_dir: Repository root used to resolve legacy wrapper paths.
+
+    Returns:
+        ``True`` when the process is running the migration server via either the
+        preferred module entrypoint or the legacy wrapper script.
+    """
+
+    parts = [str(part) for part in cmdline]
+    if not parts:
+        return False
+
+    legacy_script_path = base_dir / "scripts" / "migration_server.py"
+    if any(part == str(legacy_script_path) for part in parts):
+        return True
+
+    return "utils.devtools.migration_server" in parts
+
+
 def _is_migration_server_running(lock_dir: Path) -> bool:
     """Return ``True`` when the migration server lock indicates it is active."""
 
@@ -24,8 +47,7 @@ def _is_migration_server_running(lock_dir: Path) -> bool:
         return False
 
     cmdline = _read_process_cmdline(pid)
-    script_path = lock_dir.parent / "scripts" / "migration_server.py"
-    if not any(str(part) == str(script_path) for part in cmdline):
+    if not _is_migration_server_process(cmdline, lock_dir.parent):
         return False
 
     timestamp = payload.get("timestamp")

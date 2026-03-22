@@ -1,8 +1,8 @@
-# Developer script entrypoints
+# Developer devtools entrypoints
 
-Developer launcher modules now live under `utils/devtools/`, while the executable entrypoints remain:
+Developer launcher modules under `utils/devtools/` should be invoked through the module entrypoints directly:
 
-- `python scripts/test_server.py`
-- `python scripts/migration_server.py`
+- `.venv/bin/python -m utils.devtools.test_server`
+- `.venv/bin/python -m utils.devtools.migration_server`
 
-Management commands continue to delegate to the same shared modules, so editors and shell scripts should keep targeting the `scripts/` entrypoints rather than importing an app-shaped package.
+Editor configs and shell scripts should target these module entrypoints directly rather than the removed compatibility shims in `scripts/`.
