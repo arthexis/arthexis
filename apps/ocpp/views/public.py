@@ -34,6 +34,16 @@ from .common import (_charger_state, _charging_limit_details,
 logger = logging.getLogger(__name__)
 
 
+def _charger_chart_not_found_response() -> JsonResponse:
+    """Return a generic not-found response for chart payload lookups.
+
+    Returns:
+        JsonResponse: 404 JSON payload without leaking internal exception details.
+    """
+
+    return JsonResponse({"detail": "Not found."}, status=404)
+
+
 def _get_client_ip(request) -> str:
     forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
     if forwarded_for:
@@ -438,12 +448,26 @@ def charger_status(request, cid, connector=None):
         }
         for mode, label in date_view_options.items()
     ]
-    chart_data = build_charger_chart_payload(
-        user=request.user,
-        cid=cid,
-        connector=connector_slug,
-        session_id=session_id,
-    )
+    pagination_params = request.GET.copy()
+    pagination_params["dates"] = date_view
+    pagination_params.pop("page", None)
+    pagination_query = pagination_params.urlencode()
+    session_params = request.GET.copy()
+    session_params["dates"] = date_view
+    session_params.pop("session", None)
+    session_params.pop("page", None)
+    session_query = session_params.urlencode()
+    try:
+        chart_data = build_charger_chart_payload(
+            user=request.user,
+            cid=cid,
+            connector=connector_slug,
+            session_id=session_id,
+        )
+    except ChargerAccessDeniedError as exc:
+        raise Http404("Charger not found") from exc
+    except Transaction.DoesNotExist as exc:
+        raise Http404("Session not found") from exc
     rfid_cache: dict[str, dict[str, str | None]] = {}
     overview = _connector_overview(
         charger,
@@ -590,10 +614,10 @@ def charger_status_chart(request, cid, connector=None):
             connector=connector,
             session_id=session_id,
         )
-    except ChargerAccessDeniedError as exc:
-        return JsonResponse({"detail": str(exc)}, status=404)
-    except Transaction.DoesNotExist as exc:
-        return JsonResponse({"detail": str(exc)}, status=404)
+    except ChargerAccessDeniedError:
+        return _charger_chart_not_found_response()
+    except Transaction.DoesNotExist:
+        return _charger_chart_not_found_response()
     return JsonResponse(payload)
 
 
