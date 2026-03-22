@@ -20,6 +20,20 @@ def test_detect_runserver_process_uses_shared_detector(monkeypatch: pytest.Monke
 
 
 @pytest.mark.pr(6201)
+def test_detect_runserver_process_falls_back_to_configured_port(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Runserver detection should fall back to the configured backend port."""
+
+    monkeypatch.setattr(network_probe, "detect_runserver_port", lambda: None)
+    monkeypatch.setattr(network_probe, "_configured_backend_port", lambda _base_dir: 8888)
+
+    running, port = network_probe._detect_runserver_process()
+    assert running is True
+    assert port == 8888
+
+
+@pytest.mark.pr(6201)
 def test_probe_ports_uses_http_probe_result(monkeypatch: pytest.MonkeyPatch) -> None:
     """Port probing should return the first port where admin HTTP probing succeeds."""
 

@@ -110,7 +110,7 @@ def _detect_runserver_process() -> tuple[bool, int | None]:
 
     port = detect_runserver_port()
     if port is None:
-        return False, None
+        return True, _configured_backend_port(Path(settings.BASE_DIR))
     return True, port
 
 
