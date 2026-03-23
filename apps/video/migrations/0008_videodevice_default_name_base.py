@@ -1,11 +1,10 @@
 from django.db import migrations, models
-from django.utils.text import slugify
 
 
 def update_videodevice_default_name(apps, schema_editor):
     """Defer legacy default-name cleanup to the release transform pipeline."""
 
-    del apps, schema_editor, slugify
+    del apps, schema_editor
 
 
 class Migration(migrations.Migration):
