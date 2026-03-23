@@ -11,15 +11,15 @@ def _raise_disallowed_host():
 
 
 @pytest.mark.django_db
-def test_site_and_node_recovers_from_disallowed_host(monkeypatch):
-    """Ensure badge context generation does not fail when host validation fails."""
+def test_site_and_node_disallowed_host_uses_empty_domain(monkeypatch):
+    """Disallowed hosts should not leak unvalidated header values into context."""
     request = RequestFactory().get("/admin/", HTTP_HOST="invalid.example:8888")
 
     monkeypatch.setattr(request, "get_host", _raise_disallowed_host)
 
     context = site_and_node(request)
 
-    assert context["current_site_domain"] == "invalid.example"
+    assert context["current_site_domain"] == ""
 
 
 @pytest.mark.django_db

@@ -1,14 +1,14 @@
-import logging
 import ipaddress
+import logging
 import re
 import socket
 from importlib import import_module
 
+from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.exceptions import DisallowedHost
 from django.db.utils import OperationalError, ProgrammingError
 from django.http import HttpRequest
-from django.conf import settings
 
 DEFAULT_BADGE_COLOR = "#28a745"
 UNKNOWN_BADGE_COLOR = "#6c757d"
@@ -23,19 +23,15 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_request_host(request: HttpRequest) -> str:
-    """Return the best-effort hostname for template badge lookups.
+    """Return a validated hostname for template badge lookups.
 
-    ``request.get_host()`` can raise ``DisallowedHost`` when deployments are
-    reached through an unexpected hostname. Admin templates should still render
-    instead of failing with HTTP 500, so this helper falls back to raw WSGI
-    metadata and strips any optional port suffix.
+    If Django host validation rejects the request hostname, return an empty
+    string instead of trusting raw WSGI headers.
     """
     try:
         host_value = request.get_host()
     except DisallowedHost:
-        host_value = request.META.get("HTTP_HOST") or request.META.get(
-            "SERVER_NAME", ""
-        )
+        return ""
 
     if host_value.startswith("["):
         host_value = host_value.split("]", 1)[0].lstrip("[")
