@@ -515,40 +515,37 @@ def _install_fake_selenium_modules(monkeypatch) -> None:
         CSS_SELECTOR = "css selector"
         ID = "id"
 
-    selenium_module = ModuleType("selenium")
-    common_module = ModuleType("selenium.common")
-    common_exceptions_module = ModuleType("selenium.common.exceptions")
-    webdriver_module = ModuleType("selenium.webdriver")
-    webdriver_common_module = ModuleType("selenium.webdriver.common")
-    webdriver_common_by_module = ModuleType("selenium.webdriver.common.by")
-    chrome_module = ModuleType("selenium.webdriver.chrome")
-    chrome_options_module = ModuleType("selenium.webdriver.chrome.options")
-    support_module = ModuleType("selenium.webdriver.support")
-    support_ui_module = ModuleType("selenium.webdriver.support.ui")
+    modules = {
+        name: ModuleType(name)
+        for name in [
+            "selenium",
+            "selenium.common",
+            "selenium.common.exceptions",
+            "selenium.webdriver",
+            "selenium.webdriver.common",
+            "selenium.webdriver.common.by",
+            "selenium.webdriver.chrome",
+            "selenium.webdriver.chrome.options",
+            "selenium.webdriver.support",
+            "selenium.webdriver.support.ui",
+        ]
+    }
 
-    selenium_module.common = common_module
-    selenium_module.webdriver = webdriver_module
-    common_module.exceptions = common_exceptions_module
-    common_exceptions_module.TimeoutException = _FakeTimeoutException
-    common_exceptions_module.WebDriverException = _FakeWebDriverException
-    webdriver_module.common = webdriver_common_module
-    webdriver_module.chrome = chrome_module
-    webdriver_module.support = support_module
-    webdriver_common_module.by = webdriver_common_by_module
-    webdriver_common_by_module.By = _FakeBy
-    chrome_module.options = chrome_options_module
-    support_module.ui = support_ui_module
+    modules["selenium"].common = modules["selenium.common"]
+    modules["selenium"].webdriver = modules["selenium.webdriver"]
+    modules["selenium.common"].exceptions = modules["selenium.common.exceptions"]
+    modules["selenium.common.exceptions"].TimeoutException = _FakeTimeoutException
+    modules["selenium.common.exceptions"].WebDriverException = _FakeWebDriverException
+    modules["selenium.webdriver"].common = modules["selenium.webdriver.common"]
+    modules["selenium.webdriver"].chrome = modules["selenium.webdriver.chrome"]
+    modules["selenium.webdriver"].support = modules["selenium.webdriver.support"]
+    modules["selenium.webdriver.common"].by = modules["selenium.webdriver.common.by"]
+    modules["selenium.webdriver.common.by"].By = _FakeBy
+    modules["selenium.webdriver.chrome"].options = modules["selenium.webdriver.chrome.options"]
+    modules["selenium.webdriver.support"].ui = modules["selenium.webdriver.support.ui"]
 
-    monkeypatch.setitem(sys.modules, "selenium", selenium_module)
-    monkeypatch.setitem(sys.modules, "selenium.common", common_module)
-    monkeypatch.setitem(sys.modules, "selenium.common.exceptions", common_exceptions_module)
-    monkeypatch.setitem(sys.modules, "selenium.webdriver", webdriver_module)
-    monkeypatch.setitem(sys.modules, "selenium.webdriver.common", webdriver_common_module)
-    monkeypatch.setitem(sys.modules, "selenium.webdriver.common.by", webdriver_common_by_module)
-    monkeypatch.setitem(sys.modules, "selenium.webdriver.chrome", chrome_module)
-    monkeypatch.setitem(sys.modules, "selenium.webdriver.chrome.options", chrome_options_module)
-    monkeypatch.setitem(sys.modules, "selenium.webdriver.support", support_module)
-    monkeypatch.setitem(sys.modules, "selenium.webdriver.support.ui", support_ui_module)
+    for name, module in modules.items():
+        monkeypatch.setitem(sys.modules, name, module)
 
 
 def test_selenium_networkidle_warns_and_uses_load_wait(monkeypatch, tmp_path) -> None:

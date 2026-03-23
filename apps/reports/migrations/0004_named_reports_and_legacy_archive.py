@@ -12,7 +12,7 @@ def archive_sql_reports(apps, schema_editor):
 
     del schema_editor
     SQLReport = apps.get_model("reports", "SQLReport")
-    for report in SQLReport.objects.exclude(report_type=LEGACY_REPORT_TYPE).iterator():
+    for report in SQLReport.objects.iterator():
         legacy_definition = report.legacy_definition or {}
         legacy_definition.update(
             {
