@@ -18,11 +18,15 @@ _ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 class Prototype(Entity):
     """Store historical metadata for retired prototype experiments.
 
-    Parameters:
-        Entity: Base model providing shared soft-delete and ownership flags.
-
-    Returns:
-        Prototype: Persisted prototype metadata row.
+    Attributes:
+        slug: Stable prototype slug retained for historical reference.
+        name: Human-readable label for the retired prototype.
+        description: Optional descriptive notes about the prototype.
+        env_overrides: Legacy environment overrides preserved as metadata.
+        is_active: Legacy activation flag retained for compatibility and forced false.
+        is_runnable: Runtime flag retained for compatibility and forced false.
+        retired_at: Timestamp recording when the prototype runtime was retired.
+        retirement_notes: Administrative notes about the retired record.
 
     Raised exceptions:
         ValidationError: Raised when ``slug`` or ``env_overrides`` are invalid.
@@ -43,13 +47,11 @@ class Prototype(Entity):
     description = models.TextField(blank=True)
     app_module = models.CharField(
         max_length=255,
-        unique=True,
         blank=True,
         help_text="Legacy hidden runtime module retained for historical reference.",
     )
     app_label = models.CharField(
         max_length=100,
-        unique=True,
         blank=True,
         help_text="Legacy Django app label retained for historical reference.",
     )
@@ -105,14 +107,7 @@ class Prototype(Entity):
         verbose_name_plural = "Prototypes"
 
     def __str__(self) -> str:
-        """Return the human-readable prototype name.
-
-        Parameters:
-            None.
-
-        Returns:
-            str: The prototype display name.
-        """
+        """Return the human-readable prototype name."""
 
         return self.name
 
@@ -158,11 +153,11 @@ class Prototype(Entity):
             **kwargs: Keyword arguments forwarded to Django's model ``save``.
 
         Returns:
-            Prototype: The saved model instance.
+            None.
 
         Raised exceptions:
             ValidationError: Raised when model validation fails.
         """
 
         self.full_clean()
-        return super().save(*args, **kwargs)
+        super().save(*args, **kwargs)

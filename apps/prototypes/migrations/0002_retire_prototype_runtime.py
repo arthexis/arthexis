@@ -6,26 +6,33 @@ from django.utils import timezone
 RETIREMENT_NOTES = (
     "Prototype runtime scaffolding retired; records retained as inert metadata."
 )
+ACTIVE_STATE_MARKER = "[legacy-active]"
 
 
 def archive_existing_prototypes(apps, schema_editor):
     Prototype = apps.get_model("prototypes", "Prototype")
-    Prototype.objects.filter(retired_at__isnull=True).update(
-        is_active=False,
-        is_runnable=False,
-        retired_at=timezone.now(),
-        retirement_notes=RETIREMENT_NOTES,
-    )
-    Prototype.objects.filter(retirement_notes="").update(retirement_notes=RETIREMENT_NOTES)
+    for prototype in Prototype.objects.filter(retired_at__isnull=True):
+        prototype.retired_at = timezone.now()
+        prototype.is_runnable = False
+        prototype.retirement_notes = RETIREMENT_NOTES
+        if prototype.is_active:
+            prototype.retirement_notes = f"{RETIREMENT_NOTES} {ACTIVE_STATE_MARKER}"
+        prototype.is_active = False
+        prototype.save(
+            update_fields=["is_active", "is_runnable", "retired_at", "retirement_notes"]
+        )
 
 
 def restore_runtime_markers(apps, schema_editor):
     Prototype = apps.get_model("prototypes", "Prototype")
-    Prototype.objects.update(
-        is_runnable=False,
-        retired_at=None,
-        retirement_notes="",
-    )
+    for prototype in Prototype.objects.all():
+        prototype.is_active = ACTIVE_STATE_MARKER in (prototype.retirement_notes or "")
+        prototype.is_runnable = False
+        prototype.retired_at = None
+        prototype.retirement_notes = ""
+        prototype.save(
+            update_fields=["is_active", "is_runnable", "retired_at", "retirement_notes"]
+        )
 
 
 class Migration(migrations.Migration):
@@ -68,7 +75,6 @@ class Migration(migrations.Migration):
                 blank=True,
                 help_text="Legacy hidden runtime module retained for historical reference.",
                 max_length=255,
-                unique=True,
             ),
         ),
         migrations.AlterField(
@@ -78,7 +84,6 @@ class Migration(migrations.Migration):
                 blank=True,
                 help_text="Legacy Django app label retained for historical reference.",
                 max_length=100,
-                unique=True,
             ),
         ),
         migrations.AlterField(

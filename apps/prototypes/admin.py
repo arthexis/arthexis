@@ -58,6 +58,13 @@ class PrototypeAdmin(EntityModelAdmin):
     actions = ()
 
     def get_actions(self, request):
-        """Disable inherited bulk actions for retired prototype records."""
+        """Disable inherited bulk actions for retired prototype records.
+
+        Parameters:
+            request: The current admin HTTP request.
+
+        Returns:
+            dict[str, tuple]: An empty action mapping so bulk actions stay disabled.
+        """
 
         return {}

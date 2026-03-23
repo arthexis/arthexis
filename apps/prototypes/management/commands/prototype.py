@@ -1,20 +1,24 @@
-"""Inspect retired prototype records without mutating runtime state."""
+"""Inspect retired prototype records and clear legacy runtime overlays."""
 
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.prototypes import prototype_ops
 from apps.prototypes.models import Prototype
 from apps.prototypes.prototype_ops import RETIREMENT_MESSAGE
 
 
-_MUTATING_ACTIONS = {"create", "activate", "deactivate"}
+_RETIRED_MUTATING_ACTIONS = {"create", "activate"}
 
 
 class Command(BaseCommand):
-    """Report retired prototype metadata and block legacy runtime operations."""
+    """Report retired prototype metadata and clear legacy runtime overlays."""
 
-    help = "Inspect retired prototype metadata. Runtime scaffold generation is no longer supported."
+    help = (
+        "Inspect retired prototype metadata. Runtime scaffold generation is no longer "
+        "supported, but legacy deactivate cleanup remains available."
+    )
 
     def add_arguments(self, parser):
         """Register command arguments.
@@ -30,8 +34,18 @@ class Command(BaseCommand):
             "action",
             nargs="?",
             default="status",
-            choices=sorted(_MUTATING_ACTIONS | {"status"}),
-            help="Legacy action name. Only 'status' is still supported.",
+            choices=sorted(_RETIRED_MUTATING_ACTIONS | {"deactivate", "status"}),
+            help="Legacy action name. Only 'status' and legacy cleanup via 'deactivate' remain supported.",
+        )
+        parser.add_argument(
+            "--no-restart",
+            action="store_true",
+            help="Only clear legacy env and lock state; do not restart the suite.",
+        )
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Pass --force to stop.sh when restarting after cleanup.",
         )
 
     def handle(self, *args, **options):
@@ -49,8 +63,17 @@ class Command(BaseCommand):
         """
 
         action = options["action"]
-        if action in _MUTATING_ACTIONS:
+        if action in _RETIRED_MUTATING_ACTIONS:
             raise CommandError(RETIREMENT_MESSAGE)
+        if action == "deactivate":
+            prototype_ops.clear_legacy_runtime_state()
+            self.stdout.write(self.style.SUCCESS("Cleared legacy prototype runtime state."))
+            if options["no_restart"]:
+                self.stdout.write("Restart skipped.")
+                return
+            prototype_ops.restart_suite(force_stop=bool(options["force"]))
+            self.stdout.write(self.style.SUCCESS("Suite restarted without a prototype overlay."))
+            return
 
         self.stdout.write(RETIREMENT_MESSAGE)
         rows = list(Prototype.objects.order_by("name", "slug"))
