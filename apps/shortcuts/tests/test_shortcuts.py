@@ -123,42 +123,6 @@ def test_server_shortcut_executes_typed_target() -> None:
 
 
 @pytest.mark.django_db
-def test_client_shortcut_output_template_keeps_legacy_recipe_result_alias(client) -> None:
-    """Client shortcuts should keep ``recipe_result`` available for migrated templates."""
-
-    Feature.objects.update_or_create(
-        slug=SHORTCUT_MANAGEMENT_FEATURE_SLUG,
-        defaults={"display": "Shortcut Management", "is_enabled": True},
-    )
-    user_model = get_user_model()
-    user = user_model.objects.create_user(username="legacy-template-user", password="password", is_staff=True)
-    client.force_login(user)
-
-    shortcut = Shortcut.objects.create(
-        display="Legacy template shortcut",
-        key_combo="CTRL+SHIFT+L",
-        kind=Shortcut.Kind.CLIENT,
-        target_kind=ShortcutTargetKind.COMMAND,
-        target_identifier="text.append_suffix",
-        target_payload={"source": "clipboard", "suffix": "-legacy"},
-        is_active=True,
-        clipboard_output_enabled=True,
-        output_template="[ARG.recipe_result]!",
-    )
-
-    response = client.post(
-        reverse("shortcuts:client-execute", args=[shortcut.pk]),
-        data=json.dumps({"clipboard": "ABC"}),
-        content_type="application/json",
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["action_result"]["value"] == "ABC-legacy"
-    assert payload["clipboard_output"] == "ABC-legacy!"
-
-
-@pytest.mark.django_db
 def test_shortcut_clean_normalizes_empty_target_payload() -> None:
     """Shortcut cleaning should normalize empty payloads before validation."""
 

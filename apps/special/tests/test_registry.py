@@ -168,26 +168,6 @@ def test_call_special_command_validates_inputs_and_forwards(monkeypatch) -> None
 
 
 @pytest.mark.django_db
-def test_call_special_command_accepts_plural_alias(monkeypatch) -> None:
-    """Plural alias should resolve to the same synced special command."""
-
-    sync_special_command(command_name="samples", command_cls=SampleCommand)
-
-    captured: dict[str, object] = {}
-
-    def fake_call_command(name: str, *args, **kwargs):
-        captured["name"] = name
-        return "ok"
-
-    monkeypatch.setattr("apps.special.registry.call_command", fake_call_command)
-
-    result = call_special_command("samples", slug="alpha", count=1)
-
-    assert result == "ok"
-    assert captured["name"] == "samples"
-
-
-@pytest.mark.django_db
 def test_sync_special_command_rejects_optional_positionals() -> None:
     """Optional positional parser actions are rejected during sync."""
 

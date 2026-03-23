@@ -141,7 +141,6 @@ def test_video_command_sample_creates_video(capsys, tmp_path, monkeypatch):
     output = capsys.readouterr().out
     assert "Sample video saved" in output
 
-
 @override_settings(VIDEO_FRAME_REDIS_URL="redis://localhost:6379/0")
 @patch("apps.video.management.commands.video.get_status")
 @patch("apps.video.management.commands.video.get_frame")
@@ -553,6 +552,7 @@ def test_camera_service_supported_alias_delegates_to_video_service(capsys):
 
     call_mock.assert_called_once_with("video", "service", interval=0.25, sleep=0.1)
     assert "supported alias" in capsys.readouterr().out
+
 
 @override_settings(VIDEO_FRAME_CAPTURE_INTERVAL=0.0, VIDEO_FRAME_SERVICE_SLEEP=0.0)
 def test_video_command_setting_defaults_preserve_zero():
