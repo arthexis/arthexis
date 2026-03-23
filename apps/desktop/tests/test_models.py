@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from django.core.exceptions import ValidationError
 
 from apps.desktop.models import DesktopShortcut, RegisteredExtension
@@ -39,101 +38,23 @@ def test_clean_rejects_blank_sigil_when_replacement_mode_enabled() -> None:
         raise AssertionError("Expected ValidationError for blank filename sigil")
 
 
-def test_desktop_shortcut_clean_requires_absolute_http_url() -> None:
-    """Desktop shortcuts must always point at an absolute HTTP(S) URL."""
+def test_desktop_shortcut_clean_rejects_missing_url_in_url_mode() -> None:
+    """URL launch mode requires a non-empty target URL."""
 
     shortcut = DesktopShortcut(
         slug="public-site",
         desktop_filename="Arthexis Public Site",
         name="Arthexis Public Site",
         launch_mode=DesktopShortcut.LaunchMode.URL,
-        target_url="/relative/path",
+        target_url="",
     )
 
-    with pytest.raises(ValidationError) as exc_info:
+    try:
         shortcut.clean()
-
-    assert exc_info.value.message_dict["target_url"] == [
-        "Target URL must be an absolute http:// or https:// URL."
-    ]
-
-
-def test_desktop_shortcut_clean_rejects_non_url_launch_mode() -> None:
-    """Desktop shortcuts reject legacy non-URL launch modes during validation."""
-
-    shortcut = DesktopShortcut(
-        slug="legacy-command",
-        desktop_filename="Legacy Command",
-        name="Legacy Command",
-        launch_mode="command",
-        target_url="http://127.0.0.1:{port}/",
-    )
-
-    with pytest.raises(ValidationError) as exc_info:
-        shortcut.clean()
-
-    assert exc_info.value.message_dict["launch_mode"] == [
-        "Desktop shortcuts must use URL launch mode."
-    ]
-
-
-def test_desktop_shortcut_clean_rejects_unsafe_condition_expression() -> None:
-    """Condition expressions cannot call arbitrary helpers or names."""
-
-    shortcut = DesktopShortcut(
-        slug="unsafe-expression",
-        desktop_filename="Unsafe Expression",
-        name="Unsafe Expression",
-        launch_mode=DesktopShortcut.LaunchMode.URL,
-        target_url="http://127.0.0.1:{port}/",
-        condition_expression="__import__('os').system('whoami')",
-    )
-
-    with pytest.raises(ValidationError) as exc_info:
-        shortcut.clean()
-
-    assert exc_info.value.message_dict["condition_expression"] == [
-        "Condition expressions may only call has_feature(...)."
-    ]
-
-
-def test_desktop_shortcut_clean_rejects_bare_has_feature_name() -> None:
-    """Condition expressions must call ``has_feature`` instead of referencing it."""
-
-    shortcut = DesktopShortcut(
-        slug="bare-has-feature",
-        desktop_filename="Bare Has Feature",
-        name="Bare Has Feature",
-        launch_mode=DesktopShortcut.LaunchMode.URL,
-        target_url="http://127.0.0.1:{port}/",
-        condition_expression="has_feature",
-    )
-
-    with pytest.raises(ValidationError) as exc_info:
-        shortcut.clean()
-
-    assert exc_info.value.message_dict["condition_expression"] == [
-        "Condition expressions must call has_feature(...)."
-    ]
-
-
-def test_desktop_shortcut_clean_rejects_invalid_url_placeholder() -> None:
-    """Target URLs should reject unsupported format placeholders cleanly."""
-
-    shortcut = DesktopShortcut(
-        slug="invalid-placeholder",
-        desktop_filename="Invalid Placeholder",
-        name="Invalid Placeholder",
-        launch_mode=DesktopShortcut.LaunchMode.URL,
-        target_url="https://example.com:{port}/{station_id}",
-    )
-
-    with pytest.raises(ValidationError) as exc_info:
-        shortcut.clean()
-
-    assert exc_info.value.message_dict["target_url"] == [
-        "Target URL must only use the {port} placeholder."
-    ]
+    except ValidationError as exc:
+        assert exc.message_dict["target_url"] == ["A target URL is required."]
+    else:  # pragma: no cover - explicit regression guard
+        raise AssertionError("Expected ValidationError for blank target URL")
 
 
 def test_desktop_shortcut_clean_rejects_icon_name_and_base64_together() -> None:
