@@ -64,7 +64,81 @@ def migrate_google_accounts_from_gdrive(apps, schema_editor):
             )
             ORDER BY legacy.id
             """
-        )
+            )
+
+
+def create_calendars_googleaccount_table(apps, schema_editor):
+    """Create the calendars-owned GoogleAccount table on upgraded databases.
+
+    Parameters:
+        apps: Historical app registry for this migration state.
+        schema_editor: Active schema editor for the current database backend.
+
+    Returns:
+        None. The helper creates the table only when it is missing.
+    """
+    connection = schema_editor.connection
+    if "calendars_googleaccount" in set(connection.introspection.table_names()):
+        return
+    schema_editor.create_model(apps.get_model("calendars", "GoogleAccount"))
+
+
+def drop_calendars_googleaccount_table(apps, schema_editor):
+    """Drop the calendars-owned GoogleAccount table during reversal when present.
+
+    Parameters:
+        apps: Historical app registry for this migration state.
+        schema_editor: Active schema editor for the current database backend.
+
+    Returns:
+        None. The helper removes the table only when it exists.
+    """
+    connection = schema_editor.connection
+    if "calendars_googleaccount" not in set(connection.introspection.table_names()):
+        return
+    schema_editor.delete_model(apps.get_model("calendars", "GoogleAccount"))
+
+
+def retarget_googlecalendar_account_constraint(apps, schema_editor):
+    """Point existing GoogleCalendar account FKs at the calendars table.
+
+    Parameters:
+        apps: Historical app registry containing the gdrive and calendars models.
+        schema_editor: Active schema editor for the current database backend.
+
+    Returns:
+        None. The helper is a no-op when the calendar table is missing.
+    """
+    connection = schema_editor.connection
+    if "calendars_googlecalendar" not in set(connection.introspection.table_names()):
+        return
+
+    google_calendar = apps.get_model("calendars", "GoogleCalendar")
+    old_field = google_calendar._meta.get_field("account").clone()
+    old_field.remote_field.model = apps.get_model("gdrive", "GoogleAccount")
+    new_field = google_calendar._meta.get_field("account")
+    schema_editor.alter_field(google_calendar, old_field, new_field, strict=False)
+
+
+def restore_googlecalendar_account_constraint(apps, schema_editor):
+    """Restore the legacy GoogleCalendar account FK on migration reversal.
+
+    Parameters:
+        apps: Historical app registry containing the gdrive and calendars models.
+        schema_editor: Active schema editor for the current database backend.
+
+    Returns:
+        None. The helper is a no-op when the calendar table is missing.
+    """
+    connection = schema_editor.connection
+    if "calendars_googlecalendar" not in set(connection.introspection.table_names()):
+        return
+
+    google_calendar = apps.get_model("calendars", "GoogleCalendar")
+    old_field = google_calendar._meta.get_field("account")
+    new_field = old_field.clone()
+    new_field.remote_field.model = apps.get_model("gdrive", "GoogleAccount")
+    schema_editor.alter_field(google_calendar, old_field, new_field, strict=False)
 
 
 def restore_google_accounts_to_gdrive(apps, schema_editor):
@@ -310,32 +384,20 @@ class Migration(migrations.Migration):
                     sheet_id bigint NOT NULL
                 )
                 """,
-                """
-                CREATE TABLE IF NOT EXISTS calendars_googleaccount (
-                    id bigint NOT NULL PRIMARY KEY,
-                    is_seed_data boolean NOT NULL,
-                    is_user_data boolean NOT NULL,
-                    is_deleted boolean NOT NULL,
-                    email varchar(254) NOT NULL,
-                    client_id varchar(255) NOT NULL,
-                    client_secret varchar(255) NOT NULL,
-                    refresh_token varchar(255) NOT NULL,
-                    access_token varchar(255) NOT NULL,
-                    token_expires_at datetime NULL,
-                    scopes text NOT NULL,
-                    is_enabled boolean NOT NULL,
-                    avatar_id bigint NULL REFERENCES chats_chatavatar (id) DEFERRABLE INITIALLY DEFERRED,
-                    group_id bigint NULL REFERENCES groups_securitygroup (id) DEFERRABLE INITIALLY DEFERRED,
-                    user_id bigint NULL REFERENCES users_user (id) DEFERRABLE INITIALLY DEFERRED
-                )
-                """,
             ],
             reverse_sql=[
                 f"DROP TABLE IF EXISTS {ARCHIVE_TABLES['sheet_column']}",
                 f"DROP TABLE IF EXISTS {ARCHIVE_TABLES['sheet']}",
-                migrations.RunSQL.noop,
             ],
         ),
+        migrations.RunPython(
+            create_calendars_googleaccount_table,
+            drop_calendars_googleaccount_table,
+        ),
         migrations.RunPython(migrate_google_accounts_from_gdrive, restore_google_accounts_to_gdrive),
+        migrations.RunPython(
+            retarget_googlecalendar_account_constraint,
+            restore_googlecalendar_account_constraint,
+        ),
         migrations.RunPython(archive_google_sheet_rows, restore_google_sheet_rows),
     ]

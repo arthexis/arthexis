@@ -13,6 +13,9 @@ from apps.base.models import Entity
 from apps.sigils.fields import SigilShortAutoField
 from apps.users.models import Profile
 
+GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
+REQUEST_TIMEOUT_SECONDS = 20
+
 
 class GoogleAccount(Profile):
     """OAuth credentials used to access Google Calendar publishing APIs.
@@ -114,7 +117,6 @@ class GoogleAccount(Profile):
         if not force_refresh and not self._token_expired():
             return self.resolve_sigils("access_token") or self.access_token
 
-        token_url = "https://oauth2.googleapis.com/token"
         payload = {
             "client_id": (self.resolve_sigils("client_id") or "").strip(),
             "client_secret": (self.resolve_sigils("client_secret") or "").strip(),
@@ -124,7 +126,11 @@ class GoogleAccount(Profile):
         if not all(payload[key] for key in ("client_id", "client_secret", "refresh_token")):
             raise ValidationError(_("Google OAuth credentials are incomplete."))
 
-        response = requests.post(token_url, data=payload, timeout=20)
+        response = requests.post(
+            GOOGLE_OAUTH_TOKEN_URL,
+            data=payload,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
         response.raise_for_status()
         data = response.json()
 
