@@ -13,22 +13,16 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.features.models import Feature
-from apps.features.parameters import (
-    get_feature_parameter,
-    set_feature_parameter_values,
-)
+from apps.features.parameters import set_feature_parameter_values
 
 from .constants import LLM_SUMMARY_SUITE_FEATURE_SLUG
 from .models import LLMSummaryConfig
-from .services import (
-    DEFAULT_MODEL_DIR,
-    ensure_local_model,
-    get_summary_config,
-    resolve_model_path,
-)
+from .services import DEFAULT_MODEL_DIR, ensure_local_model, get_summary_config, resolve_model_path
 
 
 class LLMSummaryWizardForm(forms.Form):
+    """Collect safe local summary settings for operators."""
+
     MODEL_DEFAULT = "default"
     MODEL_CUSTOM = "custom"
 
@@ -46,19 +40,13 @@ class LLMSummaryWizardForm(forms.Form):
     model_path = forms.CharField(
         label=_("Model path"),
         required=False,
-        help_text=_("Directory that contains the local LLM model files."),
+        help_text=_("Directory that contains local LLM model files."),
     )
-    model_command = forms.CharField(
-        label=_("Model command"),
-        required=False,
-        help_text=_("Optional command used to invoke the local model."),
-    )
-    timeout_seconds = forms.ChoiceField(
-        label=_("Model timeout"),
-        required=False,
-        choices=(("60", "60"), ("120", "120"), ("180", "180"), ("240", "240"), ("300", "300"), ("600", "600")),
-        initial="240",
-        help_text=_("Timeout (seconds) used to invoke the local model command."),
+    backend = forms.ChoiceField(
+        label=_("Summary backend"),
+        choices=LLMSummaryConfig.Backend.choices,
+        initial=LLMSummaryConfig.Backend.DETERMINISTIC,
+        help_text=_("Built-in in-process summarizer used for LCD-friendly log summaries."),
     )
     install_model = forms.BooleanField(
         label=_("Create the model directory now"),
@@ -68,6 +56,8 @@ class LLMSummaryWizardForm(forms.Form):
     )
 
     def clean(self):
+        """Validate custom model path input when operators override the default."""
+
         cleaned = super().clean()
         if cleaned.get("model_choice") == self.MODEL_CUSTOM:
             model_path = (cleaned.get("model_path") or "").strip()
@@ -80,13 +70,23 @@ class LLMSummaryWizardForm(forms.Form):
 
 @admin.register(LLMSummaryConfig)
 class LLMSummaryConfigAdmin(admin.ModelAdmin):
-    list_display = ("display", "slug", "is_active", "installed_at", "last_run_at")
-    list_filter = ("is_active",)
+    """Admin integration for LCD summary runtime settings."""
+
+    list_display = ("display", "slug", "backend", "is_active", "installed_at", "last_run_at")
+    list_filter = ("backend", "is_active")
     search_fields = ("slug", "display")
-    readonly_fields = ("installed_at", "last_run_at", "created_at", "updated_at")
+    readonly_fields = (
+        "model_command_audit",
+        "installed_at",
+        "last_run_at",
+        "created_at",
+        "updated_at",
+    )
     change_list_template = "admin/summary/llmsummaryconfig/change_list.html"
 
     def get_urls(self):
+        """Add the summary configuration wizard endpoint."""
+
         custom = [
             path(
                 "wizard/",
@@ -97,6 +97,8 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
         return custom + super().get_urls()
 
     def model_wizard_view(self, request: HttpRequest) -> HttpResponse:
+        """Render and process the operator wizard for summary setup."""
+
         if not self.has_change_permission(request):
             messages.error(
                 request, _("You do not have permission to configure LLM summaries.")
@@ -115,24 +117,17 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
             initial={
                 "model_choice": initial_choice,
                 "model_path": config.model_path or str(resolved_path),
-                "model_command": config.model_command,
-                "timeout_seconds": get_feature_parameter(
-                    LLM_SUMMARY_SUITE_FEATURE_SLUG,
-                    "timeout_seconds",
-                    fallback="240",
-                ),
+                "backend": config.backend,
             },
         )
 
         if request.method == "POST" and form.is_valid():
             model_choice = form.cleaned_data["model_choice"]
-            model_command = (form.cleaned_data.get("model_command") or "").strip()
-            timeout_seconds = (form.cleaned_data.get("timeout_seconds") or "240").strip()
+            config.backend = form.cleaned_data["backend"]
             if model_choice == LLMSummaryWizardForm.MODEL_DEFAULT:
                 config.model_path = ""
             else:
                 config.model_path = form.cleaned_data.get("model_path", "").strip()
-            config.model_command = model_command
             if form.cleaned_data.get("install_model"):
                 model_dir = ensure_local_model(
                     config,
@@ -150,8 +145,8 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
                 messages.success(request, installed_message)
             config.save(
                 update_fields=[
+                    "backend",
                     "model_path",
-                    "model_command",
                     "installed_at",
                     "updated_at",
                 ]
@@ -169,9 +164,8 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
             set_feature_parameter_values(
                 suite_feature,
                 {
+                    "backend": config.backend,
                     "model_path": config.model_path,
-                    "model_command": model_command,
-                    "timeout_seconds": timeout_seconds,
                 },
             )
             suite_feature.save(update_fields=["metadata", "updated_at"])
@@ -200,7 +194,12 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
             request, "admin/summary/llm_summary_wizard.html", context
         )
 
-    def _build_setup_checks(self, config: LLMSummaryConfig, *, resolved_path: Path) -> list[dict[str, str]]:
+    def _build_setup_checks(
+        self,
+        config: LLMSummaryConfig,
+        *,
+        resolved_path: Path,
+    ) -> list[dict[str, str]]:
         """Return operator-facing setup checklist rows for the wizard."""
 
         from apps.nodes.models import Node
@@ -222,7 +221,9 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
             checks.append({
                 "label": _("Local node registration"),
                 "status": _("Missing"),
-                "detail": _("Register this host as a local node before enabling summaries."),
+                "detail": _(
+                    "Register this host as a local node before enabling summaries."
+                ),
             })
             return checks
 
@@ -252,9 +253,16 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
             "detail": _("Activate LLM Summary Config to permit runtime generation."),
         })
         checks.append({
+            "label": _("Summary backend"),
+            "status": config.get_backend_display(),
+            "detail": _("Summaries run in process and never execute operator-provided commands."),
+        })
+        checks.append({
             "label": _("Model directory"),
             "status": _("Ready") if resolved_path.exists() else _("Missing"),
-            "detail": _("Use Save and install to create the model placeholder directory."),
+            "detail": _(
+                "Use Save and install to create the model placeholder directory for local artifacts."
+            ),
         })
         checks.append({
             "label": _("Reviewed"),
