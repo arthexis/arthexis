@@ -1,6 +1,6 @@
 ---
 name: django-change-safety
-description: Standardize safe Django changes with required checks for reversible migrations, fixture/migration pairing, explicit exceptions, docstrings, app admin registration, focused testing, and regression labeling for failures.
+description: Standardize safe Django changes with required checks for reversible migrations, fixture/migration pairing, explicit exceptions, lean documentation guidance, app admin registration, focused testing, and regression labeling for failures.
 ---
 
 # Django Change Safety
@@ -20,7 +20,7 @@ Use this skill for Django backend/model/app changes where consistency and releas
    - Identify touched apps, models, fixtures, and management/admin surfaces.
 
 2. **Apply implementation guardrails**
-   - Add docstrings to new public functions/classes/modules when meaningful.
+   - Keep code lean: add comments or docstrings only when they preserve important context, explain unconventional decisions, or feed user-facing/generated help text.
    - Prefer specific exceptions (`ValueError`, `ValidationError`, custom exceptions) over broad catches.
    - Avoid broad `except Exception` unless re-raising with context is required.
 
@@ -44,7 +44,7 @@ Use this skill for Django backend/model/app changes where consistency and releas
 
 ## Output checklist
 
-- [ ] Guardrails followed (docstrings + specific exceptions)
+- [ ] Guardrails followed (lean documentation + specific exceptions)
 - [ ] Fixture changes paired with reversible migration (if applicable)
 - [ ] New app has admin registration (if applicable)
 - [ ] Relevant tests executed and green
