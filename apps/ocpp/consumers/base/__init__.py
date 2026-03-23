@@ -2,7 +2,6 @@
 
 from ...services import certificate_signing
 from .certificates import CertificatesMixin
-from .consumer import CSMSConsumer, SinkConsumer
 from .dispatch import DispatchMixin
 from .identity import (
     FORWARDED_PAIR_RE,
@@ -14,8 +13,6 @@ from .identity import (
 )
 
 __all__ = [
-    "CSMSConsumer",
-    "SinkConsumer",
     "CertificatesMixin",
     "DispatchMixin",
     "IdentityMixin",

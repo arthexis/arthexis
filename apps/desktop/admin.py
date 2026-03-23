@@ -77,12 +77,14 @@ class DesktopShortcutAdmin(admin.ModelAdmin):
         "slug",
         "desktop_filename",
         "launch_mode",
+        "install_location",
         "is_enabled",
         "require_desktop_ui",
         "sort_order",
     )
     list_filter = (
         "launch_mode",
+        "install_location",
         "is_enabled",
         "require_desktop_ui",
         "only_staff",
@@ -110,6 +112,7 @@ class DesktopShortcutAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "launch_mode",
+                    "install_location",
                     "target_url",
                     "command",
                     "terminal",

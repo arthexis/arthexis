@@ -375,6 +375,7 @@ def render_readme_page(
         "full_document_url": full_document_url,
         "page_url": request.build_absolute_uri(),
         "force_footer": force_footer,
+        "current_document_path": str(document.file),
     }
     response = render(request, "docs/readme.html", context)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])

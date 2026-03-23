@@ -4,6 +4,7 @@ import csv
 
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.serializers import deserialize, serialize
 from django.core.serializers.base import DeserializationError
@@ -16,6 +17,7 @@ from django.http import (
     HttpResponseBadRequest,
     HttpResponseRedirect,
 )
+from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.translation import gettext as _, ngettext
@@ -483,6 +485,9 @@ class EntityModelAdmin(ImportExportAdminMixin, UserDatumAdminMixin, admin.ModelA
 
     def get_actions(self, request):
         actions = super().get_actions(request)
+        action = self.get_action("add_selected_to_project")
+        if action is not None:
+            actions.setdefault("add_selected_to_project", action)
         if not self._supports_soft_delete():
             return actions
         if getattr(request, "_soft_deleted_only", False):
@@ -490,6 +495,69 @@ class EntityModelAdmin(ImportExportAdminMixin, UserDatumAdminMixin, admin.ModelA
             if action is not None:
                 actions.setdefault("recover_selected", action)
         return actions
+
+    @admin.action(description=_("Add selected to Project"))
+    def add_selected_to_project(self, request, queryset):
+        """Attach selected entity objects to a chosen project bundle."""
+
+        from apps.projects.models import Project, ProjectItem
+
+        if "apply" in request.POST:
+            project_id = request.POST.get("project")
+            if not project_id:
+                self.message_user(
+                    request,
+                    _("Select a project before applying the action."),
+                    level=messages.ERROR,
+                )
+                return None
+            project = get_object_or_404(Project, pk=project_id)
+            if not request.user.has_perm("projects.change_project", project):
+                self.message_user(
+                    request,
+                    _("You do not have permission to modify this project."),
+                    level=messages.ERROR,
+                )
+                return None
+            content_type = ContentType.objects.get_for_model(
+                queryset.model,
+                for_concrete_model=False,
+            )
+            created = 0
+            for obj in queryset:
+                _project_item, was_created = ProjectItem.objects.get_or_create(
+                    project=project,
+                    content_type=content_type,
+                    object_id=str(obj.pk),
+                )
+                if was_created:
+                    created += 1
+            self.message_user(
+                request,
+                _("Added %(count)d %(name)s to %(project)s.")
+                % {
+                    "count": created,
+                    "name": queryset.model._meta.verbose_name_plural,
+                    "project": project.name,
+                },
+                level=messages.SUCCESS,
+            )
+            return HttpResponseRedirect(request.get_full_path())
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "objects": queryset,
+            "projects": Project.objects.order_by("name"),
+            "action_checkbox_name": admin.helpers.ACTION_CHECKBOX_NAME,
+            "title": _("Add selected %(name)s to project")
+            % {"name": queryset.model._meta.verbose_name_plural},
+        }
+        return TemplateResponse(
+            request,
+            "admin/projects/add_selected_to_project.html",
+            context,
+        )
 
     @admin.action(description=_("Recover selected"))
     def recover_selected(self, request, queryset):

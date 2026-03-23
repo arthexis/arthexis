@@ -9,6 +9,7 @@ from django_object_actions import DjangoObjectActions
 
 from apps.core.admin import OwnableAdminMixin
 from apps.repos.forms import GitHubAppAdminForm
+from apps.repos.admin_feedback_config import FeedbackIssueConfigurationAdminMixin
 from apps.repos.models.events import GitHubEvent
 from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
 from apps.repos.models.github_tokens import GitHubToken
@@ -27,9 +28,12 @@ class FetchFromGitHubMixin(DjangoObjectActions):
 
 
 @admin.register(RepositoryIssue)
-class RepositoryIssueAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
+class RepositoryIssueAdmin(
+    FeedbackIssueConfigurationAdminMixin, FetchFromGitHubMixin, admin.ModelAdmin
+):
     actions = ["fetch_open_issues"]
     changelist_actions = ["fetch_open_issues"]
+    change_actions = ("configure_action",)
     list_display = (
         "number",
         "title",

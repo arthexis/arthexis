@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 import subprocess
+from urllib.parse import parse_qsl
+from dataclasses import dataclass
 
 from django.conf import settings
 from django.contrib import admin, messages
@@ -10,9 +12,10 @@ from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect, JsonResponse
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
-from django.urls import NoReverseMatch, path, reverse
+from django.urls import NoReverseMatch, URLPattern, URLResolver, path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.http import urlencode
 from django.utils.translation import gettext_lazy as _
 
 from apps.actions.models import StaffTask, StaffTaskPreference
@@ -25,12 +28,12 @@ from .filesystem import _clear_auto_upgrade_skip_revisions
 from .network import _upgrade_redirect
 from .ui import (
     STARTUP_REPORT_DEFAULT_LIMIT,
-    _build_nginx_report,
-    _build_services_report,
+    build_nginx_report,
+    build_services_report,
     _build_system_fields,
     _build_uptime_report,
     _gather_info,
-    _read_startup_report,
+    read_startup_report,
 )
 from .upgrade import (
     UPGRADE_CHANNEL_CHOICES,
@@ -45,6 +48,32 @@ from .upgrade import (
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class TaskPanelRoute:
+    """Declarative route metadata for admin task panel views."""
+
+    route: str
+    view: callable
+    name: str
+    group: str = "panels"
+
+
+TASK_PANEL_ROUTES: list[TaskPanelRoute] = []
+
+
+def task_panel_route(*, route: str, name: str, group: str = "panels"):
+    """Register an admin task-panel route so URLs can be generated programmatically."""
+
+    def decorator(view_func):
+        TASK_PANEL_ROUTES.append(
+            TaskPanelRoute(route=route, view=view_func, name=name, group=group)
+        )
+        return view_func
+
+    return decorator
+
+
+@task_panel_route(route="system/", name="system", group="panels")
 def _system_view(request):
     ensure_default_staff_tasks_exist()
     tasks = list(StaffTask.objects.filter(is_active=True).order_by("order", "label"))
@@ -64,9 +93,7 @@ def _system_view(request):
                 continue
             if task.superuser_only and not request.user.is_superuser:
                 continue
-            try:
-                reverse(task.admin_url_name)
-            except NoReverseMatch:
+            if not task.resolve_url():
                 continue
             enabled = task.pk in selected_task_ids
             if enabled == task.default_enabled:
@@ -77,7 +104,7 @@ def _system_view(request):
                 task=task,
                 defaults={"is_enabled": enabled},
             )
-        messages.success(request, _("Dashboard tasks updated."))
+        messages.success(request, _("Dashboard task panels updated."))
         return HttpResponseRedirect(reverse("admin:system"))
 
     task_rows = []
@@ -86,9 +113,8 @@ def _system_view(request):
             continue
         if task.superuser_only and not request.user.is_superuser:
             continue
-        try:
-            task_url = reverse(task.admin_url_name)
-        except NoReverseMatch:
+        task_url = task.resolve_url()
+        if not task_url:
             continue
         pref = task_pref_map.get(task.pk)
         is_enabled = pref.is_enabled if pref is not None else task.default_enabled
@@ -103,7 +129,7 @@ def _system_view(request):
     context = admin.site.each_context(request)
     context.update(
         {
-            "title": _("Tasks"),
+            "title": _("Task Panels"),
             "task_rows": task_rows,
         }
     )
@@ -151,6 +177,93 @@ def _suite_service_status(base_dir: Path | None = None) -> dict[str, str | bool]
     }
 
 
+
+def _collect_admin_report_routes(user) -> list[dict[str, str]]:
+    """Return reverseable admin report routes filtered by the current user permissions."""
+
+    ensure_default_staff_tasks_exist()
+    routes: list[dict[str, str]] = []
+    restricted_routes = set(
+        StaffTask.objects.filter(superuser_only=True).values_list("action_name", flat=True)
+    )
+
+    def _walk(patterns: list[URLPattern | URLResolver]) -> None:
+        for pattern in patterns:
+            if isinstance(pattern, URLResolver):
+                _walk(pattern.url_patterns)
+                continue
+
+            route_name = pattern.name
+            if not route_name or "report" not in route_name:
+                continue
+            if route_name.endswith("-data"):
+                continue
+            if route_name == "system-upgrade-report" and "upgrade" in restricted_routes and not user.is_superuser:
+                continue
+
+            try:
+                route_url = reverse(f"admin:{route_name}")
+            except NoReverseMatch:
+                continue
+
+            route_label = route_name.replace("-", " ").replace("_", " ").title()
+            routes.append(
+                {
+                    "name": route_name,
+                    "label": route_label,
+                    "url": route_url,
+                }
+            )
+
+    _walk(admin.site.get_urls())
+    return sorted(routes, key=lambda item: item["label"])
+
+
+@task_panel_route(route="system/reports/", name="system-reports", group="reports")
+def _system_reports_view(request):
+    """Render and launch the unified report runner for admin reports."""
+
+    report_routes = _collect_admin_report_routes(request.user)
+    available_report_names = {route["name"] for route in report_routes}
+    selected_report = request.GET.get("report", "")
+    params_value = request.GET.get("params", "")
+
+    if request.method == "POST":
+        selected_report = (request.POST.get("report") or "").strip()
+        params_value = (request.POST.get("params") or "").strip()
+
+        if not selected_report:
+            messages.error(request, _("Choose a report to run."))
+        elif selected_report not in available_report_names:
+            messages.error(request, _("You do not have access to the selected report."))
+        else:
+            try:
+                base_url = reverse(f"admin:{selected_report}")
+            except NoReverseMatch:
+                messages.error(request, _("The selected report is unavailable."))
+            else:
+                query_params = [
+                    (key.strip(), value.strip())
+                    for key, value in parse_qsl(params_value, keep_blank_values=True)
+                    if key.strip()
+                ]
+
+                if query_params:
+                    return HttpResponseRedirect(f"{base_url}?{urlencode(query_params)}")
+                return HttpResponseRedirect(base_url)
+
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": _("Reports"),
+            "report_routes": report_routes,
+            "selected_report": selected_report,
+            "params_value": params_value,
+        }
+    )
+    return TemplateResponse(request, "admin/system_reports.html", context)
+
+@task_panel_route(route="system/details/", name="system-details", group="panels")
 def _system_details_view(request):
     """Render system details and privileged server restart actions."""
 
@@ -174,6 +287,11 @@ def _system_details_view(request):
     return TemplateResponse(request, "admin/system_details.html", context)
 
 
+@task_panel_route(
+    route="system/details/restart-server/",
+    name="system-restart-server",
+    group="panels",
+)
 def _system_restart_server_view(request):
     """Restart the configured suite systemd service for superusers."""
 
@@ -212,6 +330,11 @@ def _system_restart_server_view(request):
     return HttpResponseRedirect(reverse("admin:system-details"))
 
 
+@task_panel_route(
+    route="system/startup-report/",
+    name="system-startup-report",
+    group="reports",
+)
 def _system_startup_report_view(request):
     try:
         limit = int(request.GET.get("limit", STARTUP_REPORT_DEFAULT_LIMIT))
@@ -225,7 +348,7 @@ def _system_startup_report_view(request):
     context.update(
         {
             "title": _("Startup Report"),
-            "startup_report": _read_startup_report(limit=limit),
+            "startup_report": read_startup_report(limit=limit),
             "startup_report_limit": limit,
             "startup_report_options": (10, 25, 50, 100, 200),
         }
@@ -233,6 +356,11 @@ def _system_startup_report_view(request):
     return TemplateResponse(request, "admin/system_startup_report.html", context)
 
 
+@task_panel_route(
+    route="system/uptime-report/",
+    name="system-uptime-report",
+    group="reports",
+)
 def _system_uptime_report_view(request):
     context = admin.site.each_context(request)
     context.update(
@@ -244,28 +372,43 @@ def _system_uptime_report_view(request):
     return TemplateResponse(request, "admin/system_uptime_report.html", context)
 
 
+@task_panel_route(
+    route="system/services-report/",
+    name="system-services-report",
+    group="reports",
+)
 def _system_services_report_view(request):
     context = admin.site.each_context(request)
     context.update(
         {
             "title": _("Suite Services Report"),
-            "services_report": _build_services_report(),
+            "services_report": build_services_report(),
         }
     )
     return TemplateResponse(request, "admin/system_services_report.html", context)
 
 
+@task_panel_route(
+    route="system/nginx-report/",
+    name="system-nginx-report",
+    group="reports",
+)
 def _system_nginx_report_view(request):
     context = admin.site.each_context(request)
     context.update(
         {
             "title": _("NGINX Report"),
-            "nginx_report": _build_nginx_report(),
+            "nginx_report": build_nginx_report(),
         }
     )
     return TemplateResponse(request, "admin/system_nginx_report.html", context)
 
 
+@task_panel_route(
+    route="system/upgrade-report/",
+    name="system-upgrade-report",
+    group="reports",
+)
 def _system_upgrade_report_view(request):
     revision_info = None
     session = getattr(request, "session", None)
@@ -283,6 +426,11 @@ def _system_upgrade_report_view(request):
     return TemplateResponse(request, "admin/system_upgrade_report.html", context)
 
 
+@task_panel_route(
+    route="system/changelog/",
+    name="system-changelog-report",
+    group="reports",
+)
 def _system_changelog_report_view(request):
     """Render the changelog report with lazy-loaded sections."""
 
@@ -316,6 +464,11 @@ def _system_changelog_report_view(request):
     return TemplateResponse(request, "admin/system_changelog_report.html", context)
 
 
+@task_panel_route(
+    route="system/changelog/data/",
+    name="system-changelog-data",
+    group="reports",
+)
 def _system_changelog_report_data_view(request):
     """Return additional changelog sections for infinite scrolling."""
 
@@ -352,6 +505,11 @@ def _system_changelog_report_data_view(request):
     )
 
 
+@task_panel_route(
+    route="admin-notices/<int:notice_id>/dismiss/",
+    name="dismiss-admin-notice",
+    group="panels",
+)
 def _dismiss_admin_notice_view(request, notice_id: int):
     if request.method != "POST":
         return HttpResponseRedirect(reverse("admin:index"))
@@ -369,6 +527,11 @@ def _dismiss_admin_notice_view(request, notice_id: int):
     return HttpResponseRedirect(reverse("admin:index"))
 
 
+@task_panel_route(
+    route="system/upgrade-report/run-check/",
+    name="system-upgrade-run-check",
+    group="reports",
+)
 def _system_trigger_upgrade_check_view(request):
     if request.method != "POST":
         return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
@@ -420,6 +583,11 @@ def _system_trigger_upgrade_check_view(request):
     return _upgrade_redirect(request, reverse("admin:system-upgrade-report"))
 
 
+@task_panel_route(
+    route="system/upgrade-report/check-revision/",
+    name="system-upgrade-check-revision",
+    group="reports",
+)
 def _system_upgrade_revision_check_view(request):
     if request.method != "POST":
         return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
@@ -457,67 +625,12 @@ def patch_admin_system_view() -> None:
     def get_urls():
         urls = original_get_urls()
         custom = [
-            path("system/", admin.site.admin_view(_system_view), name="system"),
             path(
-                "system/details/",
-                admin.site.admin_view(_system_details_view),
-                name="system-details",
-            ),
-            path(
-                "system/details/restart-server/",
-                admin.site.admin_view(_system_restart_server_view),
-                name="system-restart-server",
-            ),
-            path(
-                "admin-notices/<int:notice_id>/dismiss/",
-                admin.site.admin_view(_dismiss_admin_notice_view),
-                name="dismiss-admin-notice",
-            ),
-            path(
-                "system/startup-report/",
-                admin.site.admin_view(_system_startup_report_view),
-                name="system-startup-report",
-            ),
-            path(
-                "system/changelog/",
-                admin.site.admin_view(_system_changelog_report_view),
-                name="system-changelog-report",
-            ),
-            path(
-                "system/changelog/data/",
-                admin.site.admin_view(_system_changelog_report_data_view),
-                name="system-changelog-data",
-            ),
-            path(
-                "system/uptime-report/",
-                admin.site.admin_view(_system_uptime_report_view),
-                name="system-uptime-report",
-            ),
-            path(
-                "system/nginx-report/",
-                admin.site.admin_view(_system_nginx_report_view),
-                name="system-nginx-report",
-            ),
-            path(
-                "system/services-report/",
-                admin.site.admin_view(_system_services_report_view),
-                name="system-services-report",
-            ),
-            path(
-                "system/upgrade-report/",
-                admin.site.admin_view(_system_upgrade_report_view),
-                name="system-upgrade-report",
-            ),
-            path(
-                "system/upgrade-report/check-revision/",
-                admin.site.admin_view(_system_upgrade_revision_check_view),
-                name="system-upgrade-check-revision",
-            ),
-            path(
-                "system/upgrade-report/run-check/",
-                admin.site.admin_view(_system_trigger_upgrade_check_view),
-                name="system-upgrade-run-check",
-            ),
+                route.route,
+                admin.site.admin_view(route.view),
+                name=route.name,
+            )
+            for route in TASK_PANEL_ROUTES
         ]
         return custom + urls
 

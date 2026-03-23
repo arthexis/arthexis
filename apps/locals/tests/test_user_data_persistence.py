@@ -90,7 +90,7 @@ def test_user_data_applied_after_seed_fixture(tmp_path):
     ]
     user_fixture_path.write_text(json.dumps(user_fixture_payload))
 
-    call_command("load_user_data", str(seed_path), verbosity=0)
+    call_command("loaddata", str(seed_path), verbosity=0)
 
     seeded = Favorite.objects.get(pk=9999)
     assert seeded.custom_label == "Seed label"

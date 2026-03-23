@@ -5,7 +5,7 @@ from pathlib import Path
 
 from django.conf import settings
 
-from apps.loggers.rotation import build_daily_rotating_file_handler
+from utils.loggers.rotation import build_daily_rotating_file_handler
 
 _LOGGER_NAME = "register_visitor_node"
 _HANDLER_ATTR = "_register_visitor_configured"

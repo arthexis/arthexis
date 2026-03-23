@@ -67,7 +67,7 @@ def test_load_fixture_sigil_roots_retries_on_locked(monkeypatch, caplog):
 
 
 @pytest.mark.django_db
-def test_regression_load_fixture_sigil_roots_uses_signal_database_for_content_types(monkeypatch):
+def test_load_fixture_sigil_roots_uses_signal_database_for_content_types(monkeypatch):
     """Regression: content type lookups must use the signal-provided database alias."""
 
     entries = iter(

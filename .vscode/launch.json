@@ -48,7 +48,7 @@
             "windows": {
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
-            "module": "apps.vscode.migration_server",
+            "module": "utils.devtools.migration_server",
             "cwd": "${workspaceFolder}",
             "noDebug": true,
             "console": "integratedTerminal",
@@ -62,7 +62,7 @@
             "windows": {
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
-            "module": "apps.vscode.migration_server",
+            "module": "utils.devtools.migration_server",
             "cwd": "${workspaceFolder}",
             "noDebug": true,
             "console": "integratedTerminal",
@@ -79,7 +79,7 @@
             "windows": {
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
-            "module": "apps.vscode.test_server",
+            "module": "utils.devtools.test_server",
             "cwd": "${workspaceFolder}",
             "noDebug": true
         },

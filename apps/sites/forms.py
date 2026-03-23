@@ -23,6 +23,7 @@ from .models import UserStory, UserStoryAttachment
 ANONYMOUS_ATTACHMENT_LIMIT = 0
 AUTHENTICATED_ATTACHMENT_LIMIT = 3
 DEFAULT_MAX_ATTACHMENT_FILE_SIZE = 5 * 1024 * 1024
+DEFAULT_MAX_SCREENSHOT_FILE_SIZE = 5 * 1024 * 1024
 DEFAULT_ALLOWED_ATTACHMENT_EXTENSIONS = (
     "txt",
     "csv",
@@ -37,6 +38,19 @@ DEFAULT_ALLOWED_ATTACHMENT_EXTENSIONS = (
     "docx",
     "xls",
     "xlsx",
+)
+DEFAULT_ALLOWED_SCREENSHOT_EXTENSIONS = (
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+    "gif",
+)
+DEFAULT_ALLOWED_SCREENSHOT_CONTENT_TYPES = (
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
 )
 
 
@@ -93,6 +107,7 @@ class UserStoryForm(forms.ModelForm):
     """Feedback form used on public and admin pages."""
 
     attachments = MultipleFileField(required=False)
+    screenshot = forms.ImageField(required=False)
     contact_via_chat = forms.BooleanField(
         required=False,
         label=_("You may contact me"),
@@ -100,16 +115,38 @@ class UserStoryForm(forms.ModelForm):
 
     class Meta:
         model = UserStory
-        fields = ("name", "rating", "comments", "path", "messages", "contact_via_chat")
+        fields = ("name", "rating", "comments", "path", "messages", "contact_via_chat", "javascript_enabled", "screenshot")
         widgets = {
             "path": forms.HiddenInput(),
             "comments": forms.Textarea(attrs={"rows": 4}),
             "messages": forms.HiddenInput(),
+            "javascript_enabled": forms.HiddenInput(),
         }
 
     def __init__(self, *args, user=None, files=None, **kwargs):
+        """Initialize feedback form state and cache uploaded file metadata.
+
+        Parameters:
+            *args: Positional form arguments passed to ``ModelForm``.
+            user: Authenticated user associated with the submission, if any.
+            files: MultiValueDict-like upload container used for attachments and screenshot metadata.
+            **kwargs: Additional keyword arguments forwarded to ``ModelForm``.
+
+        Returns:
+            None: Initializes instance attributes in place.
+
+        Raises:
+            AttributeError: If ``files`` does not provide ``get`` and ``getlist`` methods.
+        """
+
         self.user = user
         self.upload_files = files.getlist("attachments") if files is not None else []
+        self.screenshot_upload_content_type = ""
+        if files is not None:
+            screenshot_upload = files.get("screenshot")
+            self.screenshot_upload_content_type = (
+                getattr(screenshot_upload, "content_type", "") or ""
+            ).strip().lower()
         super().__init__(*args, files=files, **kwargs)
 
         if user is not None and user.is_authenticated:
@@ -189,6 +226,33 @@ class UserStoryForm(forms.ModelForm):
             getattr(settings, "USER_STORY_ATTACHMENT_MAX_BYTES", DEFAULT_MAX_ATTACHMENT_FILE_SIZE)
         )
 
+    def get_allowed_screenshot_extensions(self) -> tuple[str, ...]:
+        """Return normalized set of extensions accepted by screenshot uploads."""
+
+        configured = getattr(
+            settings,
+            "USER_STORY_SCREENSHOT_ALLOWED_EXTENSIONS",
+            DEFAULT_ALLOWED_SCREENSHOT_EXTENSIONS,
+        )
+        return tuple(ext.lower().lstrip(".") for ext in configured)
+
+    def get_allowed_screenshot_content_types(self) -> tuple[str, ...]:
+        """Return the list of allowed screenshot MIME types."""
+
+        configured = getattr(
+            settings,
+            "USER_STORY_SCREENSHOT_ALLOWED_CONTENT_TYPES",
+            DEFAULT_ALLOWED_SCREENSHOT_CONTENT_TYPES,
+        )
+        return tuple(content_type.lower() for content_type in configured)
+
+    def get_max_screenshot_file_size(self) -> int:
+        """Return maximum screenshot size in bytes."""
+
+        return int(
+            getattr(settings, "USER_STORY_SCREENSHOT_MAX_BYTES", DEFAULT_MAX_SCREENSHOT_FILE_SIZE)
+        )
+
     def clean_comments(self):
         """Validate comments length according to role-based limits."""
 
@@ -243,6 +307,45 @@ class UserStoryForm(forms.ModelForm):
             )
         return name
 
+    def clean_screenshot(self):
+        """Validate screenshot uploads against size/type allow-lists."""
+
+        screenshot = self.cleaned_data.get("screenshot")
+        if not screenshot:
+            return screenshot
+
+        extension = Path(screenshot.name).suffix.lstrip(".").lower()
+        allowed_extensions = self.get_allowed_screenshot_extensions()
+        if allowed_extensions and extension not in allowed_extensions:
+            raise forms.ValidationError(
+                _("Unsupported screenshot type: %(extension)s.") % {"extension": extension or _("unknown")},
+                code="invalid_screenshot_type",
+            )
+
+        content_type = (self.screenshot_upload_content_type or "").strip().lower()
+        if not content_type:
+            raise forms.ValidationError(
+                _("Screenshot content type is required."),
+                code="missing_screenshot_content_type",
+            )
+
+        allowed_content_types = self.get_allowed_screenshot_content_types()
+        if allowed_content_types and content_type not in allowed_content_types:
+            raise forms.ValidationError(
+                _("Unsupported screenshot content type: %(content_type)s.")
+                % {"content_type": content_type},
+                code="invalid_screenshot_content_type",
+            )
+
+        max_file_size = self.get_max_screenshot_file_size()
+        if screenshot.size > max_file_size:
+            raise forms.ValidationError(
+                _("Screenshot must be %(size)s MB or smaller.")
+                % {"size": max_file_size // (1024 * 1024)},
+                code="screenshot_too_large",
+            )
+        return screenshot
+
     def clean_path(self):
         return (self.cleaned_data.get("path") or "").strip()
 
@@ -274,6 +377,10 @@ class UserStoryForm(forms.ModelForm):
         if self.user is not None and self.user.is_authenticated:
             instance.user = self.user
         instance.contact_via_chat = bool(self.cleaned_data.get("contact_via_chat"))
+        instance.javascript_enabled = self.cleaned_data.get("javascript_enabled", False)
+        screenshot_file = self.cleaned_data.get("screenshot")
+        if screenshot_file:
+            instance.screenshot = screenshot_file
         if commit:
             instance.save()
             self.save_attachments()

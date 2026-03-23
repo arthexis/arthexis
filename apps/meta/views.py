@@ -12,6 +12,7 @@ from django.db import transaction
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
+from apps.features.utils import is_suite_feature_enabled
 from apps.meta.models import WhatsAppWebhook, WhatsAppWebhookMessage
 
 
@@ -88,6 +89,10 @@ def whatsapp_webhook(request: HttpRequest, route_key: str) -> HttpResponse:
         if not hmac.compare_digest(signature[7:], expected):
             return HttpResponse("Unauthorized", status=401)
 
+    feature_enabled = is_suite_feature_enabled(
+        webhook.bridge.suite_feature_slug(),
+        default=True,
+    )
     with transaction.atomic():
         for value, metadata, contact, profile, message in _iter_messages(payload):
             message_id = str(message.get("id") or "").strip()
@@ -114,4 +119,6 @@ def whatsapp_webhook(request: HttpRequest, route_key: str) -> HttpResponse:
                 },
             )
 
+    if not feature_enabled:
+        return HttpResponse("accepted without bridge activity", status=202)
     return HttpResponse("ok")

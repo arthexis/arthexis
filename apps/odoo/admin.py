@@ -12,7 +12,7 @@ from apps.locals.user_data import EntityModelAdmin
 from .models import OdooDeployment, OdooQuery, OdooQueryVariable
 from .services import sync_odoo_deployments
 from .sync_features import (
-    ODOO_SYNC_DEPLOYMENT_DISCOVERY_FEATURE_SLUG,
+    ODOO_SYNC_DEPLOYMENT_DISCOVERY_PARAMETER_KEY,
     is_odoo_sync_integration_enabled,
 )
 
@@ -112,7 +112,7 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
             ):
                 raise PermissionDenied
             if not is_odoo_sync_integration_enabled(
-                ODOO_SYNC_DEPLOYMENT_DISCOVERY_FEATURE_SLUG,
+                ODOO_SYNC_DEPLOYMENT_DISCOVERY_PARAMETER_KEY,
                 default=False,
             ):
                 self.message_user(

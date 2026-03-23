@@ -7,7 +7,6 @@ from django.contrib.auth import get_user_model
 
 from apps.core.models import EmailArtifact
 from apps.emails.models import EmailCollector, EmailInbox
-from apps.recipes.models import Recipe
 
 
 pytestmark = pytest.mark.django_db
@@ -54,9 +53,9 @@ def test_collect_popup_notification_renders_sigil_templates(monkeypatch):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {
                 "subject": "Incident",
                 "from": "alerts@example.com",
@@ -96,9 +95,9 @@ def test_collect_net_message_uses_broadcast(monkeypatch):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {
                 "subject": "Grid alarm",
                 "from": "grid@example.com",
@@ -137,9 +136,9 @@ def test_collect_email_mode_sends_using_recipients(monkeypatch):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {
                 "subject": "Tariff update",
                 "from": "market@example.com",
@@ -180,9 +179,9 @@ def test_collect_email_mode_sanitizes_subject_newlines(monkeypatch):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {
                 "subject": "Line1\nLine2\rLine3",
                 "from": "market@example.com",
@@ -221,9 +220,9 @@ def test_collect_continues_when_notification_fails(monkeypatch, caplog):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {"subject": "First", "from": "ops@example.com", "body": "One"},
             {"subject": "Second", "from": "ops@example.com", "body": "Two"},
         ],
@@ -238,196 +237,7 @@ def test_collect_continues_when_notification_fails(monkeypatch, caplog):
         collector.collect(limit=2)
 
     assert EmailArtifact.objects.filter(collector=collector).count() == 2
-    assert "Failed to send notification for collector" in caplog.text
-
-
-def test_collect_recipe_mode_executes_configured_recipe(monkeypatch):
-    """Collector recipe mode should execute the selected recipe with context."""
-
-    owner = _create_owner("collector-recipe-owner")
-    inbox = _create_inbox(owner, "collector-recipe@example.com")
-    recipe = Recipe.objects.create(
-        user=owner,
-        slug="collector-recipe",
-        display="Collector Recipe",
-        script="result = kwargs",
-    )
-    collector = EmailCollector.objects.create(
-        inbox=inbox,
-        fragment="Ticket [ticket_id] is [status]",
-        notification_mode=EmailCollector.NOTIFY_NONE,
-        notification_subject="Alert [ticket_id]",
-        notification_message="Status [status]",
-        notification_recipe=recipe,
-    )
-
-    monkeypatch.setattr(
-        collector,
-        "search_messages",
-        lambda limit: [
-            {
-                "subject": "Grid alarm",
-                "from": "grid@example.com",
-                "body": "Ticket 9 is open",
-                "date": "Tue",
-            }
-        ],
-    )
-
-    captured: dict[str, object] = {}
-
-    def _fake_execute(*args, **kwargs):
-        captured["args"] = args
-        captured["kwargs"] = kwargs
-        return object()
-
-    monkeypatch.setattr(recipe, "execute", _fake_execute)
-
-    collector.collect(limit=1)
-
-    assert captured["args"] == ()
-    assert captured["kwargs"] == {
-        "subject": "Alert 9",
-        "message": "Status open",
-        "sender": "grid@example.com",
-        "body": "Ticket 9 is open",
-        "date": "Tue",
-        "sigils": {"ticket_id": "9", "status": "open"},
-    }
-
-
-def test_collect_email_mode_with_recipe_executes_both_routes(monkeypatch):
-    """Collector should dispatch email notifications and execute recipe when configured."""
-
-    owner = _create_owner("collector-email-and-recipe-owner")
-    inbox = _create_inbox(owner, "collector-email-and-recipe@example.com")
-    recipe = Recipe.objects.create(
-        user=owner,
-        slug="collector-email-and-recipe",
-        display="Collector Email Recipe",
-        script="result = kwargs",
-    )
-    collector = EmailCollector.objects.create(
-        inbox=inbox,
-        fragment="Ticket [ticket_id] is [status]",
-        notification_mode=EmailCollector.NOTIFY_EMAIL,
-        notification_subject="Alert [ticket_id]",
-        notification_message="Status [status]",
-        notification_recipients="ops@example.com",
-        notification_recipe=recipe,
-    )
-
-    monkeypatch.setattr(
-        collector,
-        "search_messages",
-        lambda limit: [
-            {
-                "subject": "Grid alarm",
-                "from": "grid@example.com",
-                "body": "Ticket 10 is open",
-                "date": "Wed",
-            }
-        ],
-    )
-
-    sent: dict[str, object] = {}
-
-    def _fake_send(subject, message, recipient_list, **kwargs):
-        sent["subject"] = subject
-        sent["message"] = message
-        sent["recipient_list"] = recipient_list
-        sent["kwargs"] = kwargs
-        return 1
-
-    monkeypatch.setattr("apps.emails.mailer.send", _fake_send)
-
-    captured: dict[str, object] = {}
-
-    def _fake_execute(*args, **kwargs):
-        captured["args"] = args
-        captured["kwargs"] = kwargs
-        return object()
-
-    monkeypatch.setattr(recipe, "execute", _fake_execute)
-
-    collector.collect(limit=1)
-
-    assert sent["subject"] == "Alert 10"
-    assert sent["message"] == "Status open"
-    assert sent["recipient_list"] == ["ops@example.com"]
-    assert sent["kwargs"]["fail_silently"] is False
-    assert captured["args"] == ()
-    assert captured["kwargs"] == {
-        "subject": "Alert 10",
-        "message": "Status open",
-        "sender": "grid@example.com",
-        "body": "Ticket 10 is open",
-        "date": "Wed",
-        "sigils": {"ticket_id": "10", "status": "open"},
-    }
-
-
-def test_collect_email_mode_failure_still_executes_recipe(monkeypatch, caplog):
-    """Collector should still execute recipe when email dispatch fails."""
-
-    owner = _create_owner("collector-email-failure-recipe-owner")
-    inbox = _create_inbox(owner, "collector-email-failure-recipe@example.com")
-    recipe = Recipe.objects.create(
-        user=owner,
-        slug="collector-email-failure-recipe",
-        display="Collector Email Failure Recipe",
-        script="result = kwargs",
-    )
-    collector = EmailCollector.objects.create(
-        inbox=inbox,
-        fragment="Ticket [ticket_id] is [status]",
-        notification_mode=EmailCollector.NOTIFY_EMAIL,
-        notification_subject="Alert [ticket_id]",
-        notification_message="Status [status]",
-        notification_recipients="ops@example.com",
-        notification_recipe=recipe,
-    )
-
-    monkeypatch.setattr(
-        collector,
-        "search_messages",
-        lambda limit: [
-            {
-                "subject": "Grid alarm",
-                "from": "grid@example.com",
-                "body": "Ticket 11 is open",
-                "date": "Thu",
-            }
-        ],
-    )
-
-    def _fake_send(*_args, **_kwargs):
-        raise RuntimeError("mail backend down")
-
-    monkeypatch.setattr("apps.emails.mailer.send", _fake_send)
-
-    captured: dict[str, object] = {}
-
-    def _fake_execute(*args, **kwargs):
-        captured["args"] = args
-        captured["kwargs"] = kwargs
-        return object()
-
-    monkeypatch.setattr(recipe, "execute", _fake_execute)
-
-    with caplog.at_level("ERROR"):
-        collector.collect(limit=1)
-
-    assert captured["args"] == ()
-    assert captured["kwargs"] == {
-        "subject": "Alert 11",
-        "message": "Status open",
-        "sender": "grid@example.com",
-        "body": "Ticket 11 is open",
-        "date": "Thu",
-        "sigils": {"ticket_id": "11", "status": "open"},
-    }
-    assert "Failed email notification for collector" in caplog.text
+    assert "Failed to send email notification for collector" in caplog.text
 
 
 def test_collect_none_mode_skips_dispatch(monkeypatch):
@@ -441,9 +251,9 @@ def test_collect_none_mode_skips_dispatch(monkeypatch):
     )
 
     monkeypatch.setattr(
-        collector,
+        inbox,
         "search_messages",
-        lambda limit: [
+        lambda **kwargs: [
             {
                 "subject": "Maintenance",
                 "from": "ops@example.com",

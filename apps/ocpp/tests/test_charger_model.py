@@ -4,9 +4,9 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
+from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME, SITE_OPERATOR_GROUP_NAME
 from apps.ocpp.models import Charger
 from apps.groups.models import SecurityGroup
-from apps.sites.utils import CHARGE_STATION_MANAGER_GROUP_NAME, SITE_OPERATOR_GROUP_NAME
 from apps.nodes.models import Node
 
 
@@ -95,7 +95,7 @@ def test_offline_notification_source_prefers_connector_settings():
 
 def test_charge_station_manager_can_view_owner_scoped_charger(django_user_model):
     manager_group, _ = SecurityGroup.objects.get_or_create(
-        name=CHARGE_STATION_MANAGER_GROUP_NAME
+        name=NETWORK_OPERATOR_GROUP_NAME
     )
     manager = django_user_model.objects.create_user(
         username="charger-manager", password="secret"
@@ -111,7 +111,7 @@ def test_charge_station_manager_can_view_owner_scoped_charger(django_user_model)
 
 def test_charge_station_manager_is_authorized_for_ws_auth(django_user_model):
     manager_group, _ = SecurityGroup.objects.get_or_create(
-        name=CHARGE_STATION_MANAGER_GROUP_NAME
+        name=NETWORK_OPERATOR_GROUP_NAME
     )
     manager = django_user_model.objects.create_user(
         username="charger-manager-auth", password="secret"

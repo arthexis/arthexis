@@ -2,34 +2,24 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import timedelta
 import json
 import logging
 from pathlib import Path
-import shutil
-import subprocess
-from typing import TYPE_CHECKING
 
 from django.apps import apps as django_apps
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 
-from apps.audio.utils import has_audio_capture_device
 from apps.base.models import Entity
 from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
 from apps.clocks.utils import has_clock_device
 from apps.core.systemctl import _systemctl_command
 from apps.emails import mailer
-from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
-from apps.video import has_rpi_camera_stack
+from apps.nodes.feature_detection import node_feature_detection_registry
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
-
-if TYPE_CHECKING:  # pragma: no cover - used for type checking
-    from .core.node import Node
-
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +112,12 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 url_name="admin:video_videodevice_take_snapshot",
             ),
         ),
+        "llm-summary": (
+            NodeFeatureDefaultAction(
+                label=_("Configure"),
+                url_name="admin:summary_llmsummaryconfig_wizard",
+            ),
+        ),
         "user-desktop": (
             NodeFeatureDefaultAction(
                 label=_("Desktop shortcuts"),
@@ -188,9 +184,22 @@ class NodeFeatureAssignment(Entity):
         return f"{self.node} -> {self.feature}"
 
     def save(self, *args, **kwargs):
-        """Persist the assignment and resync node feature tasks."""
+        """Persist the assignment and resync node feature tasks and service locks."""
         super().save(*args, **kwargs)
         self.node.sync_feature_tasks()
+        transaction.on_commit(_reconcile_lifecycle_services)
+
+
+def _reconcile_lifecycle_services() -> None:
+    """Reconcile lifecycle lock and unit records after feature assignment changes."""
+
+    try:
+        from apps.services.lifecycle import write_lifecycle_config
+    except ImportError:
+        logger.debug("Lifecycle reconciliation import failed", exc_info=True)
+        return
+
+    write_lifecycle_config()
 
 
 @receiver(post_delete, sender=NodeFeatureAssignment)
@@ -205,6 +214,7 @@ def _sync_tasks_on_assignment_delete(sender, instance, **kwargs):
     node = NodeModel.objects.filter(pk=node_id).first()
     if node:
         node.sync_feature_tasks()
+    transaction.on_commit(_reconcile_lifecycle_services)
 
 
 class NodeFeatureMixin:
@@ -217,13 +227,12 @@ class NodeFeatureMixin:
         set(FEATURE_LOCK_MAP.keys()) - {"rfid-scanner"}
     )
     CONNECTIVITY_MONITOR_ROLES = {"Control", "Satellite"}
-    AP_ROUTER_SSID = "gelectriic-ap"
-    NMCLI_TIMEOUT = 5
     AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
         "systemd-manager",
         "ap-router",
         "gpio-rtc",
         "lcd-screen",
+        "llvm-sigils",
         "gui-toast",
         "video-cam",
         "llm-summary",
@@ -283,171 +292,22 @@ class NodeFeatureMixin:
         for feature in NodeFeature.objects.filter(slug__in=missing):
             NodeFeatureAssignment.objects.update_or_create(node=self, feature=feature)
 
-    @classmethod
-    def _has_rpi_camera(cls) -> bool:
-        """Return ``True`` when the Raspberry Pi camera stack is available."""
-
-        return has_rpi_camera_stack()
-
-    @classmethod
-    def _has_audio_capture_device(cls) -> bool:
-        """Return ``True`` when an audio capture device is available."""
-
-        return has_audio_capture_device()
-
-    @classmethod
-    def _hosts_gelectriic_ap(cls) -> bool:
-        """Return ``True`` when the node is hosting the gelectriic access point."""
-
-        nmcli_path = shutil.which("nmcli")
-        if not nmcli_path:
-            return False
-        try:
-            result = subprocess.run(
-                [
-                    nmcli_path,
-                    "-t",
-                    "-f",
-                    "NAME,DEVICE,TYPE",
-                    "connection",
-                    "show",
-                    "--active",
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=cls.NMCLI_TIMEOUT,
-            )
-        except Exception:
-            return False
-        if result.returncode != 0:
-            return False
-        for line in result.stdout.splitlines():
-            if not line:
-                continue
-            parts = line.split(":", 2)
-            if not parts:
-                continue
-            name = parts[0]
-            conn_type = ""
-            if len(parts) == 3:
-                conn_type = parts[2]
-            elif len(parts) > 1:
-                conn_type = parts[1]
-            if name != cls.AP_ROUTER_SSID:
-                continue
-            conn_type_normalized = conn_type.strip().lower()
-            if conn_type_normalized not in {"wifi", "802-11-wireless"}:
-                continue
-            try:
-                mode_result = subprocess.run(
-                    [
-                        nmcli_path,
-                        "-g",
-                        "802-11-wireless.mode",
-                        "connection",
-                        "show",
-                        name,
-                    ],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    timeout=cls.NMCLI_TIMEOUT,
-                )
-            except Exception:
-                continue
-            if mode_result.returncode != 0:
-                continue
-            if mode_result.stdout.strip() == "ap":
-                return True
-        return False
-
     def _detect_auto_feature(
         self, slug: str, *, base_dir: Path, base_path: Path
     ) -> bool:
         """Detect whether an auto-managed feature is active for the node."""
-        if slug == "systemd-manager":
-            return bool(_systemctl_command())
 
-        if slug in self.SYSTEMD_DEPENDENT_FEATURE_SLUGS and not self._detect_auto_feature(
-            "systemd-manager", base_dir=base_dir, base_path=base_path
-        ):
+        hook_result = node_feature_detection_registry.detect(
+            slug,
+            node=self,
+            base_dir=base_dir,
+            base_path=base_path,
+        )
+        if hook_result is None:
             return False
+        return bool(hook_result)
 
-        lock = self.FEATURE_LOCK_MAP.get(slug)
-        if lock:
-            project_lock_dir = base_dir / ".locks"
-            lock_dirs = [base_path / ".locks"]
-            if project_lock_dir not in lock_dirs:
-                lock_dirs.append(project_lock_dir)
-            if any((lock_dir / lock).exists() for lock_dir in lock_dirs):
-                return True
-        if slug == "rfid-scanner":
-            try:
-                from apps.cards.rfid_service import (
-                    rfid_service_enabled,
-                    service_available,
-                )
-            except Exception:
-                logger.exception("RFID service detection import failed")
-                return False
-            lock_dir = base_dir / ".locks"
-            if rfid_service_enabled(lock_dir=lock_dir):
-                return True
-            try:
-                return service_available()
-            except Exception:
-                logger.exception("RFID service availability check failed")
-                return False
-        if lock:
-            return False
-        if slug == "lcd-screen":
-            return lcd_feature_enabled_for_paths(
-                base_dir=base_dir, node_base_path=base_path
-            )
-        if slug == "gui-toast":
-            try:
-                from apps.core.notifications import supports_gui_toast
-            except Exception:
-                return False
-            try:
-                return supports_gui_toast()
-            except Exception:
-                logger.exception("GUI toast detection failed")
-                return False
-        if slug == "video-cam":
-            return self._has_rpi_camera()
-        if slug == "ap-router":
-            return self._hosts_gelectriic_ap()
-        if slug == "gpio-rtc":
-            return has_clock_device()
-        if slug == "llm-summary":
-            from django.db.utils import OperationalError
 
-            try:
-                from apps.summary.node_features import get_llm_summary_prereq_state
-                from apps.summary.services import get_summary_config
-            except ImportError:
-                logger.exception("LLM summary detection import failed")
-                return False
-
-            try:
-                prereqs = get_llm_summary_prereq_state(
-                    base_dir=base_dir,
-                    base_path=base_path,
-                )
-                if not (prereqs.get("lcd_enabled") and prereqs.get("celery_enabled")):
-                    return False
-                config = get_summary_config()
-            except OperationalError:
-                logger.exception("LLM summary detection DB check failed")
-                return False
-            except Exception:
-                logger.exception("LLM summary detection failed")
-                return False
-
-            return bool(config.is_active)
-        return False
 
     def refresh_features(self):
         """Refresh auto-managed feature assignments and tasks."""
@@ -520,8 +380,13 @@ class NodeFeatureMixin:
                 screenshot_enabled = bool(screenshot_result and screenshot_result.success)
             else:
                 screenshot_enabled = False
+        llm_summary_suite_enabled = is_suite_feature_enabled("llm-summary-suite", default=True)
         celery_enabled = self.is_local and self.has_feature("celery-queue")
-        llm_summary_enabled = celery_enabled and self.has_feature("llm-summary")
+        llm_summary_enabled = (
+            llm_summary_suite_enabled
+            and celery_enabled
+            and self.has_feature("llm-summary")
+        )
         self._sync_screenshot_task(screenshot_enabled)
         self._sync_landing_lead_task(celery_enabled)
         self._sync_ocpp_session_report_task(celery_enabled)

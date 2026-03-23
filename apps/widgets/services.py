@@ -129,6 +129,26 @@ def _visible(widget: Widget, user) -> bool:
         return False
 
 
+def _zone_has_missing_registered_widgets(zone_slug: str) -> bool:
+    """Return whether a zone is missing any currently registered widget rows."""
+
+    registered_slugs = {
+        definition.slug
+        for definition in iter_registered_widgets()
+        if definition.zone == zone_slug
+    }
+    if not registered_slugs:
+        return False
+
+    existing_slugs = set(
+        Widget.objects.filter(zone__slug=zone_slug, slug__in=registered_slugs).values_list(
+            "slug",
+            flat=True,
+        )
+    )
+    return registered_slugs != existing_slugs
+
+
 def _zone_widgets_queryset(zone_slug: str):
     return (
         Widget.objects.select_related("zone", "required_feature")
@@ -171,7 +191,10 @@ def render_zone_widgets(
 
     try:
         widgets = list(_zone_widgets_queryset(zone_slug))
-        if not widgets and not Widget.objects.filter(zone__slug=zone_slug).exists():
+        if (
+            (not widgets and not Widget.objects.filter(zone__slug=zone_slug).exists())
+            or _zone_has_missing_registered_widgets(zone_slug)
+        ):
             sync_registered_widgets()
             widgets = list(_zone_widgets_queryset(zone_slug))
     except (OperationalError, ProgrammingError):  # pragma: no cover - database not ready

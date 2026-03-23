@@ -21,6 +21,9 @@ from apps.core.entity import Entity
 logger = logging.getLogger(__name__)
 
 
+WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG = "whatsapp-chat-bridge"
+
+
 class WhatsAppChatBridge(ChatBridge):
     """Configuration for forwarding chat messages to WhatsApp."""
 
@@ -157,6 +160,21 @@ class WhatsAppChatBridge(ChatBridge):
                     with contextlib.suppress(Exception):
                         close()
 
+    @staticmethod
+    def suite_feature_slug() -> str:
+        """Return the suite feature slug governing WhatsApp chat bridge traffic."""
+
+        return WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG
+
+    @staticmethod
+    def suite_feature_disable_summary() -> str:
+        """Describe operator-visible disable semantics for the suite feature."""
+
+        return gettext(
+            "Disabled uses soft mode: webhook traffic is accepted for audit logging, "
+            "but no WhatsApp bridge delivery or chat session message creation occurs."
+        )
+
 
 class WhatsAppWebhook(Entity):
     """Webhook endpoint configuration for inbound WhatsApp events."""
@@ -213,6 +231,11 @@ class WhatsAppWebhook(Entity):
         """Return helper query parameters expected by webhook verification requests."""
 
         return urlencode({"hub.mode": "subscribe", "hub.verify_token": self.verify_token})
+
+    def suite_feature_disable_summary(self) -> str:
+        """Return the disable contract that operators should expect for this webhook."""
+
+        return self.bridge.suite_feature_disable_summary()
 
 
 class WhatsAppWebhookMessage(Entity):

@@ -4,6 +4,7 @@ from datetime import timedelta
 from math import ceil
 from typing import Iterator, Sequence
 
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
@@ -17,6 +18,139 @@ from apps.emails.utils import normalize_recipients
 from apps.groups.models import SecurityGroup as CoreSecurityGroup
 from apps.odoo.models import OdooProduct as CoreOdooProduct
 from apps.users.models import User as CoreUser
+
+
+class GitHubIssueTrigger(models.TextChoices):
+    """Trigger options for opening task-linked GitHub issues."""
+
+    SCHEDULED_START = "scheduled_start", _("Scheduled start")
+    COMPLETED = "completed", _("Completed")
+    OVERDUE = "overdue", _("Overdue")
+
+
+class ChargerVendorSubmission(Entity):
+    """Structured public intake for charger vendors seeking suite integration."""
+
+    class ReviewStatus(models.TextChoices):
+        PENDING = "pending", _("Pending review")
+        IN_REVIEW = "in_review", _("In review")
+        FOLLOW_UP = "follow_up", _("Needs follow-up")
+        QUALIFIED = "qualified", _("Qualified")
+        REJECTED = "rejected", _("Rejected")
+
+    company_name = models.CharField(
+        _("Company name"),
+        max_length=255,
+        help_text=_("Legal entity or business unit responsible for the charger line."),
+    )
+    contact_name = models.CharField(
+        _("Primary contact name"),
+        max_length=255,
+        help_text=_("Person coordinating technical evaluation and follow-up."),
+    )
+    contact_email = models.EmailField(
+        _("Primary contact email"),
+        help_text=_("Email address Arthexis should use for integration follow-up."),
+    )
+    contact_phone = models.CharField(
+        _("Primary contact phone"),
+        max_length=64,
+        blank=True,
+        help_text=_("Optional phone or WhatsApp number for rapid coordination."),
+    )
+    website = models.URLField(
+        _("Company website"),
+        blank=True,
+        help_text=_("Public website or product landing page for the charger portfolio."),
+    )
+    charger_brand = models.CharField(
+        _("Charger brand"),
+        max_length=255,
+        help_text=_("Brand presented to operators and end customers."),
+    )
+    charger_models = models.TextField(
+        _("Charger models"),
+        help_text=_("List the charger models or SKUs that should be evaluated."),
+    )
+    ocpp_versions = models.CharField(
+        _("Supported OCPP versions"),
+        max_length=255,
+        help_text=_("For example: OCPP 1.6J, OCPP 2.0.1, proprietary extensions."),
+    )
+    connectivity_summary = models.TextField(
+        _("Connectivity and network summary"),
+        help_text=_("Summarize LTE, Ethernet, Wi-Fi, VPN, or SIM/network requirements."),
+    )
+    api_documentation_url = models.URLField(
+        _("API or documentation URL"),
+        blank=True,
+        help_text=_("Optional link to OCPP notes, APIs, SDKs, or integration guides."),
+    )
+    certification_summary = models.TextField(
+        _("Certification and compliance summary"),
+        blank=True,
+        help_text=_("Share conformance testing, certifications, and regional compliance notes."),
+    )
+    deployment_regions = models.CharField(
+        _("Deployment regions"),
+        max_length=255,
+        blank=True,
+        help_text=_("Countries or markets where these chargers are currently deployed."),
+    )
+    deployment_volume = models.CharField(
+        _("Installed base"),
+        max_length=255,
+        blank=True,
+        help_text=_("Approximate number of deployed chargers or active sites."),
+    )
+    remote_access_method = models.TextField(
+        _("Remote access and support workflow"),
+        help_text=_("Explain how Arthexis could access logs, diagnostics, firmware, or support tooling."),
+    )
+    hardware_notes = models.TextField(
+        _("Hardware highlights"),
+        blank=True,
+        help_text=_("Connector types, power ranges, meter support, payment peripherals, and notable hardware details."),
+    )
+    integration_goals = models.TextField(
+        _("Integration goals"),
+        help_text=_("Describe the workflows Arthexis should orchestrate for this charger line."),
+    )
+    additional_notes = models.TextField(
+        _("Additional notes"),
+        blank=True,
+        help_text=_("Anything else the review team should know before follow-up."),
+    )
+    review_status = models.CharField(
+        _("Review status"),
+        max_length=32,
+        choices=ReviewStatus.choices,
+        default=ReviewStatus.PENDING,
+        help_text=_("Internal state used while evaluating the submission."),
+    )
+    reviewed_at = models.DateTimeField(
+        _("Reviewed at"),
+        null=True,
+        blank=True,
+        help_text=_("When the submission was last formally reviewed."),
+    )
+    reviewed_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_vendor_submissions",
+        verbose_name=_("Reviewed by"),
+        help_text=_("User who completed the latest review step."),
+    )
+
+    class Meta:
+        verbose_name = _("Charger vendor submission")
+        verbose_name_plural = _("Charger vendor submissions")
+        ordering = ("company_name", "charger_brand", "contact_name")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.company_name} · {self.charger_brand}"
 
 
 class ManualTaskRequest(Entity):
@@ -143,10 +277,51 @@ class ManualTaskRequest(Entity):
             "Send reminder emails to the assigned contacts when Celery notifications are available."
         ),
     )
+    github_issue_template = models.ForeignKey(
+        "tasks.GitHubIssueTemplate",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="manual_task_requests",
+        verbose_name=_("GitHub issue template"),
+        help_text=_("Template used when creating GitHub issues for this task."),
+    )
+    github_issue_trigger = models.CharField(
+        _("GitHub issue trigger"),
+        max_length=32,
+        choices=GitHubIssueTrigger.choices,
+        blank=True,
+        help_text=_(
+            "When the linked GitHub issue should be created for this task request."
+        ),
+    )
+    github_issue_overdue_after = models.DurationField(
+        _("GitHub overdue threshold"),
+        null=True,
+        blank=True,
+        help_text=_("Delay after scheduled start before opening overdue issues."),
+    )
+    github_issue_url = models.URLField(
+        _("GitHub issue URL"),
+        blank=True,
+        help_text=_("URL of the GitHub issue created for this task request."),
+    )
+    github_issue_number = models.PositiveIntegerField(
+        _("GitHub issue number"),
+        null=True,
+        blank=True,
+        help_text=_("Number of the GitHub issue created for this task request."),
+    )
+    github_issue_opened_at = models.DateTimeField(
+        _("GitHub issue opened at"),
+        null=True,
+        blank=True,
+        help_text=_("Timestamp when a GitHub issue was created for this request."),
+    )
 
     class Meta:
-        verbose_name = _("Manual Task Request")
-        verbose_name_plural = _("Manual Task Requests")
+        verbose_name = _("Manual Request")
+        verbose_name_plural = _("Manual Requests")
         ordering = ("scheduled_start", "category__name")
         db_table = "core_manualtaskrequest"
         constraints = [
@@ -192,6 +367,27 @@ class ManualTaskRequest(Entity):
                 self.period = None
             if self.period_deadline:
                 self.period_deadline = None
+
+        if self.github_issue_template_id:
+            if not self.github_issue_trigger:
+                errors.setdefault("github_issue_trigger", []).append(
+                    _("Select when the GitHub issue should be created."),
+                )
+            if self.github_issue_trigger == GitHubIssueTrigger.OVERDUE:
+                if not self.github_issue_overdue_after:
+                    errors.setdefault("github_issue_overdue_after", []).append(
+                        _("Provide an overdue threshold for overdue issue creation."),
+                    )
+                elif self.github_issue_overdue_after <= timedelta(0):
+                    errors.setdefault("github_issue_overdue_after", []).append(
+                        _("Overdue threshold must be greater than zero."),
+                    )
+            elif self.github_issue_overdue_after:
+                self.github_issue_overdue_after = None
+        else:
+            self.github_issue_trigger = ""
+            self.github_issue_overdue_after = None
+
         if errors:
             raise ValidationError(errors)
 
@@ -281,8 +477,7 @@ class ManualTaskRequest(Entity):
             )
         if self.scheduled_end:
             lines.append(
-                _("Ends: %(end)s")
-                % {"end": self._format_datetime(self.scheduled_end)}
+                _("Ends: %(end)s") % {"end": self._format_datetime(self.scheduled_end)}
             )
         if self.node_id:
             lines.append(_("Node: %(node)s") % {"node": self.node})
@@ -415,21 +610,183 @@ class ManualTaskRequest(Entity):
         reservation.send_reservation_request()
         return reservation
 
+    def render_github_issue_title(self) -> str:
+        """Return the resolved GitHub issue title for this request."""
+
+        template = self.github_issue_template
+        if not template:
+            return ""
+        from apps.sigils.sigil_resolver import resolve_sigils
+
+        return resolve_sigils(template.title_template, current=self).strip()
+
+    def render_github_issue_body(self) -> str:
+        """Return the resolved GitHub issue body for this request."""
+
+        template = self.github_issue_template
+        if not template:
+            return ""
+        from apps.sigils.sigil_resolver import resolve_sigils
+
+        return resolve_sigils(template.body_template, current=self).strip()
+
+    def can_open_github_issue_for_trigger(self, trigger: str) -> bool:
+        """Return ``True`` when ``trigger`` is configured and still eligible."""
+
+        if not self.github_issue_template_id or self.github_issue_opened_at:
+            return False
+        if self.github_issue_trigger != trigger:
+            return False
+
+        now = timezone.now()
+        scheduled_start = self.scheduled_start
+        if timezone.is_naive(scheduled_start):
+            scheduled_start = timezone.make_aware(
+                scheduled_start, timezone.get_current_timezone()
+            )
+
+        if trigger == GitHubIssueTrigger.SCHEDULED_START:
+            return now >= scheduled_start
+        if trigger == GitHubIssueTrigger.COMPLETED:
+            return self.reports.exists()
+        if trigger == GitHubIssueTrigger.OVERDUE:
+            if not self.github_issue_overdue_after:
+                return False
+            overdue_at = scheduled_start + self.github_issue_overdue_after
+            if now < overdue_at:
+                return False
+            return not self.reports.exists()
+        return True
+
+    def create_github_issue(self) -> str | None:
+        """Create and store a GitHub issue using the configured template."""
+
+        if not self.github_issue_template_id or self.github_issue_opened_at:
+            return self.github_issue_url or None
+
+        from apps.repos.services.github import GitHubIssue, GitHubRepositoryError
+
+        title = self.render_github_issue_title()
+        body = self.render_github_issue_body()
+        if not title or not body:
+            return None
+
+        issue = GitHubIssue.from_active_repository()
+        response = issue.create(
+            title,
+            body,
+            labels=self.github_issue_template.resolve_labels(),
+        )
+        if response is None:
+            return None
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise GitHubRepositoryError(
+                "Unable to decode GitHub issue response"
+            ) from exc
+
+        issue_url = str(payload.get("html_url") or "").strip()
+        number = payload.get("number")
+        self.github_issue_url = issue_url
+        self.github_issue_number = number if isinstance(number, int) else None
+        self.github_issue_opened_at = timezone.now()
+        self.save(
+            update_fields=[
+                "github_issue_opened_at",
+                "github_issue_number",
+                "github_issue_url",
+            ]
+        )
+        return issue_url or None
+
+    def _github_issue_schedule_cache_key(
+        self, trigger: str, eta: timezone.datetime | None = None
+    ) -> str:
+        """Return cache key used to deduplicate GitHub issue scheduling across workers."""
+
+        normalized_eta = "immediate" if eta is None else eta.isoformat()
+        return f"manual-task-github-issue:{self.pk}:{trigger}:{normalized_eta}"
+
+    def _schedule_github_issue_task(
+        self, trigger: str, eta: timezone.datetime | None = None
+    ) -> bool:
+        """Enqueue asynchronous GitHub issue creation for this request."""
+
+        from apps.celery.utils import schedule_task
+        from apps.tasks.tasks import create_manual_task_github_issue
+
+        cache_key = self._github_issue_schedule_cache_key(trigger, eta)
+        now = timezone.now()
+        if not cache.add(cache_key, now.isoformat(), timeout=60):
+            return False
+
+        was_enqueued = schedule_task(
+            create_manual_task_github_issue,
+            kwargs={"manual_task_id": self.pk, "trigger": trigger},
+            eta=eta,
+            require_enabled=True,
+        )
+        if not was_enqueued:
+            cache.delete(cache_key)
+            return False
+
+        timeout_seconds = 24 * 60 * 60
+        if eta is not None:
+            timeout_seconds = max(int((eta - now).total_seconds()), 1)
+        cache.set(cache_key, now.isoformat(), timeout=timeout_seconds)
+        return True
+
+    def schedule_github_issue(self) -> None:
+        """Schedule GitHub issue creation according to request configuration."""
+
+        if not self.github_issue_template_id or not self.github_issue_trigger:
+            return
+        if self.github_issue_opened_at:
+            return
+
+        start = self.scheduled_start
+        if timezone.is_naive(start):
+            start = timezone.make_aware(start, timezone.get_current_timezone())
+
+        now = timezone.now()
+        if self.github_issue_trigger == GitHubIssueTrigger.SCHEDULED_START:
+            eta = start if start > now else None
+            self._schedule_github_issue_task(GitHubIssueTrigger.SCHEDULED_START, eta=eta)
+            return
+
+        if self.github_issue_trigger == GitHubIssueTrigger.OVERDUE:
+            if not self.github_issue_overdue_after:
+                return
+            eta = start + self.github_issue_overdue_after
+            if eta <= now:
+                self._schedule_github_issue_task(GitHubIssueTrigger.OVERDUE)
+            else:
+                self._schedule_github_issue_task(GitHubIssueTrigger.OVERDUE, eta=eta)
+
     def save(self, *args, **kwargs):
         track_fields = (
-            "enable_notifications",
-            "scheduled_start",
-            "scheduled_end",
-            "assigned_user_id",
             "assigned_group_id",
+            "assigned_user_id",
+            "enable_notifications",
+            "github_issue_overdue_after",
+            "github_issue_template_id",
+            "github_issue_trigger",
+            "scheduled_end",
+            "scheduled_start",
+        )
+        notification_fields = (
+            "assigned_group_id",
+            "assigned_user_id",
+            "enable_notifications",
+            "scheduled_end",
+            "scheduled_start",
         )
         previous = None
         if self.pk:
             previous = (
-                type(self)
-                .all_objects.filter(pk=self.pk)
-                .values(*track_fields)
-                .first()
+                type(self).all_objects.filter(pk=self.pk).values(*track_fields).first()
             )
         super().save(*args, **kwargs)
         should_schedule = False
@@ -437,7 +794,7 @@ class ManualTaskRequest(Entity):
             if not previous:
                 should_schedule = True
             else:
-                for field in track_fields:
+                for field in notification_fields:
                     old_value = previous.get(field) if previous else None
                     new_value = getattr(self, field)
                     if old_value != new_value:
@@ -445,3 +802,21 @@ class ManualTaskRequest(Entity):
                         break
         if should_schedule:
             self.schedule_notifications()
+
+        should_schedule_github = False
+        if self.github_issue_template_id and not self.github_issue_opened_at:
+            if not previous:
+                should_schedule_github = True
+            else:
+                github_fields = (
+                    "github_issue_overdue_after",
+                    "github_issue_template_id",
+                    "github_issue_trigger",
+                    "scheduled_start",
+                )
+                should_schedule_github = any(
+                    (previous.get(field) if previous else None) != getattr(self, field)
+                    for field in github_fields
+                )
+        if should_schedule_github:
+            self.schedule_github_issue()

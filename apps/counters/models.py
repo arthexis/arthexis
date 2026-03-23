@@ -157,7 +157,10 @@ class DashboardRule(StoredCounter):
         result = condition_field.evaluate(self)
         if result.passed:
             message = self.success_message or str(DEFAULT_SUCCESS_MESSAGE)
-            return rule_success(message)
+            return rule_success(
+                message,
+                is_default_message=(message == str(DEFAULT_SUCCESS_MESSAGE)),
+            )
 
         message = self.failure_message or _("Rule condition not met.")
         if result.error:

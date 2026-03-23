@@ -192,16 +192,22 @@ class RFIDBackend:
             tag.save(update_fields=update_fields)
 
         User = get_user_model()
-        login_user = (
-            User.objects.filter(login_rfid=tag, is_active=True).first()
-        )
+        login_user = User.objects.filter(login_rfid=tag, is_active=True).first()
         if login_user:
             block = getattr(login_user, "login_rfid_block", None)
             offset = getattr(login_user, "login_rfid_offset", None)
-            expected_value = (getattr(login_user, "login_rfid_value", "") or "").strip().upper()
+            expected_value = (
+                (getattr(login_user, "login_rfid_value", "") or "").strip().upper()
+            )
             if block is not None and offset is not None and expected_value:
-                key_choice = getattr(login_user, "login_rfid_key", login_user.LOGIN_RFID_KEY_A)
-                key_value = tag.key_a if key_choice == login_user.LOGIN_RFID_KEY_A else tag.key_b
+                key_choice = getattr(
+                    login_user, "login_rfid_key", login_user.LOGIN_RFID_KEY_A
+                )
+                key_value = (
+                    tag.key_a
+                    if key_choice == login_user.LOGIN_RFID_KEY_A
+                    else tag.key_b
+                )
                 result = read_rfid_cell_value(
                     block=block,
                     offset=offset,
@@ -348,6 +354,44 @@ def _collect_local_ip_addresses():
     return tuple(sorted(addresses, key=str))
 
 
+def _normalize_ip_candidate(candidate: str) -> str | None:
+    """Normalize a raw socket IP candidate by stripping ports, brackets, and zones."""
+
+    value = str(candidate or "").strip()
+    if not value:
+        return None
+
+    if value.startswith("[") and "]" in value:
+        value = value[1 : value.index("]")]
+    elif ":" in value and value.count(":") == 1:
+        host, port = split_domain_port(value)
+        if host and port:
+            value = host
+
+    if "%" in value:
+        value = value.split("%", 1)[0]
+
+    return value or None
+
+
+def _parse_forwarded_ip_candidate(
+    candidate: str,
+) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """Parse a forwarded IP candidate without relaxing malformed header tokens."""
+
+    value = str(candidate or "").strip()
+    if not value:
+        return None
+
+    if any(token in value for token in ("[", "]", "%")):
+        return None
+
+    try:
+        return ipaddress.ip_address(value)
+    except ValueError:
+        return None
+
+
 class LocalhostAdminBackend(ModelBackend):
     """Allow default admin credentials only from local networks."""
 
@@ -360,12 +404,37 @@ class LocalhostAdminBackend(ModelBackend):
         ipaddress.ip_network("::1/128"),
     )
     _CONTROL_ALLOWED_NETWORKS = (ipaddress.ip_network("10.0.0.0/8"),)
+    _TRUSTED_PROXY_NETWORKS = (
+        ipaddress.ip_network("127.0.0.0/8"),
+        ipaddress.ip_network("172.17.0.0/16"),
+        ipaddress.ip_network("172.18.0.0/16"),
+        ipaddress.ip_network("::1/128"),
+    )
     _LOCAL_IPS = _collect_local_ip_addresses()
 
     def _iter_allowed_networks(self):
         yield from self._ALLOWED_NETWORKS
         if getattr(settings, "NODE_ROLE", "") == "Control":
             yield from self._CONTROL_ALLOWED_NETWORKS
+
+    def _iter_trusted_proxies(self):
+        yield from self._TRUSTED_PROXY_NETWORKS
+
+    def _iter_trusted_forwarded_proxies(self):
+        configured = getattr(settings, "TRUSTED_PROXIES", ())
+        if isinstance(configured, str):
+            configured = (configured,)
+        for value in configured:
+            candidate = str(value).strip()
+            if not candidate:
+                continue
+            try:
+                if "/" in candidate:
+                    yield ipaddress.ip_network(candidate, strict=False)
+                else:
+                    yield ipaddress.ip_network(candidate)
+            except ValueError:
+                continue
 
     def _is_test_environment(self, request) -> bool:
         if os.environ.get("PYTEST_CURRENT_TEST"):
@@ -435,16 +504,37 @@ class LocalhostAdminBackend(ModelBackend):
             return self._is_test_environment(request)
 
     def _get_remote_ip(self, request):
-        forwarded = request.META.get("HTTP_X_FORWARDED_FOR") if request else ""
-        if forwarded:
-            remote = forwarded.split(",")[0].strip()
-        else:
-            remote = request.META.get("REMOTE_ADDR", "") if request else ""
+        """Return the originating client IP, honoring trusted proxy chains only."""
+
+        remote = _normalize_ip_candidate(
+            request.META.get("REMOTE_ADDR", "") if request else ""
+        )
+        if remote is None:
+            return None
 
         try:
-            return ipaddress.ip_address(remote)
+            remote_ip = ipaddress.ip_address(remote)
         except ValueError:
             return None
+
+        trusted_proxies = tuple(self._iter_trusted_proxies())
+        if not any(remote_ip in proxy for proxy in trusted_proxies):
+            return remote_ip
+
+        forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "") if request else ""
+        if not forwarded:
+            return remote_ip
+
+        trusted_forwarded_proxies = tuple(self._iter_trusted_forwarded_proxies())
+        for candidate in reversed([value.strip() for value in forwarded.split(",")]):
+            candidate_ip = _parse_forwarded_ip_candidate(candidate)
+            if candidate_ip is None:
+                continue
+            if any(candidate_ip in proxy for proxy in trusted_forwarded_proxies):
+                continue
+            return candidate_ip
+
+        return remote_ip
 
     def _is_remote_allowed(self, ip):
         if any(ip in net for net in self._iter_allowed_networks()):
@@ -511,9 +601,7 @@ class TempPasswordBackend(ModelBackend):
             user = manager.get_by_natural_key(normalized_username)
         except UserModel.DoesNotExist:
             user = (
-                manager.filter(email__iexact=normalized_username)
-                .order_by("pk")
-                .first()
+                manager.filter(email__iexact=normalized_username).order_by("pk").first()
             )
             if user is None:
                 return None

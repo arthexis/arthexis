@@ -1,6 +1,8 @@
 from django.apps import apps as django_apps
 from django.contrib import admin
 from django.contrib.auth.models import Group
+from django.core.exceptions import FieldError
+from django.db.models import Q
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
@@ -86,11 +88,88 @@ def _include_site_template_add(fieldsets):
     return tuple(updated)
 
 
+
+def _parse_prefilter_id_values(raw_value):
+    """Return normalized selected primary-key values from query-string input."""
+    if not raw_value:
+        return []
+    values = []
+    for value in str(raw_value).split(","):
+        normalized = value.strip()
+        if normalized:
+            values.append(normalized)
+    return values
+
+
+def _parse_prefilter_lookups(raw_value):
+    """Return allowed relation lookup paths from query-string input."""
+    if not raw_value:
+        return []
+    lookups = []
+    for value in str(raw_value).split(","):
+        lookup = value.strip()
+        if lookup.endswith("__id__in") and lookup:
+            lookups.append(lookup)
+    return list(dict.fromkeys(lookups))
+
+
+def _get_related_selection_prefilter_query(request):
+    """Build a queryset filter for related-model prefilter query parameters."""
+    prefilter_params = getattr(request, "_related_prefilter_params", None) or {}
+    selected_ids = _parse_prefilter_id_values(
+        prefilter_params.get("__selected_ids", request.GET.get("__selected_ids"))
+    )
+    relation_lookups = _parse_prefilter_lookups(
+        prefilter_params.get("__relation_lookups", request.GET.get("__relation_lookups"))
+    )
+    if not selected_ids or not relation_lookups:
+        return None
+    prefilter_query = Q()
+    for lookup in relation_lookups:
+        prefilter_query |= Q(**{lookup: selected_ids})
+    return prefilter_query
+
+
 original_changelist_view = admin.ModelAdmin.changelist_view
 
 
 def changelist_view_with_object_links(self, request, extra_context=None):
+    """Render changelist while preserving related-prefilter params and small-dataset links.
+
+    Parameters:
+        self: Active ModelAdmin instance with an associated ``self.model``.
+        request: Incoming HttpRequest that may carry related-selection prefilter params.
+        extra_context: Optional template context dictionary passed to changelist rendering.
+
+    Returns:
+        HttpResponse returned by ``original_changelist_view`` with updated context.
+
+    Side Effects:
+        Stores related prefilter params on ``request._related_prefilter_params`` and
+        removes helper params from ``request.GET``/``request.META['QUERY_STRING']``
+        so generated UI links stay clean. Populates ``global_object_links`` using
+        ``self.model._default_manager`` for models with very small datasets.
+
+    Raises:
+        NoReverseMatch: When Django cannot reverse the admin change URL for a row.
+    """
     extra_context = extra_context or {}
+
+    if any(
+        key in request.GET
+        for key in ("__selected_ids", "__relation_lookups", "__source_model")
+    ):
+        request._related_prefilter_params = {
+            "__selected_ids": request.GET.get("__selected_ids", ""),
+            "__relation_lookups": request.GET.get("__relation_lookups", ""),
+        }
+        cleaned_query = request.GET.copy()
+        cleaned_query.pop("__selected_ids", None)
+        cleaned_query.pop("__relation_lookups", None)
+        cleaned_query.pop("__source_model", None)
+        request.GET = cleaned_query
+        request.META["QUERY_STRING"] = cleaned_query.urlencode()
+
     count = self.model._default_manager.count()
     if 1 <= count <= 4:
         links = []
@@ -186,3 +265,20 @@ def get_app_list_with_protocol_forwarder(self, request, app_label=None):
 
 
 admin.AdminSite.get_app_list = get_app_list_with_protocol_forwarder
+
+_original_get_queryset = admin.ModelAdmin.get_queryset
+
+
+def get_queryset_with_related_selection_prefilter(self, request):
+    """Filter changelist querysets using selected related-record context parameters."""
+    queryset = _original_get_queryset(self, request)
+    prefilter_query = _get_related_selection_prefilter_query(request)
+    if prefilter_query is None:
+        return queryset
+    try:
+        return queryset.filter(prefilter_query).distinct()
+    except (FieldError, TypeError, ValueError):
+        return queryset.none()
+
+
+admin.ModelAdmin.get_queryset = get_queryset_with_related_selection_prefilter

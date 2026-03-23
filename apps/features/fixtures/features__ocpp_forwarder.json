@@ -1,0 +1,89 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "slug": "ocpp-forwarder",
+      "display": "OCPP Forwarder",
+      "summary": "Enable cross-node OCPP forwarding sessions for managed charge points.",
+      "is_enabled": true,
+      "main_app": [
+        "ocpp"
+      ],
+      "node_feature": null,
+      "admin_requirements": "Allow administrators to configure CP forwarders and observe forwarding status.",
+      "public_requirements": "",
+      "service_requirements": "Maintain outbound forwarding websocket sessions, synchronize forwarding metadata, and relay allowed OCPP calls.",
+      "admin_views": [
+        "admin:ocpp_cpforwarder_changelist",
+        "admin:ocpp_charger_changelist"
+      ],
+      "public_views": [],
+      "service_views": [
+        "apps.ocpp.tasks.setup_forwarders",
+        "apps.ocpp.forwarder.Forwarder"
+      ],
+      "code_locations": [
+        "apps/ocpp/forwarder/__init__.py",
+        "apps/ocpp/tasks/forwarding.py",
+        "apps/ocpp/consumers/csms/transport.py",
+        "apps/ocpp/consumers/base/connection_flow.py"
+      ],
+      "protocol_coverage": {
+        "ocpp16": {
+          "cp_to_csms": [
+            "Authorize",
+            "BootNotification",
+            "DataTransfer",
+            "DiagnosticsStatusNotification",
+            "FirmwareStatusNotification",
+            "Heartbeat",
+            "MeterValues",
+            "StartTransaction",
+            "StatusNotification",
+            "StopTransaction"
+          ],
+          "csms_to_cp": [
+            "CancelReservation",
+            "ChangeAvailability",
+            "ChangeConfiguration",
+            "ClearCache",
+            "ClearChargingProfile",
+            "DataTransfer",
+            "GetCompositeSchedule",
+            "GetConfiguration",
+            "GetDiagnostics",
+            "GetLocalListVersion",
+            "RemoteStartTransaction",
+            "RemoteStopTransaction",
+            "ReserveNow",
+            "Reset",
+            "SendLocalList",
+            "SetChargingProfile",
+            "TriggerMessage",
+            "UnlockConnector",
+            "UpdateFirmware"
+          ]
+        }
+      },
+      "created_at": "2026-03-08T00:00:00Z",
+      "updated_at": "2026-03-08T00:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false,
+      "source": "mainstream"
+    }
+  },
+  {
+    "model": "features.featuretest",
+    "fields": {
+      "feature": [
+        "ocpp-forwarder"
+      ],
+      "node_id": "apps/ocpp/tests/test_forwarder_feature.py::test_setup_forwarders_skips_sync_when_suite_feature_disabled",
+      "name": "Suite feature disable blocks forwarding sync",
+      "is_regression_guard": true,
+      "notes": "Ensures disabling OCPP Forwarder blocks synchronization work and clears active sessions.",
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  }
+]

@@ -9,6 +9,7 @@ from urllib.parse import unquote, urlsplit
 import uuid
 
 import requests
+from requests import Response
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
@@ -430,30 +431,71 @@ class EvergoUser(Profile):
         if customer.user_id != self.pk:
             raise EvergoAPIError("Customer does not belong to this Evergo profile.")
 
-        if customer.latest_order and customer.latest_order.remote_id is not None:
-            refreshed_order = self.reload_order_from_remote(order=customer.latest_order, timeout=timeout)
-            refreshed_customer = EvergoCustomer.objects.filter(user=self, latest_order=refreshed_order).order_by("pk").first()
-            if refreshed_customer is None:
-                raise EvergoAPIError("Reload succeeded but no customer snapshot was linked to the refreshed order.")
-            return refreshed_customer
+        stale_customer_pk = customer.pk
+        stale_customer_name = customer.name
+        stale_customer_remote_id = customer.remote_id
+        stale_latest_order = customer.latest_order
+
+        def _detach_stale_customer() -> None:
+            """Free unique customer keys so reload creates a replacement snapshot row."""
+
+            updates: list[str] = []
+            if customer.remote_id is not None:
+                customer.remote_id = None
+                updates.append("remote_id")
+            if customer.latest_order_id is not None:
+                customer.latest_order = None
+                updates.append("latest_order")
+            if stale_customer_name and customer.name == stale_customer_name:
+                customer.name = f"__stale_customer__{stale_customer_pk}"
+                updates.append("name")
+            if updates:
+                customer.save(update_fields=updates)
+
+        def _delete_stale_customer() -> None:
+            """Delete the stale customer snapshot once a replacement has been created."""
+
+            EvergoCustomer.objects.filter(pk=stale_customer_pk).delete()
+
+        if stale_latest_order and stale_latest_order.remote_id is not None:
+            with transaction.atomic():
+                _detach_stale_customer()
+                refreshed_order = self.reload_order_from_remote(order=stale_latest_order, timeout=timeout)
+                refreshed_customer = (
+                    EvergoCustomer.objects.filter(user=self, latest_order=refreshed_order)
+                    .exclude(pk=stale_customer_pk)
+                    .order_by("pk")
+                    .first()
+                )
+                if refreshed_customer is None:
+                    raise EvergoAPIError(
+                        "Reload succeeded but no replacement customer snapshot was linked to the refreshed order."
+                    )
+                _delete_stale_customer()
+                return refreshed_customer
 
         queries = [token for token in [customer.latest_so, customer.name] if token]
         if not queries:
             raise EvergoAPIError("Customer has no lookup data (SO or name) for Evergo reload.")
-
-        customer_name = customer.name
         with transaction.atomic():
-            customer.delete()
+            _detach_stale_customer()
             summary = self.load_customers_from_queries(raw_queries="\n".join(queries), timeout=timeout)
-            if summary["customers_loaded"] <= 0:
-                raise EvergoAPIError("Evergo did not return data for the selected customer.")
 
-            refreshed_customer = EvergoCustomer.objects.filter(
-                user=self,
-                name__iexact=customer_name,
-            ).order_by("-latest_order_updated_at", "pk").first()
+            refreshed_candidates = EvergoCustomer.objects.filter(user=self).exclude(pk=stale_customer_pk)
+            refreshed_customer = None
+            if stale_customer_remote_id is not None:
+                refreshed_customer = refreshed_candidates.filter(
+                    remote_id=stale_customer_remote_id
+                ).order_by("-latest_order_updated_at", "pk").first()
             if refreshed_customer is None:
+                refreshed_customer = refreshed_candidates.filter(
+                    name__iexact=stale_customer_name
+                ).order_by("-latest_order_updated_at", "pk").first()
+            if refreshed_customer is None:
+                if summary["customers_loaded"] <= 0:
+                    raise EvergoAPIError("Evergo did not return data for the selected customer.")
                 raise EvergoAPIError("Reload completed but refreshed customer could not be located locally.")
+            _delete_stale_customer()
             return refreshed_customer
 
     @staticmethod
@@ -490,8 +532,9 @@ class EvergoUser(Profile):
         payload: dict[str, Any],
         files: dict[str, Any],
         timeout: int = 30,
+        step_completion: dict[str, bool] | None = None,
     ) -> dict[str, Any]:
-        """Submit phase-one tracking data across Visita, Asignar, Instalación, and Montaje calls."""
+        """Submit tracking data progressively and complete each step only when requirements are met."""
         with requests.Session() as session:
             self._login_session(session=session, timeout=timeout)
             order_payload = self._request_json(
@@ -501,77 +544,102 @@ class EvergoUser(Profile):
                 url=self.API_ORDER_DETAIL_URL_TEMPLATE.format(order_id=order_id),
             )
 
-            self._rewind_uploads(files.values())
-            visita_response = session.post(
-                self.API_SAVE_VISITA_URL_TEMPLATE.format(order_id=order_id),
-                data=payload,
-                files=files,
-                timeout=timeout,
-            )
-            if visita_response.status_code >= 400:
-                raise EvergoPhaseSubmissionError("Visita Tecnica", visita_response.status_code, 0)
+            completion = step_completion or {"visita": True, "assign": True, "install": True, "montage": True}
+            completed_steps = 0
 
-            order_installer = order_payload.get("orden_instalador") if isinstance(order_payload, dict) else {}
-            assign_response = session.post(
-                self.API_ASSIGN_URL_TEMPLATE.format(order_id=order_id),
-                json={
-                    "user_tecnico_id": order_payload.get("user_tecnico_id") or self.evergo_user_id,
-                    "fecha_programada": payload.get("fecha_visita"),
-                    "crew": (order_installer or {}).get("idSubempresa") or 20,
-                    "type": "Installation",
-                    "crewPeople": [(order_installer or {}).get("idIngeniero") or self.evergo_user_id],
-                    "reassignment_reason_id": None,
-                    "reason_comment": "",
-                    "tag_requiered": False,
-                },
-                timeout=timeout,
-            )
-            if assign_response.status_code >= 400:
-                raise EvergoPhaseSubmissionError("Asignar técnico", assign_response.status_code, 1)
+            visita_response = None
+            if completion.get("visita"):
+                self._rewind_uploads(files.values())
+                visita_response = session.post(
+                    self.API_SAVE_VISITA_URL_TEMPLATE.format(order_id=order_id),
+                    data=payload,
+                    files=files,
+                    timeout=timeout,
+                )
+                if visita_response.status_code >= 400:
+                    raise EvergoPhaseSubmissionError("Visita Tecnica", visita_response.status_code, 0)
+                completed_steps += 1
 
-            self._rewind_uploads(files.values())
-            install_response = session.post(
-                self.API_REPORT_INSTALL_URL_TEMPLATE.format(order_id=order_id),
-                data=payload,
-                files=files,
-                timeout=timeout,
-            )
-            if install_response.status_code >= 400:
-                raise EvergoPhaseSubmissionError("Reporte de Instalacion", install_response.status_code, 2)
+            assign_response = None
+            if completion.get("assign"):
+                order_installer = order_payload.get("orden_instalador") if isinstance(order_payload, dict) else {}
+                assign_response = session.post(
+                    self.API_ASSIGN_URL_TEMPLATE.format(order_id=order_id),
+                    json={
+                        "user_tecnico_id": order_payload.get("user_tecnico_id") or self.evergo_user_id,
+                        "fecha_programada": payload.get("fecha_visita"),
+                        "crew": (order_installer or {}).get("idSubempresa") or 20,
+                        "type": "Installation",
+                        "crewPeople": [(order_installer or {}).get("idIngeniero") or self.evergo_user_id],
+                        "reassignment_reason_id": None,
+                        "reason_comment": "",
+                        "tag_requiered": False,
+                    },
+                    timeout=timeout,
+                )
+                if assign_response.status_code >= 400:
+                    raise EvergoPhaseSubmissionError("Asignar técnico", assign_response.status_code, completed_steps)
+                completed_steps += 1
 
-            montage_questions_payload = self._request_json(
-                session=session,
-                timeout=timeout,
-                method="GET",
-                url=self.API_MONTAJE_QUESTIONS_URL_TEMPLATE.format(order_id=order_id),
-            )
-            montaje_data, montaje_files = self._build_montaje_submission(
-                questionnaire_payload=montage_questions_payload,
-                payload=payload,
-                files=files,
-            )
-            self._rewind_uploads([file_obj for _, file_obj in montaje_files])
-            montage_response = session.post(
-                self.API_SAVE_MONTAJE_URL_TEMPLATE.format(order_id=order_id),
-                data=montaje_data,
-                files=montaje_files,
-                timeout=timeout,
-            )
-            if montage_response.status_code >= 400:
-                raise EvergoPhaseSubmissionError("Montaje-Conexión", montage_response.status_code, 3)
+            install_response = None
+            if completion.get("install"):
+                self._rewind_uploads(files.values())
+                install_response = session.post(
+                    self.API_REPORT_INSTALL_URL_TEMPLATE.format(order_id=order_id),
+                    data=payload,
+                    files=files,
+                    timeout=timeout,
+                )
+                if install_response.status_code >= 400:
+                    raise EvergoPhaseSubmissionError("Reporte de Instalacion", install_response.status_code, completed_steps)
+                completed_steps += 1
+
+            montage_response = None
+            if completion.get("montage"):
+                montage_questions_payload = self._request_json(
+                    session=session,
+                    timeout=timeout,
+                    method="GET",
+                    url=self.API_MONTAJE_QUESTIONS_URL_TEMPLATE.format(order_id=order_id),
+                )
+                montaje_data, montaje_files = self._build_montaje_submission(
+                    questionnaire_payload=montage_questions_payload,
+                    payload=payload,
+                    files=files,
+                )
+                self._rewind_uploads([file_obj for _, file_obj in montaje_files])
+                montage_response = session.post(
+                    self.API_SAVE_MONTAJE_URL_TEMPLATE.format(order_id=order_id),
+                    data=montaje_data,
+                    files=montaje_files,
+                    timeout=timeout,
+                )
+                if montage_response.status_code >= 400:
+                    raise EvergoPhaseSubmissionError("Montaje-Conexión", montage_response.status_code, completed_steps)
+                completed_steps += 1
 
             return {
                 "order_payload": order_payload,
-                "phase_1_status": visita_response.status_code,
-                "phase_1_payload": visita_response.json() if visita_response.content else {},
-                "assign_status": assign_response.status_code,
-                "assign_payload": assign_response.json() if assign_response.content else {},
-                "install_status": install_response.status_code,
-                "install_payload": install_response.json() if install_response.content else {},
-                "montage_status": montage_response.status_code,
-                "montage_payload": montage_response.json() if montage_response.content else {},
-                "completed_steps": 4,
+                "phase_1_status": visita_response.status_code if visita_response is not None else None,
+                "phase_1_payload": self._safe_json_extract(visita_response),
+                "assign_status": assign_response.status_code if assign_response is not None else None,
+                "assign_payload": self._safe_json_extract(assign_response),
+                "install_status": install_response.status_code if install_response is not None else None,
+                "install_payload": self._safe_json_extract(install_response),
+                "montage_status": montage_response.status_code if montage_response is not None else None,
+                "montage_payload": self._safe_json_extract(montage_response),
+                "completed_steps": completed_steps,
             }
+
+    def _safe_json_extract(self, response: Response | None) -> dict[str, Any]:
+        """Safely parse response JSON payload, returning an empty mapping when invalid."""
+        if response is None or not response.content:
+            return {}
+        try:
+            payload = response.json()
+        except ValueError:
+            return {}
+        return payload if isinstance(payload, dict) else {}
 
     def _build_montaje_submission(
         self,

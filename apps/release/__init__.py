@@ -1,18 +1,47 @@
 from __future__ import annotations
 
-from importlib import import_module
-from typing import Any
+from .services import (
+    Credentials,
+    DEFAULT_PACKAGE,
+    DEFAULT_PACKAGE_MODULES,
+    GitCredentials,
+    Package,
+    PostPublishWarning,
+    PyPICheckResult,
+    ReleaseError,
+    RepositoryTarget,
+    TestsFailed,
+    build,
+    check_pypi_readiness,
+    fetch_pypi_releases,
+    is_retryable_twine_error,
+    network_available,
+    promote,
+    publish,
+    requires_network,
+    run_tests,
+    upload_with_retries,
+)
 
-__all__ = ["release"]
-
-
-def __getattr__(name: str) -> Any:
-    if name == "release":
-        module = import_module(".release", __name__)
-        globals()["release"] = module
-        return module
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-def __dir__() -> list[str]:
-    return sorted(list(globals().keys()) + ["release"])
+__all__ = [
+    "Credentials",
+    "DEFAULT_PACKAGE",
+    "DEFAULT_PACKAGE_MODULES",
+    "GitCredentials",
+    "Package",
+    "PostPublishWarning",
+    "PyPICheckResult",
+    "ReleaseError",
+    "RepositoryTarget",
+    "TestsFailed",
+    "build",
+    "check_pypi_readiness",
+    "fetch_pypi_releases",
+    "is_retryable_twine_error",
+    "network_available",
+    "promote",
+    "publish",
+    "requires_network",
+    "run_tests",
+    "upload_with_retries",
+]

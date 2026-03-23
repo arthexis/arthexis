@@ -271,6 +271,76 @@ def _load_upgrade_policy_report() -> dict[str, object]:
     }
 
 
+def _set_upgrade_policy_channel(channel: str) -> dict[str, object]:
+    """Update local-node upgrade policy channels and return a change summary."""
+
+    def _error_response(channel_name: str, message: str) -> dict[str, object]:
+        return {
+            "ok": False,
+            "channel": channel_name,
+            "updated": 0,
+            "message": str(message),
+        }
+
+    normalized = channel.strip().lower()
+    choice = UPGRADE_CHANNEL_CHOICES.get(normalized)
+    override = choice.get("override") if choice else None
+    if not isinstance(override, str):
+        return _error_response(normalized, _("Unsupported upgrade channel."))
+
+    policy_channel = override
+    if policy_channel not in {"stable", "unstable", "latest"}:
+        policy_channel = "stable"
+
+    try:  # pragma: no cover - optional dependency
+        from apps.nodes.models import Node, NodeUpgradePolicyAssignment
+    except ImportError:
+        return _error_response(policy_channel, _("Upgrade policy data unavailable."))
+
+    try:
+        local = Node.get_local()
+    except DatabaseError:
+        return _error_response(policy_channel, _("Upgrade policy data unavailable."))
+
+    if not local:
+        return _error_response(policy_channel, _("No local node is registered."))
+
+    try:
+        assignments = list(
+            NodeUpgradePolicyAssignment.objects.select_related("policy")
+            .filter(node=local)
+            .order_by("policy__name")
+        )
+    except DatabaseError:
+        return _error_response(policy_channel, _("Upgrade policy data unavailable."))
+
+    if not assignments:
+        return _error_response(policy_channel, _("No upgrade policies are assigned to the local node."))
+
+    updated = 0
+    for assignment in assignments:
+        policy = assignment.policy
+        if not policy:
+            continue
+        if policy.channel == policy_channel:
+            continue
+        policy.channel = policy_channel
+        policy.save(update_fields=["channel"])
+        updated += 1
+
+    try:
+        ensure_auto_upgrade_periodic_task()
+    except Exception:
+        logger.exception("Unable to refresh auto-upgrade periodic task after policy channel change")
+
+    return {
+        "ok": True,
+        "channel": policy_channel,
+        "updated": updated,
+        "message": "",
+    }
+
+
 def _read_auto_upgrade_mode(base_dir: Path) -> dict[str, object]:
     """Return metadata describing the configured upgrade policy state."""
 

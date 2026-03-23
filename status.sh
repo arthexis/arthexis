@@ -68,24 +68,7 @@ arthexis_suite_reachable() {
     return 1
   fi
 
-  "$python_bin" - "$port" <<'PY'
-import socket
-import sys
-
-try:
-    port_value = int(sys.argv[1])
-except (IndexError, ValueError):
-    sys.exit(1)
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-    sock.settimeout(2)
-    try:
-        sock.connect(("127.0.0.1", port_value))
-    except OSError:
-        sys.exit(1)
-
-sys.exit(0)
-PY
+  PYTHONPATH="$BASE_DIR" "$python_bin" -m utils.service_probe probe-admin-login --port "$port" >/dev/null 2>&1
 }
 
 arthexis_read_startup_timestamp() {
@@ -223,14 +206,13 @@ if [ -n "$SERVICE" ] && command -v systemctl >/dev/null 2>&1 && systemctl list-u
   STATUS=$(systemctl is-active -- "$SERVICE" || true)
   echo "  Service status: $STATUS"
   [ "$STATUS" = "active" ] && RUNNING=true
+  if LIVE_PORT="$(arthexis_detect_live_runserver_port "$BASE_DIR")"; then
+    PORT="$LIVE_PORT"
+  fi
 else
-  if pgrep -f "manage.py runserver" >/dev/null 2>&1; then
+  if LIVE_PORT="$(arthexis_detect_live_runserver_port "$BASE_DIR")"; then
     RUNNING=true
-    # Try to detect port from running process
-    PROC_PORT=$(pgrep -af "manage.py runserver" | sed -n 's/.*0\.0\.0\.0:\([0-9]*\).*/\1/p' | head -n1)
-    if [ -n "$PROC_PORT" ]; then
-      PORT="$PROC_PORT"
-    fi
+    PORT="$LIVE_PORT"
   fi
   echo "  Process running: $RUNNING"
 fi

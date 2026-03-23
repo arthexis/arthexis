@@ -10,6 +10,8 @@ from apps.features.parameters import get_feature_parameter
 OCPP_SIMULATOR_FEATURE_SLUG = "ocpp-simulator"
 ARTHEXIS_BACKEND_PARAMETER_KEY = "arthexis_backend"
 MOBILITY_HOUSE_BACKEND_PARAMETER_KEY = "mobilityhouse_backend"
+ARTHEXIS_BACKEND = "arthexis"
+MOBILITY_HOUSE_BACKEND = "mobilityhouse"
 
 
 def _coerce_bool(value: object, *, default: bool = False) -> bool:
@@ -235,11 +237,28 @@ def _normalize_backend_override(value: object) -> str | None:
     if value is None:
         return None
     candidate = str(value).strip().lower()
-    if candidate in {"arthexis", "legacy"}:
-        return "arthexis"
-    if candidate in {"mobilityhouse", "mobility_house", "v2"}:
-        return "mobilityhouse"
+    if candidate in {ARTHEXIS_BACKEND, "legacy"}:
+        return ARTHEXIS_BACKEND
+    if candidate in {MOBILITY_HOUSE_BACKEND, "mobility_house", "v2"}:
+        return MOBILITY_HOUSE_BACKEND
     return None
+
+
+def get_simulator_backend_choices() -> tuple[tuple[str, str], ...]:
+    """Return backend dropdown choices filtered by enabled feature parameters."""
+
+    choices: list[tuple[str, str]] = []
+    if _is_simulator_backend_parameter_enabled(
+        ARTHEXIS_BACKEND_PARAMETER_KEY,
+        default=True,
+    ):
+        choices.append((ARTHEXIS_BACKEND, ARTHEXIS_BACKEND))
+    if _is_simulator_backend_parameter_enabled(
+        MOBILITY_HOUSE_BACKEND_PARAMETER_KEY,
+        default=False,
+    ):
+        choices.append((MOBILITY_HOUSE_BACKEND, MOBILITY_HOUSE_BACKEND))
+    return tuple(choices)
 
 
 def resolve_simulator_backend(
@@ -261,7 +280,7 @@ def resolve_simulator_backend(
     )
     backend_override = _normalize_backend_override(preferred_backend)
 
-    if backend_override == "arthexis":
+    if backend_override == ARTHEXIS_BACKEND:
         if arthexis_enabled:
             return SimulatorBackendSelection(
                 use_mobility_house=False,
@@ -272,7 +291,7 @@ def resolve_simulator_backend(
             )
         backend_override = None
 
-    if backend_override == "mobilityhouse":
+    if backend_override == MOBILITY_HOUSE_BACKEND:
         if mobility_house_enabled and dependency_available:
             return SimulatorBackendSelection(
                 use_mobility_house=True,
@@ -408,6 +427,7 @@ __all__ = [
     "NormalizedSimulatorParams",
     "SimulatorBackendSelection",
     "sanitize_simulator_params",
+    "get_simulator_backend_choices",
     "resolve_simulator_backend",
     "should_use_mobility_house_backend",
     "normalize_simulator_params",

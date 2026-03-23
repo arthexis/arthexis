@@ -3,7 +3,8 @@ from pathlib import Path
 from django import forms
 from django.conf import settings
 from django.contrib import admin, messages
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.contrib.admin.utils import flatten_fieldsets
+from django.core.exceptions import FieldError, PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import models
@@ -16,8 +17,12 @@ from django.utils.translation import gettext_lazy as _, ngettext
 from django_object_actions import DjangoObjectActions
 
 from apps.core.admin import OwnableAdminMixin
+from apps.core.admin.mixins import PublicViewLinksAdminMixin
 from apps.locals.user_data import EntityModelAdmin
-from apps.app.models import Application
+from apps.services.celery_workers import (
+    CELERY_WORKERS_FEATURE_SLUG,
+    sync_celery_workers_from_feature,
+)
 
 from .models import Feature, FeatureNote, FeatureTest
 from .parameters import get_feature_parameter_definitions, set_feature_parameter_values
@@ -140,7 +145,27 @@ class FeatureAdminForm(forms.ModelForm):
             except ValueError as exc:
                 self.add_error(field_name, str(exc))
 
+        self._validate_ocpp_simulator_backend_availability(cleaned_data)
+
         return cleaned_data
+
+    def _validate_ocpp_simulator_backend_availability(self, cleaned_data: dict[str, object]) -> None:
+        """Require at least one OCPP simulator backend to remain enabled."""
+
+        slug = (cleaned_data.get("slug") or self.instance.slug or "").strip()
+        if slug != "ocpp-simulator":
+            return
+
+        arthexis_backend_field = f"{self.PARAM_FIELD_PREFIX}arthexis_backend"
+        mobilityhouse_backend_field = f"{self.PARAM_FIELD_PREFIX}mobilityhouse_backend"
+        arthexis_backend = cleaned_data.get(arthexis_backend_field)
+        mobilityhouse_backend = cleaned_data.get(mobilityhouse_backend_field)
+        if arthexis_backend == "disabled" and mobilityhouse_backend == "disabled":
+            error_message = _(
+                "At least one simulator backend must stay enabled so backend dropdowns remain available."
+            )
+            self.add_error(arthexis_backend_field, error_message)
+            self.add_error(mobilityhouse_backend_field, error_message)
 
     def cleaned_parameter_values(self) -> dict[str, str]:
         """Return normalized dynamic parameter values ready for persistence."""
@@ -154,11 +179,17 @@ class FeatureAdminForm(forms.ModelForm):
 
 
 @admin.register(Feature)
-class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
+class FeatureAdmin(
+    PublicViewLinksAdminMixin,
+    DjangoObjectActions,
+    OwnableAdminMixin,
+    EntityModelAdmin,
+):
     form = FeatureAdminForm
     change_list_template = "django_object_actions/change_list.html"
     changelist_actions = ("reload_base",)
     actions = ("toggle_selected_feature",)
+    view_on_site = True
 
     list_display = (
         "display",
@@ -167,9 +198,8 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         "is_enabled",
         "main_app",
         "node_feature",
-        "owner_label",
     )
-    list_filter = ("source", "is_enabled", SourceAppListFilter, "node_feature")
+    list_filter = ("source", "is_enabled", SourceAppListFilter)
     search_fields = ("display", "slug", "summary")
     readonly_fields = ("source",)
     fieldsets = (
@@ -186,10 +216,6 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
                     "node_feature",
                 )
             },
-        ),
-        (
-            _("Ownership"),
-            {"fields": ("user", "group")},
         ),
         (
             _("Feature surfaces"),
@@ -274,7 +300,7 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
             with transaction.atomic():
                 feature_manager.update(is_seed_data=False, is_enabled=False)
                 feature_manager.all().delete()
-                call_command("load_user_data", *(str(path) for path in fixture_paths), verbosity=0)
+                call_command("loaddata", *(str(path) for path in fixture_paths), verbosity=0)
         except CommandError as exc:
             self.message_user(
                 request,
@@ -424,6 +450,26 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
             fieldsets.append((_("Feature parameters"), {"fields": tuple(parameter_fields)}))
         return fieldsets
 
+    def get_form(self, request, obj=None, **kwargs):
+        """Return a form class that tolerates dynamic parameter fields in fieldsets."""
+
+        model_field_names = {field.name for field in self.model._meta.get_fields()}
+        form_class = kwargs.get("form") or getattr(self, "form", None)
+        declared_field_names = set(getattr(form_class, "declared_fields", {}).keys())
+        allowed_fields = model_field_names | declared_field_names
+
+        field_names = kwargs.get("fields")
+        if field_names is None:
+            field_names = flatten_fieldsets(self.get_fieldsets(request, obj))
+        if field_names:
+            kwargs["fields"] = [name for name in field_names if name in allowed_fields]
+
+        try:
+            return super().get_form(request, obj, **kwargs)
+        except FieldError:
+            kwargs.pop("fields", None)
+            return super().get_form(request, obj, **kwargs)
+
     def get_formsets_with_inlines(self, request, obj=None):
         """Skip inline formsets on POST when no inline management payload is submitted."""
 
@@ -440,6 +486,22 @@ class FeatureAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
         if isinstance(form, FeatureAdminForm):
             set_feature_parameter_values(obj, form.cleaned_parameter_values())
         super().save_model(request, obj, form, change)
+        if obj.slug == CELERY_WORKERS_FEATURE_SLUG:
+            worker_count, restarted = sync_celery_workers_from_feature()
+            if restarted:
+                self.message_user(
+                    request,
+                    _("Celery worker count updated to %(count)d and service restarted.")
+                    % {"count": worker_count},
+                    level=messages.SUCCESS,
+                )
+            else:
+                self.message_user(
+                    request,
+                    _("Celery worker count updated to %(count)d, but service restart failed.")
+                    % {"count": worker_count},
+                    level=messages.WARNING,
+                )
 
     def toggle_feature(self, request, feature_id: int):
         feature = self.get_object(request, feature_id)

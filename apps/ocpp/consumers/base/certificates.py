@@ -153,7 +153,6 @@ class CertificatesMixin:
             response_payload: dict[str, object] = {"status": status_value}
 
             if target is not None:
-                status_info = "Certificate not found."
                 installed = InstalledCertificate.objects.filter(
                     charger=target, certificate_hash_data=hash_data
                 ).first()
@@ -162,6 +161,7 @@ class CertificatesMixin:
                     status_info = ""
                     response_payload = {"status": status_value}
                 else:
+                    status_info = "Certificate not found."
                     response_payload = {
                         "status": status_value,
                         "statusInfo": {

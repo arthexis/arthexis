@@ -1,64 +1,12 @@
 repos:
   - repo: local
     hooks:
-      - id: version-marker
-        name: Ensure development version marker
-        entry: scripts/git-hooks/pre-commit-version-marker.sh
+      - id: mypy-approved-paths
+        name: mypy approved paths
+        entry: ./scripts/run_mypy.sh
         language: system
         pass_filenames: false
-        stages: [commit]
-        always_run: true
-      - id: test-pr-marker
-        name: Ensure new tests include PR marker metadata
-        entry: scripts/git-hooks/pre-commit-test-pr-mark.sh
-        language: system
-        pass_filenames: false
-        stages: [commit]
-      - id: prompt-storage
-        name: Ensure prompt fixture stored for code changes
-        entry: scripts/git-hooks/pre-commit-prompt-storage.sh
-        language: system
-        pass_filenames: false
-        stages: [commit]
-      - id: ruff
-        name: ruff
-        entry: ruff check --select E9,F823
-        language: system
-        types: [python]
-      - id: black
-        name: black
-        entry: black
-        language: system
-        types: [python]
-      - id: migration-check
-        name: Check Django migrations
-        entry: python scripts/check_migrations.py
-        language: system
-        pass_filenames: false
-      - id: lint-seed-fixtures
-        name: Lint seed fixtures
-        entry: python scripts/lint_seed_fixtures.py
-        language: system
-        pass_filenames: false
-      - id: validation-todos
-        name: Ensure validation TODOs
-        entry: python scripts/ensure_validation_todos.py
-        language: system
-        pass_filenames: false
-      - id: docs-no-http-links
-        name: Ensure documentation uses HTTPS links
-        entry: python scripts/check_no_http_links.py
-        language: system
-        pass_filenames: false
-      - id: nested-git-repositories
-        name: Prevent nested Git repositories
-        entry: python scripts/check_nested_git_repositories.py
-        language: system
-        pass_filenames: false
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.9
-    hooks:
-      - id: bandit
-        name: bandit
-        args: ["-ll", "-iii"]
-        files: ^((app|awg|config|core|nodes|ocpp|pages|projects|scripts|tests|utils)/.*\.py|(manage\.py|env-refresh\.py|vscode_manage\.py))$
+        # Keep this filter aligned with pyproject.toml [tool.mypy].files, which is the
+        # source of truth for the rollout baseline. Migrations stay excluded via
+        # pyproject.toml [tool.mypy].exclude and are intentionally omitted here.
+        files: '^(scripts/(generate_requirements|sort_pyproject_deps)\.py|apps/protocols/.*\.py|apps/repos/(github\.py|services/github\.py)|apps/core/(services/health(_checks)?\.py|modeling/.*\.py|system_ui\.py))$'

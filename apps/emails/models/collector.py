@@ -25,6 +25,12 @@ class EmailCollector(Entity):
         related_name="collectors",
         on_delete=models.CASCADE,
     )
+    additional_inboxes = models.ManyToManyField(
+        EmailInbox,
+        related_name="secondary_collectors",
+        blank=True,
+        help_text="Optional additional inbox accounts monitored by this collector.",
+    )
     subject = models.CharField(max_length=255, blank=True)
     sender = models.CharField(max_length=255, blank=True)
     body = models.CharField(max_length=255, blank=True)
@@ -36,6 +42,10 @@ class EmailCollector(Entity):
     use_regular_expressions = models.BooleanField(
         default=False,
         help_text="Treat subject, sender and body filters as regular expressions (case-insensitive).",
+    )
+    is_enabled = models.BooleanField(
+        default=True,
+        help_text="Disable to exclude this collector from automatic runs and admin totals.",
     )
     NOTIFY_EMAIL = "email"
     NOTIFY_NET_MESSAGE = "net_message"
@@ -66,14 +76,6 @@ class EmailCollector(Entity):
         max_length=255,
         blank=True,
         help_text="Comma-separated recipients used when notification mode is Email.",
-    )
-    notification_recipe = models.ForeignKey(
-        "recipes.Recipe",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="email_collectors",
-        help_text="Optional recipe to execute after the selected notification action.",
     )
 
     class Meta:
@@ -111,13 +113,21 @@ class EmailCollector(Entity):
         return " – ".join(parts)
 
     def search_messages(self, limit: int = 10):
-        return self.inbox.search_messages(
-            subject=self.subject,
-            from_address=self.sender,
-            body=self.body,
-            limit=limit,
-            use_regular_expressions=self.use_regular_expressions,
-        )
+        inboxes = [self.inbox, *self.additional_inboxes.all()]
+        messages = []
+        for inbox in inboxes:
+            messages.extend(
+                inbox.search_messages(
+                    subject=self.subject,
+                    from_address=self.sender,
+                    body=self.body,
+                    limit=limit,
+                    use_regular_expressions=self.use_regular_expressions,
+                )
+            )
+            if len(messages) >= limit:
+                return messages[:limit]
+        return messages
 
     @staticmethod
     def _render_notification_template(template: str, context: dict[str, str]) -> str:
@@ -188,43 +198,46 @@ class EmailCollector(Entity):
                     )
                 except Exception:
                     logger.exception(
-                        "Failed email notification for collector %s; "
-                        "Failed to send notification for collector %s",
-                        self.pk,
+                        "Failed to send email notification for collector %s",
                         self.pk,
                     )
 
-        recipe = self.notification_recipe
-        if recipe is None:
+    def collect(self, limit: int = 10) -> None:
+        """Poll inboxes and store artifacts not already recorded.
+
+        Args:
+            limit: Maximum number of matching messages to fetch across inboxes.
+
+        Returns:
+            None.
+
+        Note:
+            Notification dispatch failures are logged and suppressed for popup,
+            net-message, and email channels.
+        """
+        if not self.is_enabled:
             return
 
-        recipe.execute(
-            subject=rendered_subject,
-            message=rendered_message,
-            sender=context.get("sender", ""),
-            body=context.get("body", ""),
-            date=context.get("date", ""),
-            sigils=sigils,
-        )
-
-    def collect(self, limit: int = 10) -> None:
-        """Poll the inbox and store new artifacts until an existing one is found."""
         messages = self.search_messages(limit=limit)
         for msg in messages:
             fp = EmailArtifact.fingerprint_for(
                 msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")
             )
-            if EmailArtifact.objects.filter(collector=self, fingerprint=fp).exists():
-                break
             sigils = self._parse_sigils(msg.get("body", ""))
-            EmailArtifact.objects.create(
+
+            _, created = EmailArtifact.objects.get_or_create(
                 collector=self,
-                subject=msg.get("subject", ""),
-                sender=msg.get("from", ""),
-                body=msg.get("body", ""),
-                sigils=sigils,
                 fingerprint=fp,
+                defaults={
+                    "subject": msg.get("subject", ""),
+                    "sender": msg.get("from", ""),
+                    "body": msg.get("body", ""),
+                    "sigils": sigils,
+                },
             )
+            if not created:
+                continue
+
             try:
                 self._notify_for_message(msg, sigils)
             except Exception:

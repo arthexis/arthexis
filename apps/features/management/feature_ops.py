@@ -6,7 +6,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.management import call_command
-from django.core.management.base import CommandError
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.app.models import Application
@@ -123,6 +123,35 @@ def list_node_features(*, enabled: bool | None = True) -> list[tuple[str, bool]]
     return [(feature.slug, feature.slug in assigned) for feature in queryset]
 
 
+def refresh_local_node_features() -> Node | None:
+    """Refresh auto-managed feature assignments for the local node.
+
+    Returns:
+        Node | None: The local node when present, otherwise ``None``.
+    """
+
+    node = Node.get_local()
+    if node is None:
+        return None
+    node.refresh_features()
+    return node
+
+
+def refresh_and_report_local_node_features(command: BaseCommand) -> Node | None:
+    """Refresh local-node features and write consistent CLI output."""
+
+    node = refresh_local_node_features()
+    if node is None:
+        command.stdout.write(
+            command.style.WARNING("Local node not found, skipping feature refresh.")
+        )
+        return None
+
+    command.stdout.write(f"Refreshing features for local node {node}...")
+    command.stdout.write(command.style.SUCCESS("Successfully refreshed features."))
+    return node
+
+
 def _ensure_fixture_applications_exist(*, fixture_paths: list[Path]) -> None:
     """Ensure fixture-referenced ``Application`` rows exist before fixture loading."""
 
@@ -153,15 +182,9 @@ def _ensure_fixture_applications_exist(*, fixture_paths: list[Path]) -> None:
 
 
 def _ensure_reset_baseline_features() -> None:
-    """Restore baseline suite features that are seeded by migrations, not fixtures."""
+    """Restore baseline suite feature state that is seeded by migrations, not fixtures."""
 
-    Feature.objects.update_or_create(
-        slug="development-blog",
-        defaults={
-            "display": "Development Blog",
-            "is_enabled": True,
-        },
-    )
+    Feature.objects.filter(slug="development-blog").delete()
 
 
 def reset_all_suite_features() -> tuple[int, int]:
@@ -186,7 +209,7 @@ def reset_all_suite_features() -> tuple[int, int]:
         feature_manager.all().delete()
         _ensure_fixture_applications_exist(fixture_paths=fixture_paths)
         call_command(
-            "load_user_data", *(str(path) for path in fixture_paths), verbosity=0
+            "loaddata", *(str(path) for path in fixture_paths), verbosity=0
         )
         _ensure_reset_baseline_features()
     return deleted_count, len(fixture_paths)

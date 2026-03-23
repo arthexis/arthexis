@@ -88,6 +88,30 @@
               <div class="invalid-feedback d-block">{{ form.enable_notifications.errors|join:" " }}</div>
             {% endif %}
           </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="id_github_issue_template">{% trans "GitHub Issue Template" %}</label>
+              {{ form.github_issue_template }}
+              {% if form.github_issue_template.errors %}
+                <div class="invalid-feedback d-block">{{ form.github_issue_template.errors|join:" " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="id_github_issue_trigger">{% trans "Issue Trigger" %}</label>
+              {{ form.github_issue_trigger }}
+              {% if form.github_issue_trigger.errors %}
+                <div class="invalid-feedback d-block">{{ form.github_issue_trigger.errors|join:" " }}</div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="mb-3 mt-3">
+            <label class="form-label" for="id_github_issue_overdue_after">{% trans "Overdue threshold" %}</label>
+            {{ form.github_issue_overdue_after }}
+            <div class="form-text">{% trans "Required when trigger is overdue (e.g. 2 days)." %}</div>
+            {% if form.github_issue_overdue_after.errors %}
+              <div class="invalid-feedback d-block">{{ form.github_issue_overdue_after.errors|join:" " }}</div>
+            {% endif %}
+          </div>
           <button type="submit" class="btn btn-primary">{% trans "Schedule Task" %}</button>
         </form>
       </div>

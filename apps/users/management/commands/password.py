@@ -4,12 +4,15 @@ import io
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 from django.db.utils import OperationalError
 from django.utils import timezone
 
+from apps.groups.security import ensure_default_staff_groups
 from apps.users import temp_passwords
+from apps.users.management.commands.utils import coerce_option_list
 
 
 class Command(BaseCommand):
@@ -96,6 +99,13 @@ class Command(BaseCommand):
             action="store_false",
             help="Do not force a password change on next visit.",
         )
+        parser.add_argument(
+            "--group",
+            action="append",
+            default=[],
+            dest="groups",
+            help="Assign the user to the provided group. May be passed multiple times.",
+        )
         parser.set_defaults(force_change=None)
 
     def handle(self, *args, **options):
@@ -109,6 +119,7 @@ class Command(BaseCommand):
         allow_change = bool(options.get("allow_change"))
         raw_password = options.get("raw_password")
         force_change = options.get("force_change")
+        groups = coerce_option_list(options.get("groups"))
 
         if delete_password and raw_password:
             raise CommandError("--password cannot be used together with --delete.")
@@ -122,6 +133,8 @@ class Command(BaseCommand):
         if identifier is None:
             if delete_password:
                 raise CommandError("identifier is required when using --delete.")
+            if groups:
+                raise CommandError("identifier is required when using --group.")
             generated_password = raw_password or temp_passwords.generate_password()
             self.stdout.write(f"Generated password: {generated_password}")
             self.stdout.write(self.style.SUCCESS("Password generated."))
@@ -150,6 +163,9 @@ class Command(BaseCommand):
         user = users[0]
         if update_user or (create_user and not created and (staff or superuser)):
             self._update_user(user, staff=staff, superuser=superuser)
+        if groups:
+            self._assign_groups(user, groups)
+        ensure_default_staff_groups(user, explicit_group_names=groups)
 
         if delete_password:
             self._delete_password(user)
@@ -267,6 +283,19 @@ class Command(BaseCommand):
             fields.append("temporary_expires_at")
 
         user.save(update_fields=fields)
+
+    def _assign_groups(self, user, groups: list[str]) -> None:
+        """Assign a user to one or more existing auth groups."""
+
+        existing_groups = {
+            group.name: group for group in Group.objects.filter(name__in=groups).order_by("name")
+        }
+        missing_groups = sorted(set(groups) - set(existing_groups))
+        if missing_groups:
+            missing_names = ", ".join(missing_groups)
+            raise CommandError(f"Unknown groups: {missing_names}")
+
+        user.groups.add(*[existing_groups[name] for name in groups])
 
     def _set_force_password_change(self, user, force_change: bool) -> None:
         if user.force_password_change == force_change:

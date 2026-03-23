@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import base64
+import importlib
 import ipaddress
 import logging
 from io import BytesIO
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-import qrcode
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
 from django.http.request import validate_host
@@ -21,7 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 def _build_share_url(target_url: str, user: object | None) -> str:
-    username = getattr(user, "username", "") if getattr(user, "is_authenticated", False) else ""
+    username = (
+        getattr(user, "username", "")
+        if getattr(user, "is_authenticated", False)
+        else ""
+    )
     if not username:
         return target_url
 
@@ -32,6 +36,14 @@ def _build_share_url(target_url: str, user: object | None) -> str:
 
 
 def _encode_qr_image(url: str) -> str:
+    """Return a base64 QR PNG for ``url`` when the optional dependency is available."""
+
+    try:
+        qrcode = importlib.import_module("qrcode")
+    except ImportError:
+        logger.debug("Optional dependency 'qrcode' is unavailable; QR image disabled.")
+        return ""
+
     qr = qrcode.QRCode(box_size=6, border=2)
     qr.add_data(url)
     qr.make(fit=True)
@@ -42,7 +54,10 @@ def _encode_qr_image(url: str) -> str:
 
 
 def _extract_page_meta(
-    target_url: str, parsed_target, override_title: str = "", override_subtitle: str = ""
+    target_url: str,
+    parsed_target,
+    override_title: str = "",
+    override_subtitle: str = "",
 ):
     hostname = parsed_target.hostname or ""
     clean_path = parsed_target.path if parsed_target.path not in {"", "/"} else ""

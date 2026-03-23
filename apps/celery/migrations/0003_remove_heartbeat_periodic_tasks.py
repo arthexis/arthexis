@@ -1,22 +1,18 @@
 from django.db import migrations
 
 
-HEARTBEAT_TASK_PATHS = [
-    "apps.core.tasks.heartbeat",
-    "core.tasks.heartbeat",
-]
+CURRENT_HEARTBEAT_TASK_PATH = "apps.core.tasks.heartbeat"
+LEGACY_HEARTBEAT_TASK_PATH = "core.tasks.heartbeat"
 
-HEARTBEAT_TASK_NAMES = [
-    "heartbeat",
-]
+def migrate_heartbeat_periodic_tasks(apps, schema_editor):
+    """Rewrite persisted heartbeat schedules to the canonical task path."""
 
-
-def remove_heartbeat_periodic_tasks(apps, schema_editor):
     del schema_editor
 
     PeriodicTask = apps.get_model("django_celery_beat", "PeriodicTask")
-    PeriodicTask.objects.filter(name__in=HEARTBEAT_TASK_NAMES).delete()
-    PeriodicTask.objects.filter(task__in=HEARTBEAT_TASK_PATHS).delete()
+    PeriodicTask.objects.filter(task=LEGACY_HEARTBEAT_TASK_PATH).update(
+        task=CURRENT_HEARTBEAT_TASK_PATH
+    )
 
 
 class Migration(migrations.Migration):
@@ -26,5 +22,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(remove_heartbeat_periodic_tasks, migrations.RunPython.noop),
+        migrations.RunPython(migrate_heartbeat_periodic_tasks, migrations.RunPython.noop),
     ]

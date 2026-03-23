@@ -2,12 +2,56 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-if [ -n "${LOCK_DIR:-}" ]; then
-  LOCK_DIR="$(normalize_path "$LOCK_DIR")"
+if [ -z "${BASE_DIR:-}" ]; then
+  BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fi
+
+LOCK_DIR="${LOCK_DIR:-${BASE_DIR}/.locks}"
+LOCK_DIR="$(normalize_path "$LOCK_DIR")"
 
 MIGRATIONS_SHA_FILE="${LOCK_DIR}/migrations.sha"
 PREDEPLOY_MIGRATIONS_MARKER_FILE="${LOCK_DIR}/predeploy_migrate_success.json"
+
+# Default behavior: Satellite/Watchtower nodes run in check-only mode, while all
+# other roles default to apply. Set ARTHEXIS_MIGRATION_POLICY explicitly to avoid
+# role-based defaults when deterministic behavior is required in automation.
+default_migration_policy() {
+  local role="${NODE_ROLE:-}"
+
+  if [ -z "$role" ] && [ -n "${LOCK_DIR:-}" ] && [ -f "${LOCK_DIR}/role.lck" ]; then
+    role="$(cat "${LOCK_DIR}/role.lck")"
+  fi
+
+  role="${role//[[:space:]]/}"
+
+  case "${role,,}" in
+    satellite|watchtower)
+      echo "check"
+      ;;
+    *)
+      echo "apply"
+      ;;
+  esac
+}
+
+resolve_migration_policy() {
+  local configured_policy="${ARTHEXIS_MIGRATION_POLICY:-}"
+
+  if [ -z "$configured_policy" ]; then
+    default_migration_policy
+    return 0
+  fi
+
+  case "${configured_policy,,}" in
+    apply|check|skip)
+      echo "${configured_policy,,}"
+      ;;
+    *)
+      echo "Unsupported ARTHEXIS_MIGRATION_POLICY value '${configured_policy}'. Expected one of: apply, check, skip." >&2
+      return 1
+      ;;
+  esac
+}
 
 compute_migration_fingerprint() {
   local base_dir
@@ -88,9 +132,36 @@ run_runserver_preflight() {
     return 1
   fi
 
+  local migration_policy
+  if ! migration_policy="$(resolve_migration_policy)"; then
+    return 1
+  fi
+
+  write_migration_fingerprint() {
+    local value="$1"
+
+    if ! printf '%s\n' "$value" > "$MIGRATIONS_SHA_FILE"; then
+      echo "Failed to write migrations fingerprint cache '$MIGRATIONS_SHA_FILE'." >&2
+      return 1
+    fi
+
+    return 0
+  }
+
+  if [ "$migration_policy" = "skip" ]; then
+    echo "Skipping runserver migration preflight (ARTHEXIS_MIGRATION_POLICY=skip)."
+    RUNSERVER_PREFLIGHT_DONE=true
+    return 0
+  fi
+
   local fingerprint
   if ! fingerprint=$(compute_migration_fingerprint); then
     echo "Failed to compute migration fingerprint" >&2
+    return 1
+  fi
+
+  if ! mkdir -p "$LOCK_DIR"; then
+    echo "Failed to create lock directory '$LOCK_DIR'." >&2
     return 1
   fi
 
@@ -107,7 +178,9 @@ run_runserver_preflight() {
       echo "Found successful pre-deploy migration marker; verifying migration state..."
       if "$python_bin" manage.py migrate --check; then
         echo "Pre-deploy migration marker verified; skipping migration apply fallback."
-        echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
+        if ! write_migration_fingerprint "$fingerprint"; then
+          return 1
+        fi
         RUNSERVER_PREFLIGHT_DONE=true
         export DJANGO_SUPPRESS_MIGRATION_CHECK=1
         RUNSERVER_EXTRA_ARGS+=("--skip-checks")
@@ -122,7 +195,9 @@ run_runserver_preflight() {
     echo "Migrations unchanged since last successful preflight; verifying database state..."
     if "$python_bin" manage.py migrate --check; then
       echo "Database matches cached migrations fingerprint; skipping migration checks."
-      echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
+      if ! write_migration_fingerprint "$fingerprint"; then
+        return 1
+      fi
       RUNSERVER_PREFLIGHT_DONE=true
       export DJANGO_SUPPRESS_MIGRATION_CHECK=1
       RUNSERVER_EXTRA_ARGS+=("--skip-checks")
@@ -158,6 +233,12 @@ run_runserver_preflight() {
       return 1
     fi
 
+    if [ "$migration_policy" = "check" ]; then
+      echo "Migration preflight failed: pending migrations detected and policy is check-only." >&2
+      printf '%s\n' "$migrate_check_output" >&2
+      return 1
+    fi
+
     echo "Pending migrations detected; applying migrations..."
     if ! "$python_bin" manage.py migrate --noinput; then
       echo "Migration preflight failed while applying migrations." >&2
@@ -171,7 +252,9 @@ run_runserver_preflight() {
     fi
   fi
 
-  echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
+  if ! write_migration_fingerprint "$fingerprint"; then
+    return 1
+  fi
   RUNSERVER_PREFLIGHT_DONE=true
   export DJANGO_SUPPRESS_MIGRATION_CHECK=1
   RUNSERVER_EXTRA_ARGS+=("--skip-checks")

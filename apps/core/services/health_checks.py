@@ -10,16 +10,18 @@ import string
 import subprocess
 import time
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Protocol, cast
 
 from django.conf import settings
+from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth import get_user_model
 from django.core.management.base import CommandError
 from django.utils import timezone
 
 from apps.cards.reader import validate_rfid_value
 from apps.core.notifications import NotificationManager, notify
-from apps.core.system.ui import _format_timestamp
+from apps.groups.security import ensure_default_staff_groups
+from apps.core.system_ui import format_timestamp
 from apps.core.system.upgrade import (
     _auto_upgrade_next_check,
     _get_auto_upgrade_periodic_task,
@@ -29,6 +31,41 @@ from apps.core.system.upgrade import (
 from apps.screens.lcd import LCDUnavailableError, prepare_lcd_controller
 from apps.screens.startup_notifications import LCD_LOW_LOCK_FILE, render_lcd_lock_file
 from apps.users.system import collect_system_user_issues, ensure_system_user
+
+
+class SupportsNaturalKeyManager(Protocol):
+    """Manager protocol for natural-key user lookups used by health checks."""
+
+    def get_by_natural_key(self, username: str) -> AbstractBaseUser:
+        """Return the user matching ``username``."""
+
+
+def _get_user_by_natural_key(
+    user_model: type[AbstractBaseUser], username: str
+) -> AbstractBaseUser | None:
+    """Return the user matching ``username`` from the broadest available manager.
+
+    Parameters:
+        user_model: Concrete Django user model class to query, preferring
+            ``all_objects`` when present and otherwise falling back to
+            ``_default_manager``.
+        username: Natural-key username for the user lookup.
+
+    Returns:
+        The matching user instance when ``get_by_natural_key`` succeeds; otherwise ``None``.
+
+    Raises:
+        No exceptions are raised. ``DoesNotExist`` is handled by returning ``None``.
+    """
+
+    manager = cast(
+        SupportsNaturalKeyManager,
+        getattr(user_model, "all_objects", user_model._default_manager),
+    )
+    try:
+        return manager.get_by_natural_key(username)
+    except user_model.DoesNotExist:
+        return None
 
 
 def run_check_time(*, stdout, style, **_kwargs) -> None:
@@ -106,6 +143,7 @@ def _create_admin(user_model, username):
     from apps.locals.models import ensure_admin_favorites
 
     ensure_admin_favorites(user)
+    ensure_default_staff_groups(user)
     return user
 
 
@@ -117,8 +155,7 @@ def run_check_admin(*, stdout, style, force: bool = False, **_kwargs) -> None:
     if not username:
         raise CommandError("The user model does not define an admin username.")
 
-    manager = getattr(user_model, "all_objects", user_model._default_manager)
-    user = manager.filter(username=username).first()
+    user = _get_user_by_natural_key(user_model, username)
 
     if user is None:
         if not force:
@@ -143,9 +180,12 @@ def run_check_admin(*, stdout, style, force: bool = False, **_kwargs) -> None:
         updated = _repair_admin(user)
         if updated:
             user.save(update_fields=sorted(updated))
+        added_groups = ensure_default_staff_groups(user)
+        if updated or added_groups:
+            changes = sorted(updated) + [f"group:{name}" for name in added_groups]
             stdout.write(
                 style.SUCCESS(
-                    f"Repaired default admin account {username!r}: {', '.join(sorted(updated))}."
+                    f"Repaired default admin account {username!r}: {', '.join(changes)}."
                 )
             )
         else:
@@ -163,8 +203,7 @@ def run_check_system_user(*, stdout, style, force: bool = False, **_kwargs) -> N
     if not username:
         raise CommandError("The user model does not define a system username.")
 
-    manager = getattr(user_model, "all_objects", user_model._default_manager)
-    user = manager.filter(username=username).first()
+    user = _get_user_by_natural_key(user_model, username)
 
     if user is None:
         if not force:
@@ -208,8 +247,10 @@ def run_check_rfid(*, stdout, rfid_value: str | None = None, rfid_kind: str | No
     result = validate_rfid_value(rfid_value, kind=rfid_kind)
     if "error" in result:
         raise CommandError(result["error"])
-    dump_kwargs = {"indent": 2, "sort_keys": True} if rfid_pretty else {}
-    stdout.write(json.dumps(result, **dump_kwargs))
+    if rfid_pretty:
+        stdout.write(json.dumps(result, indent=2, sort_keys=True))
+        return
+    stdout.write(json.dumps(result))
 
 
 def run_check_next_upgrade(*, stdout, **_kwargs) -> None:
@@ -247,10 +288,10 @@ def run_check_next_upgrade(*, stdout, **_kwargs) -> None:
         except Exception:
             pass
 
-    next_display = _format_timestamp(next_run_dt) if next_run_dt is not None else _auto_upgrade_next_check()
+    next_display = format_timestamp(next_run_dt) if next_run_dt is not None else _auto_upgrade_next_check()
     if not next_display:
         next_display = "Unavailable"
-    last_display = _format_timestamp(last_run_dt) if last_run_dt is not None else "Unavailable"
+    last_display = format_timestamp(last_run_dt) if last_run_dt is not None else "Unavailable"
 
     mode_info = _read_auto_upgrade_mode(base_dir)
     mode_value = str(mode_info.get("mode", "version"))

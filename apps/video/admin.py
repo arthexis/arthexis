@@ -12,9 +12,10 @@ from django.utils.html import format_html
 from django.utils.text import slugify
 from django_object_actions import DjangoObjectActions
 
-from apps.discovery.services import record_discovery_item, start_discovery
 from apps.core.admin.mixins import OwnableAdminMixin
+from apps.discovery.services import record_discovery_item, start_discovery
 from apps.locals.user_data import EntityModelAdmin
+from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
 from .frame_cache import get_frame
@@ -25,11 +26,7 @@ from .models import (
     VideoSnapshot,
     YoutubeChannel,
 )
-from .utils import (
-    DEFAULT_CAMERA_RESOLUTION,
-    get_camera_resolutions,
-    has_rpi_camera_stack,
-)
+from .utils import DEFAULT_CAMERA_RESOLUTION, get_camera_resolutions
 
 
 def set_admin_action_label(action, label, *, changelist=False):
@@ -347,7 +344,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
 
         node = Node.get_local()
         if auto_enable and node:
-            if not require_stack or has_rpi_camera_stack():
+            if not require_stack or is_feature_active_for_node(node=node, slug="video-cam"):
                 NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
                 return feature
 
@@ -436,7 +433,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
         if node is None:
             return redirect("..")
 
-        if not has_rpi_camera_stack():
+        if not is_feature_active_for_node(node=node, slug="video-cam"):
             self.message_user(
                 request,
                 _("No video devices were detected on this node."),

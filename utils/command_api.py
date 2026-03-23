@@ -14,7 +14,9 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence, TypedDict
+
+from utils.python_env import resolve_project_python
 
 ALLOWED_COMMAND_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 DISCOVERED_COMMAND_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -29,13 +31,22 @@ for command_name, app_name in sorted(get_commands().items()):
         cls = module.Command
     except Exception:
         continue
-    if getattr(cls, "arthexis_absorbed_command", False):
+    if cls.__dict__.get("arthexis_absorbed_command", False):
         print(command_name)
 """.strip()
 
 
 class CommandApiError(RuntimeError):
     """Raised for canonical command API failures that should be user-visible."""
+
+
+class LegacyInvocation(TypedDict):
+    """Normalized pieces extracted from legacy ``command.sh`` arguments."""
+
+    action: str
+    option_flags: list[str]
+    command: str | None
+    command_args: list[str]
 
 
 @dataclass(frozen=True)
@@ -51,11 +62,16 @@ class CommandOptions:
         return "--celery" if self.celery else "--no-celery"
 
 
-
-
 def _fast_run_enabled() -> bool:
     """Return whether run-mode should skip command discovery for faster execution."""
-    return os.getenv("ARTHEXIS_COMMAND_FAST_RUN", "") in {"1", "true", "TRUE", "yes", "YES"}
+    return os.getenv("ARTHEXIS_COMMAND_FAST_RUN", "") in {
+        "1",
+        "true",
+        "TRUE",
+        "yes",
+        "YES",
+    }
+
 
 def _cache_ttl_seconds() -> int:
     """Read and sanitize cache TTL from environment."""
@@ -116,7 +132,7 @@ def _run_manage(base_dir: Path, *args: str) -> str:
     Raises:
         CommandApiError: When manage.py invocation fails.
     """
-    cmd = [sys.executable, "manage.py", *args]
+    cmd = [resolve_project_python(base_dir), "manage.py", *args]
     timeout = _manage_timeout_seconds()
     try:
         result = subprocess.run(
@@ -170,7 +186,7 @@ def discover_commands(base_dir: Path, options: CommandOptions) -> list[str]:
 
 
 def discover_absorbed_commands(base_dir: Path) -> set[str]:
-    """Return command names marked as absorbed via `arthexis_absorbed_command`."""
+    """Return command names marked as absorbed via ``arthexis_absorbed_command``."""
     ttl_seconds = _cache_ttl_seconds()
     cache_file = _cache_file(base_dir, "deprecated_absorbed_commands.txt")
     cached = _read_cached_lines(cache_file, ttl_seconds)
@@ -284,9 +300,25 @@ def list_commands(base_dir: Path, options: CommandOptions) -> int:
 
 
 def run_command(
-    base_dir: Path, raw_command: str, command_args: list[str], options: CommandOptions
+    base_dir: Path,
+    raw_command: str,
+    command_args: Sequence[str],
+    options: CommandOptions,
 ) -> int:
-    """Validate and execute a Django command."""
+    """Validate and execute a Django command.
+
+    Args:
+        base_dir: Repository root containing ``manage.py``.
+        raw_command: User-supplied command name before normalization.
+        command_args: Additional arguments forwarded to the Django command.
+        options: Discovery and celery mode options.
+
+    Returns:
+        The subprocess exit code returned by ``manage.py``.
+
+    Raises:
+        CommandApiError: When the command name is invalid or cannot be resolved.
+    """
     if _fast_run_enabled():
         try:
             command = normalize_command_name(raw_command)
@@ -296,31 +328,86 @@ def run_command(
         command = _resolve_command(base_dir, raw_command, options)
 
     process = subprocess.run(
-        [sys.executable, "manage.py", command, *command_args],
+        [
+            resolve_project_python(base_dir),
+            "manage.py",
+            options.celery_flag,
+            command,
+            *command_args,
+        ],
         cwd=base_dir,
         check=False,
     )
     return process.returncode
 
 
-def parse_legacy_args(argv: list[str]) -> list[str]:
-    """Translate legacy invocation syntax into canonical list/run actions."""
+def _parse_legacy_invocation(argv: Sequence[str]) -> LegacyInvocation:
+    """Split legacy wrapper arguments into canonical action components.
+
+    Args:
+        argv: Raw arguments passed to the legacy wrapper entrypoint.
+
+    Returns:
+        Structured legacy invocation details ready for canonical translation.
+    """
+
     if not argv:
-        return ["list"]
+        return {
+            "action": "list",
+            "option_flags": [],
+            "command": None,
+            "command_args": [],
+        }
 
     if argv[0] in {"list", "run"}:
-        return argv
+        action = argv[0]
+        option_flags: list[str] = []
+        command: str | None = None
+        command_args: list[str] = []
 
-    # Legacy compatibility: `command.sh [options] <command> [args...]`.
+        for index, token in enumerate(argv[1:], start=1):
+            if command is None and token.startswith("-"):
+                option_flags.append(token)
+                continue
+            command = token
+            command_args = list(argv[index + 1 :])
+            break
+
+        return {
+            "action": action,
+            "option_flags": option_flags,
+            "command": command,
+            "command_args": command_args,
+        }
+
     option_flags: list[str] = []
     remaining = list(argv)
     while remaining and remaining[0] in {"--deprecated", "--celery", "--no-celery"}:
         option_flags.append(remaining.pop(0))
 
-    if not remaining:
-        return ["list", *option_flags]
+    command = remaining[0] if remaining else None
+    command_args = remaining[1:] if len(remaining) > 1 else []
+    return {
+        "action": "run" if command else "list",
+        "option_flags": option_flags,
+        "command": command,
+        "command_args": command_args,
+    }
 
-    return ["run", *option_flags, remaining[0], *remaining[1:]]
+
+def parse_legacy_args(argv: list[str]) -> list[str]:
+    """Translate legacy invocation syntax into canonical list/run actions."""
+    invocation = _parse_legacy_invocation(argv)
+    if invocation["action"] == "list":
+        return ["list", *invocation["option_flags"]]
+    if invocation["command"] is None:
+        return ["list", *invocation["option_flags"]]
+    return [
+        "run",
+        *invocation["option_flags"],
+        invocation["command"],
+        *invocation["command_args"],
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:

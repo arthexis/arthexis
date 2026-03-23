@@ -1,4 +1,4 @@
-"""Compatibility wrapper for the deprecated ``screenshot`` command."""
+"""Shortcut wrapper for the standalone ``screenshot`` command."""
 
 from __future__ import annotations
 
@@ -7,25 +7,20 @@ from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    """Bridge legacy ``screenshot`` calls to ``node screenshot``."""
+    """Forward standalone ``screenshot`` calls to ``node screenshot``."""
 
-    help = "Deprecated; use `python manage.py node screenshot` instead."
+    help = "Shortcut for `python manage.py node screenshot`."
 
     def add_arguments(self, parser) -> None:
-        """Mirror legacy args and forward to the unified node command."""
+        """Mirror standalone args and forward to the unified node command."""
 
         parser.add_argument("url", nargs="?")
         parser.add_argument("--freq", type=int)
         parser.add_argument("--local", action="store_true")
 
     def handle(self, *args, **options):
-        """Print deprecation notice and execute ``node screenshot``."""
+        """Execute ``node screenshot`` with the mirrored standalone arguments."""
 
-        self.stdout.write(
-            self.style.WARNING(
-                "DEPRECATED: `manage.py screenshot` is deprecated; use `manage.py node screenshot` instead."
-            )
-        )
         args = ["screenshot"]
         if options.get("url"):
             args.append(options["url"])

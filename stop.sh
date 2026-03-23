@@ -386,7 +386,7 @@ PATTERN="manage.py runserver"
 if [ "$ALL" = true ]; then
   pkill -f "$PATTERN" || true
 else
-pkill -f "$PATTERN 0.0.0.0:$PORT" || true
+  pkill -f "$PATTERN( .*)? (\[::1\]|0\.0\.0\.0|127\.0\.0\.1):$PORT" || true
 fi
 # Also stop any Celery components started by start.sh
 pkill -f "celery -A config" || true
