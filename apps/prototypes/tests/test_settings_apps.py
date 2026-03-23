@@ -82,12 +82,14 @@ def test_removed_runtime_apps_only_remain_available_through_explicit_legacy_shim
     assert "apps.selenium" not in settings_apps.LOCAL_APPS
     assert "apps.socials" not in settings_apps.LOCAL_APPS
     assert "apps.survey" not in settings_apps.LOCAL_APPS
+
+    assert settings_apps.MIGRATION_MODULES["selenium"] == "apps.selenium.migrations"
+    assert settings_apps.MIGRATION_MODULES["socials"] == "apps.socials.migrations"
+
     assert (
         "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig"
         in settings_apps.LEGACY_MIGRATION_APPS
     )
-    assert settings_apps.MIGRATION_MODULES["selenium"] == "apps.selenium.migrations"
-    assert settings_apps.MIGRATION_MODULES["socials"] == "apps.socials.migrations"
     assert (
         "apps._legacy.selenium_migration_only.apps.SeleniumMigrationOnlyConfig"
         in settings_apps.LEGACY_MIGRATION_APPS

@@ -1,3 +1,4 @@
+import argparse
 from io import StringIO
 from pathlib import Path
 
@@ -5,6 +6,18 @@ import pytest
 from django.core.management.base import CommandError
 
 from apps.playwright.management.commands.preview import Command
+
+
+def test_add_arguments_defaults_to_playwright_then_selenium_backend() -> None:
+    """Preview CLI should keep Selenium as the default fallback backend."""
+
+    command = Command()
+    parser = argparse.ArgumentParser()
+
+    command.add_arguments(parser)
+    options = parser.parse_args([])
+
+    assert options.backend == "playwright,selenium"
 
 
 def test_handle_reports_backend_failures_without_name_error(monkeypatch) -> None:

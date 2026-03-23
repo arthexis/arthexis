@@ -29,7 +29,7 @@ ENGINE_TO_SELENIUM_BROWSER = {
     "firefox": "firefox",
 }
 SUPPORTED_BACKENDS = ("playwright", "selenium")
-DEFAULT_BACKENDS = ("playwright",)
+DEFAULT_BACKENDS = ("playwright", "selenium")
 
 
 class Command(BaseCommand):
@@ -70,8 +70,8 @@ class Command(BaseCommand):
             default=",".join(DEFAULT_BACKENDS),
             help=(
                 "Comma-separated capture backends in fallback order. "
-                "Playwright is the primary backend; Selenium remains an optional fallback "
-                "(playwright,selenium)."
+                "Playwright is the primary backend and Selenium remains the default "
+                "fallback (playwright,selenium)."
             ),
         )
         parser.add_argument(

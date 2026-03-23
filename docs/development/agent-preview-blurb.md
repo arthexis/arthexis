@@ -10,6 +10,7 @@ When a UI/admin change is made, run the in-repo preview tool:
 
 Requirements:
 - Preview creates and deletes a temporary admin account automatically unless `--no-login` is passed.
+- Use the default backend fallback order unless troubleshooting so Selenium still retries after a Playwright runtime failure.
 - Use default engine fallback order (chromium then firefox) unless troubleshooting.
 - Report the generated image diagnostics line (brightness/white ratio/mostly_white).
 - If `mostly_white=True`, treat the preview as suspicious and investigate before finalizing.
