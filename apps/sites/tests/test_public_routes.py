@@ -235,6 +235,21 @@ def test_operator_interface_notice_keeps_port_for_unmanaged_site(client, setting
     assert "wss://example-unmanaged.test:8443/&lt;charge_point_id&gt;/" in response.content.decode()
 
 
+def test_operator_interface_notice_gracefully_handles_out_of_range_host_port(client, settings):
+    """Regression: operator notice should not raise when host header contains an out-of-range port."""
+
+    settings.ALLOWED_HOSTS = ["testserver", "example.test"]
+
+    response = client.get(
+        reverse("pages:operator-interface-notice"),
+        HTTP_HOST="example.test:99999",
+    )
+
+    assert response.status_code == 200
+    assert "ws://example.test:99999/&lt;charge_point_id&gt;/" in response.content.decode()
+
+
+
 def test_operator_interface_notice_page_is_get_only(client):
     """Operator notice page should reject non-GET requests."""
 

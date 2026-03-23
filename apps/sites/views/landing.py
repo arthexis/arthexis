@@ -55,7 +55,10 @@ def _format_operator_ws_endpoint_host(request, site) -> str:
     raw_host = request.get_host()
     parsed = urlsplit(f"//{raw_host}")
     hostname = parsed.hostname
-    port = parsed.port
+    try:
+        port = parsed.port
+    except ValueError:
+        return raw_host
 
     if hostname is None:
         return raw_host
