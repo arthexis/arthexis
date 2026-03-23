@@ -1,13 +1,10 @@
-import uuid
-
 from django.db import migrations, models
-from django.utils.text import slugify
 
 
 def populate_videodevice_names(apps, schema_editor):
     """Defer video-device normalization to the release transform pipeline."""
 
-    del apps, schema_editor, slugify, uuid
+    del apps, schema_editor
 
 
 class Migration(migrations.Migration):
