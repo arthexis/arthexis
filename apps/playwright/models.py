@@ -11,7 +11,6 @@ from django.conf import settings
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
-from django.utils.module_loading import import_string
 from django.utils.translation import gettext_lazy as _
 
 from apps.content.models import ContentSample
@@ -21,7 +20,6 @@ from apps.core.models import Ownable
 from apps.core.ui import has_graphical_display
 from apps.features.utils import is_suite_feature_enabled
 from apps.nodes.feature_detection import is_feature_active_for_node
-from apps.sigils.sigil_resolver import resolve_sigils
 from .playwright import normalize_playwright_cookie
 
 if TYPE_CHECKING:
@@ -238,73 +236,6 @@ class PlaywrightBrowser(Entity):
             playwright.stop()
             raise
         return PlaywrightDriver(playwright=playwright, browser=browser, context=context, page=page)
-
-
-class PlaywrightScript(Entity):
-    """Script that can drive a Playwright browser profile."""
-
-    name = models.CharField(max_length=100, unique=True)
-    description = models.TextField(blank=True)
-    start_url = models.URLField(blank=True)
-    script = models.TextField(blank=True, help_text="Inline Python to execute with the browser available as `browser`.")
-    python_path = models.CharField(max_length=255, blank=True, help_text="Dotted path to callable accepting the browser.")
-
-    objects = EntityManager()
-
-    class Meta:
-        verbose_name = _("Playwright Script")
-        verbose_name_plural = _("Playwright Scripts")
-
-    def __str__(self) -> str:  # pragma: no cover
-        return self.name
-
-    def _resolved_body(self, *, current=None) -> str:
-        return resolve_sigils(self.script or "", current=current)
-
-    def _resolved_start_url_and_body(self, *, current=None) -> tuple[str, str]:
-        start_url = resolve_sigils(self.start_url or "", current=current).strip()
-        resolved_body = self._resolved_body(current=current)
-        body = resolved_body.strip()
-        for idx, raw_line in enumerate(resolved_body.splitlines()):
-            stripped = raw_line.strip()
-            if not stripped:
-                continue
-            if stripped.startswith(("http://", "https://")):
-                if not start_url:
-                    start_url = stripped
-                body = "\n".join(resolved_body.splitlines()[idx + 1 :]).strip()
-            break
-        return start_url, body
-
-    def _load_callable(self, *, current=None):
-        path = resolve_sigils(self.python_path or "", current=current).strip()
-        if not path:
-            return None
-        return import_string(path)
-
-    def execute(self, browser: PlaywrightBrowser | None = None, *, current=None):
-        """Execute this script against the selected browser profile."""
-
-        _ensure_playwright_runtime_enabled()
-
-        active_browser = browser or PlaywrightBrowser.default()
-        if active_browser is None:
-            raise PlaywrightBrowser.DoesNotExist("No default Playwright browser configured.")
-        driver = active_browser.create_driver()
-        try:
-            start_url, body = self._resolved_start_url_and_body(current=current)
-            if start_url:
-                driver.get(start_url)
-            callback = self._load_callable(current=current)
-            if callback is not None:
-                callback(driver, script=self)
-                return
-            if body:
-                globals_map = {"browser": driver, "driver": driver, "script": self}
-                compiled = compile(body, f"<PlaywrightScript {self.name}>", "exec")
-                exec(compiled, globals_map, globals_map)
-        finally:
-            driver.quit()
 
 
 class SessionCookie(Ownable):
