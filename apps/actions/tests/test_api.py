@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 
 from apps.actions.models import DashboardAction, StaffTask
 from apps.actions.staff_tasks import ensure_default_staff_tasks_exist, visible_staff_tasks_for_user
+from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME
 from apps.groups.models import SecurityGroup
 
 

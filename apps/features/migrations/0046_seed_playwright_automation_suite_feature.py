@@ -18,12 +18,11 @@ def seed_playwright_automation_suite_feature(apps, schema_editor):
             "display": "Playwright Automation",
             "summary": (
                 "Enable Playwright runtime automation entry points used by admin actions, "
-                "script execution, and scheduled screenshot workers."
+                "browser launch checks and scheduled screenshot workers."
             ),
             "is_enabled": True,
             "admin_requirements": (
-                "Run Playwright browser tests, execute scripts, and trigger screenshot schedules "
-                "from Django admin."
+                "Run Playwright browser tests and trigger screenshot schedules from Django admin."
             ),
             "service_requirements": (
                 "Allow Playwright celery tasks and runtime launchers to execute when global "
@@ -31,12 +30,10 @@ def seed_playwright_automation_suite_feature(apps, schema_editor):
             ),
             "admin_views": [
                 "admin:playwright_playwrightbrowser_changelist",
-                "admin:playwright_playwrightscript_changelist",
                 "admin:playwright_websitescreenshotschedule_changelist",
             ],
             "service_views": [
                 "apps.playwright.models.PlaywrightBrowser.create_driver",
-                "apps.playwright.models.PlaywrightScript.execute",
                 "apps.playwright.models.execute_website_screenshot_schedule",
                 "apps.tasks.tasks.run_scheduled_website_screenshots",
             ],
@@ -48,13 +45,11 @@ def seed_playwright_automation_suite_feature(apps, schema_editor):
             "metadata": {
                 "runtime_paths": [
                     "apps.playwright.models.PlaywrightBrowser.create_driver",
-                    "apps.playwright.models.PlaywrightScript.execute",
                     "apps.playwright.models.schedule_pending_website_screenshots",
                     "apps.tasks.tasks.run_scheduled_website_screenshots",
                 ],
                 "admin_paths": [
                     "admin:playwright_playwrightbrowser_changelist",
-                    "admin:playwright_playwrightscript_changelist",
                     "admin:playwright_websitescreenshotschedule_changelist",
                 ],
                 "node_feature_requirements": [

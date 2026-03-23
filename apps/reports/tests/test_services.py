@@ -150,6 +150,9 @@ def test_archiving_legacy_reports_clears_schedule_state():
         schedule_interval_minutes=30,
         next_scheduled_run_at=timezone.now(),
     )
+    SQLReport.objects.filter(pk=report.pk).update(
+        report_type=SQLReport.ReportType.LEGACY_ARCHIVED,
+    )
 
     migration.archive_sql_reports(django_apps, None)
     report.refresh_from_db()

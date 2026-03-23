@@ -53,9 +53,8 @@ def seed_llm_summary_suite_feature(apps, schema_editor):
         "protocol_coverage": {},
         "metadata": {
             "parameters": {
+                "backend": "deterministic",
                 "model_path": "",
-                "model_command": "",
-                "timeout_seconds": "240",
             }
         },
     }

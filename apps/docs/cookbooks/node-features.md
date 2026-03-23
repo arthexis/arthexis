@@ -68,7 +68,7 @@ Playwright execution now uses **two gates**:
 
 An engine can run only when both gates are open. Practical effects:
 
-- If `playwright-automation` is disabled, admin actions, script execution, and scheduled screenshot celery tasks short-circuit globally.
+- If `playwright-automation` is disabled, browser launch checks, admin screenshot actions, and scheduled screenshot celery tasks short-circuit globally.
 - If `playwright-automation` is enabled but a specific `playwright-browser-*` node feature is disabled, that engine is rejected on the local node.
 - Website screenshot schedules still evaluate engine fallbacks, but only among engines currently active for the local node.
 

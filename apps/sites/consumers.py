@@ -6,16 +6,21 @@ from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.apps import apps
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.cache import cache
+from django.core.exceptions import ObjectDoesNotExist
+from django.http.request import split_domain_port
 from django.utils import timezone
 from django.utils.translation import gettext
 
 from apps.chats.models import ChatMessage, ChatSession
-from apps.features.utils import is_pages_chat_runtime_enabled
 from apps.core.channel_metrics import websocket_connected, websocket_disconnected
-
+from apps.features.utils import (
+    is_pages_chat_runtime_enabled,
+    is_suite_feature_enabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +35,9 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
     group_name: str = ""
 
     async def connect(self):
-        if not await self._is_pages_chat_runtime_enabled():
-            await self.close()
+        user = self.scope.get("user")
+        if not await self._is_chat_access_allowed(user):
+            await self.close(code=4403)
             return
         scope_session = self.scope.get("session")
         if scope_session is None:
@@ -40,7 +46,6 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
         if not scope_session.session_key:
             await database_sync_to_async(scope_session.save)()
         self.visitor_key = scope_session.session_key
-        user = self.scope.get("user")
         requested_uuid = self._requested_session_uuid()
         self.session = await self._resolve_session(requested_uuid, user)
         if self.session is None:
@@ -83,7 +88,11 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
                     self.group_name,
                     {"type": "chat.message", "payload": payload},
                 )
-        elif event_type == "close" and self.scope.get("user") and self.scope["user"].is_staff:
+        elif (
+            event_type == "close"
+            and self.scope.get("user")
+            and self.scope["user"].is_staff
+        ):
             await database_sync_to_async(self.session.close)()
             await self.channel_layer.group_send(
                 self.group_name,
@@ -226,11 +235,55 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             the visitor chat runtime to accept websocket connections.
         """
 
-        return await database_sync_to_async(is_pages_chat_runtime_enabled)(default=False)
+        return await database_sync_to_async(is_pages_chat_runtime_enabled)(
+            default=False
+        )
 
     async def _resolve_session(self, requested_uuid: str | None, user):
         return await database_sync_to_async(self._resolve_session_sync)(
             requested_uuid, user
+        )
+
+    async def _is_chat_access_allowed(self, user) -> bool:
+        return await database_sync_to_async(self._is_chat_access_allowed_sync)(user)
+
+    def _is_chat_access_allowed_sync(self, user) -> bool:
+        """Return whether the current websocket user may access public chat.
+
+        Parameters:
+            user: User-like object attached to the websocket scope.
+
+        Returns:
+            bool: ``True`` when deployment, site, or user eligibility rules allow
+            the socket to connect.
+        """
+
+        if not getattr(settings, "PAGES_CHAT_ENABLED", False):
+            return False
+        if not is_suite_feature_enabled("staff-chat-bridge", default=False):
+            return False
+
+        user_is_authenticated = bool(getattr(user, "is_authenticated", False))
+        user_has_pk = getattr(user, "pk", None) is not None
+        user_is_staff = bool(getattr(user, "is_staff", False))
+        user_is_superuser = bool(getattr(user, "is_superuser", False))
+        staff_chat_bridge_allowed = user_is_authenticated and (
+            user_is_staff or user_is_superuser
+        )
+
+        site_public_chat_enabled = bool(
+            getattr(self._current_site(), "enable_public_chat", False)
+        )
+        user_chat_opt_in = False
+        if user_is_authenticated and user_has_pk:
+            try:
+                profile = user.get_profile(apps.get_model("users", "ChatProfile"))
+            except (LookupError, ObjectDoesNotExist, AttributeError):
+                profile = None
+            user_chat_opt_in = bool(profile and profile.contact_via_chat)
+
+        return bool(
+            site_public_chat_enabled or user_chat_opt_in or staff_chat_bridge_allowed
         )
 
     def _resolve_session_sync(self, requested_uuid: str | None, user):
@@ -274,7 +327,9 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
                 visitor_key=self.visitor_key,
             )
         updates: list[str] = []
-        if not staff and (not session.visitor_key or session.visitor_key != self.visitor_key):
+        if not staff and (
+            not session.visitor_key or session.visitor_key != self.visitor_key
+        ):
             session.visitor_key = self.visitor_key
             updates.append("visitor_key")
         if session.site_id is None and site is not None:
@@ -286,10 +341,52 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
         return session
 
     def _current_site(self):
+        """Return the websocket's resolved site, preferring the socket host header.
+
+        Returns:
+            Site | None: Matching site for the websocket host, or the default site
+            when the host is unavailable.
+        """
+
+        host = self._scope_host()
+        if host:
+            site = Site.objects.filter(domain__iexact=host).first()
+            if site is not None:
+                return site
         try:
             return Site.objects.get_current()
         except Exception:  # pragma: no cover - Site configuration missing
             return None
+
+    def _scope_host(self) -> str:
+        """Return the normalized host name from the websocket scope.
+
+        Returns:
+            str: Host name without any port suffix, or an empty string when the
+            scope does not provide a usable host value.
+        """
+
+        headers = self.scope.get("headers") or []
+        for key, value in headers:
+            if key != b"host":
+                continue
+            try:
+                raw_host = value.decode("latin1")
+            except UnicodeDecodeError:
+                return ""
+            host, _port = split_domain_port(raw_host)
+            return (host or "").strip().lower()
+
+        server = self.scope.get("server")
+        if not server:
+            return ""
+        host = server[0]
+        if isinstance(host, bytes):
+            try:
+                host = host.decode("latin1")
+            except UnicodeDecodeError:
+                return ""
+        return str(host).strip().lower()
 
     def _requested_session_uuid(self) -> str | None:
         raw_query = self.scope.get("query_string", b"")
