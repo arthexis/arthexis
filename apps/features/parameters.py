@@ -69,17 +69,11 @@ FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]]
             default="",
         ),
         FeatureParameterDefinition(
-            key="model_command",
-            label=_("Model command"),
-            help_text=_("Optional command used to invoke the local summary model."),
-            default="",
-        ),
-        FeatureParameterDefinition(
-            key="timeout_seconds",
-            label=_("Model timeout (seconds)"),
-            help_text=_("Prompt timeout used when invoking the local summary model command."),
-            choices=tuple((str(value), str(value)) for value in (60, 120, 180, 240, 300, 600)),
-            default="240",
+            key="backend",
+            label=_("Summary backend"),
+            help_text=_("Select the fixed in-process backend used for LCD summaries."),
+            choices=(("deterministic", _("Deterministic built-in summarizer")),),
+            default="deterministic",
         ),
     ),
     "celery-workers": (

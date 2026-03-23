@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 LCD_COLUMNS = 16
 LCD_SUMMARY_FRAME_COUNT = 10
-DEFAULT_PROMPT_TIMEOUT = 240
 DEFAULT_MODEL_DIR = Path(settings.BASE_DIR) / "work" / "llm" / "lcd-summary"
 DEFAULT_MODEL_FILE = "MODEL.README"
 
@@ -44,6 +43,8 @@ class LogChunk:
 
 
 def get_summary_config() -> LLMSummaryConfig:
+    """Return the singleton LCD summary configuration record."""
+
     config, _created = LLMSummaryConfig.objects.get_or_create(
         slug="lcd-log-summary",
         defaults={"display": "LCD Log Summary"},
@@ -68,12 +69,16 @@ def _resolve_model_path(config: LLMSummaryConfig) -> Path:
 
 
 def resolve_model_path(config: LLMSummaryConfig) -> Path:
+    """Return the effective local model directory for ``config``."""
+
     return _resolve_model_path(config)
 
 
 def ensure_local_model(
     config: LLMSummaryConfig, *, preferred_path: str | Path | None = None
 ) -> Path:
+    """Ensure the local summary artifact directory exists and record it on ``config``."""
+
     if preferred_path:
         model_dir = Path(preferred_path)
     else:
@@ -244,34 +249,6 @@ def render_lcd_payload(subject: str, body: str) -> str:
     return render_lcd_lock_file(subject=subject, body=body)
 
 
-def _summary_command() -> str | None:
-    """Return the effective local model command from suite, config, or settings."""
-
-    suite_command = get_feature_parameter(LLM_SUMMARY_SUITE_FEATURE_SLUG, "model_command", fallback="")
-    if suite_command:
-        return suite_command
-
-    config = get_summary_config()
-    if config.model_command:
-        return config.model_command
-
-    configured = getattr(settings, "LLM_SUMMARY_COMMAND", "")
-    return configured or None
-
-
-def _summary_timeout_seconds() -> int:
-    """Return the effective prompt timeout for summary generation."""
-
-    suite_timeout = get_feature_parameter(LLM_SUMMARY_SUITE_FEATURE_SLUG, "timeout_seconds", fallback="")
-    if suite_timeout:
-        try:
-            return max(int(suite_timeout), 1)
-        except ValueError:
-            logger.warning("Invalid llm-summary-suite timeout_seconds value: %s", suite_timeout)
-
-    return int(getattr(settings, "LLM_SUMMARY_TIMEOUT", DEFAULT_PROMPT_TIMEOUT))
-
-
 def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -> str:
     """Generate LCD log summary output and persist latest run metadata."""
 
@@ -315,10 +292,7 @@ def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -
         return "skipped:no-logs"
 
     prompt = build_summary_prompt(compacted_logs, now=now)
-    summarizer = LocalLLMSummarizer(
-        command=_summary_command(),
-        timeout=_summary_timeout_seconds(),
-    )
+    summarizer = LocalLLMSummarizer()
     output = summarizer.summarize(prompt)
     screens = normalize_screens(parse_screens(output))
 

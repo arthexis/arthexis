@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import logging
-import shlex
-import subprocess
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -237,34 +235,18 @@ def validate_reference_links() -> int:
 
 
 class LocalLLMSummarizer:
-    def __init__(
-        self, *, command: str | None = None, timeout: int = DEFAULT_PROMPT_TIMEOUT
-    ):
-        self.command = command
-        self.timeout = timeout
+    """Deterministic in-process summarizer used for LCD log rotations."""
+
+    def __init__(self) -> None:
+        """Initialize the fixed summarizer adapter."""
 
     def summarize(self, prompt: str) -> str:
-        if not self.command:
-            return self._fallback(prompt)
-        try:
-            result = subprocess.run(
-                shlex.split(self.command),
-                input=prompt,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout,
-                check=False,
-                shell=False,
-            )
-        except Exception:
-            logger.exception("Failed to run local LLM command")
-            return self._fallback(prompt)
-        if result.returncode != 0:
-            logger.warning("Local LLM command returned %s", result.returncode)
-            return self._fallback(prompt)
-        return result.stdout.strip()
+        """Return a deterministic LCD summary for ``prompt`` without subprocesses."""
+
+        return self._fallback(prompt)
 
     def _fallback(self, prompt: str) -> str:
+        """Build a repeatable screen list from compacted prompt log lines."""
         log_lines: list[str] = []
         in_logs = False
         for line in prompt.splitlines():
@@ -274,7 +256,7 @@ class LocalLLMSummarizer:
             if in_logs and line.strip():
                 log_lines.append(line)
         sample = (
-            log_lines[-20:]
+            [line for line in log_lines if not (line.startswith("[") and line.endswith("]"))][-20:]
             if log_lines
             else [line for line in prompt.splitlines() if line]
         )
