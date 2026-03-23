@@ -284,6 +284,26 @@ def test_cp_simulator_accepts_ipv6_host_port(logged_in_client, fake_simulate):
     assert params["ws_port"] == 9001
 
 
+def test_cp_simulator_preserves_unbracketed_ipv6_without_port(
+    logged_in_client, fake_simulate
+):
+    """Regression: plain IPv6 literals are not split into host and port."""
+
+    payload = {
+        "simulator_slot": "1",
+        "host": "2001:db8::abcd:1",
+        "cp_path": "CP-IPV6-PLAIN",
+        "serial_number": "SERIAL-IPV6-PLAIN",
+    }
+
+    response = logged_in_client.post(reverse("ocpp:cp-simulator"), data=payload)
+
+    assert response.status_code == 200
+    params = get_simulator_state(cp=1, refresh_file=True)["params"]
+    assert params["host"] == "2001:db8::abcd:1"
+    assert params["ws_port"] is None
+
+
 def test_cp_simulator_form_prefers_default_simulator_host(logged_in_client):
     Simulator.objects.create(
         default=True,

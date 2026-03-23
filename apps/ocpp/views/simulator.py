@@ -187,6 +187,12 @@ def cp_simulator(request):
         if not host_input:
             return default_host, default_params["ws_port"]
 
+        try:
+            ipaddress.IPv6Address(host_input)
+            return host_input, None
+        except ipaddress.AddressValueError:
+            pass
+
         if host_input.startswith("["):
             closing_bracket = host_input.find("]")
             if closing_bracket > 0:
@@ -210,15 +216,6 @@ def cp_simulator(request):
                 return final_host, int(parsed_port)
             except (TypeError, ValueError):
                 return final_host, None
-
-        if ":" in host_input and host_input.count(":") >= 2:
-            ipv6_host, separator, maybe_port = host_input.rpartition(":")
-            if separator and maybe_port:
-                try:
-                    ipaddress.IPv6Address(ipv6_host)
-                    return ipv6_host, int(maybe_port)
-                except (ipaddress.AddressValueError, TypeError, ValueError):
-                    return final_host, None
 
         if parsed_port is None:
             return final_host, None
