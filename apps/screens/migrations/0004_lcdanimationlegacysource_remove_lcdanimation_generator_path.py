@@ -7,7 +7,18 @@ DEFAULT_ANIMATION_SOURCE = "scrolling_trees.txt"
 
 
 def copy_generator_paths_to_legacy_model(apps, schema_editor):
-    """Persist legacy generator references before removing the runtime field."""
+    """Persist legacy generator references before removing the runtime field.
+
+    Parameters:
+        apps: Django app registry for historical models.
+        schema_editor: Migration schema editor.
+
+    Returns:
+        None.
+
+    Raises:
+        No exceptions are raised directly.
+    """
 
     LCDAnimation = apps.get_model("screens", "LCDAnimation")
     LCDAnimationLegacySource = apps.get_model("screens", "LCDAnimationLegacySource")
@@ -23,21 +34,48 @@ def copy_generator_paths_to_legacy_model(apps, schema_editor):
             },
         )
 
+        if not animation.source_path:
+            animation.is_active = False
+            animation.save(update_fields=["is_active"])
+
 
 def restore_generator_paths_from_legacy_model(apps, schema_editor):
-    """Restore archived generator references when this migration is reversed."""
+    """Restore archived generator references when this migration is reversed.
+
+    Parameters:
+        apps: Django app registry for historical models.
+        schema_editor: Migration schema editor.
+
+    Returns:
+        None.
+
+    Raises:
+        No exceptions are raised directly.
+    """
 
     LCDAnimation = apps.get_model("screens", "LCDAnimation")
     LCDAnimationLegacySource = apps.get_model("screens", "LCDAnimationLegacySource")
 
     for legacy_source in LCDAnimationLegacySource.objects.select_related("animation"):
         LCDAnimation.objects.filter(pk=legacy_source.animation_id).update(
-            generator_path=legacy_source.generator_path
+            generator_path=legacy_source.generator_path,
+            is_active=True,
         )
 
 
 def seed_default_packaged_animation(apps, schema_editor):
-    """Ensure the built-in scrolling trees animation remains available."""
+    """Ensure the built-in scrolling trees animation remains available.
+
+    Parameters:
+        apps: Django app registry for historical models.
+        schema_editor: Migration schema editor.
+
+    Returns:
+        None.
+
+    Raises:
+        No exceptions are raised directly.
+    """
 
     LCDAnimation = apps.get_model("screens", "LCDAnimation")
     LCDAnimation.objects.update_or_create(
@@ -54,18 +92,33 @@ def seed_default_packaged_animation(apps, schema_editor):
 
 
 def unseed_default_packaged_animation(apps, schema_editor):
-    """Remove the seeded bundled animation when the migration is reversed."""
+    """Remove the seeded bundled animation when the migration is reversed.
+
+    Parameters:
+        apps: Django app registry for historical models.
+        schema_editor: Migration schema editor.
+
+    Returns:
+        None.
+
+    Raises:
+        No exceptions are raised directly.
+    """
 
     LCDAnimation = apps.get_model("screens", "LCDAnimation")
-    LCDAnimation.objects.filter(
+
+    animations = LCDAnimation.objects.filter(
         slug=DEFAULT_ANIMATION_SLUG,
         source_path=DEFAULT_ANIMATION_SOURCE,
         is_seed_data=True,
-    ).delete()
+    )
+    if animations.filter(legacy_source__isnull=False).exists():
+        return
+
+    animations.delete()
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("screens", "0003_lcdanimation"),
     ]
@@ -90,7 +143,7 @@ class Migration(migrations.Migration):
                 (
                     "animation",
                     models.OneToOneField(
-                        on_delete=models.deletion.CASCADE,
+                        on_delete=models.CASCADE,
                         related_name="legacy_source",
                         to="screens.lcdanimation",
                     ),

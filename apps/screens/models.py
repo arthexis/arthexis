@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
-from apps.screens.animations import AnimationLoadError, get_approved_animation_source, load_frames_from_file
+from apps.screens.animations import AnimationLoadError, load_frames_from_file
 
 
 class DeviceScreen(Entity):
@@ -23,21 +23,29 @@ class DeviceScreen(Entity):
     )
     columns = models.PositiveSmallIntegerField(
         default=0,
-        help_text=_("Text columns for character displays or pixel width for matrix screens."),
+        help_text=_(
+            "Text columns for character displays or pixel width for matrix screens."
+        ),
     )
     rows = models.PositiveSmallIntegerField(
         default=0,
-        help_text=_("Text rows for character displays or pixel height for matrix screens."),
+        help_text=_(
+            "Text rows for character displays or pixel height for matrix screens."
+        ),
     )
     resolution_width = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text=_("Pixel width for graphical displays when the resolution differs from columns."),
+        help_text=_(
+            "Pixel width for graphical displays when the resolution differs from columns."
+        ),
     )
     resolution_height = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text=_("Pixel height for graphical displays when the resolution differs from rows."),
+        help_text=_(
+            "Pixel height for graphical displays when the resolution differs from rows."
+        ),
     )
     min_refresh_ms = models.PositiveIntegerField(
         default=MIN_REFRESH_MS,
@@ -123,7 +131,9 @@ class PixelScreen(DeviceScreen):
     )
     row_stride = models.PositiveIntegerField(
         default=0,
-        help_text=_("Optional row stride in bytes; 0 defaults to width * bytes_per_pixel."),
+        help_text=_(
+            "Optional row stride in bytes; 0 defaults to width * bytes_per_pixel."
+        ),
     )
 
     class Meta(DeviceScreen.Meta):
@@ -131,7 +141,11 @@ class PixelScreen(DeviceScreen):
         verbose_name_plural = _("Pixel Screens")
 
     def update_pixels(
-        self, buffer: bytes | bytearray | memoryview | Sequence[Sequence[Any]], *, received_at=None, save: bool = True
+        self,
+        buffer: bytes | bytearray | memoryview | Sequence[Sequence[Any]],
+        *,
+        received_at=None,
+        save: bool = True,
     ) -> bool:
         """Persist a pixel buffer when within the refresh window."""
 
@@ -184,11 +198,16 @@ class LCDAnimation(Entity):
         super().clean()
 
         if not self.source_path:
-            raise ValidationError({"source_path": _("Provide a packaged animation file for the animation.")})
+            raise ValidationError(
+                {
+                    "source_path": _(
+                        "Provide a packaged animation file for the animation."
+                    )
+                }
+            )
 
         try:
-            approved_path = get_approved_animation_source(self.source_path)
-            load_frames_from_file(approved_path.name)
+            load_frames_from_file(self.source_path)
         except AnimationLoadError as exc:
             raise ValidationError({"source_path": str(exc)}) from exc
 
