@@ -25,8 +25,8 @@ python scripts/generate_third_party_licenses.py
 | `billiard` | `billiard==4.2.4` | BSD | [link](https://github.com/celery/billiard) |
 | `black` | `black==25.12.0` | Unknown | [link](https://pypi.org/project/black/) |
 | `bleach` | `bleach==6.3.0` | Apache Software License | [link](https://github.com/mozilla/bleach) |
-| `boto3` | `boto3==1.36.23` | Apache-2.0 | [link](https://github.com/boto/boto3) |
-| `botocore` | `botocore==1.36.23` | Apache-2.0 | [link](https://github.com/boto/botocore) |
+| `boto3` | `boto3==1.42.73` | Apache-2.0 | [link](https://github.com/boto/boto3) |
+| `botocore` | `botocore==1.42.73` | Apache-2.0 | [link](https://github.com/boto/botocore) |
 | `cbor2` | `cbor2==5.7.1` | Unknown | [link](https://pypi.org/project/cbor2/) |
 | `celery` | `celery==5.5.3` | BSD-3-Clause | [link](https://docs.celeryq.dev/) |
 | `certifi` | `certifi==2025.11.12` | MPL-2.0 | [link](https://github.com/certifi/python-certifi) |
@@ -122,7 +122,7 @@ python scripts/generate_third_party_licenses.py
 | `rfc3986` | `rfc3986==2.0.0` | Apache 2.0 | [link](https://rfc3986.readthedocs.io) |
 | `rich` | `rich==14.2.0` | MIT | [link](https://github.com/Textualize/rich) |
 | `RPi.GPIO` | `RPi.GPIO==0.7.1` | MIT | [link](https://sourceforge.net/projects/raspberry-gpio-python/) |
-| `s3transfer` | `s3transfer==0.11.1` | Apache License 2.0 | [link](https://github.com/boto/s3transfer) |
+| `s3transfer` | `s3transfer==0.16.0` | Apache License 2.0 | [link](https://github.com/boto/s3transfer) |
 | `SecretStorage` | `SecretStorage==3.5.0` | Unknown | [link](https://github.com/mitya57/secretstorage) |
 | `service-identity` | `service-identity==24.2.0` | MIT License | [link](https://pypi.org/project/service-identity/) |
 | `setuptools` | `setuptools==80.9.0` | Unknown | [link](https://pypi.org/project/setuptools/) |
