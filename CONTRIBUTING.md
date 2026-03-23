@@ -97,7 +97,7 @@ python manage.py runserver 127.0.0.1:8888
   editor-friendly import and flow-analysis pass, while MyPy is the blocking, Django-aware
   enforcement gate for the explicitly approved rollout paths. Keep both green when touching
   shared modules.
-- Prefer clear, well-documented functions over clever shortcuts.
+- Prefer clear, lean functions over clever shortcuts. Add comments or docstrings only when they preserve important context, explain unconventional choices, or feed user-facing/generated help text.
 
 ### Documentation changes
 - Documentation lives under `docs/` and uses MkDocs.

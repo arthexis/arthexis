@@ -14,7 +14,7 @@ Use these conventions when tightening types in existing modules so MyPy gains si
 
 - Replace `Any` only when it currently blocks a useful MyPy check or obscures a stable data shape.
 - Keep aliases close to the owning module unless the same shape is shared broadly.
-- Add or refresh docstrings on touched functions and classes so the implementation and typing intent stay discoverable.
+- Add or refresh docstrings only when they materially improve discoverability, capture non-obvious typing intent, or feed user-facing/generated help text. Prefer lean code over routine explanatory boilerplate.
 - Favor incremental changes in lower-dynamic modules first, then expand app-by-app as coverage improves.
 
 - Record rollout sequencing, owned paths, and regressions in `docs/development/mypy-adoption-checklist.md` whenever MyPy coverage expands.
