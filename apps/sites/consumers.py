@@ -6,7 +6,9 @@ from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.apps import apps
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.sites.models import Site
 from django.core.cache import cache
 from django.utils import timezone
@@ -14,6 +16,7 @@ from django.utils.translation import gettext
 
 from apps.chats.models import ChatMessage, ChatSession
 from apps.core.channel_metrics import websocket_connected, websocket_disconnected
+from apps.features.utils import is_suite_feature_enabled
 
 
 logger = logging.getLogger(__name__)
@@ -29,8 +32,9 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
     group_name: str = ""
 
     async def connect(self):
-        if not getattr(settings, "PAGES_CHAT_ENABLED", False):
-            await self.close()
+        user = self.scope.get("user")
+        if not await self._is_chat_access_allowed(user):
+            await self.close(code=4403)
             return
         scope_session = self.scope.get("session")
         if scope_session is None:
@@ -39,7 +43,6 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
         if not scope_session.session_key:
             await database_sync_to_async(scope_session.save)()
         self.visitor_key = scope_session.session_key
-        user = self.scope.get("user")
         requested_uuid = self._requested_session_uuid()
         self.session = await self._resolve_session(requested_uuid, user)
         if self.session is None:
@@ -220,6 +223,36 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
     async def _resolve_session(self, requested_uuid: str | None, user):
         return await database_sync_to_async(self._resolve_session_sync)(
             requested_uuid, user
+        )
+
+    async def _is_chat_access_allowed(self, user) -> bool:
+        return await database_sync_to_async(self._is_chat_access_allowed_sync)(user)
+
+    def _is_chat_access_allowed_sync(self, user) -> bool:
+        if not getattr(settings, "PAGES_CHAT_ENABLED", False):
+            return False
+        if not is_suite_feature_enabled("staff-chat-bridge", default=False):
+            return False
+
+        user_is_authenticated = bool(getattr(user, "is_authenticated", False))
+        user_has_pk = getattr(user, "pk", None) is not None
+        user_is_staff = bool(getattr(user, "is_staff", False))
+        user_is_superuser = bool(getattr(user, "is_superuser", False))
+        staff_chat_bridge_allowed = user_is_authenticated and (user_is_staff or user_is_superuser)
+
+        site_public_chat_enabled = bool(
+            getattr(self._current_site(), "enable_public_chat", False)
+        )
+        user_chat_opt_in = False
+        if user_is_authenticated and user_has_pk:
+            try:
+                profile = user.get_profile(apps.get_model("users", "ChatProfile"))
+            except (LookupError, ObjectDoesNotExist, AttributeError):
+                profile = None
+            user_chat_opt_in = bool(profile and profile.contact_via_chat)
+
+        return bool(
+            site_public_chat_enabled or user_chat_opt_in or staff_chat_bridge_allowed
         )
 
     def _resolve_session_sync(self, requested_uuid: str | None, user):
