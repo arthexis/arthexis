@@ -7,6 +7,7 @@ from django.db import migrations
 
 FEATURE_SLUG = "llm-summary-suite"
 ARCHIVE_KEY = "legacy_model_command_audit"
+LEGACY_TIMEOUT_KEY = "legacy_timeout_seconds_audit"
 PARAMETERS_KEY = "parameters"
 
 
@@ -39,11 +40,15 @@ def archive_llm_summary_model_command(apps, schema_editor) -> None:
     metadata = _normalize_metadata(feature.metadata)
     parameters = _normalize_parameters(metadata)
     legacy_command = str(parameters.pop("model_command", "") or "").strip()
-    parameters.pop("timeout_seconds", None)
-    parameters["backend"] = str(parameters.get("backend") or "deterministic").strip() or "deterministic"
+    legacy_timeout = str(parameters.pop("timeout_seconds", "") or "").strip()
+    parameters["backend"] = (
+        str(parameters.get("backend") or "deterministic").strip() or "deterministic"
+    )
     metadata[PARAMETERS_KEY] = parameters
     if legacy_command:
         metadata[ARCHIVE_KEY] = legacy_command
+    if legacy_timeout:
+        metadata[LEGACY_TIMEOUT_KEY] = legacy_timeout
     feature.metadata = metadata
     feature.save(update_fields=["metadata", "updated_at"])
 
@@ -60,7 +65,8 @@ def restore_llm_summary_model_command(apps, schema_editor) -> None:
     metadata = _normalize_metadata(feature.metadata)
     parameters = _normalize_parameters(metadata)
     parameters.pop("backend", None)
-    parameters.setdefault("timeout_seconds", "240")
+    archived_timeout = str(metadata.pop(LEGACY_TIMEOUT_KEY, "") or "").strip()
+    parameters["timeout_seconds"] = archived_timeout or "240"
     archived_command = str(metadata.pop(ARCHIVE_KEY, "") or "").strip()
     parameters["model_command"] = archived_command
     metadata[PARAMETERS_KEY] = parameters
@@ -69,7 +75,6 @@ def restore_llm_summary_model_command(apps, schema_editor) -> None:
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("features", "0051_merge_20260321_2302"),
     ]

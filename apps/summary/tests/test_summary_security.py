@@ -103,7 +103,8 @@ def test_execute_log_summary_generation_ignores_legacy_feature_command(
 
 
 @pytest.mark.django_db
-def test_legacy_model_command_text_is_retained_only_as_audit_metadata() -> None:
+def test_model_command_is_removed_and_audit_field_is_present() -> None:
+    """Verify the executable command field is gone while audit metadata remains available."""
     config = LLMSummaryConfig.objects.create(
         slug="audit-check",
         display="Audit Check",
@@ -113,3 +114,6 @@ def test_legacy_model_command_text_is_retained_only_as_audit_metadata() -> None:
     )
 
     assert config.model_command_audit == "legacy command text"
+
+    with pytest.raises(AttributeError):
+        _ = config.model_command
