@@ -1,8 +1,18 @@
 from django.contrib import admin
 
+from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 
-from .models import GoogleCalendar
+from .models import GoogleAccount, GoogleCalendar
+
+
+@admin.register(GoogleAccount)
+class GoogleAccountAdmin(OwnableAdminMixin, EntityModelAdmin):
+    """Admin UI for Google OAuth account records used by calendar publishing."""
+
+    list_display = ("email", "user", "group", "is_enabled")
+    search_fields = ("email", "user__username", "group__name")
+    list_filter = ("is_enabled",)
 
 
 @admin.register(GoogleCalendar)

@@ -312,7 +312,7 @@ class Migration(migrations.Migration):
                 null=True,
                 on_delete=models.SET_NULL,
                 related_name="calendars",
-                to="gdrive.googleaccount",
+                to="calendars.googleaccount",
             ),
         ),
         migrations.AlterField(

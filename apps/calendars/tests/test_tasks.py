@@ -8,10 +8,9 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from apps.calendars.models import GoogleCalendar
+from apps.calendars.models import GoogleAccount, GoogleCalendar
 from apps.calendars.services import GoogleCalendarError, GoogleCalendarGateway, GoogleCalendarRequestError
 from apps.calendars.tasks import push_calendar_event
-from apps.gdrive.models import GoogleAccount
 
 
 @pytest.mark.django_db
@@ -159,3 +158,25 @@ def test_google_calendar_gateway_rejects_inverted_event_windows():
             starts_at=start,
             ends_at=start - timedelta(minutes=5),
         )
+
+
+@pytest.mark.django_db
+def test_google_account_reuses_cached_access_token_when_not_expired(monkeypatch):
+    """Calendar OAuth accounts should reuse cached tokens until expiry."""
+    user = get_user_model().objects.create_user(username="cal-user-5", password="x")
+    account = GoogleAccount.objects.create(
+        user=user,
+        email="cal5@example.com",
+        client_id="client",
+        client_secret="secret",
+        refresh_token="refresh",
+        access_token="cached-token",
+        token_expires_at=timezone.now() + timedelta(minutes=5),
+    )
+
+    def fail_post(*args, **kwargs):
+        raise AssertionError("OAuth refresh should not be called while the token is still valid")
+
+    monkeypatch.setattr(requests, "post", fail_post)
+
+    assert account.get_access_token() == "cached-token"
