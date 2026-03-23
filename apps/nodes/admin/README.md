@@ -4,7 +4,9 @@
 
 The Django admin setup for the nodes app is split across focused modules to keep the large surface area manageable:
 
-[View all Developer Documents](/docs/library/)
+[View all Developer Documents](../../../docs/index.md)
+
+> Note: this link targets the in-repo docs index for repository readers, not a runtime web route.
 
 - `forms.py` — admin-only forms such as `NodeAdminForm`, firmware/DataTransfer helpers, and NetMessage forms. All admin classes import shared forms from here rather than defining them inline.
 - `inlines.py` — inline admin configurations (currently `NodeFeatureAssignmentInline`).
@@ -16,3 +18,9 @@ The Django admin setup for the nodes app is split across focused modules to keep
 - `net_message_admin.py` — admin for `NetMessage` including quick-send tooling and resend endpoints.
 
 Import `apps.nodes.admin` (the package) to ensure all admin registrations are evaluated; `__init__.py` re-exports the registered admin classes for convenience.
+
+## License and Sponsorship
+
+This project is released under the Arthexis Contribution Reciprocity License 1.0. We treat sponsoring Arthexis and doing paid or volunteer work for the open-source dependencies behind the suite as a valid and important contribution alongside code, documentation, review, and maintenance work.
+
+If this admin package helps your work, please review the repository [`LICENSE`](../../../LICENSE) and consider sponsoring or otherwise supporting the maintainers of the dependencies that keep Arthexis running.

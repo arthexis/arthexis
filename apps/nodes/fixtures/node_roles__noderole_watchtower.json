@@ -8,7 +8,7 @@
       "acronym": "WTTW",
       "description": "Multi-User Cloud & Orchestration",
       "default_upgrade_policy": [
-        "Unstable"
+        "Stable"
       ]
     }
   }

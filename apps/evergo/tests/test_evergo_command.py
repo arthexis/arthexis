@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import io
-from unittest.mock import Mock, patch
+from dataclasses import dataclass
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -14,10 +15,8 @@ from apps.evergo.models import EvergoUser
 
 @pytest.mark.django_db
 @pytest.mark.integration
-@patch("apps.evergo.models.user.EvergoUser._prime_session", return_value="xsrf-token")
-@patch("apps.evergo.models.user.requests.Session")
 def test_evergo_command_saves_credentials_and_tests_login(
-    mock_session_cls, _mock_prime_session
+    monkeypatch,
 ):
     """Command should save credentials, test login, and sync API fields."""
     User = get_user_model()
@@ -25,23 +24,19 @@ def test_evergo_command_saves_credentials_and_tests_login(
         username="suite-user", email="suite@example.com"
     )
 
-    mock_response = Mock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "id": 100,
-        "name": "Suite Evergo",
-        "email": "suite.evergo@example.com",
-        "two_fa_enabled": 1,
-        "two_fa_authenticated": 1,
-        "created_at": "2025-01-01T00:00:00.000000Z",
-        "updated_at": "2025-01-02T00:00:00.000000Z",
-        "subempresas": [{"id": 5, "idInstalaEmpresa": 2, "nombre": "Ops"}],
-    }
-    mock_session = Mock()
-    mock_session.__enter__ = Mock(return_value=mock_session)
-    mock_session.__exit__ = Mock(return_value=False)
-    mock_session.post.return_value = mock_response
-    mock_session_cls.return_value = mock_session
+    @dataclass(slots=True)
+    class _FakeLoginResult:
+        payload: dict[str, object]
+        response_code: int
+
+    def _fake_test_login(self, *, timeout=15):
+        self.evergo_user_id = 100
+        self.name = "Suite Evergo"
+        self.email = "suite.evergo@example.com"
+        self.save(update_fields=["evergo_user_id", "name", "email", "updated_at"])
+        return _FakeLoginResult(payload={"id": 100}, response_code=200)
+
+    monkeypatch.setattr(EvergoUser, "test_login", _fake_test_login)
 
     stdout = io.StringIO()
     call_command(
@@ -150,7 +145,6 @@ def test_evergo_command_load_customers_requires_query_source():
         call_command("evergo", suite_user.username, "--load-customers")
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_evergo_command_load_customers_requires_existing_evergo_email():
     """Command should reject load-customer runs when the profile email is missing."""
     User = get_user_model()

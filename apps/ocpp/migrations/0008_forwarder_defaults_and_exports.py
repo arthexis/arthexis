@@ -2,10 +2,9 @@ from django.db import migrations, models
 
 
 def enable_forwarders_and_exports(apps, schema_editor):
-    CPForwarder = apps.get_model("ocpp", "CPForwarder")
-    Charger = apps.get_model("ocpp", "Charger")
-    CPForwarder.objects.all().update(enabled=True)
-    Charger.objects.all().update(export_transactions=True)
+    """Defer default enablement to the checkpointed release transform pipeline."""
+
+    del apps, schema_editor
 
 
 class Migration(migrations.Migration):

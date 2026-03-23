@@ -13,7 +13,7 @@ from django.utils import timezone
 from apps.evergo.models import EvergoUser
 from apps.odoo.models import OdooDeployment, OdooEmployee, OdooQuery
 from apps.odoo.sync_features import (
-    ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG,
+    ODOO_SYNC_EVERGO_USERS_PARAMETER_KEY,
     is_odoo_sync_integration_enabled,
 )
 
@@ -161,7 +161,7 @@ class Command(BaseCommand):
         """Create missing Odoo users for discovered Evergo users."""
 
         if not is_odoo_sync_integration_enabled(
-            ODOO_SYNC_EVERGO_USERS_FEATURE_SLUG, default=False
+            ODOO_SYNC_EVERGO_USERS_PARAMETER_KEY, default=False
         ):
             raise CommandError(
                 "Odoo Evergo user sync integration is disabled by suite feature toggles."

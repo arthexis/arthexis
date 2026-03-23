@@ -19,7 +19,7 @@ from apps.core.fixtures import ensure_seed_data_flags
 from apps.locals import user_data
 from utils import revision as revision_utils
 
-from ..release import Credentials, Package as ReleasePackage, RepositoryTarget
+from .. import Credentials, Package as ReleasePackage, RepositoryTarget
 from .package import Package
 
 logger = logging.getLogger(__name__)

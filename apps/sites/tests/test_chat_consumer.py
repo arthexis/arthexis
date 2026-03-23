@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from unittest import TestCase, mock
 
+from asgiref.sync import async_to_sync
 from django.core.cache import cache
 
 from apps.sites.consumers import (

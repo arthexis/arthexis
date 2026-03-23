@@ -23,7 +23,6 @@ import requests
 from packaging.version import InvalidVersion, Version
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.template.loader import get_template
@@ -33,7 +32,10 @@ from django.utils.translation import gettext as _
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.nodes.models import NetMessage, Node
-from apps.release import release as release_utils
+import apps.release as release_utils
+from apps.release import git_utils
+from apps.release.services import builder as release_builder
+from apps.release.services import uploader as release_uploader
 from apps.release.models import PackageRelease
 from apps.repos.models import GitHubToken
 from utils import revision
@@ -841,7 +843,7 @@ def _resolve_github_repository(release: PackageRelease) -> tuple[str, str]:
     parsed = _parse_github_repository(repo_url)
     if parsed:
         return parsed
-    remote_url = release_utils._git_remote_url()
+    remote_url = git_utils.git_remote_url("origin", use_push_url=True) or git_utils.git_remote_url("origin")
     if remote_url:
         parsed = _parse_github_repository(remote_url)
         if parsed:
@@ -862,7 +864,7 @@ def _ensure_release_tag(release: PackageRelease, log_path: Path) -> str:
         _append_log(log_path, f"Created git tag {tag_name}")
     else:
         _append_log(log_path, f"Git tag {tag_name} already exists")
-    release_utils._push_tag(tag_name, release.to_package())
+    release_uploader._push_tag(tag_name)
     _append_log(log_path, f"Pushed git tag {tag_name} to origin")
     return tag_name
 
@@ -1219,7 +1221,7 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
     except Exception as exc:
         sync_error = exc
 
-    if not release_utils._git_clean():
+    if not release_builder._git_clean():
         dirty_entries = _collect_dirty_files()
         files = [entry["path"] for entry in dirty_entries]
         fixture_files = [
@@ -1901,8 +1903,7 @@ PUBLISH_STEPS = [
 ]
 
 
-@staff_member_required
-def release_progress(request, pk: int, action: str):
+def release_progress_impl(request, pk: int, action: str):
     release, error_response = _get_release_or_response(request, pk, action)
     if error_response:
         return error_response
@@ -1950,13 +1951,8 @@ def release_progress(request, pk: int, action: str):
     )
 
     steps = PUBLISH_STEPS
-    total_steps = len(steps)
     step_count = ctx.get("step", 0)
-    started_flag = bool(ctx.get("started"))
-    paused_flag = bool(ctx.get("paused"))
-    error_flag = bool(ctx.get("error"))
-    done_flag = step_count >= total_steps and not error_flag
-    start_enabled = (not started_flag or paused_flag) and not done_flag and not error_flag
+    start_enabled = _is_release_start_enabled(ctx, step_count, len(steps))
 
     start_requested = bool(request.GET.get("start")) and start_enabled
     ctx, resume_requested, redirect_response = _update_publish_controls(
@@ -2031,19 +2027,8 @@ def release_progress(request, pk: int, action: str):
         _broadcast_release_message(release)
         ctx["release_net_message_sent"] = True
 
-    show_log = ctx.get("started") or step_count > 0 or done or ctx.get("error")
-    if show_log and log_path.exists():
-        log_content = log_path.read_text(encoding="utf-8")
-    else:
-        log_content = ""
-    next_step = (
-        step_count
-        if ctx.get("started")
-        and not ctx.get("paused")
-        and not done
-        and not ctx.get("error")
-        else None
-    )
+    show_log, log_content = _resolve_release_log_display(ctx, step_count, done, log_path)
+    next_step = _resolve_next_step(ctx, step_count, done)
     dirty_files = ctx.get("dirty_files")
     if dirty_files:
         next_step = None
@@ -2051,37 +2036,14 @@ def release_progress(request, pk: int, action: str):
     publish_pending = bool(ctx.get("publish_pending"))
 
     step_names = [s[0] for s in steps]
-    step_states = []
-    for index, name in enumerate(step_names):
-        if index < step_count:
-            status = "complete"
-            icon = "✅"
-            label = _("Completed")
-        elif error and index == step_count:
-            status = "error"
-            icon = "❌"
-            label = _("Failed")
-        elif paused and ctx.get("started") and index == step_count and not done:
-            status = "paused"
-            icon = "⏸️"
-            label = _("Paused")
-        elif ctx.get("started") and index == step_count and not done:
-            status = "active"
-            icon = "⏳"
-            label = _("In progress")
-        else:
-            status = "pending"
-            icon = "⬜"
-            label = _("Pending")
-        step_states.append(
-            {
-                "index": index + 1,
-                "name": name,
-                "status": status,
-                "icon": icon,
-                "label": label,
-            }
-        )
+    step_states = _build_release_step_states(
+        step_names=step_names,
+        step_count=step_count,
+        error=bool(error),
+        paused=paused,
+        started=bool(ctx.get("started")),
+        done=done,
+    )
 
     is_running = ctx.get("started") and not paused and not done and not ctx.get("error")
     resume_available = (
@@ -2122,7 +2084,163 @@ def release_progress(request, pk: int, action: str):
     dry_run_active = bool(ctx.get("dry_run"))
     dry_run_toggle_enabled = not is_running and not done and not ctx.get("error")
 
-    context = {
+    status_guidance = build_release_guidance(
+        done=done,
+        error=ctx.get("error"),
+        started=bool(ctx.get("started", False)),
+        paused=paused,
+        publish_pending=publish_pending,
+        github_token_required=bool(ctx.get("github_token_required", False)),
+        step_count=step_count,
+        total_steps=len(steps),
+    )
+
+    context = _build_release_progress_context(
+        release=release,
+        step_names=step_names,
+        step_count=step_count,
+        next_step=next_step,
+        done=done,
+        ctx=ctx,
+        log_content=log_content,
+        log_path=log_path,
+        fixtures_summary=fixtures_summary,
+        dirty_files=dirty_files,
+        restart_count=restart_count,
+        paused=paused,
+        show_log=show_log,
+        start_requested=start_requested,
+        step_states=step_states,
+        oidc_enabled=oidc_enabled,
+        pypi_credentials_missing=pypi_credentials_missing,
+        github_credentials_missing=github_credentials_missing,
+        github_token_using_stored=github_token_using_stored,
+        github_token_edit_url=github_token_edit_url,
+        is_running=is_running,
+        resume_available=resume_available,
+        can_resume=can_resume,
+        dry_run_active=dry_run_active,
+        dry_run_toggle_enabled=dry_run_toggle_enabled,
+        manual_git_push=manual_git_push,
+        manual_git_push_command=manual_git_push_command,
+        publish_pending=publish_pending,
+        status_guidance=status_guidance,
+    )
+    return _finalize_release_progress_response(
+        request=request,
+        ctx=ctx,
+        context=context,
+        session_key=session_key,
+        lock_path=lock_path,
+        done=done,
+        publish_pending=publish_pending,
+        dry_run_active=dry_run_active,
+        poll_requested=poll_requested,
+        step_count=step_count,
+        next_step=next_step,
+        paused=paused,
+    )
+
+
+def _is_release_start_enabled(ctx: dict, step_count: int, total_steps: int) -> bool:
+    started_flag = bool(ctx.get("started"))
+    paused_flag = bool(ctx.get("paused"))
+    error_flag = bool(ctx.get("error"))
+    done_flag = step_count >= total_steps and not error_flag
+    return (not started_flag or paused_flag) and not done_flag and not error_flag
+
+
+def _resolve_release_log_display(ctx: dict, step_count: int, done: bool, log_path: Path):
+    show_log = bool(ctx.get("started")) or step_count > 0 or done or bool(ctx.get("error"))
+    if show_log and log_path.exists():
+        return show_log, log_path.read_text(encoding="utf-8")
+    return show_log, ""
+
+
+def _resolve_next_step(ctx: dict, step_count: int, done: bool):
+    if ctx.get("started") and not ctx.get("paused") and not done and not ctx.get("error"):
+        return step_count
+    return None
+
+
+def _build_release_step_states(
+    *,
+    step_names: list[str],
+    step_count: int,
+    error: bool,
+    paused: bool,
+    started: bool,
+    done: bool,
+):
+    step_states = []
+    for index, name in enumerate(step_names):
+        status, icon, label = _build_release_step_state(
+            index=index,
+            step_count=step_count,
+            error=error,
+            paused=paused,
+            started=started,
+            done=done,
+        )
+        step_states.append(
+            {
+                "index": index + 1,
+                "name": name,
+                "status": status,
+                "icon": icon,
+                "label": label,
+            }
+        )
+    return step_states
+
+
+def _build_release_step_state(
+    *, index: int, step_count: int, error: bool, paused: bool, started: bool, done: bool
+):
+    if index < step_count:
+        return "complete", "✅", _("Completed")
+    if error and index == step_count:
+        return "error", "❌", _("Failed")
+    if paused and started and index == step_count and not done:
+        return "paused", "⏸️", _("Paused")
+    if started and index == step_count and not done:
+        return "active", "⏳", _("In progress")
+    return "pending", "⬜", _("Pending")
+
+
+def _build_release_progress_context(
+    *,
+    release,
+    step_names: list[str],
+    step_count: int,
+    next_step,
+    done: bool,
+    ctx: dict,
+    log_content: str,
+    log_path: Path,
+    fixtures_summary,
+    dirty_files,
+    restart_count: int,
+    paused: bool,
+    show_log: bool,
+    start_requested: bool,
+    step_states: list[dict],
+    oidc_enabled: bool,
+    pypi_credentials_missing: bool,
+    github_credentials_missing: bool,
+    github_token_using_stored: bool,
+    github_token_edit_url,
+    is_running: bool,
+    resume_available: bool,
+    can_resume: bool,
+    dry_run_active: bool,
+    dry_run_toggle_enabled: bool,
+    manual_git_push,
+    manual_git_push_command: str,
+    publish_pending: bool,
+    status_guidance,
+):
+    return {
         "release": release,
         "action": "publish",
         "steps": step_names,
@@ -2160,42 +2278,88 @@ def release_progress(request, pk: int, action: str):
         "manual_git_push_error": ctx.get("pending_git_push_error"),
         "publish_pending": publish_pending,
         "publish_workflow_url": ctx.get("publish_workflow_url", ""),
+        "status_guidance": status_guidance,
     }
+
+
+def _finalize_release_progress_response(
+    *,
+    request,
+    ctx: dict,
+    context: dict,
+    session_key: str,
+    lock_path: Path,
+    done: bool,
+    publish_pending: bool,
+    dry_run_active: bool,
+    poll_requested: bool,
+    step_count: int,
+    next_step,
+    paused: bool,
+):
     if done or ctx.get("error"):
         _store_release_context(request, session_key, ctx)
         if lock_path.exists():
             lock_path.unlink()
     else:
         _persist_release_context(request, session_key, ctx, lock_path)
+
     if publish_pending:
         poll_query = {"step": step_count, "poll": "1"}
         if dry_run_active:
             poll_query["dry_run"] = "1"
         poll_base = _clean_redirect_path(request, request.path)
         context["publish_poll_url"] = f"{poll_base}?{urlencode(poll_query)}"
+
     if poll_requested:
-        refresh_query = {}
-        if not done and not ctx.get("error"):
-            refresh_query["step"] = step_count
-        if dry_run_active:
-            refresh_query["dry_run"] = "1"
-        refresh_base = _clean_redirect_path(request, request.path)
-        refresh_url = (
-            f"{refresh_base}?{urlencode(refresh_query)}"
-            if refresh_query
-            else refresh_base
+        return _build_release_progress_poll_response(
+            request=request,
+            ctx=ctx,
+            done=done,
+            dry_run_active=dry_run_active,
+            step_count=step_count,
+            next_step=next_step,
+            paused=paused,
+            publish_pending=publish_pending,
         )
-        return JsonResponse(
-            {
-                "done": done,
-                "error": _sanitize_release_error_message(ctx.get("error"), ctx),
-                "paused": paused,
-                "publish_pending": publish_pending,
-                "current_step": step_count,
-                "next_step": next_step,
-                "refresh_url": refresh_url,
-            }
-        )
+
+    return _render_release_progress_response(request, context)
+
+
+def _build_release_progress_poll_response(
+    *,
+    request,
+    ctx: dict,
+    done: bool,
+    dry_run_active: bool,
+    step_count: int,
+    next_step,
+    paused: bool,
+    publish_pending: bool,
+):
+    refresh_query = {}
+    if not done and not ctx.get("error"):
+        refresh_query["step"] = step_count
+    if dry_run_active:
+        refresh_query["dry_run"] = "1"
+    refresh_base = _clean_redirect_path(request, request.path)
+    refresh_url = (
+        f"{refresh_base}?{urlencode(refresh_query)}" if refresh_query else refresh_base
+    )
+    return JsonResponse(
+        {
+            "done": done,
+            "error": _sanitize_release_error_message(ctx.get("error"), ctx),
+            "paused": paused,
+            "publish_pending": publish_pending,
+            "current_step": step_count,
+            "next_step": next_step,
+            "refresh_url": refresh_url,
+        }
+    )
+
+
+def _render_release_progress_response(request, context: dict):
     template = _ensure_template_name(
         get_template("core/release_progress.html"),
         "core/release_progress.html",
@@ -2211,7 +2375,6 @@ def release_progress(request, pk: int, action: str):
             using=getattr(getattr(template, "engine", None), "name", None),
         )
     response = HttpResponse(content)
-    # Intentionally mimic Django test Client response attributes for introspection.
     response.context = context
     response.templates = [template]
     return response
@@ -2226,3 +2389,79 @@ def _dedupe_preserve_order(values):
         seen.add(value)
         result.append(value)
     return result
+
+
+def build_release_guidance(
+    *,
+    done: bool,
+    error: str | None,
+    started: bool,
+    paused: bool,
+    publish_pending: bool,
+    github_token_required: bool,
+    step_count: int,
+    total_steps: int,
+) -> dict[str, str]:
+    """Build user-facing status guidance for the release progress screen."""
+
+    if done:
+        return {
+            "tone": "success",
+            "title": _("Publish completed"),
+            "message": _(
+                "All release steps finished successfully. You can now share the package URLs below."
+            ),
+        }
+
+    if error:
+        return {
+            "tone": "error",
+            "title": _("Publish needs attention"),
+            "message": _(
+                "Resolve the error below, then continue to retry the current step."
+            ),
+        }
+
+    if not started:
+        return {
+            "tone": "info",
+            "title": _("Ready to publish"),
+            "message": _(
+                "Review credentials and click Start Publish when you are ready."
+            ),
+        }
+
+    if paused and github_token_required:
+        return {
+            "tone": "warning",
+            "title": _("GitHub token required"),
+            "message": _(
+                "Publishing is paused until a GitHub token is provided for this session."
+            ),
+        }
+
+    if paused and publish_pending:
+        return {
+            "tone": "warning",
+            "title": _("Waiting for GitHub Actions"),
+            "message": _(
+                "The publish workflow is still running on GitHub. This page will keep checking automatically."
+            ),
+        }
+
+    if paused:
+        return {
+            "tone": "warning",
+            "title": _("Publishing paused"),
+            "message": _("Press Continue Publish to proceed from the current step."),
+        }
+
+    return {
+        "tone": "info",
+        "title": _("Publishing in progress"),
+        "message": _("Step %(current)s of %(total)s is running.")
+        % {
+            "current": min(step_count + 1, total_steps),
+            "total": total_steps,
+        },
+    }

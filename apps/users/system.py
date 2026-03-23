@@ -6,6 +6,8 @@ from typing import Callable, Iterator, Tuple
 
 from django.contrib.auth import get_user_model
 
+from apps.groups.security import ensure_default_staff_groups
+
 
 SystemUserCheck = Tuple[str, str, Callable[[object], bool]]
 
@@ -85,6 +87,9 @@ def ensure_system_user(*, record_updates: bool = False):
 
     if updates:
         user.save(update_fields=sorted(updates))
+
+    added_groups = ensure_default_staff_groups(user)
+    updates.update(f"group:{name}" for name in added_groups)
 
     if record_updates:
         return user, updates

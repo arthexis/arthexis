@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
-import ssl
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -14,6 +13,8 @@ from typing import Iterable, Iterator, MutableMapping
 from django.db.models import Q
 from django.utils import timezone
 from websocket import WebSocketException, create_connection
+
+from apps.ocpp.forwarder_feature import ocpp_forwarder_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -90,19 +91,8 @@ class Forwarder:
     @staticmethod
     def _connection_options(node, url: str) -> dict[str, object]:
         """Return websocket-client connection options for ``url`` and ``node``.
-
-        Trusted nodes are already authenticated in the Arthexis node graph, so
-        forwarding sessions to them may skip certificate verification to support
-        private PKI or self-signed deployments.
         """
 
-        if url.startswith("wss://") and getattr(node, "trusted", False):
-            return {
-                "sslopt": {
-                    "cert_reqs": ssl.CERT_NONE,
-                    "check_hostname": False,
-                }
-            }
         return {}
 
     @staticmethod
@@ -170,6 +160,9 @@ class Forwarder:
         Returns the created session or ``None`` when all connection attempts fail.
         """
 
+        if not ocpp_forwarder_enabled(default=True):
+            return None
+
         if getattr(charger, "pk", None) is None:
             return None
 
@@ -215,6 +208,10 @@ class Forwarder:
 
     def keepalive_sessions(self, *, idle_seconds: int = 60) -> int:
         """Send ping frames on idle sessions to keep forwarding sockets open."""
+
+        if not ocpp_forwarder_enabled(default=True):
+            self.clear_sessions()
+            return 0
 
         if idle_seconds <= 0:
             return 0
@@ -503,6 +500,11 @@ class Forwarder:
         from apps.nodes.models import Node
         from apps.ocpp.models import CPForwarder
         from ..models import Charger
+
+        if not ocpp_forwarder_enabled(default=True):
+            self.clear_sessions()
+            CPForwarder.objects.update_running_state(set())
+            return 0
 
         local = Node.get_local()
         if not local:

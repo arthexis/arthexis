@@ -8,20 +8,9 @@ from django.db import migrations, models
 
 
 def _link_existing_charge_points(apps, schema_editor):
-    """Create ChargingStation rows and link existing charger records."""
+    """Defer charge-point linking to the checkpointed release transform pipeline."""
 
-    Charger = apps.get_model("ocpp", "Charger")
-    ChargingStation = apps.get_model("ocpp", "ChargingStation")
-    station_ids = (
-        Charger.objects.exclude(charger_id__isnull=True)
-        .exclude(charger_id="")
-        .values_list("charger_id", flat=True)
-        .distinct()
-        .iterator(chunk_size=1000)
-    )
-    for station_id in station_ids:
-        station, _created = ChargingStation.objects.get_or_create(station_id=station_id)
-        Charger.objects.filter(charger_id=station_id).update(charging_station=station)
+    del apps, schema_editor
 
 
 def _unlink_existing_charge_points(apps, schema_editor):

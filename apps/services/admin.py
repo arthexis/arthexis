@@ -6,6 +6,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
+from .celery_workers import CELERY_WORKERS_FEATURE_SLUG, configured_worker_count
 from .lifecycle import lock_dir, read_service_name
 from .models import LifecycleService
 
@@ -17,6 +18,7 @@ class LifecycleServiceAdmin(admin.ModelAdmin):
         "slug",
         "unit_template",
         "activation",
+        "suite_feature_binding",
         "feature_slug",
         "sort_order",
     )
@@ -24,6 +26,17 @@ class LifecycleServiceAdmin(admin.ModelAdmin):
     search_fields = ("display", "slug", "unit_template", "feature_slug")
     ordering = ("sort_order", "display")
     actions = ("check_selected_statuses",)
+
+    @admin.display(description=_("Suite feature"))
+    def suite_feature_binding(self, obj: LifecycleService) -> str:
+        """Return suite feature parameter mapping shown in lifecycle service changelist."""
+
+        if obj.slug != "celery-worker":
+            return ""
+        return _("%(feature)s worker_count=%(count)s") % {
+            "feature": CELERY_WORKERS_FEATURE_SLUG,
+            "count": configured_worker_count(),
+        }
 
     def get_urls(self):
         """Expose lifecycle status reports for selected changelist rows."""
@@ -65,12 +78,16 @@ class LifecycleServiceAdmin(admin.ModelAdmin):
         for service in services:
             unit_name = service.unit_template.format(service=service_name_placeholder)
             configured = service.is_configured(service_name=service_name, lock_dir=locks)
+            suite_parameter = ""
+            if service.slug == "celery-worker":
+                suite_parameter = self.suite_feature_binding(service)
             report_rows.append(
                 {
                     "service": service,
                     "unit_name": unit_name,
                     "configured": configured,
                     "service_name": service_name,
+                    "suite_parameter": suite_parameter,
                 }
             )
 

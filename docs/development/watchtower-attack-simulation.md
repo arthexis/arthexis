@@ -14,6 +14,8 @@ This guide focuses on high-frequency, low-complexity attacks that are often seen
 
 Success means attacks are blocked or throttled, logs are generated, and the node stays available for legitimate traffic.
 
+The broader suite goal remains the same here as elsewhere: operators should rely on developed and tested defenses and integrations rather than recipe-like behaviors or custom wiring that force them into programming roles. **SIGILS** remain acceptable for straightforward defaults and basic templating where no control flow is required.
+
 ## Safety rules (required)
 
 - Run only against infrastructure you own or have written permission to test.

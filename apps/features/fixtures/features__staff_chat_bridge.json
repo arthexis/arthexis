@@ -4,15 +4,15 @@
     "fields": {
       "slug": "staff-chat-bridge",
       "display": "Staff Chat Bridge",
-      "summary": "Gates staff-facing chat bridge UI wiring for site and admin chat widgets.",
+      "summary": "Gates staff-only chat bridge and escalation affordances layered on top of the visitor chat runtime.",
       "is_enabled": true,
       "main_app": [
         "sites"
       ],
       "node_feature": null,
-      "admin_requirements": "Admin base template should only render the chat widget when this suite feature is enabled.",
-      "public_requirements": "Public base template should only render the chat widget when this suite feature is enabled.",
-      "service_requirements": "No additional backend services beyond configured pages chat socket path.",
+      "admin_requirements": "Admin and staff surfaces should only render bridge-specific chat widgets when this suite feature is enabled and Pages Chat runtime prerequisites are active.",
+      "public_requirements": "Does not enable visitor chat by itself; only controls staff bridge behavior once Pages Chat is available.",
+      "service_requirements": "Relies on the Pages Chat suite feature and deployment socket prerequisites for any live bridge activity.",
       "admin_views": [
         "admin:index"
       ],
@@ -20,11 +20,10 @@
         "pages:index"
       ],
       "service_views": [
-        "settings:PAGES_CHAT_SOCKET_PATH"
+        "apps.sites.context_processors._build_chat_context"
       ],
       "code_locations": [
         "apps/sites/context_processors.py",
-        "apps/sites/templates/pages/base.html",
         "apps/sites/templates/admin/base_site.html"
       ],
       "protocol_coverage": {},

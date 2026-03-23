@@ -1,5 +1,5 @@
 {% extends "pages/base.html" %}
-{% load i18n static docs_mermaid %}
+{% load i18n static docs_mermaid docs_model_docs %}
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
@@ -11,16 +11,14 @@
         <h4>Contents</h4>
         {{ toc|safe }}
       </nav>
-      <div class="card bg-body-tertiary border-0 shadow-sm mt-4 reader-qr-card">
-        <div class="card-body">
-          <div
-            id="reader-qr"
-            class="reader-qr-image"
-            data-url="{{ page_url }}"
-            role="img"
-            aria-label="{% trans 'QR code linking to this page' %}"
-          ></div>
-        </div>
+      <div class="reader-qr-card mt-4">
+        <div
+          id="reader-qr"
+          class="reader-qr-image"
+          data-url="{{ page_url }}"
+          role="img"
+          aria-label="{% trans 'QR code linking to this page' %}"
+        ></div>
       </div>
     </div>
   </div>
@@ -46,6 +44,18 @@
             </a>
           </noscript>
         </div>
+      {% endif %}
+      {% if request.user.is_staff %}
+        {% linked_admin_model_links current_document_path as linked_model_admin_links %}
+        {% if linked_model_admin_links %}
+          <hr>
+          <h4>{% trans "Configure linked models" %}</h4>
+          <ul>
+            {% for model_link in linked_model_admin_links %}
+              <li><a href="{{ model_link.url }}">{% blocktrans with label=model_link.label %}Configure model {{ label }} in the admin console{% endblocktrans %}</a></li>
+            {% endfor %}
+          </ul>
+        {% endif %}
       {% endif %}
     </div>
   </div>

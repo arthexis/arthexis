@@ -24,7 +24,9 @@ class ManualTaskReport(Entity):
         help_text=_("User who performed the work. Can differ from the assignee."),
     )
     performed_at = models.DateTimeField(
-        _("Performed at"), default=timezone.now, help_text=_("When the work occurred."),
+        _("Performed at"),
+        default=timezone.now,
+        help_text=_("When the work occurred."),
     )
     duration = models.DurationField(
         _("Actual duration"),
@@ -33,7 +35,8 @@ class ManualTaskReport(Entity):
         help_text=_("Actual time spent completing the task."),
     )
     details = models.TextField(
-        _("Details"), help_text=_("Executor notes and outcomes for this task."),
+        _("Details"),
+        help_text=_("Executor notes and outcomes for this task."),
     )
 
     class Meta:
@@ -44,3 +47,18 @@ class ManualTaskReport(Entity):
 
     def __str__(self):  # pragma: no cover - simple representation
         return _("Report for %(task)s") % {"task": self.request}
+
+    def save(self, *args, **kwargs):
+        """Persist report and trigger post-completion GitHub issue automation."""
+
+        created = self.pk is None
+        super().save(*args, **kwargs)
+        if not created:
+            return
+
+        request = self.request
+        if request.can_open_github_issue_for_trigger("completed"):
+            from apps.celery.utils import enqueue_task
+            from apps.tasks.tasks import create_manual_task_github_issue
+
+            enqueue_task(create_manual_task_github_issue, request.pk, "completed")

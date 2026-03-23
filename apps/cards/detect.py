@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
-from typing import Any, Dict, Tuple
 
 
 def _ensure_django() -> None:
@@ -24,70 +22,16 @@ def _ensure_django() -> None:
     django.setup()
 
 
-def _lockfile_status() -> Tuple[bool, Path | None]:
-    """Return whether a scanner lock file exists and its path when available."""
-
-    try:
-        from .background_reader import lock_file_active
-    except Exception:  # pragma: no cover - import edge cases
-        return False, None
-
-    try:
-        return lock_file_active()
-    except Exception:  # pragma: no cover - settings misconfiguration
-        return False, None
-
-
-def _assume_detected(reason: str | None, lock: Path | None) -> Dict[str, Any]:
-    """Return metadata indicating detection succeeded via lock file."""
-
-    response: Dict[str, Any] = {"detected": True, "assumed": True}
-    if reason:
-        response["reason"] = reason
-    if lock is not None:
-        response["lockfile"] = lock.as_posix()
-    return response
-
-
-def detect_scanner() -> Dict[str, Any]:
+def detect_scanner() -> dict[str, object]:
     """Return detection metadata for the RFID scanner."""
     try:
         _ensure_django()
     except Exception as exc:
         return {"detected": False, "reason": str(exc)}
 
-    has_lock, lock_path = _lockfile_status()
+    from .node_features import detect_scanner_capability
 
-    if has_lock:
-        return _assume_detected(None, lock_path)
-
-    try:
-        from .irq_wiring_check import check_irq_pin
-    except Exception as exc:  # pragma: no cover - unexpected import error
-        return {"detected": False, "reason": str(exc)}
-
-    result = check_irq_pin()
-    if result.get("error"):
-        if has_lock:
-            return _assume_detected(result.get("error"), lock_path)
-        return {"detected": False, "reason": result["error"]}
-
-    response: Dict[str, Any] = {"detected": True}
-    if "irq_pin" in result:
-        response["irq_pin"] = result.get("irq_pin")
-
-    if result.get("busy"):
-        response["assumed"] = True
-        response["busy"] = True
-        reason = result.get("reason") or "RFID scanner busy"
-        if reason:
-            response["reason"] = reason
-        if "errno" in result and result["errno"] is not None:
-            response["errno"] = result["errno"]
-
-    if has_lock and lock_path is not None:
-        response["lockfile"] = str(lock_path)
-    return response
+    return detect_scanner_capability(node=None)
 
 
 def main(argv: list[str] | None = None) -> int:

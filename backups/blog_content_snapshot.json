@@ -1,0 +1,17 @@
+{
+  "exported_at": "2026-03-21T14:38:00Z",
+  "source": {
+    "database_backend": "sqlite",
+    "database_path": "db.sqlite3",
+    "database_present": false
+  },
+  "models": {
+    "BlogArticle": [],
+    "BlogRevision": [],
+    "BlogSeries": [],
+    "BlogTag": []
+  },
+  "notes": [
+    "No local SQLite database was present in the repository checkout, so no blog rows were available to export from this environment."
+  ]
+}

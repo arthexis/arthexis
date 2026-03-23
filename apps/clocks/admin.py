@@ -9,10 +9,10 @@ from django_object_actions import DjangoObjectActions
 
 from apps.discovery.services import record_discovery_item, start_discovery
 from apps.locals.user_data import EntityModelAdmin
+from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
 from .models import ClockDevice
-from .utils import has_clock_device
 
 
 @admin.register(ClockDevice)
@@ -130,7 +130,7 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             metadata={"action": "clock_find_devices"},
         )
 
-        if not has_clock_device():
+        if not is_feature_active_for_node(node=node, slug="gpio-rtc"):
             if auto_enabled:
                 NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
                 self.message_user(

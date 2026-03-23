@@ -87,25 +87,80 @@ class EvergoLoadCustomersForm(forms.Form):
         return cleaned_data
 
 
+class EvergoContractorLoginWizardForm(forms.ModelForm):
+    """Collect contractor ownership, credentials, and setup options for the admin wizard."""
+
+    validate_credentials = forms.BooleanField(
+        initial=True,
+        required=False,
+        label="Validate credentials now",
+        help_text="Run an Evergo login immediately after saving the contractor.",
+    )
+    load_all_customers = forms.BooleanField(
+        initial=False,
+        required=False,
+        label="Load all customers after validation",
+        help_text="Optionally perform the initial full customer and order load for this contractor.",
+    )
+
+    class Meta:
+        model = EvergoUser
+        fields = ("user", "group", "avatar", "evergo_email", "evergo_password")
+
+    def __init__(self, *args, **kwargs):
+        """Prefill first-time contractor setup defaults for a smoother signup flow."""
+        super().__init__(*args, **kwargs)
+        self.fields["evergo_password"].widget = forms.PasswordInput()
+        if self.instance.pk:
+            self.fields["evergo_password"].required = False
+        self.fields["user"].required = False
+        self.fields["group"].required = False
+        self.fields["avatar"].required = False
+        self.fields["evergo_email"].help_text = "Email used to sign in to the Evergo contractor portal."
+        self.fields["evergo_password"].help_text = "Password used to sign in to the Evergo contractor portal."
+
+    def clean(self):
+        """Require a single owner and force validation before optional initial loading."""
+        cleaned_data = super().clean()
+        if self.instance.pk and not cleaned_data.get("evergo_password"):
+            cleaned_data["evergo_password"] = self.instance.evergo_password
+
+        owners = [
+            field_name
+            for field_name in ("user", "group", "avatar")
+            if cleaned_data.get(field_name) is not None
+        ]
+        if not owners:
+            raise ValidationError("Choose a user, security group, or avatar owner for this contractor.")
+        if cleaned_data.get("load_all_customers") and not cleaned_data.get("validate_credentials"):
+            self.add_error(
+                "load_all_customers",
+                "Enable credential validation before running the initial customer load.",
+            )
+        return cleaned_data
+
+
 class EvergoOrderTrackingForm(forms.Form):
     """Collect phase-one data for the public Evergo order tracking flow."""
 
-    metraje_visita_tecnica = forms.IntegerField(min_value=0, label="Metraje visita técnica")
-    programacion_cargador = forms.ChoiceField(choices=(("16A", "16A"), ("32A", "32A")))
-    capacidad_itm_principal = forms.IntegerField(min_value=1, initial=60)
+    metraje_visita_tecnica = forms.IntegerField(min_value=0, label="Metraje visita técnica", required=False)
+    programacion_cargador = forms.ChoiceField(choices=(("16A", "16A"), ("32A", "32A")), required=False)
+    capacidad_itm_principal = forms.IntegerField(min_value=1, initial=60, required=False)
     fecha_visita = forms.DateTimeField(
         input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"],
         widget=forms.DateTimeInput(attrs={"type": "datetime-local"}),
+        required=False,
     )
-    voltaje_fase_fase = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Fase")
-    voltaje_fase_tierra = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Tierra")
-    voltaje_fase_neutro = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Neutro")
+    voltaje_fase_fase = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Fase", required=False)
+    voltaje_fase_tierra = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Tierra", required=False)
+    voltaje_fase_neutro = forms.DecimalField(min_value=0, max_digits=8, decimal_places=2, label="Fase-Neutro", required=False)
     voltaje_neutro_tierra = forms.DecimalField(
         min_value=0,
         max_digits=8,
         decimal_places=2,
         initial=0,
         label="Neutro-Tierra",
+        required=False,
     )
     prueba_carga = forms.ChoiceField(
         choices=(
@@ -115,9 +170,10 @@ class EvergoOrderTrackingForm(forms.Form):
         ),
         initial="Sin prueba",
         label="Prueba de carga",
+        required=False,
     )
     marca_cargador = forms.ChoiceField(choices=(), required=False)
-    numero_serie = forms.CharField(max_length=128, label="Número de Serie")
+    numero_serie = forms.CharField(max_length=128, label="Número de Serie", required=False)
 
 
     foto_tablero = forms.ImageField(required=False)

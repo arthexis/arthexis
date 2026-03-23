@@ -4,7 +4,9 @@ This note summarizes how the CSMS signals successful charger connections and how
 
 ## What the CSMS records
 
-* When a charger handshake succeeds, the CSMS accepts the socket and records a log entry similar to `Connected (subprotocol=...)`. The subprotocol is only negotiated when the client offers `ocpp1.6`; otherwise the connection is still accepted and logged with `subprotocol=none`.
+* When a charger handshake succeeds, the CSMS accepts the socket and records a log entry similar to `Connected (subprotocol=...)`.
+* Subprotocol negotiation now supports `ocpp2.1`, `ocpp2.0.1`, and OCPP 1.6 aliases (`ocpp1.6j` preferred, `ocpp1.6` accepted). If a charger offers multiple protocols, the server prefers `ocpp2.1`, then `ocpp2.0.1`, then OCPP 1.6 unless a stored charger preference is present. When both OCPP 1.6 aliases are offered, `ocpp1.6j` is selected.
+* If a charger offers no supported subprotocol token, the connection is still accepted and logged with `subprotocol=none`; runtime handling falls back to OCPP 1.6 for compatibility.
 * The serial number is taken from the WebSocket path or the common OCPP query parameters (`cid`, `chargePointId`, `charge_point_id`, `chargeBoxId`, `charge_box_id`, `chargerId`). Parameter names are matched case-insensitively and whitespace-only values are ignored.
 
 If the most recent charger log is weeks old, the EVCS is not completing the WebSocket handshake today. No new attempt has made it past the TCP/TLS negotiation or the HTTP upgrade request.
@@ -23,5 +25,5 @@ This behaviour usually indicates one of the following:
 
 * Confirm the EVCS target URL matches the gateway host and TLS port and that it uses `wss://`.
 * If a reverse proxy is in play, capture on the proxy as well to ensure the TLS `Client Hello` reaches Django.
-* Test with protocol version enforcement disabled on the EVCS if possible; the CSMS already accepts connections without an `ocpp1.6` subprotocol.
+* Test with protocol version enforcement disabled on the EVCS if possible; the CSMS accepts connections even when no recognized OCPP subprotocol is offered.
 * Once the TLS handshake succeeds, check `logs/charger.<SERIAL>.log` for a fresh `Connected` message to verify the CSMS registered the session.

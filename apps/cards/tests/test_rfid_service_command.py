@@ -114,3 +114,17 @@ def test_rfid_status_does_not_delete_scanner_lock(tmp_path, capsys, monkeypatch)
     output = capsys.readouterr().out
     assert "RFID reader configuration: configured" in output
     assert scanner_lock.exists()
+
+
+@pytest.mark.django_db
+def test_rfid_scan_requires_feature(monkeypatch):
+    """RFID scan should not probe scanner hardware when feature is inactive."""
+
+    rfid_command = importlib.import_module("apps.cards.management.commands.rfid")
+    dummy_node = SimpleNamespace()
+    monkeypatch.setattr(rfid_command.Node, "get_local", lambda: dummy_node)
+    monkeypatch.setattr(rfid_command, "is_feature_active_for_node", lambda *, node, slug: False)
+    monkeypatch.setattr(rfid_command, "scan_sources", lambda **kwargs: (_ for _ in ()).throw(AssertionError("scan_sources should not run")))
+
+    with pytest.raises(rfid_command.CommandError, match="rfid-scanner feature is not active"):
+        call_command("rfid", "check", "--scan", "--no-irq")

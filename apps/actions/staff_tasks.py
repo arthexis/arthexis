@@ -2,94 +2,99 @@
 
 from __future__ import annotations
 
-from django.urls import NoReverseMatch, reverse
-
 from apps.actions.models import StaffTask, StaffTaskPreference
 
 
 DEFAULT_STAFF_TASKS: tuple[dict[str, object], ...] = (
     {
-        "slug": "actions",
-        "label": "Actions",
-        "description": "Open personal action OpenAPI and remote action tooling.",
-        "admin_url_name": "admin:actions_remoteaction_my_openapi_spec",
-        "order": 10,
-    },
-    {
         "slug": "config",
         "label": "Config",
         "description": "Open configuration shortcuts.",
-        "admin_url_name": "admin:config",
+        "action_name": "config",
         "order": 20,
     },
     {
         "slug": "data",
         "label": "Data",
         "description": "Manage personal admin data and preferences.",
-        "admin_url_name": "admin:user_data",
+        "action_name": "data",
         "order": 30,
     },
     {
         "slug": "discover",
         "label": "Discover",
         "description": "Run node and integration discovery tools.",
-        "admin_url_name": "admin:nodes_nodefeature_discover",
+        "action_name": "discover",
         "order": 40,
     },
     {
         "slug": "environment",
         "label": "Environment",
         "description": "Inspect deployment environment details.",
-        "admin_url_name": "admin:environment",
+        "action_name": "environment",
         "order": 50,
+    },
+    {
+        "slug": "groups",
+        "label": "Groups",
+        "description": "Browse the current user's security groups.",
+        "action_name": "groups",
+        "order": 55,
     },
     {
         "slug": "logs",
         "label": "Logs",
         "description": "Browse system and application logs.",
-        "admin_url_name": "admin:log_viewer",
+        "action_name": "logs",
         "order": 60,
     },
     {
         "slug": "rules",
         "label": "Rules",
         "description": "Review dashboard rule evaluation outcomes.",
-        "admin_url_name": "admin:system-dashboard-rules-report",
+        "action_name": "rules",
         "order": 70,
+    },
+    {
+        "slug": "reports",
+        "label": "Reports",
+        "description": "Run system reports and provide query parameters.",
+        "action_name": "reports",
+        "order": 75,
     },
     {
         "slug": "seed",
         "label": "Seed",
         "description": "Load baseline data into the system.",
-        "admin_url_name": "admin:seed_data",
+        "action_name": "seed",
         "order": 80,
     },
     {
         "slug": "sigil",
         "label": "Sigil",
         "description": "Build and inspect sigils.",
-        "admin_url_name": "admin:sigil_builder",
+        "action_name": "sigil",
         "order": 90,
     },
     {
         "slug": "tasks",
         "label": "Tasks",
-        "description": "Open the staff tasks overview and toggles.",
-        "admin_url_name": "admin:system",
+        "description": "Open the task panels overview and toggles.",
+        "action_name": "tasks",
         "order": 100,
     },
     {
         "slug": "system",
         "label": "System",
         "description": "Inspect system details and service controls.",
-        "admin_url_name": "admin:system-details",
+        "action_name": "system",
         "order": 105,
     },
     {
         "slug": "upgrade",
         "label": "Upgrade",
         "description": "View upgrade status and run upgrade checks.",
-        "admin_url_name": "admin:system-upgrade-report",
+        "action_name": "upgrade",
         "order": 110,
         "superuser_only": True,
     },
@@ -102,10 +107,8 @@ def visible_staff_tasks_for_user(user) -> list[dict[str, str]]:
     if not getattr(user, "is_staff", False):
         return []
 
+    ensure_default_staff_tasks_exist()
     tasks = list(StaffTask.objects.filter(is_active=True).order_by("order", "label"))
-    if not tasks:
-        ensure_default_staff_tasks_exist()
-        tasks = list(StaffTask.objects.filter(is_active=True).order_by("order", "label"))
     if not tasks:
         return []
 
@@ -123,28 +126,32 @@ def visible_staff_tasks_for_user(user) -> list[dict[str, str]]:
         enabled = pref_map.get(task.pk, task.default_enabled)
         if not enabled:
             continue
-        try:
-            url = reverse(task.admin_url_name)
-        except NoReverseMatch:
+        url = task.resolve_url()
+        if not url:
             continue
         visible.append({"slug": task.slug, "label": task.label, "url": url})
     return visible
 
 
-def ensure_default_staff_tasks_exist() -> None:
-    """Backfill default staff tasks when the table is empty."""
 
-    if StaffTask.objects.exists():
-        return
+def ensure_default_staff_tasks_exist() -> None:
+    """Backfill missing default staff tasks in existing and new environments.
+
+    Existing rows are left intact so operator edits to labels, ordering, and
+    visibility remain persistent after the defaults have been seeded once.
+    """
+
     for task in DEFAULT_STAFF_TASKS:
-        StaffTask.objects.create(
+        StaffTask.objects.get_or_create(
             slug=task["slug"],
-            label=task["label"],
-            description=task["description"],
-            admin_url_name=task["admin_url_name"],
-            order=task["order"],
-            default_enabled=True,
-            staff_only=True,
-            superuser_only=bool(task.get("superuser_only", False)),
-            is_active=True,
+            defaults={
+                "label": task["label"],
+                "description": task["description"],
+                "action_name": task["action_name"],
+                "order": task["order"],
+                "default_enabled": True,
+                "staff_only": True,
+                "superuser_only": bool(task.get("superuser_only", False)),
+                "is_active": True,
+            },
         )

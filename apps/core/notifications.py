@@ -149,7 +149,7 @@ class NotificationManager:
         channel_num: int | str | None,
         sticky: bool = False,
     ) -> Path:
-        """Deprecated wrapper for :meth:`get_target_lock_file`.
+        """Legacy wrapper for :meth:`get_target_lock_file`.
 
         Kept for backward compatibility with older callers that still
         reference the private method directly.

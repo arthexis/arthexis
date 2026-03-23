@@ -26,6 +26,7 @@ from apps.actions.models import DashboardAction
 from apps.celery.utils import celery_feature_enabled as celery_feature_enabled_helper
 from apps.core.entity import Entity
 from apps.nodes.models import NetMessage, Node
+from apps.counters.dashboard_rules import DEFAULT_SUCCESS_MESSAGE
 from apps.counters.models import DashboardRule
 
 register = template.Library()
@@ -261,14 +262,344 @@ def admin_translate_url(language_tabs) -> str:
     return ""
 
 
+def _model_admin_action_key(value: str) -> str:
+    """Return a normalized identifier used to deduplicate admin actions."""
+
+    return str(value or "").strip().lower().replace("-", "_")
+
+def _model_admin_action_uses_queryset(func) -> bool:
+    """Return whether an admin action implementation references ``queryset``."""
+
+    func = inspect.unwrap(func)
+    cached = _USES_QUERYSET_CACHE.get(func)
+    if cached is not None:
+        return cached
+    try:
+        source = textwrap.dedent(inspect.getsource(func))
+    except (OSError, TypeError):
+        _USES_QUERYSET_CACHE[func] = True
+        return True
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        _USES_QUERYSET_CACHE[func] = True
+        return True
+    func_node = next(
+        (
+            n
+            for n in tree.body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ),
+        None,
+    )
+    if func_node is None:
+        _USES_QUERYSET_CACHE[func] = True
+        return True
+
+    class Finder(ast.NodeVisitor):
+        def __init__(self):
+            self.found = False
+
+        def visit_Name(self, node):
+            if node.id == "queryset":
+                self.found = True
+
+    finder = Finder()
+    for node in func_node.body:
+        if finder.found:
+            break
+        finder.visit(node)
+    _USES_QUERYSET_CACHE[func] = finder.found
+    return finder.found
+
+def _model_admin_action_capabilities(action_name, func, *, skip_queryset_actions):
+    """Describe the static capabilities of an admin action implementation.
+
+    Parameters:
+        action_name: Action identifier reported by Django admin.
+        func: Callable that implements the action.
+        skip_queryset_actions: Whether queryset-backed actions should be hidden.
+
+    Returns:
+        Dict containing normalized metadata used during visibility checks.
+    """
+
+    requires_queryset = getattr(func, "requires_queryset", None)
+    if requires_queryset is None:
+        requires_queryset = _model_admin_action_uses_queryset(func)
+    return {
+        "action_name": action_name,
+        "action_key": _model_admin_action_key(action_name),
+        "is_delete_selected": action_name == "delete_selected",
+        "requires_queryset": bool(requires_queryset),
+        "skip_queryset_actions": bool(skip_queryset_actions),
+        "is_discover": bool(getattr(func, "is_discover_action", False)),
+    }
+
+def _model_admin_action_eligibility(capabilities, seen_actions):
+    """Return structured visibility state for a candidate admin action.
+
+    Parameters:
+        capabilities: Static action capability metadata.
+        seen_actions: Set of normalized action keys already emitted.
+
+    Returns:
+        Dict describing whether the action should be rendered and why.
+    """
+
+    action_key = capabilities["action_key"]
+    is_duplicate = action_key in seen_actions
+    hidden_by_queryset = capabilities["skip_queryset_actions"] and capabilities["requires_queryset"]
+    is_visible = not (
+        capabilities["is_delete_selected"] or is_duplicate or hidden_by_queryset
+    )
+    return {
+        "action_name": capabilities["action_name"],
+        "action_key": action_key,
+        "is_visible": is_visible,
+        "is_duplicate": is_duplicate,
+        "hidden_by_queryset": hidden_by_queryset,
+        "is_delete_selected": capabilities["is_delete_selected"],
+        "is_discover": capabilities["is_discover"],
+    }
+
+def _model_admin_action_label(model_admin, action_name, func, default_label, request):
+    """Return the display label for a legacy admin action."""
+
+    label = getattr(func, "label", default_label)
+    if action_name != "my_profile":
+        return label
+
+    label_getter = getattr(model_admin, "get_my_profile_label", None)
+    if not callable(label_getter):
+        return label
+    try:
+        dynamic_label = label_getter(request)
+    except Exception:  # pragma: no cover - defensive fallback
+        return label
+    return dynamic_label or label
+
+def _model_admin_action_base_view_name(model_admin) -> str:
+    """Return the shared admin view-name prefix for a model admin."""
+
+    return f"admin:{model_admin.opts.app_label}_{model_admin.opts.model_name}_"
+
+def _model_admin_action_default_url(model_admin, action_name):
+    """Return the fallback URL used by legacy admin and changelist actions."""
+
+    base = _model_admin_action_base_view_name(model_admin)
+    try:
+        return reverse(base + action_name)
+    except NoReverseMatch:
+        try:
+            return reverse(base + action_name.split("_")[0])
+        except NoReverseMatch:
+            return reverse(base + "changelist") + f"?action={action_name}"
+
+def _model_admin_action_tools_url(model_admin, action_name):
+    """Return a django-object-actions tool URL when configured."""
+
+    tools_view_name = getattr(model_admin, "tools_view_name", None)
+    if not tools_view_name:
+        initializer = getattr(model_admin, "_get_action_urls", None)
+        if callable(initializer):
+            try:
+                initializer()
+            except Exception:  # pragma: no cover - defensive
+                tools_view_name = None
+            else:
+                tools_view_name = getattr(model_admin, "tools_view_name", None)
+    if not tools_view_name:
+        return ""
+    try:
+        return reverse(tools_view_name, kwargs={"tool": action_name})
+    except NoReverseMatch:
+        return ""
+
+def _model_admin_action_url(model_admin, action_name, func, request, source):
+    """Return the rendered URL for a legacy admin action source."""
+
+    if source == "dashboard":
+        dashboard_url = getattr(func, "dashboard_url", None)
+        if not isinstance(dashboard_url, str):
+            return ""
+        try:
+            return reverse(dashboard_url)
+        except NoReverseMatch:
+            return dashboard_url
+
+    if source == "changelist":
+        tools_url = _model_admin_action_tools_url(model_admin, action_name)
+        if tools_url:
+            return tools_url
+
+    if action_name == "my_profile":
+        getter = getattr(model_admin, "get_my_profile_url", None)
+        if callable(getter):
+            url = getter(request)
+            if url:
+                return url
+
+    return _model_admin_action_default_url(model_admin, action_name)
+
+def _configured_dashboard_action_descriptors(model):
+    """Return normalized descriptors for configured dashboard actions."""
+
+    content_type = _content_type_for_model(model)
+    if content_type is None:
+        return []
+
+    descriptors = []
+    for configured_action in DashboardAction.objects.filter(
+        content_type=content_type,
+        is_active=True,
+    ):
+        rendered_action = configured_action.as_rendered_action()
+        descriptors.append(
+            {
+                "action_key": _model_admin_action_key(configured_action.slug),
+                "label": configured_action.display_label,
+                "url": rendered_action["url"],
+                "method": rendered_action["method"],
+                "is_discover": rendered_action["is_discover"],
+            }
+        )
+    return descriptors
+
+def _model_admin_named_actions(model_admin, getter_name, request):
+    """Return action names exposed by an optional model-admin getter."""
+
+    getter = getattr(model_admin, getter_name, None)
+    if not callable(getter):
+        return []
+    try:
+        action_names = getter(request)
+    except TypeError:
+        action_names = getter()
+    return action_names or []
+
+def _build_model_admin_action_descriptor(
+    model_admin,
+    action_name,
+    func,
+    *,
+    default_label,
+    request,
+    source,
+    seen_actions,
+    skip_queryset_actions,
+):
+    """Return a normalized descriptor for a visible legacy admin action."""
+
+    capabilities = _model_admin_action_capabilities(
+        action_name,
+        func,
+        skip_queryset_actions=skip_queryset_actions,
+    )
+    eligibility = _model_admin_action_eligibility(capabilities, seen_actions)
+    if not eligibility["is_visible"]:
+        return None
+
+    descriptor = {
+        "action_key": eligibility["action_key"],
+        "label": _model_admin_action_label(
+            model_admin,
+            action_name,
+            func,
+            default_label,
+            request,
+        ),
+        "url": _model_admin_action_url(model_admin, action_name, func, request, source),
+        "method": getattr(func, "dashboard_method", "get") if source == "dashboard" else "get",
+        "is_discover": eligibility["is_discover"],
+    }
+    if not descriptor["url"]:
+        return None
+    return descriptor
+
+def _normalized_model_admin_actions(request, model_admin):
+    """Return normalized descriptors for configured and legacy admin actions."""
+
+    seen_actions = set()
+    descriptors = []
+
+    for descriptor in _configured_dashboard_action_descriptors(model_admin.model):
+        if not descriptor["url"]:
+            continue
+        descriptors.append(descriptor)
+        seen_actions.add(descriptor["action_key"])
+
+    for action_name, (func, _name, description) in model_admin.get_actions(request).items():
+        descriptor = _build_model_admin_action_descriptor(
+            model_admin,
+            action_name,
+            func,
+            default_label=description or action_name.replace("_", " "),
+            request=request,
+            source="actions",
+            seen_actions=seen_actions,
+            skip_queryset_actions=True,
+        )
+        if descriptor is None:
+            continue
+        descriptors.append(descriptor)
+        seen_actions.add(descriptor["action_key"])
+
+    for action_name in _model_admin_named_actions(model_admin, "get_changelist_actions", request):
+        func = getattr(model_admin, action_name, None)
+        if func is None:
+            continue
+        descriptor = _build_model_admin_action_descriptor(
+            model_admin,
+            action_name,
+            func,
+            default_label=getattr(func, "short_description", action_name.replace("_", " ")),
+            request=request,
+            source="changelist",
+            seen_actions=seen_actions,
+            skip_queryset_actions=True,
+        )
+        if descriptor is None:
+            continue
+        descriptors.append(descriptor)
+        seen_actions.add(descriptor["action_key"])
+
+    for action_name in _model_admin_named_actions(model_admin, "get_dashboard_actions", request):
+        func = getattr(model_admin, action_name, None)
+        if func is None:
+            continue
+        descriptor = _build_model_admin_action_descriptor(
+            model_admin,
+            action_name,
+            func,
+            default_label=getattr(func, "short_description", action_name.replace("_", " ")),
+            request=request,
+            source="dashboard",
+            seen_actions=seen_actions,
+            skip_queryset_actions=False,
+        )
+        if descriptor is None:
+            continue
+        descriptors.append(descriptor)
+        seen_actions.add(descriptor["action_key"])
+
+    return descriptors
+
+def _format_model_admin_action(descriptor):
+    """Return the template payload for a normalized admin action descriptor."""
+
+    return {
+        "url": descriptor["url"],
+        "label": str(descriptor["label"]),
+        "method": str(descriptor["method"]),
+        "is_discover": bool(descriptor["is_discover"]),
+    }
+
+
 @register.simple_tag(takes_context=True)
 def model_admin_actions(context, app_label, model_name):
-    """Return available admin actions for the given model.
+    """Return available admin actions for the given model."""
 
-    Only custom actions are returned; the default ``delete_selected`` action is
-    ignored. Each action is represented as a dict with ``url`` and ``label``
-    keys so templates can render them as links.
-    """
     request = context.get("request")
     cache_key = (app_label, model_name)
     if request is not None:
@@ -287,196 +618,10 @@ def model_admin_actions(context, app_label, model_name):
     if not model_admin:
         return []
 
-    def uses_queryset(func):
-        func = inspect.unwrap(func)
-        cached = _USES_QUERYSET_CACHE.get(func)
-        if cached is not None:
-            return cached
-        try:
-            source = textwrap.dedent(inspect.getsource(func))
-        except (OSError, TypeError):
-            _USES_QUERYSET_CACHE[func] = True
-            return True
-        try:
-            tree = ast.parse(source)
-        except SyntaxError:
-            _USES_QUERYSET_CACHE[func] = True
-            return True
-        func_node = next(
-            (
-                n
-                for n in tree.body
-                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-            ),
-            None,
-        )
-        if func_node is None:
-            _USES_QUERYSET_CACHE[func] = True
-            return True
-
-        class Finder(ast.NodeVisitor):
-            def __init__(self):
-                self.found = False
-
-            def visit_Name(self, node):
-                if node.id == "queryset":
-                    self.found = True
-
-        finder = Finder()
-        for node in func_node.body:
-            if finder.found:
-                break
-            finder.visit(node)
-        _USES_QUERYSET_CACHE[func] = finder.found
-        return finder.found
-
-    actions = []
-    seen = set()
-
-    def action_key(value: str) -> str:
-        return str(value or "").strip().lower().replace("-", "_")
-
-    def add_action(action_name, func, label, url, method="get", caller_sigil=""):
-        key = action_key(action_name)
-        if key in seen or not url:
-            return
-        action = DashboardAction.from_legacy(
-            label=str(label),
-            method=str(method),
-            url=url,
-            caller_sigil=caller_sigil,
-        ).as_rendered_action()
-        action["is_discover"] = bool(getattr(func, "is_discover_action", False)) or bool(action["is_discover"])
-        actions.append(action)
-        seen.add(key)
-
-    content_type = _content_type_for_model(model)
-    for configured_action in DashboardAction.objects.filter(
-        content_type=content_type,
-        is_active=True,
-    ).select_related("recipe"):
-        payload = configured_action.as_rendered_action()
-        if payload["url"]:
-            actions.append(payload)
-            seen.add(action_key(configured_action.slug))
-
-    for action_name, (func, _name, description) in model_admin.get_actions(
-        request
-    ).items():
-        requires_queryset = getattr(func, "requires_queryset", None)
-        if action_name == "delete_selected" or requires_queryset is True:
-            continue
-        if requires_queryset is None and uses_queryset(func):
-            continue
-        url = None
-        label = getattr(
-            func,
-            "label",
-            description or _name.replace("_", " "),
-        )
-        if action_name == "my_profile":
-            getter = getattr(model_admin, "get_my_profile_url", None)
-            if callable(getter):
-                url = getter(request)
-            label_getter = getattr(model_admin, "get_my_profile_label", None)
-            if callable(label_getter):
-                try:
-                    dynamic_label = label_getter(request)
-                except Exception:  # pragma: no cover - defensive fallback
-                    dynamic_label = None
-                if dynamic_label:
-                    label = dynamic_label
-        base = f"admin:{model_admin.opts.app_label}_{model_admin.opts.model_name}_"
-        if not url:
-            try:
-                url = reverse(base + action_name)
-            except NoReverseMatch:
-                try:
-                    url = reverse(base + action_name.split("_")[0])
-                except NoReverseMatch:
-                    url = reverse(base + "changelist") + f"?action={action_name}"
-        add_action(action_name, func, label, url)
-
-    def get_named_actions(getter_name):
-        getter = getattr(model_admin, getter_name, None)
-        if not callable(getter):
-            return []
-        try:
-            action_names = getter(request)
-        except TypeError:
-            action_names = getter()
-        return action_names or []
-
-    def iter_model_admin_named_actions(action_names, *, skip_queryset_actions):
-        for action_name in action_names:
-            if action_key(action_name) in seen:
-                continue
-            func = getattr(model_admin, action_name, None)
-            if func is None:
-                continue
-            if skip_queryset_actions:
-                requires_queryset = getattr(func, "requires_queryset", None)
-                if requires_queryset is True:
-                    continue
-                if requires_queryset is None and uses_queryset(func):
-                    continue
-            label = getattr(
-                func,
-                "label",
-                getattr(
-                    func,
-                    "short_description",
-                    action_name.replace("_", " "),
-                ),
-            )
-            yield action_name, func, label
-
-    for action_name, func, label in iter_model_admin_named_actions(
-        get_named_actions("get_changelist_actions"),
-        skip_queryset_actions=True,
-    ):
-        url = None
-        tools_view_name = getattr(model_admin, "tools_view_name", None)
-        if not tools_view_name:
-            initializer = getattr(model_admin, "_get_action_urls", None)
-            if callable(initializer):
-                try:
-                    initializer()
-                except Exception:  # pragma: no cover - defensive
-                    tools_view_name = None
-                else:
-                    tools_view_name = getattr(model_admin, "tools_view_name", None)
-        if tools_view_name:
-            try:
-                url = reverse(tools_view_name, kwargs={"tool": action_name})
-            except NoReverseMatch:
-                url = None
-        if not url:
-            base = f"admin:{model_admin.opts.app_label}_{model_admin.opts.model_name}_"
-            try:
-                url = reverse(base + action_name)
-            except NoReverseMatch:
-                try:
-                    url = reverse(base + action_name.split("_")[0])
-                except NoReverseMatch:
-                    url = reverse(base + "changelist") + f"?action={action_name}"
-        add_action(action_name, func, label, url)
-
-    for action_name, func, label in iter_model_admin_named_actions(
-        get_named_actions("get_dashboard_actions"),
-        skip_queryset_actions=False,
-    ):
-        dashboard_url = getattr(func, "dashboard_url", None)
-        dashboard_method = getattr(func, "dashboard_method", "get")
-        if isinstance(dashboard_url, str):
-            try:
-                url = reverse(dashboard_url)
-            except NoReverseMatch:
-                url = dashboard_url
-        else:
-            url = ""
-        add_action(action_name, func, label, url, method=dashboard_method)
-
+    actions = [
+        _format_model_admin_action(descriptor)
+        for descriptor in _normalized_model_admin_actions(request, model_admin)
+    ]
     if request is not None:
         action_cache[cache_key] = actions
     return actions
@@ -512,7 +657,12 @@ def dashboard_model_status(app_label: str, model_name: str) -> dict | None:
         return None
 
     try:
-        return DashboardRule.get_cached_value(content_type, rule.evaluate)
+        status = DashboardRule.get_cached_value(content_type, rule.evaluate)
+        if isinstance(status, dict) and status.get("success") and "is_default_message" not in status:
+            status["is_default_message"] = status.get("message") == str(
+                DEFAULT_SUCCESS_MESSAGE
+            )
+        return status
     except Exception:
         logger.exception("Unable to evaluate dashboard rule for %s", content_type)
         return None
@@ -581,9 +731,12 @@ def dashboard_model_status_map(app_list: list[Any]) -> dict[int, dict]:
     for rule in rules:
         content_type = rule.content_type
         try:
-            status_map[content_type.id] = DashboardRule.get_cached_value(
-                content_type, rule.evaluate
-            )
+            status = DashboardRule.get_cached_value(content_type, rule.evaluate)
+            if isinstance(status, dict) and status.get("success") and "is_default_message" not in status:
+                status["is_default_message"] = status.get("message") == str(
+                    DEFAULT_SUCCESS_MESSAGE
+                )
+            status_map[content_type.id] = status
         except Exception:
             logger.exception(
                 "Unable to evaluate dashboard rule for %s", content_type
@@ -639,12 +792,19 @@ def related_admin_models(opts):
             return None
         if model_cls in registry:
             return model_cls
-        concrete_model = getattr(model_cls, "_meta", None)
-        if concrete_model is None:
+        concrete_options = getattr(model_cls, "_meta", None)
+        if concrete_options is None:
             return None
-        concrete_model = concrete_model.concrete_model
+        concrete_model = concrete_options.concrete_model
         if concrete_model in registry:
             return concrete_model
+
+        for registered_model in registry:
+            registered_options = getattr(registered_model, "_meta", None)
+            if registered_options is None:
+                continue
+            if registered_options.concrete_model == concrete_model:
+                return registered_model
         return None
 
     def describe_relation(field):
@@ -657,6 +817,42 @@ def related_admin_models(opts):
         if getattr(field, "many_to_many", False):
             return "N:N", _("Many-to-many relationship")
         return "—", _("Related model")
+
+    def relation_lookup_name(field):
+        if getattr(field, "auto_created", False) and not getattr(field, "concrete", False):
+            related_query_name = getattr(field, "related_query_name", None)
+            if callable(related_query_name):
+                return related_query_name()
+            return related_query_name
+        return getattr(field, "name", None)
+
+    def target_filter_lookups(target_model_cls):
+        lookups = []
+        source_labels = set(current_labels)
+        source_concrete = getattr(model._meta, "concrete_model", None)
+        if source_concrete is not None:
+            source_labels.add(source_concrete._meta.label_lower)
+
+        for field in target_model_cls._meta.get_fields(include_hidden=True):
+            if not getattr(field, "is_relation", False):
+                continue
+            related_model = getattr(field, "related_model", None)
+            if related_model is None:
+                continue
+
+            related_labels = {related_model._meta.label_lower}
+            related_concrete = getattr(related_model._meta, "concrete_model", None)
+            if related_concrete is not None:
+                related_labels.add(related_concrete._meta.label_lower)
+
+            if source_labels.isdisjoint(related_labels):
+                continue
+
+            relation_name = relation_lookup_name(field)
+            if relation_name:
+                lookups.append(f"{relation_name}__id__in")
+        resolved = sorted(set(lookups))
+        return resolved
 
     def add_model(model_cls, relation_type: str, relation_title: str):
         registered_model = get_registered(model_cls)
@@ -680,6 +876,8 @@ def related_admin_models(opts):
             "url": url,
             "relation_type": relation_type,
             "relation_title": relation_title,
+            "filter_lookups": target_filter_lookups(registered_model),
+            "source_model_label": opts.label_lower,
         })
         seen.add(label_lower)
 
