@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Generator, Iterable, Iterator
-from importlib import import_module, resources
+from collections.abc import Iterable, Iterator
+from importlib import resources
 from pathlib import Path
-from typing import Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from apps.screens.models import LCDAnimation
@@ -12,31 +12,65 @@ ANIMATION_FRAME_COLUMNS = 16
 ANIMATION_FRAME_ROWS = 2
 ANIMATION_FRAME_CHARS = ANIMATION_FRAME_COLUMNS * ANIMATION_FRAME_ROWS
 DEFAULT_ANIMATION_FILE = "scrolling_trees.txt"
+ALLOWED_ANIMATION_SUFFIX = ".txt"
 
 
 class AnimationLoadError(ValueError):
-    """Raised when an animation file or generator is invalid."""
+    """Raised when an animation file is invalid or unsupported."""
 
 
-def _resolve_path(candidate: str | Path) -> Path:
-    path = Path(candidate)
-    if path.is_absolute():
-        return path
+def _animations_root() -> Path:
+    """Return the local filesystem path for the packaged animations directory."""
 
-    try:
-        package_files = resources.files(__name__)
-    except (TypeError, FileNotFoundError):
-        package_files = None
-
-    if package_files:
-        packaged = Path(package_files / str(candidate))
-        if packaged.exists():
-            return packaged
-
-    return path
+    return Path(resources.files(__name__))
 
 
-def _validate_frame(frame: str, *, index: int) -> str:
+def get_approved_animation_source(candidate: str | Path) -> Path:
+    """Resolve *candidate* to a packaged animation file.
+
+    Parameters:
+        candidate: File name stored on an ``LCDAnimation`` row.
+
+    Returns:
+        The packaged animation path.
+
+    Raises:
+        AnimationLoadError: If the candidate is blank, traverses directories,
+            uses a non-text format, or does not match a packaged animation file.
+    """
+
+    raw_candidate = str(candidate).strip()
+    if not raw_candidate:
+        raise AnimationLoadError("Animation source path is required.")
+
+    relative_path = Path(raw_candidate)
+    if relative_path.is_absolute() or len(relative_path.parts) != 1:
+        raise AnimationLoadError("Animation source path must name a packaged file in apps/screens/animations/.")
+
+    if relative_path.suffix != ALLOWED_ANIMATION_SUFFIX:
+        raise AnimationLoadError("Animation source path must reference a packaged .txt file.")
+
+    packaged_path = _animations_root() / relative_path.name
+    if not packaged_path.exists() or not packaged_path.is_file():
+        raise AnimationLoadError(f"Animation source '{raw_candidate}' is not a packaged animation file.")
+
+    return packaged_path
+
+
+def validate_animation_frame(frame: str, *, index: int) -> str:
+    """Validate one LCD animation frame.
+
+    Parameters:
+        frame: Candidate frame text.
+        index: 1-based frame index for error reporting.
+
+    Returns:
+        The validated frame.
+
+    Raises:
+        AnimationLoadError: If the frame does not contain exactly 32 characters.
+    """
+
     if len(frame) != ANIMATION_FRAME_CHARS:
         raise AnimationLoadError(
             f"Frame {index} must be {ANIMATION_FRAME_CHARS} characters (got {len(frame)})."
@@ -44,62 +78,60 @@ def _validate_frame(frame: str, *, index: int) -> str:
     return frame
 
 
-def load_frames_from_file(candidate: str | Path) -> list[str]:
-    """Load animation frames from a text file.
+def validate_animation_frames(frames: Iterable[str]) -> list[str]:
+    """Validate a collection of animation frames.
 
-    Each line must contain exactly 32 characters (16 per LCD row). Spaces are
-    preserved verbatim to allow sparse animations.
+    Parameters:
+        frames: Iterable of LCD frame strings.
+
+    Returns:
+        The validated frames as a list.
+
+    Raises:
+        AnimationLoadError: If the iterable is empty or any frame is malformed.
     """
 
-    path = _resolve_path(candidate)
-    data = path.read_text(encoding="utf-8").splitlines()
-    frames = [_validate_frame(line, index=index) for index, line in enumerate(data, start=1)]
-    if not frames:
+    validated = [validate_animation_frame(frame, index=index) for index, frame in enumerate(frames, start=1)]
+    if not validated:
         raise AnimationLoadError("Animation file must contain at least one frame.")
-    return frames
+    return validated
 
 
-def resolve_generator(target: str) -> Callable[[], Iterable[str] | Generator[str, None, None]]:
-    """Resolve a ``module:function`` reference to an animation generator."""
+def load_frames_from_file(candidate: str | Path) -> list[str]:
+    """Load validated animation frames from an approved packaged file.
 
-    if ":" not in target:
-        raise AnimationLoadError("Animation generator path must use 'module:function'.")
+    Parameters:
+        candidate: File name stored on the animation record.
 
-    module_path, func_name = target.rsplit(":", 1)
-    module = import_module(module_path)
-    try:
-        func = getattr(module, func_name)
-    except AttributeError as exc:  # pragma: no cover - defensive
-        raise AnimationLoadError(f"Animation generator '{target}' not found.") from exc
+    Returns:
+        A list of validated 32-character frames.
 
-    if not callable(func):
-        raise AnimationLoadError(f"Animation generator '{target}' is not callable.")
+    Raises:
+        AnimationLoadError: If the source is unsupported or contains malformed frames.
+    """
 
-    return func
-
-
-def load_frames_from_callable(
-    generator: Callable[[], Iterable[str] | Generator[str, None, None]]
-) -> Iterator[str]:
-    """Yield validated animation frames from a generator."""
-
-    for index, frame in enumerate(generator(), start=1):
-        yield _validate_frame(frame, index=index)
+    path = get_approved_animation_source(candidate)
+    return validate_animation_frames(path.read_text(encoding="utf-8").splitlines())
 
 
 def load_frames_from_animation(animation: "LCDAnimation") -> Iterator[str]:
-    """Yield frames for an :class:`~apps.screens.models.LCDAnimation` instance."""
+    """Yield frames for an ``LCDAnimation`` instance.
 
-    if animation.generator_path:
-        generator = resolve_generator(animation.generator_path)
-        yield from load_frames_from_callable(generator)
-        return
+    Parameters:
+        animation: Animation model instance using a packaged source file.
+
+    Returns:
+        An iterator over validated frames.
+
+    Raises:
+        AnimationLoadError: If the animation does not point to an approved packaged file.
+    """
 
     if animation.source_path:
         yield from load_frames_from_file(animation.source_path)
         return
 
-    raise AnimationLoadError("Animation requires either a source file or generator path.")
+    raise AnimationLoadError("Animation requires a packaged source file.")
 
 
 def default_tree_frames() -> list[str]:
@@ -112,11 +144,13 @@ __all__ = [
     "ANIMATION_FRAME_CHARS",
     "ANIMATION_FRAME_COLUMNS",
     "ANIMATION_FRAME_ROWS",
+    "ALLOWED_ANIMATION_SUFFIX",
     "AnimationLoadError",
     "DEFAULT_ANIMATION_FILE",
     "default_tree_frames",
+    "get_approved_animation_source",
     "load_frames_from_animation",
-    "load_frames_from_callable",
     "load_frames_from_file",
-    "resolve_generator",
+    "validate_animation_frame",
+    "validate_animation_frames",
 ]
