@@ -1,9 +1,10 @@
 from datetime import timedelta
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.screens.models import CharacterScreen, PixelScreen
+from apps.screens.models import CharacterScreen, LCDAnimation, PixelScreen
 
 
 class DeviceScreenTests(TestCase):
@@ -70,3 +71,20 @@ class DeviceScreenTests(TestCase):
         screen.update_pixels(payload)
 
         self.assertEqual(list(screen.pixel_buffer), [1, 2, 3, 4])
+
+
+class LCDAnimationModelTests(TestCase):
+    def test_requires_packaged_source_path(self):
+        animation = LCDAnimation(slug="missing", name="Missing")
+
+        with self.assertRaises(ValidationError):
+            animation.full_clean()
+
+    def test_accepts_packaged_source_path(self):
+        animation = LCDAnimation(
+            slug="trees",
+            name="Trees",
+            source_path="scrolling_trees.txt",
+        )
+
+        animation.full_clean()
