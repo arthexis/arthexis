@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from django.test import override_settings
+from django.contrib.auth import get_user_model
+from django.test import Client, override_settings
 from django.urls import reverse
 
 from apps.services.models import LifecycleService
@@ -45,6 +46,29 @@ def test_lifecycle_service_status_action_redirects_to_report(admin_client):
     assert response.headers["Location"] == (
         f"{reverse('admin:services_lifecycleservice_status_report')}?ids={target.pk}"
     )
+
+
+@pytest.mark.django_db
+@override_settings(STORAGES=TEST_STORAGES)
+def test_lifecycle_service_status_report_forbids_staff_without_model_permissions():
+    """Regression: status report view denies staff users lacking lifecycle service permissions."""
+
+    user = get_user_model().objects.create_user(
+        username="limitedstaff",
+        email="limitedstaff@example.com",
+        password="pw",
+        is_staff=True,
+    )
+    target = LifecycleService.objects.get(slug="suite")
+    client = Client()
+    client.force_login(user)
+
+    response = client.get(
+        reverse("admin:services_lifecycleservice_status_report"),
+        {"ids": str(target.pk)},
+    )
+
+    assert response.status_code == 403
 
 
 @pytest.mark.django_db

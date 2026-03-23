@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -46,6 +47,9 @@ class LifecycleServiceAdmin(admin.ModelAdmin):
 
     def status_report_view(self, request: HttpRequest):
         """Render the lifecycle status report for selected lifecycle services."""
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
+
         raw_ids = request.GET.get("ids", "")
         selected_ids: list[int] = []
         for value in raw_ids.split(","):
