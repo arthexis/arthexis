@@ -1,5 +1,7 @@
 from io import StringIO
 from pathlib import Path
+import sys
+from types import ModuleType
 
 import pytest
 from django.core.management.base import CommandError
@@ -498,6 +500,57 @@ def test_handle_passes_effective_capture_options_to_backend(monkeypatch) -> None
     }
 
 
+def _install_fake_selenium_modules(monkeypatch) -> None:
+    """Install a minimal Selenium module tree so monkeypatch can target it."""
+
+    class _FakeTimeoutException(Exception):
+        """Placeholder Selenium timeout exception for unit tests."""
+
+    class _FakeWebDriverException(Exception):
+        """Placeholder Selenium driver exception for unit tests."""
+
+    class _FakeBy:
+        """Minimal Selenium ``By`` namespace used by preview tests."""
+
+        CSS_SELECTOR = "css selector"
+        ID = "id"
+
+    selenium_module = ModuleType("selenium")
+    common_module = ModuleType("selenium.common")
+    common_exceptions_module = ModuleType("selenium.common.exceptions")
+    webdriver_module = ModuleType("selenium.webdriver")
+    webdriver_common_module = ModuleType("selenium.webdriver.common")
+    webdriver_common_by_module = ModuleType("selenium.webdriver.common.by")
+    chrome_module = ModuleType("selenium.webdriver.chrome")
+    chrome_options_module = ModuleType("selenium.webdriver.chrome.options")
+    support_module = ModuleType("selenium.webdriver.support")
+    support_ui_module = ModuleType("selenium.webdriver.support.ui")
+
+    selenium_module.common = common_module
+    selenium_module.webdriver = webdriver_module
+    common_module.exceptions = common_exceptions_module
+    common_exceptions_module.TimeoutException = _FakeTimeoutException
+    common_exceptions_module.WebDriverException = _FakeWebDriverException
+    webdriver_module.common = webdriver_common_module
+    webdriver_module.chrome = chrome_module
+    webdriver_module.support = support_module
+    webdriver_common_module.by = webdriver_common_by_module
+    webdriver_common_by_module.By = _FakeBy
+    chrome_module.options = chrome_options_module
+    support_module.ui = support_ui_module
+
+    monkeypatch.setitem(sys.modules, "selenium", selenium_module)
+    monkeypatch.setitem(sys.modules, "selenium.common", common_module)
+    monkeypatch.setitem(sys.modules, "selenium.common.exceptions", common_exceptions_module)
+    monkeypatch.setitem(sys.modules, "selenium.webdriver", webdriver_module)
+    monkeypatch.setitem(sys.modules, "selenium.webdriver.common", webdriver_common_module)
+    monkeypatch.setitem(sys.modules, "selenium.webdriver.common.by", webdriver_common_by_module)
+    monkeypatch.setitem(sys.modules, "selenium.webdriver.chrome", chrome_module)
+    monkeypatch.setitem(sys.modules, "selenium.webdriver.chrome.options", chrome_options_module)
+    monkeypatch.setitem(sys.modules, "selenium.webdriver.support", support_module)
+    monkeypatch.setitem(sys.modules, "selenium.webdriver.support.ui", support_ui_module)
+
+
 def test_selenium_networkidle_warns_and_uses_load_wait(monkeypatch, tmp_path) -> None:
     """Selenium should warn that networkidle falls back to the load-ready check."""
 
@@ -561,9 +614,10 @@ def test_selenium_networkidle_warns_and_uses_load_wait(monkeypatch, tmp_path) ->
 
     fake_driver = FakeDriver()
 
-    monkeypatch.setattr("selenium.webdriver.Chrome", lambda options: fake_driver)
-    monkeypatch.setattr("selenium.webdriver.chrome.options.Options", FakeChromeOptions)
-    monkeypatch.setattr("selenium.webdriver.support.ui.WebDriverWait", FakeWebDriverWait)
+    _install_fake_selenium_modules(monkeypatch)
+    monkeypatch.setattr("selenium.webdriver.Chrome", lambda options: fake_driver, raising=False)
+    monkeypatch.setattr("selenium.webdriver.chrome.options.Options", FakeChromeOptions, raising=False)
+    monkeypatch.setattr("selenium.webdriver.support.ui.WebDriverWait", FakeWebDriverWait, raising=False)
 
     command._capture_all_selenium(
         base_url="http://127.0.0.1:8000",
@@ -651,9 +705,10 @@ def test_selenium_full_page_warns_and_uses_viewport_capture(monkeypatch, tmp_pat
 
     fake_driver = FakeDriver()
 
-    monkeypatch.setattr("selenium.webdriver.Chrome", lambda options: fake_driver)
-    monkeypatch.setattr("selenium.webdriver.chrome.options.Options", FakeChromeOptions)
-    monkeypatch.setattr("selenium.webdriver.support.ui.WebDriverWait", FakeWebDriverWait)
+    _install_fake_selenium_modules(monkeypatch)
+    monkeypatch.setattr("selenium.webdriver.Chrome", lambda options: fake_driver, raising=False)
+    monkeypatch.setattr("selenium.webdriver.chrome.options.Options", FakeChromeOptions, raising=False)
+    monkeypatch.setattr("selenium.webdriver.support.ui.WebDriverWait", FakeWebDriverWait, raising=False)
 
     output = tmp_path / "admin-preview.png"
     command._capture_all_selenium(
