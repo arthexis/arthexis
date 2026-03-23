@@ -14,6 +14,7 @@ from apps.desktop.models import DesktopShortcut
 from apps.desktop.services import (
     DesktopSyncResult,
     _build_exec,
+    _evaluate_expression,
     should_install_shortcut,
     sync_desktop_shortcuts,
 )
@@ -181,6 +182,12 @@ def test_build_exec_always_uses_browser_helper() -> None:
 
     assert "webbrowser" in exec_value
     assert "https://example.com:8443/status" in exec_value
+
+
+def test_evaluate_expression_rejects_bare_has_feature_name() -> None:
+    """Bare ``has_feature`` names should evaluate as invalid expressions."""
+
+    assert _evaluate_expression("has_feature", {"has_feature": lambda _slug: True}) is False
 
 
 def test_sync_desktop_shortcuts_marks_db_unavailable_and_logs_warning(

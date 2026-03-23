@@ -46,6 +46,21 @@ _ALLOWED_CONDITION_NAMES = {
 _ALLOWED_URL_SCHEMES = {"http", "https"}
 
 
+def _is_has_feature_callable_name(node: ast.Name, parents: dict[ast.AST, ast.AST]) -> bool:
+    """Return whether ``node`` is the callable name in a ``has_feature(...)`` call.
+
+    Parameters:
+        node: The AST name node under inspection.
+        parents: Mapping of child nodes to their direct parent node.
+
+    Returns:
+        ``True`` when the name is used as the function target for a call.
+    """
+
+    parent = parents.get(node)
+    return isinstance(parent, ast.Call) and parent.func is node
+
+
 class RegisteredExtension(Entity):
     """Map a file extension to a Django management command executable."""
 
@@ -246,6 +261,11 @@ class DesktopShortcut(Entity):
                 "Enter a valid condition expression."
             ) from exc
 
+        parents = {
+            child: parent
+            for parent in ast.walk(tree)
+            for child in ast.iter_child_nodes(parent)
+        }
         for node in ast.walk(tree):
             if not isinstance(node, _ALLOWED_CONDITION_AST_NODES):
                 raise ValidationError(
@@ -254,6 +274,14 @@ class DesktopShortcut(Entity):
             if isinstance(node, ast.Name) and node.id not in _ALLOWED_CONDITION_NAMES:
                 raise ValidationError(
                     f"Condition expressions cannot reference '{node.id}'."
+                )
+            if (
+                isinstance(node, ast.Name)
+                and node.id == "has_feature"
+                and not _is_has_feature_callable_name(node, parents)
+            ):
+                raise ValidationError(
+                    "Condition expressions must call has_feature(...)."
                 )
             if isinstance(node, ast.Call):
                 if not isinstance(node.func, ast.Name) or node.func.id != "has_feature":
@@ -276,7 +304,12 @@ class DesktopShortcut(Entity):
         if not normalized_target_url:
             raise ValidationError("A target URL is required.")
 
-        parsed = urlparse(normalized_target_url.format(port="80"))
+        try:
+            parsed = urlparse(normalized_target_url.format(port="80"))
+        except (KeyError, ValueError) as exc:
+            raise ValidationError(
+                "Target URL must only use the {port} placeholder."
+            ) from exc
         if parsed.scheme not in _ALLOWED_URL_SCHEMES or not parsed.netloc:
             raise ValidationError(
                 "Target URL must be an absolute http:// or https:// URL."

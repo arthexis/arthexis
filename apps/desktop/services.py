@@ -42,6 +42,21 @@ class DesktopSyncResult:
     skipped_db_unavailable: bool = False
 
 
+def _is_has_feature_callable_name(node: ast.Name, parents: dict[ast.AST, ast.AST]) -> bool:
+    """Return whether ``node`` is the callable name in a ``has_feature(...)`` call.
+
+    Parameters:
+        node: The AST name node under inspection.
+        parents: Mapping of child nodes to their direct parent node.
+
+    Returns:
+        ``True`` when the name is used as the function target for a call.
+    """
+
+    parent = parents.get(node)
+    return isinstance(parent, ast.Call) and parent.func is node
+
+
 def build_windows_registry_command(extension: RegisteredExtension) -> str:
     """Build the Windows shell command used to open a file with this extension."""
 
@@ -216,8 +231,19 @@ def _evaluate_expression(expression: str, context: dict[str, object]) -> bool:
         ast.Tuple,
         ast.List,
     )
+    parents = {
+        child: parent
+        for parent in ast.walk(tree)
+        for child in ast.iter_child_nodes(parent)
+    }
     for node in ast.walk(tree):
         if not isinstance(node, allowed_nodes):
+            return False
+        if (
+            isinstance(node, ast.Name)
+            and node.id == "has_feature"
+            and not _is_has_feature_callable_name(node, parents)
+        ):
             return False
         if isinstance(node, ast.Call):
             if not isinstance(node.func, ast.Name) or node.func.id != "has_feature":

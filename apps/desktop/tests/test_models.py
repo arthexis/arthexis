@@ -97,6 +97,45 @@ def test_desktop_shortcut_clean_rejects_unsafe_condition_expression() -> None:
     ]
 
 
+def test_desktop_shortcut_clean_rejects_bare_has_feature_name() -> None:
+    """Condition expressions must call ``has_feature`` instead of referencing it."""
+
+    shortcut = DesktopShortcut(
+        slug="bare-has-feature",
+        desktop_filename="Bare Has Feature",
+        name="Bare Has Feature",
+        launch_mode=DesktopShortcut.LaunchMode.URL,
+        target_url="http://127.0.0.1:{port}/",
+        condition_expression="has_feature",
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        shortcut.clean()
+
+    assert exc_info.value.message_dict["condition_expression"] == [
+        "Condition expressions must call has_feature(...)."
+    ]
+
+
+def test_desktop_shortcut_clean_rejects_invalid_url_placeholder() -> None:
+    """Target URLs should reject unsupported format placeholders cleanly."""
+
+    shortcut = DesktopShortcut(
+        slug="invalid-placeholder",
+        desktop_filename="Invalid Placeholder",
+        name="Invalid Placeholder",
+        launch_mode=DesktopShortcut.LaunchMode.URL,
+        target_url="https://example.com:{port}/{station_id}",
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        shortcut.clean()
+
+    assert exc_info.value.message_dict["target_url"] == [
+        "Target URL must only use the {port} placeholder."
+    ]
+
+
 def test_desktop_shortcut_clean_rejects_icon_name_and_base64_together() -> None:
     """Desktop icons cannot use both system icon names and base64 payloads."""
 
