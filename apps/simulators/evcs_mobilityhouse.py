@@ -327,7 +327,26 @@ class MobilityHouseChargePointAdapter:
         expected_message_id: str | None = None,
         timeout: float = 60.0,
     ) -> tuple[object, list[object] | None]:
+        """Read websocket frames until a matching response arrives.
+
+        Args:
+            ws: Active websocket connection for the simulator session.
+            expected_message_id: Optional message identifier that constrains which
+                CallResult or CallError frame is returned.
+            timeout: Maximum time in seconds to continue receiving frames before
+                `_recv` raises for timeout or transport failure.
+
+        Returns:
+            A tuple of the decoded response payload and the last observed Call
+            frame, or ``None`` when no Call was seen before the response.
+
+        Raises:
+            TimeoutError: Propagated when the receive deadline elapses.
+            RuntimeError: Propagated for websocket or protocol failures surfaced
+                by ``_recv``.
+        """
         deadline = time.monotonic() + timeout
+        call: list[object] | None = None
         while True:
             remaining = max(0.1, timeout if not expected_message_id else deadline - time.monotonic())
             incoming = await self._recv(ws, timeout=remaining)
@@ -640,7 +659,6 @@ __all__ = [
     "build_simulator_proposal",
     "ensure_mobilityhouse_ocpp_available",
 ]
-
 
 
 
