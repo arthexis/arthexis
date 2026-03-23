@@ -80,14 +80,20 @@ def test_removed_runtime_apps_only_remain_available_through_explicit_legacy_shim
     assert "apps.fitbit" not in settings_apps.LOCAL_APPS
     assert "apps.prompts" not in settings_apps.LOCAL_APPS
     assert "apps.socials" not in settings_apps.LOCAL_APPS
+    assert "apps.sponsors" not in settings_apps.LOCAL_APPS
     assert "apps.survey" not in settings_apps.LOCAL_APPS
     assert (
         "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig"
         in settings_apps.LEGACY_MIGRATION_APPS
     )
     assert settings_apps.MIGRATION_MODULES["socials"] == "apps.socials.migrations"
+    assert settings_apps.MIGRATION_MODULES["sponsors"] == "apps.sponsors.migrations"
     assert (
         "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig"
+        in settings_apps.LEGACY_MIGRATION_APPS
+    )
+    assert (
+        "apps._legacy.sponsors_migration_only.apps.SponsorsMigrationOnlyConfig"
         in settings_apps.LEGACY_MIGRATION_APPS
     )
     assert (
@@ -107,5 +113,6 @@ def test_legacy_runtime_packages_are_derived_from_legacy_migration_apps():
         "apps.extensions",
         "apps.prompts",
         "apps.socials",
+        "apps.sponsors",
         "apps.survey",
     }
