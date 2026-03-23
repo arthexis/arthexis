@@ -1,5 +1,7 @@
 from io import StringIO
 from pathlib import Path
+import sys
+from types import ModuleType
 
 import pytest
 from django.core.management.base import CommandError
@@ -498,6 +500,54 @@ def test_handle_passes_effective_capture_options_to_backend(monkeypatch) -> None
     }
 
 
+def _install_fake_selenium_modules(monkeypatch) -> None:
+    """Install a minimal Selenium module tree so monkeypatch can target it."""
+
+    class _FakeTimeoutException(Exception):
+        """Placeholder Selenium timeout exception for unit tests."""
+
+    class _FakeWebDriverException(Exception):
+        """Placeholder Selenium driver exception for unit tests."""
+
+    class _FakeBy:
+        """Minimal Selenium ``By`` namespace used by preview tests."""
+
+        CSS_SELECTOR = "css selector"
+        ID = "id"
+
+    modules = {
+        name: ModuleType(name)
+        for name in [
+            "selenium",
+            "selenium.common",
+            "selenium.common.exceptions",
+            "selenium.webdriver",
+            "selenium.webdriver.common",
+            "selenium.webdriver.common.by",
+            "selenium.webdriver.chrome",
+            "selenium.webdriver.chrome.options",
+            "selenium.webdriver.support",
+            "selenium.webdriver.support.ui",
+        ]
+    }
+
+    modules["selenium"].common = modules["selenium.common"]
+    modules["selenium"].webdriver = modules["selenium.webdriver"]
+    modules["selenium.common"].exceptions = modules["selenium.common.exceptions"]
+    modules["selenium.common.exceptions"].TimeoutException = _FakeTimeoutException
+    modules["selenium.common.exceptions"].WebDriverException = _FakeWebDriverException
+    modules["selenium.webdriver"].common = modules["selenium.webdriver.common"]
+    modules["selenium.webdriver"].chrome = modules["selenium.webdriver.chrome"]
+    modules["selenium.webdriver"].support = modules["selenium.webdriver.support"]
+    modules["selenium.webdriver.common"].by = modules["selenium.webdriver.common.by"]
+    modules["selenium.webdriver.common.by"].By = _FakeBy
+    modules["selenium.webdriver.chrome"].options = modules["selenium.webdriver.chrome.options"]
+    modules["selenium.webdriver.support"].ui = modules["selenium.webdriver.support.ui"]
+
+    for name, module in modules.items():
+        monkeypatch.setitem(sys.modules, name, module)
+
+
 def test_selenium_networkidle_warns_and_uses_load_wait(monkeypatch, tmp_path) -> None:
     """Selenium should warn that networkidle falls back to the load-ready check."""
 
@@ -561,9 +611,10 @@ def test_selenium_networkidle_warns_and_uses_load_wait(monkeypatch, tmp_path) ->
 
     fake_driver = FakeDriver()
 
-    monkeypatch.setattr("selenium.webdriver.Chrome", lambda options: fake_driver)
-    monkeypatch.setattr("selenium.webdriver.chrome.options.Options", FakeChromeOptions)
-    monkeypatch.setattr("selenium.webdriver.support.ui.WebDriverWait", FakeWebDriverWait)
+    _install_fake_selenium_modules(monkeypatch)
+    monkeypatch.setattr("selenium.webdriver.Chrome", lambda options: fake_driver, raising=False)
+    monkeypatch.setattr("selenium.webdriver.chrome.options.Options", FakeChromeOptions, raising=False)
+    monkeypatch.setattr("selenium.webdriver.support.ui.WebDriverWait", FakeWebDriverWait, raising=False)
 
     command._capture_all_selenium(
         base_url="http://127.0.0.1:8000",
@@ -651,9 +702,10 @@ def test_selenium_full_page_warns_and_uses_viewport_capture(monkeypatch, tmp_pat
 
     fake_driver = FakeDriver()
 
-    monkeypatch.setattr("selenium.webdriver.Chrome", lambda options: fake_driver)
-    monkeypatch.setattr("selenium.webdriver.chrome.options.Options", FakeChromeOptions)
-    monkeypatch.setattr("selenium.webdriver.support.ui.WebDriverWait", FakeWebDriverWait)
+    _install_fake_selenium_modules(monkeypatch)
+    monkeypatch.setattr("selenium.webdriver.Chrome", lambda options: fake_driver, raising=False)
+    monkeypatch.setattr("selenium.webdriver.chrome.options.Options", FakeChromeOptions, raising=False)
+    monkeypatch.setattr("selenium.webdriver.support.ui.WebDriverWait", FakeWebDriverWait, raising=False)
 
     output = tmp_path / "admin-preview.png"
     command._capture_all_selenium(

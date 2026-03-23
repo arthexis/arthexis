@@ -38,6 +38,8 @@ def _sanitize_remediation_url(remediation_url: str) -> str:
     if parsed.scheme in {"http", "https"}:
         return candidate
 
+    return "/admin/"
+
 class OperationScreen(Entity):
     """Defines an operation that staff can execute through one or more screens."""
 
