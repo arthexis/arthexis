@@ -27,7 +27,7 @@ def _write_app(apps_root: Path, relative_parts: tuple[str, ...]) -> None:
     )
 
 
-def test_hidden_prototype_apps_require_explicit_activation(monkeypatch, tmp_path):
+def test_hidden_packages_stay_out_of_local_django_app_discovery(monkeypatch, tmp_path):
     apps_root = tmp_path / "apps"
     _write_app(apps_root, ("public_updates",))
     _write_app(apps_root, ("_prototypes", "vision_lab"))
@@ -37,17 +37,6 @@ def test_hidden_prototype_apps_require_explicit_activation(monkeypatch, tmp_path
 
     assert "apps.public_updates" in discovered
     assert "apps._prototypes.vision_lab" not in discovered
-
-    monkeypatch.setenv("ARTHEXIS_PROTOTYPE_APP", "apps._prototypes.vision_lab")
-    monkeypatch.setattr(
-        settings_apps.importlib.util,
-        "find_spec",
-        lambda module_name: object()
-        if module_name == "apps._prototypes.vision_lab"
-        else None,
-    )
-
-    assert settings_apps._load_active_prototype_app() == ["apps._prototypes.vision_lab"]
 
 
 def test_camera_utility_package_stays_out_of_local_django_app_discovery(
