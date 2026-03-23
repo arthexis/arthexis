@@ -1,174 +1,102 @@
-"""Regression tests for remote actions API endpoints."""
+"""Regression tests for explicit actions API endpoints and action models."""
 
 from __future__ import annotations
 
-import datetime
-
 import pytest
 from django.contrib.auth import get_user_model
-from django.test import RequestFactory
-from django.utils import timezone
+from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 
-from apps.actions.models import RemoteAction, RemoteActionToken
-from apps.actions.openapi import build_openapi_spec
+from apps.actions.models import DashboardAction, StaffTask
+from apps.actions.staff_tasks import ensure_default_staff_tasks_exist, visible_staff_tasks_for_user
 from apps.groups.models import SecurityGroup
-from apps.recipes.models import Recipe
 
 
 @pytest.mark.django_db
-def test_security_groups_endpoint_returns_authorized_user_groups(client):
-    """Regression: bearer-auth endpoint exposes groups for token owner only."""
+def test_security_groups_endpoint_returns_session_user_groups(client):
+    """Regression: supported groups API should list the logged-in user's groups."""
 
     user_model = get_user_model()
     user = user_model.objects.create_user(username="api-user", password="secret123")
-    group = SecurityGroup.objects.create(name="Operators")
+    group = SecurityGroup.objects.create(name=NETWORK_OPERATOR_GROUP_NAME)
     user.groups.add(group)
-    _, raw_key = RemoteActionToken.issue_for_user(user)
+    client.force_login(user)
 
-    response = client.get(
-        "/actions/api/v1/security-groups/",
-        HTTP_AUTHORIZATION=f"Bearer {raw_key}",
-    )
+    response = client.get("/actions/api/v1/security-groups/")
 
     assert response.status_code == 200
-    assert response.json() == {"groups": ["Operators"]}
+    assert response.json() == {"groups": [NETWORK_OPERATOR_GROUP_NAME]}
 
 
 @pytest.mark.django_db
-def test_invoke_action_executes_linked_recipe_for_owned_action(client):
-    """Regression: API invocation executes selected action recipe and returns result."""
+def test_security_groups_endpoint_requires_login(client):
+    """Security: supported groups API should reject anonymous callers."""
 
-    user_model = get_user_model()
-    user = user_model.objects.create_user(username="owner", password="secret123")
-    recipe = Recipe.objects.create(
-        user=user,
-        display="Echo",
-        slug="echo-recipe",
-        script="result = kwargs.get('message', 'none')",
-    )
-    RemoteAction.objects.create(
-        user=user,
-        display="Echo action",
-        slug="echo-action",
-        operation_id="echoAction",
-        recipe=recipe,
-    )
-    _, raw_key = RemoteActionToken.issue_for_user(user)
+    response = client.get("/actions/api/v1/security-groups/")
 
-    response = client.post(
-        "/actions/api/v1/remote/echo-action/",
-        data='{"kwargs": {"message": "hello"}}',
-        content_type="application/json",
-        HTTP_AUTHORIZATION=f"Bearer {raw_key}",
-    )
-
-    assert response.status_code == 200
-    assert response.json() == {"action": "echo-action", "result": "hello"}
+    assert response.status_code == 302
 
 
 @pytest.mark.django_db
-def test_expired_token_is_rejected(client):
-    """Regression: expired bearer tokens cannot call remote actions APIs."""
+def test_dashboard_action_clean_rejects_unknown_internal_action():
+    """Regression: dashboard actions must point to registered internal actions."""
 
-    user_model = get_user_model()
-    user = user_model.objects.create_user(username="expired", password="secret123")
-    _, raw_key = RemoteActionToken.issue_for_user(
-        user,
-        expires_at=timezone.now() - datetime.timedelta(minutes=1),
+    action = DashboardAction(
+        content_type=ContentType.objects.get_for_model(SecurityGroup),
+        slug="unknown-action",
+        label="Unknown",
+        action_name="not-registered",
     )
 
-    response = client.get(
-        "/actions/api/v1/security-groups/",
-        HTTP_AUTHORIZATION=f"Bearer {raw_key}",
-    )
+    with pytest.raises(ValidationError) as excinfo:
+        action.clean()
 
-    assert response.status_code == 401
-    assert response.json()["detail"] == "Token has expired."
+    assert excinfo.value.message_dict == {
+        "action_name": ["Select a supported internal action."]
+    }
 
 
 @pytest.mark.django_db
-def test_invoke_action_rejects_invalid_argument_shapes(client):
-    """Security: reject payloads that do not provide list args and object kwargs."""
+def test_staff_task_resolves_named_internal_action_for_visible_tasks():
+    """Regression: seeded staff tasks should resolve URLs from named internal actions."""
 
     user_model = get_user_model()
-    user = user_model.objects.create_user(username="owner2", password="secret123")
-    recipe = Recipe.objects.create(
-        user=user,
-        display="Echo",
-        slug="echo-recipe-2",
-        script="result = kwargs.get('message', 'none')",
-    )
-    RemoteAction.objects.create(
-        user=user,
-        display="Echo action",
-        slug="echo-action-2",
-        operation_id="echoAction2",
-        recipe=recipe,
-    )
-    _, raw_key = RemoteActionToken.issue_for_user(user)
-
-    response = client.post(
-        "/actions/api/v1/remote/echo-action-2/",
-        data='{"args": {"not": "a-list"}}',
-        content_type="application/json",
-        HTTP_AUTHORIZATION=f"Bearer {raw_key}",
+    user = user_model.objects.create_user(
+        username="staff-user",
+        password="secret123",
+        is_staff=True,
     )
 
-    assert response.status_code == 400
+    ensure_default_staff_tasks_exist()
+    tasks = visible_staff_tasks_for_user(user)
+
+    assert any(task["slug"] == "groups" and task["url"] == "/actions/api/v1/security-groups/" for task in tasks)
+    assert StaffTask.objects.filter(slug="actions").exists() is False
 
 
 @pytest.mark.django_db
-def test_authenticate_bearer_throttles_last_used_updates(client):
-    """Regression: repeat requests within one minute do not re-write last_used_at."""
+def test_ensure_default_staff_tasks_exist_preserves_existing_seeded_task_edits():
+    """Regression: reseeding should not overwrite operator changes to seeded tasks."""
 
-    user_model = get_user_model()
-    user = user_model.objects.create_user(username="throttle", password="secret123")
-    _, raw_key = RemoteActionToken.issue_for_user(user)
-
-    first = client.get(
-        "/actions/api/v1/security-groups/",
-        HTTP_AUTHORIZATION=f"Bearer {raw_key}",
-    )
-    assert first.status_code == 200
-    token = RemoteActionToken.objects.get(user=user)
-    first_last_used = token.last_used_at
-
-    second = client.get(
-        "/actions/api/v1/security-groups/",
-        HTTP_AUTHORIZATION=f"Bearer {raw_key}",
-    )
-    assert second.status_code == 200
-    token.refresh_from_db()
-
-    assert token.last_used_at == first_last_used
-
-
-@pytest.mark.django_db
-def test_openapi_spec_uses_request_host_and_strips_html():
-    """Regression: OpenAPI export should use deployment host and plain-text docs."""
-
-    user_model = get_user_model()
-    user = user_model.objects.create_user(username="spec-user", password="secret123")
-    recipe = Recipe.objects.create(
-        user=user,
-        display="Recipe",
-        slug="spec-recipe",
-        script="result = 'ok'",
-    )
-    action = RemoteAction.objects.create(
-        user=user,
-        display="<b>Display</b>",
-        slug="spec-action",
-        operation_id="specAction",
-        description="<script>alert(1)</script>Description",
-        recipe=recipe,
+    StaffTask.objects.create(
+        slug="groups",
+        label="Customized Groups",
+        description="Customized description.",
+        action_name="groups",
+        order=5,
+        default_enabled=False,
+        staff_only=False,
+        superuser_only=True,
+        is_active=False,
     )
 
-    request = RequestFactory().get("/admin/actions/remoteaction/my-openapi-spec/", HTTP_HOST="testserver")
+    ensure_default_staff_tasks_exist()
 
-    spec = build_openapi_spec(user=user, actions=[action], request=request)
-    operation = spec["paths"]["/actions/api/v1/remote/spec-action/"]["post"]
-
-    assert spec["servers"][0]["url"] == "http://testserver"
-    assert operation["summary"] == "Display"
-    assert operation["description"] == "alert(1)Description"
+    task = StaffTask.objects.get(slug="groups")
+    assert task.label == "Customized Groups"
+    assert task.description == "Customized description."
+    assert task.order == 5
+    assert task.default_enabled is False
+    assert task.staff_only is False
+    assert task.superuser_only is True
+    assert task.is_active is False

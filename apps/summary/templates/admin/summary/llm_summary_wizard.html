@@ -1,10 +1,17 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans "Home" %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{{ changelist_url }}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; {% trans "Configure" %}
+  </div>
+{% endblock %}
+
 {% block content %}
   <div class="content">
-    <h1>{% trans "LLM Summary Model Wizard" %}</h1>
-
     <p>
       {% blocktrans %}
         Use this wizard to configure where the LCD summary model lives and to
@@ -44,6 +51,29 @@
             {{ config.installed_at|default:_("Not installed yet") }}
           </div>
         </div>
+      </fieldset>
+
+
+      <fieldset class="module">
+        <h2>{% trans "Environment checklist" %}</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>{% trans "Step" %}</th>
+              <th>{% trans "Status" %}</th>
+              <th>{% trans "Guidance" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in checks %}
+              <tr>
+                <td>{{ item.label }}</td>
+                <td>{{ item.status }}</td>
+                <td>{{ item.detail }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </fieldset>
 
       <div class="submit-row">

@@ -5,7 +5,7 @@
     <ul class="related-models__list">
       {% for related in related_models %}
         <li class="related-models__item">
-          <a class="related-models__link" href="{{ related.url }}">
+          <a class="related-models__link" href="{{ related.url }}"{% if related.filter_lookups %} data-related-filter-lookups="{{ related.filter_lookups|join:"," }}" data-related-source-model="{{ related.source_model_label }}"{% endif %}>
             <span class="related-models__relation" aria-label="{{ related.relation_title|default:related.label }}">
               {{ related.relation_type|default:"—" }}
             </span>

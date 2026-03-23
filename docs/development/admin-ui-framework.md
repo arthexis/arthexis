@@ -7,6 +7,8 @@ This project now includes a shared **admin UI framework** for consistent spacing
 - Ensure buttons and action links render at a predictable, uniform height.
 - Use common spacing and panel primitives so custom views feel native.
 - Provide a repeatable pattern for future admin customizations.
+- Steer administrators toward developed and tested UI capabilities instead of recipe-like or programmer-oriented configuration surfaces.
+- Keep **SIGILS** available where basic templating or default values improve usability without introducing control flow.
 
 ## Framework location
 
@@ -41,6 +43,7 @@ When creating or updating admin templates:
 4. Apply `.admin-ui-button` with a modifier class (for example, `.admin-ui-button--primary` or `.admin-ui-button--secondary`) to *every* clickable action in custom content.
 5. Prefer the `--primary`/`--secondary` modifiers over ad-hoc inline styles, since `.admin-ui-button` alone intentionally does not set a filled background.
 6. Keep custom CSS local only when the framework lacks a needed primitive.
+7. Prefer selectors, forms, and guided controls over free-form scripting or recipe-like configuration whenever a reusable workflow can be shipped in the suite.
 
 ## Prototype application
 

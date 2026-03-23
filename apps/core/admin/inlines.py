@@ -131,7 +131,24 @@ class UserPhoneNumberInline(admin.TabularInline):
 class EmailCollectorInline(admin.TabularInline):
     model = EmailCollector
     extra = 0
-    fields = ("name", "subject", "sender", "notification_mode", "notification_recipe")
+    fields = (
+        "name",
+        "notification_mode",
+        "collector_change_link",
+    )
+    readonly_fields = ("collector_change_link",)
+
+    def collector_change_link(self, obj):
+        """Return a link to the full collector change form."""
+        if not obj or not obj.pk:
+            return "Save to configure"
+        from django.urls import reverse
+        from django.utils.html import format_html
+
+        url = reverse("admin:emails_emailcollector_change", args=[obj.pk])
+        return format_html('<a href="{}">Open collector</a>', url)
+
+    collector_change_link.short_description = "Record"
 
 
 class CustomerAccountRFIDInline(admin.TabularInline):

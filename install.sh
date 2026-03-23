@@ -44,7 +44,7 @@ AUTO_UPGRADE=false
 CHANNEL="stable"
 UPGRADE=false
 ENABLE_CELERY=false
-SERVICE_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
+SERVICE_MANAGEMENT_MODE=""
 SERVICE_MANAGEMENT_MODE_FLAG=false
 START_FLAG=false
 ENABLE_LCD_SCREEN=false
@@ -149,7 +149,8 @@ clean_previous_installation_state() {
           "$LOCK_DIR/migrations.md5" \
           "$LOCK_DIR/fixtures.md5" \
           "$BASE_DIR/redis.env" \
-          "$BASE_DIR/debug.env"
+          "$BASE_DIR/debug.env" \
+          "$BASE_DIR/migration.env"
 
     rm -rf "$LOCK_DIR"
 }
@@ -171,6 +172,28 @@ reset_service_units_for_repair() {
     fi
 }
 
+write_redis_env() {
+    local role="$1"
+
+    cat > "$BASE_DIR/redis.env" <<'EOF'
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+EOF
+
+    case "${role,,}" in
+        satellite)
+            cat >> "$BASE_DIR/redis.env" <<'EOF'
+OCPP_STATE_REDIS_URL=redis://localhost:6379/0
+EOF
+            ;;
+        watchtower)
+            cat >> "$BASE_DIR/redis.env" <<'EOF'
+CHANNEL_REDIS_URL=redis://localhost:6379/0
+EOF
+            ;;
+    esac
+}
+
 require_redis() {
     if ! command -v redis-cli >/dev/null 2>&1; then
         echo "Redis is required for the $1 role but is not installed."
@@ -184,10 +207,8 @@ require_redis() {
         echo "  sudo systemctl start redis-server"
         exit 1
     fi
-    cat > "$BASE_DIR/redis.env" <<'EOF'
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/0
-EOF
+
+    write_redis_env "$1"
 }
 
 # Hardware support utilities.
@@ -341,6 +362,17 @@ done
 
 if [ "$ENABLE_CAMERA_SERVICE" = true ]; then
     REQUIRES_REDIS=true
+fi
+
+if [ "$SERVICE_MANAGEMENT_MODE_FLAG" = false ]; then
+    case "${NODE_ROLE,,}" in
+        satellite|watchtower)
+            SERVICE_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_SYSTEMD"
+            ;;
+        *)
+            SERVICE_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
+            ;;
+    esac
 fi
 
 if [ "$REPAIR" = true ]; then
@@ -570,6 +602,36 @@ fi
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 
+if [ -z "${ARTHEXIS_MIGRATION_POLICY:-}" ]; then
+    case "${NODE_ROLE,,}" in
+        satellite|watchtower)
+            ARTHEXIS_MIGRATION_POLICY="check"
+            ;;
+        *)
+            ARTHEXIS_MIGRATION_POLICY="apply"
+            ;;
+    esac
+fi
+
+case "${ARTHEXIS_MIGRATION_POLICY,,}" in
+    apply|check|skip)
+        ARTHEXIS_MIGRATION_POLICY="${ARTHEXIS_MIGRATION_POLICY,,}"
+        ;;
+    *)
+        echo "Warning: Invalid ARTHEXIS_MIGRATION_POLICY value '${ARTHEXIS_MIGRATION_POLICY}', using role default." >&2
+        case "${NODE_ROLE,,}" in
+            satellite|watchtower)
+                ARTHEXIS_MIGRATION_POLICY="check"
+                ;;
+            *)
+                ARTHEXIS_MIGRATION_POLICY="apply"
+                ;;
+        esac
+        ;;
+esac
+
+printf 'ARTHEXIS_MIGRATION_POLICY=%s\n' "$ARTHEXIS_MIGRATION_POLICY" > "$BASE_DIR/migration.env"
+
 source .venv/bin/activate
 arthexis_timing_start "pip_bootstrap"
 REQ_HASH_FILE="$LOCK_DIR/requirements.bundle.sha256"
@@ -605,7 +667,7 @@ else
 fi
 
 arthexis_timing_start "requirements_install"
-env_refresh_args=(--force-refresh --deps-only)
+env_refresh_args=(--force-refresh --install-and-refresh)
 if [ "$CHANNEL" = "unstable" ]; then
     env_refresh_args+=(--latest)
 fi
@@ -620,52 +682,20 @@ run_env_refresh() {
     fi
     "${env_prefix[@]}" ./env-refresh.sh "$@"
 }
-
 run_env_refresh "${env_refresh_args[@]}"
 arthexis_timing_end "requirements_install" "refreshed"
-
-
-# Apply database migrations for a ready-to-run schema.
-arthexis_timing_start "django_migrate"
-run_migration=false
-if ! python manage.py migrate --check; then
-    if migration_plan=$(python manage.py showmigrations --plan); then
-        if grep -q '^[[:space:]]*\\[ \\]' <<< "$migration_plan"; then
-            run_migration=true
-        fi
-    else
-        echo "Failed to inspect migrations" >&2
-        exit 1
-    fi
-fi
-
-if [ "$run_migration" = true ]; then
-    python manage.py migrate --noinput
-    arthexis_timing_end "django_migrate"
-else
-    arthexis_timing_record "django_migrate" 0 "skipped"
-fi
-
-# Load personal user data fixtures if present
+arthexis_timing_record "django_migrate" 0 "delegated-to-env-refresh"
 if ls data/*.json >/dev/null 2>&1; then
     arthexis_timing_start "load_user_data"
-    python manage.py load_user_data data/*.json
+    python manage.py loaddata data/*.json
     arthexis_timing_end "load_user_data"
 else
     arthexis_timing_record "load_user_data" 0 "skipped"
 fi
-
-# Refresh environment data and register this node
-arthexis_timing_start "env_refresh"
-if [ "$CHANNEL" = "unstable" ]; then
-    run_env_refresh --latest
-else
-    run_env_refresh
-fi
-arthexis_timing_end "env_refresh"
+arthexis_timing_record "env_refresh" 0 "included-in-requirements_install"
 
 # Ensure auto-managed node features are refreshed via NodeFeatureAssignment lifecycle.
-python manage.py refresh_node_features
+python manage.py features --refresh-node
 
 deactivate
 

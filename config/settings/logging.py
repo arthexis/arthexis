@@ -1,6 +1,6 @@
 """Logging settings."""
 
-from apps.loggers import build_logging_settings
+from utils.loggers import build_logging_settings
 
 from .base import BASE_DIR, DEBUG
 

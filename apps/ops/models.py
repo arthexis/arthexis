@@ -3,25 +3,40 @@
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from datetime import timedelta
 from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, connection, models, transaction
+from django.db import IntegrityError, models, transaction
+from django.db.models import F, Value
+from django.db.models.functions import Greatest, Now
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
 
-
 logger = logging.getLogger(__name__)
 
+VALIDATION_SQL_DISABLED_MESSAGE = _("Custom SQL validation is disabled for security reasons.")
 
-READ_ONLY_SQL_PATTERN = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
 
+def _sanitize_remediation_url(remediation_url: str) -> str:
+    """Return a safe remediation URL for security alert links."""
+
+    candidate = remediation_url.strip()
+    if not candidate:
+        return "/admin/"
+
+    parsed = urlparse(candidate)
+    if not parsed.scheme:
+        if candidate.startswith("//"):
+            return "/admin/"
+        return candidate
+
+    if parsed.scheme in {"http", "https"}:
+        return candidate
 
 class OperationScreen(Entity):
     """Defines an operation that staff can execute through one or more screens."""
@@ -79,28 +94,18 @@ class OperationScreen(Entity):
             raise ValidationError({"start_url": _("Start URL must be HTTP(S) or a relative path.")})
 
     def run_validation_sql(self) -> tuple[bool | None, str]:
-        """Execute optional SQL validation and return pass flag with output."""
+        """Return SQL validation status.
+
+        Free-form SQL execution is intentionally disabled to prevent arbitrary database
+        access through operation configuration.
+        """
 
         sql = (self.validation_sql or "").strip()
         if not sql:
             return None, ""
-        if not READ_ONLY_SQL_PATTERN.match(sql):
-            return False, _("Validation SQL must be a read-only SELECT query.")
 
-        try:
-            with transaction.atomic():
-                with connection.cursor() as cursor:
-                    cursor.execute(sql)
-                    row = cursor.fetchone()
-                transaction.set_rollback(True)
-        except DatabaseError as exc:
-            logger.exception("Validation SQL failed for operation %s", self.pk)
-            return False, str(exc)
-
-        if not row:
-            return False, _("Validation query returned no rows.")
-
-        return bool(row[0]), str(row[0])
+        logger.warning("Blocked validation_sql execution for operation %s", self.pk)
+        return None, _("Custom SQL validation is disabled for security reasons.")
 
 
 class OperationLink(Entity):
@@ -169,6 +174,8 @@ class OperationExecution(Entity):
             return
         if self.validation_passed is None:
             passed, output = self.operation.run_validation_sql()
+            if passed is False:
+                raise ValidationError({"validation_sql": output})
             self.validation_passed = passed
             self.validation_output = output
         super().save(*args, **kwargs)
@@ -177,6 +184,89 @@ class OperationExecution(Entity):
         """Return execution string summary."""
 
         return f"{self.operation} @ {self.performed_at:%Y-%m-%d %H:%M}"
+
+
+class SecurityAlertEvent(Entity):
+    """Aggregated operational error event used by the security alerts widget."""
+
+    key = models.CharField(max_length=255, unique=True)
+    severity = models.CharField(max_length=20, default="error")
+    message = models.CharField(max_length=255)
+    detail = models.TextField(blank=True)
+    occurrence_count = models.PositiveIntegerField(default=1)
+    last_occurred_at = models.DateTimeField(default=timezone.now)
+    remediation_url = models.CharField(max_length=500, default="/admin/")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-last_occurred_at", "-updated_at")
+        indexes = [
+            models.Index(
+                fields=["is_active", "-last_occurred_at"],
+                name="ops_secalert_active_last",
+            )
+        ]
+        verbose_name = _("Security Alert Event")
+        verbose_name_plural = _("Security Alert Events")
+
+    def __str__(self) -> str:
+        """Return a readable key/message label for admin lists."""
+
+        return f"{self.key}: {self.message}"
+
+    @classmethod
+    def record_occurrence(
+        cls,
+        *,
+        key: str,
+        message: str,
+        detail: str = "",
+        severity: str = "error",
+        remediation_url: str = "/admin/",
+        occurred_at=None,
+    ) -> SecurityAlertEvent:
+        """Create or update an event entry while incrementing occurrence metadata."""
+
+        event_timestamp = occurred_at or timezone.now()
+        safe_remediation_url = _sanitize_remediation_url(remediation_url)
+        try:
+            with transaction.atomic():
+                return cls.objects.create(
+                    key=key,
+                    severity=severity,
+                    message=message,
+                    detail=detail,
+                    occurrence_count=1,
+                    last_occurred_at=event_timestamp,
+                    remediation_url=safe_remediation_url,
+                    is_active=True,
+                )
+        except IntegrityError:
+            cls.objects.filter(key=key).update(
+                severity=severity,
+                message=message,
+                detail=detail,
+                remediation_url=safe_remediation_url,
+                occurrence_count=F("occurrence_count") + 1,
+                last_occurred_at=Greatest(F("last_occurred_at"), Value(event_timestamp)),
+                is_active=True,
+                updated_at=Now(),
+            )
+        return cls.objects.get(key=key)
+
+    @classmethod
+    def clear_occurrence(cls, *, key: str, occurred_at=None) -> None:
+        """Mark an aggregated event inactive when the source recovers."""
+
+        update_kwargs = {"is_active": False, "updated_at": Now()}
+        if occurred_at is not None:
+            update_kwargs["last_occurred_at"] = Greatest(
+                F("last_occurred_at"),
+                Value(occurred_at),
+            )
+        cls.objects.filter(key=key, is_active=True).update(**update_kwargs)
 
 
 @dataclass(slots=True)

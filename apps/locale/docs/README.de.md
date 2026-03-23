@@ -1,7 +1,7 @@
 # Constellation
 
 [![OCPP 1.6-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.0.1-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp201_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.1-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md)
-[![Install CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/install-hourly.yml?branch=main&label=Install%20CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/install-hourly.yml) [![Upgrade CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/ci.yml?branch=main&label=Upgrade%20CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![Lizenz: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/arthexis/arthexis/blob/main/LICENSE)
+[![Install CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/install-hourly.yml?branch=main&label=Install%20CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/install-hourly.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![Lizenz: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/arthexis/arthexis/blob/main/LICENSE)
 
 
 ## Zweck
@@ -141,7 +141,8 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
 - Verbinde Slack-Workspaces mit dem [Slack-Bot-Onboarding-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
 
 ### 5. Entwicklung
-- Durchsuche die [Entwickler-Dokumentationsbibliothek](/docs/library/) für Architekturreferenzen, Protokollhandbücher und Beitrags-Workflows.
+- Durchsuche die [Entwickler-Dokumentationsbibliothek](../../../docs/index.md) für Architekturreferenzen, Protokollhandbücher und Beitrags-Workflows.
+- Hinweis: Dieser Link zeigt auf die Dokumentation im Repository und nicht auf eine Laufzeit-Webroute.
 
 ## Support
 
@@ -153,3 +154,9 @@ Wenn du unsere Suite für deine Energieprojekte einsetzen möchtest, erreichst d
 
 > "Wie bitte, du willst auch etwas über mich wissen? Nun, ich mag es, Software zu entwickeln, Pen-&-Paper-Rollenspiele, lange Spaziergänge am Strand und eine vierte geheime Sache."
 > --Arthexis
+
+## Lizenz und Förderung
+
+Arthexis wird unter der Arthexis Contribution Reciprocity License 1.0 veröffentlicht. Neben Code, Dokumentation, Reviews und Wartung betrachten wir auch das Sponsoring von Arthexis sowie bezahlte oder ehrenamtliche Arbeit für die Open-Source-Abhängigkeiten, auf denen wir aufbauen, als gültigen und wichtigen Beitrag.
+
+Wenn Arthexis deinem Team hilft, lies bitte die Lizenzbedingungen in [`LICENSE`](../../../LICENSE) und erwäge, die Maintainer der Bibliotheken, Frameworks und Infrastrukturprojekte zu sponsoren oder direkt zu unterstützen, die diese Suite möglich machen. Die Unterstützung dieser Abhängigkeiten stärkt das gesamte Arthexis-Ökosystem.

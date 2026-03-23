@@ -1,0 +1,40 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "slug": "whatsapp-chat-bridge",
+      "display": "WhatsApp Chat Bridge",
+      "summary": "Controls WhatsApp webhook intake and bridge/session activity. Disabled uses soft mode: Arthexis still accepts webhook payloads for audit/debug handling where supported, but it does not create WhatsApp bridge traffic or chat session messages.",
+      "is_enabled": true,
+      "main_app": [
+        "meta"
+      ],
+      "node_feature": null,
+      "admin_requirements": "Operators manage the feature in Suite Features. When disabled, Meta webhook endpoints continue to accept inbound payloads for audit visibility while bridge delivery and chat session creation stay blocked. Admin screens for WhatsApp webhooks and messages should surface that disable contract clearly.",
+      "public_requirements": "No public-facing requirements.",
+      "service_requirements": "WhatsApp webhook entry points should remain consistent: disabled mode returns accepted-without-bridge activity, persists Meta webhook message payloads for audit/debug, and prevents new WhatsApp bridge or chat session message creation, including traffic aimed at existing sessions.",
+      "admin_views": [
+        "admin:features_feature_changelist",
+        "admin:meta_whatsappwebhook_changelist",
+        "admin:meta_whatsappwebhookmessage_changelist"
+      ],
+      "public_views": [],
+      "service_views": [
+        "meta:whatsapp-webhook",
+        "pages:whatsapp-webhook"
+      ],
+      "code_locations": [
+        "apps/meta/admin.py",
+        "apps/meta/models.py",
+        "apps/meta/views.py",
+        "apps/sites/views/management.py"
+      ],
+      "protocol_coverage": {},
+      "created_at": "2024-03-22T00:00:00Z",
+      "updated_at": "2024-03-22T00:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false,
+      "source": "mainstream"
+    }
+  }
+]

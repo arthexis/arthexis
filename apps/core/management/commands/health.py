@@ -17,7 +17,6 @@ from apps.core.services.health_checks import (
     run_check_system_user,
     run_check_time,
 )
-from apps.mcp.remote_commands import remote_command
 from apps.ocpp.services.health_checks import run_check_forwarders
 from apps.release.services.health_checks import run_check_pypi
 
@@ -84,10 +83,6 @@ HEALTH_CHECKS = {
 }
 
 
-@remote_command(
-    description="Run configured application health checks.",
-    security_groups=["Site Operator"],
-)
 class Command(BaseCommand):
     """Run one or more application health checks from a unified interface."""
 

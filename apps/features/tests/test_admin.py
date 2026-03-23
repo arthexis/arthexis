@@ -1,49 +1,49 @@
 """Admin regression tests for suite feature workflows."""
 
-from __future__ import annotations
-
 import pytest
-from django.contrib import admin
-from django.contrib.auth.models import Permission
-from django.contrib.messages import get_messages
-from django.test import RequestFactory
-from django.test import override_settings
-from django.urls import reverse
 
 from apps.app.models import Application
 from apps.features.admin import FeatureAdmin, SourceAppListFilter
 from apps.features.models import Feature
 
 
-TEST_STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
-}
+@pytest.mark.parametrize(
+    ("arthexis_backend", "mobilityhouse_backend", "is_valid"),
+    [
+        ("disabled", "disabled", False),
+        ("enabled", "disabled", True),
+        ("disabled", "enabled", True),
+        ("enabled", "enabled", True),
+    ],
+)
+def test_ocpp_simulator_form_backend_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    arthexis_backend: str,
+    mobilityhouse_backend: str,
+    is_valid: bool,
+) -> None:
+    """OCPP simulator admin form should validate backend availability."""
 
-
-@pytest.mark.django_db
-def test_feature_admin_toggle_selected_feature_action_flips_enabled_state(admin_client):
-    """Regression: changelist action must invert enabled state for selected features."""
-
-    feature_enabled = Feature.objects.create(
-        slug="toggle-enabled",
-        display="Toggle Enabled",
-        source=Feature.Source.CUSTOM,
-        is_enabled=True,
-    )
-    feature_disabled = Feature.objects.create(
-        slug="toggle-disabled",
-        display="Toggle Disabled",
-        source=Feature.Source.CUSTOM,
-        is_enabled=False,
-    )
-
-    changelist_url = reverse("admin:features_feature_changelist")
-    response = admin_client.post(
-        changelist_url,
-        {
-            "action": "toggle_selected_feature",
-            "_selected_action": [str(feature_enabled.pk), str(feature_disabled.pk)],
+    monkeypatch.setattr(Feature, "validate_unique", lambda self, exclude=None: None)
+    feature = Feature(slug="ocpp-simulator", display="OCPP Simulator")
+    form = FeatureAdminForm(
+        instance=feature,
+        data={
+            "slug": "ocpp-simulator",
+            "display": "OCPP Simulator",
+            "summary": "",
+            "is_enabled": "on",
+            "admin_requirements": "",
+            "public_requirements": "",
+            "service_requirements": "",
+            "admin_views": "[]",
+            "public_views": "[]",
+            "service_views": "[]",
+            "code_locations": "[]",
+            "protocol_coverage": "{}",
+            "metadata": "{}",
+            "param__arthexis_backend": arthexis_backend,
+            "param__mobilityhouse_backend": mobilityhouse_backend,
         },
     )
 

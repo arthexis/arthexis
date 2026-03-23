@@ -12,14 +12,18 @@ from typing import Iterable
 from django.conf import settings
 from django.utils import timezone
 
+from apps.features.parameters import get_feature_parameter
+from apps.features.utils import is_suite_feature_enabled
 from apps.screens.startup_notifications import render_lcd_lock_file
 
+from .constants import LLM_SUMMARY_SUITE_FEATURE_SLUG
 from .models import LLMSummaryConfig
 
 logger = logging.getLogger(__name__)
 
 LCD_COLUMNS = 16
 LCD_SUMMARY_FRAME_COUNT = 10
+DEFAULT_PROMPT_TIMEOUT = 240
 DEFAULT_MODEL_DIR = Path(settings.BASE_DIR) / "work" / "llm" / "lcd-summary"
 DEFAULT_MODEL_FILE = "MODEL.README"
 
@@ -48,6 +52,13 @@ def get_summary_config() -> LLMSummaryConfig:
 
 
 def _resolve_model_path(config: LLMSummaryConfig) -> Path:
+    suite_model_path = get_feature_parameter(
+        LLM_SUMMARY_SUITE_FEATURE_SLUG,
+        "model_path",
+        fallback="",
+    )
+    if suite_model_path:
+        return Path(suite_model_path)
     if config.model_path:
         return Path(config.model_path)
     env_override = os.getenv("ARTHEXIS_LLM_SUMMARY_MODEL")
@@ -60,8 +71,13 @@ def resolve_model_path(config: LLMSummaryConfig) -> Path:
     return _resolve_model_path(config)
 
 
-def ensure_local_model(config: LLMSummaryConfig) -> Path:
-    model_dir = _resolve_model_path(config)
+def ensure_local_model(
+    config: LLMSummaryConfig, *, preferred_path: str | Path | None = None
+) -> Path:
+    if preferred_path:
+        model_dir = Path(preferred_path)
+    else:
+        model_dir = _resolve_model_path(config)
     model_dir.mkdir(parents=True, exist_ok=True)
     sentinel = model_dir / DEFAULT_MODEL_FILE
     if not sentinel.exists():
@@ -228,13 +244,40 @@ def render_lcd_payload(subject: str, body: str) -> str:
     return render_lcd_lock_file(subject=subject, body=body)
 
 
-def execute_log_summary_generation() -> str:
+def _summary_command() -> str | None:
+    """Return the effective local model command from suite, config, or settings."""
+
+    suite_command = get_feature_parameter(LLM_SUMMARY_SUITE_FEATURE_SLUG, "model_command", fallback="")
+    if suite_command:
+        return suite_command
+
+    config = get_summary_config()
+    if config.model_command:
+        return config.model_command
+
+    configured = getattr(settings, "LLM_SUMMARY_COMMAND", "")
+    return configured or None
+
+
+def _summary_timeout_seconds() -> int:
+    """Return the effective prompt timeout for summary generation."""
+
+    suite_timeout = get_feature_parameter(LLM_SUMMARY_SUITE_FEATURE_SLUG, "timeout_seconds", fallback="")
+    if suite_timeout:
+        try:
+            return max(int(suite_timeout), 1)
+        except ValueError:
+            logger.warning("Invalid llm-summary-suite timeout_seconds value: %s", suite_timeout)
+
+    return int(getattr(settings, "LLM_SUMMARY_TIMEOUT", DEFAULT_PROMPT_TIMEOUT))
+
+
+def execute_log_summary_generation(*, ignore_suite_feature_gate: bool = False) -> str:
     """Generate LCD log summary output and persist latest run metadata."""
 
     from apps.nodes.models import Node
     from apps.screens.startup_notifications import LCD_LOW_LOCK_FILE
     from apps.tasks.tasks import (
-        DEFAULT_PROMPT_TIMEOUT,
         LocalLLMSummarizer,
         _write_lcd_frames,
     )
@@ -242,6 +285,16 @@ def execute_log_summary_generation() -> str:
     node = Node.get_local()
     if not node:
         return "skipped:no-node"
+
+    if (
+        not ignore_suite_feature_gate
+        and not is_suite_feature_enabled(LLM_SUMMARY_SUITE_FEATURE_SLUG, default=True)
+    ):
+        logger.info(
+            "Skipping LCD summary automation because suite feature '%s' is disabled.",
+            LLM_SUMMARY_SUITE_FEATURE_SLUG,
+        )
+        return "skipped:suite-feature-disabled"
 
     if not node.has_feature("llm-summary"):
         return "skipped:feature-disabled"
@@ -262,10 +315,9 @@ def execute_log_summary_generation() -> str:
         return "skipped:no-logs"
 
     prompt = build_summary_prompt(compacted_logs, now=now)
-    command = config.model_command or getattr(settings, "LLM_SUMMARY_COMMAND", "") or None
     summarizer = LocalLLMSummarizer(
-        command=command,
-        timeout=getattr(settings, "LLM_SUMMARY_TIMEOUT", DEFAULT_PROMPT_TIMEOUT),
+        command=_summary_command(),
+        timeout=_summary_timeout_seconds(),
     )
     output = summarizer.summarize(prompt)
     screens = normalize_screens(parse_screens(output))

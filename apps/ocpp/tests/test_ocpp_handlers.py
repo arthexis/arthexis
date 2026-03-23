@@ -2,7 +2,6 @@ import json
 from datetime import datetime, timezone as dt_timezone
 from functools import partial
 from unittest.mock import AsyncMock
-import json
 
 import anyio
 import pytest
@@ -806,7 +805,7 @@ async def test_get_certificate_status_persists_check():
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.integration
-async def test_get_certificate_status_handles_missing_certificate():
+async def test_get_certificate_status_rejects_missing_certificate_by_default():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-4")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-4"
@@ -816,6 +815,59 @@ async def test_get_certificate_status_handles_missing_certificate():
     payload = {"certificateHashData": {"hashAlgorithm": "SHA256"}}
     result = await consumer._handle_get_certificate_status_action(
         payload, "msg-3", "", "",
+    )
+
+    assert result["status"] == "Failed"
+    status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
+        charger=charger
+    )
+    assert status_check.status == CertificateStatusCheck.STATUS_REJECTED
+    assert status_check.status_info == "Certificate not found."
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.integration
+async def test_get_certificate_status_rejects_missing_certificate_when_auto_accept_disabled():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CERT-4B",
+        auto_accept_offered_certificates=False,
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-4B"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    payload = {"certificateHashData": {"hashAlgorithm": "SHA256"}}
+    result = await consumer._handle_get_certificate_status_action(
+        payload, "msg-3b", "", "",
+    )
+
+    assert result["status"] == "Failed"
+    status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
+        charger=charger
+    )
+    assert status_check.status == CertificateStatusCheck.STATUS_REJECTED
+    assert status_check.status_info == "Certificate not found."
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.integration
+async def test_get_certificate_status_ignores_auto_accept_flag():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CERT-4C",
+        auto_accept_offered_certificates=True,
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-4C"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    # Guard against reintroducing the legacy auto-accept behavior.
+    payload = {"certificateHashData": {"hashAlgorithm": "SHA256"}}
+    result = await consumer._handle_get_certificate_status_action(
+        payload, "msg-3c", "", "",
     )
 
     assert result["status"] == "Failed"
@@ -1671,6 +1723,18 @@ async def test_report_charging_profiles_matches_local_state(monkeypatch):
 
     assert result == {}
     assert logs == []
+    refreshed = await database_sync_to_async(ChargingProfile.objects.get)(
+        charger=charger,
+        connector_id=1,
+        charging_profile_id=9,
+    )
+    assert refreshed.stack_level == 1
+    refreshed_schedule = await database_sync_to_async(
+        lambda: refreshed.schedule.charging_schedule_periods
+    )()
+    assert refreshed_schedule == [
+        {"start_period": 0, "limit": 32.0}
+    ]
 
 
 @pytest.mark.anyio
@@ -1720,6 +1784,180 @@ async def test_report_charging_profiles_flags_mismatch(monkeypatch):
 
     assert result == {}
     assert any("stack level expected" in entry for entry in logs)
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_rejects_malformed_payload(monkeypatch):
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "RCP-BAD-1"
+    consumer.charger_id = "RCP-BAD-1"
+    consumer.charger = None
+    consumer.aggregate_charger = None
+    consumer.connector_value = 1
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    logs: list[str] = []
+    monkeypatch.setattr(
+        store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry)
+    )
+
+    result = await consumer._handle_report_charging_profiles_action(
+        {"requestId": 23, "evseId": 1, "chargingProfile": {"chargingProfileId": 3}},
+        "msg-rcp-bad-1",
+        "",
+        "",
+    )
+
+    assert result == {}
+    assert logs == ["ReportChargingProfiles ignored: stackLevel is required"]
+    count = await database_sync_to_async(ChargingProfile.objects.count)()
+    assert count == 0
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_rejects_invalid_schedule_values(monkeypatch):
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key("report-invalid-schedule", 1)
+    consumer.charger_id = "report-invalid-schedule"
+    consumer.charger = None
+    consumer.aggregate_charger = None
+    consumer.connector_value = 1
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    logs: list[str] = []
+    monkeypatch.setattr(
+        store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry)
+    )
+
+    result = await consumer._handle_report_charging_profiles_action(
+        {
+            "requestId": 23,
+            "evseId": 1,
+            "chargingProfile": {
+                "chargingProfileId": 3,
+                "stackLevel": 1,
+                "chargingProfilePurpose": ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+                "chargingProfileKind": ChargingProfile.Kind.ABSOLUTE,
+                "chargingSchedule": {
+                    "chargingRateUnit": ChargingProfile.RateUnit.AMP,
+                    "duration": 0,
+                    "chargingSchedulePeriod": [{"startPeriod": 0, "limit": -1}],
+                },
+            },
+        },
+        "msg-rcp-bad-schedule-1",
+        "",
+        "",
+    )
+
+    assert result == {}
+    assert logs == [
+        "ReportChargingProfiles ignored: chargingSchedulePeriod[1].limit must be greater than zero"
+    ]
+    count = await database_sync_to_async(ChargingProfile.objects.count)()
+    assert count == 0
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_rolls_back_partial_profile_writes(monkeypatch):
+    """Schedule validation failures should not leave orphaned charging profiles."""
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key("report-partial-write", 1)
+    consumer.charger_id = "report-partial-write"
+    consumer.charger = None
+    consumer.aggregate_charger = None
+    consumer.connector_value = 1
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    logs: list[str] = []
+    monkeypatch.setattr(
+        store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry)
+    )
+
+    result = await consumer._handle_report_charging_profiles_action(
+        {
+            "requestId": 24,
+            "evseId": 1,
+            "chargingProfile": {
+                "chargingProfileId": 4,
+                "stackLevel": 1,
+                "chargingProfilePurpose": ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+                "chargingProfileKind": ChargingProfile.Kind.ABSOLUTE,
+                "chargingSchedule": {
+                    "chargingRateUnit": ChargingProfile.RateUnit.AMP,
+                    "duration": 60,
+                    "chargingSchedulePeriod": [
+                        {"startPeriod": 0, "limit": 8, "numberPhases": 2}
+                    ],
+                },
+            },
+        },
+        "msg-rcp-partial-write-1",
+        "",
+        "",
+    )
+
+    assert result == {}
+    assert any(entry.startswith("ReportChargingProfiles ignored:") for entry in logs)
+    assert any("number_phases must be 1 or 3" in entry for entry in logs)
+    count = await database_sync_to_async(ChargingProfile.objects.count)()
+    assert count == 0
+    schedule_count = await database_sync_to_async(ChargingSchedule.objects.count)()
+    assert schedule_count == 0
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_ignores_invalid_profile_values(monkeypatch):
+    """Malformed profile values should be logged instead of crashing persistence."""
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key("report-invalid-profile", 1)
+    consumer.charger_id = "report-invalid-profile"
+    consumer.charger = None
+    consumer.aggregate_charger = None
+    consumer.connector_value = 1
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    logs: list[str] = []
+    monkeypatch.setattr(
+        store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry)
+    )
+
+    result = await consumer._handle_report_charging_profiles_action(
+        {
+            "requestId": 23,
+            "evseId": 1,
+            "chargingProfile": {
+                "chargingProfileId": 3,
+                "stackLevel": 1,
+                "chargingProfilePurpose": ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+                "chargingProfileKind": ChargingProfile.Kind.ABSOLUTE,
+                "recurrencyKind": ChargingProfile.RecurrencyKind.DAILY,
+                "chargingSchedule": {
+                    "chargingRateUnit": ChargingProfile.RateUnit.AMP,
+                    "duration": 60,
+                    "chargingSchedulePeriod": [{"startPeriod": 0, "limit": 8}],
+                },
+            },
+        },
+        "msg-rcp-bad-profile-1",
+        "",
+        "",
+    )
+
+    assert result == {}
+    assert any(entry.startswith("ReportChargingProfiles ignored:") for entry in logs)
+    assert any(
+        "Recurrency kind is only valid for recurring profiles." in entry
+        for entry in logs
+    )
+    count = await database_sync_to_async(ChargingProfile.objects.count)()
+    assert count == 0
 
 
 @pytest.mark.anyio
@@ -1781,6 +2019,311 @@ async def test_report_charging_profiles_flags_missing_entries(monkeypatch):
     assert result == {}
     assert any("ReportChargingProfiles missing" in entry for entry in logs)
     assert any("3" in entry for entry in logs)
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_flags_duplicate_profiles(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="RCP-DUP-1", connector_id=1
+    )
+    profile = await database_sync_to_async(ChargingProfile.objects.create)(
+        charger=charger,
+        connector_id=1,
+        charging_profile_id=12,
+        stack_level=1,
+        purpose=ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+        kind=ChargingProfile.Kind.ABSOLUTE,
+    )
+    await database_sync_to_async(ChargingSchedule.objects.create)(
+        profile=profile,
+        charging_rate_unit=ChargingProfile.RateUnit.AMP,
+        charging_schedule_periods=[{"start_period": 0, "limit": 24}],
+    )
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+    consumer.connector_value = charger.connector_id
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    logs: list[str] = []
+    monkeypatch.setattr(
+        store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry)
+    )
+
+    profile_payload = profile.as_cs_charging_profile()
+    result = await consumer._handle_report_charging_profiles_action(
+        {
+            "requestId": 24,
+            "evseId": 1,
+            "chargingProfiles": [profile_payload, profile_payload],
+            "tbc": False,
+        },
+        "msg-rcp-dup-1",
+        "",
+        "",
+    )
+
+    assert result == {}
+    assert any("duplicate profile 12" in entry for entry in logs)
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_partial_update_clears_missing_optionals():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="RCP-PART-1", connector_id=1
+    )
+    profile = await database_sync_to_async(ChargingProfile.objects.create)(
+        charger=charger,
+        connector_id=1,
+        charging_profile_id=4,
+        stack_level=1,
+        purpose=ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+        kind=ChargingProfile.Kind.ABSOLUTE,
+        recurrency_kind="",
+    )
+    await database_sync_to_async(ChargingSchedule.objects.create)(
+        profile=profile,
+        charging_rate_unit=ChargingProfile.RateUnit.AMP,
+        duration_seconds=300,
+        charging_schedule_periods=[{"start_period": 0, "limit": 16}],
+        min_charging_rate=2,
+    )
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+    consumer.connector_value = charger.connector_id
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    result = await consumer._handle_report_charging_profiles_action(
+        {
+            "requestId": 25,
+            "evseId": 1,
+            "chargingProfile": {
+                "chargingProfileId": 4,
+                "stackLevel": 2,
+                "chargingProfilePurpose": ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+                "chargingProfileKind": ChargingProfile.Kind.ABSOLUTE,
+                "chargingSchedule": {
+                    "chargingRateUnit": ChargingProfile.RateUnit.AMP,
+                    "chargingSchedulePeriod": [{"startPeriod": 0, "limit": 20}],
+                },
+            },
+            "tbc": False,
+        },
+        "msg-rcp-part-1",
+        "",
+        "",
+    )
+
+    assert result == {}
+    updated = await database_sync_to_async(ChargingProfile.objects.get)(
+        charger=charger,
+        connector_id=1,
+        charging_profile_id=4,
+    )
+    assert updated.stack_level == 2
+    updated_schedule = await database_sync_to_async(
+        lambda: (
+            updated.schedule.duration_seconds,
+            updated.schedule.min_charging_rate,
+            updated.schedule.charging_schedule_periods,
+        )
+    )()
+    assert updated_schedule[0] is None
+    assert updated_schedule[1] is None
+    assert updated_schedule[2] == [
+        {"start_period": 0, "limit": 20.0}
+    ]
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_persists_multi_profile_payload():
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "RCP-MULTI-1"
+    consumer.charger_id = "RCP-MULTI-1"
+    consumer.charger = None
+    consumer.aggregate_charger = None
+    consumer.connector_value = 2
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    result = await consumer._handle_report_charging_profiles_action(
+        {
+            "requestId": 26,
+            "evseId": 2,
+            "chargingProfiles": [
+                {
+                    "chargingProfileId": 7,
+                    "stackLevel": 1,
+                    "chargingProfilePurpose": ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+                    "chargingProfileKind": ChargingProfile.Kind.ABSOLUTE,
+                    "chargingSchedule": {
+                        "chargingRateUnit": ChargingProfile.RateUnit.AMP,
+                        "chargingSchedulePeriod": [{"startPeriod": 0, "limit": 16}],
+                    },
+                },
+                {
+                    "chargingProfileId": 8,
+                    "stackLevel": 3,
+                    "chargingProfilePurpose": ChargingProfile.Purpose.CHARGE_POINT_MAX_PROFILE,
+                    "chargingProfileKind": ChargingProfile.Kind.RECURRING,
+                    "recurrencyKind": ChargingProfile.RecurrencyKind.DAILY,
+                    "chargingSchedule": {
+                        "chargingRateUnit": ChargingProfile.RateUnit.WATT,
+                        "duration": 900,
+                        "minChargingRate": 3.5,
+                        "chargingSchedulePeriod": [
+                            {"startPeriod": 0, "limit": 1200},
+                            {"startPeriod": 300, "limit": 900},
+                        ],
+                    },
+                },
+            ],
+            "tbc": False,
+        },
+        "msg-rcp-multi-1",
+        "",
+        "",
+    )
+
+    assert result == {}
+    profiles = await database_sync_to_async(
+        lambda: list(
+            ChargingProfile.objects.filter(charger__charger_id="RCP-MULTI-1").order_by(
+                "charging_profile_id"
+            )
+        )
+    )()
+    assert [profile.charging_profile_id for profile in profiles] == [7, 8]
+    assert profiles[0].connector_id == 2
+    first_schedule = await database_sync_to_async(
+        lambda: profiles[0].schedule.charging_schedule_periods
+    )()
+    assert first_schedule == [
+        {"start_period": 0, "limit": 16.0}
+    ]
+    assert profiles[1].recurrency_kind == ChargingProfile.RecurrencyKind.DAILY
+    second_schedule = await database_sync_to_async(
+        lambda: (
+            profiles[1].schedule.duration_seconds,
+            float(profiles[1].schedule.min_charging_rate),
+            profiles[1].schedule.charging_schedule_periods,
+        )
+    )()
+    assert second_schedule[0] == 900
+    assert second_schedule[1] == 3.5
+    assert second_schedule[2] == [
+        {"start_period": 0, "limit": 1200.0},
+        {"start_period": 300, "limit": 900.0},
+    ]
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_uses_connector_context_without_evse_id():
+    connector_charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="RCP-CONTEXT-1", connector_id=1
+    )
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(
+        connector_charger.charger_id, connector_charger.connector_id
+    )
+    consumer.charger_id = connector_charger.charger_id
+    consumer.charger = connector_charger
+    consumer.aggregate_charger = None
+    consumer.connector_value = connector_charger.connector_id
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    result = await consumer._handle_report_charging_profiles_action(
+        {
+            "requestId": 28,
+            "chargingProfile": {
+                "chargingProfileId": 12,
+                "stackLevel": 1,
+                "chargingProfilePurpose": ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+                "chargingProfileKind": ChargingProfile.Kind.ABSOLUTE,
+                "chargingSchedule": {
+                    "chargingRateUnit": ChargingProfile.RateUnit.AMP,
+                    "chargingSchedulePeriod": [{"startPeriod": 0, "limit": 14}],
+                },
+            },
+            "tbc": False,
+        },
+        "msg-rcp-context-1",
+        "",
+        "",
+    )
+
+    assert result == {}
+    profile_data = await database_sync_to_async(
+        lambda: ChargingProfile.objects.select_related("charger")
+        .get(
+            charger=connector_charger,
+            charging_profile_id=12,
+        )
+    )()
+    assert profile_data.charger.connector_id == 1
+    assert profile_data.connector_id == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_resolves_evse_row_from_aggregate_charger():
+    aggregate_charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="RCP-EVSE-1", connector_id=0
+    )
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(
+        aggregate_charger.charger_id, aggregate_charger.connector_id
+    )
+    consumer.charger_id = aggregate_charger.charger_id
+    consumer.charger = aggregate_charger
+    consumer.aggregate_charger = aggregate_charger
+    consumer.connector_value = aggregate_charger.connector_id
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    result = await consumer._handle_report_charging_profiles_action(
+        {
+            "requestId": 27,
+            "evseId": 1,
+            "chargingProfile": {
+                "chargingProfileId": 11,
+                "stackLevel": 1,
+                "chargingProfilePurpose": ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+                "chargingProfileKind": ChargingProfile.Kind.ABSOLUTE,
+                "chargingSchedule": {
+                    "chargingRateUnit": ChargingProfile.RateUnit.AMP,
+                    "chargingSchedulePeriod": [{"startPeriod": 0, "limit": 18}],
+                },
+            },
+            "tbc": False,
+        },
+        "msg-rcp-evse-1",
+        "",
+        "",
+    )
+
+    assert result == {}
+    profile = await database_sync_to_async(ChargingProfile.objects.select_related("charger").get)(
+        charger__charger_id="RCP-EVSE-1",
+        charging_profile_id=11,
+    )
+    assert profile.charger.connector_id == 1
+    assert profile.connector_id == 1
+    aggregate_profiles = await database_sync_to_async(
+        lambda: ChargingProfile.objects.filter(charger=aggregate_charger).count()
+    )()
+    assert aggregate_profiles == 0
 
 
 @pytest.mark.anyio

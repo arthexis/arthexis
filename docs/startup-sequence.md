@@ -43,5 +43,6 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
    disabled or delegated to systemd, capturing their PIDs for cleanup.
 7. If the LCD is configured for embedded mode, start the `apps.screens.lcd_screen`
    process alongside the web server.
-8. Launch the Django server on `0.0.0.0:<port>`, using `--noreload` by default
-   unless `--reload` was requested.
+8. Launch the Django server on `127.0.0.1:<port>` by default, using `--noreload`
+   unless `--reload` was requested. Service scripts that need LAN exposure pass an
+   explicit bind address instead of relying on the CLI default.

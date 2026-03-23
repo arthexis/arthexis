@@ -13,7 +13,7 @@ from django.conf import settings
 from django.utils import timezone
 
 if TYPE_CHECKING:
-    from apps.nodes.models.core.node import Node
+    from apps.nodes.models.node import Node
 
 logger = logging.getLogger(__name__)
 

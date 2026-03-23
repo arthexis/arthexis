@@ -264,7 +264,7 @@ def _check_app(files: list[MigrationFile], *, repo_root: Path = REPO_ROOT) -> li
 
     errors: list[str] = []
     if len(leaves) > 1:
-        leaf_paths = ", ".join(str(migration.path.relative_to(repo_root)) for migration in leaves)
+        leaf_paths = ", ".join(migration.path.relative_to(repo_root).as_posix() for migration in leaves)
         errors.append(
             "duplicate leaf migrations detected; resolve by creating/adjusting a merge migration "
             f"for app '{files[0].app_label}'. Leaves: {leaf_paths}"
@@ -277,7 +277,9 @@ def _check_app(files: list[MigrationFile], *, repo_root: Path = REPO_ROOT) -> li
         if any(dep_app == files[0].app_label and dep_name in merge_name_set for dep_app, dep_name in dependencies_by_name[migration.name])
     ]
     if len(merge_files) > 1 and (len(merge_chain) > 0 or len([leaf for leaf in leaves if _is_merge_migration(leaf.name)]) > 1):
-        merge_paths = ", ".join(str(migration.path.relative_to(repo_root)) for migration in merge_files)
+        merge_paths = ", ".join(
+            migration.path.relative_to(repo_root).as_posix() for migration in merge_files
+        )
         errors.append(
             "suspicious parallel merge chain detected; multiple merge migrations exist in "
             f"app '{files[0].app_label}'. Merge files: {merge_paths}"
@@ -299,7 +301,9 @@ def _check_app(files: list[MigrationFile], *, repo_root: Path = REPO_ROOT) -> li
         if not _has_required_suffix(migration.name)
     ]
     if invalid_names:
-        invalid_paths = ", ".join(str(migration.path.relative_to(repo_root)) for migration in invalid_names)
+        invalid_paths = ", ".join(
+            migration.path.relative_to(repo_root).as_posix() for migration in invalid_names
+        )
         errors.append(
             "migration naming policy violation in "
             f"app '{files[0].app_label}'; duplicate migration numbers must include a ticket/PR suffix "

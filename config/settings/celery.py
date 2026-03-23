@@ -61,20 +61,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.ocpp.tasks.schedule_power_projection_requests",
         "schedule": crontab(minute=0, hour=1),
     },
-    "web_request_sampling": {
-        "task": "apps.content.tasks.run_scheduled_web_samplers",
-        "schedule": timedelta(minutes=30),
-    },
     "certificate_expiration_refresh": {
         "task": "apps.certs.tasks.refresh_certificate_expirations",
         "schedule": crontab(minute=0, hour=2),
-    },
-    "google_calendar_snapshot_sync": {
-        "task": "apps.calendars.tasks.sync_google_calendars",
-        "schedule": timedelta(hours=1),
-    },
-    "google_calendar_trigger_runner": {
-        "task": "apps.calendars.tasks.run_calendar_event_triggers",
-        "schedule": timedelta(minutes=15),
     },
 }

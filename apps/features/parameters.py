@@ -46,6 +46,42 @@ OPERATOR_LANGUAGE_CHOICES: tuple[tuple[str, str], ...] = (
 
 
 FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]] = {
+    "release-management": (
+        FeatureParameterDefinition(
+            key="execution_mode",
+            label=_("Execution mode"),
+            help_text=_(
+                "Choose suite to use suite tokens/API first with gh/git fallback, "
+                "or binary to prefer local gh/git auth and binaries."
+            ),
+            choices=(
+                ("suite", _("Suite (token/API first, gh/git fallback)")),
+                ("binary", _("Binary (gh/git first)")),
+            ),
+            default="suite",
+        ),
+    ),
+    "llm-summary-suite": (
+        FeatureParameterDefinition(
+            key="model_path",
+            label=_("Model path"),
+            help_text=_("Directory that contains local LLM summary model files."),
+            default="",
+        ),
+        FeatureParameterDefinition(
+            key="model_command",
+            label=_("Model command"),
+            help_text=_("Optional command used to invoke the local summary model."),
+            default="",
+        ),
+        FeatureParameterDefinition(
+            key="timeout_seconds",
+            label=_("Model timeout (seconds)"),
+            help_text=_("Prompt timeout used when invoking the local summary model command."),
+            choices=tuple((str(value), str(value)) for value in (60, 120, 180, 240, 300, 600)),
+            default="240",
+        ),
+    ),
     "celery-workers": (
         FeatureParameterDefinition(
             key="worker_count",
@@ -70,7 +106,7 @@ FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]]
             label=_("Mobility House backend"),
             help_text=_("Enable or disable the Mobility House simulator backend."),
             choices=(("enabled", _("Enabled")), ("disabled", _("Disabled"))),
-            default="disabled",
+            default="enabled",
         ),
     ),
     "odoo-crm-sync": (

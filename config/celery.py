@@ -4,7 +4,11 @@ import os
 
 from celery import Celery
 
+from config.loadenv import loadenv
+from config.sqlite_driver import bootstrap_sqlite_driver
 
+loadenv()
+bootstrap_sqlite_driver()
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 from django.conf import settings  # noqa: E402

@@ -6,6 +6,7 @@ from django.contrib import admin
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.urls import include, path
 from django.views.decorators.csrf import csrf_exempt
+from django.views.generic.base import RedirectView
 from django.views.i18n import set_language
 
 from config.admin_urls import admin_route
@@ -25,6 +26,7 @@ urlpatterns = [
 urlpatterns += autodiscovered_route_patterns()
 urlpatterns += [
     path(admin_route(), admin.site.urls),
+    path("admin/", RedirectView.as_view(url="/" + admin_route(), permanent=False)),
     path("admindocs/", include("django.contrib.admindocs.urls")),
 ]
 

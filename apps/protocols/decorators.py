@@ -1,16 +1,11 @@
 from __future__ import annotations
 
-from typing import Callable, TypeVar, overload
+from typing import Callable, TypeVar
 
 from apps.protocols import registry
 from apps.protocols.models import ProtocolCall
 
 F = TypeVar("F", bound=Callable)
-
-
-@overload
-def protocol_call(protocol_slug: str, direction: str, call_name: str) -> Callable[[F], F]:
-    ...
 
 
 def protocol_call(protocol_slug: str, direction: str, call_name: str) -> Callable[[F], F]:
@@ -23,7 +18,7 @@ def protocol_call(protocol_slug: str, direction: str, call_name: str) -> Callabl
 
     def decorator(func: F) -> F:
         registry.register(protocol_slug, direction, call_name, func)
-        calls = getattr(func, "__protocol_calls__", set())
+        calls: set[tuple[str, str, str]] = getattr(func, "__protocol_calls__", set())
         calls.add((protocol_slug, direction, call_name))
         setattr(func, "__protocol_calls__", calls)
 

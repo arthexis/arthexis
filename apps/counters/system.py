@@ -8,6 +8,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
+from apps.counters.dashboard_rules import DEFAULT_SUCCESS_MESSAGE
 from apps.counters.models import DashboardRule
 
 
@@ -26,6 +27,10 @@ def _system_dashboard_rules_report_view(request: HttpRequest):
         model_name = model._meta.verbose_name if model else content_type.name
 
         status = DashboardRule.get_cached_value(content_type, rule.evaluate)
+        if isinstance(status, dict) and status.get("success") and "is_default_message" not in status:
+            status["is_default_message"] = status.get("message") == str(
+                DEFAULT_SUCCESS_MESSAGE
+            )
 
         entries.append(
             {

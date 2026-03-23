@@ -4,22 +4,11 @@ from __future__ import annotations
 
 from urllib.parse import urlsplit, urlunsplit
 
-from django.utils import timezone
 
-from apps.core.system.ui import _build_nginx_report
+from apps.core.system_ui import build_nginx_report, format_timestamp
 from apps.nginx import config_utils
 from apps.nodes.models import Node
 from apps.ocpp.models import CPForwarder, Charger
-
-
-def _format_timestamp(value) -> str:
-    if not value:
-        return "—"
-    try:
-        localized = timezone.localtime(value)
-    except Exception:
-        localized = value
-    return localized.strftime("%Y-%m-%d %H:%M:%S %Z")
 
 
 def _format_bool(value: bool | None) -> str:
@@ -62,7 +51,7 @@ def run_check_forwarders(*, stdout, **_kwargs) -> None:
         metadata_urls = list(local.iter_remote_urls("/nodes/network/chargers/forward/"))
         ocpp_urls = _iter_websocket_urls(local, "/<charger_id>")
         ocpp_ws_urls = _iter_websocket_urls(local, "/ws/<charger_id>")
-        nginx_report = _build_nginx_report()
+        nginx_report = build_nginx_report()
 
         stdout.write("  Registered: True")
         stdout.write(f"  Preferred hosts: {_format_list(host_candidates)}")
@@ -109,9 +98,9 @@ def run_check_forwarders(*, stdout, **_kwargs) -> None:
         stdout.write(f"  Target: {target}")
         stdout.write(f"  Enabled: {forwarder.enabled}")
         stdout.write(f"  Running: {forwarder.is_running}")
-        stdout.write(f"  Last synced: {_format_timestamp(forwarder.last_synced_at)}")
+        stdout.write(f"  Last synced: {format_timestamp(forwarder.last_synced_at)}")
         stdout.write(
-            f"  Last forwarded message: {_format_timestamp(forwarder.last_forwarded_at)}"
+            f"  Last forwarded message: {format_timestamp(forwarder.last_forwarded_at)}"
         )
         stdout.write(f"  Last status: {forwarder.last_status or '—'}")
         stdout.write(f"  Last error: {forwarder.last_error or '—'}")
@@ -144,7 +133,7 @@ def run_check_forwarders(*, stdout, **_kwargs) -> None:
         stdout.write(f"  Forwarded to: {forwarded_to}")
         stdout.write(f"  Export transactions: {charger.export_transactions}")
         stdout.write(
-            f"  Last forwarded message: {_format_timestamp(charger.forwarding_watermark)}"
+            f"  Last forwarded message: {format_timestamp(charger.forwarding_watermark)}"
         )
-        stdout.write(f"  Last online: {_format_timestamp(charger.last_online_at)}")
+        stdout.write(f"  Last online: {format_timestamp(charger.last_online_at)}")
         stdout.write("")

@@ -29,7 +29,7 @@ class CalculateCoverageCommandTests(SimpleTestCase):
 
             stdout = io.StringIO()
             call_command(
-                "calculate_coverage",
+                "coverage",
                 coverage_json=str(coverage_json),
                 badge_path=str(badge_path),
                 label="tests",
@@ -54,7 +54,7 @@ class CalculateCoverageCommandTests(SimpleTestCase):
             with self.assertRaisesMessage(
                 CommandError, f"Coverage report {coverage_json} does not exist"
             ):
-                call_command("calculate_coverage", coverage_json=str(coverage_json))
+                call_command("coverage", coverage_json=str(coverage_json))
 
     def test_rejects_invalid_json(self):
         with TemporaryDirectory() as tmpdir:
@@ -64,4 +64,4 @@ class CalculateCoverageCommandTests(SimpleTestCase):
             with self.assertRaisesMessage(
                 CommandError, "Coverage report"  # propagated from load_summary
             ):
-                call_command("calculate_coverage", coverage_json=str(coverage_json))
+                call_command("coverage", coverage_json=str(coverage_json))

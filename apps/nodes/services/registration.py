@@ -12,14 +12,43 @@ from django.conf import settings
 from django.utils.text import slugify
 
 from apps.nodes.logging import get_register_local_node_logger
-from apps.nodes.models.core.role import NodeRole
-from apps.nodes.models.core.utils import ROLE_RENAMES
+from apps.nodes.models.role import NodeRole
+from apps.nodes.models.utils import ROLE_RENAMES
 from utils import revision
 
 if TYPE_CHECKING:
-    from apps.nodes.models.core.node import Node
+    from apps.nodes.models.node import Node
 
 local_registration_logger = get_register_local_node_logger()
+
+
+def _resolve_local_role_name() -> str:
+    """Resolve the local node role from settings, environment, lock file, then default."""
+    env_role = str(os.environ.get("NODE_ROLE", "")).strip()
+    if env_role:
+        configured_role = env_role.title()
+        return ROLE_RENAMES.get(configured_role, configured_role)
+
+    configured_role = getattr(settings, "NODE_ROLE", "")
+    configured_role = "" if configured_role is None else str(configured_role).strip()
+    if configured_role and configured_role.lower() != "terminal":
+        normalized_setting_role = configured_role.title()
+        return ROLE_RENAMES.get(normalized_setting_role, normalized_setting_role)
+
+    role_lock = Path(settings.BASE_DIR) / ".locks" / "role.lck"
+    try:
+        locked_role = role_lock.read_text(encoding="utf-8").strip()
+    except (FileNotFoundError, OSError, UnicodeError):
+        locked_role = ""
+    if locked_role:
+        normalized_lock_role = locked_role.title()
+        return ROLE_RENAMES.get(normalized_lock_role, normalized_lock_role)
+
+    if configured_role:
+        normalized_setting_role = configured_role.title()
+        return ROLE_RENAMES.get(normalized_setting_role, normalized_setting_role)
+
+    return "Terminal"
 
 
 def register_current(node_model: type["Node"], notify_peers: bool = True) -> tuple["Node", bool]:
@@ -108,9 +137,7 @@ def register_current(node_model: type["Node"], notify_peers: bool = True) -> tup
     if managed_site:
         defaults["base_site"] = managed_site
 
-    role_lock = Path(settings.BASE_DIR) / ".locks" / "role.lck"
-    role_name = role_lock.read_text().strip() if role_lock.exists() else "Terminal"
-    role_name = ROLE_RENAMES.get(role_name, role_name)
+    role_name = _resolve_local_role_name()
     desired_role = NodeRole.objects.filter(name=role_name).first()
 
     if node:

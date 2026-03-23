@@ -110,6 +110,7 @@ class ChargerAdmin(
                 "fields": (
                     "public_display",
                     "require_rfid",
+                    "auto_accept_offered_certificates",
                     "configuration_check_enabled",
                     "power_projection_enabled",
                     "firmware_snapshot_enabled",

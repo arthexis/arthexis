@@ -110,9 +110,11 @@
         </div>
       </div>
       <div class="embed-body">
+        {% if qr_code_data %}
         <div class="qr-wrapper">
           <img src="data:image/png;base64,{{ qr_code_data }}" alt="QR code for {{ share_url }}" />
         </div>
+        {% endif %}
         <div class="embed-actions">
           <a href="{{ share_url }}" target="_blank" rel="noopener noreferrer">
             <span aria-hidden="true">↗</span>

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import argparse
+import logging
 import shutil
 import subprocess
 import time
@@ -12,8 +14,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count, Q
 from django.utils import timezone as django_timezone
 from django.utils.dateparse import parse_datetime
-import logging
 
+from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.video.frame_cache import (
     CachedFrame,
@@ -128,6 +130,82 @@ class Command(BaseCommand):
     _CAMERA_SERVICE_FRAME_TIMEOUT_SECONDS = 3.0
     _CAMERA_SERVICE_FRAME_POLL_SECONDS = 0.05
     _CAMERA_SERVICE_STATUS_STALE_SECONDS = 5.0
+    _LEGACY_ACTION_FLAGS = {
+        "--doctor": "doctor",
+        "--mjpeg": "mjpeg",
+        "--snapshot": "snapshot",
+    }
+
+    def _add_compatibility_flag(self, parser, *flags: str, **kwargs) -> None:
+        """Register a legacy-only argument while keeping help output concise."""
+
+        parser.add_argument(*flags, help=argparse.SUPPRESS, **kwargs)
+
+    def _add_auto_enable_argument(self, parser) -> None:
+        """Register the auto-enable feature toggle."""
+
+        parser.add_argument(
+            "--auto-enable",
+            action="store_true",
+            help="Enable the Video Camera feature automatically for active actions.",
+        )
+
+    def _add_device_selection_argument(self, parser) -> None:
+        """Register the video device selector argument."""
+
+        parser.add_argument(
+            "--device",
+            help="Video device ID, slug, or identifier to use for sampling.",
+        )
+
+    def _add_discovery_arguments(self, parser) -> None:
+        """Register device discovery arguments for list-like actions."""
+
+        parser.add_argument(
+            "--discover",
+            action="store_true",
+            help="Discover video devices before listing them.",
+        )
+        parser.add_argument(
+            "--refresh-devices",
+            action="store_true",
+            help="Alias for --discover.",
+        )
+
+    def _add_service_timing_arguments(self, parser) -> None:
+        """Register camera service timing arguments."""
+
+        parser.add_argument(
+            "--interval",
+            type=float,
+            default=_setting_default_float("VIDEO_FRAME_CAPTURE_INTERVAL", 0.2),
+            help="Seconds between frame capture attempts per stream.",
+        )
+        parser.add_argument(
+            "--sleep",
+            type=float,
+            default=_setting_default_float("VIDEO_FRAME_SERVICE_SLEEP", 0.05),
+            help="Seconds to sleep between capture loops.",
+        )
+
+    def _add_stream_selection_arguments(self, parser) -> None:
+        """Register MJPEG stream selection arguments."""
+
+        parser.add_argument(
+            "--stream",
+            help="MJPEG stream slug or ID to capture.",
+        )
+        parser.add_argument(
+            "--include-inactive",
+            action="store_true",
+            help="Include inactive MJPEG streams.",
+        )
+
+    def run_from_argv(self, argv: list[str]) -> None:
+        """Rewrite legacy top-level action flags to the primary subcommand syntax."""
+
+        rewritten_args = self._rewrite_legacy_cli_args(argv[2:])
+        super().run_from_argv([*argv[:2], *rewritten_args])
 
     def add_arguments(self, parser) -> None:
         """Register supported command-line arguments."""
@@ -142,25 +220,8 @@ class Command(BaseCommand):
             action="store_true",
             help="Disable the Video Camera feature for the local node.",
         )
-        parser.add_argument(
-            "--discover",
-            action="store_true",
-            help="Discover video devices before listing them.",
-        )
-        parser.add_argument(
-            "--refresh-devices",
-            action="store_true",
-            help="Alias for --discover.",
-        )
-        parser.add_argument(
-            "--device",
-            help="Video device ID, slug, or identifier to use for sampling.",
-        )
-        parser.add_argument(
-            "--snapshot",
-            action="store_true",
-            help="Capture a single still snapshot from a video device.",
-        )
+        self._add_discovery_arguments(parser)
+        self._add_device_selection_argument(parser)
         parser.add_argument(
             "--samples",
             type=int,
@@ -173,80 +234,137 @@ class Command(BaseCommand):
             dest="samples",
             help="Capture a single frame and assemble a short video.",
         )
-        parser.add_argument(
-            "--doctor",
-            action="store_true",
-            help="Run server-side video diagnostics.",
+        self._add_auto_enable_argument(parser)
+        self._add_compatibility_flag(parser, "--doctor", action="store_true", default=False)
+        self._add_compatibility_flag(parser, "--mjpeg", action="store_true", default=False)
+        self._add_compatibility_flag(parser, "--snapshot", action="store_true", default=False)
+        self._add_compatibility_flag(parser, "--list-streams", action="store_true", default=False)
+        self._add_compatibility_flag(parser, "--include-inactive", action="store_true", default=False)
+        self._add_compatibility_flag(parser, "--stream")
+
+        subparsers = parser.add_subparsers(dest="action")
+
+        list_parser = subparsers.add_parser(
+            "list",
+            help="List video devices and optional stream details.",
         )
-        parser.add_argument(
-            "--mjpeg",
-            action="store_true",
-            help="Capture a frame from MJPEG streams.",
-        )
-        parser.add_argument(
-            "--stream",
-            help="MJPEG stream slug or ID to capture.",
-        )
-        parser.add_argument(
+        self._add_discovery_arguments(list_parser)
+        list_parser.add_argument("--list-streams", action="store_true", help="List MJPEG streams.")
+        list_parser.add_argument(
             "--include-inactive",
             action="store_true",
             help="Include inactive MJPEG streams.",
         )
-        parser.add_argument(
-            "--auto-enable",
-            action="store_true",
-            help="Enable the Video Camera feature automatically for active actions.",
-        )
-        parser.add_argument(
-            "--list-streams",
-            action="store_true",
-            help="List MJPEG streams in addition to video devices.",
-        )
-        parser.add_argument(
-            "--interval",
-            type=float,
-            default=_setting_default_float("VIDEO_FRAME_CAPTURE_INTERVAL", 0.2),
-            help="Seconds between frame capture attempts per stream.",
-        )
-        parser.add_argument(
-            "--sleep",
-            type=float,
-            default=_setting_default_float("VIDEO_FRAME_SERVICE_SLEEP", 0.05),
-            help="Seconds to sleep between capture loops.",
-        )
+        self._add_auto_enable_argument(list_parser)
 
-        subparsers = parser.add_subparsers(dest="action")
+        snapshot_parser = subparsers.add_parser(
+            "snapshot",
+            help="Capture a still snapshot from a video device.",
+        )
+        self._add_device_selection_argument(snapshot_parser)
+        self._add_discovery_arguments(snapshot_parser)
+        self._add_auto_enable_argument(snapshot_parser)
 
-        list_parser = subparsers.add_parser("list", help="List video devices and optional stream details.")
-        list_parser.add_argument("--discover", action="store_true", help="Discover devices before listing.")
-        list_parser.add_argument("--refresh-devices", action="store_true", help="Alias for --discover.")
-        list_parser.add_argument("--list-streams", action="store_true", help="List MJPEG streams.")
-        list_parser.add_argument("--include-inactive", action="store_true", help="Include inactive MJPEG streams.")
-        list_parser.add_argument("--auto-enable", action="store_true", help="Enable feature automatically when discovering.")
-
-        snapshot_parser = subparsers.add_parser("snapshot", help="Capture a still snapshot from a video device.")
-        snapshot_parser.add_argument("--device", help="Video device ID, slug, or identifier.")
-        snapshot_parser.add_argument("--discover", action="store_true", help="Discover devices before capture.")
-        snapshot_parser.add_argument("--refresh-devices", action="store_true", help="Alias for --discover.")
-        snapshot_parser.add_argument("--auto-enable", action="store_true", help="Enable feature automatically.")
-
-        mjpeg_parser = subparsers.add_parser("mjpeg", help="Capture frame(s) from MJPEG stream cache.")
-        mjpeg_parser.add_argument("--stream", help="MJPEG stream slug or ID to capture.")
-        mjpeg_parser.add_argument("--include-inactive", action="store_true", help="Include inactive MJPEG streams.")
+        mjpeg_parser = subparsers.add_parser(
+            "mjpeg",
+            help="Capture frame(s) from MJPEG stream cache.",
+        )
+        self._add_stream_selection_arguments(mjpeg_parser)
 
         subparsers.add_parser("doctor", help="Run server-side video diagnostics.")
 
-        service_parser = subparsers.add_parser("service", help="Run camera service capture loop.")
-        service_parser.add_argument("--interval", type=float, default=_setting_default_float("VIDEO_FRAME_CAPTURE_INTERVAL", 0.2), help="Seconds between frame capture attempts per stream.")
-        service_parser.add_argument("--sleep", type=float, default=_setting_default_float("VIDEO_FRAME_SERVICE_SLEEP", 0.05), help="Seconds to sleep between capture loops.")
+        service_parser = subparsers.add_parser(
+            "service",
+            help="Run camera service capture loop.",
+        )
+        self._add_service_timing_arguments(service_parser)
+
+    def _rewrite_legacy_cli_args(self, command_args: list[str]) -> list[str]:
+        """Translate legacy CLI action flags into their preferred subcommand form.
+
+        Root-level options must remain before the inserted subcommand so Django's
+        parser still accepts legacy invocations such as ``video --verbosity 0
+        --doctor``.
+        """
+
+        if not command_args or any(arg in {"-h", "--help"} for arg in command_args):
+            return command_args
+        if command_args[0] in {"list", "snapshot", "mjpeg", "doctor", "service"}:
+            return command_args
+
+        compatibility_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+        for flag in self._LEGACY_ACTION_FLAGS:
+            compatibility_parser.add_argument(flag, action="store_true")
+        known, remainder = compatibility_parser.parse_known_args(command_args)
+
+        action_flags = [
+            action
+            for flag, action in self._LEGACY_ACTION_FLAGS.items()
+            if getattr(known, flag[2:].replace("-", "_"))
+        ]
+        if len(action_flags) != 1:
+            return command_args
+
+        action_flag = next(
+            flag
+            for flag, action in self._LEGACY_ACTION_FLAGS.items()
+            if action == action_flags[0]
+        )
+        leading_root_args: list[str] = []
+        trailing_args = list(remainder)
+        while trailing_args:
+            next_arg = trailing_args[0]
+            if next_arg == action_flag:
+                trailing_args.pop(0)
+                continue
+            if next_arg.startswith("-"):
+                leading_root_args.append(trailing_args.pop(0))
+                if trailing_args and not trailing_args[0].startswith("-"):
+                    leading_root_args.append(trailing_args.pop(0))
+                continue
+            break
+
+        return [*leading_root_args, action_flags[0], *trailing_args]
+
+    def _normalize_compatibility_options(self, options: dict[str, object]) -> dict[str, object]:
+        """Merge subcommand arguments with legacy compatibility flags."""
+
+        normalized = dict(options)
+        action = normalized.get("action")
+        compatibility_actions = [
+            compatibility_action
+            for compatibility_action in self._LEGACY_ACTION_FLAGS.values()
+            if normalized.get(compatibility_action)
+        ]
+        if action and compatibility_actions:
+            raise CommandError(
+                f"Cannot use subcommand '{action}' with legacy action flag "
+                f"'--{compatibility_actions[0]}'."
+            )
+        if len(compatibility_actions) > 1:
+            raise CommandError("Choose only one legacy action flag at a time.")
+
+        normalized["discover"] = bool(normalized.get("discover") or normalized.get("refresh_devices"))
+        normalized["doctor"] = bool(action == "doctor" or normalized.get("doctor"))
+        normalized["mjpeg"] = bool(action == "mjpeg" or normalized.get("mjpeg"))
+        normalized["snapshot"] = bool(action == "snapshot" or normalized.get("snapshot"))
+
+        if normalized["doctor"]:
+            normalized["action"] = "doctor"
+        elif normalized["mjpeg"]:
+            normalized["action"] = "mjpeg"
+        elif normalized["snapshot"]:
+            normalized["action"] = "snapshot"
+
+        return normalized
 
     def handle(self, *args, **options) -> None:
         """Execute video camera management actions."""
 
-        action = options.get("action")
-        normalized = self._normalize_legacy_flags(options)
+        normalized = self._normalize_compatibility_options(options)
+        action = normalized.get("action")
 
-        if action == "doctor" or normalized["doctor"]:
+        if normalized["doctor"]:
             self._run_doctor()
             return
 
@@ -303,25 +421,6 @@ class Command(BaseCommand):
         if samples is not None:
             self._capture_samples(node=node, feature=feature, options=normalized, samples=samples)
 
-    def _normalize_legacy_flags(self, options: dict[str, object]) -> dict[str, object]:
-        """Merge sub-action arguments with legacy top-level flags for compatibility."""
-
-        normalized = dict(options)
-        action = normalized.get("action")
-
-        normalized["discover"] = bool(normalized.get("discover") or normalized.get("refresh_devices"))
-
-        if action == "list":
-            normalized["list_streams"] = bool(normalized.get("list_streams"))
-        elif action == "snapshot":
-            normalized["snapshot"] = True
-        elif action == "mjpeg":
-            normalized["mjpeg"] = True
-        elif action == "service":
-            normalized["service"] = True
-
-        return normalized
-
     def _maybe_enable_or_disable_feature(
         self,
         *,
@@ -334,8 +433,8 @@ class Command(BaseCommand):
         if options["enable"]:
             NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
             self.stdout.write(self.style.SUCCESS("Enabled the Video Camera feature for the node."))
-            if not has_rpi_camera_stack():
-                self.stdout.write(self.style.WARNING("Raspberry Pi camera stack not detected; enabling anyway."))
+            if node is not None and not is_feature_active_for_node(node=node, slug="video-cam"):
+                self.stdout.write(self.style.WARNING("Video Camera feature not auto-detected; enabling anyway."))
 
         if options["disable"]:
             deleted, _ = NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
@@ -360,8 +459,8 @@ class Command(BaseCommand):
         if feature is not None and not feature.is_enabled and not options["enable"]:
             self.stdout.write(self.style.WARNING("Video Camera feature is currently disabled."))
 
-        if not has_rpi_camera_stack():
-            self.stdout.write(self.style.WARNING("Raspberry Pi camera stack not detected; capture may fail."))
+        if node is not None and not is_feature_active_for_node(node=node, slug="video-cam"):
+            self.stdout.write(self.style.WARNING("Video Camera feature not auto-detected; capture may fail."))
 
         device = self._resolve_video_device(node, options.get("device"))
         if device is None:
@@ -382,10 +481,10 @@ class Command(BaseCommand):
             return
 
         if auto_enable:
-            if not has_rpi_camera_stack():
+            if not is_feature_active_for_node(node=node, slug="video-cam"):
                 self.stdout.write(
                     self.style.WARNING(
-                        "Raspberry Pi camera stack not detected; enabling anyway."
+                        "Video Camera feature not auto-detected; enabling anyway."
                     )
                 )
             NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
@@ -420,10 +519,10 @@ class Command(BaseCommand):
         if device is None:
             raise CommandError("No video device is available for snapshot capture.")
 
-        if not has_rpi_camera_stack():
+        if node is not None and not is_feature_active_for_node(node=node, slug="video-cam"):
             self.stdout.write(
                 self.style.WARNING(
-                    "Raspberry Pi camera stack not detected; snapshot may fail."
+                    "Video Camera feature not auto-detected; snapshot may fail."
                 )
             )
 
@@ -532,8 +631,11 @@ class Command(BaseCommand):
                 f"Video Camera feature: {status_label} ({assignment_label})"
             )
 
+        feature_available = bool(node and is_feature_active_for_node(node=node, slug="video-cam"))
+        feature_status = "available" if feature_available else "missing"
+        self.stdout.write(f"Video feature detection: {feature_status}")
         camera_stack = "available" if has_rpi_camera_stack() else "missing"
-        self.stdout.write(f"Camera stack: {camera_stack}")
+        self.stdout.write(f"Camera stack probe: {camera_stack}")
 
         self._report_devices(node)
         self._report_streams()

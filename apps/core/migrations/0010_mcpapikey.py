@@ -1,4 +1,4 @@
-"""Compatibility migration after moving MCP models into apps.mcp."""
+"""Deprecated no-op migration retained for historical compatibility."""
 
 from django.db import migrations
 
@@ -10,9 +10,8 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("core", "0009_alter_invitelead_status"),
-        ("mcp", "0001_initial"),
     ]
 
     operations = [
-        SafelyDeprecatedMigration(reason="compatibility shim after MCP app split"),
+        SafelyDeprecatedMigration(reason="deprecated compatibility shim for removed app split"),
     ]

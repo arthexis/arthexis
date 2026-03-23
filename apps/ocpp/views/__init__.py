@@ -7,6 +7,7 @@ from .public import (
     charger_page,
     charger_session_search,
     charger_status,
+    charger_status_chart,
     charging_station_map,
     public_connector_page,
     supported_charger_detail,

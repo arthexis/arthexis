@@ -1,6 +1,6 @@
 # LLM LCD log summary
 
-The `summary` domain ships a local LLM-backed workflow that produces extremely sparse LCD summaries for recent system logs. The feature is gated behind the **LLM Summary** node feature (`llm-summary`) and is automatically enabled only when LCD and Celery locks are present.
+The `summary` domain ships a local LLM-backed workflow that produces extremely sparse LCD summaries for recent system logs. Runtime execution is gated by the **LLM Summary Suite** feature (`llm-summary-suite`) and connected to the **LLM Summary** node feature (`llm-summary`), which is only assigned by default to Control nodes.
 
 ## How it works
 
@@ -44,3 +44,10 @@ LTE drop x3
 - The LCD completes a full message cycle every 30 seconds.
 - The task caps LCD output to 10 screens to keep the display cycle under five minutes.
 - The feature depends on both LCD and Celery lock files, so the LCD service and Celery must be enabled.
+
+
+## Suite feature
+
+- The suite feature stores centralized runtime parameters in `metadata.parameters` (`model_path`, `model_command`, `timeout_seconds`).
+- The Configure action in **Admin → Summary → LLM Summary Configs** opens a wizard with an environment checklist (suite gate, node assignment, locks, active config, model directory).
+- The periodic summary task is synced only when both the suite feature and node feature are enabled for the local node.

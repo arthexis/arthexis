@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.db import models
@@ -13,12 +13,14 @@ from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.module_loading import import_string
 from django.utils.translation import gettext_lazy as _
-from typing import TYPE_CHECKING
 
 from apps.content.models import ContentSample
 from apps.content.utils import save_screenshot
 from apps.core.entity import Entity, EntityManager
 from apps.core.models import Ownable
+from apps.core.ui import has_graphical_display
+from apps.features.utils import is_suite_feature_enabled
+from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.sigils.sigil_resolver import resolve_sigils
 from .playwright import normalize_playwright_cookie
 
@@ -28,6 +30,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
+PLAYWRIGHT_AUTOMATION_FEATURE_SLUG = "playwright-automation"
 
 
 def _load_sync_playwright():
@@ -51,6 +54,46 @@ class UnsupportedBrowserEngineError(ValueError):
 
 class InvalidCookiePayloadError(ValueError):
     """Raised when a session cookie payload does not match the expected shape."""
+
+
+class PlaywrightRuntimeDisabledError(RuntimeError):
+    """Raised when Playwright runtime automation is globally disabled."""
+
+
+class PlaywrightEngineFeatureDisabledError(RuntimeError):
+    """Raised when a Playwright browser engine is unavailable on the local node."""
+
+
+def _ensure_playwright_runtime_enabled() -> None:
+    """Raise when the global Playwright automation suite feature is disabled."""
+
+    if not is_suite_feature_enabled(PLAYWRIGHT_AUTOMATION_FEATURE_SLUG, default=True):
+        raise PlaywrightRuntimeDisabledError(
+            "Playwright automation is disabled by suite feature "
+            f"'{PLAYWRIGHT_AUTOMATION_FEATURE_SLUG}'."
+        )
+
+
+def _ensure_engine_feature_enabled(engine: str) -> None:
+    """Raise when the local node does not expose the requested Playwright engine."""
+
+    from apps.nodes.models import Node
+
+    feature_map = {
+        PlaywrightBrowser.Engine.CHROMIUM: "playwright-browser-chromium",
+        PlaywrightBrowser.Engine.FIREFOX: "playwright-browser-firefox",
+        PlaywrightBrowser.Engine.WEBKIT: "playwright-browser-webkit",
+    }
+    node_feature_slug = feature_map.get(engine)
+    if node_feature_slug is None:
+        raise UnsupportedBrowserEngineError(f"Unsupported browser engine: {engine}")
+    local = Node.get_local()
+    if local is None:
+        return
+    if not is_feature_active_for_node(node=local, slug=node_feature_slug):
+        raise PlaywrightEngineFeatureDisabledError(
+            f"Playwright engine '{engine}' is disabled on local node feature '{node_feature_slug}'."
+        )
 
 
 @dataclass
@@ -154,13 +197,16 @@ class PlaywrightBrowser(Entity):
     def _headless_mode(self) -> bool:
         if self.mode == self.Mode.HEADLESS:
             return True
-        if not os.environ.get("DISPLAY"):
-            logger.warning("DISPLAY not set; forcing headless mode for %s", self)
+        if not has_graphical_display():
+            logger.warning("No graphical display available; forcing headless mode for %s", self)
             return True
         return False
 
     def create_driver(self) -> PlaywrightDriver:
         """Launch this configured browser profile."""
+
+        _ensure_playwright_runtime_enabled()
+        _ensure_engine_feature_enabled(self.engine)
 
         sync_playwright = _load_sync_playwright()
         playwright = sync_playwright().start()
@@ -239,6 +285,8 @@ class PlaywrightScript(Entity):
     def execute(self, browser: PlaywrightBrowser | None = None, *, current=None):
         """Execute this script against the selected browser profile."""
 
+        _ensure_playwright_runtime_enabled()
+
         active_browser = browser or PlaywrightBrowser.default()
         if active_browser is None:
             raise PlaywrightBrowser.DoesNotExist("No default Playwright browser configured.")
@@ -290,6 +338,7 @@ class SessionCookie(Ownable):
         indexes = [models.Index(fields=["state", "expires_at"], name="pw_sc_state_exp_idx")]
 
     def clean_cookie_payload(self, payload: list[dict]) -> list[dict]:
+        """Validate cookie payload structure and required ``name``/``value`` fields."""
         if not isinstance(payload, list):
             raise InvalidCookiePayloadError("Cookie payload must be a list of mappings.")
         for cookie in payload:
@@ -297,6 +346,13 @@ class SessionCookie(Ownable):
                 raise InvalidCookiePayloadError("Each cookie entry must be a mapping with cookie attributes.")
             if "name" not in cookie or "value" not in cookie:
                 raise InvalidCookiePayloadError("Each cookie must include both 'name' and 'value' keys.")
+
+            name = cookie.get("name")
+            value = cookie.get("value")
+            if not isinstance(name, str) or not name.strip():
+                raise InvalidCookiePayloadError("Cookie 'name' must be a non-empty string.")
+            if not isinstance(value, str):
+                raise InvalidCookiePayloadError("Cookie 'value' must be a string.")
         return payload
 
     def _save_fields(self, fields: list[str]) -> None:
@@ -401,7 +457,10 @@ class WebsiteScreenshotSchedule(Entity):
         available = [
             engine
             for engine in deduped
-            if local.has_feature(feature_map[engine])
+            if is_feature_active_for_node(
+                node=local,
+                slug=feature_map[engine],
+            )
         ]
         return available or deduped or [PlaywrightBrowser.Engine.CHROMIUM]
 
@@ -421,6 +480,8 @@ class WebsiteScreenshotRun(Entity):
 def execute_website_screenshot_schedule(schedule: WebsiteScreenshotSchedule, *, user=None) -> WebsiteScreenshotRun:
     """Execute one screenshot schedule and persist a content sample."""
 
+    _ensure_playwright_runtime_enabled()
+
     from playwright.sync_api import Error as PlaywrightError
 
     sync_playwright = _load_sync_playwright()
@@ -430,6 +491,7 @@ def execute_website_screenshot_schedule(schedule: WebsiteScreenshotSchedule, *, 
     errors: dict[str, str] = {}
     for engine in schedule.browser_engine_candidates():
         try:
+            _ensure_engine_feature_enabled(engine)
             with sync_playwright() as playwright:
                 launcher = getattr(playwright, engine)
                 browser = launcher.launch(headless=True)
@@ -479,6 +541,13 @@ def _run_pre_commands(page, pre_commands, *, default_timeout_ms: int) -> None:
 
 def schedule_pending_website_screenshots(now=None) -> list[int]:
     """Execute screenshot schedules that are due."""
+
+    if not is_suite_feature_enabled(PLAYWRIGHT_AUTOMATION_FEATURE_SLUG, default=True):
+        logger.info(
+            "Skipping Playwright screenshot schedules because suite feature %s is disabled.",
+            PLAYWRIGHT_AUTOMATION_FEATURE_SLUG,
+        )
+        return []
 
     now = now or timezone.now()
     executed: list[int] = []

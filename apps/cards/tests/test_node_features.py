@@ -21,7 +21,7 @@ def test_setup_node_feature_writes_compatibility_lock(monkeypatch, settings, tmp
     monkeypatch.setattr(
         node_features,
         "detect_scanner_capability",
-        lambda *, node=None: {"detected": True},
+        lambda *, node=None, base_dir=None, base_path=None: {"detected": True},
     )
 
     result = node_features.setup_node_feature("rfid-scanner", node=StubNode())
@@ -38,7 +38,7 @@ def test_detect_scanner_reuses_node_feature_detection(monkeypatch):
     monkeypatch.setattr(
         node_features,
         "detect_scanner_capability",
-        lambda *, node=None: expected,
+        lambda *, node=None, base_dir=None, base_path=None: expected,
     )
 
     assert detect.detect_scanner() == expected
@@ -57,7 +57,7 @@ def test_detect_scanner_ignores_stale_compatibility_lock(monkeypatch, settings, 
     monkeypatch.setattr(
         node_features,
         "_service_detection",
-        lambda: {"detected": False, "reason": "RFID scanner not detected"},
+        lambda *, base_dir=None: {"detected": False, "reason": "RFID scanner not detected"},
     )
 
     class StubNode:
