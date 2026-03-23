@@ -30,12 +30,20 @@ class ChatConsumerPresenceDebounceTests(TestCase):
 
         consumer = self._build_consumer(session_pk=101)
 
-        with mock.patch(
-            "apps.sites.consumers.settings.PAGES_CHAT_PRESENCE_FLAP_WINDOW_SECONDS",
-            1,
-            create=True,
-        ), mock.patch("apps.sites.consumers.timezone.now") as mock_now:
-            mock_now.return_value.timestamp.side_effect = [1000.0, 1000.1, 1000.2, 1001.2]
+        with (
+            mock.patch(
+                "apps.sites.consumers.settings.PAGES_CHAT_PRESENCE_FLAP_WINDOW_SECONDS",
+                1,
+                create=True,
+            ),
+            mock.patch("apps.sites.consumers.timezone.now") as mock_now,
+        ):
+            mock_now.return_value.timestamp.side_effect = [
+                1000.0,
+                1000.1,
+                1000.2,
+                1001.2,
+            ]
             self.assertTrue(consumer._should_emit_presence(event="join", staff=True))
             self.assertFalse(consumer._should_emit_presence(event="leave", staff=True))
             self.assertFalse(consumer._should_emit_presence(event="join", staff=True))
@@ -46,11 +54,14 @@ class ChatConsumerPresenceDebounceTests(TestCase):
 
         consumer = self._build_consumer(session_pk=102)
 
-        with mock.patch(
-            "apps.sites.consumers.settings.PAGES_CHAT_PRESENCE_FLAP_WINDOW_SECONDS",
-            1,
-            create=True,
-        ), mock.patch("apps.sites.consumers.timezone.now") as mock_now:
+        with (
+            mock.patch(
+                "apps.sites.consumers.settings.PAGES_CHAT_PRESENCE_FLAP_WINDOW_SECONDS",
+                1,
+                create=True,
+            ),
+            mock.patch("apps.sites.consumers.timezone.now") as mock_now,
+        ):
             mock_now.return_value.timestamp.side_effect = [1000.0, 1000.1, 1000.2]
             self.assertTrue(consumer._should_emit_presence(event="join", staff=True))
             self.assertFalse(consumer._should_emit_presence(event="leave", staff=True))
@@ -82,7 +93,9 @@ class ChatConsumerAccessControlTests(TestCase):
 
         with (
             mock.patch("apps.sites.consumers.settings.PAGES_CHAT_ENABLED", True),
-            mock.patch("apps.sites.consumers.is_suite_feature_enabled", return_value=True),
+            mock.patch(
+                "apps.sites.consumers.is_suite_feature_enabled", return_value=True
+            ),
             mock.patch.object(
                 consumer,
                 "_current_site",
@@ -100,7 +113,9 @@ class ChatConsumerAccessControlTests(TestCase):
 
         with (
             mock.patch("apps.sites.consumers.settings.PAGES_CHAT_ENABLED", True),
-            mock.patch("apps.sites.consumers.is_suite_feature_enabled", return_value=True),
+            mock.patch(
+                "apps.sites.consumers.is_suite_feature_enabled", return_value=True
+            ),
             mock.patch.object(
                 consumer,
                 "_current_site",
@@ -125,7 +140,9 @@ class ChatConsumerAccessControlTests(TestCase):
 
         with (
             mock.patch("apps.sites.consumers.settings.PAGES_CHAT_ENABLED", True),
-            mock.patch("apps.sites.consumers.is_suite_feature_enabled", return_value=True),
+            mock.patch(
+                "apps.sites.consumers.is_suite_feature_enabled", return_value=True
+            ),
             mock.patch.object(
                 consumer,
                 "_current_site",
@@ -136,6 +153,82 @@ class ChatConsumerAccessControlTests(TestCase):
 
         self.assertTrue(allowed)
 
+    def test_chat_access_allowed_for_staff_without_site_or_profile_opt_in(self):
+        """Staff should retain chat access even when public chat and opt-in are off."""
+
+        consumer = ChatConsumer()
+        user = SimpleNamespace(
+            is_authenticated=True,
+            is_staff=True,
+            is_superuser=False,
+            pk=456,
+            get_profile=lambda _profile_cls: SimpleNamespace(contact_via_chat=False),
+        )
+
+        with (
+            mock.patch("apps.sites.consumers.settings.PAGES_CHAT_ENABLED", True),
+            mock.patch(
+                "apps.sites.consumers.is_suite_feature_enabled", return_value=True
+            ),
+            mock.patch.object(
+                consumer,
+                "_current_site",
+                return_value=SimpleNamespace(enable_public_chat=False),
+            ),
+        ):
+            allowed = consumer._is_chat_access_allowed_sync(user=user)
+
+        self.assertTrue(allowed)
+
+    def test_chat_access_allowed_for_superuser_without_site_or_profile_opt_in(self):
+        """Superusers should retain chat access even when public chat and opt-in are off."""
+
+        consumer = ChatConsumer()
+        user = SimpleNamespace(
+            is_authenticated=True,
+            is_staff=False,
+            is_superuser=True,
+            pk=789,
+            get_profile=lambda _profile_cls: SimpleNamespace(contact_via_chat=False),
+        )
+
+        with (
+            mock.patch("apps.sites.consumers.settings.PAGES_CHAT_ENABLED", True),
+            mock.patch(
+                "apps.sites.consumers.is_suite_feature_enabled", return_value=True
+            ),
+            mock.patch.object(
+                consumer,
+                "_current_site",
+                return_value=SimpleNamespace(enable_public_chat=False),
+            ),
+        ):
+            allowed = consumer._is_chat_access_allowed_sync(user=user)
+
+        self.assertTrue(allowed)
+
+    def test_current_site_prefers_websocket_host_header(self):
+        """Site resolution should follow the websocket host, not only the default site."""
+
+        consumer = ChatConsumer()
+        consumer.scope = {"headers": [(b"host", b"chat.example.test:8443")]}
+        resolved_site = SimpleNamespace(domain="chat.example.test")
+
+        with (
+            mock.patch(
+                "apps.sites.consumers.Site.objects.filter",
+                return_value=SimpleNamespace(first=lambda: resolved_site),
+            ) as mock_filter,
+            mock.patch(
+                "apps.sites.consumers.Site.objects.get_current"
+            ) as mock_get_current,
+        ):
+            site = consumer._current_site()
+
+        self.assertIs(site, resolved_site)
+        mock_filter.assert_called_once_with(domain__iexact="chat.example.test")
+        mock_get_current.assert_not_called()
+
     def test_chat_access_denied_when_staff_chat_bridge_feature_disabled(self):
         """Chat must be disabled when the bridge feature flag is off."""
 
@@ -143,7 +236,9 @@ class ChatConsumerAccessControlTests(TestCase):
 
         with (
             mock.patch("apps.sites.consumers.settings.PAGES_CHAT_ENABLED", True),
-            mock.patch("apps.sites.consumers.is_suite_feature_enabled", return_value=False),
+            mock.patch(
+                "apps.sites.consumers.is_suite_feature_enabled", return_value=False
+            ),
             mock.patch.object(
                 consumer,
                 "_current_site",
