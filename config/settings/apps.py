@@ -108,9 +108,9 @@ LEGACY_MIGRATION_APPS = [
     "apps._legacy.extensions_migration_only.apps.ExtensionsMigrationOnlyConfig",
     "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig",
     "apps._legacy.recipes_migration_only.apps.RecipesMigrationOnlyConfig",
+    "apps._legacy.selenium_migration_only.apps.SeleniumMigrationOnlyConfig",
     "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig",
     "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
-    "apps.selenium",
     "config.legacy_mermaid",
 ]
 NON_DJANGO_UTILITY_PACKAGES = {
@@ -178,6 +178,7 @@ INSTALLED_APPS = _dedupe_app_entries(INSTALLED_APPS)
 SITE_ID = 1
 
 MIGRATION_MODULES = {
+    "selenium": "apps.selenium.migrations",
     "sites": "apps.core.sites_migrations",
     "socials": "apps.socials.migrations",
     # Pin django_celery_beat migrations to a local copy so we can override
