@@ -15,6 +15,7 @@ from apps.desktop.services import (
     DesktopSyncResult,
     _build_exec,
     _evaluate_expression,
+    render_shortcut_desktop_entry,
     should_install_shortcut,
     sync_desktop_shortcuts,
 )
@@ -182,6 +183,31 @@ def test_build_exec_always_uses_browser_helper() -> None:
 
     assert "webbrowser" in exec_value
     assert "https://example.com:8443/status" in exec_value
+
+
+def test_render_shortcut_desktop_entry_skips_private_extra_entries() -> None:
+    """Private extra entry metadata should not leak into rendered launchers."""
+
+    shortcut = DesktopShortcut(
+        slug="render-private-extra-entries",
+        desktop_filename="Render Private Extra Entries",
+        name="Render Private Extra Entries",
+        launch_mode=DesktopShortcut.LaunchMode.URL,
+        target_url="https://example.com:{port}/status",
+        extra_entries={
+            "StartupWMClass": "arthexis",
+            "_retired_command_mode_review": {"command": "legacy"},
+        },
+    )
+
+    rendered = render_shortcut_desktop_entry(
+        shortcut,
+        exec_value="python -m webbrowser -t https://example.com:8443/status",
+        icon_value="applications-system",
+    )
+
+    assert "StartupWMClass=arthexis" in rendered
+    assert "_retired_command_mode_review" not in rendered
 
 
 def test_evaluate_expression_rejects_bare_has_feature_name() -> None:

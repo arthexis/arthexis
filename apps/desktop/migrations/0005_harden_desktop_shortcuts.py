@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.db import migrations, models
 
 
-_ARCHIVE_KEY = "retired_command_mode_review"
+_ARCHIVE_KEY = "_retired_command_mode_review"
 _REVIEW_URL = "http://127.0.0.1:{port}/admin/desktop/desktopshortcut/"
 
 

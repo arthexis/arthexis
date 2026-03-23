@@ -10,55 +10,13 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from apps.base.models import Entity
-
-
-_ALLOWED_CONDITION_AST_NODES = (
-    ast.And,
-    ast.BoolOp,
-    ast.Call,
-    ast.Compare,
-    ast.Constant,
-    ast.Eq,
-    ast.Expression,
-    ast.Gt,
-    ast.GtE,
-    ast.In,
-    ast.List,
-    ast.Load,
-    ast.Lt,
-    ast.LtE,
-    ast.Name,
-    ast.Not,
-    ast.NotEq,
-    ast.NotIn,
-    ast.Or,
-    ast.Set,
-    ast.Tuple,
-    ast.UnaryOp,
+from apps.desktop.expression_utils import (
+    _ALLOWED_CONDITION_AST_NODES,
+    _ALLOWED_CONDITION_NAMES,
+    _ALLOWED_URL_SCHEMES,
+    _is_has_feature_callable_name,
+    build_ast_parent_map,
 )
-_ALLOWED_CONDITION_NAMES = {
-    "group_names",
-    "has_desktop_ui",
-    "has_feature",
-    "is_staff",
-    "is_superuser",
-}
-_ALLOWED_URL_SCHEMES = {"http", "https"}
-
-
-def _is_has_feature_callable_name(node: ast.Name, parents: dict[ast.AST, ast.AST]) -> bool:
-    """Return whether ``node`` is the callable name in a ``has_feature(...)`` call.
-
-    Parameters:
-        node: The AST name node under inspection.
-        parents: Mapping of child nodes to their direct parent node.
-
-    Returns:
-        ``True`` when the name is used as the function target for a call.
-    """
-
-    parent = parents.get(node)
-    return isinstance(parent, ast.Call) and parent.func is node
 
 
 class RegisteredExtension(Entity):
@@ -261,11 +219,7 @@ class DesktopShortcut(Entity):
                 "Enter a valid condition expression."
             ) from exc
 
-        parents = {
-            child: parent
-            for parent in ast.walk(tree)
-            for child in ast.iter_child_nodes(parent)
-        }
+        parents = build_ast_parent_map(tree)
         for node in ast.walk(tree):
             if not isinstance(node, _ALLOWED_CONDITION_AST_NODES):
                 raise ValidationError(

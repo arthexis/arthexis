@@ -17,6 +17,11 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractBaseUser
 from django.db.utils import OperationalError, ProgrammingError
 
+from apps.desktop.expression_utils import (
+    _ALLOWED_CONDITION_AST_NODES,
+    _is_has_feature_callable_name,
+    build_ast_parent_map,
+)
 from apps.desktop.models import DesktopShortcut, RegisteredExtension
 from apps.nodes.models import Node
 
@@ -40,22 +45,6 @@ class DesktopSyncResult:
     skipped: int = 0
     removed: int = 0
     skipped_db_unavailable: bool = False
-
-
-def _is_has_feature_callable_name(node: ast.Name, parents: dict[ast.AST, ast.AST]) -> bool:
-    """Return whether ``node`` is the callable name in a ``has_feature(...)`` call.
-
-    Parameters:
-        node: The AST name node under inspection.
-        parents: Mapping of child nodes to their direct parent node.
-
-    Returns:
-        ``True`` when the name is used as the function target for a call.
-    """
-
-    parent = parents.get(node)
-    return isinstance(parent, ast.Call) and parent.func is node
-
 
 def build_windows_registry_command(extension: RegisteredExtension) -> str:
     """Build the Windows shell command used to open a file with this extension."""
@@ -207,37 +196,9 @@ def _evaluate_expression(expression: str, context: dict[str, object]) -> bool:
     except SyntaxError:
         return False
 
-    allowed_nodes = (
-        ast.Expression,
-        ast.BoolOp,
-        ast.UnaryOp,
-        ast.Compare,
-        ast.Call,
-        ast.Name,
-        ast.Load,
-        ast.Constant,
-        ast.And,
-        ast.Or,
-        ast.Not,
-        ast.Eq,
-        ast.NotEq,
-        ast.In,
-        ast.NotIn,
-        ast.Gt,
-        ast.GtE,
-        ast.Lt,
-        ast.LtE,
-        ast.Set,
-        ast.Tuple,
-        ast.List,
-    )
-    parents = {
-        child: parent
-        for parent in ast.walk(tree)
-        for child in ast.iter_child_nodes(parent)
-    }
+    parents = build_ast_parent_map(tree)
     for node in ast.walk(tree):
-        if not isinstance(node, allowed_nodes):
+        if not isinstance(node, _ALLOWED_CONDITION_AST_NODES):
             return False
         if (
             isinstance(node, ast.Name)
@@ -390,6 +351,8 @@ def render_shortcut_desktop_entry(shortcut: DesktopShortcut, *, exec_value: str,
         "X-Arthexis-Managed=true",
     ]
     for key, value in sorted(shortcut.extra_entries.items()):
+        if str(key).startswith("_"):
+            continue
         lines.append(f"{_sanitize_desktop_value(key)}={_sanitize_desktop_value(value)}")
     return "\n".join(lines) + "\n"
 
