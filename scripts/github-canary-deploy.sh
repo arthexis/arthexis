@@ -82,16 +82,23 @@ git fetch --prune --tags origin
 
 resolve_commit() {
   local ref="$1"
-  if git rev-parse --verify --quiet "${ref}^{commit}" >/dev/null; then
-    git rev-parse "${ref}^{commit}"
-    return 0
-  fi
+
+  # Resolve against fetched origin refs first so local branches/tags cannot
+  # override remote state.
   if git rev-parse --verify --quiet "origin/${ref}^{commit}" >/dev/null; then
     git rev-parse "origin/${ref}^{commit}"
     return 0
   fi
+
+  # Allow explicit commit SHAs if they exist locally.
+  if [[ "${ref}" =~ ^[0-9a-fA-F]{40}$ ]] && git rev-parse --verify --quiet "${ref}^{commit}" >/dev/null; then
+    git rev-parse "${ref}^{commit}"
+    return 0
+  fi
+
   return 1
 }
+
 
 if ! RESOLVED_COMMIT="$(resolve_commit "${TARGET_REF}")"; then
   echo "Unable to resolve target ref '${TARGET_REF}' in ${DEPLOY_PATH}." >&2
