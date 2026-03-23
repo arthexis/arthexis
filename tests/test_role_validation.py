@@ -32,6 +32,10 @@ from config.roles import validate_role_settings
             "NODE_ROLE": "Watchtower",
             "CHANNEL_REDIS_URL": "redis://localhost:6379/2",
         },
+        {
+            "DEBUG": False,
+            "NODE_ROLE": "Gateway",
+        },
     ],
 )
 def test_role_profiles_accept_valid_configuration(settings_values: dict[str, object]) -> None:

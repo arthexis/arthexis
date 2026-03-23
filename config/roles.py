@@ -71,6 +71,11 @@ ROLE_PROFILES: dict[str, RoleProfile] = {
         ),
         forbidden=(),
     ),
+    "Gateway": RoleProfile(
+        name="Gateway",
+        required=(),
+        forbidden=(),
+    ),
 }
 
 
