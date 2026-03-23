@@ -796,9 +796,9 @@ def test_to_tsv_sanitizes_formula_and_line_break_characters():
             {
                 "so": "=2+2",
                 "customer_name": "Bob\nSmith",
-                "status": "+new",
+                "status": " +new",
                 "full_address": "A\tB",
-                "phone": "@phone",
+                "phone": "\t@phone",
                 "charger_brand": "-brand",
                 "city": "Monterrey\rNL",
             }
@@ -807,9 +807,9 @@ def test_to_tsv_sanitizes_formula_and_line_break_characters():
 
     assert "'=2+2" in tsv
     assert "Bob Smith" in tsv
-    assert "'+new" in tsv
+    assert "' +new" in tsv
     assert "A B" in tsv
-    assert "'@phone" in tsv
+    assert "' @phone" in tsv
     assert "'-brand" in tsv
     assert "Monterrey NL" in tsv
 
