@@ -11,7 +11,12 @@ from django.core.management.base import CommandError
 from django.db.utils import OperationalError
 
 from apps.desktop.models import DesktopShortcut
-from apps.desktop.services import DesktopSyncResult, sync_desktop_shortcuts
+from apps.desktop.services import (
+    DesktopSyncResult,
+    _build_exec,
+    should_install_shortcut,
+    sync_desktop_shortcuts,
+)
 
 pytestmark = [pytest.mark.django_db]
 
@@ -68,6 +73,10 @@ def test_sync_desktop_shortcuts_installs_applications_only(
     assert result.installed >= 1
     assert applications_target.exists()
     assert not desktop_target.exists()
+    assert "Exec=" in applications_target.read_text(encoding="utf-8")
+    assert "webbrowser -t http://127.0.0.1:8000/" in applications_target.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_sync_desktop_shortcuts_removes_stale_file_when_location_changes(
@@ -117,6 +126,61 @@ def test_sync_desktop_shortcuts_removes_stale_file_when_location_changes(
     assert result.removed >= 1
     assert applications_target.exists()
     assert not stale_desktop_file.exists()
+
+
+def test_should_install_shortcut_does_not_execute_shell_commands(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Structured conditions should be evaluated without spawning subprocesses."""
+
+    User = get_user_model()
+    User.objects.create_user(username="tester", is_staff=True)
+
+    shortcut = DesktopShortcut.objects.create(
+        slug="public-site-conditions",
+        desktop_filename="Arthexis Public Site Conditions",
+        name="Arthexis Public Site",
+        launch_mode=DesktopShortcut.LaunchMode.URL,
+        target_url="http://127.0.0.1:{port}/",
+        condition_expression="has_desktop_ui and is_staff and has_feature('user-desktop')",
+    )
+
+    desktop_dir = tmp_path / "Desktop"
+    desktop_dir.mkdir()
+
+    monkeypatch.setattr(
+        "apps.desktop.services.detect_desktop_dir",
+        lambda _base_dir, _username: desktop_dir,
+    )
+    monkeypatch.setattr("apps.desktop.services.Node.get_local", lambda: _NodeStub())
+
+    def _unexpected_run(*args, **kwargs):
+        raise AssertionError(f"subprocess.run should not be called: {args!r} {kwargs!r}")
+
+    monkeypatch.setattr("apps.desktop.services.subprocess.run", _unexpected_run)
+
+    assert should_install_shortcut(
+        shortcut,
+        base_dir=Path("/home/tester/arthexis"),
+        username="tester",
+    ) is True
+
+
+def test_build_exec_always_uses_browser_helper() -> None:
+    """Desktop launchers always route through the Python browser helper."""
+
+    shortcut = DesktopShortcut(
+        slug="browser-helper",
+        desktop_filename="Browser Helper",
+        name="Browser Helper",
+        launch_mode=DesktopShortcut.LaunchMode.URL,
+        target_url="https://example.com:{port}/status",
+    )
+
+    exec_value = _build_exec(shortcut, 8443)
+
+    assert "webbrowser" in exec_value
+    assert "https://example.com:8443/status" in exec_value
 
 
 def test_sync_desktop_shortcuts_marks_db_unavailable_and_logs_warning(

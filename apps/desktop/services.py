@@ -244,10 +244,15 @@ def _icon_value(shortcut: DesktopShortcut, username: str) -> str:
 
 
 def _build_exec(shortcut: DesktopShortcut, port: int) -> str:
-    """Build the desktop entry ``Exec`` string for a shortcut."""
+    """Build the desktop entry ``Exec`` string for a shortcut.
 
-    if shortcut.launch_mode == DesktopShortcut.LaunchMode.COMMAND:
-        return shortcut.command
+    Parameters:
+        shortcut: Shortcut definition being rendered.
+        port: Active Arthexis port injected into the URL template.
+
+    Returns:
+        A browser-helper command line that opens the resolved URL.
+    """
 
     target_url = shortcut.target_url.format(port=port)
     return shlex.join([sys.executable, "-m", "webbrowser", "-t", target_url])
@@ -335,27 +340,7 @@ def should_install_shortcut(
         "group_names": user_groups,
         "has_feature": lambda slug: local_node.has_feature(slug),
     }
-    if not _evaluate_expression(shortcut.condition_expression, expr_context):
-        return False
-
-    if shortcut.condition_command:
-        try:
-            command_parts = shlex.split(shortcut.condition_command)
-        except ValueError:
-            return False
-        if not command_parts:
-            return False
-
-        result = subprocess.run(
-            command_parts,
-            check=False,
-            cwd=base_dir,
-            env={**os.environ, "ARTHEXIS_SHORTCUT_SLUG": shortcut.slug, "ARTHEXIS_USERNAME": username},
-        )
-        if result.returncode != 0:
-            return False
-
-    return True
+    return _evaluate_expression(shortcut.condition_expression, expr_context)
 
 
 def render_shortcut_desktop_entry(shortcut: DesktopShortcut, *, exec_value: str, icon_value: str) -> str:

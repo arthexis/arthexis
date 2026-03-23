@@ -48,7 +48,7 @@ The script also:
 - Creates `.venv`, installs the slim runtime dependency set from `requirements.txt` via `scripts/helpers/pip_install.py`, applies migrations, and refreshes environment secrets via `env-refresh.sh`.
 - Leaves non-runtime extras (pytest, debug toolbar, Playwright/Selenium, typing tools) out of the base install unless a later workflow explicitly installs them. This keeps production and Docker runtime environments intentionally lean.
 - Writes lock files capturing the selected role, Nginx mode, and enabled subsystems so the runtime helpers know how to behave.
-- Refreshes desktop shortcuts on Linux desktops for quick access to the UI and maintenance commands.
+- Refreshes desktop shortcuts on Linux desktops for quick access to the Arthexis UI through browser-based launchers.
 
 ### 1.2 Windows: `install.bat`
 
@@ -126,7 +126,7 @@ Supported options:
 Additional behaviour:
 - Before applying migrations it refreshes Nginx maintenance assets, optionally clears the database, reruns `env-refresh.sh`, migrates legacy systemd configurations, and restarts services unless `--no-start`/`--no-restart` was requested.
 - `env-refresh.sh` now keeps Playwright/Selenium setup opt-in (`--preview-deps` or `ARTHEXIS_INSTALL_PREVIEW_DEPS=1`) so normal production refreshes do not pull browser tooling into the base runtime environment.
-- After restarting, it updates desktop shortcuts so GUI launchers stay current.
+- After restarting, it updates desktop shortcuts so browser-launcher entries stay current.
 
 ### 3.2 Windows: `upgrade.bat`
 
@@ -136,7 +136,7 @@ The Windows upgrade helper focuses on Git safety and dependency refreshes. It pu
 
 ### 4.1 Linux: `uninstall.sh`
 
-`uninstall.sh` removes system services, lock files, and the SQLite database. It warns before deleting persistent data unless you pass `--no-warn` (useful for scripted teardown). Providing `--service NAME` overrides the autodetected service from `.locks/service.lck`. The script always prompts before stopping the server, disables any LCD and Celery units, and refreshes desktop shortcuts on exit.
+`uninstall.sh` removes system services, lock files, and the SQLite database. It warns before deleting persistent data unless you pass `--no-warn` (useful for scripted teardown). Providing `--service NAME` overrides the autodetected service from `.locks/service.lck`. The script always prompts before stopping the server, disables any LCD and Celery units, and refreshes desktop shortcuts on exit so any remaining launchers stay aligned with the browser-based shortcut model.
 
 ### 4.2 Windows
 
