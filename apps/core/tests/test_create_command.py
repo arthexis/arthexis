@@ -110,6 +110,15 @@ def test_create_model_supports_existing_underscored_app_name(tmp_path):
     assert "class Ticket(models.Model):" in models_text
 
 
+def test_create_model_rejects_pathlike_app_name(tmp_path):
+    """create model should reject path-like app names before filesystem writes."""
+
+    _seed_apps_root(tmp_path)
+
+    with pytest.raises(CommandError, match="lowercase identifier"):
+        call_command("create", "model", "../../tmp/target", "ticket")
+
+
 def test_create_model_extends_existing_urlpatterns_without_duplicate_imports(tmp_path):
     """create model should append route entries instead of redefining urlpatterns/imports."""
 
