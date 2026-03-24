@@ -12,8 +12,8 @@ Automat==25.4.16
 billiard==4.2.4
 black==26.3.1
 bleach==6.3.0
-boto3==1.36.23
-botocore==1.36.23
+boto3==1.42.73
+botocore==1.42.73
 celery==5.5.3
 certifi==2026.2.25
 cffi==2.0.0
@@ -90,8 +90,8 @@ qrcode==8.2
 redis==7.3.0
 reportlab==4.4.10
 requests==2.32.5
+s3transfer==0.16.0
 ruff==0.15.7
-s3transfer==0.11.1
 selenium==4.41.0
 service-identity==24.2.0
 setuptools==82.0.1
