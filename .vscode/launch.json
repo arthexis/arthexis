@@ -68,7 +68,7 @@
             "console": "integratedTerminal",
             "subProcess": true,
             "args": [
-                "--server"
+                "--watch"
             ]
         },
         {
