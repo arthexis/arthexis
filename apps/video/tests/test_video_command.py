@@ -469,6 +469,16 @@ def test_video_service_subaction_invokes_service_runner():
     service_mock.assert_called_once_with(interval=0.33, sleep=0.12)
 
 
+def test_camera_service_supported_alias_delegates_to_video_service(capsys):
+    """Keep the short alias as a supported synonym for ``video service``."""
+
+    with patch("apps.video.management.commands.camera_service.call_command") as call_mock:
+        call_command("camera_service", interval=0.25, sleep=0.1)
+
+    call_mock.assert_called_once_with("video", "service", interval=0.25, sleep=0.1)
+    assert "supported alias" in capsys.readouterr().out
+
+
 @override_settings(VIDEO_FRAME_CAPTURE_INTERVAL=0.0, VIDEO_FRAME_SERVICE_SLEEP=0.0)
 def test_video_command_setting_defaults_preserve_zero():
     """Preserve explicit zero-valued interval/sleep settings as CLI defaults."""
