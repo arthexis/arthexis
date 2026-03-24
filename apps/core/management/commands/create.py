@@ -10,6 +10,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 APP_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9]*$")
+MODEL_APP_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class Command(BaseCommand):
@@ -53,6 +54,7 @@ class Command(BaseCommand):
 
         if target == "model":
             app_name = str(options["app"]).strip()
+            self._validate_model_app_name(app_name)
             raw_model_name = str(options["name"]).strip()
             model_name = self._normalize_model_name(raw_model_name)
             self._create_model(apps_dir, app_name, model_name)
@@ -238,6 +240,16 @@ class Command(BaseCommand):
         if not APP_NAME_PATTERN.match(value):
             raise CommandError(
                 f"Invalid app name '{value}'. Use a lowercase single word (letters and digits only), starting with a letter."
+            )
+
+    def _validate_model_app_name(self, value: str) -> None:
+        if not value:
+            raise CommandError("App name cannot be empty.")
+        if keyword.iskeyword(value):
+            raise CommandError(f"Invalid app name '{value}': Python keyword.")
+        if not MODEL_APP_NAME_PATTERN.match(value):
+            raise CommandError(
+                f"Invalid app name '{value}'. Use a lowercase identifier (letters, digits, and underscores only), starting with a letter."
             )
 
     def _normalize_model_name(self, value: str) -> str:
