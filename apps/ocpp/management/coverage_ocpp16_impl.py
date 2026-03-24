@@ -2,8 +2,6 @@ import ast
 import json
 from pathlib import Path
 
-from django.core.management.base import BaseCommand
-
 from apps.protocols.services import load_protocol_spec_from_file, spec_path
 from utils.coverage import coverage_color, render_badge
 
@@ -358,34 +356,3 @@ def run_coverage_ocpp16(*, badge_path=None, json_path=None, stdout=None, stderr=
         )
     if stdout:
         stdout.write("Command completed without failure.")
-
-
-class Command(BaseCommand):
-    help = "Compute OCPP 1.6J call coverage and generate a badge."
-
-    def add_arguments(self, parser) -> None:
-        """Register arguments for legacy compatibility."""
-        from apps.ocpp.management.commands._ocpp_command_helpers import add_coverage_arguments
-
-        add_coverage_arguments(parser)
-
-    def handle(self, *args, **options):
-        from django.core.management import call_command
-
-        from apps.ocpp.management.commands._ocpp_command_helpers import warn_deprecated_command
-
-        warn_deprecated_command("coverage_ocpp16", "ocpp coverage --version 1.6J")
-        command_options = {
-            key: value
-            for key, value in options.items()
-            if key in {"badge_path", "json_path"} and value is not None
-        }
-        call_command(
-            "ocpp",
-            "coverage",
-            "--version",
-            "1.6J",
-            stdout=self.stdout,
-            stderr=self.stderr,
-            **command_options,
-        )
