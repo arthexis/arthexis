@@ -18,13 +18,6 @@ def _run_heartbeat() -> None:
 
 @shared_task(name="apps.core.tasks.heartbeat")
 def heartbeat() -> None:
-    """Run the canonical heartbeat Celery task."""
-
-    _run_heartbeat()
-
-
-@shared_task(name="core.tasks.heartbeat")
-def legacy_heartbeat() -> None:
-    """Run the legacy heartbeat task alias for one upgrade cycle."""
+    """Run the heartbeat Celery task."""
 
     _run_heartbeat()

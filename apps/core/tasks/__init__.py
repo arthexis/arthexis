@@ -20,7 +20,7 @@ from .auto_upgrade import (
     check_github_updates,
     verify_auto_upgrade_health,
 )
-from .heartbeat import heartbeat, legacy_heartbeat
+from .heartbeat import heartbeat
 from .maintenance import (
     execute_scheduled_release,
     poll_emails,
@@ -48,7 +48,6 @@ __all__ = [
     "check_github_updates",
     "execute_scheduled_release",
     "heartbeat",
-    "legacy_heartbeat",
     "poll_emails",
     "run_client_report_schedule",
     "run_scheduled_release",

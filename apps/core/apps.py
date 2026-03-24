@@ -336,6 +336,7 @@ def _configure_urlfield_assume_scheme():
 def _configure_lock_dependent_tasks(config):
     from django.db.backends.signals import connection_created
     from django.db.models.signals import post_migrate
+    from django.db.utils import OperationalError, ProgrammingError
 
     from apps.celery.utils import is_celery_enabled
 
@@ -344,10 +345,23 @@ def _configure_lock_dependent_tasks(config):
 
     from .auto_upgrade import ensure_auto_upgrade_periodic_task
 
+    def migrate_legacy_heartbeat_task(**kwargs):
+        del kwargs
+        try:  # pragma: no cover - optional dependency
+            from django_celery_beat.models import PeriodicTask
+        except Exception:
+            return
+
+        try:
+            PeriodicTask.objects.filter(task="core.tasks.heartbeat").update(
+                task="apps.core.tasks.heartbeat"
+            )
+        except (OperationalError, ProgrammingError):
+            return
+
     def ensure_email_collector_task(**kwargs):
         try:  # pragma: no cover - optional dependency
             from django_celery_beat.models import IntervalSchedule, PeriodicTask
-            from django.db.utils import OperationalError, ProgrammingError
         except Exception:  # pragma: no cover - tables or module not ready
             return
 
@@ -371,6 +385,7 @@ def _configure_lock_dependent_tasks(config):
             pass
 
     post_migrate.connect(ensure_email_collector_task, sender=config)
+    post_migrate.connect(migrate_legacy_heartbeat_task, sender=config)
     post_migrate.connect(ensure_auto_upgrade_periodic_task, sender=config)
 
     auto_upgrade_dispatch_uid = "apps.core.apps.ensure_auto_upgrade_periodic_task"
@@ -386,6 +401,7 @@ def _configure_lock_dependent_tasks(config):
 
         try:
             ensure_auto_upgrade_periodic_task()
+            migrate_legacy_heartbeat_task()
         finally:
             connection_created.disconnect(
                 receiver=ensure_auto_upgrade_on_connection,

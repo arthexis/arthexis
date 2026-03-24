@@ -6,6 +6,7 @@ Celery beat is the scheduler service that triggers periodic background tasks for
 ## What it does
 - Publishes scheduled jobs (upgrade checks, LCD summaries, health tasks) into the Celery queue.
 - Keeps periodic tasks running even when no users are active.
+- Uses `apps.core.tasks.heartbeat` as the canonical heartbeat task path for periodic health checks.
 
 ## Enable
 1. Confirm Celery is enabled for the node (`.locks/celery.lck` exists).
