@@ -260,6 +260,8 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
 
         if not getattr(settings, "PAGES_CHAT_ENABLED", False):
             return False
+        if not is_suite_feature_enabled("pages-chat", default=False):
+            return False
         if not is_suite_feature_enabled("staff-chat-bridge", default=False):
             return False
 
