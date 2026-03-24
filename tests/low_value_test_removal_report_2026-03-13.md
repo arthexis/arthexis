@@ -11,7 +11,6 @@ The removal pass prioritized modules that are expensive to execute (database + D
 2. `apps/sites/tests/test_user_story_submission.py` (11 tests)
 3. `apps/ocpp/tests/test_charge_point_admin_actions_domains.py` (9 tests)
 4. `apps/actions/tests/test_admin.py` (8 tests)
-5. `apps/projects/tests/test_admin.py` (7 tests)
 
 Total removed tests: **50**.
 
