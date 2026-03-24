@@ -163,8 +163,8 @@ SITE_ID = 1
 MIGRATION_MODULES = {
     "selenium": "apps.selenium.migrations",
     "sites": "apps.core.sites_migrations",
-    "socials": "apps.socials.migrations",
-    "sponsors": "apps.sponsors.migrations",
+    "socials": "apps._legacy.socials_migration_only.migrations",
+    "sponsors": "apps._legacy.sponsors_migration_only.migrations",
     # Pin django_celery_beat migrations to a local copy so we can override
     # upstream changes that introduce optional dependencies (e.g. Google
     # Calendar profile) and avoid InvalidBases errors during migrate.
