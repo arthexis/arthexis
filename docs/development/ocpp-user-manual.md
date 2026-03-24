@@ -76,7 +76,7 @@ Pending-call metadata is stored in-memory and mirrored to Redis so responses can
 Use the unified `ocpp` management command for operational workflows:
 
 - Coverage reports:
-  - `python manage.py ocpp coverage --version 1.6`
+  - `python manage.py ocpp coverage --version 1.6J`
   - `python manage.py ocpp coverage --version 2.0.1`
   - `python manage.py ocpp coverage --version 2.1`
 - Transaction data:
@@ -86,4 +86,4 @@ Use the unified `ocpp` management command for operational workflows:
   - `python manage.py ocpp trace extract [--txn ... --out ... --log ...]`
   - `python manage.py ocpp trace replay <extract.json>`
 
-Legacy single-purpose commands (`coverage_ocpp16`, `coverage_ocpp201`, `coverage_ocpp21`, `import_transactions`, `export_transactions`, `ocpp_extract`, and `ocpp_replay`) have been removed; use the unified `ocpp` command surface above.
+Legacy single-purpose commands (`coverage_ocpp16`, `coverage_ocpp201`, `coverage_ocpp21`, `import_transactions`, `export_transactions`, and `ocpp_replay`) have been removed; use the unified `ocpp` command surface above. For operator/script migration steps, see `docs/development/ocpp-command-alias-removal.md`.

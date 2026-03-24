@@ -5,14 +5,9 @@ from dataclasses import dataclass
 from datetime import timezone
 from pathlib import Path
 
-from django.core.management import call_command
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
 
 from apps.ocpp import store
-from apps.ocpp.management.commands._ocpp_command_helpers import (
-    add_trace_replay_arguments,
-    warn_deprecated_command,
-)
 from apps.ocpp.transactions_io import import_transactions_deduped
 
 
@@ -71,14 +66,3 @@ def _session_log_path(transaction) -> Path:
         key = store.identity_key(transaction.charger.charger_id, transaction.connector_id)
         folder = store.session_folder(key)
     return folder / f"{date}_{transaction.pk}.json"
-
-
-class Command(BaseCommand):
-    help = "Replay an extracted OCPP transaction into the system"
-
-    def add_arguments(self, parser) -> None:
-        add_trace_replay_arguments(parser)
-
-    def handle(self, *args, **options) -> None:
-        warn_deprecated_command("ocpp_replay", "ocpp trace replay")
-        call_command("ocpp", "trace", "replay", options["extract"])

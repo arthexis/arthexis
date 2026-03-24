@@ -1,13 +1,6 @@
 import json
 from pathlib import Path
 
-from django.core.management import call_command
-from django.core.management.base import BaseCommand
-
-from apps.ocpp.management.commands._ocpp_command_helpers import (
-    add_coverage_arguments,
-    warn_deprecated_command,
-)
 from apps.ocpp.management.coverage_ocpp16_impl import (
     _implemented_cp_to_csms,
     _implemented_csms_to_cp,
@@ -88,27 +81,3 @@ def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr
         stderr.write(f"Currently supporting {len(overall_coverage)} of {len(overall_spec)} operations.")
     if stdout:
         stdout.write("Command completed without failure.")
-
-
-class Command(BaseCommand):
-    help = "Compute OCPP 2.0.1 call coverage and generate a badge."
-
-    def add_arguments(self, parser) -> None:
-        add_coverage_arguments(parser)
-
-    def handle(self, *args, **options):
-        warn_deprecated_command("coverage_ocpp201", "ocpp coverage --version 2.0.1")
-        command_options = {
-            key: value
-            for key, value in options.items()
-            if key in {"badge_path", "json_path"} and value is not None
-        }
-        call_command(
-            "ocpp",
-            "coverage",
-            "--version",
-            "2.0.1",
-            stdout=self.stdout,
-            stderr=self.stderr,
-            **command_options,
-        )
