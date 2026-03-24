@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime
+from datetime import timezone as dt_timezone
 
 from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
@@ -67,8 +68,8 @@ def get_or_create_energy_account_for_user(user) -> CustomerAccount:
 
 
 def _virtual_rfid_hex_for_user(user) -> str:
-    seed = f"energy:{user.pk}:{user.username}".encode("utf-8")
-    return hashlib.sha1(seed).hexdigest()[:16].upper()
+    seed = f"energy:{user.pk}:{user.username}".encode()
+    return hashlib.sha256(seed).hexdigest()[:16].upper()
 
 
 def get_or_create_virtual_rfid_for_user(user) -> RFID:

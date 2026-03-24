@@ -80,6 +80,26 @@
           </div>
           {% endif %}
 
+          {% if page.support_phone or page.support_whatsapp or page.support_email or page.support_url %}
+          <div class="landing-card-section">
+            <p class="landing-card-section-title">{% trans "Need help?" %}</p>
+            <ul class="list-unstyled mb-0">
+              {% if page.support_phone %}
+              <li><strong>{% trans "Phone" %}:</strong> <a href="tel:{{ page.support_phone }}">{{ page.support_phone }}</a></li>
+              {% endif %}
+              {% if page.support_whatsapp %}
+              <li><strong>{% trans "WhatsApp" %}:</strong> <a href="https://wa.me/{{ page.support_whatsapp|cut:'+' }}">{{ page.support_whatsapp }}</a></li>
+              {% endif %}
+              {% if page.support_email %}
+              <li><strong>{% trans "Email" %}:</strong> <a href="mailto:{{ page.support_email }}">{{ page.support_email }}</a></li>
+              {% endif %}
+              {% if page.support_url %}
+              <li><strong>{% trans "Website" %}:</strong> <a href="{{ page.support_url }}" target="_blank" rel="noopener">{{ page.support_url }}</a></li>
+              {% endif %}
+            </ul>
+          </div>
+          {% endif %}
+
           {% if charger.last_status or charger_error_code or charger.last_status_timestamp %}
           <div class="landing-card-section">
             <p class="landing-card-section-title mb-1">{% trans "Latest report" %}</p>

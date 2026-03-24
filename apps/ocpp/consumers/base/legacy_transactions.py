@@ -5,13 +5,14 @@ import logging
 from channels.db import database_sync_to_async
 from django.utils import timezone
 
-from apps.cards.models import RFID as CoreRFID, RFIDAttempt
+from apps.cards.models import RFID as CoreRFID
+from apps.cards.models import RFIDAttempt
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 from ... import store
-from ...models import Transaction
 from ...energy_accounts import can_authorize_account, energy_accounts_enabled
+from ...models import Transaction
 from ...utils import _parse_ocpp_timestamp
 from .identity import _extract_vehicle_identifier
 
@@ -79,10 +80,13 @@ class LegacyTransactionHandlersMixin:
             authorized = True
             authorized_via_tag = False
             if self.charger.require_rfid:
+                energy_accounts_mode = await database_sync_to_async(
+                    energy_accounts_enabled
+                )(default=False)
                 if account is not None:
                     authorized = await database_sync_to_async(can_authorize_account)(account)
                 elif (
-                    not energy_accounts_enabled(default=False)
+                    not energy_accounts_mode
                     and id_tag
                     and tag
                     and not tag_created
@@ -147,7 +151,7 @@ class LegacyTransactionHandlersMixin:
             return {"idTokenInfo": {"status": "Invalid"}}
 
         if event_type == "ended":
-            trigger_reason = str((payload.get("triggerReason") or "")).strip()
+            trigger_reason = str(payload.get("triggerReason") or "").strip()
             tx_obj = store.transactions.pop(self.store_key, None)
             if not tx_obj and ocpp_tx_id:
                 tx_obj = await Transaction.aget_by_ocpp_id(self.charger, ocpp_tx_id)
@@ -337,7 +341,7 @@ class LegacyTransactionHandlersMixin:
             meter_stop_value = payload.get("meterStop")
             if meter_stop_value is not None:
                 tx_obj.meter_stop = meter_stop_value
-            stop_reason_value = str((payload.get("reason") or "")).strip()[:64]
+            stop_reason_value = str(payload.get("reason") or "").strip()[:64]
             if stop_reason_value:
                 tx_obj.stop_reason = stop_reason_value
             if vid_value:

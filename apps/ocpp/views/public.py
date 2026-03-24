@@ -71,7 +71,7 @@ def _get_client_ip(request) -> str:
 
 def _hash_ip(value: str) -> str:
     secret = getattr(settings, "SECRET_KEY", "")
-    payload = f"{value}:{secret}".encode("utf-8")
+    payload = f"{value}:{secret}".encode()
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -408,7 +408,11 @@ def public_connector_page(request, slug):
             charger.connector_slug,
         )
         pending = pop_pending_energy_charge(request)
-        pending_matches = pending and pending.get("charger_id") == charger.charger_id
+        pending_matches = bool(
+            pending
+            and pending.get("charger_id") == charger.charger_id
+            and pending.get("connector_id") == charger.connector_id
+        )
         if pending_matches and not tx:
             request_remote_start_for_user(charger=charger, user=request.user)
 
