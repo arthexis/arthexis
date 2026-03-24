@@ -36,3 +36,7 @@ A focused runtime attempt was run against these modules as a slow-test triage st
 - Result summary: 0/2 completed within the session time limits; both timed out or stalled before durations output could be collected.
 - Preserved commands: `pytest apps/ocpp/tests/test_websocket_creation.py --durations=20` and `timeout 300 pytest apps/ocpp/tests/test_ocpp_handlers.py --durations=60`.
 - Interpretation: these module-level integration paths remain among the slowest candidates and motivated the low-value triage pass.
+
+## Follow-up note (2026-03-24)
+
+See `tests/low_value_test_removal_report_2026-03-14.md` addendum dated 2026-03-24 for the exact list of 40 additional removed test IDs, rationale, and regression outcome.
