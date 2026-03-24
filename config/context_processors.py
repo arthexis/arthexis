@@ -23,19 +23,11 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_request_host(request: HttpRequest) -> str:
-    """Return the best-effort hostname for template badge lookups.
-
-    ``request.get_host()`` can raise ``DisallowedHost`` when deployments are
-    reached through an unexpected hostname. Admin templates should still render
-    instead of failing with HTTP 500, so this helper falls back to raw WSGI
-    metadata and strips any optional port suffix.
-    """
+    """Return the validated hostname for template badge lookups."""
     try:
         host_value = request.get_host()
     except DisallowedHost:
-        host_value = request.META.get("HTTP_HOST") or request.META.get(
-            "SERVER_NAME", ""
-        )
+        return ""
 
     if host_value.startswith("["):
         host_value = host_value.split("]", 1)[0].lstrip("[")
