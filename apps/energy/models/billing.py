@@ -207,11 +207,11 @@ class EnergyTariff(Entity):
     natural_key.dependencies = []  # type: ignore[attr-defined]
 
 
-from apps.ocpp.models.location import Location as OCPPLocation
+from apps.maps import models as map_models
 
 
-class Location(OCPPLocation):
-    class Meta(OCPPLocation.Meta):
+class Location(map_models.Location):
+    class Meta(map_models.Location.Meta):
         proxy = True
         app_label = "energy"
 
