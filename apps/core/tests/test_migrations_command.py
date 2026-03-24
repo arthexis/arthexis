@@ -258,3 +258,79 @@ def test_migrations_next_major_rebuild_regenerates_parallel_line(
     assert tracks_payload["current_line"] == "0.x"
     assert tracks_payload["current_version"] == "0.2.3"
     assert tracks_payload["next_major"]["version"] == "1.0"
+
+
+def test_migrations_next_major_rebuild_uses_app_labels_for_migration_modules(
+    monkeypatch, settings, tmp_path
+):
+    """next-major-rebuild should key MIGRATION_MODULES by Django app label."""
+
+    apps_dir = _seed_apps_root(tmp_path)
+    settings.BASE_DIR = tmp_path
+    settings.APPS_DIR = apps_dir
+    _seed_app_migrations(apps_dir, "sites")
+
+    class _FakeAppConfig:
+        name = "apps.sites"
+        label = "pages"
+        path = str(apps_dir / "sites")
+
+    monkeypatch.setattr(
+        "apps.core.management.commands.migrations.django_apps.get_app_configs",
+        lambda: [_FakeAppConfig()],
+    )
+
+    def _fake_call_command(name, *args, **kwargs):
+        if name != "makemigrations":
+            raise AssertionError(f"Unexpected command: {name} {args}")
+
+        migration_modules = dict(settings.MIGRATION_MODULES)
+        assert migration_modules["pages"] == "apps.sites.migrations_v1_0"
+        assert "sites" not in migration_modules
+
+        generated = apps_dir / "sites" / "migrations_v1_0" / "0001_initial.py"
+        generated.write_text(
+            "from django.db import migrations\n\n"
+            "class Migration(migrations.Migration):\n"
+            "    operations = [\n"
+            "    ]\n",
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(
+        "apps.core.management.commands.migrations.call_command", _fake_call_command
+    )
+
+    call_command("migrations", "next-major-rebuild", major_version="1.0")
+
+
+def test_migrations_next_major_rebuild_restores_missing_migration_modules_attr(
+    monkeypatch, settings, tmp_path
+):
+    """next-major-rebuild should restore absent MIGRATION_MODULES settings state."""
+
+    apps_dir = _seed_apps_root(tmp_path)
+    settings.BASE_DIR = tmp_path
+    settings.APPS_DIR = apps_dir
+    del settings.MIGRATION_MODULES
+    _seed_app_migrations(apps_dir, "catalog")
+
+    def _fake_call_command(name, *args, **kwargs):
+        if name != "makemigrations":
+            raise AssertionError(f"Unexpected command: {name} {args}")
+        generated = apps_dir / "catalog" / "migrations_v1_0" / "0001_initial.py"
+        generated.write_text(
+            "from django.db import migrations\n\n"
+            "class Migration(migrations.Migration):\n"
+            "    operations = [\n"
+            "    ]\n",
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(
+        "apps.core.management.commands.migrations.call_command", _fake_call_command
+    )
+
+    call_command("migrations", "next-major-rebuild", major_version="1.0")
+
+    assert not hasattr(settings, "MIGRATION_MODULES")

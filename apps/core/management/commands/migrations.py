@@ -7,8 +7,9 @@ from datetime import datetime, timezone
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
+from django.apps import apps as django_apps
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
@@ -144,8 +145,8 @@ class Command(BaseCommand):
         )
 
     def _resolve_next_major_version(self, explicit_major: object | None) -> str:
-        if explicit_major is not None and str(explicit_major).strip():
-            return str(explicit_major).strip()
+        if explicit_major is not None and (version_str := str(explicit_major).strip()):
+            return version_str
         tracks = self._load_tracks()
         next_major = tracks.get("next_major")
         if isinstance(next_major, dict):
@@ -317,8 +318,9 @@ class Command(BaseCommand):
             return
 
         major_slug = self._major_slug(major_version)
-        migration_modules = self._build_track_modules(project_apps, major_slug)
-        target_dirs = self._prepare_track_dirs(apps_dir, project_apps, major_slug)
+        migration_targets = self._collect_project_migration_targets(project_apps, apps_dir)
+        migration_modules = self._build_track_modules(migration_targets, major_slug)
+        target_dirs = self._prepare_track_dirs(apps_dir, migration_targets, major_slug)
         self._clear_track_migrations(target_dirs)
 
         with self._override_migration_modules(migration_modules):
@@ -330,6 +332,7 @@ class Command(BaseCommand):
             branch_id=branch_id,
             project_apps=project_apps,
             migration_modules=migration_modules,
+            migration_targets=migration_targets,
         )
         self.stdout.write(
             f"Rebuilt next-major migration branch {major_version} ({major_slug})."
@@ -348,20 +351,45 @@ class Command(BaseCommand):
             raise CommandError("major-version must include numeric components")
         return f"v{normalized.replace('.', '_')}"
 
+    def _collect_project_migration_targets(
+        self, project_apps: list[str], apps_dir: Path
+    ) -> dict[str, str]:
+        app_label_overrides: dict[str, str] = {}
+        for app_config in django_apps.get_app_configs():
+            if not app_config.name.startswith("apps."):
+                continue
+            try:
+                app_path = Path(app_config.path).resolve()
+            except FileNotFoundError:
+                continue
+            try:
+                relative_path = app_path.relative_to(apps_dir.resolve())
+            except ValueError:
+                continue
+            if len(relative_path.parts) != 1:
+                continue
+            app_label_overrides[relative_path.name] = app_config.label
+
+        migration_targets: dict[str, str] = {}
+        for package_name in project_apps:
+            app_label = app_label_overrides.get(package_name, package_name)
+            migration_targets[app_label] = package_name
+        return migration_targets
+
     def _build_track_modules(
-        self, project_apps: list[str], major_slug: str
+        self, migration_targets: dict[str, str], major_slug: str
     ) -> dict[str, str]:
         return {
-            app_label: f"apps.{app_label}.migrations_{major_slug}"
-            for app_label in project_apps
+            app_label: f"apps.{package_name}.migrations_{major_slug}"
+            for app_label, package_name in migration_targets.items()
         }
 
     def _prepare_track_dirs(
-        self, apps_dir: Path, project_apps: list[str], major_slug: str
+        self, apps_dir: Path, migration_targets: dict[str, str], major_slug: str
     ) -> list[Path]:
         dirs: list[Path] = []
-        for app_label in project_apps:
-            migrations_dir = apps_dir / app_label / f"migrations_{major_slug}"
+        for package_name in migration_targets.values():
+            migrations_dir = apps_dir / package_name / f"migrations_{major_slug}"
             migrations_dir.mkdir(parents=True, exist_ok=True)
             (migrations_dir / "__init__.py").touch()
             dirs.append(migrations_dir)
@@ -375,14 +403,20 @@ class Command(BaseCommand):
                 migration_file.unlink(missing_ok=True)
 
     @contextmanager
-    def _override_migration_modules(self, migration_modules: dict[str, str]):
+    def _override_migration_modules(
+        self, migration_modules: dict[str, str]
+    ) -> Iterator[None]:
+        had_attr = hasattr(settings, "MIGRATION_MODULES")
         previous = dict(getattr(settings, "MIGRATION_MODULES", {}))
         merged = {**previous, **migration_modules}
         settings.MIGRATION_MODULES = merged
         try:
             yield
         finally:
-            settings.MIGRATION_MODULES = previous
+            if had_attr:
+                settings.MIGRATION_MODULES = previous
+            else:
+                delattr(settings, "MIGRATION_MODULES")
 
     def _tag_initial_migrations_for_modules(
         self,
@@ -391,11 +425,13 @@ class Command(BaseCommand):
         branch_id: str,
         project_apps: list[str],
         migration_modules: dict[str, str],
+        migration_targets: dict[str, str],
     ) -> list[Path]:
         tagged: list[Path] = []
         for app_label, module_path in migration_modules.items():
             suffix = module_path.split(".")[-1]
-            migrations_dir = apps_dir / app_label / suffix
+            package_name = migration_targets[app_label]
+            migrations_dir = apps_dir / package_name / suffix
             if not migrations_dir.exists():
                 continue
 
