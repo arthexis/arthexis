@@ -39,7 +39,7 @@ from apps.ocpp.models import (
     CPFirmwareDeployment,
 )
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
-from apps.maps.models import Location
+from apps.ocpp.models.location import Location
 from django.utils.dateparse import parse_datetime
 
 

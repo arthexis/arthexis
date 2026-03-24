@@ -48,6 +48,7 @@ from .device_report import DeviceInventorySnapshot, DeviceInventoryItem
 from .charging_limit_event import ClearedChargingLimitEvent
 from .public_pages import PublicConnectorPage, PublicScanEvent
 from .charging_station import ChargingStation
+from .location import GoogleMapsLocation, Location
 
 __all__ = [
     "Charger",
@@ -105,4 +106,6 @@ __all__ = [
     "PublicConnectorPage",
     "PublicScanEvent",
     "ChargingStation",
+    "GoogleMapsLocation",
+    "Location",
 ]

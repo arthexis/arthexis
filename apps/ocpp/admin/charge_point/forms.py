@@ -2,7 +2,7 @@ from django import forms
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
-from apps.maps.models import Location
+from apps.ocpp.models.location import Location
 
 
 class ChargerLocationSetupForm(forms.Form):

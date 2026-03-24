@@ -6,7 +6,7 @@ import pytest
 from channels.db import database_sync_to_async
 from django.utils import timezone
 
-from apps.maps.models import Location
+from apps.ocpp.models.location import Location
 from apps.ocpp import call_error_handlers, store
 from apps.ocpp.call_error_handlers import certificates, configuration, data_transfer, firmware, profiles, reservation
 from apps.ocpp.consumers import CSMSConsumer

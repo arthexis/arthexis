@@ -7,7 +7,7 @@ from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from apps.maps.models import Location
+from apps.ocpp.models.location import Location
 from apps.tasks.models import GitHubIssueTemplate, ManualTaskReport, ManualTaskRequest
 from apps.tasks.tasks import create_manual_task_github_issue
 

@@ -14,7 +14,7 @@ from apps.ocpp.call_result_handlers import (
     profiles,
     transactions,
 )
-from apps.maps.models import Location
+from apps.ocpp.models.location import Location
 
 from apps.ocpp.models import (
     CPReservation,
