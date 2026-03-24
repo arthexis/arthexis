@@ -8,7 +8,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
-from apps.maps.models import Location
+from apps.ocpp.models.location import Location
 
 from ...models import Charger
 from .forms import ChargerLocationSetupForm

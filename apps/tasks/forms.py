@@ -4,7 +4,7 @@ from django import forms
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from apps.maps.models import Location
+from apps.ocpp.models.location import Location
 from apps.media.models import MediaFile
 from apps.media.utils import create_media_file
 from apps.tasks.models import (

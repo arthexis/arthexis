@@ -12,7 +12,7 @@ from django.utils.translation import gettext as _
 
 from apps.docs import rendering
 from apps.locale.models import Language
-from apps.maps.models import Location
+from apps.ocpp.models.location import Location
 from apps.ocpp.services import ChargerAccessDeniedError, build_charger_chart_payload
 from apps.sites.utils import (get_request_language_code, landing,
                               module_pill_link_validation,
