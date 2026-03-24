@@ -82,16 +82,50 @@ git fetch --prune --tags origin
 
 resolve_commit() {
   local ref="$1"
-  if git rev-parse --verify --quiet "${ref}^{commit}" >/dev/null; then
-    git rev-parse "${ref}^{commit}"
+  local resolved_commit
+  local remote_tag_lines
+  local remote_tag_commit
+
+  # Resolve against fetched origin refs first so local branches/tags cannot
+  # override remote state.
+  if resolved_commit="$(git rev-parse --verify "origin/${ref}^{commit}" 2>/dev/null)"; then
+    echo "${resolved_commit}"
     return 0
   fi
-  if git rev-parse --verify --quiet "origin/${ref}^{commit}" >/dev/null; then
-    git rev-parse "origin/${ref}^{commit}"
+
+  # Allow tags that exist on origin. Prefer the peeled commit SHA for annotated
+  # tags and never trust a local tag value on its own.
+  remote_tag_lines="$(git ls-remote --tags origin "refs/tags/${ref}" "refs/tags/${ref}^{}" 2>/dev/null || true)"
+  if [[ -n "${remote_tag_lines}" ]]; then
+    remote_tag_commit="$(
+      awk '
+        $2 ~ /\^\{\}$/ { peeled = $1 }
+        $2 !~ /\^\{\}$/ { direct = $1 }
+        END {
+          if (peeled != "") {
+            print peeled
+          } else if (direct != "") {
+            print direct
+          }
+        }
+      ' <<<"${remote_tag_lines}"
+    )"
+
+    if [[ -n "${remote_tag_commit}" ]] && git cat-file -e "${remote_tag_commit}^{commit}" 2>/dev/null; then
+      echo "${remote_tag_commit}"
+      return 0
+    fi
+  fi
+
+  # Allow explicit commit SHAs if they exist locally.
+  if [[ "${ref}" =~ ^[0-9a-fA-F]{40}$ ]] && resolved_commit="$(git rev-parse --verify "${ref}^{commit}" 2>/dev/null)"; then
+    echo "${resolved_commit}"
     return 0
   fi
+
   return 1
 }
+
 
 if ! RESOLVED_COMMIT="$(resolve_commit "${TARGET_REF}")"; then
   echo "Unable to resolve target ref '${TARGET_REF}' in ${DEPLOY_PATH}." >&2
