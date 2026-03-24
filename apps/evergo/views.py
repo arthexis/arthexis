@@ -259,7 +259,7 @@ def _format_full_address(order: EvergoOrder) -> str:
 def _sanitize_tsv_value(value: str | None) -> str:
     """Sanitize TSV cell values for structure and spreadsheet formula safety."""
     normalized = str(value or "").replace("\t", " ").replace("\r", " ").replace("\n", " ")
-    if normalized.startswith(("=", "+", "-", "@")):
+    if normalized.lstrip().startswith(("=", "+", "-", "@")):
         return f"'" + normalized
     return normalized
 
