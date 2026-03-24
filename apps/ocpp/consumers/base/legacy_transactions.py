@@ -71,6 +71,8 @@ class LegacyTransactionHandlersMixin:
             if id_tag:
                 tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(id_tag)
             account = await self._get_account(id_tag)
+            energy_accounts_enabled = await self._energy_accounts_enabled()
+            credits_required = await self._energy_credits_required()
             if id_tag and not self.charger.require_rfid:
                 seen_tag = await self._ensure_rfid_seen(id_tag, tag=tag)
                 if seen_tag:
@@ -79,7 +81,12 @@ class LegacyTransactionHandlersMixin:
             authorized_via_tag = False
             if self.charger.require_rfid:
                 if account is not None:
-                    authorized = await database_sync_to_async(account.can_authorize)()
+                    if energy_accounts_enabled and not credits_required:
+                        authorized = True
+                    else:
+                        authorized = await database_sync_to_async(account.can_authorize)()
+                elif energy_accounts_enabled:
+                    authorized = False
                 elif id_tag and tag and not tag_created and getattr(tag, "allowed", False):
                     authorized = True
                     authorized_via_tag = True
@@ -238,6 +245,8 @@ class LegacyTransactionHandlersMixin:
         if id_tag:
             tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(id_tag)
         account = await self._get_account(id_tag)
+        energy_accounts_enabled = await self._energy_accounts_enabled()
+        credits_required = await self._energy_credits_required()
         if id_tag and not self.charger.require_rfid:
             seen_tag = await self._ensure_rfid_seen(id_tag, tag=tag)
             if seen_tag:
@@ -247,7 +256,12 @@ class LegacyTransactionHandlersMixin:
         authorized_via_tag = False
         if self.charger.require_rfid:
             if account is not None:
-                authorized = await database_sync_to_async(account.can_authorize)()
+                if energy_accounts_enabled and not credits_required:
+                    authorized = True
+                else:
+                    authorized = await database_sync_to_async(account.can_authorize)()
+            elif energy_accounts_enabled:
+                authorized = False
             elif id_tag and tag and not tag_created and getattr(tag, "allowed", False):
                 authorized = True
                 authorized_via_tag = True

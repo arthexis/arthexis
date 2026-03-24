@@ -1,0 +1,66 @@
+{% extends "ocpp/landing_base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Energy Account Summary" %}{% endblock %}
+
+{% block content %}
+<div class="container px-3 px-sm-4">
+  <div class="row justify-content-center mt-2 mt-sm-4">
+    <div class="col-12 col-lg-8 col-xl-6">
+      <div class="card shadow-sm border-0 overflow-hidden">
+        <div class="card-header">
+          <h1 class="h4 mb-0">{% trans "Energy Account Summary" %}</h1>
+        </div>
+        <div class="card-body">
+          {% if account %}
+            <div class="landing-card-section">
+              <p class="landing-card-section-title">{% trans "Account" %}</p>
+              <p class="mb-1"><strong>{% trans "Name" %}:</strong> {{ account.name }}</p>
+              <p class="mb-1"><strong>{% trans "Balance (kW)" %}:</strong> {{ account.balance_kw|floatformat:3 }}</p>
+              <p class="mb-1"><strong>{% trans "Balance (MXN)" %}:</strong> {{ account.balance_mxn|floatformat:2 }}</p>
+              <p class="mb-0">
+                <strong>{% trans "Credits required for auth" %}:</strong>
+                {% if energy_credits_required %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}
+              </p>
+            </div>
+            <div class="landing-card-section">
+              <p class="landing-card-section-title">{% trans "Previous Sessions" %}</p>
+              {% if recent_sessions %}
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle">
+                    <thead>
+                      <tr>
+                        <th>{% trans "Started" %}</th>
+                        <th>{% trans "Charge Point" %}</th>
+                        <th>{% trans "Energy" %}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                    {% for session in recent_sessions %}
+                      <tr>
+                        <td>{{ session.start_time|date:"SHORT_DATETIME_FORMAT" }}</td>
+                        <td>{{ session.charger.display_name|default:session.charger.charger_id }}</td>
+                        <td>{{ session.kw|floatformat:2 }} kW</td>
+                      </tr>
+                    {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% else %}
+                <p class="text-muted mb-0">{% trans "No sessions recorded yet." %}</p>
+              {% endif %}
+            </div>
+          {% else %}
+            <p class="mb-0 text-muted">{% trans "No energy account is linked to this user." %}</p>
+          {% endif %}
+          <div class="mt-3">
+            <a class="btn btn-outline-primary" href="{% url 'ocpp:charger-page-connector' charger.charger_id charger.connector_slug %}">
+              {% trans "Back to Charge Point" %}
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

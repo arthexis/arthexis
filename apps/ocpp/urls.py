@@ -21,6 +21,11 @@ urlpatterns = [
     ),
     path("c/<uuid:slug>/", views.public_connector_page, name="public-connector-page"),
     path(
+        "c/<uuid:slug>/create-account/",
+        views.public_connector_page_create_account,
+        name="public-connector-page-create-account",
+    ),
+    path(
         "firmware/<int:deployment_id>/<slug:token>/",
         views.firmware_download,
         name="cp-firmware-download",
@@ -48,6 +53,16 @@ urlpatterns = [
         "c/<str:cid>/sessions/",
         views.charger_session_search,
         name="charger-session-search",
+    ),
+    path(
+        "c/<str:cid>/account/",
+        views.charger_account_summary,
+        name="charger-account-summary",
+    ),
+    path(
+        "c/<str:cid>/connector/<slug:connector>/account/",
+        views.charger_account_summary,
+        name="charger-account-summary-connector",
     ),
     path(
         "c/<str:cid>/connector/<slug:connector>/sessions/",

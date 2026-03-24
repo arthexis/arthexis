@@ -46,6 +46,18 @@ OPERATOR_LANGUAGE_CHOICES: tuple[tuple[str, str], ...] = (
 
 
 FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]] = {
+    "energy-accounts": (
+        FeatureParameterDefinition(
+            key="energy_credits_required",
+            label=_("Energy credits required"),
+            help_text=_(
+                "Require positive energy credits before authorizing charging sessions. "
+                "Disabled by default so charging can be tallied and billed later."
+            ),
+            choices=(("enabled", _("Enabled")), ("disabled", _("Disabled"))),
+            default="disabled",
+        ),
+    ),
     "release-management": (
         FeatureParameterDefinition(
             key="execution_mode",
