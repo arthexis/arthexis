@@ -500,6 +500,128 @@ def test_handle_passes_effective_capture_options_to_backend(monkeypatch) -> None
     }
 
 
+def test_print_reports_emits_manifest_after_diagnostics(monkeypatch, tmp_path) -> None:
+    """Preview reports should end with a concise manifest of generated artifacts."""
+
+    command = Command()
+    command.stdout = StringIO()
+    output = tmp_path / "root-desktop.png"
+    output.write_bytes(b"png")
+
+    class _Report:
+        width = 1440
+        height = 900
+        mean_brightness = 120.5
+        white_pixel_ratio = 0.25
+
+        def mostly_white(self) -> bool:
+            return False
+
+    monkeypatch.setattr(
+        "apps.playwright.management.commands.preview.analyze_preview_image",
+        lambda _: _Report(),
+    )
+    monkeypatch.setattr(command, "_display_path", lambda path: f"shown/{path.name}")
+
+    command._print_reports(
+        [
+            {
+                "path": "/",
+                "viewport_name": "desktop",
+                "viewport_size": (1440, 1800),
+                "output": output,
+            }
+        ]
+    )
+
+    rendered = command.stdout.getvalue()
+    assert "Saved preview to:" in rendered
+    assert "Preview manifest:" in rendered
+    assert "- / [desktop]: shown/root-desktop.png" in rendered
+
+
+def test_write_preview_index_groups_paths_and_viewports(tmp_path) -> None:
+    """Preview index should group captures by path with reviewer-friendly markdown links."""
+
+    command = Command()
+    output_dir = tmp_path / "preview_output"
+    output_dir.mkdir()
+    homepage = output_dir / "root-desktop.png"
+    admin_mobile = output_dir / "admin-mobile.png"
+    homepage.write_bytes(b"png")
+    admin_mobile.write_bytes(b"png")
+
+    command._write_preview_index(
+        captures=[
+            {
+                "path": "/",
+                "viewport_name": "desktop",
+                "viewport_size": (1440, 1800),
+                "output": homepage,
+            },
+            {
+                "path": "/admin/",
+                "viewport_name": "mobile",
+                "viewport_size": (390, 844),
+                "output": admin_mobile,
+            },
+        ],
+        output_dir=output_dir,
+    )
+
+    index = (output_dir / "README.md").read_text()
+    assert "# Preview Index" in index
+    assert "## `/`" in index
+    assert "## `/admin/`" in index
+    assert "[root-desktop.png](root-desktop.png)" in index
+    assert "[admin-mobile.png](admin-mobile.png)" in index
+
+
+def test_build_capture_plan_uses_output_dir_when_custom_dir_is_provided(tmp_path) -> None:
+    """Single-path desktop captures should stay within --output-dir when customized."""
+
+    command = Command()
+    output = tmp_path / "media" / "previews" / "admin-preview.png"
+    output_dir = tmp_path / "preview_output"
+    captures = command._build_capture_plan(
+        paths=["/admin/"],
+        viewport_names=["desktop"],
+        output=output,
+        output_dir=output_dir,
+    )
+
+    assert captures[0]["output"] == output_dir / "admin-desktop.png"
+
+
+def test_write_preview_index_avoids_overwriting_existing_readme(tmp_path) -> None:
+    """Preview index should not clobber pre-existing README files in output directories."""
+
+    command = Command()
+    command.stderr = StringIO()
+    output_dir = tmp_path / "preview_output"
+    output_dir.mkdir()
+    readme = output_dir / "README.md"
+    readme.write_text("# Existing docs\n", encoding="utf-8")
+    homepage = output_dir / "root-desktop.png"
+    homepage.write_bytes(b"png")
+
+    command._write_preview_index(
+        captures=[
+            {
+                "path": "/",
+                "viewport_name": "desktop",
+                "viewport_size": (1440, 1800),
+                "output": homepage,
+            }
+        ],
+        output_dir=output_dir,
+    )
+
+    assert readme.read_text(encoding="utf-8") == "# Existing docs\n"
+    assert (output_dir / "PREVIEW_INDEX.md").is_file()
+    assert "Refusing to overwrite existing README.md" in command.stderr.getvalue()
+
+
 def _install_fake_selenium_modules(monkeypatch) -> None:
     """Install a minimal Selenium module tree so monkeypatch can target it."""
 
