@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 from django.conf import settings
 from django.core.management import call_command
@@ -68,6 +70,23 @@ class Command(BaseCommand):
             dest="branch_id",
             help="Stable identifier recorded by the branch tag operation.",
         )
+        next_major_parser = subparsers.add_parser(
+            "next-major-rebuild",
+            help=(
+                "Rebuild a clean migration branch for the next major version "
+                "using per-app migration modules."
+            ),
+        )
+        next_major_parser.add_argument(
+            "--major-version",
+            default=None,
+            help="Target major version branch (default: 1.0).",
+        )
+        next_major_parser.add_argument(
+            "--apps-dir",
+            dest="apps_dir",
+            help="Override the apps directory (defaults to settings.APPS_DIR)",
+        )
 
     def handle(self, *args, **options):
         """Dispatch migration operations."""
@@ -92,10 +111,48 @@ class Command(BaseCommand):
             self._rebuild_migrations(apps_dir, branch_id)
             return
 
+        if target == "next-major-rebuild":
+            major_version = self._resolve_next_major_version(options.get("major_version"))
+            self._rebuild_next_major_migrations(apps_dir, major_version)
+            return
+
         raise CommandError(f"Unsupported migrations target: {target}")
 
     def _resolve_apps_dir(self, apps_dir_option: str | None) -> Path:
         return Path(apps_dir_option or getattr(settings, "APPS_DIR", Path(settings.BASE_DIR) / "apps"))
+
+    def _tracks_file(self) -> Path:
+        return Path(settings.BASE_DIR) / "MIGRATION_TRACKS.json"
+
+    def _load_tracks(self) -> dict[str, Any]:
+        tracks_file = self._tracks_file()
+        if not tracks_file.exists():
+            return {}
+        try:
+            data = json.loads(tracks_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise CommandError(f"Invalid migration tracks file: {tracks_file}") from exc
+        if isinstance(data, dict):
+            return data
+        raise CommandError(f"Migration tracks file must contain a JSON object: {tracks_file}")
+
+    def _save_tracks(self, payload: dict[str, Any]) -> None:
+        tracks_file = self._tracks_file()
+        tracks_file.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+    def _resolve_next_major_version(self, explicit_major: object | None) -> str:
+        if explicit_major is not None and str(explicit_major).strip():
+            return str(explicit_major).strip()
+        tracks = self._load_tracks()
+        next_major = tracks.get("next_major")
+        if isinstance(next_major, dict):
+            candidate = str(next_major.get("version", "")).strip()
+            if candidate:
+                return candidate
+        return "1.0"
 
     def _check_migrations(self) -> None:
         """Run Django's pending-migration detection without writing files."""
@@ -241,3 +298,129 @@ class Command(BaseCommand):
             return
 
         raise CommandError("no pending migrations")
+
+    def _rebuild_next_major_migrations(self, apps_dir: Path, major_version: str) -> None:
+        """Rebuild the next-major migration line from scratch.
+
+        This keeps current-version migrations untouched while regenerating
+        clean baseline migrations in parallel modules dedicated to the next
+        major release (for example, ``migrations_v1_0``).
+        """
+
+        if not apps_dir.exists():
+            self.stderr.write(f"Apps directory not found: {apps_dir}")
+            return
+
+        project_apps = self._collect_project_apps(apps_dir)
+        if not project_apps:
+            self.stdout.write("No project apps with migrations found.")
+            return
+
+        major_slug = self._major_slug(major_version)
+        migration_modules = self._build_track_modules(project_apps, major_slug)
+        target_dirs = self._prepare_track_dirs(apps_dir, project_apps, major_slug)
+        self._clear_track_migrations(target_dirs)
+
+        with self._override_migration_modules(migration_modules):
+            call_command("makemigrations")
+
+        branch_id = f"major-{major_version}-base"
+        tagged = self._tag_initial_migrations_for_modules(
+            apps_dir=apps_dir,
+            branch_id=branch_id,
+            project_apps=project_apps,
+            migration_modules=migration_modules,
+        )
+        self.stdout.write(
+            f"Rebuilt next-major migration branch {major_version} ({major_slug})."
+        )
+        self._record_tracks_state(major_version=major_version, major_slug=major_slug)
+        if tagged:
+            self.stdout.write("Tagged next-major initial migrations:")
+            for path in tagged:
+                self.stdout.write(f" - {path.relative_to(apps_dir)}")
+        else:
+            self.stdout.write("No next-major initial migrations were tagged.")
+
+    def _major_slug(self, major_version: str) -> str:
+        normalized = re.sub(r"[^0-9.]", "", major_version).strip(".")
+        if not normalized:
+            raise CommandError("major-version must include numeric components")
+        return f"v{normalized.replace('.', '_')}"
+
+    def _build_track_modules(
+        self, project_apps: list[str], major_slug: str
+    ) -> dict[str, str]:
+        return {
+            app_label: f"apps.{app_label}.migrations_{major_slug}"
+            for app_label in project_apps
+        }
+
+    def _prepare_track_dirs(
+        self, apps_dir: Path, project_apps: list[str], major_slug: str
+    ) -> list[Path]:
+        dirs: list[Path] = []
+        for app_label in project_apps:
+            migrations_dir = apps_dir / app_label / f"migrations_{major_slug}"
+            migrations_dir.mkdir(parents=True, exist_ok=True)
+            (migrations_dir / "__init__.py").touch()
+            dirs.append(migrations_dir)
+        return dirs
+
+    def _clear_track_migrations(self, migration_dirs: list[Path]) -> None:
+        for migrations_dir in migration_dirs:
+            for migration_file in migrations_dir.rglob("*.py"):
+                if migration_file.name == "__init__.py":
+                    continue
+                migration_file.unlink(missing_ok=True)
+
+    @contextmanager
+    def _override_migration_modules(self, migration_modules: dict[str, str]):
+        previous = dict(getattr(settings, "MIGRATION_MODULES", {}))
+        merged = {**previous, **migration_modules}
+        settings.MIGRATION_MODULES = merged
+        try:
+            yield
+        finally:
+            settings.MIGRATION_MODULES = previous
+
+    def _tag_initial_migrations_for_modules(
+        self,
+        *,
+        apps_dir: Path,
+        branch_id: str,
+        project_apps: list[str],
+        migration_modules: dict[str, str],
+    ) -> list[Path]:
+        tagged: list[Path] = []
+        for app_label, module_path in migration_modules.items():
+            suffix = module_path.split(".")[-1]
+            migrations_dir = apps_dir / app_label / suffix
+            if not migrations_dir.exists():
+                continue
+
+            initial_candidates = sorted(migrations_dir.glob("0001_*.py"))
+            if not initial_candidates:
+                continue
+
+            target = initial_candidates[0]
+            if self._inject_guard(target, branch_id, project_apps):
+                tagged.append(target)
+        return tagged
+
+    def _record_tracks_state(self, *, major_version: str, major_slug: str) -> None:
+        tracks = self._load_tracks()
+        tracks["current_version"] = self._read_repo_version()
+        tracks["current_line"] = "0.x"
+        tracks["next_major"] = {
+            "version": major_version,
+            "status": "rebuild",
+            "module_suffix": f"migrations_{major_slug}",
+        }
+        self._save_tracks(tracks)
+
+    def _read_repo_version(self) -> str:
+        version_path = Path(settings.BASE_DIR) / "VERSION"
+        if version_path.exists():
+            return version_path.read_text(encoding="utf-8").strip()
+        return ""

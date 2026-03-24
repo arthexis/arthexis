@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -210,3 +211,50 @@ def test_migrations_clear_calls_clear_operation(settings, tmp_path):
 
     assert not migration_path.exists()
     assert (apps_dir / "legacy" / "migrations" / "__init__.py").exists()
+
+
+def test_migrations_next_major_rebuild_regenerates_parallel_line(
+    monkeypatch, settings, tmp_path
+):
+    """next-major-rebuild should generate clean migrations in a parallel module."""
+
+    apps_dir = _seed_apps_root(tmp_path)
+    settings.BASE_DIR = tmp_path
+    settings.APPS_DIR = apps_dir
+    (tmp_path / "VERSION").write_text("0.2.3\n", encoding="utf-8")
+    _seed_app_migrations(apps_dir, "catalog")
+    (apps_dir / "catalog" / "migrations_v1_0").mkdir(parents=True, exist_ok=True)
+    (apps_dir / "catalog" / "migrations_v1_0" / "__init__.py").write_text(
+        "", encoding="utf-8"
+    )
+    stale = apps_dir / "catalog" / "migrations_v1_0" / "0007_stale.py"
+    stale.write_text("stale", encoding="utf-8")
+
+    def _fake_call_command(name, *args, **kwargs):
+        if name != "makemigrations":
+            raise AssertionError(f"Unexpected command: {name} {args}")
+        generated = apps_dir / "catalog" / "migrations_v1_0" / "0001_initial.py"
+        generated.write_text(
+            "from django.db import migrations\n\n"
+            "class Migration(migrations.Migration):\n"
+            "    operations = [\n"
+            "    ]\n",
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(
+        "apps.core.management.commands.migrations.call_command", _fake_call_command
+    )
+
+    call_command("migrations", "next-major-rebuild", major_version="1.0")
+
+    content = (apps_dir / "catalog" / "migrations_v1_0" / "0001_initial.py").read_text(
+        encoding="utf-8"
+    )
+    tracks_payload = json.loads((tmp_path / "MIGRATION_TRACKS.json").read_text(encoding="utf-8"))
+    assert not stale.exists()
+    assert "BranchTagOperation" in content
+    assert '"major-1.0-base"' in content
+    assert tracks_payload["current_line"] == "0.x"
+    assert tracks_payload["current_version"] == "0.2.3"
+    assert tracks_payload["next_major"]["version"] == "1.0"
