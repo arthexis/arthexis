@@ -3,33 +3,58 @@ import logging
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import login
 from django.db.utils import OperationalError, ProgrammingError
 from django.http import Http404, JsonResponse
 from django.shortcuts import redirect
-from django.views.decorators.http import require_GET
 from django.utils import translation
 from django.utils.translation import gettext as _
+from django.views.decorators.http import require_GET, require_POST
 
 from apps.docs import rendering
 from apps.locale.models import Language
 from apps.ocpp.models.location import Location
 from apps.ocpp.services import ChargerAccessDeniedError, build_charger_chart_payload
-from apps.sites.utils import (get_request_language_code, landing,
-                              module_pill_link_validation,
-                              require_site_operator_or_staff)
+from apps.sites.utils import (
+    get_request_language_code,
+    landing,
+    module_pill_link_validation,
+    require_site_operator_or_staff,
+)
 
-from ..models import PublicConnectorPage, PublicScanEvent, StationModel
+from ..energy_accounts import (
+    create_energy_account_user,
+    energy_accounts_enabled,
+    get_or_create_energy_account_for_user,
+    get_or_create_virtual_rfid_for_user,
+    pop_pending_energy_charge,
+    queue_pending_energy_charge,
+    request_remote_start_for_user,
+)
+from ..models import PublicConnectorPage, PublicScanEvent, StationModel, Transaction
 from .common import *  # noqa: F401,F403
-from .common import (_charger_state, _charging_limit_details,
-                     _clear_stale_statuses_for_view, _connector_overview,
-                     _connector_set, _default_language_code,
-                     _ensure_charger_access, _get_charger,
-                     _important_non_transaction_events,
-                     _landing_page_translations, _landing_requires_chargers,
-                     _landing_visibility_params, _live_sessions,
-                     _reverse_connector_url, _supported_language_codes,
-                     _transaction_rfid_details, _usage_timeline,
-                     _visible_chargers, _visible_error_code)
+from .common import (
+    _charger_state,
+    _charging_limit_details,
+    _clear_stale_statuses_for_view,
+    _connector_overview,
+    _connector_set,
+    _default_language_code,
+    _ensure_charger_access,
+    _get_charger,
+    _important_non_transaction_events,
+    _landing_page_translations,
+    _landing_requires_chargers,
+    _landing_visibility_params,
+    _live_sessions,
+    _reverse_connector_url,
+    _supported_language_codes,
+    _transaction_rfid_details,
+    _usage_timeline,
+    _visible_chargers,
+    _visible_error_code,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +283,24 @@ def charger_page(request, cid, connector=None):
     )
 
 
+def _ensure_public_page_assets(page: PublicConnectorPage) -> None:
+    if page.qr_svg and page.qr_png:
+        return
+    try:
+        page.refresh_qr_assets(page.public_url())
+        page.save(update_fields=["qr_png", "qr_svg", "updated_at"])
+    except RuntimeError:
+        return
+
+
+def public_connector_page_by_charger(request, cid, connector=None):
+    """Resolve a charger public page by CID and redirect to canonical slug URL."""
+
+    charger, _connector_slug = _get_charger(cid, connector)
+    page, _created = PublicConnectorPage.objects.get_or_create(charger=charger)
+    return redirect("ocpp:public-connector-page", page.slug)
+
+
 def public_connector_page(request, slug):
     """Public landing page for a connector QR code."""
     _clear_stale_statuses_for_view()
@@ -269,6 +312,8 @@ def public_connector_page(request, slug):
     charger = page.charger
     if not charger.public_display or not charger.is_visible_to(request.user):
         raise Http404("Public page not found")
+
+    _ensure_public_page_assets(page)
 
     connectors = _connector_set(charger)
     sessions = _live_sessions(charger, connectors=connectors)
@@ -329,6 +374,44 @@ def public_connector_page(request, slug):
     except (OperationalError, ProgrammingError):
         pass
 
+
+    energy_accounts_mode = energy_accounts_enabled(default=False)
+    account = None
+    account_balance_kw = None
+    previous_sessions = []
+    account_summary_url = ""
+    status_url = ""
+    if energy_accounts_mode and not request.user.is_authenticated:
+        queue_pending_energy_charge(
+            request,
+            charger_id=charger.charger_id,
+            connector_id=charger.connector_id,
+        )
+
+    if request.user.is_authenticated and energy_accounts_mode:
+        get_or_create_virtual_rfid_for_user(request.user)
+        account = get_or_create_energy_account_for_user(request.user)
+        account_balance_kw = account.balance_kw
+        previous_sessions = list(
+            Transaction.objects.filter(account=account)
+            .select_related("charger")
+            .order_by("-start_time")[:5]
+        )
+        status_url = _reverse_connector_url(
+            "charger-status",
+            charger.charger_id,
+            charger.connector_slug,
+        )
+        account_summary_url = _reverse_connector_url(
+            "public-account-summary",
+            charger.charger_id,
+            charger.connector_slug,
+        )
+        pending = pop_pending_energy_charge(request)
+        pending_matches = pending and pending.get("charger_id") == charger.charger_id
+        if pending_matches and not tx:
+            request_remote_start_for_user(charger=charger, user=request.user)
+
     return render(
         request,
         "ocpp/public_connector_page.html",
@@ -342,6 +425,18 @@ def public_connector_page(request, slug):
             "available_languages": language_options,
             "preferred_language": preferred_language,
             "charger_error_code": _visible_error_code(charger.last_error_code),
+            "energy_accounts_mode": energy_accounts_mode,
+            "account": account,
+            "account_balance_kw": account_balance_kw,
+            "account_summary_url": account_summary_url,
+            "create_account_url": _reverse_connector_url(
+                "public-create-account",
+                charger.charger_id,
+                charger.connector_slug,
+            ),
+            "login_url": f"{reverse('pages:login')}?next={request.get_full_path()}",
+            "previous_sessions": previous_sessions,
+            "status_url": status_url,
         },
     )
 
@@ -808,6 +903,50 @@ def _station_model_documents(bucket, image_ids):
         return []
     files = bucket.files.all().order_by("-uploaded_at")
     return [media_file for media_file in files if media_file.pk not in image_ids]
+
+
+@require_POST
+def public_create_account(request, cid, connector=None):
+    charger, _connector_slug = _get_charger(cid, connector)
+    if not energy_accounts_enabled(default=False):
+        return redirect(_reverse_connector_url("charger-page", cid, charger.connector_slug))
+
+    user = create_energy_account_user()
+    user.backend = settings.AUTHENTICATION_BACKENDS[1]
+    login(request, user)
+    queue_pending_energy_charge(
+        request,
+        charger_id=charger.charger_id,
+        connector_id=charger.connector_id,
+    )
+    messages.success(request, _("Account created. Preparing your charging session."))
+    return redirect(_reverse_connector_url("public-connector-page-by-cid", cid, charger.connector_slug))
+
+
+@login_required
+def public_account_summary(request, cid, connector=None):
+    charger, connector_slug = _get_charger(cid, connector)
+    if not energy_accounts_enabled(default=False):
+        raise Http404("Page not found")
+
+    account = get_or_create_energy_account_for_user(request.user)
+    sessions = list(
+        Transaction.objects.filter(account=account)
+        .select_related("charger")
+        .order_by("-start_time")[:25]
+    )
+    status_url = _reverse_connector_url("charger-status", cid, connector_slug)
+    return render(
+        request,
+        "ocpp/public_account_summary.html",
+        {
+            "charger": charger,
+            "account": account,
+            "sessions": sessions,
+            "status_url": status_url,
+            "hide_default_footer": True,
+        },
+    )
 
 
 def supported_chargers(request):

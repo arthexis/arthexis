@@ -11,6 +11,7 @@ from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 from ... import store
 from ...models import Transaction
+from ...energy_accounts import can_authorize_account, energy_accounts_enabled
 from ...utils import _parse_ocpp_timestamp
 from .identity import _extract_vehicle_identifier
 
@@ -79,8 +80,14 @@ class LegacyTransactionHandlersMixin:
             authorized_via_tag = False
             if self.charger.require_rfid:
                 if account is not None:
-                    authorized = await database_sync_to_async(account.can_authorize)()
-                elif id_tag and tag and not tag_created and getattr(tag, "allowed", False):
+                    authorized = await database_sync_to_async(can_authorize_account)(account)
+                elif (
+                    not energy_accounts_enabled(default=False)
+                    and id_tag
+                    and tag
+                    and not tag_created
+                    and getattr(tag, "allowed", False)
+                ):
                     authorized = True
                     authorized_via_tag = True
                 else:

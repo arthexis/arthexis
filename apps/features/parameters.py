@@ -143,6 +143,17 @@ FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]]
             default="en",
         ),
     ),
+    "energy-accounts": (
+        FeatureParameterDefinition(
+            key="credits_required",
+            label=_("Require energy credits"),
+            help_text=_(
+                "Require a positive energy-credit balance before allowing charging."
+            ),
+            choices=(("disabled", _("Disabled")), ("enabled", _("Enabled"))),
+            default="disabled",
+        ),
+    ),
 }
 
 

@@ -41,6 +41,45 @@
           </div>
         </div>
         <div class="card-body">
+          {% if energy_accounts_mode and not request.user.is_authenticated %}
+          <div class="alert alert-info" role="alert">
+            <p class="mb-2">{% trans "Sign in or create your energy account to begin charging." %}</p>
+            <div class="d-flex flex-wrap gap-2">
+              <a class="btn btn-primary" href="{{ login_url }}">{% trans "Log in" %}</a>
+              <form method="post" action="{{ create_account_url }}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-primary">{% trans "Create Account" %}</button>
+              </form>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if energy_accounts_mode and request.user.is_authenticated and account %}
+          <div class="landing-card-section">
+            <p class="landing-card-section-title">{% trans "Energy account" %}</p>
+            <p class="mb-1"><strong>{% trans "Account" %}:</strong> {{ account.name }}</p>
+            <p class="mb-2"><strong>{% trans "Balance" %}:</strong> {{ account_balance_kw|floatformat:3 }} kW</p>
+            <div class="d-flex flex-wrap gap-2">
+              <a class="btn btn-primary" href="{{ status_url }}">{% trans "Live Charging View" %}</a>
+              <a class="btn btn-outline-primary" href="{{ account_summary_url }}">{% trans "Session & Balance Summary" %}</a>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if previous_sessions %}
+          <div class="landing-card-section">
+            <p class="landing-card-section-title">{% trans "Recent sessions" %}</p>
+            <ul class="list-unstyled mb-0">
+              {% for session in previous_sessions %}
+              <li class="mb-2">
+                <strong>{{ session.start_time|date:"SHORT_DATETIME_FORMAT" }}</strong>
+                <div class="small text-muted">{{ session.kw|floatformat:3 }} kW</div>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+
           {% if charger.last_status or charger_error_code or charger.last_status_timestamp %}
           <div class="landing-card-section">
             <p class="landing-card-section-title mb-1">{% trans "Latest report" %}</p>
@@ -67,25 +106,6 @@
           <div class="landing-card-section">
             <p class="landing-card-section-title">{% trans "Site rules" %}</p>
             <div class="markdown-body">{{ rules_html|safe }}</div>
-          </div>
-          {% endif %}
-          {% if page.support_phone or page.support_whatsapp or page.support_email or page.support_url %}
-          <div class="landing-card-section">
-            <p class="landing-card-section-title">{% trans "Support" %}</p>
-            <ul class="list-unstyled mb-0">
-              {% if page.support_phone %}
-              <li><strong>{% trans "Phone" %}:</strong> <a href="tel:{{ page.support_phone }}">{{ page.support_phone }}</a></li>
-              {% endif %}
-              {% if page.support_whatsapp %}
-              <li><strong>{% trans "WhatsApp" %}:</strong> <a href="https://wa.me/{{ page.support_whatsapp|cut:'+' }}">{{ page.support_whatsapp }}</a></li>
-              {% endif %}
-              {% if page.support_email %}
-              <li><strong>{% trans "Email" %}:</strong> <a href="mailto:{{ page.support_email }}">{{ page.support_email }}</a></li>
-              {% endif %}
-              {% if page.support_url %}
-              <li><strong>{% trans "Website" %}:</strong> <a href="{{ page.support_url }}" rel="noopener" target="_blank">{{ page.support_url }}</a></li>
-              {% endif %}
-            </ul>
           </div>
           {% endif %}
         </div>

@@ -21,6 +21,32 @@ urlpatterns = [
     ),
     path("c/<uuid:slug>/", views.public_connector_page, name="public-connector-page"),
     path(
+        "c/<str:cid>/account/create/",
+        views.public_create_account,
+        name="public-create-account",
+    ),
+    path(
+        "c/<str:cid>/connector/<slug:connector>/account/create/",
+        views.public_create_account,
+        name="public-create-account-connector",
+    ),
+    path(
+        "c/<str:cid>/account/",
+        views.public_account_summary,
+        name="public-account-summary",
+    ),
+    path(
+        "c/<str:cid>/connector/<slug:connector>/account/",
+        views.public_account_summary,
+        name="public-account-summary-connector",
+    ),
+    path("c/<str:cid>/public/", views.public_connector_page_by_charger, name="public-connector-page-by-cid"),
+    path(
+        "c/<str:cid>/connector/<slug:connector>/public/",
+        views.public_connector_page_by_charger,
+        name="public-connector-page-by-cid-connector",
+    ),
+    path(
         "firmware/<int:deployment_id>/<slug:token>/",
         views.firmware_download,
         name="cp-firmware-download",
