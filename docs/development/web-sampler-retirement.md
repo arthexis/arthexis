@@ -5,8 +5,9 @@ Arthexis no longer executes stored shell-style cURL samplers from the content ap
 ## What changed
 
 - The `WebRequestSampler` and `WebRequestStep` models were retired.
-- The generic scheduler hook that executed `apps.content.tasks.run_scheduled_web_samplers` was removed.
+- The generic scheduler hook that executed `apps.content.tasks.run_scheduled_web_samplers` was removed, and the temporary compatibility alias task has now been fully removed from `apps.content.tasks`.
 - Historical `WebSample` and `WebSampleAttachment` rows remain available in a read-only form.
+- Startup now fails during migrations if `django_celery_beat` still contains periodic tasks pointed at the retired alias so operators can migrate each trigger to the owning app's dedicated collector task before rollout.
 
 This keeps Arthexis aligned with the suite's role as an integration pivot: live collection should happen in a dedicated app or integration module with typed request settings and controlled HTTP clients, not by storing shell commands in the database.
 
