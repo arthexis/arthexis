@@ -83,6 +83,33 @@ def test_create_model_requires_existing_app(tmp_path):
         call_command("create", "model", "unknown", "item")
 
 
+def test_create_app_rejects_underscores_in_app_name(tmp_path):
+    """create app should reject underscore-separated app package names."""
+
+    _seed_apps_root(tmp_path)
+
+    with pytest.raises(CommandError, match="lowercase single word"):
+        call_command("create", "app", "billing_tools")
+
+
+def test_create_model_supports_existing_underscored_app_name(tmp_path):
+    """create model should support scaffolding into existing underscored app packages."""
+
+    apps_dir = _seed_apps_root(tmp_path)
+    app_dir = apps_dir / "billing_tools"
+    app_dir.mkdir(parents=True, exist_ok=True)
+    (app_dir / "manifest.py").write_text(
+        '"""Manifest entries for Django app loading."""\n\nDJANGO_APPS = [\n    "apps.billing_tools",\n]\n',
+        encoding="utf-8",
+    )
+
+    call_command("create", "model", "billing_tools", "ticket")
+
+    models_text = (app_dir / "models.py").read_text(encoding="utf-8")
+    assert 'app_label = "billing_tools"' in models_text
+    assert "class Ticket(models.Model):" in models_text
+
+
 def test_create_model_extends_existing_urlpatterns_without_duplicate_imports(tmp_path):
     """create model should append route entries instead of redefining urlpatterns/imports."""
 
