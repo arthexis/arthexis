@@ -39,9 +39,9 @@ def test_test_server_subcommand_does_not_require_vscode_cli(monkeypatch) -> None
 
     monkeypatch.setattr("utils.devtools.test_server.main", fake_main)
 
-    Command()._run_test_server(interval=1.5, debounce=0.5, latest=True)
+    Command()._run_test_server()
 
-    assert called["argv"] == ["--interval", "1.5", "--debounce", "0.5", "--latest"]
+    assert called["argv"] == []
 
 
 @pytest.mark.django_db

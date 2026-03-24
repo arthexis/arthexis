@@ -423,7 +423,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--interval",
         type=float,
         default=1.0,
-        help="Polling interval in seconds when --watch/--server is enabled.",
+        help="Polling interval in seconds when --watch is enabled.",
     )
     parser.add_argument(
         "--debounce",
@@ -432,27 +432,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Debounce window in seconds before rerunning migrations in watch mode.",
     )
     parser.add_argument(
-        "--latest",
-        dest="latest",
-        action="store_true",
-        default=True,
-        help="Compatibility flag from legacy watcher mode (ignored).",
-    )
-    parser.add_argument(
-        "--no-latest",
-        dest="latest",
-        action="store_false",
-        help="Compatibility flag from legacy watcher mode (ignored).",
-    )
-    parser.add_argument(
         "--watch",
         action="store_true",
         help="Keep running and re-run migrations when code files change.",
-    )
-    parser.add_argument(
-        "--server",
-        action="store_true",
-        help="Alias for --watch for legacy migration server launchers.",
     )
     parser.add_argument(
         "extra_args",
@@ -481,7 +463,7 @@ def main(argv: list[str] | None = None) -> int:
         extra_args=extra_args,
         interval=args.interval,
         debounce=args.debounce,
-        watch=args.watch or args.server,
+        watch=args.watch,
     )
 
 

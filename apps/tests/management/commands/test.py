@@ -37,21 +37,6 @@ class Command(BaseCommand):
             "server",
             help="Start the VS Code test server watcher.",
         )
-        server_parser.add_argument("--interval", type=float, default=1.0)
-        server_parser.add_argument("--debounce", type=float, default=1.0)
-        server_parser.add_argument(
-            "--latest",
-            dest="latest",
-            action="store_true",
-            default=True,
-            help="Pass --latest to env-refresh (default).",
-        )
-        server_parser.add_argument(
-            "--no-latest",
-            dest="latest",
-            action="store_false",
-            help="Do not pass --latest to env-refresh.",
-        )
 
         subparsers.add_parser(
             "discover",
@@ -66,11 +51,7 @@ class Command(BaseCommand):
             self._run_pytest(options.get("pytest_args", []))
             return
         if action == "server":
-            self._run_test_server(
-                interval=options["interval"],
-                debounce=options["debounce"],
-                latest=options["latest"],
-            )
+            self._run_test_server()
             return
         if action == "discover":
             self._discover_suite_tests()
@@ -88,16 +69,12 @@ class Command(BaseCommand):
         if result.returncode != 0:
             raise CommandError(f"pytest exited with status {result.returncode}")
 
-    def _run_test_server(
-        self, *, interval: float, debounce: float, latest: bool
-    ) -> None:
+    def _run_test_server(self) -> None:
         """Start the long-running VS Code test server."""
 
         from utils.devtools import test_server
 
-        argv = ["--interval", str(interval), "--debounce", str(debounce)]
-        argv.append("--latest" if latest else "--no-latest")
-        exit_code = test_server.main(argv)
+        exit_code = test_server.main([])
         if exit_code != 0:
             raise CommandError(f"test server exited with status {exit_code}")
 
