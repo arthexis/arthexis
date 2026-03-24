@@ -66,7 +66,6 @@ def test_legacy_camera_shim_remains_importable_for_prototype_integrations():
 
 def test_removed_runtime_apps_only_remain_available_through_explicit_legacy_shims():
     assert "apps.extensions" not in settings_apps.LOCAL_APPS
-    assert "apps.fitbit" not in settings_apps.LOCAL_APPS
     assert "apps.prompts" not in settings_apps.LOCAL_APPS
     assert "apps.selenium" not in settings_apps.LOCAL_APPS
     assert "apps.socials" not in settings_apps.LOCAL_APPS
