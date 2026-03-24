@@ -348,21 +348,23 @@ def _configure_lock_dependent_tasks(config):
     def migrate_legacy_heartbeat_task(**kwargs):
         del kwargs
         try:  # pragma: no cover - optional dependency
-            from django_celery_beat.models import PeriodicTask
-        except Exception:
+            from django_celery_beat.models import PeriodicTask, PeriodicTasks
+        except ImportError:
             return
 
         try:
-            PeriodicTask.objects.filter(task="core.tasks.heartbeat").update(
+            updated = PeriodicTask.objects.filter(task="core.tasks.heartbeat").update(
                 task="apps.core.tasks.heartbeat"
             )
+            if updated:
+                PeriodicTasks.update_changed()
         except (OperationalError, ProgrammingError):
             return
 
     def ensure_email_collector_task(**kwargs):
         try:  # pragma: no cover - optional dependency
             from django_celery_beat.models import IntervalSchedule, PeriodicTask
-        except Exception:  # pragma: no cover - tables or module not ready
+        except ImportError:  # pragma: no cover - tables or module not ready
             return
 
         from apps.celery.utils import normalize_periodic_task_name
