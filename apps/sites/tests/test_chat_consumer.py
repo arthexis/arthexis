@@ -229,6 +229,27 @@ class ChatConsumerAccessControlTests(TestCase):
         mock_filter.assert_called_once_with(domain__iexact="chat.example.test")
         mock_get_current.assert_not_called()
 
+    def test_chat_access_denied_when_pages_chat_feature_disabled(self):
+        """Regression: websocket access must honor the pages-chat runtime gate."""
+
+        consumer = ChatConsumer()
+
+        with (
+            mock.patch("apps.sites.consumers.settings.PAGES_CHAT_ENABLED", True),
+            mock.patch(
+                "apps.sites.consumers.is_suite_feature_enabled",
+                side_effect=lambda slug, default=False: slug == "staff-chat-bridge",
+            ),
+            mock.patch.object(
+                consumer,
+                "_current_site",
+                return_value=SimpleNamespace(enable_public_chat=True),
+            ),
+        ):
+            allowed = consumer._is_chat_access_allowed_sync(user=SimpleNamespace())
+
+        self.assertFalse(allowed)
+
     def test_chat_access_denied_when_staff_chat_bridge_feature_disabled(self):
         """Chat must be disabled when the bridge feature flag is off."""
 
