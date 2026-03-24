@@ -1242,6 +1242,7 @@ async def test_request_start_transaction_result_tracks_status():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.critical
 async def test_transaction_event_updates_request_status(monkeypatch):
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TRX")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -1293,6 +1294,7 @@ async def test_transaction_event_updates_request_status(monkeypatch):
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.critical
 async def test_transaction_event_does_not_start_request_when_authorization_fails():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="CP-TRX-RFID", require_rfid=True
@@ -1386,6 +1388,7 @@ async def test_start_transaction_rejection_creates_transaction_record():
     assert rejected_tx.rejected_at is not None
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.critical
 async def test_transaction_event_started_notifies_and_persists():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TE-1")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -1472,6 +1475,7 @@ async def test_transaction_event_updated_notifies_existing_transaction():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.critical
 async def test_transaction_event_ended_updates_and_notifies():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TE-3")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -1862,6 +1866,7 @@ async def test_report_charging_profiles_rejects_invalid_schedule_values(monkeypa
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.critical
 async def test_report_charging_profiles_rolls_back_partial_profile_writes(monkeypatch):
     """Schedule validation failures should not leave orphaned charging profiles."""
 
