@@ -52,7 +52,7 @@ def test_desktop_shortcut_clean_rejects_missing_url_in_url_mode() -> None:
     try:
         shortcut.clean()
     except ValidationError as exc:
-        assert exc.message_dict["target_url"] == ["A target URL is required for URL mode."]
+        assert exc.message_dict["target_url"] == ["A target URL is required."]
     else:  # pragma: no cover - explicit regression guard
         raise AssertionError("Expected ValidationError for blank target URL")
 

@@ -76,21 +76,19 @@ class DesktopShortcutAdmin(admin.ModelAdmin):
         "name",
         "slug",
         "desktop_filename",
-        "launch_mode",
         "install_location",
         "is_enabled",
         "require_desktop_ui",
         "sort_order",
     )
     list_filter = (
-        "launch_mode",
         "install_location",
         "is_enabled",
         "require_desktop_ui",
         "only_staff",
         "only_superuser",
     )
-    search_fields = ("name", "slug", "desktop_filename", "comment", "target_url", "command")
+    search_fields = ("name", "slug", "desktop_filename", "comment", "target_url")
     filter_horizontal = ("required_features", "required_groups")
 
     fieldsets = (
@@ -110,11 +108,10 @@ class DesktopShortcutAdmin(admin.ModelAdmin):
         (
             "Launch",
             {
+                "description": "Desktop shortcuts always open an HTTP(S) URL via the browser helper.",
                 "fields": (
-                    "launch_mode",
                     "install_location",
                     "target_url",
-                    "command",
                     "terminal",
                     "categories",
                     "startup_notify",
@@ -135,8 +132,9 @@ class DesktopShortcutAdmin(admin.ModelAdmin):
             "Conditions",
             {
                 "description": (
-                    "Shortcuts install only when all selected conditions pass for "
-                    "the target user."
+                    "Shortcuts install only when all selected structured conditions "
+                    "pass for the target user. The optional expression is limited "
+                    "to the documented shortcut context values."
                 ),
                 "fields": (
                     "require_desktop_ui",
@@ -145,7 +143,6 @@ class DesktopShortcutAdmin(admin.ModelAdmin):
                     "only_staff",
                     "only_superuser",
                     "condition_expression",
-                    "condition_command",
                 ),
             },
         ),

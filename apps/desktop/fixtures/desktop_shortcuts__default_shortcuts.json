@@ -10,7 +10,6 @@
       "comment": "Open the Arthexis public site",
       "launch_mode": "url",
       "target_url": "http://127.0.0.1:{port}/",
-      "command": "",
       "icon_name": "web-browser",
       "icon_base64": "",
       "icon_extension": "png",
@@ -19,7 +18,6 @@
       "startup_notify": true,
       "extra_entries": {},
       "condition_expression": "",
-      "condition_command": "",
       "require_desktop_ui": true,
       "required_features": [
         [
@@ -44,7 +42,6 @@
       "comment": "Open the Arthexis admin console",
       "launch_mode": "url",
       "target_url": "http://127.0.0.1:{port}/admin/",
-      "command": "",
       "icon_name": "applications-system",
       "icon_base64": "",
       "icon_extension": "png",
@@ -53,7 +50,6 @@
       "startup_notify": true,
       "extra_entries": {},
       "condition_expression": "",
-      "condition_command": "",
       "require_desktop_ui": true,
       "required_features": [
         [

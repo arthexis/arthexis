@@ -17,6 +17,11 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractBaseUser
 from django.db.utils import OperationalError, ProgrammingError
 
+from apps.desktop.expression_utils import (
+    _ALLOWED_CONDITION_AST_NODES,
+    _is_has_feature_callable_name,
+    build_ast_parent_map,
+)
 from apps.desktop.models import DesktopShortcut, RegisteredExtension
 from apps.nodes.models import Node
 
@@ -40,7 +45,6 @@ class DesktopSyncResult:
     skipped: int = 0
     removed: int = 0
     skipped_db_unavailable: bool = False
-
 
 def build_windows_registry_command(extension: RegisteredExtension) -> str:
     """Build the Windows shell command used to open a file with this extension."""
@@ -192,32 +196,15 @@ def _evaluate_expression(expression: str, context: dict[str, object]) -> bool:
     except SyntaxError:
         return False
 
-    allowed_nodes = (
-        ast.Expression,
-        ast.BoolOp,
-        ast.UnaryOp,
-        ast.Compare,
-        ast.Call,
-        ast.Name,
-        ast.Load,
-        ast.Constant,
-        ast.And,
-        ast.Or,
-        ast.Not,
-        ast.Eq,
-        ast.NotEq,
-        ast.In,
-        ast.NotIn,
-        ast.Gt,
-        ast.GtE,
-        ast.Lt,
-        ast.LtE,
-        ast.Set,
-        ast.Tuple,
-        ast.List,
-    )
+    parents = build_ast_parent_map(tree)
     for node in ast.walk(tree):
-        if not isinstance(node, allowed_nodes):
+        if not isinstance(node, _ALLOWED_CONDITION_AST_NODES):
+            return False
+        if (
+            isinstance(node, ast.Name)
+            and node.id == "has_feature"
+            and not _is_has_feature_callable_name(node, parents)
+        ):
             return False
         if isinstance(node, ast.Call):
             if not isinstance(node.func, ast.Name) or node.func.id != "has_feature":
@@ -244,10 +231,15 @@ def _icon_value(shortcut: DesktopShortcut, username: str) -> str:
 
 
 def _build_exec(shortcut: DesktopShortcut, port: int) -> str:
-    """Build the desktop entry ``Exec`` string for a shortcut."""
+    """Build the desktop entry ``Exec`` string for a shortcut.
 
-    if shortcut.launch_mode == DesktopShortcut.LaunchMode.COMMAND:
-        return shortcut.command
+    Parameters:
+        shortcut: Shortcut definition being rendered.
+        port: Active Arthexis port injected into the URL template.
+
+    Returns:
+        A browser-helper command line that opens the resolved URL.
+    """
 
     target_url = shortcut.target_url.format(port=port)
     return shlex.join([sys.executable, "-m", "webbrowser", "-t", target_url])
@@ -335,27 +327,7 @@ def should_install_shortcut(
         "group_names": user_groups,
         "has_feature": lambda slug: local_node.has_feature(slug),
     }
-    if not _evaluate_expression(shortcut.condition_expression, expr_context):
-        return False
-
-    if shortcut.condition_command:
-        try:
-            command_parts = shlex.split(shortcut.condition_command)
-        except ValueError:
-            return False
-        if not command_parts:
-            return False
-
-        result = subprocess.run(
-            command_parts,
-            check=False,
-            cwd=base_dir,
-            env={**os.environ, "ARTHEXIS_SHORTCUT_SLUG": shortcut.slug, "ARTHEXIS_USERNAME": username},
-        )
-        if result.returncode != 0:
-            return False
-
-    return True
+    return _evaluate_expression(shortcut.condition_expression, expr_context)
 
 
 def render_shortcut_desktop_entry(shortcut: DesktopShortcut, *, exec_value: str, icon_value: str) -> str:
@@ -379,6 +351,8 @@ def render_shortcut_desktop_entry(shortcut: DesktopShortcut, *, exec_value: str,
         "X-Arthexis-Managed=true",
     ]
     for key, value in sorted(shortcut.extra_entries.items()):
+        if str(key).startswith("_"):
+            continue
         lines.append(f"{_sanitize_desktop_value(key)}={_sanitize_desktop_value(value)}")
     return "\n".join(lines) + "\n"
 
