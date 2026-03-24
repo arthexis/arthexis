@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
             name="auto_accept_offered_certificates",
             field=models.BooleanField(
                 default=False,
-                help_text="Deprecated. This flag no longer has any effect and will be removed in a future version.",
+                help_text="Compatibility field retained as a runtime no-op until removal.",
                 verbose_name="Auto Accept Offered Certificates",
             ),
         ),
