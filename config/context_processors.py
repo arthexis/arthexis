@@ -23,10 +23,11 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_request_host(request: HttpRequest) -> str:
-    """Return the validated hostname for template badge lookups."""
+    """Return the validated hostname for template badge lookups, or ``""``."""
     try:
         host_value = request.get_host()
     except DisallowedHost:
+        # Never trust unvalidated Host headers for site/node resolution.
         return ""
 
     if host_value.startswith("["):
