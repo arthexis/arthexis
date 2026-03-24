@@ -1,11 +1,12 @@
 """Tests for route-provider autodiscovery behavior."""
 
+import sys
 from types import ModuleType, SimpleNamespace
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
-from django.urls import path
+from django.urls import include, path
 
 from config import route_providers
 
@@ -50,8 +51,6 @@ def test_autodiscovered_route_patterns_only_honor_routes_py(
     def fake_import_module(module_name: str):
         if module_name == "apps.example.routes":
             return routes_module
-        if module_name in {"apps.example.urls", "apps.example.api.urls"}:
-            return ModuleType(module_name)
         raise ModuleNotFoundError(module_name)
 
     monkeypatch.setattr(route_providers, "import_module", fake_import_module)
@@ -60,3 +59,60 @@ def test_autodiscovered_route_patterns_only_honor_routes_py(
 
     assert len(patterns) == 1
     assert patterns[0].name == "example-home"
+
+
+def test_autodiscovered_route_patterns_raises_when_legacy_urls_not_mounted(
+    monkeypatch, app_config
+):
+    monkeypatch.setattr(route_providers, "_iter_project_apps", lambda: [app_config])
+
+    routes_module = ModuleType("apps.example.routes")
+    routes_module.ROOT_URLPATTERNS = [
+        path("", lambda request: HttpResponse("ok"), name="example-home")
+    ]
+
+    def fake_import_module(module_name: str):
+        if module_name == "apps.example.routes":
+            return routes_module
+        if module_name in {"apps.example.urls", "apps.example.api.urls"}:
+            return ModuleType(module_name)
+        raise ModuleNotFoundError(module_name)
+
+    monkeypatch.setattr(route_providers, "import_module", fake_import_module)
+
+    with pytest.raises(ImproperlyConfigured, match="Add routes.py with ROOT_URLPATTERNS"):
+        route_providers.autodiscovered_route_patterns()
+
+
+def test_autodiscovered_route_patterns_allow_explicit_legacy_mounts(
+    monkeypatch, app_config
+):
+    monkeypatch.setattr(route_providers, "_iter_project_apps", lambda: [app_config])
+
+    legacy_urls_module = ModuleType("apps.example.urls")
+    legacy_urls_module.urlpatterns = []
+    legacy_api_urls_module = ModuleType("apps.example.api.urls")
+    legacy_api_urls_module.urlpatterns = []
+    monkeypatch.setitem(sys.modules, "apps.example.urls", legacy_urls_module)
+    monkeypatch.setitem(sys.modules, "apps.example.api.urls", legacy_api_urls_module)
+
+    routes_module = ModuleType("apps.example.routes")
+    routes_module.ROOT_URLPATTERNS = [
+        path("", include("apps.example.urls")),
+        path("api/", include("apps.example.api.urls")),
+    ]
+
+    def fake_import_module(module_name: str):
+        if module_name == "apps.example.routes":
+            return routes_module
+        if module_name == "apps.example.urls":
+            return legacy_urls_module
+        if module_name == "apps.example.api.urls":
+            return legacy_api_urls_module
+        raise ModuleNotFoundError(module_name)
+
+    monkeypatch.setattr(route_providers, "import_module", fake_import_module)
+
+    patterns = route_providers.autodiscovered_route_patterns()
+
+    assert len(patterns) == 2

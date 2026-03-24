@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from importlib import import_module
 from pathlib import Path
+from types import ModuleType
 from typing import Iterable
 
 from django.apps import apps
@@ -102,6 +103,26 @@ def _warn_or_fail_for_legacy_fallback(legacy_apps: list[str]) -> None:
     )
 
 
+def _collect_included_urlconfs(patterns: Iterable[URLPattern | URLResolver]) -> set[str]:
+    """Collect string urlconf module names included in route patterns."""
+
+    included_urlconfs: set[str] = set()
+
+    for pattern in patterns:
+        if not isinstance(pattern, URLResolver):
+            continue
+
+        urlconf_name = pattern.urlconf_name
+        if isinstance(urlconf_name, str):
+            included_urlconfs.add(urlconf_name)
+        elif isinstance(urlconf_name, ModuleType):
+            included_urlconfs.add(urlconf_name.__name__)
+
+        included_urlconfs.update(_collect_included_urlconfs(pattern.url_patterns))
+
+    return included_urlconfs
+
+
 def autodiscovered_route_patterns() -> list[URLPattern | URLResolver]:
     """Collect root route providers from project apps.
 
@@ -115,6 +136,7 @@ def autodiscovered_route_patterns() -> list[URLPattern | URLResolver]:
     patterns: list[URLPattern | URLResolver] = []
     mounted_prefixes: list[tuple[str, str, str]] = []
     apps_relying_on_legacy_fallback: list[str] = []
+    apps_with_unmounted_legacy_urlconfs: list[str] = []
 
     for app_config in _iter_project_apps():
         routes_module_name = f"{app_config.name}.routes"
@@ -138,6 +160,13 @@ def autodiscovered_route_patterns() -> list[URLPattern | URLResolver]:
         if root_patterns is None:
             raise AttributeError(f"{routes_module_name} must define ROOT_URLPATTERNS")
 
+        mounted_urlconfs = _collect_included_urlconfs(root_patterns)
+        missing_legacy_mounts = (
+            has_legacy_urls and app_urls_module not in mounted_urlconfs
+        ) or (has_legacy_api_urls and app_api_urls_module not in mounted_urlconfs)
+        if missing_legacy_mounts:
+            apps_with_unmounted_legacy_urlconfs.append(app_config.label)
+
         patterns.extend(root_patterns)
         for root_pattern in root_patterns:
             mounted_prefixes.append(
@@ -145,6 +174,7 @@ def autodiscovered_route_patterns() -> list[URLPattern | URLResolver]:
             )
 
     _warn_or_fail_for_legacy_fallback(apps_relying_on_legacy_fallback)
+    _warn_or_fail_for_legacy_fallback(apps_with_unmounted_legacy_urlconfs)
     _detect_conflicting_roots(mounted_prefixes)
 
     return patterns
