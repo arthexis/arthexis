@@ -1,12 +1,9 @@
 """Application registry and site integration settings."""
 
-import importlib.util
-import os
 from pathlib import Path
 
 from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
-from django.core.exceptions import ImproperlyConfigured
 
 from .base import APPS_DIR, HAS_DEBUG_TOOLBAR
 
@@ -109,6 +106,7 @@ LEGACY_MIGRATION_APPS = [
     "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig",
     "apps._legacy.recipes_migration_only.apps.RecipesMigrationOnlyConfig",
     "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig",
+    "apps._legacy.sponsors_migration_only.apps.SponsorsMigrationOnlyConfig",
     "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
     "apps.selenium",
     "config.legacy_mermaid",
@@ -130,22 +128,7 @@ def _load_local_apps() -> list[str]:
     return sorted(_to_module_path(app_dir) for app_dir in app_dirs)
 
 
-def _load_active_prototype_app() -> list[str]:
-    """Return the explicitly activated hidden prototype app when configured."""
-
-    module_name = os.environ.get("ARTHEXIS_PROTOTYPE_APP", "").strip()
-    if not module_name:
-        return []
-
-    if importlib.util.find_spec(module_name) is None:
-        raise ImproperlyConfigured(
-            f"Configured ARTHEXIS_PROTOTYPE_APP could not be imported: {module_name}"
-        )
-
-    return [module_name]
-
-
-LOCAL_APPS = _load_local_apps() + _load_active_prototype_app()
+LOCAL_APPS = _load_local_apps()
 
 INSTALLED_APPS = (
     [
@@ -180,6 +163,7 @@ SITE_ID = 1
 MIGRATION_MODULES = {
     "sites": "apps.core.sites_migrations",
     "socials": "apps.socials.migrations",
+    "sponsors": "apps.sponsors.migrations",
     # Pin django_celery_beat migrations to a local copy so we can override
     # upstream changes that introduce optional dependencies (e.g. Google
     # Calendar profile) and avoid InvalidBases errors during migrate.

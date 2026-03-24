@@ -16,8 +16,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _, ngettext
 from django_object_actions import DjangoObjectActions
 
-from apps.core.admin import OwnableAdminMixin
-from apps.core.admin.mixins import PublicViewLinksAdminMixin
+from apps.app.models import Application
+from apps.core.admin.mixins import OwnableAdminMixin, PublicViewLinksAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 from apps.services.celery_workers import (
     CELERY_WORKERS_FEATURE_SLUG,

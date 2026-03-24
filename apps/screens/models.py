@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
+from apps.screens.animations import AnimationLoadError, load_frames_from_file
 
 
 class DeviceScreen(Entity):
@@ -22,21 +23,29 @@ class DeviceScreen(Entity):
     )
     columns = models.PositiveSmallIntegerField(
         default=0,
-        help_text=_("Text columns for character displays or pixel width for matrix screens."),
+        help_text=_(
+            "Text columns for character displays or pixel width for matrix screens."
+        ),
     )
     rows = models.PositiveSmallIntegerField(
         default=0,
-        help_text=_("Text rows for character displays or pixel height for matrix screens."),
+        help_text=_(
+            "Text rows for character displays or pixel height for matrix screens."
+        ),
     )
     resolution_width = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text=_("Pixel width for graphical displays when the resolution differs from columns."),
+        help_text=_(
+            "Pixel width for graphical displays when the resolution differs from columns."
+        ),
     )
     resolution_height = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text=_("Pixel height for graphical displays when the resolution differs from rows."),
+        help_text=_(
+            "Pixel height for graphical displays when the resolution differs from rows."
+        ),
     )
     min_refresh_ms = models.PositiveIntegerField(
         default=MIN_REFRESH_MS,
@@ -122,7 +131,9 @@ class PixelScreen(DeviceScreen):
     )
     row_stride = models.PositiveIntegerField(
         default=0,
-        help_text=_("Optional row stride in bytes; 0 defaults to width * bytes_per_pixel."),
+        help_text=_(
+            "Optional row stride in bytes; 0 defaults to width * bytes_per_pixel."
+        ),
     )
 
     class Meta(DeviceScreen.Meta):
@@ -130,7 +141,11 @@ class PixelScreen(DeviceScreen):
         verbose_name_plural = _("Pixel Screens")
 
     def update_pixels(
-        self, buffer: bytes | bytearray | memoryview | Sequence[Sequence[Any]], *, received_at=None, save: bool = True
+        self,
+        buffer: bytes | bytearray | memoryview | Sequence[Sequence[Any]],
+        *,
+        received_at=None,
+        save: bool = True,
     ) -> bool:
         """Persist a pixel buffer when within the refresh window."""
 
@@ -152,7 +167,7 @@ class PixelScreen(DeviceScreen):
 
 
 class LCDAnimation(Entity):
-    """Bundled or custom animation for the LCD display."""
+    """Configured LCD animation backed by approved packaged frame files."""
 
     slug = models.SlugField(max_length=64, unique=True)
     name = models.CharField(max_length=100)
@@ -160,12 +175,7 @@ class LCDAnimation(Entity):
     source_path = models.CharField(
         max_length=255,
         blank=True,
-        help_text=_("Path to a 32-character-per-line animation file."),
-    )
-    generator_path = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text=_("Python path to a generator that yields 32-character frames."),
+        help_text=_("Packaged animation file name under apps/screens/animations/."),
     )
     frame_interval_ms = models.PositiveIntegerField(
         default=750,
@@ -179,15 +189,46 @@ class LCDAnimation(Entity):
         verbose_name_plural = _("LCD Animations")
 
     def clean(self) -> None:
-        if not (self.source_path or self.generator_path):
+        """Validate that the animation uses an approved packaged frame file.
+
+        Raises:
+            ValidationError: If the source path is missing, unapproved, or contains malformed frames.
+        """
+
+        super().clean()
+
+        if not self.source_path:
             raise ValidationError(
-                {"source_path": _("Provide a source file or generator for the animation.")}
+                {
+                    "source_path": _(
+                        "Provide a packaged animation file for the animation."
+                    )
+                }
             )
-        if self.source_path and self.generator_path:
-            raise ValidationError(
-                {"generator_path": _("Specify only one animation source.")}
-            )
+
+        try:
+            load_frames_from_file(self.source_path)
+        except AnimationLoadError as exc:
+            raise ValidationError({"source_path": str(exc)}) from exc
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
 
+
+class LCDAnimationLegacySource(Entity):
+    """Audit record preserving retired Python generator references for LCD animations."""
+
+    animation = models.OneToOneField(
+        LCDAnimation,
+        on_delete=models.CASCADE,
+        related_name="legacy_source",
+    )
+    generator_path = models.CharField(max_length=255)
+
+    class Meta(Entity.Meta):
+        ordering = ["animation__name"]
+        verbose_name = _("LCD Animation Legacy Source")
+        verbose_name_plural = _("LCD Animation Legacy Sources")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.animation.name}: {self.generator_path}"

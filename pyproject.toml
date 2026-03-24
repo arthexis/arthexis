@@ -14,7 +14,7 @@ dependencies = [
   "amqp==5.3.1",
   "anyio==4.12.1",
   "asgiref==3.11.0",
-  "attrs==25.3.0",
+  "attrs==26.1.0",
   "autobahn==24.4.2",
   "Automat==25.4.16",
   "billiard==4.2.4",
@@ -126,7 +126,7 @@ ci = [
   "django-stubs==6.0.1",
   "import-linter==2.11",
   "mypy==1.19.1",
-  "ruff==0.15.6",
+  "ruff==0.15.7",
   "twine==6.1.0",
 ]
 dev = [
@@ -328,6 +328,7 @@ include-package-data = true
 "apps.rates.tests" = [ "**/*",]
 "apps._legacy.recipes_migration_only" = [ "**/*",]
 "apps._legacy.recipes_migration_only.migrations" = [ "**/*",]
+"apps._legacy.sponsors_migration_only" = [ "**/*",]
 "apps.release" = [ "**/*",]
 "apps.release.admin" = [ "**/*",]
 "apps.release.domain" = [ "**/*",]
@@ -370,7 +371,6 @@ include-package-data = true
 "apps.sites.views" = [ "**/*",]
 "apps.socials" = [ "**/*",]
 "apps.socials.migrations" = [ "**/*",]
-"apps.sponsors" = [ "**/*",]
 "apps.sponsors.migrations" = [ "**/*",]
 "apps.summary" = [ "**/*",]
 "apps.summary.migrations" = [ "**/*",]

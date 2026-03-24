@@ -81,14 +81,15 @@ Whenever imports or `__all__` lists appear unordered:
 
 ## Documentation
 
-All functions and classes should include **docstrings** describing:
+Keep implementation code lean. Prefer comments only when they capture something important that should not drift over time, such as:
 
-* purpose
-* parameters
-* return values
-* raised exceptions (when relevant)
+* unconventional decisions or constraints
+* behavior that is easy to accidentally change back and forth
+* docstrings or metadata that feed user-facing help text or generated documentation
 
-Code within test modules (e.g., test functions and classes) is exempt from this requirement unless a docstring is needed to clarify non-obvious behavior.
+Do not add routine inline comments or blanket docstrings for obvious code. Add docstrings to functions, classes, commands, and modules when they materially improve discoverability, clarify non-obvious behavior, or supply user-facing/generated help text.
+
+Code within test modules is exempt unless a comment or docstring is needed to clarify non-obvious behavior.
 
 ---
 

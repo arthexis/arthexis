@@ -6,7 +6,7 @@ aiortc==1.14.0
 amqp==5.3.1
 anyio==4.12.1
 asgiref==3.11.0
-attrs==25.3.0
+attrs==26.1.0
 autobahn==24.4.2
 Automat==25.4.16
 billiard==4.2.4
@@ -90,8 +90,8 @@ qrcode==8.2
 redis==7.3.0
 reportlab==4.4.10
 requests==2.32.5
-ruff==0.15.6
 s3transfer==0.16.0
+ruff==0.15.7
 selenium==4.41.0
 service-identity==24.2.0
 setuptools==82.0.1

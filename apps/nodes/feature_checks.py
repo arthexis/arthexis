@@ -250,12 +250,6 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
     config = get_summary_config()
     model_path = resolve_model_path(config)
     model_path_exists = model_path.exists()
-    model_command = (
-        config.model_command
-        or getattr(settings, "LLM_SUMMARY_COMMAND", "")
-        or None
-    )
-
     suite_enabled = is_suite_feature_enabled("llm-summary-suite", default=True)
 
     details = [
@@ -264,8 +258,7 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
         f"Celery lock: {'ok' if prereqs['celery_enabled'] else 'missing'}",
         f"Config active: {'yes' if config.is_active else 'no'}",
         f"Model path: {model_path} ({'found' if model_path_exists else 'missing'})",
-        "Model command: "
-        + (model_command if model_command else "unset (fallback summarizer)"),
+        f"Backend: {config.get_backend_display()} (in-process)",
     ]
 
     success = (

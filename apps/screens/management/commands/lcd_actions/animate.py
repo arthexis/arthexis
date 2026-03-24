@@ -48,12 +48,13 @@ class Command(BaseCommand):
 
         writer = self._setup_writer(Path(settings.BASE_DIR))
         self.stdout.write(
-            f"Playing '{animation.name}' ({len(frames)} frames); press Ctrl+C to stop."
+            f"Playing '{animation.name}' ({len(frames)} frames from {animation.source_path}); press Ctrl+C to stop."
         )
         self._play_animation(frames, frame_interval_ms=interval_ms, loops=loops, writer=writer)
 
-    # ------------------------------------------------------------------
     def _list_animations(self) -> None:
+        """Print the available LCD animations and their packaged sources."""
+
         animations = LCDAnimation.objects.all().order_by("name")
         if not animations.exists():
             self.stdout.write("No LCD animations configured.")
@@ -62,22 +63,55 @@ class Command(BaseCommand):
         self.stdout.write("Available animations:")
         for animation in animations:
             status = "" if animation.is_active else " [inactive]"
-            source = animation.generator_path or animation.source_path or "unspecified"
+            source = animation.source_path or "unspecified"
             self.stdout.write(f"- {animation.slug}: {animation.name}{status} ({source})")
 
     def _load_animation(self, slug: str) -> LCDAnimation:
+        """Fetch an animation by slug.
+
+        Parameters:
+            slug: Animation slug requested from the command line.
+
+        Returns:
+            The matching ``LCDAnimation`` instance.
+
+        Raises:
+            CommandError: If the animation does not exist.
+        """
+
         try:
             return LCDAnimation.objects.get(slug=slug)
         except LCDAnimation.DoesNotExist as exc:
             raise CommandError(f"LCD animation '{slug}' not found.") from exc
 
     def _load_frames(self, animation: LCDAnimation) -> list[str]:
+        """Load validated frames for the supplied animation.
+
+        Parameters:
+            animation: Animation model to load.
+
+        Returns:
+            List of validated LCD frames.
+
+        Raises:
+            CommandError: If the configured animation source is invalid.
+        """
+
         try:
             return list(load_frames_from_animation(animation))
         except AnimationLoadError as exc:
             raise CommandError(str(exc)) from exc
 
     def _setup_writer(self, base_dir: Path) -> LCDFrameWriter:
+        """Prepare the LCD frame writer or a file-backed fallback.
+
+        Parameters:
+            base_dir: Repository base directory used for fallback output.
+
+        Returns:
+            A hardware or file-backed ``LCDFrameWriter``.
+        """
+
         try:
             lcd = prepare_lcd_controller(base_dir=base_dir)
         except LCDUnavailableError as exc:
@@ -101,6 +135,15 @@ class Command(BaseCommand):
         loops: int,
         writer: LCDFrameWriter,
     ) -> None:
+        """Write animation frames to the LCD writer.
+
+        Parameters:
+            frames: Validated animation frames.
+            frame_interval_ms: Delay between frames in milliseconds.
+            loops: Number of playback loops, where ``0`` means forever.
+            writer: LCD frame writer target.
+        """
+
         interval_seconds = max(0, frame_interval_ms) / 1000
         iterations = 0
         try:
