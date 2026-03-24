@@ -252,6 +252,7 @@ def test_sync_charger_error_security_event_avoids_duplicate_same_timestamp(charg
     assert event.occurrence_count == 1
 
 
+@pytest.mark.critical
 @pytest.mark.django_db
 def test_sync_charger_error_security_event_deactivates_when_status_recovers(charger_rows):
     """Recovered chargers should deactivate previously active OCPP security events."""
