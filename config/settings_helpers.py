@@ -49,6 +49,8 @@ def normalize_site_host(candidate: str) -> str:
     except ValueError:
         return ""
     hostname = (parsed.hostname or "").strip().strip(".").lower()
+    if "*" in hostname:
+        return ""
     return hostname
 
 
