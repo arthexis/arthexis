@@ -115,6 +115,7 @@ def retarget_googlecalendar_account_constraint(apps, schema_editor):
 
     google_calendar = apps.get_model("calendars", "GoogleCalendar")
     old_field = google_calendar._meta.get_field("account").clone()
+    old_field.concrete = True
     old_field.remote_field.model = apps.get_model("gdrive", "GoogleAccount")
     new_field = google_calendar._meta.get_field("account")
     schema_editor.alter_field(google_calendar, old_field, new_field, strict=False)
@@ -137,6 +138,7 @@ def restore_googlecalendar_account_constraint(apps, schema_editor):
     google_calendar = apps.get_model("calendars", "GoogleCalendar")
     old_field = google_calendar._meta.get_field("account")
     new_field = old_field.clone()
+    new_field.concrete = True
     new_field.remote_field.model = apps.get_model("gdrive", "GoogleAccount")
     schema_editor.alter_field(google_calendar, old_field, new_field, strict=False)
 
