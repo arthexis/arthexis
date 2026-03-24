@@ -4,15 +4,10 @@ import json
 from datetime import datetime, time
 from typing import Iterable
 
-from django.core.management import call_command
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
-from apps.ocpp.management.commands._ocpp_command_helpers import (
-    add_transactions_export_arguments,
-    warn_deprecated_command,
-)
 from apps.ocpp.transactions_io import export_transactions
 
 
@@ -39,27 +34,3 @@ def run_export_transactions(
     with open(output_path, "w", encoding="utf-8") as handle:
         json.dump(data, handle, indent=2, ensure_ascii=False)
     return len(data["transactions"])
-
-
-class Command(BaseCommand):
-    help = "Export OCPP transactions and related data to a JSON file"
-
-    def add_arguments(self, parser) -> None:
-        add_transactions_export_arguments(parser)
-
-    def handle(self, *args, **options):
-        warn_deprecated_command("export_transactions", "ocpp transactions export")
-        command_options = {
-            key: value
-            for key, value in options.items()
-            if key in {"output", "start", "end", "chargers"} and value is not None
-        }
-        args = ["ocpp", "transactions", "export", command_options["output"]]
-        if "start" in command_options:
-            args.extend(["--start", command_options["start"]])
-        if "end" in command_options:
-            args.extend(["--end", command_options["end"]])
-        if "chargers" in command_options:
-            args.append("--chargers")
-            args.extend(command_options["chargers"])
-        call_command(*args, stdout=self.stdout, stderr=self.stderr)
