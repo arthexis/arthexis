@@ -9,7 +9,7 @@ from apps.core.auto_upgrade import (
     ensure_auto_upgrade_periodic_task,
 )
 
-pytestmark = [pytest.mark.django_db]
+pytestmark = [pytest.mark.django_db, pytest.mark.regression]
 
 
 def test_ensure_auto_upgrade_periodic_task_reuses_duplicate_interval_schedules(
