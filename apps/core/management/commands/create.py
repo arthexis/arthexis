@@ -233,24 +233,27 @@ class Command(BaseCommand):
         urls_path.write_text(content, encoding="utf-8")
 
     def _validate_app_name(self, value: str) -> None:
-        if not value:
-            raise CommandError("App name cannot be empty.")
-        if keyword.iskeyword(value):
-            raise CommandError(f"Invalid app name '{value}': Python keyword.")
-        if not APP_NAME_PATTERN.match(value):
-            raise CommandError(
-                f"Invalid app name '{value}'. Use a lowercase single word (letters and digits only), starting with a letter."
-            )
+        self._validate_name(
+            value,
+            APP_NAME_PATTERN,
+            "a lowercase single word (letters and digits only), starting with a letter",
+        )
 
     def _validate_model_app_name(self, value: str) -> None:
+        """Reject path-like or invalid app names before filesystem writes."""
+        self._validate_name(
+            value,
+            MODEL_APP_NAME_PATTERN,
+            "a lowercase identifier (letters, digits, and underscores only), starting with a letter",
+        )
+
+    def _validate_name(self, value: str, pattern: re.Pattern[str], description: str) -> None:
         if not value:
             raise CommandError("App name cannot be empty.")
         if keyword.iskeyword(value):
             raise CommandError(f"Invalid app name '{value}': Python keyword.")
-        if not MODEL_APP_NAME_PATTERN.match(value):
-            raise CommandError(
-                f"Invalid app name '{value}'. Use a lowercase identifier (letters, digits, and underscores only), starting with a letter."
-            )
+        if not pattern.match(value):
+            raise CommandError(f"Invalid app name '{value}'. Use {description}.")
 
     def _normalize_model_name(self, value: str) -> str:
         if not value:
