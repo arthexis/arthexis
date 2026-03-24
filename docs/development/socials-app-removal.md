@@ -1,16 +1,14 @@
-# Socials app removal and migration compatibility shim
+# Archived: Socials domain runtime removal
 
-The social/profile runtime features were already removed before this change.
-This update only removes the leftover `apps.socials` maintenance shell from normal app loading while keeping the historical `socials` migration graph importable.
+This document is retained strictly for migration compatibility history.
+The `socials` domain is archived and has no active product/runtime surface.
 
-## What changed
+## Archived status
 
-- `apps.socials` is no longer installed as a regular local Django app.
-- A dedicated legacy shim now provides the `socials` app label through `apps/_legacy/socials_migration_only/`.
-- The shim reuses the preserved migration chain in `apps/socials/migrations/` so older installations can still traverse historical dependencies.
-- Runtime application metadata no longer advertises `socials` as an active site app.
+- Runtime models, admin, views, routes, and menu exposure are retired.
+- `socials` remains available only as a legacy migration label via `apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig`.
+- Migration loading is routed through `apps._legacy.socials_migration_only.migrations`, which delegates to the preserved historical chain in `apps/socials/migrations/`.
 
 ## Operator note
 
-No live socials/profile models remain after `socials.0004_remove_blueskyprofile_discordprofile`, so this change should not alter runtime behavior on current deployments.
-It only trims the final migration-only shell that had still been loaded like a normal app.
+No live socials/profile models remain after `socials.0004_remove_blueskyprofile_discordprofile`.
