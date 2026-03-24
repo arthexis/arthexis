@@ -10,7 +10,6 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 APP_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9]*$")
-MODEL_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class Command(BaseCommand):
@@ -36,7 +35,7 @@ class Command(BaseCommand):
         model_parser = subparsers.add_parser(
             "model", help="Create a model scaffold inside an existing local app."
         )
-        model_parser.add_argument("app", help="Existing app package name (single word, example: billing).")
+        model_parser.add_argument("app", help="Existing app package name (example: billing or billing_tools).")
         model_parser.add_argument("name", help="Model name in snake_case or CamelCase.")
         model_parser.add_argument("--apps-dir", dest="apps_dir", help="Override apps directory path.")
 
@@ -54,7 +53,6 @@ class Command(BaseCommand):
 
         if target == "model":
             app_name = str(options["app"]).strip()
-            self._validate_app_name(app_name)
             raw_model_name = str(options["name"]).strip()
             model_name = self._normalize_model_name(raw_model_name)
             self._create_model(apps_dir, app_name, model_name)
@@ -240,16 +238,6 @@ class Command(BaseCommand):
         if not APP_NAME_PATTERN.match(value):
             raise CommandError(
                 f"Invalid app name '{value}'. Use a lowercase single word (letters and digits only), starting with a letter."
-            )
-
-    def _validate_snake_case_name(self, value: str, noun: str) -> None:
-        if not value:
-            raise CommandError(f"{noun.capitalize()} name cannot be empty.")
-        if keyword.iskeyword(value):
-            raise CommandError(f"Invalid {noun} name '{value}': Python keyword.")
-        if not MODEL_NAME_PATTERN.match(value):
-            raise CommandError(
-                f"Invalid {noun} name '{value}'. Use lowercase snake_case starting with a letter."
             )
 
     def _normalize_model_name(self, value: str) -> str:
