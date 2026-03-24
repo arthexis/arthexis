@@ -43,19 +43,7 @@ class Command(BaseCommand):
             help="Start the VS Code migration server watcher.",
         )
         server_parser.add_argument("--interval", type=float, default=1.0)
-        server_parser.add_argument(
-            "--latest",
-            dest="latest",
-            action="store_true",
-            default=True,
-            help="Pass --latest to env-refresh (default).",
-        )
-        server_parser.add_argument(
-            "--no-latest",
-            dest="latest",
-            action="store_false",
-            help="Do not pass --latest to env-refresh.",
-        )
+        server_parser.add_argument("--debounce", type=float, default=1.0)
 
     def handle(self, *args, **options) -> None:
         """Dispatch to the selected migration subcommand."""
@@ -106,8 +94,13 @@ class Command(BaseCommand):
 
         from utils.devtools import migration_server
 
-        argv = ["--interval", str(options["interval"])]
-        argv.append("--latest" if options["latest"] else "--no-latest")
+        argv = [
+            "--watch",
+            "--interval",
+            str(options["interval"]),
+            "--debounce",
+            str(options["debounce"]),
+        ]
         exit_code = migration_server.main(argv)
         if exit_code != 0:
             raise CommandError(f"migration server exited with status {exit_code}")
