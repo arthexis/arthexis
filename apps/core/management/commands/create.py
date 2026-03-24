@@ -9,7 +9,8 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+APP_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9]*$")
+MODEL_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class Command(BaseCommand):
@@ -24,7 +25,7 @@ class Command(BaseCommand):
         subparsers.required = True
 
         app_parser = subparsers.add_parser("app", help="Create a new local app scaffold.")
-        app_parser.add_argument("name", help="App package name (lowercase snake_case).")
+        app_parser.add_argument("name", help="App package name (lowercase single word, no underscores).")
         app_parser.add_argument(
             "--backend-only",
             action="store_true",
@@ -35,7 +36,7 @@ class Command(BaseCommand):
         model_parser = subparsers.add_parser(
             "model", help="Create a model scaffold inside an existing local app."
         )
-        model_parser.add_argument("app", help="Existing app package name (example: billing).")
+        model_parser.add_argument("app", help="Existing app package name (single word, example: billing).")
         model_parser.add_argument("name", help="Model name in snake_case or CamelCase.")
         model_parser.add_argument("--apps-dir", dest="apps_dir", help="Override apps directory path.")
 
@@ -47,13 +48,13 @@ class Command(BaseCommand):
 
         if target == "app":
             app_name = str(options["name"]).strip()
-            self._validate_snake_case_name(app_name, noun="app")
+            self._validate_app_name(app_name)
             self._create_app(apps_dir, app_name, backend_only=bool(options.get("backend_only")))
             return
 
         if target == "model":
             app_name = str(options["app"]).strip()
-            self._validate_snake_case_name(app_name, noun="app")
+            self._validate_app_name(app_name)
             raw_model_name = str(options["name"]).strip()
             model_name = self._normalize_model_name(raw_model_name)
             self._create_model(apps_dir, app_name, model_name)
@@ -231,12 +232,22 @@ class Command(BaseCommand):
         content = content.rstrip() + "\n\nurlpatterns = [\n" + model_routes + "\n]\n"
         urls_path.write_text(content, encoding="utf-8")
 
+    def _validate_app_name(self, value: str) -> None:
+        if not value:
+            raise CommandError("App name cannot be empty.")
+        if keyword.iskeyword(value):
+            raise CommandError(f"Invalid app name '{value}': Python keyword.")
+        if not APP_NAME_PATTERN.match(value):
+            raise CommandError(
+                f"Invalid app name '{value}'. Use a lowercase single word (letters and digits only), starting with a letter."
+            )
+
     def _validate_snake_case_name(self, value: str, noun: str) -> None:
         if not value:
             raise CommandError(f"{noun.capitalize()} name cannot be empty.")
         if keyword.iskeyword(value):
             raise CommandError(f"Invalid {noun} name '{value}': Python keyword.")
-        if not NAME_PATTERN.match(value):
+        if not MODEL_NAME_PATTERN.match(value):
             raise CommandError(
                 f"Invalid {noun} name '{value}'. Use lowercase snake_case starting with a letter."
             )

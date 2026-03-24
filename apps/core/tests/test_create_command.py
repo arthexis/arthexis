@@ -83,6 +83,23 @@ def test_create_model_requires_existing_app(tmp_path):
         call_command("create", "model", "unknown", "item")
 
 
+def test_create_app_rejects_underscores_in_app_name(tmp_path):
+    """create app should reject underscore-separated app package names."""
+
+    _seed_apps_root(tmp_path)
+
+    with pytest.raises(CommandError, match="lowercase single word"):
+        call_command("create", "app", "billing_tools")
+
+
+def test_create_model_rejects_underscored_app_name_argument(tmp_path):
+    """create model should enforce the single-word policy for app arguments."""
+
+    _seed_apps_root(tmp_path)
+
+    with pytest.raises(CommandError, match="lowercase single word"):
+        call_command("create", "model", "billing_tools", "ticket")
+
 def test_create_model_extends_existing_urlpatterns_without_duplicate_imports(tmp_path):
     """create model should append route entries instead of redefining urlpatterns/imports."""
 
