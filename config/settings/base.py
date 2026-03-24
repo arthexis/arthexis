@@ -61,7 +61,7 @@ HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not N
 NET_MESSAGE_DISABLE_PROPAGATION = env_bool("NET_MESSAGE_DISABLE_PROPAGATION", False)
 ENABLE_USAGE_ANALYTICS = env_bool("ENABLE_USAGE_ANALYTICS", False)
 ROUTE_PROVIDER_ENABLE_LEGACY_FALLBACK = env_bool(
-    "ROUTE_PROVIDER_ENABLE_LEGACY_FALLBACK", True
+    "ROUTE_PROVIDER_ENABLE_LEGACY_FALLBACK", False
 )
 ADMIN_URL_PATH = normalize_admin_url_path(os.environ.get("ADMIN_URL_PATH", "admin/"))
 ADMIN_SITE_HEADER = os.environ.get("ADMIN_SITE_HEADER", "Constellation")
