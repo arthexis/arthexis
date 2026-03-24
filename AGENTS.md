@@ -254,7 +254,27 @@ Agents must **not modify primary README files** unless:
 
 # Special Terminology
 
-## Cleave
+## Glossary
+
+### Please
+
+Attend all open comments and implement a middle ground. Ignore comments that go against the original intent of the request with an explanation.
+
+---
+
+### Model
+
+Create or reuse one or more Django Models to model a business process and its interfaces. Add Django commands to model views and create UI admin wizard tool views for the entire process.
+
+---
+
+### Refactor
+
+In general, to reduce complexity and duplication, improve accessibility, and remove old unused cruft, plus any other specific goals, that targets a set or class of code.
+
+---
+
+### Cleave
 
 Remove **all words contained in parentheses**.
 
@@ -272,7 +292,7 @@ Example text
 
 ---
 
-## Triage
+### Triage
 
 The triage process consists of:
 
