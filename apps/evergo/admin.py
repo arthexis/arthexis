@@ -19,7 +19,7 @@ from apps.core.admin import OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChan
 from apps.core.admin.mixins import _build_credentials_actions
 
 from .exceptions import EvergoAPIError
-from .forms import EvergoContractorLoginWizardForm, EvergoLoadCustomersForm
+from .forms import EvergoContractorLoginWizardForm, EvergoLoadCustomersForm, EvergoUserAdminForm
 from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
@@ -128,7 +128,7 @@ def _save_contractor_and_maybe_validate(admin_instance, request, form, profile):
 def _handle_contract_login_wizard_post(admin_instance, request, profile, opts, changelist_url):
     """Bind, validate, and process contractor wizard submissions."""
     instance = profile if profile is not None else admin_instance.model()
-    form = EvergoContractorLoginWizardForm(request.POST, instance=instance)
+    form = EvergoContractorLoginWizardForm(request.POST, instance=instance, request_user=request.user)
     setup_results = None
     if not form.is_valid():
         return form, setup_results
@@ -171,7 +171,7 @@ def _contractor_login_wizard_admin_view(admin_instance, request, object_id: str 
         form = form_or_response
     else:
         instance = profile if profile is not None else admin_instance.model()
-        form = EvergoContractorLoginWizardForm(instance=instance)
+        form = EvergoContractorLoginWizardForm(instance=instance, request_user=request.user)
 
     context = {
         **admin_instance.admin_site.each_context(request),
@@ -238,7 +238,7 @@ def _load_customers_admin_view(admin_instance, request):
                         % {"items": ", ".join(summary["unresolved"])},
                         level=messages.WARNING,
                     )
-                next_view = form.cleaned_data.get("next_view") or "orders"
+                next_view = form.cleaned_data.get("next_view") or "customers"
                 selected_customer_ids = [str(value) for value in summary.get("loaded_customer_ids", [])]
                 selected_order_ids = [str(value) for value in summary.get("loaded_order_ids", [])]
 
@@ -272,6 +272,7 @@ class EvergoUserAdmin(
     """Manage Evergo users and allow login verification from admin actions."""
 
     change_form_template = "django_object_actions/change_form.html"
+    form = EvergoUserAdminForm
     dashboard_actions = ("login_on_evergo_dashboard_action",)
     LOGIN_ON_EVERGO_LABEL = _("Login on Evergo")
 
@@ -310,12 +311,6 @@ class EvergoUserAdmin(
     actions = ("_test_login_and_sync_bulk_action",)
     change_actions = ("login_on_evergo_action", "test_login_and_sync_action", "my_profile_action")
     fieldsets = (
-        (
-            "Ownership",
-            {
-                "fields": ("user", "group", "avatar"),
-            },
-        ),
         (
             "Credentials",
             {
@@ -360,7 +355,25 @@ class EvergoUserAdmin(
                 ),
             },
         ),
+        (
+            "Ownership",
+            {
+                "fields": ("user", "group", "avatar"),
+            },
+        ),
     )
+
+    def get_form(self, request, obj=None, **kwargs):
+        form_class = super().get_form(request, obj, **kwargs)
+        if not issubclass(form_class, EvergoUserAdminForm):
+            return form_class
+
+        class RequestUserEvergoUserAdminForm(form_class):
+            def __init__(self, *args, **inner_kwargs):
+                inner_kwargs.setdefault("request_user", request.user)
+                super().__init__(*args, **inner_kwargs)
+
+        return RequestUserEvergoUserAdminForm
 
     def _test_login_and_sync(self, request, profile):
         """Call the Evergo API and persist synchronized user metadata."""
