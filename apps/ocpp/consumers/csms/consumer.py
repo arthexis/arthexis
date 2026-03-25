@@ -1158,8 +1158,12 @@ class CSMSConsumer(
     async def _handle_authorize_action(self, payload, msg_id, raw, text_data):
         id_tag = payload.get("idTag")
         account = await self._get_account(id_tag)
+        energy_accounts_enabled = False
+        credits_required = False
         status = "Invalid"
         if self.charger.require_rfid:
+            energy_accounts_enabled = await self._energy_accounts_enabled()
+            credits_required = await self._energy_credits_required()
             tag = None
             tag_created = False
             if id_tag:
@@ -1167,8 +1171,13 @@ class CSMSConsumer(
                     id_tag
                 )
             if account:
-                if await database_sync_to_async(account.can_authorize)():
+                account_authorized = (
+                    energy_accounts_enabled and not credits_required
+                ) or await database_sync_to_async(account.can_authorize)()
+                if account_authorized:
                     status = "Accepted"
+            elif energy_accounts_enabled:
+                status = "Invalid"
             elif id_tag and tag and not tag_created and tag.allowed:
                 status = "Accepted"
                 self._log_unlinked_rfid(tag.rfid)

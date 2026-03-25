@@ -7,11 +7,14 @@ from django.utils import timezone
 
 from apps.cards.models import RFID as CoreRFID, RFIDAttempt
 from apps.energy.models import CustomerAccount
+from apps.features.utils import get_cached_feature_enabled, get_cached_feature_parameter
 
 from ... import store
 from ...models import Transaction
 
 logger = logging.getLogger(__name__)
+
+ENERGY_ACCOUNTS_FEATURE_SLUG = "energy-accounts"
 
 
 class RfidMixin:
@@ -27,6 +30,28 @@ class RfidMixin:
             return CustomerAccount.objects.filter(rfids__in=matches).distinct().first()
 
         return await database_sync_to_async(_resolve)()
+
+    async def _energy_accounts_enabled(self) -> bool:
+        """Return whether account-first energy authorization is enabled."""
+
+        return await database_sync_to_async(get_cached_feature_enabled)(
+            ENERGY_ACCOUNTS_FEATURE_SLUG,
+            cache_key="feature-enabled:energy-accounts",
+            timeout=300,
+            default=False,
+        )
+
+    async def _energy_credits_required(self) -> bool:
+        """Return whether positive credits are required for account authorization."""
+
+        value = await database_sync_to_async(get_cached_feature_parameter)(
+            ENERGY_ACCOUNTS_FEATURE_SLUG,
+            "energy_credits_required",
+            cache_key="feature-parameter:energy-accounts:energy_credits_required",
+            timeout=300,
+            fallback="disabled",
+        )
+        return value == "enabled"
 
     async def _ensure_rfid_seen(self, id_tag: str, tag: CoreRFID | None = None) -> CoreRFID | None:
         """Ensure an RFID exists, auto-approve/release it, and refresh its `last_seen_on` timestamp."""

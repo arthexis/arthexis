@@ -49,6 +49,11 @@
               <a class="btn btn-outline-primary w-100 w-sm-auto" href="{{ status_url }}" data-i18n="advanced_view_label">
                 {% trans "Advanced View" %}
               </a>
+              {% if account_summary_url %}
+              <a class="btn btn-outline-secondary w-100 w-sm-auto" href="{{ account_summary_url }}">
+                {% trans "Account & Sessions" %}
+              </a>
+              {% endif %}
               {% endif %}
             </div>
           </div>
@@ -124,7 +129,11 @@
           {% else %}
           <div class="landing-card-section py-3 text-center">
             <p class="lead mb-0" data-i18n="instruction_text">
-              {% trans "Plug in your vehicle and slide your RFID card over the reader to begin charging." %}
+              {% if energy_accounts_enabled %}
+                {% trans "Plug in your vehicle and authenticate with your energy account to begin charging." %}
+              {% else %}
+                {% trans "Plug in your vehicle and slide your RFID card over the reader to begin charging." %}
+              {% endif %}
             </p>
           </div>
           {% endif %}
