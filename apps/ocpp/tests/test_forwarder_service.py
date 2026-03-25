@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from websocket import WebSocketException
 
-from apps.ocpp.forwarder import Forwarder, ForwardingSession
+from apps.forwarder.ocpp import Forwarder, ForwardingSession
 from apps.ocpp.models import CPForwarder, Charger
 from apps.nodes.models import Node
 
@@ -73,7 +73,7 @@ def test_connect_forwarding_session_keeps_tls_verification_for_trusted_node(
         create_kwargs.update(kwargs)
         return SimpleNamespace(connected=True, close=Mock())
 
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_connect)
+    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_connect)
 
     session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
 
@@ -98,7 +98,7 @@ def test_connect_forwarding_session_keeps_tls_verification_for_untrusted_node(
         create_kwargs.update(kwargs)
         return SimpleNamespace(connected=True, close=Mock())
 
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_connect)
+    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_connect)
 
     session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
 
@@ -121,9 +121,9 @@ def test_connect_forwarding_session_handles_failures(monkeypatch, forwarder_inst
             raise WebSocketException("boom")
         return SimpleNamespace(connected=True, close=Mock())
 
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_connect)
+    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_connect)
     monkeypatch.setattr(
-        "apps.ocpp.forwarder.logger", SimpleNamespace(warning=Mock(), info=Mock())
+        "apps.forwarder.ocpp.logger", SimpleNamespace(warning=Mock(), info=Mock())
     )
 
     session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
@@ -138,7 +138,7 @@ def test_connect_forwarding_session_handles_failures(monkeypatch, forwarder_inst
     def always_fail(url, timeout, subprotocols):
         raise WebSocketException("down")
 
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", always_fail)
+    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", always_fail)
     forwarder_instance.clear_sessions()
     session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
     assert session is None
@@ -231,8 +231,8 @@ def test_sync_forwarded_charge_points_respects_existing_sessions(monkeypatch):
         raise WebSocketException("reject")
 
     fake_logger = SimpleNamespace(warning=Mock(), info=Mock())
-    monkeypatch.setattr("apps.ocpp.forwarder.logger", fake_logger)
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_create_connection)
+    monkeypatch.setattr("apps.forwarder.ocpp.logger", fake_logger)
+    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_create_connection)
 
     from apps.ocpp import forwarder as forwarder_module, forwarding_utils
 
@@ -367,7 +367,7 @@ def test_sync_forwarded_charge_points_dedupes_charger_ids(monkeypatch):
         connections.append(connection)
         return connection
 
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_create_connection)
+    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_create_connection)
 
     connected = forwarder.sync_forwarded_charge_points(refresh_forwarders=False)
 

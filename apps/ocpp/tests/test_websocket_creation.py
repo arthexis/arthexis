@@ -550,7 +550,7 @@ def test_existing_charger_clears_status_and_refreshes_forwarding(monkeypatch):
         return 0
 
     monkeypatch.setattr(
-        "apps.ocpp.forwarder.forwarder.sync_forwarded_charge_points",
+        "apps.forwarder.ocpp.forwarder.sync_forwarded_charge_points",
         mock_sync_forwarded_charge_points,
     )
 

@@ -487,7 +487,7 @@ class CPForwarder(Entity):
     def _forwarding_service(self):
         """Return the shared forwarding service used to manage sessions."""
 
-        from apps.ocpp.forwarder import forwarder
+        from apps.forwarder.ocpp import forwarder
 
         return forwarder
 
