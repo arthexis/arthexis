@@ -80,6 +80,18 @@ def test_removed_runtime_apps_only_remain_available_through_explicit_legacy_shim
         in settings_apps.LEGACY_MIGRATION_APPS
     )
     assert (
+        settings_apps.MIGRATION_MODULES["extensions"]
+        == "apps._legacy.extensions_migration_only.migrations"
+    )
+    assert (
+        settings_apps.MIGRATION_MODULES["prompts"]
+        == "apps._legacy.prompts_migration_only.migrations"
+    )
+    assert (
+        settings_apps.MIGRATION_MODULES["recipes"]
+        == "apps._legacy.recipes_migration_only.migrations"
+    )
+    assert (
         settings_apps.MIGRATION_MODULES["selenium"]
         == "apps._legacy.selenium_migration_only.migrations"
     )
@@ -90,6 +102,10 @@ def test_removed_runtime_apps_only_remain_available_through_explicit_legacy_shim
     assert (
         settings_apps.MIGRATION_MODULES["sponsors"]
         == "apps._legacy.sponsors_migration_only.migrations"
+    )
+    assert (
+        settings_apps.MIGRATION_MODULES["survey"]
+        == "apps._legacy.survey_migration_only.migrations"
     )
     assert (
         "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig"
