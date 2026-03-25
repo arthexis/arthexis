@@ -91,6 +91,17 @@ def _reorder_favorites(user, favorite_pk: int, direction: str) -> None:
         Favorite.objects.bulk_update(favorites_to_update, ["priority"])
 
 
+def _ensure_favorite_user_data(fav: Favorite, update_fields: list[str]) -> None:
+    """Enforce user-data flags and record changed fields for model save."""
+
+    if not fav.user_data:
+        fav.user_data = True
+        update_fields.append("user_data")
+    if not fav.is_user_data:
+        fav.is_user_data = True
+        update_fields.append("is_user_data")
+
+
 def favorite_toggle(request, ct_id):
     """Create, update, or configure a user's favorite model shortcut."""
 
@@ -126,12 +137,7 @@ def favorite_toggle(request, ct_id):
             if fav.custom_label != label:
                 fav.custom_label = label
                 update_fields.append("custom_label")
-            if not fav.user_data:
-                fav.user_data = True
-                update_fields.append("user_data")
-            if not fav.is_user_data:
-                Favorite.all_objects.filter(pk=fav.pk).update(is_user_data=True)
-                fav.is_user_data = True
+            _ensure_favorite_user_data(fav, update_fields)
             priority = _parse_priority(priority_raw, fav.priority)
             if fav.priority != priority:
                 fav.priority = priority
@@ -156,12 +162,7 @@ def favorite_toggle(request, ct_id):
                     if fav.custom_label != label:
                         fav.custom_label = label
                         update_fields.append("custom_label")
-                    if not fav.user_data:
-                        fav.user_data = True
-                        update_fields.append("user_data")
-                    if not fav.is_user_data:
-                        Favorite.all_objects.filter(pk=fav.pk).update(is_user_data=True)
-                        fav.is_user_data = True
+                    _ensure_favorite_user_data(fav, update_fields)
                     if fav.priority != priority:
                         fav.priority = priority
                         update_fields.append("priority")
@@ -195,12 +196,7 @@ def favorite_list(request):
         ContentType.objects.clear_cache()
         for fav in favorites:
             update_fields = []
-            if not fav.user_data:
-                fav.user_data = True
-                update_fields.append("user_data")
-            if not fav.is_user_data:
-                Favorite.all_objects.filter(pk=fav.pk).update(is_user_data=True)
-                fav.is_user_data = True
+            _ensure_favorite_user_data(fav, update_fields)
 
             custom_label = request.POST.get(f"custom_label_{fav.pk}", "").strip()
             if fav.custom_label != custom_label:

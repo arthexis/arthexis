@@ -27,10 +27,18 @@ class Favorite(Entity):
         verbose_name_plural = _("Favorites")
 
     def save(self, *args, **kwargs):
+        """Persist favorites as user data for both create and update paths."""
+        is_new = self.pk is None
         self.user_data = True
-        if self.pk is None:
-            self.is_user_data = True
+        self.is_user_data = True
         super().save(*args, **kwargs)
+        if not is_new and (not self.user_data or not self.is_user_data):
+            type(self).all_objects.filter(pk=self.pk).update(
+                user_data=True,
+                is_user_data=True,
+            )
+            self.user_data = True
+            self.is_user_data = True
 
 
 def ensure_admin_favorites(user) -> None:

@@ -105,7 +105,10 @@ class FavoriteListViewTests(TestCase):
             content_type=self.content_type,
             custom_label="Before",
             priority=1,
+        )
+        Favorite.all_objects.filter(pk=favorite.pk).update(
             user_data=False,
+            is_user_data=False,
         )
 
         response = self.client.post(
@@ -122,6 +125,8 @@ class FavoriteListViewTests(TestCase):
         self.assertEqual(favorite.priority, 1)
         self.assertTrue(favorite.user_data)
         self.assertTrue(favorite.is_user_data)
+
+
 class RecoverSelectedActionTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
