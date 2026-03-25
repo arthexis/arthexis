@@ -24,6 +24,7 @@ from apps.ocpp.services import ChargerAccessDeniedError, build_charger_chart_pay
 from apps.sites.utils import (get_request_language_code, landing,
                               module_pill_link_validation,
                               require_site_operator_or_staff)
+from apps.users.backends import LocalhostAdminBackend
 
 from ..models import PublicConnectorPage, PublicScanEvent, StationModel, Transaction
 from .common import *  # noqa: F401,F403
@@ -65,12 +66,14 @@ def _energy_accounts_enabled() -> bool:
 def _signup_auth_backend() -> str:
     """Return a safe auth backend path for post-signup login."""
 
-    localhost_backend = "apps.users.backends.LocalhostAdminBackend"
+    localhost_backend = f"{LocalhostAdminBackend.__module__}.{LocalhostAdminBackend.__name__}"
     for backend in settings.AUTHENTICATION_BACKENDS:
         if backend != localhost_backend:
             return backend
     if settings.AUTHENTICATION_BACKENDS:
-        return settings.AUTHENTICATION_BACKENDS[0]
+        logger.warning(
+            "No safe auth backend found for signup; using ModelBackend fallback."
+        )
     return "django.contrib.auth.backends.ModelBackend"
 
 

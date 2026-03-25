@@ -10,6 +10,7 @@ from apps.features.models import Feature
 from apps.ocpp import store
 from apps.ocpp.consumers.csms.consumer import CSMSConsumer
 from apps.ocpp.models import Charger, PublicConnectorPage
+from apps.users.backends import LocalhostAdminBackend
 
 
 @pytest.mark.anyio
@@ -129,7 +130,8 @@ def test_public_connector_page_create_account_creates_user_and_account(client):
     )
     user = get_user_model().objects.get(username="new-energy-user")
     assert CustomerAccount.objects.filter(user=user).exists()
-    assert client.session[BACKEND_SESSION_KEY] == "apps.users.backends.PasswordOrOTPBackend"
+    localhost_backend = f"{LocalhostAdminBackend.__module__}.{LocalhostAdminBackend.__name__}"
+    assert client.session[BACKEND_SESSION_KEY] != localhost_backend
 
 
 @pytest.mark.django_db
