@@ -334,3 +334,20 @@ def test_migrations_next_major_rebuild_restores_missing_migration_modules_attr(
     call_command("migrations", "next-major-rebuild", major_version="1.0")
 
     assert not hasattr(settings, "MIGRATION_MODULES")
+
+
+def test_migrations_switch_major_marks_active_line(settings, tmp_path):
+    """switch-major should persist the active major migration line."""
+
+    settings.BASE_DIR = tmp_path
+    (tmp_path / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+
+    call_command("migrations", "switch-major", major_version="1.0")
+
+    tracks_payload = json.loads(
+        (tmp_path / "MIGRATION_TRACKS.json").read_text(encoding="utf-8")
+    )
+    assert tracks_payload["current_line"] == "1.x"
+    assert tracks_payload["current_version"] == "1.0.0"
+    assert tracks_payload["next_major"]["status"] == "active"
+    assert tracks_payload["next_major"]["module_suffix"] == "migrations_v1_0"

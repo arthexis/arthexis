@@ -88,6 +88,18 @@ class Command(BaseCommand):
             dest="apps_dir",
             help="Override the apps directory (defaults to settings.APPS_DIR)",
         )
+        switch_major_parser = subparsers.add_parser(
+            "switch-major",
+            help=(
+                "Switch the migration track to a major line and retire "
+                "migration-only _legacy apps."
+            ),
+        )
+        switch_major_parser.add_argument(
+            "--major-version",
+            required=True,
+            help="Major version line to activate (for example: 1.0).",
+        )
 
     def handle(self, *args, **options):
         """Dispatch migration operations."""
@@ -115,6 +127,11 @@ class Command(BaseCommand):
         if target == "next-major-rebuild":
             major_version = self._resolve_next_major_version(options.get("major_version"))
             self._rebuild_next_major_migrations(apps_dir, major_version)
+            return
+
+        if target == "switch-major":
+            major_version = str(options["major_version"]).strip()
+            self._switch_major_line(major_version)
             return
 
         raise CommandError(f"Unsupported migrations target: {target}")
@@ -460,3 +477,28 @@ class Command(BaseCommand):
         if version_path.exists():
             return version_path.read_text(encoding="utf-8").strip()
         return ""
+
+    def _switch_major_line(self, major_version: str) -> None:
+        normalized_major_version = major_version.strip()
+        major_slug = self._major_slug(normalized_major_version)
+        major_number = self._major_number(normalized_major_version)
+        tracks = self._load_tracks()
+        tracks["current_version"] = self._read_repo_version()
+        tracks["current_line"] = f"{major_number}.x"
+        tracks["next_major"] = {
+            "version": normalized_major_version,
+            "status": "active",
+            "module_suffix": f"migrations_{major_slug}",
+        }
+        self._save_tracks(tracks)
+        self.stdout.write(
+            "Switched migration line to "
+            f"{major_number}.x ({normalized_major_version}); legacy shims "
+            "under apps._legacy.* are now disabled by settings discovery."
+        )
+
+    def _major_number(self, major_version: str) -> int:
+        match = re.match(r"(?P<major>\d+)", major_version.strip())
+        if match is None:
+            raise CommandError("major-version must start with a numeric major value")
+        return int(match.group("major"))

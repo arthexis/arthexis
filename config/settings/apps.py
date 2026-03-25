@@ -1,5 +1,7 @@
 """Application registry and site integration settings."""
 
+import json
+import re
 from pathlib import Path
 
 from django.contrib.sites import shortcuts as sites_shortcuts
@@ -101,7 +103,41 @@ def _legacy_runtime_app_packages() -> set[str]:
     return retired_packages
 
 
-LEGACY_MIGRATION_APPS = [
+def _tracks_file_path() -> Path:
+    return Path(APPS_DIR).resolve().parent / "MIGRATION_TRACKS.json"
+
+
+def _migration_tracks() -> dict[str, object]:
+    tracks_file = _tracks_file_path()
+    if not tracks_file.exists():
+        return {}
+
+    try:
+        payload = json.loads(tracks_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+    if isinstance(payload, dict):
+        return payload
+    return {}
+
+
+def _legacy_shims_enabled() -> bool:
+    """Return whether migration-only legacy shims should stay enabled."""
+
+    tracks = _migration_tracks()
+    current_line = str(tracks.get("current_line", "")).strip().lower()
+    if not current_line:
+        return True
+
+    match = re.match(r"(?P<major>\d+)", current_line)
+    if match is None:
+        return True
+
+    return int(match.group("major")) == 0
+
+
+ALL_LEGACY_MIGRATION_APPS = [
     "apps._legacy.extensions_migration_only.apps.ExtensionsMigrationOnlyConfig",
     "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig",
     "apps._legacy.recipes_migration_only.apps.RecipesMigrationOnlyConfig",
@@ -110,6 +146,11 @@ LEGACY_MIGRATION_APPS = [
     "apps._legacy.sponsors_migration_only.apps.SponsorsMigrationOnlyConfig",
     "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
     "config.legacy_mermaid",
+]
+LEGACY_MIGRATION_APPS = [
+    app_path
+    for app_path in ALL_LEGACY_MIGRATION_APPS
+    if _legacy_shims_enabled() or "._legacy." not in app_path
 ]
 NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",
@@ -163,13 +204,18 @@ SITE_ID = 1
 MIGRATION_MODULES = {
     "selenium": "apps.selenium.migrations",
     "sites": "apps.core.sites_migrations",
-    "socials": "apps._legacy.socials_migration_only.migrations",
-    "sponsors": "apps._legacy.sponsors_migration_only.migrations",
     # Pin django_celery_beat migrations to a local copy so we can override
     # upstream changes that introduce optional dependencies (e.g. Google
     # Calendar profile) and avoid InvalidBases errors during migrate.
     "django_celery_beat": "apps.celery.beat_migrations",
 }
+if _legacy_shims_enabled():
+    MIGRATION_MODULES.update(
+        {
+            "socials": "apps._legacy.socials_migration_only.migrations",
+            "sponsors": "apps._legacy.sponsors_migration_only.migrations",
+        }
+    )
 
 _original_get_current_site = sites_shortcuts.get_current_site
 
