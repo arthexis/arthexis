@@ -3,7 +3,13 @@
 from django.db import migrations
 
 SPONSOR_RENEWAL_TASK_NAME = "sponsor-renewals"
-SPONSOR_RENEWAL_TASK_PATH = "apps.sponsors.tasks.process_sponsorship_renewals"
+SPONSOR_RENEWAL_TASK_PATH = (
+    "apps._legacy.sponsors_migration_only.tasks.process_sponsorship_renewals"
+)
+LEGACY_SPONSOR_RENEWAL_TASK_PATHS = (
+    SPONSOR_RENEWAL_TASK_PATH,
+    "apps.sponsors.tasks.process_sponsorship_renewals",
+)
 SPONSOR_PERMISSION_NAMES = {
     "sponsorship": {
         "add_sponsorship": "Can add Sponsorship",
@@ -48,7 +54,8 @@ def delete_retired_sponsor_task(apps, schema_editor):
         return
 
     PeriodicTask.objects.filter(name=SPONSOR_RENEWAL_TASK_NAME).delete()
-    PeriodicTask.objects.filter(task=SPONSOR_RENEWAL_TASK_PATH).delete()
+    for task_path in LEGACY_SPONSOR_RENEWAL_TASK_PATHS:
+        PeriodicTask.objects.filter(task=task_path).delete()
 
 
 def restore_retired_sponsor_task(apps, schema_editor):
