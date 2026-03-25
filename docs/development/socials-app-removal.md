@@ -7,7 +7,7 @@ The `socials` domain is archived and has no active product/runtime surface.
 
 - Runtime models, admin, views, routes, and menu exposure are retired.
 - `socials` remains available only as a legacy migration label via `apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig`.
-- Migration loading is routed through `apps._legacy.socials_migration_only.migrations`, which delegates to the preserved historical chain in `apps/socials/migrations/`.
+- Migration loading is routed directly through `apps._legacy.socials_migration_only.migrations`.
 
 ## Operator note
 

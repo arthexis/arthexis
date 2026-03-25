@@ -120,8 +120,19 @@ def test_legacy_runtime_packages_are_derived_from_legacy_migration_apps():
 
 
 def test_archived_socials_and_sponsors_runtime_surfaces_are_removed():
-    socials_files = {path.name for path in Path("apps/socials").iterdir() if path.is_file()}
+    legacy_socials_migrations = {
+        path.name
+        for path in Path("apps/_legacy/socials_migration_only/migrations").iterdir()
+        if path.is_file()
+    }
     sponsors_files = {path.name for path in Path("apps/sponsors").iterdir() if path.is_file()}
 
-    assert socials_files == {"__init__.py"}
+    assert not Path("apps/socials").exists()
+    assert legacy_socials_migrations == {
+        "__init__.py",
+        "0001_initial.py",
+        "0002_initial.py",
+        "0003_alter_blueskyprofile_group_alter_blueskyprofile_user_and_more.py",
+        "0004_remove_blueskyprofile_discordprofile.py",
+    }
     assert sponsors_files == {"__init__.py"}
