@@ -89,8 +89,8 @@ def test_refresh_enabled_apps_lock_respects_disabled_manifest_labels(
     assert "enabled-core" in lock_entries
 
 
-def test_load_manifest_app_entries_includes_classification_projects_special_shortcuts():
-    """Manifest discovery should include current runtime and legacy migration apps."""
+def test_load_manifest_app_entries_includes_runtime_and_legacy_migration_apps():
+    """Manifest discovery should include runtime apps and migration-only shims."""
 
     manifest_app_entries = _load_manifest_app_entries()
     expected_apps = {
@@ -100,10 +100,16 @@ def test_load_manifest_app_entries_includes_classification_projects_special_shor
     }
 
     assert expected_apps.issubset(manifest_app_entries)
-    assert (
-        "apps._legacy.shortcuts_migration_only.apps.ShortcutsMigrationOnlyConfig"
-        in manifest_app_entries
-    )
+    retired_apps = {
+        "calendars": "apps._legacy.calendars_migration_only.apps.CalendarsMigrationOnlyConfig",
+        "screens": "apps._legacy.screens_migration_only.apps.ScreensMigrationOnlyConfig",
+        "shortcuts": "apps._legacy.shortcuts_migration_only.apps.ShortcutsMigrationOnlyConfig",
+        "smb": "apps._legacy.smb_migration_only.apps.SmbMigrationOnlyConfig",
+    }
+    for app_label, legacy_app in retired_apps.items():
+        assert legacy_app in manifest_app_entries
+        assert f"apps.{app_label}" not in manifest_app_entries
+
     assert "apps.game" not in manifest_app_entries
     assert (
         "apps._legacy.sponsors_migration_only.apps.SponsorsMigrationOnlyConfig"
