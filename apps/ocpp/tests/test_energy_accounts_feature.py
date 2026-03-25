@@ -1,6 +1,9 @@
 import pytest
 from channels.db import database_sync_to_async
+from django.contrib.auth import BACKEND_SESSION_KEY
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
+from django.test import override_settings
 from django.urls import reverse
 
 from apps.cards.models import RFID
@@ -9,6 +12,7 @@ from apps.features.models import Feature
 from apps.ocpp import store
 from apps.ocpp.consumers.csms.consumer import CSMSConsumer
 from apps.ocpp.models import Charger, PublicConnectorPage
+from apps.users.backends import LocalhostAdminBackend
 
 
 @pytest.mark.anyio
@@ -128,6 +132,8 @@ def test_public_connector_page_create_account_creates_user_and_account(client):
     )
     user = get_user_model().objects.get(username="new-energy-user")
     assert CustomerAccount.objects.filter(user=user).exists()
+    localhost_backend = f"{LocalhostAdminBackend.__module__}.{LocalhostAdminBackend.__name__}"
+    assert client.session[BACKEND_SESSION_KEY] != localhost_backend
 
 
 @pytest.mark.django_db
@@ -157,3 +163,68 @@ def test_public_connector_page_create_account_rejects_hidden_charger(client):
     )
 
     assert response.status_code == 404
+
+
+@pytest.mark.django_db
+@override_settings(AUTHENTICATION_BACKENDS=["apps.users.backends.LocalhostAdminBackend"])
+def test_public_connector_page_create_account_skips_login_with_unsafe_only_backends(client):
+    Feature.objects.update_or_create(
+        slug="energy-accounts",
+        defaults={
+            "display": "Energy Accounts",
+            "is_enabled": True,
+            "metadata": {"parameters": {"energy_credits_required": "disabled"}},
+        },
+    )
+    charger = Charger.objects.create(charger_id="CP-EA-UNSAFE-ONLY", connector_id=1)
+    page = PublicConnectorPage.objects.create(charger=charger, enabled=True)
+
+    response = client.post(
+        reverse("ocpp:public-connector-page-create-account", args=[page.slug]),
+        data={
+            "username": "no-session-user",
+            "email": "nosession@example.com",
+            "password": "safe-password-123",
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    messages = [message.message for message in get_messages(response.wsgi_request)]
+    assert "Account created, but you are not signed in. Please sign in to switch to the new account." in messages
+    assert BACKEND_SESSION_KEY not in client.session
+
+
+@pytest.mark.django_db
+def test_public_connector_page_create_account_rejects_authenticated_post(client):
+    Feature.objects.update_or_create(
+        slug="energy-accounts",
+        defaults={
+            "display": "Energy Accounts",
+            "is_enabled": True,
+            "metadata": {"parameters": {"energy_credits_required": "disabled"}},
+        },
+    )
+    existing_user = get_user_model().objects.create_user(
+        username="existing-energy-user",
+        email="existing@example.com",
+        password="safe-password-123",
+    )
+    charger = Charger.objects.create(charger_id="CP-EA-AUTHED", connector_id=1)
+    page = PublicConnectorPage.objects.create(charger=charger, enabled=True)
+    client.force_login(existing_user)
+
+    response = client.post(
+        reverse("ocpp:public-connector-page-create-account", args=[page.slug]),
+        data={
+            "username": "should-not-create",
+            "email": "new@example.com",
+            "password": "safe-password-123",
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert not get_user_model().objects.filter(username="should-not-create").exists()
+    messages = [message.message for message in get_messages(response.wsgi_request)]
+    assert "Please sign out before creating a new account." in messages

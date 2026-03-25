@@ -24,6 +24,7 @@ from apps.ocpp.services import ChargerAccessDeniedError, build_charger_chart_pay
 from apps.sites.utils import (get_request_language_code, landing,
                               module_pill_link_validation,
                               require_site_operator_or_staff)
+from apps.users.backends import LocalhostAdminBackend
 
 from ..models import PublicConnectorPage, PublicScanEvent, StationModel, Transaction
 from .common import *  # noqa: F401,F403
@@ -62,12 +63,23 @@ def _energy_accounts_enabled() -> bool:
     )
 
 
-def _default_auth_backend() -> str:
-    """Return a deterministic auth backend path for post-signup login."""
+def _signup_auth_backend() -> str | None:
+    """Return a safe auth backend path for post-signup login."""
 
-    if settings.AUTHENTICATION_BACKENDS:
-        return settings.AUTHENTICATION_BACKENDS[0]
-    return "django.contrib.auth.backends.ModelBackend"
+    localhost_backend = f"{LocalhostAdminBackend.__module__}.{LocalhostAdminBackend.__name__}"
+    for backend in settings.AUTHENTICATION_BACKENDS:
+        if backend != localhost_backend:
+            return backend
+
+    model_backend = "django.contrib.auth.backends.ModelBackend"
+    if model_backend in settings.AUTHENTICATION_BACKENDS:
+        logger.warning(
+            "No signup-safe auth backend found; using configured ModelBackend fallback."
+        )
+        return model_backend
+
+    logger.warning("No signup-safe auth backend found; skipping automatic login.")
+    return None
 
 
 def _energy_credits_required() -> bool:
@@ -440,6 +452,9 @@ def public_connector_page_create_account(request, slug):
     if not _energy_accounts_enabled():
         messages.error(request, _("Energy account onboarding is not enabled."))
         return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
+    if request.user.is_authenticated:
+        messages.error(request, _("Please sign out before creating a new account."))
+        return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
     form = PublicConnectorAccountCreateForm(request.POST)
     if not form.is_valid():
         messages.error(request, _("Please provide valid account details."))
@@ -467,8 +482,15 @@ def public_connector_page_create_account(request, slug):
     except IntegrityError:
         messages.error(request, _("Username is already in use."))
         return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
-    login(request, user, backend=_default_auth_backend())
-    messages.success(request, _("Account created. Charging authorization has been updated."))
+    signup_backend = _signup_auth_backend()
+    if signup_backend is not None:
+        login(request, user, backend=signup_backend)
+        messages.success(request, _("Account created. Charging authorization has been updated."))
+    else:
+        messages.warning(
+            request,
+            _("Account created, but you are not signed in. Please sign in to switch to the new account."),
+        )
     return redirect(next_url)
 
 
