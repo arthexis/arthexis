@@ -891,10 +891,6 @@ body.chat-open {
     border-radius: 1rem;
   }
 
-  .chat-drawer[open] {
-    right: 1rem;
-    bottom: 1rem;
-  }
 }
 
 @media (min-width: 768px) and (max-width: 1024px) {
@@ -911,7 +907,9 @@ body.chat-open {
     min-height: calc(100dvh - 2rem);
     max-height: calc(100dvh - 2rem);
   }
+}
 
+@media (max-width: 1024px) {
   .chat-drawer[open] {
     right: 1rem;
     bottom: 1rem;

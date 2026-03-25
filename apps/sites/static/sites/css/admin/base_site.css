@@ -33,6 +33,7 @@
     --user-story-contact-gap: var(--admin-ui-space-3, 0.75rem);
     --user-story-contact-optin-offset: var(--admin-ui-space-2, 0.5rem);
     --user-story-contact-breakpoint: 48rem;
+    --admin-ui-space-6: 1.5rem;
     --admin-chat-tablet-viewport-offset: calc(var(--admin-ui-space-4, 1rem) * 2);
 }
 
@@ -151,8 +152,8 @@
 
 .chat-drawer[open] {
     position: fixed;
-    right: 1.5rem;
-    bottom: 1.5rem;
+    right: var(--admin-ui-space-6);
+    bottom: var(--admin-ui-space-6);
 }
 
 .chat-overlay.show .chat-drawer {
@@ -387,10 +388,6 @@ body.chat-open {
         border-radius: 1rem;
     }
 
-    .chat-drawer[open] {
-        right: 1rem;
-        bottom: 1rem;
-    }
 }
 
 [data-theme="dark"] {
@@ -1175,10 +1172,12 @@ body.user-story-open {
         max-height: calc(100vh - var(--admin-chat-tablet-viewport-offset));
         max-height: calc(100dvh - var(--admin-chat-tablet-viewport-offset));
     }
+}
 
+@media (max-width: 1024px) {
     .chat-drawer[open] {
-        right: 1rem;
-        bottom: 1rem;
+        right: var(--admin-ui-space-4, 1rem);
+        bottom: var(--admin-ui-space-4, 1rem);
     }
 }
 
