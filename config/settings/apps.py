@@ -161,7 +161,7 @@ INSTALLED_APPS = _dedupe_app_entries(INSTALLED_APPS)
 SITE_ID = 1
 
 MIGRATION_MODULES = {
-    "selenium": "apps.selenium.migrations",
+    "selenium": "apps._legacy.selenium_migration_only.migrations",
     "sites": "apps.core.sites_migrations",
     "socials": "apps._legacy.socials_migration_only.migrations",
     "sponsors": "apps._legacy.sponsors_migration_only.migrations",

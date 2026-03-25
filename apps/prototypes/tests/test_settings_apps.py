@@ -79,7 +79,10 @@ def test_removed_runtime_apps_only_remain_available_through_explicit_legacy_shim
         "apps._legacy.selenium_migration_only.apps.SeleniumMigrationOnlyConfig"
         in settings_apps.LEGACY_MIGRATION_APPS
     )
-    assert settings_apps.MIGRATION_MODULES["selenium"] == "apps.selenium.migrations"
+    assert (
+        settings_apps.MIGRATION_MODULES["selenium"]
+        == "apps._legacy.selenium_migration_only.migrations"
+    )
     assert (
         settings_apps.MIGRATION_MODULES["socials"]
         == "apps._legacy.socials_migration_only.migrations"
@@ -123,5 +126,6 @@ def test_archived_socials_and_sponsors_runtime_surfaces_are_removed():
     socials_files = {path.name for path in Path("apps/socials").iterdir() if path.is_file()}
     sponsors_files = {path.name for path in Path("apps/sponsors").iterdir() if path.is_file()}
 
+    assert not Path("apps/selenium").exists()
     assert socials_files == {"__init__.py"}
     assert sponsors_files == {"__init__.py"}
