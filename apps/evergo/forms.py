@@ -4,7 +4,10 @@ import re
 
 from django import forms
 from django.core.exceptions import ValidationError
+from django.forms import ModelForm
 from django.utils import timezone
+
+from apps.core.admin import OwnableAdminForm
 
 from .models import EvergoUser
 
@@ -138,7 +141,11 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
             for field_name in ("user", "group", "avatar")
             if cleaned_data.get(field_name) is not None
         ]
-        if not owners and getattr(self.request_user, "is_authenticated", False):
+        if (
+            not owners
+            and not self.instance.pk
+            and getattr(self.request_user, "is_authenticated", False)
+        ):
             cleaned_data["user"] = self.request_user
             owners = ["user"]
         if not owners:
@@ -148,6 +155,38 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
                 "load_all_customers",
                 "Enable credential validation before running the initial customer load.",
             )
+        return cleaned_data
+
+
+class EvergoUserAdminForm(OwnableAdminForm):
+    """Allow user/group/avatar ownership while defaulting new records to the acting user."""
+
+    class Meta:
+        model = EvergoUser
+        fields = "__all__"
+
+    def __init__(self, *args, request_user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request_user = request_user
+
+    def clean(self):
+        cleaned_data = ModelForm.clean(self)
+        owners = [cleaned_data.get(field_name) for field_name in ("user", "group", "avatar")]
+        owner_count = sum(owner is not None for owner in owners)
+        if owner_count > 1:
+            raise ValidationError("Choose exactly one owner: user, security group, or avatar.")
+
+        if (
+            owner_count == 0
+            and not self.instance.pk
+            and getattr(self.request_user, "is_authenticated", False)
+        ):
+            cleaned_data["user"] = self.request_user
+            owner_count = 1
+
+        owner_required = getattr(self._meta.model, "owner_required", self.owner_required)
+        if owner_required and owner_count == 0:
+            raise ValidationError("Choose a user, security group, or avatar owner for this contractor.")
         return cleaned_data
 
 

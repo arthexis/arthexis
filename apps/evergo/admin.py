@@ -19,7 +19,7 @@ from apps.core.admin import OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChan
 from apps.core.admin.mixins import _build_credentials_actions
 
 from .exceptions import EvergoAPIError
-from .forms import EvergoContractorLoginWizardForm, EvergoLoadCustomersForm
+from .forms import EvergoContractorLoginWizardForm, EvergoLoadCustomersForm, EvergoUserAdminForm
 from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
 
@@ -272,6 +272,7 @@ class EvergoUserAdmin(
     """Manage Evergo users and allow login verification from admin actions."""
 
     change_form_template = "django_object_actions/change_form.html"
+    form = EvergoUserAdminForm
     dashboard_actions = ("login_on_evergo_dashboard_action",)
     LOGIN_ON_EVERGO_LABEL = _("Login on Evergo")
 
@@ -362,24 +363,17 @@ class EvergoUserAdmin(
         ),
     )
 
-    def get_changeform_initial_data(self, request):
-        """Default new contractors to the current user when no owner is selected."""
-        initial = super().get_changeform_initial_data(request)
-        if getattr(request.user, "is_authenticated", False):
-            initial.setdefault("user", request.user.pk)
-        return initial
+    def get_form(self, request, obj=None, **kwargs):
+        form_class = super().get_form(request, obj, **kwargs)
+        if not issubclass(form_class, EvergoUserAdminForm):
+            return form_class
 
-    def save_model(self, request, obj, form, change):
-        """Auto-assign owner on creation when no owner fields are provided."""
-        if (
-            not change
-            and getattr(request.user, "is_authenticated", False)
-            and obj.user_id is None
-            and obj.group_id is None
-            and obj.avatar_id is None
-        ):
-            obj.user = request.user
-        return super().save_model(request, obj, form, change)
+        class RequestUserEvergoUserAdminForm(form_class):
+            def __init__(self, *args, **inner_kwargs):
+                inner_kwargs.setdefault("request_user", request.user)
+                super().__init__(*args, **inner_kwargs)
+
+        return RequestUserEvergoUserAdminForm
 
     def _test_login_and_sync(self, request, profile):
         """Call the Evergo API and persist synchronized user metadata."""
