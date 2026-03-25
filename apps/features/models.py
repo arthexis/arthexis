@@ -141,8 +141,7 @@ class Feature(Ownable):
     def params_count(self) -> int:
         """Return the count of configured feature parameter values."""
 
-        metadata = self.metadata if isinstance(self.metadata, dict) else {}
-        parameters = metadata.get("parameters")
+        parameters = (self.metadata or {}).get("parameters")
         if not isinstance(parameters, dict):
             return 0
         return len(parameters)

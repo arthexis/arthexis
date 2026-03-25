@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 
 from apps.features.models import Feature
 
+
 @pytest.mark.django_db
 def test_enabled_suite_feature_cannot_be_deleted() -> None:
     """Regression: enabled suite features must be disabled before deletion."""
@@ -15,6 +16,7 @@ def test_enabled_suite_feature_cannot_be_deleted() -> None:
 
     with pytest.raises(ValidationError, match="Disable this suite feature before deleting it"):
         feature.delete()
+
 
 @pytest.mark.django_db
 def test_disabled_suite_feature_can_be_deleted() -> None:
@@ -27,6 +29,7 @@ def test_disabled_suite_feature_can_be_deleted() -> None:
     feature.delete()
 
     assert not Feature.all_objects.filter(pk=feature.pk).exists()
+
 
 @pytest.mark.django_db
 def test_set_enabled_returns_transition_state() -> None:
@@ -51,13 +54,32 @@ def test_set_enabled_persists_when_update_fields_is_empty() -> None:
 
 
 @pytest.mark.django_db
-def test_params_count_reads_feature_metadata_parameters() -> None:
+@pytest.mark.parametrize(
+    ("metadata", "expected_count"),
+    [
+        ({"parameters": {"one": "1", "two": "2"}}, 2),
+        ({"parameters": {}}, 0),
+        ({"parameters": "not-a-dict"}, 0),
+        ({"parameters": None}, 0),
+        ({}, 0),
+    ],
+)
+def test_params_count_reads_feature_metadata_parameters(metadata, expected_count: int) -> None:
     """params_count should only count dictionary-backed parameter values."""
 
     feature = Feature.objects.create(
         slug="feature-params-count",
         display="Feature Params Count",
-        metadata={"parameters": {"one": "1", "two": "2"}},
+        metadata=metadata,
     )
 
-    assert feature.params_count == 2
+    assert feature.params_count == expected_count
+
+
+def test_params_count_handles_missing_metadata_dict() -> None:
+    """params_count should return zero when metadata is unset on the model instance."""
+
+    feature = Feature(slug="feature-params-count", display="Feature Params Count")
+    feature.metadata = None
+
+    assert feature.params_count == 0
