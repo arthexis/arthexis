@@ -4,13 +4,19 @@ import uuid
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.urls import NoReverseMatch
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from apps.groups.models import SecurityGroup
 from apps.ocpp import store
 from apps.ocpp.models import Charger, Transaction
+from apps.ocpp.views.common import (
+    EventFeedConfig,
+    EventRow,
+    classify_event_severity,
+    dedupe_event_rows,
+)
+
 
 @pytest.mark.django_db
 def test_status_view_disables_polling_without_active_session(client):
@@ -237,6 +243,80 @@ def test_status_view_aggregate_keeps_distinct_connector_status_rows(client):
     ]
     assert len(connector_status_rows) == 2
 
+
+def test_dedupe_event_rows_keeps_newest_row_for_same_status_identity():
+    """Status dedupe should keep the newest row for one identity collision."""
+
+    older = EventRow(
+        timestamp=timezone.now() - timezone.timedelta(minutes=5),
+        event="Status",
+        details="Preparing",
+        severity="info",
+        severity_color="#0d6efd",
+        severity_label="Info",
+        event_id=44,
+    )
+    newer = EventRow(
+        timestamp=timezone.now(),
+        event="Status",
+        details="Preparing",
+        severity="warning",
+        severity_color="#ffc107",
+        severity_label="Warning",
+        event_id=44,
+    )
+
+    rows = dedupe_event_rows([(older, 1), (newer, 1)])
+
+    assert rows == [newer]
+
+
+@pytest.mark.django_db
+def test_status_view_ignores_invalid_status_payload_rows(client):
+    """Malformed status payload rows should be ignored while rendering keeps working."""
+
+    user = get_user_model().objects.create_user(
+        username="status-events-invalid-payload", password="pass"
+    )
+    client.force_login(user)
+    charger = Charger.objects.create(
+        charger_id="STATUS-INVALID-PAYLOAD",
+        connector_id=1,
+    )
+    identity = store.identity_key(charger.charger_id, charger.connector_id)
+    store.add_log(identity, "Connected websocket")
+    store.add_log(identity, "StatusNotification processed: {not-json}")
+
+    response = client.get(
+        reverse(
+            "ocpp:charger-status-connector",
+            args=[charger.charger_id, charger.connector_slug],
+        )
+    )
+
+    assert response.status_code == 200
+    events = response.context["non_transaction_events"]
+    assert any(item["event"] == "Connected websocket" for item in events)
+    assert not any(item["event"] == "Status" for item in events)
+
+
+def test_classify_event_severity_handles_status_and_retry_edge_cases():
+    """Severity classifier should consistently map status and retry edge cases."""
+
+    config = EventFeedConfig(
+        error_statuses=frozenset({"closed", "error", "offline", "rejected"}),
+        excluded_prefixes=(),
+        important_prefixes=(),
+        status_prefix="StatusNotification processed:",
+        warning_statuses=frozenset(
+            {"faulted", "suspendedev", "suspendedevse", "unavailable"}
+        ),
+    )
+
+    assert classify_event_severity("Status", "Faulted", config)[0] == "warning"
+    assert classify_event_severity("Status", "Closed", config)[0] == "error"
+    assert classify_event_severity("Heartbeat", "retry in 10s", config)[0] == "warning"
+
 @pytest.mark.django_db
 def test_status_view_aggregate_includes_pending_events(client):
     """Regression: aggregate status view includes notable pending-key events."""
@@ -399,4 +479,3 @@ def test_status_view_shows_non_transaction_events_for_staff(client):
         item["event"] == "DiagnosticsStatusNotification"
         for item in response.context["non_transaction_events"]
     )
-
