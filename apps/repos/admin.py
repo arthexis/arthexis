@@ -3,7 +3,9 @@ from urllib.parse import urlparse
 
 from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
+from django.urls import path
 from django.urls import reverse
+from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
@@ -19,12 +21,16 @@ from apps.repos.models.repositories import GitHubRepository, PackageRepository
 
 class FetchFromGitHubMixin(DjangoObjectActions):
     changelist_actions: list[str] = []
+    dashboard_actions: list[str] = []
 
     def _redirect_to_changelist(self):
         opts = self.model._meta
         return HttpResponseRedirect(
             reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
         )
+
+    def get_dashboard_actions(self, request):
+        return getattr(self, "dashboard_actions", [])
 
 
 @admin.register(RepositoryIssue)
@@ -133,9 +139,55 @@ class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
 
 
 @admin.register(GitHubRepository)
-class GitHubRepositoryAdmin(admin.ModelAdmin):
+class GitHubRepositoryAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
+    dashboard_actions = ["setup_token"]
     list_display = ("owner", "name", "is_private")
     search_fields = ("owner", "name")
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "setup-token/",
+                self.admin_site.admin_view(self.setup_token_view),
+                name="repos_githubrepository_setup_token",
+            )
+        ]
+        return custom_urls + urls
+
+    def changelist_view(self, request, extra_context=None):
+        response = super().changelist_view(request, extra_context=extra_context)
+        content = getattr(response, "rendered_content", "")
+        label = str(self.setup_token.label)
+        if not content or label in content:
+            return response
+        link_markup = format_html(
+            '<li><a href="{}" class="addlink">{}</a></li>',
+            reverse("admin:repos_githubrepository_setup_token"),
+            label,
+        )
+        response.content = content.replace(
+            '<ul class="object-tools">',
+            f'<ul class="object-tools">{link_markup}',
+            1,
+        )
+        return response
+
+    def setup_token_view(self, request):
+        return self.setup_token(request)
+
+    def setup_token(self, request, queryset=None):
+        token = GitHubToken.objects.filter(user=request.user).order_by("pk").first()
+        if token is not None:
+            return HttpResponseRedirect(
+                reverse("admin:repos_githubtoken_change", args=[token.pk])
+            )
+        return HttpResponseRedirect(reverse("admin:repos_githubtoken_add"))
+
+    setup_token.label = _("Setup Token")
+    setup_token.short_description = _("Setup Token")
+    setup_token.requires_queryset = False
+    setup_token.dashboard_url = "admin:repos_githubrepository_setup_token"
 
 
 @admin.register(PackageRepository)
