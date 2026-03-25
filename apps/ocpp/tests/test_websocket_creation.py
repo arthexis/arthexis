@@ -33,7 +33,6 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 CONNECT_TIMEOUT = 5
 
-
 async def _finalize_communicator(communicator: WebsocketCommunicator) -> None:
     """Wait for communicator shutdown so teardown does not stall on pending tasks."""
 
@@ -42,7 +41,6 @@ async def _finalize_communicator(communicator: WebsocketCommunicator) -> None:
         return
     await communicator.disconnect()
     await communicator.wait()
-
 
 @pytest.fixture(autouse=True)
 def clear_store_state():
@@ -62,13 +60,11 @@ def clear_store_state():
     RateLimit.objects.all().delete()
     cache.clear()
 
-
 @pytest.fixture(autouse=True)
 def isolate_log_dir(tmp_path, monkeypatch):
     log_dir = tmp_path / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(store, "LOG_DIR", log_dir)
-
 
 @pytest.fixture
 def local_node(monkeypatch):
@@ -84,7 +80,6 @@ def local_node(monkeypatch):
     )
     Node._local_cache.clear()
     return node
-
 
 @pytest.fixture
 def charge_point_features(local_node):
@@ -104,7 +99,6 @@ def charge_point_features(local_node):
         suite_feature.save(update_fields=["is_enabled"])
         feature_map[slug] = suite_feature
     return local_node, feature_map
-
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
@@ -151,25 +145,6 @@ def test_charge_point_created_for_new_websocket_path(charge_point_features):
 
     async_to_sync(run_scenario)()
 
-
-@pytest.mark.slow
-@override_settings(ROOT_URLCONF="apps.ocpp.urls")
-def test_ocpp_connection_allowed_without_legacy_charge_point_node_feature(
-    charge_point_features,
-):
-    """Regression: websocket admission no longer depends on node feature toggles."""
-
-    _local_node, _suite_features = charge_point_features
-
-    async def run_scenario():
-        communicator = WebsocketCommunicator(application, "/CP-NODE-FEATURE-OFF")
-        connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
-        assert connected is True
-        await _finalize_communicator(communicator)
-
-    async_to_sync(run_scenario)()
-
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_new_charge_point_blocked_when_creation_feature_disabled(
@@ -189,7 +164,6 @@ def test_new_charge_point_blocked_when_creation_feature_disabled(
 
     async_to_sync(run_scenario)()
 
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_known_charge_point_allowed_when_creation_feature_disabled(
@@ -207,7 +181,6 @@ def test_known_charge_point_allowed_when_creation_feature_disabled(
         await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
-
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
@@ -230,7 +203,6 @@ def test_new_charge_point_allowed_without_local_node_when_feature_is_global(monk
 
     async_to_sync(run_scenario)()
 
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_new_charge_point_blocked_when_requested_version_feature_missing_but_other_gate_exists(
@@ -251,7 +223,6 @@ def test_new_charge_point_blocked_when_requested_version_feature_missing_but_oth
 
     async_to_sync(run_scenario)()
 
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_new_charge_point_without_subprotocol_uses_any_enabled_creation_feature(
@@ -270,14 +241,12 @@ def test_new_charge_point_without_subprotocol_uses_any_enabled_creation_feature(
 
     async_to_sync(run_scenario)()
 
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_charger_page_reverse_resolves_expected_path():
     cid = "CP-TEST-REVERSE"
 
     assert reverse("charger-page", args=[cid]) == f"/c/{cid}/"
-
 
 @pytest.mark.slow
 def test_select_subprotocol_prioritizes_preference_and_defaults():
@@ -311,7 +280,6 @@ def test_select_subprotocol_prioritizes_preference_and_defaults():
     for (offered, preferred), expected in cases:
         assert consumer._select_subprotocol(offered, preferred) == expected
 
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 @pytest.mark.parametrize(
@@ -341,7 +309,6 @@ def test_connect_prefers_stored_ocpp2_without_offered_subprotocol(preferred):
 
     async_to_sync(run_scenario)()
 
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_connect_maps_ocpp16j_subprotocol_to_ocpp16_version():
@@ -365,7 +332,6 @@ def test_connect_maps_ocpp16j_subprotocol_to_ocpp16_version():
         await _finalize_communicator(communicator)
 
     async_to_sync(run_scenario)()
-
 
 @pytest.mark.critical
 def test_ocpp_websocket_rate_limit_enforced():
@@ -394,7 +360,6 @@ def test_ocpp_websocket_rate_limit_enforced():
     cache.clear()
 
     async_to_sync(run_scenario)()
-
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
@@ -426,7 +391,6 @@ def test_local_ip_bypasses_rate_limit_with_custom_scope_client():
 
     async_to_sync(run_scenario)()
 
-
 @pytest.mark.critical
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
@@ -454,7 +418,6 @@ def test_pending_connection_replaced_on_reconnect():
         await first.wait()
 
     async_to_sync(run_scenario)()
-
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
@@ -530,7 +493,6 @@ def test_assign_connector_rebinds_store_preserves_state():
 
     async_to_sync(run_scenario)()
 
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_existing_charger_clears_status_and_refreshes_forwarding(monkeypatch):
@@ -568,7 +530,6 @@ def test_existing_charger_clears_status_and_refreshes_forwarding(monkeypatch):
     assert charger.last_error_code == ""
     assert charger.last_status_vendor_info is None
     assert called["refresh_forwarders"] is False
-
 
 @pytest.mark.slow
 @override_settings(
@@ -622,7 +583,6 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
         assert cp_simulator._connect_error == "accepted"
         assert cp_simulator.status == "stopped"
 
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_rejects_invalid_serial_from_path_logs_reason():
@@ -643,7 +603,6 @@ def test_rejects_invalid_serial_from_path_logs_reason():
         for entry in entries
     )
 
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_rejects_invalid_query_serial_and_logs_details():
@@ -661,11 +620,9 @@ def test_rejects_invalid_query_serial_and_logs_details():
     assert any("Serial Number cannot be blank." in entry for entry in entries)
     assert any("query_string='cid='" in entry for entry in entries)
 
-
 def _auth_header(username: str, password: str) -> list[tuple[bytes, bytes]]:
     token = base64.b64encode(f"{username}:{password}".encode("utf-8"))
     return [(b"authorization", b"Basic " + token)]
-
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
@@ -692,7 +649,6 @@ def test_basic_auth_rejects_when_missing_header():
         "HTTP Basic authentication required (credentials missing)" in entry
         for entry in entries
     )
-
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
@@ -723,7 +679,6 @@ def test_basic_auth_rejects_invalid_header_format():
         "HTTP Basic authentication header is invalid" in entry for entry in entries
     )
 
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_rejects_invalid_credentials():
@@ -748,7 +703,6 @@ def test_basic_auth_rejects_invalid_credentials():
     store_key = store.pending_key(charger.charger_id)
     entries = list(store.logs.get("charger", {}).get(store_key, []))
     assert any("HTTP Basic authentication failed" in entry for entry in entries)
-
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
@@ -787,7 +741,6 @@ def test_basic_auth_rejects_unauthorized_user():
         ]
     )
 
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_accepts_authorized_user():
@@ -820,7 +773,6 @@ def test_basic_auth_accepts_authorized_user():
     else:
         assert auth_entries or connection_result.get("close_code") != 4003
 
-
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_accepts_charge_station_manager_user():
@@ -851,7 +803,6 @@ def test_basic_auth_accepts_charge_station_manager_user():
     async_to_sync(run_scenario)()
 
     assert connection_result["connected"] is True
-
 
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")

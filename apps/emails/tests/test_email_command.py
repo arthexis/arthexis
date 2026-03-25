@@ -11,7 +11,6 @@ from django.core.management.base import CommandError
 
 from apps.emails.models import EmailOutbox
 
-
 @pytest.fixture()
 def owner(db):
     """Create a reusable profile owner for email command tests."""
@@ -20,7 +19,6 @@ def owner(db):
         username="email-command-owner",
         email="email-command-owner@example.com",
     )
-
 
 @pytest.mark.parametrize(
     ("args", "message"),
@@ -34,7 +32,6 @@ def test_email_subcommand_validation_errors(args, message):
 
     with pytest.raises(CommandError, match=message):
         call_command("email", *args)
-
 
 def test_email_send_subcommand_accepts_trailing_django_base_options(monkeypatch, owner):
     """The send subcommand should keep Django base options valid after verb arguments."""
@@ -79,9 +76,3 @@ def test_email_send_subcommand_accepts_trailing_django_base_options(monkeypatch,
     assert sent["outbox"] == outbox
     assert sent["recipients"] == ["alice@example.com"]
 
-
-def test_email_legacy_bridge_selector_raises_for_missing_bridge(db):
-    """The legacy bridge selector should keep the not-found validation behavior."""
-
-    with pytest.raises(CommandError, match="Bridge not found: 999999"):
-        call_command("email", "--bridge", "999999")

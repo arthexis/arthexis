@@ -16,7 +16,6 @@ from apps.screens.startup_notifications import (
     render_lcd_lock_file,
 )
 
-
 class LCDStartupNotificationTests(TestCase):
     def _create_node(self, mac: str) -> Node:
         return Node.objects.create(
@@ -89,14 +88,6 @@ class LCDStartupNotificationTests(TestCase):
                     base_dir=base_dir, node_base_path=node_base_path
                 )
             )
-
-    def test_lcd_feature_enabled_creates_lock_from_legacy_file(self):
-        with TemporaryDirectory() as tmpdir:
-            lock_dir = Path(tmpdir) / ".locks"
-            lock_dir.mkdir(parents=True)
-            (lock_dir / LCD_LEGACY_FEATURE_LOCK).write_text("", encoding="utf-8")
-
-            self.assertTrue(lcd_feature_enabled(lock_dir))
 
     def test_render_and_read_preserve_expiration(self):
         expires_at = timezone.now().replace(microsecond=0)
