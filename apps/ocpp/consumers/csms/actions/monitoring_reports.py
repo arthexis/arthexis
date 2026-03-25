@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from apps.ocpp import store
 from apps.ocpp.services import report_persistence
-from apps.ocpp.utils import _parse_ocpp_timestamp
+from apps.ocpp.utils import _parse_ocpp_timestamp, try_parse_int
 
 
 class NotifyMonitoringReportActionHandler:
@@ -22,14 +22,8 @@ class NotifyMonitoringReportActionHandler:
         seq_no_value = payload_data.get("seqNo")
         generated_at = _parse_ocpp_timestamp(payload_data.get("generatedAt"))
         tbc_value = payload_data.get("tbc")
-        try:
-            request_id = int(request_id_value) if request_id_value is not None else None
-        except (TypeError, ValueError):
-            request_id = None
-        try:
-            seq_no = int(seq_no_value) if seq_no_value is not None else None
-        except (TypeError, ValueError):
-            seq_no = None
+        request_id = try_parse_int(request_id_value)
+        seq_no = try_parse_int(seq_no_value)
         tbc = bool(tbc_value) if tbc_value is not None else False
         monitoring_data = payload_data.get("monitoringData")
         if not isinstance(monitoring_data, (list, tuple)):

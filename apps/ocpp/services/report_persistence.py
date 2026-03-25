@@ -13,6 +13,194 @@ from apps.ocpp.models import (
     Variable,
 )
 from apps.ocpp.services.charger_resolution import resolve_charger_target
+from apps.ocpp.utils import try_parse_int
+
+
+def _normalize_display_message_entry(entry: dict, parse_timestamp) -> dict[str, object]:
+    message_payload = entry.get("message") or {}
+    if not isinstance(message_payload, dict):
+        message_payload = {}
+
+    content_value = (
+        message_payload.get("content")
+        or message_payload.get("text")
+        or entry.get("content")
+        or ""
+    )
+    language_value = message_payload.get("language") or entry.get("language") or ""
+    component = entry.get("component") or {}
+    variable = entry.get("variable") or {}
+    if not isinstance(component, dict):
+        component = {}
+    if not isinstance(variable, dict):
+        variable = {}
+
+    return {
+        "message_id": try_parse_int(entry.get("messageId")),
+        "priority": str(entry.get("priority") or ""),
+        "state": str(entry.get("state") or ""),
+        "valid_from": parse_timestamp(entry.get("validFrom")),
+        "valid_to": parse_timestamp(entry.get("validTo")),
+        "language": str(language_value or ""),
+        "content": str(content_value or ""),
+        "component_name": str(component.get("name") or ""),
+        "component_instance": str(component.get("instance") or ""),
+        "variable_name": str(variable.get("name") or ""),
+        "variable_instance": str(variable.get("instance") or ""),
+    }
+
+
+def _create_display_message(notification, target, entry: dict, parse_timestamp) -> dict[str, object]:
+    normalized_entry = _normalize_display_message_entry(entry, parse_timestamp)
+    DisplayMessage.objects.create(
+        notification=notification,
+        charger=target,
+        message_id=normalized_entry["message_id"],
+        priority=normalized_entry["priority"],
+        state=normalized_entry["state"],
+        valid_from=normalized_entry["valid_from"],
+        valid_to=normalized_entry["valid_to"],
+        language=normalized_entry["language"],
+        content=normalized_entry["content"],
+        component_name=normalized_entry["component_name"],
+        component_instance=normalized_entry["component_instance"],
+        variable_name=normalized_entry["variable_name"],
+        variable_instance=normalized_entry["variable_instance"],
+        raw_payload=entry,
+    )
+    return normalized_entry
+
+
+def _extract_monitoring_entry_context(entry: dict) -> dict[str, object] | None:
+    component_data = entry.get("component")
+    variable_data = entry.get("variable")
+    if not isinstance(component_data, dict) or not isinstance(variable_data, dict):
+        return None
+
+    component_name = str(component_data.get("name") or "").strip()
+    variable_name = str(variable_data.get("name") or "").strip()
+    if not component_name or not variable_name:
+        return None
+
+    component_instance = str(component_data.get("instance") or "").strip()
+    variable_instance = str(variable_data.get("instance") or "").strip()
+    component_evse = component_data.get("evse")
+    evse_id = None
+    connector_hint = None
+    if isinstance(component_evse, dict):
+        evse_id = try_parse_int(component_evse.get("id"))
+        connector_hint = component_evse.get("connectorId")
+
+    return {
+        "component_name": component_name,
+        "component_instance": component_instance,
+        "variable_name": variable_name,
+        "variable_instance": variable_instance,
+        "evse_id": evse_id,
+        "connector_hint": connector_hint,
+    }
+
+
+def _normalize_monitoring_record(
+    *,
+    target,
+    request_id: int | None,
+    seq_no: int | None,
+    generated_at: datetime | None,
+    tbc: bool,
+    context: dict[str, object],
+    monitor: dict,
+    variable_obj,
+) -> dict[str, object] | None:
+    monitoring_id = try_parse_int(monitor.get("id") or monitor.get("monitoringId"))
+    if monitoring_id is None:
+        return None
+
+    severity = try_parse_int(monitor.get("severity"))
+    threshold_value = monitor.get("value")
+    threshold_text = str(threshold_value) if threshold_value is not None else ""
+    monitor_type = str(monitor.get("type") or "").strip()
+    transaction_value = monitor.get("transaction")
+    is_transaction = bool(transaction_value) if transaction_value is not None else False
+
+    MonitoringRule.objects.update_or_create(
+        charger=target,
+        monitoring_id=monitoring_id,
+        defaults={
+            "variable": variable_obj,
+            "severity": severity,
+            "monitor_type": monitor_type,
+            "threshold": threshold_text,
+            "is_transaction": is_transaction,
+            "is_active": True,
+            "raw_payload": monitor,
+        },
+    )
+
+    return {
+        "charger_id": target.charger_id,
+        "request_id": request_id,
+        "seq_no": seq_no,
+        "generated_at": generated_at,
+        "tbc": tbc,
+        "component_name": context["component_name"],
+        "component_instance": context["component_instance"],
+        "variable_name": context["variable_name"],
+        "variable_instance": context["variable_instance"],
+        "monitoring_id": monitoring_id,
+        "severity": severity,
+        "monitor_type": monitor_type,
+        "threshold": threshold_text,
+        "is_transaction": is_transaction,
+        "evse_id": context["evse_id"],
+        "connector_id": context["connector_hint"],
+    }
+
+
+def _normalize_monitoring_records_for_entry(
+    *,
+    entry: dict,
+    target,
+    request_id: int | None,
+    seq_no: int | None,
+    generated_at: datetime | None,
+    tbc: bool,
+) -> list[dict[str, object]]:
+    context = _extract_monitoring_entry_context(entry)
+    if context is None:
+        return []
+
+    variable_obj, _created = Variable.objects.get_or_create(
+        charger=target,
+        component_name=context["component_name"],
+        component_instance=context["component_instance"],
+        variable_name=context["variable_name"],
+        variable_instance=context["variable_instance"],
+        attribute_type="",
+    )
+
+    variable_monitoring = entry.get("variableMonitoring")
+    if not isinstance(variable_monitoring, (list, tuple)):
+        return []
+
+    normalized_records: list[dict[str, object]] = []
+    for monitor in variable_monitoring:
+        if not isinstance(monitor, dict):
+            continue
+        normalized_record = _normalize_monitoring_record(
+            target=target,
+            request_id=request_id,
+            seq_no=seq_no,
+            generated_at=generated_at,
+            tbc=tbc,
+            context=context,
+            monitor=monitor,
+            variable_obj=variable_obj,
+        )
+        if normalized_record is not None:
+            normalized_records.append(normalized_record)
+
+    return normalized_records
 
 
 def persist_cleared_charging_limit_event(
@@ -131,55 +319,22 @@ def persist_notify_display_messages(
     for entry in message_info:
         if not isinstance(entry, dict):
             continue
-        message_id_value = entry.get("messageId")
-        try:
-            message_id = int(message_id_value) if message_id_value is not None else None
-        except (TypeError, ValueError):
-            message_id = None
-        message_payload = entry.get("message") or {}
-        if not isinstance(message_payload, dict):
-            message_payload = {}
-        content_value = (
-            message_payload.get("content")
-            or message_payload.get("text")
-            or entry.get("content")
-            or ""
+        normalized_entry = _create_display_message(
+            notification=notification,
+            target=target,
+            entry=entry,
+            parse_timestamp=parse_timestamp,
         )
-        language_value = message_payload.get("language") or entry.get("language") or ""
-        component = entry.get("component") or {}
-        variable = entry.get("variable") or {}
-        if not isinstance(component, dict):
-            component = {}
-        if not isinstance(variable, dict):
-            variable = {}
-
         compliance_messages.append(
             {
-                "message_id": message_id,
-                "priority": str(entry.get("priority") or ""),
-                "state": str(entry.get("state") or ""),
-                "valid_from": parse_timestamp(entry.get("validFrom")),
-                "valid_to": parse_timestamp(entry.get("validTo")),
-                "language": str(language_value or ""),
-                "content": str(content_value or ""),
+                "message_id": normalized_entry["message_id"],
+                "priority": normalized_entry["priority"],
+                "state": normalized_entry["state"],
+                "valid_from": normalized_entry["valid_from"],
+                "valid_to": normalized_entry["valid_to"],
+                "language": normalized_entry["language"],
+                "content": normalized_entry["content"],
             }
-        )
-
-        DisplayMessage.objects.create(
-            notification=notification,
-            charger=target,
-            message_id=message_id,
-            priority=str(entry.get("priority") or ""),
-            state=str(entry.get("state") or ""),
-            valid_from=parse_timestamp(entry.get("validFrom")),
-            valid_to=parse_timestamp(entry.get("validTo")),
-            language=str(language_value or ""),
-            content=str(content_value or ""),
-            component_name=str(component.get("name") or ""),
-            component_instance=str(component.get("instance") or ""),
-            variable_name=str(variable.get("name") or ""),
-            variable_instance=str(variable.get("instance") or ""),
-            raw_payload=entry,
         )
 
     return compliance_messages
@@ -220,98 +375,15 @@ def persist_notify_monitoring_report(
     for entry in monitoring_data:
         if not isinstance(entry, dict):
             continue
-        component_data = entry.get("component")
-        variable_data = entry.get("variable")
-        if not isinstance(component_data, dict) or not isinstance(variable_data, dict):
-            continue
-
-        component_name = str(component_data.get("name") or "").strip()
-        variable_name = str(variable_data.get("name") or "").strip()
-        if not component_name or not variable_name:
-            continue
-
-        component_instance = str(component_data.get("instance") or "").strip()
-        variable_instance = str(variable_data.get("instance") or "").strip()
-        component_evse = component_data.get("evse")
-        evse_id = None
-        connector_hint = None
-        if isinstance(component_evse, dict):
-            try:
-                evse_id = int(component_evse.get("id"))
-            except (TypeError, ValueError):
-                evse_id = None
-            connector_hint = component_evse.get("connectorId")
-
-        variable_obj, _created = Variable.objects.get_or_create(
-            charger=target,
-            component_name=component_name,
-            component_instance=component_instance,
-            variable_name=variable_name,
-            variable_instance=variable_instance,
-            attribute_type="",
+        normalized_records.extend(
+            _normalize_monitoring_records_for_entry(
+                entry=entry,
+                target=target,
+                request_id=request_id,
+                seq_no=seq_no,
+                generated_at=generated_at,
+                tbc=tbc,
+            )
         )
-
-        variable_monitoring = entry.get("variableMonitoring")
-        if not isinstance(variable_monitoring, (list, tuple)):
-            continue
-
-        for monitor in variable_monitoring:
-            if not isinstance(monitor, dict):
-                continue
-            monitoring_id_value = monitor.get("id") or monitor.get("monitoringId")
-            try:
-                monitoring_id = (
-                    int(monitoring_id_value) if monitoring_id_value is not None else None
-                )
-            except (TypeError, ValueError):
-                monitoring_id = None
-            if monitoring_id is None:
-                continue
-
-            severity_value = monitor.get("severity")
-            try:
-                severity = int(severity_value) if severity_value is not None else None
-            except (TypeError, ValueError):
-                severity = None
-            threshold_value = monitor.get("value")
-            threshold_text = str(threshold_value) if threshold_value is not None else ""
-            monitor_type = str(monitor.get("type") or "").strip()
-            transaction_value = monitor.get("transaction")
-            is_transaction = bool(transaction_value) if transaction_value is not None else False
-
-            MonitoringRule.objects.update_or_create(
-                charger=target,
-                monitoring_id=monitoring_id,
-                defaults={
-                    "variable": variable_obj,
-                    "severity": severity,
-                    "monitor_type": monitor_type,
-                    "threshold": threshold_text,
-                    "is_transaction": is_transaction,
-                    "is_active": True,
-                    "raw_payload": monitor,
-                },
-            )
-
-            normalized_records.append(
-                {
-                    "charger_id": target.charger_id,
-                    "request_id": request_id,
-                    "seq_no": seq_no,
-                    "generated_at": generated_at,
-                    "tbc": tbc,
-                    "component_name": component_name,
-                    "component_instance": component_instance,
-                    "variable_name": variable_name,
-                    "variable_instance": variable_instance,
-                    "monitoring_id": monitoring_id,
-                    "severity": severity,
-                    "monitor_type": monitor_type,
-                    "threshold": threshold_text,
-                    "is_transaction": is_transaction,
-                    "evse_id": evse_id,
-                    "connector_id": connector_hint,
-                }
-            )
 
     return normalized_records

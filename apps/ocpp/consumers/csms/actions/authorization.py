@@ -34,9 +34,13 @@ class AuthorizationActionHandler:
                 ) or await database_sync_to_async(account.can_authorize)()
                 if account_authorized:
                     status = "Accepted"
-            elif energy_accounts_enabled:
-                status = "Invalid"
-            elif id_tag and tag and not tag_created and tag.allowed:
+            elif (
+                not energy_accounts_enabled
+                and id_tag
+                and tag
+                and not tag_created
+                and tag.allowed
+            ):
                 status = "Accepted"
                 self.consumer._log_unlinked_rfid(tag.rfid)
         else:

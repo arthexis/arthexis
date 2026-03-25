@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from apps.ocpp import store
 from apps.ocpp.services import report_persistence
-from apps.ocpp.utils import _parse_ocpp_timestamp
+from apps.ocpp.utils import _parse_ocpp_timestamp, try_parse_int
 
 
 class NotifyDisplayMessagesActionHandler:
@@ -20,10 +20,7 @@ class NotifyDisplayMessagesActionHandler:
         payload_data = payload if isinstance(payload, dict) else {}
         request_id_value = payload_data.get("requestId")
         tbc_value = payload_data.get("tbc")
-        try:
-            request_id = int(request_id_value) if request_id_value is not None else None
-        except (TypeError, ValueError):
-            request_id = None
+        request_id = try_parse_int(request_id_value)
         tbc = bool(tbc_value) if tbc_value is not None else False
         message_info = payload_data.get("messageInfo")
         if not isinstance(message_info, (list, tuple)):

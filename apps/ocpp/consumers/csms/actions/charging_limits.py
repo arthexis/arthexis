@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from apps.ocpp import store
 from apps.ocpp.services import report_persistence
+from apps.ocpp.utils import try_parse_int
 
 
 class ClearedChargingLimitActionHandler:
@@ -18,10 +19,7 @@ class ClearedChargingLimitActionHandler:
     async def handle(self, payload, msg_id, _raw, _text_data) -> dict:
         payload_data = payload if isinstance(payload, dict) else {}
         evse_id_value = payload_data.get("evseId")
-        try:
-            evse_id = int(evse_id_value) if evse_id_value is not None else None
-        except (TypeError, ValueError):
-            evse_id = None
+        evse_id = try_parse_int(evse_id_value)
         source_value = str(payload_data.get("chargingLimitSource") or "").strip()
 
         details: list[str] = []
@@ -66,10 +64,7 @@ class NotifyChargingLimitActionHandler:
         if not isinstance(schedules, list):
             schedules = []
         evse_id_value = payload_data.get("evseId")
-        try:
-            evse_id = int(evse_id_value) if evse_id_value is not None else None
-        except (TypeError, ValueError):
-            evse_id = None
+        evse_id = try_parse_int(evse_id_value)
 
         details: list[str] = []
         if source_value:
