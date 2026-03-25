@@ -51,6 +51,20 @@ When new apps are created:
 
 * Always create the **admin configuration** for the app using suite commands.
 
+## Retiring legacy apps
+
+When retiring an app that still needs migration compatibility, move it to the
+legacy migration-only pattern instead of deleting it in place:
+
+1. Create or reuse `apps/_legacy/<app>_migration_only/` with an `AppConfig`.
+2. Register that config in `LEGACY_MIGRATION_APPS`.
+3. Point `MIGRATION_MODULES["<app_label>"]` to the migration-only package so
+   historical migrations stay runnable.
+4. Remove the runtime app from normal app discovery/runtime wiring.
+
+This keeps upgrade paths intact now and ensures the retired app is positioned
+to be dropped cleanly on the next **major** version.
+
 ---
 
 ## Exceptions
