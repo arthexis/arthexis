@@ -33,6 +33,18 @@ def test_public_qr_page_requires_authentication_prompt(client):
     assert "Sign in or create your energy account" in content
 
 
+def test_public_qr_page_energy_accounts_disabled_by_default(client):
+    charger = Charger.objects.create(charger_id="CP-ENERGY-DEFAULT-1", connector_id=1)
+    page = PublicConnectorPage.objects.get(charger=charger)
+
+    response = client.get(reverse("ocpp:public-connector-page", args=[page.slug]))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "Create Account" not in content
+    assert "Sign in or create your energy account" not in content
+
+
 def test_create_account_endpoint_creates_user_and_redirects(client):
     _enable_energy_accounts()
     charger = Charger.objects.create(charger_id="CP-ENERGY-2", connector_id=1)
@@ -57,3 +69,22 @@ def test_create_account_endpoint_creates_user_and_redirects(client):
     assert user.is_authenticated
     assert hasattr(user, "customer_account")
     assert user.customer_account.rfids.exists()
+
+
+def test_create_account_endpoint_redirects_when_feature_disabled(client):
+    charger = Charger.objects.create(charger_id="CP-ENERGY-DEFAULT-2", connector_id=1)
+
+    response = client.post(
+        reverse(
+            "ocpp:public-create-account-connector",
+            args=[charger.charger_id, charger.connector_slug],
+        )
+    )
+
+    assert response.status_code == 302
+    assert response.url.endswith(
+        reverse(
+            "ocpp:charger-page-connector",
+            args=[charger.charger_id, charger.connector_slug],
+        )
+    )
