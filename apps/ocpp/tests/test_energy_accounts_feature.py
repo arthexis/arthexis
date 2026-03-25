@@ -2,6 +2,7 @@ import pytest
 from channels.db import database_sync_to_async
 from django.contrib.auth import BACKEND_SESSION_KEY
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from django.urls import reverse
 
 from apps.cards.models import RFID
@@ -161,3 +162,33 @@ def test_public_connector_page_create_account_rejects_hidden_charger(client):
     )
 
     assert response.status_code == 404
+
+
+@pytest.mark.django_db
+@override_settings(AUTHENTICATION_BACKENDS=["apps.users.backends.LocalhostAdminBackend"])
+def test_public_connector_page_create_account_skips_login_with_unsafe_only_backends(client):
+    Feature.objects.update_or_create(
+        slug="energy-accounts",
+        defaults={
+            "display": "Energy Accounts",
+            "is_enabled": True,
+            "metadata": {"parameters": {"energy_credits_required": "disabled"}},
+        },
+    )
+    charger = Charger.objects.create(charger_id="CP-EA-UNSAFE-ONLY", connector_id=1)
+    page = PublicConnectorPage.objects.create(charger=charger, enabled=True)
+
+    response = client.post(
+        reverse("ocpp:public-connector-page-create-account", args=[page.slug]),
+        data={
+            "username": "no-session-user",
+            "email": "nosession@example.com",
+            "password": "safe-password-123",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse(
+        "ocpp:charger-page-connector", args=[charger.charger_id, charger.connector_slug]
+    )
+    assert BACKEND_SESSION_KEY not in client.session

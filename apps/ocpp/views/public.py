@@ -63,18 +63,23 @@ def _energy_accounts_enabled() -> bool:
     )
 
 
-def _signup_auth_backend() -> str:
+def _signup_auth_backend() -> str | None:
     """Return a safe auth backend path for post-signup login."""
 
     localhost_backend = f"{LocalhostAdminBackend.__module__}.{LocalhostAdminBackend.__name__}"
     for backend in settings.AUTHENTICATION_BACKENDS:
         if backend != localhost_backend:
             return backend
-    if settings.AUTHENTICATION_BACKENDS:
+
+    model_backend = "django.contrib.auth.backends.ModelBackend"
+    if model_backend in settings.AUTHENTICATION_BACKENDS:
         logger.warning(
-            "No safe auth backend found for signup; using ModelBackend fallback."
+            "No signup-safe auth backend found; using configured ModelBackend fallback."
         )
-    return "django.contrib.auth.backends.ModelBackend"
+        return model_backend
+
+    logger.warning("No signup-safe auth backend found; skipping automatic login.")
+    return None
 
 
 def _energy_credits_required() -> bool:
@@ -474,7 +479,9 @@ def public_connector_page_create_account(request, slug):
     except IntegrityError:
         messages.error(request, _("Username is already in use."))
         return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
-    login(request, user, backend=_signup_auth_backend())
+    signup_backend = _signup_auth_backend()
+    if signup_backend is not None:
+        login(request, user, backend=signup_backend)
     messages.success(request, _("Account created. Charging authorization has been updated."))
     return redirect(next_url)
 
