@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from datetime import timedelta
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -269,45 +267,3 @@ class SecurityAlertEvent(Entity):
                 Value(occurred_at),
             )
         cls.objects.filter(key=key, is_active=True).update(**update_kwargs)
-
-
-@dataclass(slots=True)
-class PendingOperation:
-    """Computed pending operation context for UI display."""
-
-    operation: OperationScreen
-    latest_execution: OperationExecution | None
-
-
-def _latest_execution_for_user(operation: OperationScreen, user, *, node=None) -> OperationExecution | None:
-    queryset = operation.executions.filter(user=user)
-    if operation.scope == OperationScreen.Scope.PER_NODE:
-        queryset = queryset.filter(node=node)
-    return queryset.order_by("-performed_at").first()
-
-
-def _is_expired(operation: OperationScreen, execution: OperationExecution | None) -> bool:
-    if execution is None:
-        return True
-    if not operation.recurrence_days:
-        return False
-    expires_at = execution.performed_at + timedelta(days=operation.recurrence_days)
-    return timezone.now() >= expires_at
-
-
-def pending_operations_for_user(user, *, node=None, required_only: bool = False) -> list[PendingOperation]:
-    """Return operations currently pending for a user."""
-
-    if not getattr(user, "is_authenticated", False):
-        return []
-
-    operations = OperationScreen.objects.filter(is_active=True)
-    if required_only:
-        operations = operations.filter(is_required=True)
-
-    pending: list[PendingOperation] = []
-    for operation in operations.order_by("priority", "id"):
-        latest = _latest_execution_for_user(operation, user, node=node)
-        if _is_expired(operation, latest):
-            pending.append(PendingOperation(operation=operation, latest_execution=latest))
-    return pending
