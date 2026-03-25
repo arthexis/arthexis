@@ -255,13 +255,13 @@ class Forwarder:
             return
         listener = threading.Thread(
             target=self._listen_forwarding_session,
-            args=(session.charger_pk,),
+            args=(session,),
             daemon=True,
         )
         session.listener = listener
         listener.start()
 
-    def _listen_forwarding_session(self, charger_pk: int) -> None:
+    def _listen_forwarding_session(self, session: ForwardingSession) -> None:
         """Listen for incoming commands from the remote node."""
 
         # Local imports avoid circular dependencies with the consumer/store modules.
@@ -271,9 +271,11 @@ class Forwarder:
         from apps.ocpp import store
         from apps.ocpp.models import Charger
 
+        charger_pk = session.charger_pk
+
         while True:
-            session = self.get_session(charger_pk)
-            if session is None or not session.is_connected:
+            current = self.get_session(charger_pk)
+            if current is not session or not session.is_connected:
                 return
             try:
                 raw = session.connection.recv()
@@ -284,7 +286,10 @@ class Forwarder:
                     getattr(session, "url", "unknown"),
                     exc,
                 )
-                self.remove_session(charger_pk)
+                with self._sync_lock:
+                    if self._sessions.get(charger_pk) is session:
+                        self._sessions.pop(charger_pk, None)
+                self._close_forwarding_session(session)
                 return
             if not raw:
                 continue
@@ -394,6 +399,7 @@ class Forwarder:
             try:
                 async_to_sync(ws.send)(json.dumps(message))
             except Exception as exc:  # pragma: no cover - network errors
+                store.pop_pending_call(message_id)
                 logger.warning(
                     "Forwarded command %s failed for charger %s: %s",
                     action,
@@ -531,7 +537,12 @@ class Forwarder:
 
         chargers = list(chargers_qs.filter(node_filter))
         chargers = self._select_forwarding_chargers(chargers)
-        active_ids = {charger.pk for charger in chargers}
+        active_ids = {
+            charger.pk
+            for charger in chargers
+            if charger.forwarded_to
+            and (not local.pk or getattr(charger.forwarded_to, "pk", None) != local.pk)
+        }
 
         self.prune_inactive_sessions(active_ids)
 
@@ -547,6 +558,7 @@ class Forwarder:
             if not target:
                 continue
             if local.pk and getattr(target, "pk", None) == local.pk:
+                self.remove_session(charger.pk)
                 continue
 
             existing = self.get_session(charger.pk)
