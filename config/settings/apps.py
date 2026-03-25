@@ -102,10 +102,16 @@ def _legacy_runtime_app_packages() -> set[str]:
 
 
 LEGACY_MIGRATION_APPS = [
+    "apps._legacy.calendars_migration_only.apps.CalendarsMigrationOnlyConfig",
     "apps._legacy.extensions_migration_only.apps.ExtensionsMigrationOnlyConfig",
+    "apps._legacy.fitbit_migration_only.apps.FitbitMigrationOnlyConfig",
+    "apps._legacy.game_migration_only.apps.GameMigrationOnlyConfig",
     "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig",
     "apps._legacy.recipes_migration_only.apps.RecipesMigrationOnlyConfig",
+    "apps._legacy.screens_migration_only.apps.ScreensMigrationOnlyConfig",
+    "apps._legacy.shortcuts_migration_only.apps.ShortcutsMigrationOnlyConfig",
     "apps._legacy.selenium_migration_only.apps.SeleniumMigrationOnlyConfig",
+    "apps._legacy.smb_migration_only.apps.SmbMigrationOnlyConfig",
     "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig",
     "apps._legacy.sponsors_migration_only.apps.SponsorsMigrationOnlyConfig",
     "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
@@ -161,11 +167,17 @@ INSTALLED_APPS = _dedupe_app_entries(INSTALLED_APPS)
 SITE_ID = 1
 
 MIGRATION_MODULES = {
+    "calendars": "apps._legacy.calendars_migration_only.migrations",
     "extensions": "apps._legacy.extensions_migration_only.migrations",
+    "fitbit": "apps._legacy.fitbit_migration_only.migrations",
+    "game": "apps._legacy.game_migration_only.migrations",
     "prompts": "apps._legacy.prompts_migration_only.migrations",
     "recipes": "apps._legacy.recipes_migration_only.migrations",
+    "screens": "apps._legacy.screens_migration_only.migrations",
     "selenium": "apps._legacy.selenium_migration_only.migrations",
+    "shortcuts": "apps._legacy.shortcuts_migration_only.migrations",
     "sites": "apps.core.sites_migrations",
+    "smb": "apps._legacy.smb_migration_only.migrations",
     "socials": "apps._legacy.socials_migration_only.migrations",
     "sponsors": "apps._legacy.sponsors_migration_only.migrations",
     "survey": "apps._legacy.survey_migration_only.migrations",
