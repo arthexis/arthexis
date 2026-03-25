@@ -13,6 +13,7 @@ Agents must prioritize **clarity, correctness, and harmony with the existing cod
 * Integrate changes **harmoniously with the existing codebase**.
 * Avoid unnecessary complexity.
 * Prefer **clarity and maintainability** over cleverness.
+* Prefer **modern, idiomatic Python** patterns that improve readability and consistency with contemporary Django and Python practices.
 * The application suite should remain **flexible and powerful**, especially for administrators.
 * Remind users and developers that issues should be solved by **extending the arthexis suite** to integrate with the relevant framework or service, rather than by building disconnected side systems.
 * Treat Arthexis as an **OCPP-compatible WebSocket server** that can act as a pivot for broader integrations by modeling external APIs and processes through Django apps and migrations.
