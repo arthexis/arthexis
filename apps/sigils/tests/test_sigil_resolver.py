@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -5,7 +7,6 @@ from django.db import DatabaseError
 from django.test import RequestFactory
 
 from apps.nodes.models import Node, NodeRole
-
 from apps.sigils import sigil_resolver
 from apps.sigils.models import SigilRoot
 from apps.sigils.sigil_context import clear_request, set_request
@@ -331,3 +332,67 @@ def test_resolve_sigils_entity_failures_preserve_placeholder(user_root):
     result = sigil_resolver.resolve_sigils("[USR:missing-field=value.email]")
 
     assert result == "[USR:missing-field=value.email]"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("token", "expected"),
+    [
+        ("[USR=missing.email]", ""),
+        ("[USR=missing->email]", "[USR=missing->email]"),
+    ],
+)
+def test_resolve_sigils_table_driven_strict_vs_non_strict_keys(user_root, token, expected):
+    assert sigil_resolver.resolve_sigils(token) == expected
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("token", "expected"),
+    [
+        ("[USR:missing-field=value.email]", "[USR:missing-field=value.email]"),
+        ("[USR:username=someone.email]", ""),
+    ],
+)
+def test_resolve_sigils_table_driven_invalid_field_lookup(user_root, token, expected):
+    assert sigil_resolver.resolve_sigils(token) == expected
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("token", "assertion"),
+    [
+        ("[USR=all]", lambda payload: len(payload) >= 2),
+        ("[USR=manager_count]", lambda payload: payload == "2"),
+    ],
+)
+def test_resolve_sigils_table_driven_manager_method_dispatch(user_root, token, assertion, monkeypatch):
+    user_model = get_user_model()
+    user_model.objects.create(username="manager-alpha")
+    user_model.objects.create(username="manager-bravo")
+    monkeypatch.setattr(user_model.objects, "manager_count", lambda: 2, raising=False)
+
+    resolved = sigil_resolver.resolve_sigils(token)
+    parsed = json.loads(resolved) if resolved.startswith("[") else resolved
+
+    assert assertion(parsed)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("token", "expected"),
+    [
+        ("[USR=:count]", "2"),
+        ("[USR=id:total]", lambda baseline, users: str(baseline + sum(users))),
+    ],
+)
+def test_resolve_sigils_table_driven_aggregate_requests(user_root, token, expected):
+    user_model = get_user_model()
+    baseline_total = int(sigil_resolver.resolve_sigils("[USR=id:total]") or "0")
+    first_user = user_model.objects.create(username="agg-alpha")
+    second_user = user_model.objects.create(username="agg-bravo")
+    user_ids = (first_user.id, second_user.id)
+
+    resolved = sigil_resolver.resolve_sigils(token)
+    expected_value = expected if isinstance(expected, str) else expected(baseline_total, user_ids)
+    assert resolved == expected_value

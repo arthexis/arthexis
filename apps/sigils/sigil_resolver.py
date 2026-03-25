@@ -3,16 +3,16 @@ import concurrent.futures
 import json
 import logging
 import os
-from decimal import Decimal
+from collections.abc import Iterable
+from dataclasses import dataclass
 from functools import lru_cache
-from typing import Iterable, Optional
 
 from django.conf import settings
 from django.core import serializers
 from django.core.exceptions import FieldDoesNotExist, FieldError
 from django.db import models
-from django.db.models import Count, Max, Min, Sum
 
+from . import entity_lookup
 from .models import SigilRoot
 from .scanner import scan_sigil_tokens
 from .sigil_context import get_context, get_request
@@ -48,6 +48,23 @@ class SigilTokenParts(tuple):
     strict_key = property(lambda self: self[5])
 
 
+@dataclass(frozen=True)
+class ResolutionContext:
+    """Token resolution context shared across resolver strategies."""
+
+    current: models.Model | None
+    instance_id: str | None
+    key_lower: str | None
+    key_upper: str | None
+    lookup_root: str
+    normalized_key: str | None
+    original_token: str
+    param: str | None
+    param_args: tuple[str, ...]
+    raw_key: str | None
+    token_parts: SigilTokenParts
+
+
 def _shutdown_attribute_executor():
     _ATTRIBUTE_EXECUTOR.shutdown(wait=True, cancel_futures=True)
 
@@ -55,7 +72,7 @@ def _shutdown_attribute_executor():
 atexit.register(_shutdown_attribute_executor)
 
 
-def _first_instance(model: type[models.Model]) -> Optional[models.Model]:
+def _first_instance(model: type[models.Model]) -> models.Model | None:
     """Return the first model instance honoring model ordering when available."""
     qs = model.objects
     ordering = list(getattr(model._meta, "ordering", []))
@@ -96,7 +113,7 @@ def _identifier_variants(name: str | None) -> list[str]:
 
 
 @lru_cache(maxsize=256)
-def _get_sigil_root(prefix: str) -> Optional[SigilRoot]:
+def _get_sigil_root(prefix: str) -> SigilRoot | None:
     """Fetch a sigil root while treating hyphens and underscores as equivalent."""
     for candidate in _identifier_variants(prefix):
         try:
@@ -110,36 +127,6 @@ def _get_sigil_root(prefix: str) -> Optional[SigilRoot]:
     return None
 
 
-@lru_cache(maxsize=256)
-def _model_field_map(model: type[models.Model]) -> dict[str, models.Field]:
-    """Return a case-insensitive mapping of model field names to fields.
-
-    Args:
-        model: Django model class to introspect.
-
-    Returns:
-        A dictionary keyed by lowercase field name.
-    """
-    return {field.name.lower(): field for field in model._meta.fields}
-
-
-@lru_cache(maxsize=256)
-def _unique_char_fields(model: type[models.Model]) -> tuple[str, ...]:
-    """Return unique character field names for fallback entity lookups.
-
-    Args:
-        model: Django model class to introspect.
-
-    Returns:
-        A tuple of unique ``CharField`` names that support case-insensitive fallback lookup.
-    """
-    return tuple(
-        field.name
-        for field in model._meta.fields
-        if field.unique and isinstance(field, models.CharField)
-    )
-
-
 def _candidate_names(name: str) -> list[str]:
     return _identifier_variants(name)
 
@@ -150,15 +137,6 @@ def _stringify_value(value) -> str:
     if value is None:
         return ""
     return str(value)
-
-
-def _coerce_numeric(value):
-    if isinstance(value, (int, float, Decimal)):
-        return float(value)
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _call_attribute(obj, name: str, args: list[str]):
@@ -181,7 +159,7 @@ def _call_attribute(obj, name: str, args: list[str]):
                     )
                     raise TimeoutError(
                         f"Sigil attribute {obj.__class__.__name__}.{candidate} exceeded timeout"
-                    )
+                    ) from None
                 except TypeError:
                     return True, None
             try:
@@ -190,20 +168,6 @@ def _call_attribute(obj, name: str, args: list[str]):
                 return True, None
         return True, attr
     return False, None
-
-
-def _aggregate_values(values: Iterable[float], func: str) -> Optional[str]:
-    """Aggregate numeric values using the requested aggregate function."""
-    collected = [v for v in values if v is not None]
-    if func == "count":
-        return str(len(collected))
-    if not collected:
-        return ""
-    if func == "min":
-        return str(min(collected))
-    if func == "max":
-        return str(max(collected))
-    return str(sum(collected))
 
 
 def _parse_root_name(token: str, index: int) -> tuple[str, int]:
@@ -472,7 +436,7 @@ def _resolve_instance_value(instance, model, key_name: str, key_lower: str, raw_
         if handled:
             return _stringify_value(custom_value)
 
-    field = _model_field_map(model).get(key_lower or "")
+    field = entity_lookup.model_field_map(model).get(key_lower or "")
     if field:
         value = getattr(instance, field.attname)
         if isinstance(field, models.ForeignKey):
@@ -683,154 +647,9 @@ def _resolve_entity_instance(model, instance, normalized_key: str | None, key_lo
     return serializers.serialize("json", [instance])
 
 
-def _parse_aggregate_request(filter_field: str | None, instance_id: str | None, normalized_key: str | None):
-    """Parse entity aggregate syntax expressed as ``target:function`` in the instance slot.
-
-    Args:
-        filter_field: Optional named lookup field from the token.
-        instance_id: Optional instance selector that may encode an aggregate request.
-        normalized_key: Hyphen-normalized token key.
-
-    Returns:
-        A tuple of aggregate target and aggregate function, or ``(None, None)`` when not applicable.
-    """
-    if filter_field or instance_id is None or normalized_key is not None or ":" not in instance_id:
-        return None, None
-    aggregate_target, aggregate_func = instance_id.split(":", 1)
-    return aggregate_target, _normalize_name(aggregate_func or "total").lower()
-
-
-def _resolve_entity_aggregate(model, aggregate_target: str | None, aggregate_func: str | None, param_args: list[str], original_token: str) -> str | None:
-    """Resolve entity aggregate syntax for model-backed sigils.
-
-    Args:
-        model: Model class to aggregate.
-        aggregate_target: Field or attribute to aggregate.
-        aggregate_func: Aggregate function name.
-        param_args: Positional arguments for callable aggregate targets.
-        original_token: Token used for degraded failure output.
-
-    Returns:
-        Aggregated string result, or ``None`` when the token is not an aggregate request.
-    """
-    aggregate_candidates = {"total", "count", "min", "max"}
-    if aggregate_func not in aggregate_candidates:
-        return None
-
-    qs = model.objects.all()
-    target_name = _normalize_name(aggregate_target or "")
-    if aggregate_func == "count" and not target_name:
-        return str(qs.count())
-
-    field = _model_field_map(model).get(target_name.lower()) if target_name else None
-    if field and aggregate_func in {"total", "min", "max", "count"}:
-        aggregation_map = {
-            "count": Count,
-            "max": Max,
-            "min": Min,
-            "total": Sum,
-        }
-        agg_class = aggregation_map.get(aggregate_func)
-        if agg_class:
-            result = qs.aggregate(value=agg_class(field.attname)).get("value")
-            return "" if result is None else str(result)
-
-    values: list[float] = []
-    for obj in qs:
-        source = None
-        if target_name:
-            if field:
-                source = getattr(obj, field.attname)
-            else:
-                found, source = _call_attribute(obj, target_name, param_args)
-                if not found:
-                    continue
-        if source is None:
-            continue
-        numeric = _coerce_numeric(source)
-        if numeric is not None:
-            values.append(numeric)
-
-    aggregated = _aggregate_values(values, aggregate_func)
-    return aggregated if aggregated is not None else _failed_resolution(original_token)
-
-
-def _resolve_entity_lookup(
-    model,
-    filter_field: str | None,
-    instance_id: str | None,
-    current: Optional[models.Model],
-) -> tuple[Optional[models.Model], bool]:
-    """Resolve the target entity instance from explicit selectors or ambient context.
-
-    Args:
-        model: Target Django model class.
-        filter_field: Optional named field used for lookup.
-        instance_id: Optional explicit instance selector from the token.
-        current: Optional ambient current model instance.
-
-    Returns:
-        A tuple containing a matching model instance, if any, and a flag indicating
-        whether the lookup itself was invalid.
-
-    Raises:
-        FieldError: Caught internally when malformed lookups reach the ORM.
-    """
-    instance = None
-    invalid_lookup = False
-    if model is None:
-        return None, False
-
-    if instance_id is not None:
-        if filter_field:
-            field_name = filter_field.lower()
-            try:
-                field_obj = model._meta.get_field(field_name)
-            except FieldDoesNotExist:
-                invalid_lookup = True
-                field_obj = None
-            if field_obj and isinstance(field_obj, models.CharField):
-                lookup = {f"{field_name}__iexact": instance_id}
-            else:
-                lookup = {field_name: instance_id}
-            try:
-                instance = model.objects.filter(**lookup).first()
-            except (FieldError, TypeError, ValueError):
-                invalid_lookup = True
-                instance = None
-        else:
-            try:
-                instance = model.objects.filter(pk=instance_id).first()
-            except (TypeError, ValueError):
-                instance = None
-
-    if instance is None and instance_id is not None and not filter_field:
-        for field_name in _unique_char_fields(model):
-            instance = model.objects.filter(**{f"{field_name}__iexact": instance_id}).first()
-            if instance:
-                break
-
-    if instance is None and instance_id is None and current and isinstance(current, model):
-        instance = current
-    if instance is None and instance_id is None:
-        ctx = get_context()
-        inst_pk = ctx.get(model)
-        if inst_pk is not None:
-            instance = model.objects.filter(pk=inst_pk).first()
-    return instance, invalid_lookup
-
-
 def _resolve_entity_root(
-    root,
-    filter_field: str | None,
-    instance_id: str | None,
-    normalized_key: str | None,
-    key_lower: str | None,
-    raw_key: str | None,
-    param_args: list[str],
-    current: Optional[models.Model],
-    original_token: str,
-    strict_key: bool,
+    root: SigilRoot,
+    context: ResolutionContext,
 ) -> str:
     """Resolve entity-context sigils for model instances, aggregates, and manager dispatch.
 
@@ -851,38 +670,58 @@ def _resolve_entity_root(
     """
     model = root.content_type.model_class() if root.content_type else None
     if model is None:
-        return _failed_resolution(original_token)
+        return _failed_resolution(context.original_token)
 
-    aggregate_target, aggregate_func = _parse_aggregate_request(filter_field, instance_id, normalized_key)
+    aggregate_target, aggregate_func = entity_lookup.parse_aggregate_request(
+        context.token_parts.filter_field,
+        context.instance_id,
+        context.normalized_key,
+    )
     if aggregate_func is not None:
-        aggregate_result = _resolve_entity_aggregate(
+        aggregate_result = entity_lookup.resolve_entity_aggregate(
             model,
             aggregate_target,
             aggregate_func,
-            param_args,
-            original_token,
+            list(context.param_args),
+            _call_attribute,
+            _failed_resolution,
+            context.original_token,
         )
         if aggregate_result is not None:
             return aggregate_result
 
-    instance, invalid_lookup = _resolve_entity_lookup(model, filter_field, instance_id, current)
-    if instance is None and instance_id is None:
+    instance, invalid_lookup = entity_lookup.resolve_entity_lookup(
+        model,
+        context.token_parts.filter_field,
+        context.instance_id,
+        context.current,
+    )
+    if instance is None and context.instance_id is None:
+        ctx = get_context()
+        inst_pk = ctx.get(model)
+        if inst_pk is not None:
+            instance = model.objects.filter(pk=inst_pk).first()
+    if instance is None and context.instance_id is None:
         instance = root.default_instance()
 
     if instance:
         return _resolve_entity_instance(
             model,
             instance,
-            normalized_key,
-            key_lower,
-            raw_key,
-            param_args,
-            original_token,
+            context.normalized_key,
+            context.key_lower,
+            context.raw_key,
+            list(context.param_args),
+            context.original_token,
         )
 
-    manager_method_name = instance_id if not filter_field and normalized_key is None else None
+    manager_method_name = (
+        context.instance_id
+        if not context.token_parts.filter_field and context.normalized_key is None
+        else None
+    )
     if manager_method_name:
-        found, manager_val = _call_attribute(model.objects, manager_method_name, param_args)
+        found, manager_val = _call_attribute(model.objects, manager_method_name, list(context.param_args))
         if found:
             if isinstance(manager_val, models.QuerySet):
                 return serializers.serialize("json", manager_val)
@@ -891,85 +730,100 @@ def _resolve_entity_root(
             return _stringify_value(manager_val)
 
     if invalid_lookup:
-        return _failed_resolution(original_token)
-    if normalized_key and not strict_key:
+        return _failed_resolution(context.original_token)
+    if context.normalized_key and not context.token_parts.strict_key:
         return ""
-    return _failed_resolution(original_token)
+    return _failed_resolution(context.original_token)
 
 
-def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
-    """Resolve a single sigil token to its string value with graceful degradation."""
-    original_token = token
-    try:
-        token_parts = _parse_token_parts(token)
-    except TokenParseError:
-        return _failed_resolution(original_token)
-
-    root_name, filter_field, instance_id, key, param, strict_key = token_parts
-    normalized_root = _normalize_name(root_name)
+def _build_resolution_context(
+    token: str,
+    current: models.Model | None,
+) -> ResolutionContext:
+    """Build normalized token resolution context from a raw token."""
+    token_parts = _parse_token_parts(token)
+    normalized_root = _normalize_name(token_parts.root_name)
     lookup_root = normalized_root.upper()
-    raw_key = key
-    normalized_key = _normalize_name(key) if key else None
+    normalized_key = _normalize_name(token_parts.key) if token_parts.key else None
     key_upper = normalized_key.upper() if normalized_key else None
     key_lower = normalized_key.lower() if normalized_key else None
+    param = resolve_sigils(token_parts.param, current) if token_parts.param else token_parts.param
+    param_args = tuple(param.split(",")) if param else ()
+    instance_id = resolve_sigils(token_parts.instance_id, current) if token_parts.instance_id else token_parts.instance_id
+    return ResolutionContext(
+        current=current,
+        instance_id=instance_id,
+        key_lower=key_lower,
+        key_upper=key_upper,
+        lookup_root=lookup_root,
+        normalized_key=normalized_key,
+        original_token=token,
+        param=param,
+        param_args=param_args,
+        raw_key=token_parts.key,
+        token_parts=token_parts,
+    )
 
-    param_args: list[str] = []
-    if param:
-        param = resolve_sigils(param, current)
-        if param:
-            param_args = param.split(",")
-    if instance_id:
-        instance_id = resolve_sigils(instance_id, current)
 
-    if lookup_root == "OBJECT" and current is not None:
+def _resolve_context_config(root: SigilRoot, context: ResolutionContext) -> str:
+    return _resolve_config_value(
+        root,
+        context.normalized_key,
+        context.key_upper,
+        context.key_lower,
+        context.raw_key,
+        context.original_token,
+    )
+
+
+def _resolve_context_request(root: SigilRoot, context: ResolutionContext) -> str:
+    del root
+    return _resolve_request_root(
+        context.normalized_key,
+        context.raw_key,
+        context.param,
+        list(context.param_args),
+    )
+
+
+def _resolve_context_entity(root: SigilRoot, context: ResolutionContext) -> str:
+    return _resolve_entity_root(root, context)
+
+
+CONTEXT_RESOLVERS = {
+    SigilRoot.Context.CONFIG: _resolve_context_config,
+    SigilRoot.Context.REQUEST: _resolve_context_request,
+    SigilRoot.Context.ENTITY: _resolve_context_entity,
+}
+
+
+def _resolve_token(token: str, current: models.Model | None = None) -> str:
+    """Resolve a single sigil token to its string value with graceful degradation."""
+    try:
+        context = _build_resolution_context(token, current)
+    except TokenParseError:
+        return _failed_resolution(token)
+
+    if context.lookup_root == "OBJECT" and context.current is not None:
         return _resolve_dynamic_root(
-            current,
-            normalized_key,
-            key_lower,
-            raw_key,
-            param_args,
-            original_token,
+            context.current,
+            context.normalized_key,
+            context.key_lower,
+            context.raw_key,
+            list(context.param_args),
+            context.original_token,
         )
 
-    root = _get_sigil_root(lookup_root)
+    root = _get_sigil_root(context.lookup_root)
     if root is None:
-        return _failed_resolution(original_token)
+        return _failed_resolution(context.original_token)
 
-    dispatch = {
-        SigilRoot.Context.CONFIG: lambda: _resolve_config_value(
-            root,
-            normalized_key,
-            key_upper,
-            key_lower,
-            raw_key,
-            original_token,
-        ),
-        SigilRoot.Context.REQUEST: lambda: _resolve_request_root(
-            normalized_key,
-            raw_key,
-            param,
-            param_args,
-        ),
-        SigilRoot.Context.ENTITY: lambda: _resolve_entity_root(
-            root,
-            filter_field,
-            instance_id,
-            normalized_key,
-            key_lower,
-            raw_key,
-            param_args,
-            current,
-            original_token,
-            strict_key,
-        ),
-    }
-
-    resolver = dispatch.get(root.context_type)
+    resolver = CONTEXT_RESOLVERS.get(root.context_type)
     if resolver is None:
-        return _failed_resolution(original_token)
+        return _failed_resolution(context.original_token)
 
     try:
-        return resolver()
+        return resolver(root, context)
     except (
         AttributeError,
         FieldDoesNotExist,
@@ -981,13 +835,13 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
     ):
         logger.exception(
             "Error resolving sigil [%s.%s]",
-            lookup_root,
-            key_upper or normalized_key or raw_key,
+            context.lookup_root,
+            context.key_upper or context.normalized_key or context.raw_key,
         )
-        return _failed_resolution(original_token)
+        return _failed_resolution(context.original_token)
 
 
-def resolve_sigils(text: str, current: Optional[models.Model] = None) -> str:
+def resolve_sigils(text: str, current: models.Model | None = None) -> str:
     """Resolve every sigil token found in the given text.
 
     Args:
@@ -1010,7 +864,7 @@ def resolve_sigils(text: str, current: Optional[models.Model] = None) -> str:
     return "".join(parts)
 
 
-def resolve_sigil(sigil: str, current: Optional[models.Model] = None) -> str:
+def resolve_sigil(sigil: str, current: models.Model | None = None) -> str:
     """Resolve a single sigil-bearing string.
 
     Args:
