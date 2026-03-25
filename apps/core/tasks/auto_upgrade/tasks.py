@@ -8,15 +8,15 @@ import shutil
 import socket
 import subprocess
 import sys
+import urllib.error
+import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable
-import urllib.error
-import urllib.request
+from typing import Any
 
 import requests
-
 from celery import shared_task
 from django.conf import settings
 from django.db import DatabaseError
@@ -39,12 +39,14 @@ from .canaries import _canary_gate
 from .locks import (
     _add_skipped_revision,
     _auto_upgrade_ran_recently,
+    _load_skipped_revisions,
     _read_auto_upgrade_failure_count,
-    _record_auto_upgrade_failure as _record_auto_upgrade_failure_base,
     _record_auto_upgrade_timestamp,
     _reset_auto_upgrade_failure_count,
     _reset_network_failure_count,
-    _load_skipped_revisions,
+)
+from .locks import (
+    _record_auto_upgrade_failure as _record_auto_upgrade_failure_base,
 )
 from .network import _handle_network_failure_if_applicable, _is_network_failure
 from .runner import (
@@ -57,7 +59,6 @@ from .scheduling import (
     _apply_stable_schedule_guard,
     _resolve_auto_upgrade_interval_minutes,
 )
-
 
 AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 300
 AUTO_UPGRADE_LCD_CHANNEL_TYPE = LcdChannel.HIGH.value
@@ -368,6 +369,15 @@ class AutoUpgradeRepositoryState:
     local_version: str | None
     local_revision: str
     severity: str
+
+
+@dataclass
+class AutoUpgradeDecision:
+    skip: bool
+    apply: bool
+    reason: str | None
+    args: list[str]
+    notify: bool
 
 
 def _default_auto_upgrade_operations() -> AutoUpgradeOperations:
@@ -844,91 +854,78 @@ def _fetch_repository_state(
     )
 
 
-def _plan_auto_upgrade(
+def build_upgrade_decision(
     base_dir: Path,
     mode: AutoUpgradeMode,
     repo_state: AutoUpgradeRepositoryState,
-    notify: Callable[[str, str], Any] | None,
-    startup: Callable[[], Any] | None,
-    ops: AutoUpgradeOperations,
-) -> tuple[list[str], bool] | None:
-    upgrade_was_applied = False
-    args: list[str] = []
-    upgrade_subject = _resolve_upgrade_subject()
-    upgrade_stamp = timezone.localtime(timezone.now()).strftime("@ %Y%m%d %H:%M")
-
+    *,
+    recency_throttled: bool = False,
+) -> AutoUpgradeDecision:
     if not _canary_gate(base_dir, repo_state, mode):
-        ops.ensure_runtime_services(
-            base_dir,
-            restart_if_active=False,
-            revert_on_failure=False,
-            log_appender=append_auto_upgrade_log,
+        return AutoUpgradeDecision(
+            skip=True,
+            apply=False,
+            reason="canary-gate-blocked",
+            args=[],
+            notify=False,
         )
-        if startup:
-            startup()
-        return None
 
     if mode.requires_pypi:
         if not repo_state.release_pypi_url:
-            append_auto_upgrade_log(
-                base_dir,
-                "Skipping auto-upgrade; PyPI release has not been published yet.",
+            return AutoUpgradeDecision(
+                skip=True,
+                apply=False,
+                reason="pypi-release-missing",
+                args=[],
+                notify=False,
             )
-            ops.ensure_runtime_services(
-                base_dir,
-                restart_if_active=False,
-                revert_on_failure=False,
-                log_appender=append_auto_upgrade_log,
-            )
-            if startup:
-                startup()
-            return None
 
     if mode.mode == "unstable":
         if repo_state.severity == SEVERITY_LOW:
-            append_auto_upgrade_log(
-                base_dir,
-                "Skipping auto-upgrade for low severity patch on latest channel",
+            return AutoUpgradeDecision(
+                skip=True,
+                apply=False,
+                reason="low-severity-unstable-skip",
+                args=[],
+                notify=False,
             )
-            ops.ensure_runtime_services(
-                base_dir,
-                restart_if_active=False,
-                revert_on_failure=False,
-                log_appender=append_auto_upgrade_log,
-            )
-            if startup:
-                startup()
-            return None
 
         if (
             repo_state.local_revision == repo_state.remote_revision
             and repo_state.local_revision
         ):
-            ops.ensure_runtime_services(
-                base_dir,
-                restart_if_active=False,
-                revert_on_failure=False,
-                log_appender=append_auto_upgrade_log,
+            return AutoUpgradeDecision(
+                skip=True,
+                apply=False,
+                reason="revision-unchanged",
+                args=[],
+                notify=False,
             )
-            return None
-
-        if notify:
-            notify(upgrade_subject, upgrade_stamp)
-        args = _upgrade_command_args("latest")
-        upgrade_was_applied = True
+        decision = AutoUpgradeDecision(
+            skip=False,
+            apply=True,
+            reason=None,
+            args=_upgrade_command_args("latest"),
+            notify=True,
+        )
+        if recency_throttled:
+            decision.skip = True
+            decision.apply = False
+            decision.reason = "recency-throttled"
+            decision.args = []
+            decision.notify = False
+        return decision
     else:
         target_version = repo_state.remote_version or repo_state.local_version or "0"
 
         if repo_state.local_version == target_version:
-            ops.ensure_runtime_services(
-                base_dir,
-                restart_if_active=False,
-                revert_on_failure=False,
-                log_appender=append_auto_upgrade_log,
+            return AutoUpgradeDecision(
+                skip=True,
+                apply=False,
+                reason="version-unchanged",
+                args=[],
+                notify=False,
             )
-            if startup:
-                startup()
-            return None
 
         if repo_state.release_version and repo_state.release_revision:
             matches_revision = False
@@ -940,34 +937,93 @@ def _plan_auto_upgrade(
                     repo_state.release_version, repo_state.remote_revision
                 )
             if not matches_revision:
-                append_auto_upgrade_log(
-                    base_dir,
-                    (
-                        "Skipping stable auto-upgrade; release revision does not "
-                        "match origin/main"
-                    ),
+                return AutoUpgradeDecision(
+                    skip=True,
+                    apply=False,
+                    reason="release-revision-mismatch",
+                    args=[],
+                    notify=False,
                 )
-                ops.ensure_runtime_services(
-                    base_dir,
-                    restart_if_active=False,
-                    revert_on_failure=False,
-                    log_appender=append_auto_upgrade_log,
-                )
-                return None
-
-        if notify:
-            notify(upgrade_subject, upgrade_stamp)
-        args = _upgrade_command_args("stable")
-        upgrade_was_applied = True
-
-    if os.name != "nt" and args and args[0].lower().endswith(".bat"):
-        args = ["./upgrade.sh", *args[1:]]
-        append_auto_upgrade_log(
-            base_dir,
-            "Normalized upgrade command for POSIX host",
+        decision = AutoUpgradeDecision(
+            skip=False,
+            apply=True,
+            reason=None,
+            args=_upgrade_command_args("stable"),
+            notify=True,
         )
+        if recency_throttled:
+            decision.skip = True
+            decision.apply = False
+            decision.reason = "recency-throttled"
+            decision.args = []
+            decision.notify = False
+        return decision
 
-    return args, upgrade_was_applied
+def _execute_upgrade_decision(
+    base_dir: Path,
+    mode: AutoUpgradeMode,
+    repo_state: AutoUpgradeRepositoryState,
+    decision: AutoUpgradeDecision,
+    log_file: Path,
+    notify: Callable[[str, str], Any] | None,
+    startup: Callable[[], Any] | None,
+    ops: AutoUpgradeOperations,
+    state: AutoUpgradeState,
+) -> bool:
+    if decision.skip:
+        if decision.reason == "pypi-release-missing":
+            append_auto_upgrade_log(
+                base_dir,
+                "Skipping auto-upgrade; PyPI release has not been published yet.",
+            )
+        elif decision.reason == "low-severity-unstable-skip":
+            append_auto_upgrade_log(
+                base_dir,
+                "Skipping auto-upgrade for low severity patch on latest channel",
+            )
+        elif decision.reason == "release-revision-mismatch":
+            append_auto_upgrade_log(
+                base_dir,
+                (
+                    "Skipping stable auto-upgrade; release revision does not "
+                    "match origin/main"
+                ),
+            )
+        elif decision.reason == "recency-throttled":
+            append_auto_upgrade_log(
+                base_dir,
+                (
+                    "Skipping auto-upgrade; last run was less than "
+                    f"{mode.interval_minutes} minutes ago"
+                ),
+            )
+
+        ops.ensure_runtime_services(
+            base_dir,
+            restart_if_active=False,
+            revert_on_failure=False,
+            log_appender=append_auto_upgrade_log,
+        )
+        if startup:
+            startup()
+        return False
+
+    if decision.notify and notify:
+        upgrade_subject = _resolve_upgrade_subject()
+        upgrade_stamp = timezone.localtime(timezone.now()).strftime("@ %Y%m%d %H:%M")
+        notify(upgrade_subject, upgrade_stamp)
+
+    _execute_upgrade_plan(
+        base_dir,
+        mode,
+        repo_state,
+        decision.args,
+        decision.apply,
+        log_file,
+        ops,
+        state,
+    )
+    return decision.apply
 
 
 def _execute_upgrade_plan(
@@ -980,46 +1036,8 @@ def _execute_upgrade_plan(
     ops: AutoUpgradeOperations,
     state: AutoUpgradeState,
 ):
-    if upgrade_was_applied and not mode.admin_override and not mode.skip_recency_check:
-        if _auto_upgrade_ran_recently(base_dir, mode.interval_minutes):
-            append_auto_upgrade_log(
-                base_dir,
-                (
-                    "Skipping auto-upgrade; last run was less than "
-                    f"{mode.interval_minutes} minutes ago"
-                ),
-            )
-            ops.ensure_runtime_services(
-                base_dir,
-                restart_if_active=False,
-                revert_on_failure=False,
-                log_appender=append_auto_upgrade_log,
-            )
-            return
-
     with log_file.open("a") as fh:
         fh.write(f"{timezone.now().isoformat()} running: {' '.join(args)}\n")
-
-    if (
-        upgrade_was_applied
-        and not mode.admin_override
-        and not mode.skip_recency_check
-        and _auto_upgrade_ran_recently(base_dir, mode.interval_minutes)
-    ):
-        append_auto_upgrade_log(
-            base_dir,
-            (
-                "Skipping auto-upgrade; last run was less than "
-                f"{mode.interval_minutes} minutes ago"
-            ),
-        )
-        ops.ensure_runtime_services(
-            base_dir,
-            restart_if_active=False,
-            revert_on_failure=False,
-            log_appender=append_auto_upgrade_log,
-        )
-        return
 
     if upgrade_was_applied:
         _broadcast_upgrade_start_message(
@@ -1176,25 +1194,35 @@ def check_github_updates(
             status = "SKIPPED"
             return status
 
-        plan = _plan_auto_upgrade(base_dir, mode, repo_state, notify, startup, ops)
-        if plan is None:
-            status = "NO-UPDATES"
-            return status
-
-        args, upgrade_was_applied = plan
-
-        status = "APPLIED" if upgrade_was_applied else "NO-UPDATES"
-
-        _execute_upgrade_plan(
+        decision = build_upgrade_decision(
             base_dir,
             mode,
             repo_state,
-            args,
-            upgrade_was_applied,
+            recency_throttled=(
+                not mode.admin_override
+                and not mode.skip_recency_check
+                and _auto_upgrade_ran_recently(base_dir, mode.interval_minutes)
+            ),
+        )
+        if os.name != "nt" and decision.args and decision.args[0].lower().endswith(".bat"):
+            decision.args = ["./upgrade.sh", *decision.args[1:]]
+            append_auto_upgrade_log(
+                base_dir,
+                "Normalized upgrade command for POSIX host",
+            )
+
+        applied = _execute_upgrade_decision(
+            base_dir,
+            mode,
+            repo_state,
+            decision,
             log_file,
+            notify,
+            startup,
             ops,
             state,
         )
+        status = "APPLIED" if applied else "NO-UPDATES"
     except Exception as exc:
         status = "FAILED"
         _handle_auto_upgrade_failure(base_dir, exc, state)
@@ -1320,11 +1348,13 @@ __all__ = [
     "AUTO_UPGRADE_HEALTH_DELAY_SECONDS",
     "AUTO_UPGRADE_LCD_CHANNEL_NUM",
     "AUTO_UPGRADE_LCD_CHANNEL_TYPE",
+    "SEVERITY_CRITICAL",
+    "SEVERITY_LOW",
+    "SEVERITY_NORMAL",
+    "AutoUpgradeDecision",
     "AutoUpgradeMode",
-    "AutoUpgradeRepositoryState",
     "AutoUpgradeOperations",
-    "check_github_updates",
-    "verify_auto_upgrade_health",
+    "AutoUpgradeRepositoryState",
     "_broadcast_upgrade_start_message",
     "_canary_gate",
     "_ci_status_for_revision",
@@ -1333,8 +1363,8 @@ __all__ = [
     "_read_auto_upgrade_failure_count",
     "_resolve_auto_upgrade_change_tag",
     "_send_auto_upgrade_check_message",
-    "SEVERITY_CRITICAL",
-    "SEVERITY_LOW",
-    "SEVERITY_NORMAL",
     "append_auto_upgrade_log",
+    "build_upgrade_decision",
+    "check_github_updates",
+    "verify_auto_upgrade_health",
 ]
