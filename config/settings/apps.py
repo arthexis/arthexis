@@ -161,10 +161,14 @@ INSTALLED_APPS = _dedupe_app_entries(INSTALLED_APPS)
 SITE_ID = 1
 
 MIGRATION_MODULES = {
+    "extensions": "apps._legacy.extensions_migration_only.migrations",
+    "prompts": "apps._legacy.prompts_migration_only.migrations",
+    "recipes": "apps._legacy.recipes_migration_only.migrations",
     "selenium": "apps._legacy.selenium_migration_only.migrations",
     "sites": "apps.core.sites_migrations",
     "socials": "apps._legacy.socials_migration_only.migrations",
     "sponsors": "apps._legacy.sponsors_migration_only.migrations",
+    "survey": "apps._legacy.survey_migration_only.migrations",
     # Pin django_celery_beat migrations to a local copy so we can override
     # upstream changes that introduce optional dependencies (e.g. Google
     # Calendar profile) and avoid InvalidBases errors during migrate.
