@@ -91,6 +91,17 @@ def _reorder_favorites(user, favorite_pk: int, direction: str) -> None:
         Favorite.objects.bulk_update(favorites_to_update, ["priority"])
 
 
+def _ensure_favorite_user_data(fav: Favorite, update_fields: list[str]) -> None:
+    """Enforce user-data flags and record changed fields for model save."""
+
+    if not fav.user_data:
+        fav.user_data = True
+        update_fields.append("user_data")
+    if not fav.is_user_data:
+        fav.is_user_data = True
+        update_fields.append("is_user_data")
+
+
 def favorite_toggle(request, ct_id):
     """Create, update, or configure a user's favorite model shortcut."""
 
@@ -101,7 +112,12 @@ def favorite_toggle(request, ct_id):
 
     if request.method == "GET" and not fav:
         try:
-            Favorite.objects.create(user=request.user, content_type=ct)
+            Favorite.objects.create(
+                user=request.user,
+                content_type=ct,
+                user_data=True,
+                is_user_data=True,
+            )
         except IntegrityError:
             # A concurrent request may have created this favorite already.
             pass
@@ -115,16 +131,13 @@ def favorite_toggle(request, ct_id):
             clear_user_favorites_cache(request.user)
             return redirect(next_url or changelist_url or "admin:index")
         label = request.POST.get("custom_label", "").strip()
-        user_data = request.POST.get("user_data") == "on"
         priority_raw = request.POST.get("priority", "").strip()
         if fav:
             update_fields = []
             if fav.custom_label != label:
                 fav.custom_label = label
                 update_fields.append("custom_label")
-            if fav.user_data != user_data:
-                fav.user_data = user_data
-                update_fields.append("user_data")
+            _ensure_favorite_user_data(fav, update_fields)
             priority = _parse_priority(priority_raw, fav.priority)
             if fav.priority != priority:
                 fav.priority = priority
@@ -138,7 +151,8 @@ def favorite_toggle(request, ct_id):
                     user=request.user,
                     content_type=ct,
                     custom_label=label,
-                    user_data=user_data,
+                    user_data=True,
+                    is_user_data=True,
                     priority=priority,
                 )
             except IntegrityError:
@@ -148,9 +162,7 @@ def favorite_toggle(request, ct_id):
                     if fav.custom_label != label:
                         fav.custom_label = label
                         update_fields.append("custom_label")
-                    if fav.user_data != user_data:
-                        fav.user_data = user_data
-                        update_fields.append("user_data")
+                    _ensure_favorite_user_data(fav, update_fields)
                     if fav.priority != priority:
                         fav.priority = priority
                         update_fields.append("priority")
@@ -182,13 +194,9 @@ def favorite_list(request):
     )
     if request.method == "POST":
         ContentType.objects.clear_cache()
-        selected = set(request.POST.getlist("user_data"))
         for fav in favorites:
             update_fields = []
-            user_selected = str(fav.pk) in selected
-            if fav.user_data != user_selected:
-                fav.user_data = user_selected
-                update_fields.append("user_data")
+            _ensure_favorite_user_data(fav, update_fields)
 
             custom_label = request.POST.get(f"custom_label_{fav.pk}", "").strip()
             if fav.custom_label != custom_label:

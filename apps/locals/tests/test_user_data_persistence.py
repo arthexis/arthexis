@@ -24,8 +24,8 @@ def test_user_data_persisted_and_reloaded_after_db_flush(tmp_path):
         custom_label="Example",
         priority=1,
     )
-    Favorite.all_objects.filter(pk=favorite.pk).update(is_user_data=True)
     favorite.refresh_from_db()
+    assert favorite.is_user_data is True
 
     user_data.dump_user_fixture(favorite, user)
     fixture_path = user_data.fixture_path(user, favorite)
