@@ -1,14 +1,18 @@
-from collections import OrderedDict
-from collections.abc import Mapping
-import ipaddress
-from datetime import timedelta
-from types import SimpleNamespace
-from urllib.parse import urlsplit, urlunsplit
 import base64
 import binascii
+import ipaddress
 import json
 import uuid
+from collections import OrderedDict
+from collections.abc import Mapping
+from datetime import timedelta
+from types import SimpleNamespace
 
+import requests
+from asgiref.sync import async_to_sync
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -18,28 +22,19 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
 from django.test import signals
-from django.test.client import RequestFactory
 from django.urls import NoReverseMatch, path, reverse
-from django.conf import settings
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
-from asgiref.sync import async_to_sync
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
 from requests import RequestException
-import requests
 
-from apps.nodes.logging import get_register_visitor_logger
-from apps.nodes.views.registration import register_visitor_proxy
-from config.request_utils import is_https_request
-
-from apps.discovery.services import record_discovery_item, start_discovery
 from apps.cards.models import RFID
 from apps.cards.sync import apply_rfid_payload
 from apps.core.admin import SaveBeforeChangeAction
+from apps.discovery.services import record_discovery_item, start_discovery
 from apps.locals.user_data import EntityModelAdmin
+from apps.nodes.logging import get_register_visitor_logger
 from apps.ocpp import store
 from apps.ocpp.models import (
     Charger,
@@ -50,6 +45,7 @@ from apps.ocpp.models import (
 )
 from apps.ocpp.network import serialize_charger_for_network
 from apps.users import temp_passwords
+from config.request_utils import is_https_request
 
 from ..models import Node, NodeRole, _format_upgrade_body
 from .actions import (
@@ -69,7 +65,7 @@ from .inlines import (
     NodeUpgradePolicyAssignmentInline,
     SSHAccountInline,
 )
-
+from .visitor_registration import VisitorRegistrationRequest, VisitorRegistrationService
 
 registration_logger = get_register_visitor_logger()
 
@@ -929,31 +925,15 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return None, None
 
     def _resolve_visitor_base(self, request, default_port: int = 443):
-        raw_port = default_port
-        raw = "127.0.0.1"
-
-        candidate = raw
-        if "://" not in candidate:
-            candidate = f"//{candidate.lstrip('/')}"
-
-        parsed = urlsplit(candidate)
-        hostname = parsed.hostname or ""
-        if not hostname:
-            return None, "", default_port, "https"
-
-        scheme = (parsed.scheme or "https").lower()
-        if scheme != "https":
-            scheme = "https"
-
-        port = parsed.port or raw_port or default_port
-        if ":" in hostname and not hostname.startswith("["):
-            host_part = f"[{hostname}]"
-        else:
-            host_part = hostname
-        if port:
-            host_part = f"{host_part}:{port}"
-
-        return urlunsplit((scheme, host_part, "", "", "")), hostname, port, scheme
+        parsed = VisitorRegistrationRequest.from_http_request(
+            request, default_port=default_port
+        )
+        return (
+            parsed.visitor_base,
+            parsed.visitor_host,
+            parsed.visitor_port,
+            parsed.visitor_scheme,
+        )
 
     def _build_visitor_base_from_input(
         self,
@@ -962,37 +942,13 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         port_value: int | None,
         scheme: str | None = None,
     ) -> str | None:
-        cleaned_host = (host_value or "").strip()
-        if not cleaned_host:
-            return None
-
-        candidate = cleaned_host
-        if "://" not in candidate:
-            normalized_scheme = (scheme or "https").replace(":", "")
-            candidate = f"{normalized_scheme}://{candidate}"
-
-        try:
-            parsed = urlsplit(candidate)
-        except ValueError:
-            return None
-
-        hostname = parsed.hostname or ""
-        if not hostname:
-            return None
-
-        normalized_scheme = (parsed.scheme or scheme or "https").lower()
-        if normalized_scheme != "https":
-            normalized_scheme = "https"
-
-        port = port_value or parsed.port or 8888
-        host_part = hostname
-        if ":" in hostname and not hostname.startswith("["):
-            host_part = f"[{hostname}]"
-
-        if port:
-            host_part = f"{host_part}:{port}"
-
-        return urlunsplit((normalized_scheme, host_part, "", "", ""))
+        del scheme
+        visitor_base, *_ = VisitorRegistrationRequest._build_base(
+            host_value,
+            port_value,
+            default_port=8888,
+        )
+        return visitor_base
 
     def register_visitor_view(self, request):
         """Exchange registration data with the visiting node."""
@@ -1009,114 +965,32 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 request, f"Current host registered as {node}", messages.SUCCESS
             )
 
-        token = (request.POST.get("token") if request.method == "POST" else None) or uuid.uuid4().hex
-        visitor_base, visitor_host, visitor_port, visitor_scheme = self._resolve_visitor_base(request)
-        visitor_info_url = ""
-        visitor_register_url = ""
-        visitor_error = None
+        parsed_request = VisitorRegistrationRequest.from_http_request(request)
+        token = parsed_request.token
+        visitor_base = parsed_request.visitor_base
+        visitor_host = parsed_request.visitor_host
+        visitor_port = parsed_request.visitor_port
+        visitor_scheme = parsed_request.visitor_scheme
+        visitor_info_url = parsed_request.visitor_info_url
+        visitor_register_url = parsed_request.visitor_register_url
+        visitor_error = parsed_request.visitor_error
         https_warnings: list[str] = []
         server_summary = None
         server_host = None
         server_visitor = None
         log_visible = False
-        if visitor_base:
-            visitor_base = visitor_base.rstrip("/")
-            visitor_info_url = f"{visitor_base}/nodes/info/"
-            visitor_register_url = f"{visitor_base}/nodes/register/"
-        else:
-            visitor_error = _(
-                "Visitor address missing or invalid. Append a ?visitor=host[:port] query string to continue."
-            )
 
         if request.method == "POST":
-            submitted_host = str(request.POST.get("visitor_host") or "").strip()
-            submitted_port = request.POST.get("visitor_port")
-            parsed_port: int | None = None
-            if submitted_port not in (None, ""):
-                try:
-                    parsed_port = int(submitted_port)
-                except (TypeError, ValueError):
-                    parsed_port = None
-
-            visitor_host = submitted_host or visitor_host
-            visitor_port = parsed_port or visitor_port
-            visitor_base = self._build_visitor_base_from_input(
-                host_value=submitted_host,
-                port_value=parsed_port,
-                scheme=visitor_scheme,
-            )
             log_visible = True
-
-            if not visitor_base:
-                visitor_error = _(
-                    "Visitor address missing. Reload with ?visitor=host[:port]."
-                )
-                server_summary = {
-                    "status": "error",
-                    "message": visitor_error,
-                }
-                server_host = {
-                    "status": "error",
-                    "message": visitor_error,
-                }
-                server_visitor = {
-                    "status": "error",
-                    "message": visitor_error,
-                }
-            else:
-                visitor_info_url = f"{visitor_base}/nodes/info/"
-                visitor_register_url = f"{visitor_base}/nodes/register/"
-                proxy_payload = json.dumps(
-                    {
-                        "token": token,
-                        "visitor_info_url": visitor_info_url,
-                        "visitor_register_url": visitor_register_url,
-                    }
-                )
-                proxy_request = RequestFactory().post(
-                    reverse("register-visitor-proxy"),
-                    data=proxy_payload,
-                    content_type="application/json",
-                )
-                proxy_request.user = request.user
-                proxy_request._cached_user = request.user
-                proxy_response = register_visitor_proxy(proxy_request)
-
-                try:
-                    proxy_body = json.loads(proxy_response.content.decode() or "{}")
-                except json.JSONDecodeError:
-                    proxy_body = {}
-
-                if proxy_response.status_code == 200 and proxy_body.get("host") and proxy_body.get("visitor"):
-                    host_body = proxy_body.get("host", {})
-                    visitor_body = proxy_body.get("visitor", {})
-                    if not proxy_body.get("host_requires_https", True):
-                        https_warnings.append(
-                            _("Host node is not configured to require HTTPS. Update its Sites settings.")
-                        )
-                    if not proxy_body.get("visitor_requires_https", True):
-                        https_warnings.append(
-                            _("Visitor node is not configured to require HTTPS. Update its Sites settings.")
-                        )
-                    server_summary = {
-                        "status": "success",
-                        "message": _("Both nodes registered successfully."),
-                    }
-                    server_host = {
-                        "status": "success",
-                        "message": host_body.get("detail") or _("Visitor node registered with this server."),
-                        "id": host_body.get("id"),
-                    }
-                    server_visitor = {
-                        "status": "success",
-                        "message": visitor_body.get("detail") or _("Host node registered with visitor."),
-                        "id": visitor_body.get("id"),
-                    }
-                else:
-                    error_message = proxy_body.get("detail") or _("Registration aborted.")
-                    server_summary = {"status": "error", "message": error_message}
-                    server_host = {"status": "error", "message": error_message}
-                    server_visitor = {"status": "error", "message": error_message}
+            registration_result = VisitorRegistrationService(user=request.user).register(
+                parsed_request
+            )
+            https_warnings.extend(registration_result.warnings)
+            if registration_result.errors and not visitor_error:
+                visitor_error = registration_result.errors[0]
+            server_summary = registration_result.summary
+            server_host = registration_result.host
+            server_visitor = registration_result.visitor
 
         if not is_https_request(request):
             https_warnings.append(
