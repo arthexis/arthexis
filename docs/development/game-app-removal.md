@@ -2,6 +2,7 @@
 
 The `apps.game` package has been removed from the fresh-install baseline.
 New environments should **not** include `apps.game` in manifest-driven app loading or `INSTALLED_APPS` discovery.
+Upgrade compatibility is now provided by `apps._legacy.game_migration_only`.
 
 ## Scope of this cleanup
 
@@ -10,10 +11,10 @@ The deleted package included only `apps/game/migrations/0001_initial.py`, and no
 
 ## Legacy upgrade path for existing installations
 
-Existing installations that already applied `apps.game` migrations must follow a legacy branch or release path before moving onto this baseline:
+Existing installations that already applied `apps.game` migrations can upgrade in place through the migration-only shim:
 
-1. Start from a branch or release where `apps.game` still exists in shipped history.
-2. Add and apply a dedicated decommission migration/release step there to archive or drop the `game_avatar` table as needed for that environment.
-3. Only after that decommission step is applied everywhere should the installation move to a baseline where `apps.game` is absent from the repository.
+1. Ensure `apps._legacy.game_migration_only.apps.GameMigrationOnlyConfig` is present in `LEGACY_MIGRATION_APPS`.
+2. Ensure `MIGRATION_MODULES["game"]` points to `apps._legacy.game_migration_only.migrations`.
+3. Run `python manage.py migrate` and confirm `game.0002_archive_and_drop_avatar` is recorded.
 
-Until such a legacy decommission path exists, do not treat this cleanup as an in-place upgrade for environments that already migrated `apps.game`.
+The migration archives `game_avatar` into `game_archived_avatar` so rollback remains available.

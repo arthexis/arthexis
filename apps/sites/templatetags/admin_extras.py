@@ -15,11 +15,12 @@ from django.contrib.staticfiles import finders
 from django.db import DatabaseError
 from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models import Model
+from django.template import TemplateDoesNotExist, loader
 from django.templatetags.static import static
 from django.urls import NoReverseMatch, reverse
 from django.utils.html import format_html_join
-from django.utils.text import capfirst
 from django.utils import timezone
+from django.utils.text import capfirst
 from django.utils.translation import gettext_lazy as _
 
 from apps.actions.models import DashboardAction
@@ -118,6 +119,17 @@ def render_admin_stylesheets(context) -> str:
         '<link rel="stylesheet" href="{}">',
         ((static(stylesheet_path),) for stylesheet_path in stylesheet_paths),
     )
+
+
+@register.simple_tag(takes_context=True)
+def include_if_exists(context, template_name: str) -> str:
+    """Render a template include when present and return an empty string when missing."""
+
+    try:
+        template_obj = loader.get_template(template_name)
+    except TemplateDoesNotExist:
+        return ""
+    return template_obj.render(context.flatten(), request=context.get("request"))
 
 
 @register.simple_tag

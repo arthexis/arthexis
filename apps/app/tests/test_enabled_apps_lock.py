@@ -90,17 +90,20 @@ def test_refresh_enabled_apps_lock_respects_disabled_manifest_labels(
 
 
 def test_load_manifest_app_entries_includes_classification_projects_special_shortcuts():
-    """Manifest discovery should include app entries for recently-manifested apps."""
+    """Manifest discovery should include current runtime and legacy migration apps."""
 
     manifest_app_entries = _load_manifest_app_entries()
     expected_apps = {
         "apps.classification",
         "apps.projects",
-        "apps.shortcuts",
         "apps.special",
     }
 
     assert expected_apps.issubset(manifest_app_entries)
+    assert (
+        "apps._legacy.shortcuts_migration_only.apps.ShortcutsMigrationOnlyConfig"
+        in manifest_app_entries
+    )
     assert "apps.game" not in manifest_app_entries
     assert (
         "apps._legacy.sponsors_migration_only.apps.SponsorsMigrationOnlyConfig"

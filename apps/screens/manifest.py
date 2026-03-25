@@ -1,5 +1,5 @@
 """Manifest entries for Django app loading."""
 
 DJANGO_APPS = [
-    "apps.screens",
+    "apps._legacy.screens_migration_only.apps.ScreensMigrationOnlyConfig",
 ]

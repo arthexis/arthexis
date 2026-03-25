@@ -1,4 +1,4 @@
-{% load i18n ref_tags static %}
+{% load admin_extras i18n ref_tags static %}
 {% with template=site_template %}
 <!doctype html>
 <html
@@ -308,7 +308,7 @@
     {% include "core/version_check.html" %}
     {% endif %}
 
-    {% include "shortcuts/includes/client_shortcuts_setup.html" %}
+    {% include_if_exists "shortcuts/includes/client_shortcuts_setup.html" %}
 
     {% block extra_scripts %}{% endblock %}
   </body>
