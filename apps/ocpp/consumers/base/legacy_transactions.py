@@ -71,8 +71,11 @@ class LegacyTransactionHandlersMixin:
             if id_tag:
                 tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(id_tag)
             account = await self._get_account(id_tag)
-            energy_accounts_enabled = await self._energy_accounts_enabled()
-            credits_required = await self._energy_credits_required()
+            energy_accounts_enabled = False
+            credits_required = False
+            if self.charger.require_rfid:
+                energy_accounts_enabled = await self._energy_accounts_enabled()
+                credits_required = await self._energy_credits_required()
             if id_tag and not self.charger.require_rfid:
                 seen_tag = await self._ensure_rfid_seen(id_tag, tag=tag)
                 if seen_tag:
@@ -245,8 +248,11 @@ class LegacyTransactionHandlersMixin:
         if id_tag:
             tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(id_tag)
         account = await self._get_account(id_tag)
-        energy_accounts_enabled = await self._energy_accounts_enabled()
-        credits_required = await self._energy_credits_required()
+        energy_accounts_enabled = False
+        credits_required = False
+        if self.charger.require_rfid:
+            energy_accounts_enabled = await self._energy_accounts_enabled()
+            credits_required = await self._energy_credits_required()
         if id_tag and not self.charger.require_rfid:
             seen_tag = await self._ensure_rfid_seen(id_tag, tag=tag)
             if seen_tag:

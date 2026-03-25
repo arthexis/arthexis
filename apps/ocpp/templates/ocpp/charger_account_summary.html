@@ -16,7 +16,7 @@
             <div class="landing-card-section">
               <p class="landing-card-section-title">{% trans "Account" %}</p>
               <p class="mb-1"><strong>{% trans "Name" %}:</strong> {{ account.name }}</p>
-              <p class="mb-1"><strong>{% trans "Balance (kW)" %}:</strong> {{ account.balance_kw|floatformat:3 }}</p>
+              <p class="mb-1"><strong>{% trans "Balance (kWh)" %}:</strong> {{ account.balance_kw|floatformat:3 }}</p>
               <p class="mb-1"><strong>{% trans "Balance (MXN)" %}:</strong> {{ account.balance_mxn|floatformat:2 }}</p>
               <p class="mb-0">
                 <strong>{% trans "Credits required for auth" %}:</strong>
@@ -40,7 +40,7 @@
                       <tr>
                         <td>{{ session.start_time|date:"SHORT_DATETIME_FORMAT" }}</td>
                         <td>{{ session.charger.display_name|default:session.charger.charger_id }}</td>
-                        <td>{{ session.kw|floatformat:2 }} kW</td>
+                        <td>{{ session.kw|floatformat:2 }} kWh</td>
                       </tr>
                     {% endfor %}
                     </tbody>

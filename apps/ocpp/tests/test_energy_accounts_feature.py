@@ -1,5 +1,6 @@
 import pytest
 from channels.db import database_sync_to_async
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from apps.cards.models import RFID
@@ -97,3 +98,62 @@ def test_public_connector_page_prompts_account_creation_when_enabled(client):
     content = response.content.decode("utf-8")
     assert "Create Account" in content
     assert "Authenticate to Charge" in content
+
+
+@pytest.mark.django_db
+def test_public_connector_page_create_account_creates_user_and_account(client):
+    Feature.objects.update_or_create(
+        slug="energy-accounts",
+        defaults={
+            "display": "Energy Accounts",
+            "is_enabled": True,
+            "metadata": {"parameters": {"energy_credits_required": "disabled"}},
+        },
+    )
+    charger = Charger.objects.create(charger_id="CP-EA-CREATE", connector_id=1)
+    page = PublicConnectorPage.objects.create(charger=charger, enabled=True)
+
+    response = client.post(
+        reverse("ocpp:public-connector-page-create-account", args=[page.slug]),
+        data={
+            "username": "new-energy-user",
+            "email": "energy@example.com",
+            "password": "safe-password-123",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse(
+        "ocpp:charger-page-connector", args=[charger.charger_id, charger.connector_slug]
+    )
+    user = get_user_model().objects.get(username="new-energy-user")
+    assert CustomerAccount.objects.filter(user=user).exists()
+
+
+@pytest.mark.django_db
+def test_public_connector_page_create_account_rejects_hidden_charger(client):
+    Feature.objects.update_or_create(
+        slug="energy-accounts",
+        defaults={
+            "display": "Energy Accounts",
+            "is_enabled": True,
+            "metadata": {"parameters": {"energy_credits_required": "disabled"}},
+        },
+    )
+    charger = Charger.objects.create(
+        charger_id="CP-EA-HIDDEN",
+        connector_id=1,
+        public_display=False,
+    )
+    page = PublicConnectorPage.objects.create(charger=charger, enabled=True)
+
+    response = client.post(
+        reverse("ocpp:public-connector-page-create-account", args=[page.slug]),
+        data={
+            "username": "blocked-energy-user",
+            "email": "blocked@example.com",
+            "password": "safe-password-123",
+        },
+    )
+
+    assert response.status_code == 404

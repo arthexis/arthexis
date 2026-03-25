@@ -54,13 +54,16 @@
             <form method="post" action="{% url 'ocpp:public-connector-page-create-account' page.slug %}" class="row g-2 mt-1">
               {% csrf_token %}
               <div class="col-12">
-                <input class="form-control" type="text" name="username" required placeholder="{% trans 'Username' %}" maxlength="150">
+                <label class="visually-hidden" for="create-account-username">{% trans "Username" %}</label>
+                <input id="create-account-username" class="form-control" type="text" name="username" required placeholder="{% trans 'Username' %}" maxlength="150" autocomplete="username">
               </div>
               <div class="col-12">
-                <input class="form-control" type="email" name="email" placeholder="{% trans 'Email (optional)' %}">
+                <label class="visually-hidden" for="create-account-email">{% trans "Email (optional)" %}</label>
+                <input id="create-account-email" class="form-control" type="email" name="email" placeholder="{% trans 'Email (optional)' %}" autocomplete="email">
               </div>
               <div class="col-12">
-                <input class="form-control" type="password" name="password" required placeholder="{% trans 'Password' %}">
+                <label class="visually-hidden" for="create-account-password">{% trans "Password" %}</label>
+                <input id="create-account-password" class="form-control" type="password" name="password" required placeholder="{% trans 'Password' %}" autocomplete="new-password">
               </div>
               <div class="col-12 d-grid gap-2 d-sm-flex">
                 <button type="submit" class="btn btn-primary">{% trans "Create Account" %}</button>

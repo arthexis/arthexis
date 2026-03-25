@@ -2,22 +2,22 @@ import hashlib
 import logging
 from pathlib import Path
 
-from django.conf import settings
 from django import forms
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError, transaction
 from django.db.utils import OperationalError, ProgrammingError
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_GET
 from django.utils import translation
 from django.utils.translation import gettext as _
+from django.views.decorators.http import require_GET, require_POST
 
 from apps.docs import rendering
 from apps.energy.models import CustomerAccount
-from apps.features.models import Feature
-from apps.features.parameters import get_feature_parameter
+from apps.features.utils import get_cached_feature_enabled, get_cached_feature_parameter
 from apps.locale.models import Language
 from apps.ocpp.models.location import Location
 from apps.ocpp.services import ChargerAccessDeniedError, build_charger_chart_payload
@@ -40,6 +40,7 @@ from .common import (_charger_state, _charging_limit_details,
 
 logger = logging.getLogger(__name__)
 ENERGY_ACCOUNTS_FEATURE_SLUG = "energy-accounts"
+PUBLIC_CONNECTOR_PAGE_URL_NAME = "ocpp:public-connector-page"
 
 
 class PublicConnectorAccountCreateForm(forms.Form):
@@ -53,19 +54,31 @@ class PublicConnectorAccountCreateForm(forms.Form):
 def _energy_accounts_enabled() -> bool:
     """Return whether energy account-first routing is enabled."""
 
-    return Feature.objects.filter(
-        slug=ENERGY_ACCOUNTS_FEATURE_SLUG,
-        is_enabled=True,
-    ).exists()
+    return get_cached_feature_enabled(
+        ENERGY_ACCOUNTS_FEATURE_SLUG,
+        cache_key="feature-enabled:energy-accounts",
+        timeout=300,
+        default=False,
+    )
+
+
+def _default_auth_backend() -> str:
+    """Return a deterministic auth backend path for post-signup login."""
+
+    if settings.AUTHENTICATION_BACKENDS:
+        return settings.AUTHENTICATION_BACKENDS[0]
+    return "django.contrib.auth.backends.ModelBackend"
 
 
 def _energy_credits_required() -> bool:
     """Return whether positive credits are required for account auth."""
 
     return (
-        get_feature_parameter(
+        get_cached_feature_parameter(
             ENERGY_ACCOUNTS_FEATURE_SLUG,
             "energy_credits_required",
+            cache_key="feature-parameter:energy-accounts:energy_credits_required",
+            timeout=300,
             fallback="disabled",
         )
         == "enabled"
@@ -407,17 +420,18 @@ def public_connector_page(request, slug):
     )
 
 
+@require_POST
 def public_connector_page_create_account(request, slug):
     """Create a user + energy account from a public connector page."""
 
-    if request.method != "POST":
-        raise Http404("Not found")
     page = get_object_or_404(
         PublicConnectorPage.objects.select_related("charger"),
         slug=slug,
         enabled=True,
     )
     charger = page.charger
+    if not charger.public_display or not charger.is_visible_to(request.user):
+        raise Http404("Public page not found")
     next_url = _reverse_connector_url(
         "charger-page",
         charger.charger_id,
@@ -425,30 +439,35 @@ def public_connector_page_create_account(request, slug):
     )
     if not _energy_accounts_enabled():
         messages.error(request, _("Energy account onboarding is not enabled."))
-        return redirect("ocpp:public-connector-page", slug=slug)
+        return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
     form = PublicConnectorAccountCreateForm(request.POST)
     if not form.is_valid():
         messages.error(request, _("Please provide valid account details."))
-        return redirect("ocpp:public-connector-page", slug=slug)
+        return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
 
     username = form.cleaned_data["username"]
     email = form.cleaned_data.get("email", "")
     password = form.cleaned_data["password"]
-    UserModel = get_user_model()
-    if UserModel.objects.filter(username=username).exists():
+    user_model = get_user_model()
+    if user_model.objects.filter(username=username).exists():
         messages.error(request, _("Username is already in use."))
-        return redirect("ocpp:public-connector-page", slug=slug)
+        return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
 
-    user = UserModel.objects.create_user(
-        username=username,
-        email=email,
-        password=password,
-    )
-    CustomerAccount.objects.get_or_create(
-        user=user,
-        defaults={"name": username.upper()},
-    )
-    login(request, user)
+    try:
+        with transaction.atomic():
+            user = user_model.objects.create_user(
+                username=username,
+                email=email,
+                password=password,
+            )
+            CustomerAccount.objects.get_or_create(
+                user=user,
+                defaults={"name": username.upper()},
+            )
+    except IntegrityError:
+        messages.error(request, _("Username is already in use."))
+        return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
+    login(request, user, backend=_default_auth_backend())
     messages.success(request, _("Account created. Charging authorization has been updated."))
     return redirect(next_url)
 
