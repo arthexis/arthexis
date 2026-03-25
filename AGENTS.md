@@ -145,11 +145,7 @@ If a test fails **multiple times across runs**, it must be:
 
 ### Fixture Changes
 
-Any modification to database models must include:
-
-* **reversible migrations**
-
-Agents must ensure migrations are reversible before committing.
+Any modification to database models must include appropriate migrations.
 
 ---
 
