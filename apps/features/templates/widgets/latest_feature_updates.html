@@ -1,8 +1,12 @@
 {% load i18n %}
 <div class="module" id="latest-feature-updates-widget">
   <div class="latest-feature-updates-header">
-    <h2>{% translate "Hot features" %}</h2>
-    <a href="{{ feature_admin_url }}">{% translate "All features" %}</a>
+    <h2>{% translate "Active features" %}</h2>
+    <div class="latest-feature-updates-links">
+      <a href="{{ feature_admin_url }}">{% translate "All features" %}</a>
+      <span aria-hidden="true">·</span>
+      <a href="{{ feature_disabled_admin_url }}">{% translate "View disabled features" %}</a>
+    </div>
   </div>
   <ul class="actionlist latest-feature-updates-list">
     {% for entry in features %}
@@ -10,6 +14,7 @@
         <div class="d-flex justify-content-between align-items-start gap-2">
           <div>
             <span class="latest-feature-updates-name">{{ entry.feature.display }}</span>
+            <span class="latest-feature-updates-count">{% blocktranslate with count=entry.params_count %}Params: {{ count }}{% endblocktranslate %}</span>
             <div class="latest-feature-updates-links">
               <a href="{{ entry.admin_url }}">{% translate "View" %}</a>
               <span aria-hidden="true">·</span>
@@ -39,7 +44,7 @@
         </div>
       </li>
     {% empty %}
-      <li class="quiet">{% translate "No feature updates yet." %}</li>
+      <li class="quiet">{% translate "No active features found." %}</li>
     {% endfor %}
   </ul>
 </div>

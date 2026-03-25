@@ -48,3 +48,16 @@ def test_set_enabled_persists_when_update_fields_is_empty() -> None:
 
     feature.refresh_from_db()
     assert feature.is_enabled is False
+
+
+@pytest.mark.django_db
+def test_params_count_reads_feature_metadata_parameters() -> None:
+    """params_count should only count dictionary-backed parameter values."""
+
+    feature = Feature.objects.create(
+        slug="feature-params-count",
+        display="Feature Params Count",
+        metadata={"parameters": {"one": "1", "two": "2"}},
+    )
+
+    assert feature.params_count == 2

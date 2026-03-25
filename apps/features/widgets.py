@@ -10,7 +10,6 @@ from apps.widgets.models import WidgetZone
 
 from .models import FeatureNote, Feature
 
-LATEST_FEATURE_UPDATES_LIMIT = 3
 LATEST_FEATURE_UPDATES_ORDER = 30
 
 
@@ -39,7 +38,8 @@ def latest_feature_updates_widget(**_kwargs):
                 Coalesce(F("latest_note_updated_at"), F("updated_at")),
             ),
         )
-        .order_by("-latest_activity_at", "-updated_at", "display")[:LATEST_FEATURE_UPDATES_LIMIT]
+        .filter(is_enabled=True)
+        .order_by("-latest_activity_at", "-updated_at", "display")
     )
     entries = []
     for feature in features:
@@ -57,9 +57,13 @@ def latest_feature_updates_widget(**_kwargs):
                 "admin_url": admin_url,
                 "toggle_url": toggle_url,
                 "updated_at": feature.latest_activity_at,
+                "params_count": feature.params_count,
             }
         )
     return {
         "features": entries,
         "feature_admin_url": reverse("admin:features_feature_changelist"),
+        "feature_disabled_admin_url": (
+            f"{reverse('admin:features_feature_changelist')}?is_enabled__exact=0"
+        ),
     }
