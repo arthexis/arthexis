@@ -218,7 +218,7 @@ should_install_preview_dependencies() {
       ;;
   esac
 
-  if [ "$INSTALL_PREVIEW_DEPS" -eq 1 ] || [ "$DEPS_ONLY" -eq 1 ]; then
+  if [[ "$INSTALL_PREVIEW_DEPS" -eq 1 || "$DEPS_ONLY" -eq 1 ]]; then
     return 0
   fi
 
