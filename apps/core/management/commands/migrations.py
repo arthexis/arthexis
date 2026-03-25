@@ -479,7 +479,7 @@ class Command(BaseCommand):
         return ""
 
     def _switch_major_line(self, major_version: str) -> None:
-        normalized_major_version = major_version.strip()
+        normalized_major_version = major_version
         major_slug = self._major_slug(normalized_major_version)
         major_number = self._major_number(normalized_major_version)
         tracks = self._load_tracks()
@@ -498,7 +498,7 @@ class Command(BaseCommand):
         )
 
     def _major_number(self, major_version: str) -> int:
-        match = re.match(r"(?P<major>\d+)", major_version.strip())
+        match = re.match(r"(?P<major>\d+)", major_version)
         if match is None:
             raise CommandError("major-version must start with a numeric major value")
         return int(match.group("major"))

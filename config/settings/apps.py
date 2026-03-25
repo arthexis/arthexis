@@ -127,11 +127,8 @@ def _legacy_shims_enabled() -> bool:
 
     tracks = _migration_tracks()
     current_line = str(tracks.get("current_line", "")).strip().lower()
-    if not current_line:
-        return True
-
     match = re.match(r"(?P<major>\d+)", current_line)
-    if match is None:
+    if not match:
         return True
 
     return int(match.group("major")) == 0
@@ -147,11 +144,25 @@ ALL_LEGACY_MIGRATION_APPS = [
     "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
     "config.legacy_mermaid",
 ]
-LEGACY_MIGRATION_APPS = [
-    app_path
-    for app_path in ALL_LEGACY_MIGRATION_APPS
-    if _legacy_shims_enabled() or "._legacy." not in app_path
-]
+REQUIRED_LEGACY_MIGRATION_APPS = {
+    "apps._legacy.recipes_migration_only.apps.RecipesMigrationOnlyConfig",
+}
+
+
+def _enabled_legacy_migration_apps() -> list[str]:
+    """Return active migration-only app configs for the current migration line."""
+
+    if _legacy_shims_enabled():
+        return list(ALL_LEGACY_MIGRATION_APPS)
+
+    return [
+        app_path
+        for app_path in ALL_LEGACY_MIGRATION_APPS
+        if app_path in REQUIRED_LEGACY_MIGRATION_APPS or "._legacy." not in app_path
+    ]
+
+
+LEGACY_MIGRATION_APPS = _enabled_legacy_migration_apps()
 NON_DJANGO_UTILITY_PACKAGES = {
     "apps.camera",
 }

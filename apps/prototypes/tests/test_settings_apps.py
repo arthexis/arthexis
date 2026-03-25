@@ -127,6 +127,17 @@ def test_legacy_shims_disable_after_switching_to_non_zero_major(monkeypatch):
     assert settings_apps._legacy_shims_enabled() is False
 
 
+def test_recipes_legacy_migration_app_stays_enabled_after_major_switch(monkeypatch):
+    monkeypatch.setattr(
+        settings_apps, "_migration_tracks", lambda: {"current_line": "1.x"}
+    )
+
+    assert (
+        "apps._legacy.recipes_migration_only.apps.RecipesMigrationOnlyConfig"
+        in settings_apps._enabled_legacy_migration_apps()
+    )
+
+
 def test_archived_socials_and_sponsors_runtime_surfaces_are_removed():
     socials_files = {path.name for path in Path("apps/socials").iterdir() if path.is_file()}
     sponsors_files = {path.name for path in Path("apps/sponsors").iterdir() if path.is_file()}
