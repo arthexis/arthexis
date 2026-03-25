@@ -196,6 +196,7 @@ class FeatureAdmin(
         "slug",
         "source",
         "is_enabled",
+        "params",
         "main_app",
         "node_feature",
     )
@@ -249,6 +250,12 @@ class FeatureAdmin(
 
     class Media:
         js = ("features/admin/feature_admin_autogrow.js",)
+
+    @admin.display(description=_("Params"))
+    def params(self, obj: Feature) -> int:
+        """Return the count of configured feature parameters."""
+
+        return obj.params_count
 
     def _mainstream_fixture_paths(self) -> list[Path]:
         """Return fixture files used to seed mainstream suite features."""
