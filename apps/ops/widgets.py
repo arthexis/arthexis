@@ -8,7 +8,7 @@ from apps.widgets.models import WidgetZone
 from .security_alerts import build_security_alerts
 
 
-def _can_view_pending_ops(*, request, **_kwargs) -> bool:
+def _is_authenticated_staff(*, request, **_kwargs) -> bool:
     user = getattr(request, "user", None)
     return bool(user and user.is_authenticated and user.is_staff)
 
@@ -20,7 +20,7 @@ def _can_view_pending_ops(*, request, **_kwargs) -> bool:
     template_name="widgets/security_alerts.html",
     description=_("Critical operational and security readiness alerts."),
     order=5,
-    permission=_can_view_pending_ops,
+    permission=_is_authenticated_staff,
 )
 def security_alerts_widget(**_kwargs):
     """Render normalized security alerts for the sidebar."""
