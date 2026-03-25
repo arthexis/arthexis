@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from apps.ocpp.consumers.csms.actions import build_action_handlers
+
 Handler = Callable[[dict[str, Any], str, str | None, str | None], Awaitable[dict]]
 
 
@@ -12,10 +14,11 @@ def build_action_registry(consumer) -> dict[str, Handler]:
     """Return action routing map while preserving legacy/2.0.1 behaviour."""
 
     c = consumer
+    handlers = build_action_handlers(consumer)
     return {
-        "Authorize": c._handle_authorize_action,
+        "Authorize": handlers["Authorize"].handle,
         "BootNotification": c._handle_boot_notification_action,
-        "ClearedChargingLimit": c._handle_cleared_charging_limit_action,
+        "ClearedChargingLimit": handlers["ClearedChargingLimit"].handle,
         "CostUpdated": c._handle_cost_updated_action,
         "DataTransfer": c._handle_data_transfer_action,
         "DiagnosticsStatusNotification": c._handle_diagnostics_status_notification_action,
@@ -25,13 +28,13 @@ def build_action_registry(consumer) -> dict[str, Handler]:
         "Heartbeat": c._handle_heartbeat_action,
         "LogStatusNotification": c._handle_log_status_notification_action,
         "MeterValues": c._handle_meter_values_action,
-        "NotifyChargingLimit": c._handle_notify_charging_limit_action,
+        "NotifyChargingLimit": handlers["NotifyChargingLimit"].handle,
         "NotifyCustomerInformation": c._handle_notify_customer_information_action,
-        "NotifyDisplayMessages": c._handle_notify_display_messages_action,
+        "NotifyDisplayMessages": handlers["NotifyDisplayMessages"].handle,
         "NotifyEVChargingNeeds": c._handle_notify_ev_charging_needs_action,
         "NotifyEVChargingSchedule": c._handle_notify_ev_charging_schedule_action,
         "NotifyEvent": c._handle_notify_event_action,
-        "NotifyMonitoringReport": c._handle_notify_monitoring_report_action,
+        "NotifyMonitoringReport": handlers["NotifyMonitoringReport"].handle,
         "NotifyReport": c._handle_notify_report_action,
         "PublishFirmwareStatusNotification": c._handle_publish_firmware_status_notification_action,
         "ReportChargingProfiles": c._handle_report_charging_profiles_action,
