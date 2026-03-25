@@ -135,8 +135,6 @@
             <div class="user-story-field">
               <label for="user-story-attachments" class="user-story-label">{% trans 'Attachments' %}</label>
               <input class="user-story-input" id="user-story-attachments" name="attachments" type="file" multiple>
-              <label for="user-story-screenshot" class="user-story-label">{% trans 'Screenshot' %}</label>
-              <input class="user-story-input" id="user-story-screenshot" name="screenshot" type="file" accept="image/*">
             </div>
             {% if not request.user.is_staff %}
               <div class="user-story-help">{% blocktrans with limit=user_story_attachment_limit %}You can upload up to {{ limit }} files.{% endblocktrans %}</div>
