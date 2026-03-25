@@ -1,4 +1,5 @@
 import sys
+import json
 from datetime import timedelta
 
 import pytest
@@ -9,7 +10,7 @@ from django.utils import timezone
 
 from websocket import WebSocketException
 
-from apps.ocpp.forwarder import Forwarder, ForwardingSession
+from apps.forwarder.ocpp import Forwarder, ForwardingSession
 from apps.ocpp.models import CPForwarder, Charger
 from apps.nodes.models import Node
 
@@ -73,7 +74,7 @@ def test_connect_forwarding_session_keeps_tls_verification_for_trusted_node(
         create_kwargs.update(kwargs)
         return SimpleNamespace(connected=True, close=Mock())
 
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_connect)
+    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_connect)
 
     session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
 
@@ -98,7 +99,7 @@ def test_connect_forwarding_session_keeps_tls_verification_for_untrusted_node(
         create_kwargs.update(kwargs)
         return SimpleNamespace(connected=True, close=Mock())
 
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_connect)
+    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_connect)
 
     session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
 
@@ -121,9 +122,9 @@ def test_connect_forwarding_session_handles_failures(monkeypatch, forwarder_inst
             raise WebSocketException("boom")
         return SimpleNamespace(connected=True, close=Mock())
 
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_connect)
+    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_connect)
     monkeypatch.setattr(
-        "apps.ocpp.forwarder.logger", SimpleNamespace(warning=Mock(), info=Mock())
+        "apps.forwarder.ocpp.logger", SimpleNamespace(warning=Mock(), info=Mock())
     )
 
     session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
@@ -138,7 +139,7 @@ def test_connect_forwarding_session_handles_failures(monkeypatch, forwarder_inst
     def always_fail(url, timeout, subprotocols):
         raise WebSocketException("down")
 
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", always_fail)
+    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", always_fail)
     forwarder_instance.clear_sessions()
     session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
     assert session is None
@@ -231,8 +232,8 @@ def test_sync_forwarded_charge_points_respects_existing_sessions(monkeypatch):
         raise WebSocketException("reject")
 
     fake_logger = SimpleNamespace(warning=Mock(), info=Mock())
-    monkeypatch.setattr("apps.ocpp.forwarder.logger", fake_logger)
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_create_connection)
+    monkeypatch.setattr("apps.forwarder.ocpp.logger", fake_logger)
+    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_create_connection)
 
     from apps.ocpp import forwarder as forwarder_module, forwarding_utils
 
@@ -367,7 +368,7 @@ def test_sync_forwarded_charge_points_dedupes_charger_ids(monkeypatch):
         connections.append(connection)
         return connection
 
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_create_connection)
+    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_create_connection)
 
     connected = forwarder.sync_forwarded_charge_points(refresh_forwarders=False)
 
@@ -375,3 +376,111 @@ def test_sync_forwarded_charge_points_dedupes_charger_ids(monkeypatch):
     assert len(connections) == 1
     assert forwarder.get_session(charger_primary.pk) is not None
     assert CPForwarder.objects.get(pk=cp_forwarder.pk).is_running is True
+
+
+def test_listener_does_not_drop_reconnected_session(forwarder_instance):
+    old_connection = SimpleNamespace(close=Mock())
+    new_connection = SimpleNamespace(connected=True, close=Mock())
+
+    old_session = ForwardingSession(
+        charger_pk=42,
+        node_id=100,
+        url="ws://old",
+        connection=old_connection,
+        connected_at=timezone.now(),
+    )
+    new_session = ForwardingSession(
+        charger_pk=42,
+        node_id=100,
+        url="ws://new",
+        connection=new_connection,
+        connected_at=timezone.now(),
+    )
+    forwarder_instance._sessions[42] = old_session
+
+    old_connection.connected = True
+    old_connection.send = Mock()
+
+    def recv_with_reconnect():
+        forwarder_instance._sessions[42] = new_session
+        raise RuntimeError("socket reset")
+
+    old_connection.recv = Mock(side_effect=recv_with_reconnect)
+
+    forwarder_instance._listen_forwarding_session(old_session)
+
+    assert forwarder_instance.get_session(42) is new_session
+    old_connection.close.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_listener_rolls_back_pending_call_when_send_to_cp_fails(monkeypatch, forwarder_instance):
+    charger = Charger.objects.create(charger_id="CP-ROLLBACK", allow_remote=True)
+    session_connection = SimpleNamespace(
+        connected=True,
+        close=Mock(),
+        send=Mock(),
+    )
+    command = json.dumps([2, "msg-rollback", "Heartbeat", {}])
+    session_connection.recv = Mock(side_effect=[command, RuntimeError("done")])
+
+    session = ForwardingSession(
+        charger_pk=charger.pk,
+        node_id=100,
+        url="ws://remote",
+        connection=session_connection,
+        connected_at=timezone.now(),
+        forwarded_calls=("Heartbeat",),
+    )
+    forwarder_instance._sessions[charger.pk] = session
+
+    pop_pending_call = Mock()
+    register_pending_call = Mock()
+    from apps.ocpp import store
+
+    monkeypatch.setattr(store, "add_log", Mock())
+    monkeypatch.setattr(
+        store,
+        "get_connection",
+        Mock(return_value=SimpleNamespace(send=Mock(side_effect=RuntimeError("fail")))),
+    )
+    monkeypatch.setattr(store, "identity_key", Mock(return_value="cp-rollback-1"))
+    monkeypatch.setattr(store, "pop_pending_call", pop_pending_call)
+    monkeypatch.setattr(store, "register_pending_call", register_pending_call)
+    monkeypatch.setattr("asgiref.sync.async_to_sync", lambda fn: fn)
+
+    forwarder_instance._listen_forwarding_session(session)
+
+    register_pending_call.assert_called_once()
+    pop_pending_call.assert_called_once_with("msg-rollback")
+
+
+@pytest.mark.django_db
+def test_sync_forwarded_charge_points_removes_sessions_forwarded_back_to_local(monkeypatch):
+    forwarder = Forwarder()
+
+    mac_address = "00:11:22:33:44:55"
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: mac_address))
+    Node._local_cache.clear()
+
+    local = Node.objects.create(hostname="local", mac_address=mac_address)
+    charger = Charger.objects.create(
+        charger_id="CP-LOCAL",
+        export_transactions=True,
+        forwarded_to=local,
+        node_origin=local,
+    )
+    existing = ForwardingSession(
+        charger_pk=charger.pk,
+        node_id=local.pk,
+        url="ws://stale",
+        connection=SimpleNamespace(connected=True, close=Mock()),
+        connected_at=timezone.now(),
+    )
+    forwarder._sessions[charger.pk] = existing
+
+    connected = forwarder.sync_forwarded_charge_points(refresh_forwarders=False)
+
+    assert connected == 0
+    assert forwarder.get_session(charger.pk) is None
+    existing.connection.close.assert_called_once()

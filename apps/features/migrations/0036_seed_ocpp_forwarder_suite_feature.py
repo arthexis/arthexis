@@ -39,10 +39,10 @@ def seed_ocpp_forwarder_suite_feature(apps, schema_editor):
             "public_views": [],
             "service_views": [
                 "apps.ocpp.tasks.setup_forwarders",
-                "apps.ocpp.forwarder.Forwarder",
+                "apps.forwarder.ocpp.Forwarder",
             ],
             "code_locations": [
-                "apps/ocpp/forwarder/__init__.py",
+                "apps/forwarder/ocpp/__init__.py",
                 "apps/ocpp/tasks/forwarding.py",
                 "apps/ocpp/consumers/csms/transport.py",
                 "apps/ocpp/consumers/base/connection_flow.py",
