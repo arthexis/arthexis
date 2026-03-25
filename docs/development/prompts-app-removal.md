@@ -15,15 +15,6 @@ The deleted seed fixtures were developer-facing change records rather than end-u
   3. Capture related file context and optional change references.
   4. Keep future prompt fixtures aligned with the model.
 
-### Historical prompt record: rename admin preview tooling and guidance
-
-- Original intent: standardize preview capture tooling and document how agents should use it.
-- Historical implementation plan:
-  1. Rename preview command usage while preserving compatibility.
-  2. Update preview guidance documentation.
-  3. Add AGENTS guidance for preview usage.
-  4. Validate the workflow with tests and an admin preview capture.
-
 ## Release note for operators
 
 If production databases still contain `prompts_storedprompt` rows, upgrade through the release that ships the legacy migration-only prompts app.
