@@ -100,19 +100,19 @@ def test_load_manifest_app_entries_includes_runtime_and_legacy_migration_apps():
     }
 
     assert expected_apps.issubset(manifest_app_entries)
-    retired_apps = {
-        "calendars": "apps._legacy.calendars_migration_only.apps.CalendarsMigrationOnlyConfig",
-        "screens": "apps._legacy.screens_migration_only.apps.ScreensMigrationOnlyConfig",
-        "shortcuts": "apps._legacy.shortcuts_migration_only.apps.ShortcutsMigrationOnlyConfig",
-        "smb": "apps._legacy.smb_migration_only.apps.SmbMigrationOnlyConfig",
-    }
-    for app_label, legacy_app in retired_apps.items():
-        assert legacy_app in manifest_app_entries
+    retired_app_labels = [
+        "calendars",
+        "screens",
+        "shortcuts",
+        "smb",
+        "sponsors",
+    ]
+    for app_label in retired_app_labels:
+        legacy_app_config = (
+            f"apps._legacy.{app_label}_migration_only.apps."
+            f"{app_label.title()}MigrationOnlyConfig"
+        )
+        assert legacy_app_config in manifest_app_entries
         assert f"apps.{app_label}" not in manifest_app_entries
 
     assert "apps.game" not in manifest_app_entries
-    assert (
-        "apps._legacy.sponsors_migration_only.apps.SponsorsMigrationOnlyConfig"
-        in manifest_app_entries
-    )
-    assert "apps.sponsors" not in manifest_app_entries
