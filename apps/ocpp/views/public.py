@@ -452,6 +452,9 @@ def public_connector_page_create_account(request, slug):
     if not _energy_accounts_enabled():
         messages.error(request, _("Energy account onboarding is not enabled."))
         return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
+    if request.user.is_authenticated:
+        messages.error(request, _("Please sign out before creating a new account."))
+        return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
     form = PublicConnectorAccountCreateForm(request.POST)
     if not form.is_valid():
         messages.error(request, _("Please provide valid account details."))
@@ -482,7 +485,12 @@ def public_connector_page_create_account(request, slug):
     signup_backend = _signup_auth_backend()
     if signup_backend is not None:
         login(request, user, backend=signup_backend)
-    messages.success(request, _("Account created. Charging authorization has been updated."))
+        messages.success(request, _("Account created. Charging authorization has been updated."))
+    else:
+        messages.warning(
+            request,
+            _("Account created, but you are not signed in. Please sign in to switch to the new account."),
+        )
     return redirect(next_url)
 
 
