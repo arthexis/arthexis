@@ -87,18 +87,20 @@ class ReleasePublishWorkflow:
     def load(self, log_dir_warning_message: str | None) -> tuple[ReleasePublishContext, str | None]:
         session_ctx = self.request.session.get(self.session_key)
         loaded_ctx = load_release_context(session_ctx, self.lock_path)
-        state = ReleaseContextState.from_dict(loaded_ctx).to_dict()
+        typed_ctx = ReleasePublishContext.from_dict(
+            ReleaseContextState.from_dict(loaded_ctx).to_dict()
+        )
         if not loaded_ctx:
-            state = {"step": 0}
+            typed_ctx.step = 0
             if self.restart_path.exists():
                 self.restart_path.unlink()
 
         if log_dir_warning_message:
-            state["log_dir_warning_message"] = log_dir_warning_message
+            typed_ctx.extras["log_dir_warning_message"] = log_dir_warning_message
         else:
-            log_dir_warning_message = state.get("log_dir_warning_message")
+            log_dir_warning_message = typed_ctx.extras.get("log_dir_warning_message")
 
-        return ReleasePublishContext.from_dict(state), log_dir_warning_message
+        return typed_ctx, log_dir_warning_message
 
     def start(self, ctx: ReleasePublishContext, *, start_enabled: bool) -> ReleasePublishContext:
         state = ctx.to_dict()
@@ -140,8 +142,7 @@ class ReleasePublishWorkflow:
 
     def poll(self, ctx: ReleasePublishContext) -> tuple[bool, bool]:
         poll_requested = self.request.GET.get("poll") == "1"
-        state = ctx.to_dict()
-        return poll_requested, bool(poll_requested and state.get("publish_pending"))
+        return poll_requested, bool(poll_requested and ctx.extras.get("publish_pending"))
 
     def advance(
         self,

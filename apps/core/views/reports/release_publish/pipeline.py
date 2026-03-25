@@ -1995,6 +1995,8 @@ def release_progress_impl(request, pk: int, action: str):
 
     ctx = _handle_dirty_repository_action(request, ctx, log_path)
     ctx = _handle_manual_git_push_action(request, ctx, log_path)
+    typed_ctx = ReleasePublishContext.from_dict(ctx)
+    step_count = typed_ctx.step
 
     fixtures_step_index = next(
         (
