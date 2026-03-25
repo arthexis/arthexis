@@ -59,6 +59,47 @@ def test_rebrand_rewrites_tokens_and_prunes_seed_fixtures(tmp_path):
     assert not (tmp_path / "apps" / "repos" / "fixtures" / "repositories__arthexis.json").exists()
 
 
+def test_rebrand_keeps_license_refs_and_repo_slug_with_default_owner(tmp_path):
+    _write(
+        tmp_path / "pyproject.toml",
+        'license = "LicenseRef-ArthexisReciprocity"\nurl = "https://github.com/arthexis/arthexis"\n',
+    )
+
+    call_command(
+        "rebrand",
+        "acme",
+        "--base-dir",
+        str(tmp_path),
+        "--repo-name",
+        "acme",
+        "--acknowledge-license",
+    )
+
+    rewritten = (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'license = "LicenseRef-ArthexisReciprocity"' in rewritten
+    assert 'url = "https://github.com/arthexis/acme"' in rewritten
+
+
+def test_rebrand_hyphenated_primary_name_uses_default_python_package_and_skips_symlinks(tmp_path):
+    base_dir = tmp_path / "repo"
+    outside_file = tmp_path / "outside.txt"
+    _write(base_dir / "module.py", "import arthexis\n")
+    _write(outside_file, "import arthexis\n")
+    (base_dir / "linked.py").parent.mkdir(parents=True, exist_ok=True)
+    (base_dir / "linked.py").symlink_to(outside_file)
+
+    call_command(
+        "rebrand",
+        "acme-suite",
+        "--base-dir",
+        str(base_dir),
+        "--acknowledge-license",
+    )
+
+    assert (base_dir / "module.py").read_text(encoding="utf-8") == "import acme_suite\n"
+    assert outside_file.read_text(encoding="utf-8") == "import arthexis\n"
+
+
 def test_rebrand_requires_license_acknowledgement_with_no_input(tmp_path):
     _write(tmp_path / "README.md", "arthexis\n")
 

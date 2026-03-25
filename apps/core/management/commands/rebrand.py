@@ -10,6 +10,10 @@ from django.core.management.base import BaseCommand, CommandError
 
 LICENSE_ACKNOWLEDGEMENT = "I ACKNOWLEDGE THE ARTHEXIS LICENSE"
 DEFAULT_REPO_OWNER = "arthexis"
+LICENSE_REF_PLACEHOLDER = "__REBRAND_LICENSE_REF__"
+URL_GIT_PLACEHOLDER = "__REBRAND_GITHUB_URL_GIT__"
+URL_PLACEHOLDER = "__REBRAND_GITHUB_URL__"
+URL_SLUG_PLACEHOLDER = "__REBRAND_GITHUB_SLUG__"
 TEXT_SUFFIX_ALLOWLIST = {
     ".bat",
     ".cfg",
@@ -181,27 +185,58 @@ class Command(BaseCommand):
     ) -> list[Path]:
         changed_files: list[Path] = []
         project_display_name = primary_name.replace("-", " ").replace("_", " ").title()
+        normalized_primary_package = primary_name.replace("-", "_")
 
         for path in self._iter_candidate_files(base_dir):
             original = path.read_text(encoding="utf-8")
             rewritten = original
 
-            rewritten = rewritten.replace("https://github.com/arthexis/arthexis.git", f"https://github.com/{repo_owner}/{repo_name}.git")
-            rewritten = rewritten.replace("https://github.com/arthexis/arthexis", f"https://github.com/{repo_owner}/{repo_name}")
-            rewritten = rewritten.replace("github.com/arthexis/arthexis", f"github.com/{repo_owner}/{repo_name}")
+            rewritten = rewritten.replace(
+                "LicenseRef-Arthexis",
+                LICENSE_REF_PLACEHOLDER,
+            )
+            rewritten = rewritten.replace(
+                "https://github.com/arthexis/arthexis.git",
+                URL_GIT_PLACEHOLDER,
+            )
+            rewritten = rewritten.replace(
+                "https://github.com/arthexis/arthexis",
+                URL_PLACEHOLDER,
+            )
+            rewritten = rewritten.replace(
+                "github.com/arthexis/arthexis",
+                URL_SLUG_PLACEHOLDER,
+            )
 
             rewritten = rewritten.replace("ARTHEXIS", primary_name.upper().replace("-", "_").replace(" ", "_"))
             rewritten = rewritten.replace("Arthexis", project_display_name)
+
+            if python_package != normalized_primary_package or "-" in primary_name:
+                rewritten = self._replace_python_package_tokens(
+                    rewritten,
+                    source_package="arthexis",
+                    python_package=python_package,
+                )
             rewritten = rewritten.replace("arthexis", primary_name)
 
             if service_name != primary_name:
                 rewritten = self._replace_service_tokens(rewritten, primary_name=primary_name, service_name=service_name)
-            if python_package != primary_name:
-                rewritten = self._replace_python_package_tokens(
-                    rewritten,
-                    primary_name=primary_name,
-                    python_package=python_package,
-                )
+            rewritten = rewritten.replace(
+                URL_GIT_PLACEHOLDER,
+                f"https://github.com/{repo_owner}/{repo_name}.git",
+            )
+            rewritten = rewritten.replace(
+                URL_PLACEHOLDER,
+                f"https://github.com/{repo_owner}/{repo_name}",
+            )
+            rewritten = rewritten.replace(
+                URL_SLUG_PLACEHOLDER,
+                f"github.com/{repo_owner}/{repo_name}",
+            )
+            rewritten = rewritten.replace(
+                LICENSE_REF_PLACEHOLDER,
+                "LicenseRef-Arthexis",
+            )
 
             if rewritten == original:
                 continue
@@ -220,12 +255,11 @@ class Command(BaseCommand):
             .replace(f"{primary_name}.service", f"{service_name}.service")
         )
 
-    def _replace_python_package_tokens(self, content: str, *, primary_name: str, python_package: str) -> str:
-        normalized_primary = primary_name.replace("-", "_")
+    def _replace_python_package_tokens(self, content: str, *, source_package: str, python_package: str) -> str:
         return (
-            content.replace(f"import {normalized_primary}", f"import {python_package}")
-            .replace(f"\"{normalized_primary}\"", f"\"{python_package}\"")
-            .replace(f"'{normalized_primary}'", f"'{python_package}'")
+            content.replace(f"import {source_package}", f"import {python_package}")
+            .replace(f"\"{source_package}\"", f"\"{python_package}\"")
+            .replace(f"'{source_package}'", f"'{python_package}'")
         )
 
     def _remove_seed_data(self, *, base_dir: Path, dry_run: bool) -> list[Path]:
@@ -241,6 +275,8 @@ class Command(BaseCommand):
 
     def _iter_candidate_files(self, base_dir: Path):
         for path in base_dir.rglob("*"):
+            if path.is_symlink():
+                continue
             if not path.is_file() or path.name == "LICENSE":
                 continue
             if any(part in EXCLUDED_DIR_NAMES for part in path.parts):
