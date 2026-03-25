@@ -58,14 +58,15 @@ from ..report_rendering import (
     _sanitize_release_error_message,
 )
 
-from .exceptions import DirtyRepository, PublishPending
-from .steps import StepDefinition, run_release_step
 from .context import (
     ReleaseContextState,
     load_release_context,
     persist_release_context as _persist_release_context,
     store_release_context as _store_release_context,
 )
+from .exceptions import DirtyRepository, PublishPending
+from .steps import StepDefinition, run_release_step
+from .workflow import ReleasePublishContext, ReleasePublishWorkflow
 from .git_ops import (
     SubprocessGitAdapter,
     collect_dirty_files as git_collect_dirty_files,
@@ -1942,30 +1943,31 @@ def release_progress_impl(request, pk: int, action: str):
     if restart_response:
         return restart_response
 
-    ctx, log_dir_warning_message = _load_release_context(
-        request,
-        session_key,
-        lock_path,
-        restart_path,
-        log_dir_warning_message,
+    workflow = ReleasePublishWorkflow(
+        request=request,
+        session_key=session_key,
+        lock_path=lock_path,
+        restart_path=restart_path,
+        clean_redirect_path=_clean_redirect_path,
+        collect_dirty_files=_collect_dirty_files,
+        validate_manual_git_push=_validate_manual_git_push,
+        append_log=_append_log,
     )
+    typed_ctx, log_dir_warning_message = workflow.load(log_dir_warning_message)
+    ctx = workflow.template_state(typed_ctx)
 
     steps = PUBLISH_STEPS
-    step_count = ctx.get("step", 0)
+    step_count = typed_ctx.step
     start_enabled = _is_release_start_enabled(ctx, step_count, len(steps))
 
     start_requested = bool(request.GET.get("start")) and start_enabled
-    ctx, resume_requested, redirect_response = _update_publish_controls(
-        request,
-        ctx,
-        start_enabled,
-        session_key,
-        lock_path,
-    )
+    typed_ctx = workflow.start(typed_ctx, start_enabled=start_enabled)
+    typed_ctx, resume_requested, redirect_response = workflow.resume(typed_ctx)
     if redirect_response:
         return redirect_response
-    restart_count, step_param = _prepare_step_progress(
-        request, ctx, restart_path, resume_requested
+    ctx = workflow.template_state(typed_ctx)
+    restart_count, step_param = workflow.step_progress(
+        typed_ctx, resume_requested=resume_requested
     )
 
     ctx, log_path, step_count = _prepare_logging(
@@ -2003,22 +2005,18 @@ def release_progress_impl(request, pk: int, action: str):
         None,
     )
 
-    poll_requested = request.GET.get("poll") == "1"
-    publish_poll_allowed = poll_requested and ctx.get("publish_pending")
+    poll_requested, publish_poll_allowed = workflow.poll(typed_ctx)
 
     if not start_requested:
-        ctx, step_count = _run_release_step(
-            request,
-            steps,
-            ctx,
-            step_param,
-            step_count,
-            release,
-            log_path,
-            session_key,
-            lock_path,
+        typed_ctx, step_count = workflow.advance(
+            steps=steps,
+            ctx=typed_ctx,
+            step_param=step_param,
+            release=release,
+            log_path=log_path,
             allow_when_paused=publish_poll_allowed,
         )
+        ctx = workflow.template_state(typed_ctx)
 
     error = ctx.get("error")
     done = step_count >= len(steps) and not error
@@ -2128,10 +2126,9 @@ def release_progress_impl(request, pk: int, action: str):
     )
     return _finalize_release_progress_response(
         request=request,
+        workflow=workflow,
         ctx=ctx,
         context=context,
-        session_key=session_key,
-        lock_path=lock_path,
         done=done,
         publish_pending=publish_pending,
         dry_run_active=dry_run_active,
@@ -2285,10 +2282,9 @@ def _build_release_progress_context(
 def _finalize_release_progress_response(
     *,
     request,
+    workflow: ReleasePublishWorkflow,
     ctx: dict,
     context: dict,
-    session_key: str,
-    lock_path: Path,
     done: bool,
     publish_pending: bool,
     dry_run_active: bool,
@@ -2297,12 +2293,10 @@ def _finalize_release_progress_response(
     next_step,
     paused: bool,
 ):
-    if done or ctx.get("error"):
-        _store_release_context(request, session_key, ctx)
-        if lock_path.exists():
-            lock_path.unlink()
-    else:
-        _persist_release_context(request, session_key, ctx, lock_path)
+    workflow.persist_state(
+        ReleasePublishContext.from_dict(ctx),
+        done=done,
+    )
 
     if publish_pending:
         poll_query = {"step": step_count, "poll": "1"}
