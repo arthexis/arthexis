@@ -62,9 +62,13 @@ def _energy_accounts_enabled() -> bool:
     )
 
 
-def _default_auth_backend() -> str:
-    """Return a deterministic auth backend path for post-signup login."""
+def _signup_auth_backend() -> str:
+    """Return a safe auth backend path for post-signup login."""
 
+    localhost_backend = "apps.users.backends.LocalhostAdminBackend"
+    for backend in settings.AUTHENTICATION_BACKENDS:
+        if backend != localhost_backend:
+            return backend
     if settings.AUTHENTICATION_BACKENDS:
         return settings.AUTHENTICATION_BACKENDS[0]
     return "django.contrib.auth.backends.ModelBackend"
@@ -467,7 +471,7 @@ def public_connector_page_create_account(request, slug):
     except IntegrityError:
         messages.error(request, _("Username is already in use."))
         return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
-    login(request, user, backend=_default_auth_backend())
+    login(request, user, backend=_signup_auth_backend())
     messages.success(request, _("Account created. Charging authorization has been updated."))
     return redirect(next_url)
 

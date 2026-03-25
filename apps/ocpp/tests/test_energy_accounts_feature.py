@@ -1,5 +1,6 @@
 import pytest
 from channels.db import database_sync_to_async
+from django.contrib.auth import BACKEND_SESSION_KEY
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -128,6 +129,7 @@ def test_public_connector_page_create_account_creates_user_and_account(client):
     )
     user = get_user_model().objects.get(username="new-energy-user")
     assert CustomerAccount.objects.filter(user=user).exists()
+    assert client.session[BACKEND_SESSION_KEY] == "apps.users.backends.PasswordOrOTPBackend"
 
 
 @pytest.mark.django_db
