@@ -128,7 +128,7 @@ def _save_contractor_and_maybe_validate(admin_instance, request, form, profile):
 def _handle_contract_login_wizard_post(admin_instance, request, profile, opts, changelist_url):
     """Bind, validate, and process contractor wizard submissions."""
     instance = profile if profile is not None else admin_instance.model()
-    form = EvergoContractorLoginWizardForm(request.POST, instance=instance)
+    form = EvergoContractorLoginWizardForm(request.POST, instance=instance, request_user=request.user)
     setup_results = None
     if not form.is_valid():
         return form, setup_results
@@ -171,7 +171,7 @@ def _contractor_login_wizard_admin_view(admin_instance, request, object_id: str 
         form = form_or_response
     else:
         instance = profile if profile is not None else admin_instance.model()
-        form = EvergoContractorLoginWizardForm(instance=instance)
+        form = EvergoContractorLoginWizardForm(instance=instance, request_user=request.user)
 
     context = {
         **admin_instance.admin_site.each_context(request),
@@ -238,7 +238,7 @@ def _load_customers_admin_view(admin_instance, request):
                         % {"items": ", ".join(summary["unresolved"])},
                         level=messages.WARNING,
                     )
-                next_view = form.cleaned_data.get("next_view") or "orders"
+                next_view = form.cleaned_data.get("next_view") or "customers"
                 selected_customer_ids = [str(value) for value in summary.get("loaded_customer_ids", [])]
                 selected_order_ids = [str(value) for value in summary.get("loaded_order_ids", [])]
 
@@ -311,12 +311,6 @@ class EvergoUserAdmin(
     change_actions = ("login_on_evergo_action", "test_login_and_sync_action", "my_profile_action")
     fieldsets = (
         (
-            "Ownership",
-            {
-                "fields": ("user", "group", "avatar"),
-            },
-        ),
-        (
             "Credentials",
             {
                 "fields": ("evergo_email", "evergo_password"),
@@ -360,7 +354,32 @@ class EvergoUserAdmin(
                 ),
             },
         ),
+        (
+            "Ownership",
+            {
+                "fields": ("user", "group", "avatar"),
+            },
+        ),
     )
+
+    def get_changeform_initial_data(self, request):
+        """Default new contractors to the current user when no owner is selected."""
+        initial = super().get_changeform_initial_data(request)
+        if getattr(request.user, "is_authenticated", False):
+            initial.setdefault("user", request.user.pk)
+        return initial
+
+    def save_model(self, request, obj, form, change):
+        """Auto-assign owner on creation when no owner fields are provided."""
+        if (
+            not change
+            and getattr(request.user, "is_authenticated", False)
+            and obj.user_id is None
+            and obj.group_id is None
+            and obj.avatar_id is None
+        ):
+            obj.user = request.user
+        return super().save_model(request, obj, form, change)
 
     def _test_login_and_sync(self, request, profile):
         """Call the Evergo API and persist synchronized user metadata."""

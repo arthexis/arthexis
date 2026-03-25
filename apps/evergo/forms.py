@@ -35,10 +35,10 @@ class EvergoLoadCustomersForm(forms.Form):
     next_view = forms.ChoiceField(
         label="Open next",
         choices=(
-            ("orders", "Orders"),
             ("customers", "Customers"),
+            ("orders", "Orders"),
         ),
-        initial="orders",
+        initial="customers",
         required=False,
         help_text="Choose which admin list should open after the sync completes.",
     )
@@ -107,15 +107,23 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
         model = EvergoUser
         fields = ("user", "group", "avatar", "evergo_email", "evergo_password")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, request_user=None, **kwargs):
         """Prefill first-time contractor setup defaults for a smoother signup flow."""
         super().__init__(*args, **kwargs)
+        self.request_user = request_user
         self.fields["evergo_password"].widget = forms.PasswordInput()
         if self.instance.pk:
             self.fields["evergo_password"].required = False
         self.fields["user"].required = False
         self.fields["group"].required = False
         self.fields["avatar"].required = False
+        if (
+            not self.is_bound
+            and not self.instance.pk
+            and getattr(request_user, "is_authenticated", False)
+            and self.fields["user"].initial is None
+        ):
+            self.fields["user"].initial = request_user
         self.fields["evergo_email"].help_text = "Email used to sign in to the Evergo contractor portal."
         self.fields["evergo_password"].help_text = "Password used to sign in to the Evergo contractor portal."
 
@@ -130,6 +138,9 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
             for field_name in ("user", "group", "avatar")
             if cleaned_data.get(field_name) is not None
         ]
+        if not owners and getattr(self.request_user, "is_authenticated", False):
+            cleaned_data["user"] = self.request_user
+            owners = ["user"]
         if not owners:
             raise ValidationError("Choose a user, security group, or avatar owner for this contractor.")
         if cleaned_data.get("load_all_customers") and not cleaned_data.get("validate_credentials"):
