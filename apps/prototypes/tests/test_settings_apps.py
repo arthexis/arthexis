@@ -121,7 +121,6 @@ def test_legacy_runtime_packages_are_derived_from_legacy_migration_apps():
 
 def test_archived_socials_and_sponsors_runtime_surfaces_are_removed():
     socials_files = {path.name for path in Path("apps/socials").iterdir() if path.is_file()}
-    sponsors_files = {path.name for path in Path("apps/sponsors").iterdir() if path.is_file()}
 
     assert socials_files == {"__init__.py"}
-    assert sponsors_files == {"__init__.py"}
+    assert not Path("apps/sponsors").exists()
