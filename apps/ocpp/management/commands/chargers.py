@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import json
 import re
 import uuid
@@ -22,6 +21,11 @@ from apps.ocpp.models import Charger, MeterValue, Transaction
 from apps.ocpp.views import _aggregate_dashboard_state
 from apps.special.registry import special_command
 
+from .chargers_cmd.actions import ChargersActionRunner
+from .chargers_cmd.args import build_chargers_parser
+from .chargers_cmd.legacy import resolve_action
+from .chargers_cmd.render import ChargersRenderer
+
 
 @special_command(singular="charger", plural="chargers", keystone_model="ocpp.Charger")
 class Command(BaseCommand):
@@ -30,196 +34,14 @@ class Command(BaseCommand):
     def add_arguments(self, parser) -> None:  # pragma: no cover - simple wiring
         """Register selectors, legacy flags, and verb-style subcommands."""
 
-        parser.formatter_class = argparse.RawDescriptionHelpFormatter
-        parser.epilog = (
-            "Examples:\n"
-            "  charger show --sn CP-01\n"
-            "  charger tail 50 --sn CP-01 --cp A\n"
-            "  charger sessions 10 --sn CP-01\n"
-            "  charger rfid on --sn CP-01\n"
-            "  charger auth set cp-user secret123 --sn CP-01\n"
-            "  charger rename 'Main Hub' --sn CP-01\n"
-            "  charger stop --sn CP-01\n"
-            "  charger restart --sn CP-01\n"
-            "\n"
-            "Legacy flags such as --tail, --sessions, --rfid-enable, "
-            "--ws-auth-clear,\n"
-            "--rename, --send-stop, and --send-restart remain available during "
-            "the transition."
-        )
-
-        selector_parent = self._build_selector_parent()
-        parser.add_argument(
-            '--sn',
-            dest='serial',
-            help=(
-                'Serial number (or suffix) used to narrow the charger selection. '
-                'Matching is case-insensitive and falls back to helpful suffix '
-                'matching.'
-            ),
-        )
-        parser.add_argument(
-            '-cp',
-            '--cp',
-            dest='cp',
-            help=(
-                'Connector identifier used to filter chargers. Provide a connector '
-                "number or 'all' to select all connector charge points. Non-numeric "
-                'values fall back to matching the charge point path, ignoring '
-                'surrounding slashes.'
-            ),
-        )
-        parser.add_argument(
-            '--default-base',
-            action='store_true',
-            help='Select the first available base charger when no selector is provided.',
-        )
-        parser.add_argument(
-            '--tail',
-            dest='tail',
-            type=int,
-            nargs='?',
-            const=20,
-            help='Legacy alias for "tail". Show the last N log entries.',
-        )
-        parser.add_argument(
-            '--sessions',
-            dest='sessions',
-            type=int,
-            nargs='?',
-            const=10,
-            help='Legacy alias for "sessions". Show the last N session logs.',
-        )
-        parser.add_argument(
-            '--rfid-enable',
-            action='store_true',
-            help='Legacy alias for "rfid on".',
-        )
-        parser.add_argument(
-            '--rfid-disable',
-            action='store_true',
-            help='Legacy alias for "rfid off".',
-        )
-        parser.add_argument(
-            '--send-local-rfids',
-            action='store_true',
-            help='Legacy alias for "rfid push".',
-        )
-        parser.add_argument(
-            '--rfid-lockdown',
-            action='store_true',
-            help='Legacy alias for "rfid lock".',
-        )
-        parser.add_argument(
-            '--ws-auth-username',
-            dest='ws_auth_username',
-            help='Legacy alias for "auth set <username> <password>" username.',
-        )
-        parser.add_argument(
-            '--ws-auth-password',
-            dest='ws_auth_password',
-            help='Legacy alias for "auth set <username> <password>" password.',
-        )
-        parser.add_argument(
-            '--ws-auth-clear',
-            action='store_true',
-            help='Legacy alias for "auth clear".',
-        )
-        parser.add_argument(
-            '--rename',
-            nargs='?',
-            const='',
-            help='Legacy alias for "rename <name>".',
-        )
-        parser.add_argument(
-            '--send-stop',
-            action='store_true',
-            help='Legacy alias for "stop".',
-        )
-        parser.add_argument(
-            '--send-restart',
-            action='store_true',
-            help='Legacy alias for "restart".',
-        )
-
-        subparsers = parser.add_subparsers(dest='action')
-
-        subparsers.add_parser(
-            'show',
-            parents=[selector_parent],
-            help='Show charger details or the default table view.',
-            description='Show charger details or the default table view.',
-        )
-
-        tail_parser = subparsers.add_parser(
-            'tail',
-            parents=[selector_parent],
-            help='Show the last N charger log entries.',
-            description='Show the last N charger log entries.',
-        )
-        tail_parser.add_argument('count', type=int, nargs='?', default=20)
-
-        sessions_parser = subparsers.add_parser(
-            'sessions',
-            parents=[selector_parent],
-            help='Show the last N charger sessions.',
-            description='Show the last N charger sessions.',
-        )
-        sessions_parser.add_argument('count', type=int, nargs='?', default=10)
-
-        rfid_parser = subparsers.add_parser(
-            'rfid',
-            parents=[selector_parent],
-            help='Manage RFID requirements and local lists.',
-            description='Manage RFID requirements and local lists.',
-        )
-        rfid_parser.add_argument('rfid_action', choices=['on', 'off', 'push', 'lock'])
-
-        auth_parser = subparsers.add_parser(
-            'auth',
-            help='Manage websocket basic auth for chargers.',
-            description='Manage websocket basic auth for chargers.',
-        )
-        auth_subparsers = auth_parser.add_subparsers(dest='auth_action', required=True)
-        auth_set = auth_subparsers.add_parser('set', parents=[selector_parent])
-        auth_set.add_argument('username')
-        auth_set.add_argument('password')
-        auth_subparsers.add_parser('clear', parents=[selector_parent])
-
-        rename_parser = subparsers.add_parser(
-            'rename',
-            parents=[selector_parent],
-            help='Rename a charger display name.',
-            description='Rename a charger display name.',
-        )
-        rename_parser.add_argument('name', nargs='?', default='')
-
-        subparsers.add_parser(
-            'stop',
-            parents=[selector_parent],
-            help='Send a remote stop request.',
-            description='Send a remote stop request.',
-        )
-        subparsers.add_parser(
-            'restart',
-            parents=[selector_parent],
-            help='Send a soft reset request.',
-            description='Send a soft reset request.',
-        )
-
-    def _build_selector_parent(self):
-        """Return a parser parent that shares charger selection options."""
-
-        parent = argparse.ArgumentParser(add_help=False)
-        parent.add_argument('--sn', dest='serial')
-        parent.add_argument('-cp', '--cp', dest='cp')
-        parent.add_argument('--default-base', action='store_true')
-        return parent
+        build_chargers_parser(parser)
 
     def handle(self, *args, **options):
         """Dispatch charger command actions using verb-style subcommands or legacy flags."""
 
-        action = self._resolve_action(options)
+        self.renderer = ChargersRenderer(self)
+        self.action_runner = ChargersActionRunner(self)
+        action = resolve_action(options)
         queryset, selection = self._select_chargers(options)
         chargers = list(queryset.order_by('charger_id', 'connector_id'))
 
@@ -227,96 +49,12 @@ class Command(BaseCommand):
             self.stdout.write('No chargers found.')
             return
 
-        self._execute_action(
+        self.action_runner.execute(
             action=action,
             chargers=chargers,
             queryset=queryset,
             selection=selection,
         )
-
-    def _resolve_action(self, options: dict[str, object]) -> dict[str, object]:
-        """Resolve the requested action from verb-style subcommands or legacy flags."""
-
-        subcommand = options.get('action')
-        if subcommand == 'show':
-            return {'name': 'show'}
-        if subcommand == 'tail':
-            return {'name': 'tail', 'count': options.get('count')}
-        if subcommand == 'sessions':
-            return {'name': 'sessions', 'count': options.get('count')}
-        if subcommand == 'rfid':
-            return {'name': 'rfid', 'mode': options.get('rfid_action')}
-        if subcommand == 'auth':
-            auth_action = options.get('auth_action')
-            if auth_action == 'set':
-                return {
-                    'name': 'auth_set',
-                    'username': (options.get('username') or '').strip(),
-                    'password': options.get('password'),
-                }
-            return {'name': 'auth_clear'}
-        if subcommand == 'rename':
-            return {'name': 'rename', 'value': options.get('name')}
-        if subcommand == 'stop':
-            return {'name': 'stop'}
-        if subcommand == 'restart':
-            return {'name': 'restart'}
-
-        return self._resolve_legacy_action(options)
-
-    def _resolve_legacy_action(self, options: dict[str, object]) -> dict[str, object]:
-        """Resolve the requested action using backward-compatible long flags."""
-
-        if options.get('rfid_lockdown') and options.get('send_local_rfids'):
-            raise CommandError(
-                '--rfid-lockdown already sends local RFIDs; remove '
-                '--send-local-rfids.'
-            )
-
-        ws_auth_username = (options.get('ws_auth_username') or '').strip()
-        ws_auth_password = options.get('ws_auth_password')
-        if options.get('ws_auth_clear') and (ws_auth_username or ws_auth_password):
-            raise CommandError(
-                'Use either --ws-auth-clear or '
-                '--ws-auth-username/--ws-auth-password, not both.'
-            )
-
-        actions: list[dict[str, object]] = []
-        if options.get('tail') is not None:
-            actions.append({'name': 'tail', 'count': options.get('tail')})
-        if options.get('sessions') is not None:
-            actions.append({'name': 'sessions', 'count': options.get('sessions')})
-        if options.get('rfid_enable'):
-            actions.append({'name': 'rfid', 'mode': 'on'})
-        if options.get('rfid_disable'):
-            actions.append({'name': 'rfid', 'mode': 'off'})
-        if options.get('send_local_rfids'):
-            actions.append({'name': 'rfid', 'mode': 'push'})
-        if options.get('rfid_lockdown'):
-            actions.append({'name': 'rfid', 'mode': 'lock'})
-
-        if ws_auth_username or ws_auth_password:
-            actions.append(
-                {
-                    'name': 'auth_set',
-                    'username': ws_auth_username,
-                    'password': ws_auth_password,
-                }
-            )
-        if options.get('ws_auth_clear'):
-            actions.append({'name': 'auth_clear'})
-        if options.get('rename') is not None:
-            actions.append({'name': 'rename', 'value': options.get('rename')})
-        if options.get('send_stop'):
-            actions.append({'name': 'stop'})
-        if options.get('send_restart'):
-            actions.append({'name': 'restart'})
-
-        if len(actions) > 1:
-            raise CommandError('Choose one charger action at a time.')
-        if actions:
-            return actions[0]
-        return {'name': 'show'}
 
     def _select_chargers(
         self, options: dict[str, object]
@@ -387,104 +125,6 @@ class Command(BaseCommand):
             or connector_filter is not None
             or bool(cp_path),
         }
-
-    def _execute_action(
-        self,
-        *,
-        action: dict[str, object],
-        chargers: list[Charger],
-        queryset: QuerySet[Charger],
-        selection: dict[str, object],
-    ) -> None:
-        """Validate and execute the selected charger action."""
-
-        name = action['name']
-        if name == 'show':
-            if selection['serial'] or selection['cp_raw']:
-                self._render_details(chargers)
-            else:
-                self._render_table(chargers)
-            return
-
-        if name == 'tail':
-            count = self._validate_positive_count(action.get('count'), '--tail')
-            self._require_selector(
-                selection,
-                message=(
-                    'Log tail requires selecting at least one charger with --sn '
-                    'and/or --cp.'
-                ),
-            )
-            if len(chargers) != 1:
-                raise CommandError(
-                    '--tail requires selecting exactly one charger using --sn '
-                    'and/or --cp.'
-                )
-            self._render_details(chargers)
-            self._render_tail(chargers[0], count)
-            return
-
-        if name == 'sessions':
-            count = self._validate_positive_count(action.get('count'), '--sessions')
-            self._render_sessions(chargers, count)
-            return
-
-        if name == 'auth_set':
-            self._require_selector(
-                selection,
-                message=(
-                    'Websocket auth changes require selecting at least one '
-                    'charger with --sn and/or --cp.'
-                ),
-            )
-            self._handle_auth_set(
-                chargers=chargers,
-                queryset=queryset,
-                username=str(action.get('username') or ''),
-                password=action.get('password'),
-            )
-            return
-        if name == 'auth_clear':
-            self._require_selector(
-                selection,
-                message=(
-                    'Websocket auth changes require selecting at least one '
-                    'charger with --sn and/or --cp.'
-                ),
-            )
-            updated = queryset.update(ws_auth_user=None, ws_auth_group=None)
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f'Cleared websocket auth protection on {updated} charger(s).'
-                )
-            )
-            return
-        self._require_selector(selection)
-
-        if name == 'rfid':
-            self._handle_rfid_action(
-                chargers=chargers,
-                queryset=queryset,
-                mode=str(action['mode']),
-            )
-            return
-        if name == 'rename':
-            self._handle_rename(chargers=chargers, value=action.get('value'))
-            return
-        if name == 'stop':
-            sent = self._send_stop(chargers)
-            self.stdout.write(
-                self.style.SUCCESS(f'Sent remote stop request to {sent} charger(s).')
-            )
-            return
-        if name == 'restart':
-            restart_targets = self._action_targets_for_single_station(chargers)
-            sent = self._send_restart(restart_targets)
-            self.stdout.write(
-                self.style.SUCCESS(f'Sent reset request to {sent} charger(s).')
-            )
-            return
-        raise CommandError(f'Unknown charger action: {name}')
 
     def _require_selector(
         self,
@@ -928,104 +568,6 @@ class Command(BaseCommand):
             return default
         return answer in {"y", "yes"}
 
-    def _render_tail(self, charger: Charger, limit: int) -> None:
-        connector_label = self._connector_descriptor(charger)
-        heading = f"Log tail ({connector_label}; last {limit} entries)"
-        self.stdout.write("")
-        self.stdout.write(self.style.MIGRATE_HEADING(heading))
-
-        log_key = store.identity_key(charger.charger_id, charger.connector_id)
-        entries = store.get_logs(log_key)
-
-        if not entries:
-            self.stdout.write("No log entries recorded.")
-            return
-
-        for line in entries[-limit:]:
-            self.stdout.write(line)
-
-    def _render_sessions(self, chargers: Iterable[Charger], limit: int) -> None:
-        entries = self._collect_session_entries(chargers)
-        if not entries:
-            self.stdout.write("No session logs found.")
-            return
-
-        entries.sort(key=lambda item: item["timestamp"], reverse=True)
-        selected = entries[:limit]
-        total_count = len(entries)
-        heading = "Recent sessions"
-        if total_count > limit:
-            heading += f" (showing {len(selected)} of {total_count})"
-        self.stdout.write(self.style.MIGRATE_HEADING(heading))
-        for entry in selected:
-            charger = entry["charger"]
-            connector_label = self._connector_descriptor(charger)
-            label = charger.display_name or charger.charger_id
-            timestamp = self._format_dt(entry["timestamp"]) or "-"
-            tx_id = entry["tx_id"] or "-"
-            self.stdout.write(
-                f"{timestamp}  {label} ({connector_label})  tx={tx_id}  {entry['path']}"
-            )
-
-    def _collect_session_entries(
-        self, chargers: Iterable[Charger]
-    ) -> list[dict[str, object]]:
-        entries: list[dict[str, object]] = []
-        for charger in chargers:
-            for folder in self._session_folders_for_charger(charger):
-                for path in folder.glob("*.json"):
-                    if not path.is_file():
-                        continue
-                    try:
-                        stat = path.stat()
-                    except FileNotFoundError:
-                        continue
-                    timestamp = datetime.fromtimestamp(
-                        stat.st_mtime, tz=dt_timezone.utc
-                    )
-                    entries.append(
-                        {
-                            "timestamp": timezone.localtime(timestamp),
-                            "charger": charger,
-                            "tx_id": self._session_transaction_id(path.name),
-                            "path": path,
-                        }
-                    )
-        return entries
-
-    def _session_folders_for_charger(self, charger: Charger) -> list[Path]:
-        identity_key = store.identity_key(charger.charger_id, charger.connector_id)
-        pending_key = store.pending_key(charger.charger_id)
-        candidates = {charger.charger_id, identity_key, pending_key}
-        if charger.display_name:
-            candidates.add(charger.display_name)
-        if charger.name:
-            candidates.add(charger.name)
-        log_names = store.log_names.get("charger", {})
-        for key in (charger.charger_id, identity_key, pending_key):
-            registered = log_names.get(key)
-            if registered:
-                candidates.add(registered)
-        folders = []
-        for name in candidates:
-            safe_name = self._safe_session_name(name)
-            path = store.SESSION_DIR / safe_name
-            if path.exists() and path.is_dir():
-                folders.append(path)
-        return folders
-
-    @staticmethod
-    def _safe_session_name(name: str) -> str:
-        return re.sub(r"[^\w.-]", "_", name)
-
-    @staticmethod
-    def _session_transaction_id(filename: str) -> str | None:
-        stem = filename.rsplit(".", 1)[0]
-        parts = stem.rsplit("_", 1)
-        if len(parts) == 2 and parts[1]:
-            return parts[1]
-        return None
-
     def _transaction_prefetch(self) -> Prefetch:
         return Prefetch(
             "transactions",
@@ -1094,230 +636,6 @@ class Command(BaseCommand):
         total = end_val - start_val
         return total if total >= 0 else 0.0
 
-    def _render_table(self, chargers: Iterable[Charger]) -> None:
-        totals: dict[int, float] = {}
-        aggregate_totals: dict[str, float] = {}
-        aggregate_sources: set[str] = set()
-
-        for charger in chargers:
-            total = self._total_energy_kwh(charger)
-            totals[charger.pk] = total
-            if charger.connector_id is not None:
-                aggregate_sources.add(charger.charger_id)
-                aggregate_totals[charger.charger_id] = (
-                    aggregate_totals.get(charger.charger_id, 0.0) + total
-                )
-
-        rows: list[dict[str, str]] = []
-        for charger in chargers:
-            total = totals.get(charger.pk, 0.0)
-            if charger.connector_id is None and charger.charger_id in aggregate_sources:
-                total = aggregate_totals.get(charger.charger_id, total)
-            status_label = self._status_label(charger)
-            rfid_value = "on" if charger.require_rfid else "off"
-            if (
-                charger.connector_id is not None
-                and status_label.casefold() == "charging"
-            ):
-                tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
-                if tx_obj is not None:
-                    active_rfid = str(getattr(tx_obj, "rfid", "") or "").strip()
-                    if active_rfid:
-                        rfid_value = active_rfid.upper()
-            last_contact = self._last_contact_timestamp(charger)
-            rows.append(
-                {
-                    "serial": charger.charger_id,
-                    "name": charger.display_name or "-",
-                    "connector": (
-                        Charger.connector_letter_from_value(charger.connector_id)
-                        if charger.connector_id is not None
-                        else "all"
-                    ),
-                    "rfid": rfid_value,
-                    "public": "yes" if charger.public_display else "no",
-                    "status": status_label,
-                    "energy": self._format_energy(total),
-                    "last_contact": self._format_dt(last_contact) or "-",
-                }
-            )
-
-        headers = {
-            "serial": "Serial",
-            "name": "Name",
-            "connector": "Connector",
-            "rfid": "RFID",
-            "public": "Public",
-            "status": "Status",
-            "energy": "Total Energy (kWh)",
-            "last_contact": "Last Contact",
-        }
-
-        widths = {
-            key: max(len(headers[key]), *(len(row[key]) for row in rows))
-            for key in headers
-        }
-
-        header_line = "  ".join(headers[key].ljust(widths[key]) for key in headers)
-        separator = "  ".join("-" * widths[key] for key in headers)
-        self.stdout.write(header_line)
-        self.stdout.write(separator)
-        for row in rows:
-            self.stdout.write("  ".join(row[key].ljust(widths[key]) for key in headers))
-
-    def _render_details(self, chargers: Iterable[Charger]) -> None:
-        for idx, charger in enumerate(chargers):
-            if idx:
-                self.stdout.write("")
-
-            heading = charger.display_name or charger.charger_id
-            connector_label = self._connector_descriptor(charger)
-            heading_text = f"{heading} ({connector_label})"
-            self.stdout.write(self.style.MIGRATE_HEADING(heading_text))
-
-            info: list[tuple[str, str]] = [
-                ("Serial", charger.charger_id),
-                (
-                    "Connected",
-                    (
-                        "Yes"
-                        if store.is_connected(charger.charger_id, charger.connector_id)
-                        else "No"
-                    ),
-                ),
-                ("Require RFID", "Yes" if charger.require_rfid else "No"),
-                ("Public Display", "Yes" if charger.public_display else "No"),
-                (
-                    "Location",
-                    charger.location.name if charger.location else "-",
-                ),
-                (
-                    "Manager Node",
-                    charger.manager_node.hostname if charger.manager_node else "-",
-                ),
-                (
-                    "Last Heartbeat",
-                    self._format_dt(charger.last_heartbeat) or "-",
-                ),
-                ("Last Status", charger.last_status or "-"),
-                (
-                    "Last Status Timestamp",
-                    self._format_dt(charger.last_status_timestamp) or "-",
-                ),
-                ("Last Error Code", charger.last_error_code or "-"),
-                (
-                    "Availability State",
-                    charger.availability_state or "-",
-                ),
-                (
-                    "Requested State",
-                    charger.availability_requested_state or "-",
-                ),
-                (
-                    "Request Status",
-                    charger.availability_request_status or "-",
-                ),
-                (
-                    "Firmware Status",
-                    charger.firmware_status or "-",
-                ),
-                (
-                    "Firmware Info",
-                    charger.firmware_status_info or "-",
-                ),
-                (
-                    "Firmware Timestamp",
-                    self._format_dt(charger.firmware_timestamp) or "-",
-                ),
-                ("Last Path", charger.last_path or "-"),
-            ]
-
-            for label, value in info:
-                self.stdout.write(f"{label}: {value}")
-
-            if charger.last_status_vendor_info:
-                vendor_info = json.dumps(
-                    charger.last_status_vendor_info, indent=2, sort_keys=True
-                )
-                self.stdout.write("Vendor Info:")
-                self.stdout.write(vendor_info)
-
-            if charger.last_meter_values:
-                self._render_last_meter_values(charger.last_meter_values)
-
-    def _render_last_meter_values(self, payload: dict) -> None:
-        self.stdout.write("Last Meter Values:")
-        if not isinstance(payload, dict):
-            self.stdout.write("  -")
-            return
-
-        self._render_meter_values_transaction(payload)
-
-        meter_values = payload.get("meterValue")
-        if not isinstance(meter_values, list) or not meter_values:
-            self.stdout.write("  No meter values reported.")
-            return
-
-        total = len(meter_values)
-        for idx, entry in enumerate(meter_values, start=1):
-            self._render_meter_value_entry(entry, idx, total)
-
-    def _render_meter_values_transaction(self, payload: dict) -> None:
-        transaction_id = payload.get("transactionId")
-        if transaction_id is not None:
-            self.stdout.write(f"  Transaction ID: {transaction_id}")
-
-    def _render_meter_value_entry(self, entry: object, index: int, total: int) -> None:
-        if not isinstance(entry, dict):
-            return
-        timestamp = entry.get("timestamp")
-        if timestamp:
-            label = "Timestamp" if total <= 1 else f"Timestamp {index}"
-            self.stdout.write(f"  {label}: {timestamp}")
-
-        sampled_values = entry.get("sampledValue")
-        if not isinstance(sampled_values, list):
-            return
-        for sample in sampled_values:
-            self._render_sampled_value(sample)
-
-    def _render_sampled_value(self, sample: object) -> None:
-        if not isinstance(sample, dict):
-            return
-        measurand = sample.get("measurand") or "Value"
-        value_text = self._format_sample_value(sample.get("value"), sample.get("unit"))
-        meta_text = self._format_sample_meta(
-            sample.get("context"), sample.get("location")
-        )
-        self.stdout.write(f"  - {measurand}: {value_text}{meta_text}")
-
-    @staticmethod
-    def _format_sample_value(value: object, unit: object) -> str:
-        value_parts: list[str] = []
-        if value is not None:
-            value_parts.append(str(value))
-        if unit:
-            value_parts.append(str(unit))
-        return " ".join(value_parts) if value_parts else "-"
-
-    @staticmethod
-    def _format_sample_meta(context: object, location: object) -> str:
-        meta_parts: list[str] = []
-        if context:
-            meta_parts.append(f"context: {context}")
-        if location:
-            meta_parts.append(f"location: {location}")
-        return f" ({', '.join(meta_parts)})" if meta_parts else ""
-
-    @staticmethod
-    def _connector_descriptor(charger: Charger) -> str:
-        if charger.connector_id is None:
-            return "all connectors"
-        letter = Charger.connector_letter_from_value(charger.connector_id)
-        if letter:
-            return f"connector {letter}"
-        return f"connector {charger.connector_id}"
-
     @staticmethod
     def _format_dt(value: datetime | None) -> str | None:
         if not value:
@@ -1332,6 +650,18 @@ class Command(BaseCommand):
         if heartbeat and meter_ts:
             return max(heartbeat, meter_ts)
         return heartbeat or meter_ts
+
+    def _render_tail(self, charger: Charger, limit: int) -> None:
+        self.renderer.render_tail(charger, limit)
+
+    def _render_sessions(self, chargers: Iterable[Charger], limit: int) -> None:
+        self.renderer.render_sessions(chargers, limit)
+
+    def _render_table(self, chargers: Iterable[Charger]) -> None:
+        self.renderer.render_table(chargers)
+
+    def _render_details(self, chargers: Iterable[Charger]) -> None:
+        self.renderer.render_details(chargers)
 
     def _upsert_ws_auth_user(self, *, username: str, password: str):
         """Create or update the websocket HTTP Basic user for charger protection."""
