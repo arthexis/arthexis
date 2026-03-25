@@ -5,7 +5,6 @@ from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
 from django.urls import path
 from django.urls import reverse
-from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
@@ -144,44 +143,62 @@ class GitHubRepositoryAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
     list_display = ("owner", "name", "is_private")
     search_fields = ("owner", "name")
 
+    def _github_token_admin(self):
+        return self.admin_site._registry.get(GitHubToken)
+
+    def _can_setup_token(self, request, token=None):
+        token_admin = self._github_token_admin()
+        if token_admin is None:
+            return False
+        if token is None:
+            return token_admin.has_add_permission(request)
+        return token_admin.has_change_permission(request, obj=token)
+
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
             path(
                 "setup-token/",
-                self.admin_site.admin_view(self.setup_token_view),
+                self.admin_site.admin_view(self.setup_token),
                 name="repos_githubrepository_setup_token",
             )
         ]
         return custom_urls + urls
 
     def changelist_view(self, request, extra_context=None):
-        response = super().changelist_view(request, extra_context=extra_context)
-        content = getattr(response, "rendered_content", "")
-        label = str(self.setup_token.label)
-        if not content or label in content:
-            return response
-        link_markup = format_html(
-            '<li><a href="{}" class="addlink">{}</a></li>',
-            reverse("admin:repos_githubrepository_setup_token"),
-            label,
-        )
-        response.content = content.replace(
-            '<ul class="object-tools">',
-            f'<ul class="object-tools">{link_markup}',
-            1,
-        )
-        return response
+        extra_context = extra_context or {}
+        links = list(extra_context.get("public_view_links") or [])
+        setup_url = reverse("admin:repos_githubrepository_setup_token")
+        if not any(link.get("url") == setup_url for link in links):
+            links.append({"label": self.setup_token.label, "url": setup_url})
+        extra_context["public_view_links"] = links
+        return super().changelist_view(request, extra_context=extra_context)
 
-    def setup_token_view(self, request):
-        return self.setup_token(request)
+    def get_dashboard_actions(self, request):
+        if not self._can_setup_token(request):
+            return []
+        return super().get_dashboard_actions(request)
 
     def setup_token(self, request, queryset=None):
         token = GitHubToken.objects.filter(user=request.user).order_by("pk").first()
         if token is not None:
+            if not self._can_setup_token(request, token=token):
+                self.message_user(
+                    request,
+                    _("You do not have permission to change your GitHub token."),
+                    level=messages.WARNING,
+                )
+                return self._redirect_to_changelist()
             return HttpResponseRedirect(
                 reverse("admin:repos_githubtoken_change", args=[token.pk])
             )
+        if not self._can_setup_token(request):
+            self.message_user(
+                request,
+                _("You do not have permission to add a GitHub token."),
+                level=messages.WARNING,
+            )
+            return self._redirect_to_changelist()
         return HttpResponseRedirect(reverse("admin:repos_githubtoken_add"))
 
     setup_token.label = _("Setup Token")
