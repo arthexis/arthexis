@@ -1,10 +1,10 @@
 from pathlib import Path
 
+from apps.nginx.renderers import generate_unified_config
+
 
 def test_generate_unified_config_includes_managed_sites(tmp_path: Path):
     """Unified nginx config should include primary and managed site blocks in one file."""
-
-    from apps.nginx.renderers import generate_unified_config
 
     staging = tmp_path / "sites.json"
     staging.write_text(
