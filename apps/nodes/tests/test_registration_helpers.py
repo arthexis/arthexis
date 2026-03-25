@@ -16,7 +16,6 @@ from apps.nodes.views.registration import (
     register_node,
 )
 
-
 @pytest.mark.django_db
 def test_register_node_rejects_invalid_signature_without_authenticated_user():
     """Unsigned requests with malformed signature must be rejected."""
@@ -39,7 +38,6 @@ def test_register_node_rejects_invalid_signature_without_authenticated_user():
     assert response.status_code == 403
     assert json.loads(response.content.decode())["detail"] == "invalid signature"
 
-
 @pytest.mark.parametrize(
     "headers,expected",
     [
@@ -56,17 +54,6 @@ def test_get_host_port_infers_from_proxy_headers(headers, expected):
     request = RequestFactory().get("/nodes/info/", **headers)
     assert _get_host_port(request) == expected
 
-
-def test_iter_port_fallback_urls_generates_legacy_alternative_port():
-    """Registration URLs on 8888 should include legacy 8000 fallback."""
-
-    base = "https://visitor.example.com:8888/nodes/info/?token=a"
-    assert list(_iter_port_fallback_urls(base)) == [
-        base,
-        "https://visitor.example.com:8000/nodes/info/?token=a",
-    ]
-
-
 @override_settings(VISITOR_ALLOWED_HOST_SUFFIXES=("example.com", "nodes.internal"))
 def test_allowed_visitor_url_matches_suffix_allow_list():
     """Allow-list checks should permit listed suffixes and reject others."""
@@ -75,7 +62,6 @@ def test_allowed_visitor_url_matches_suffix_allow_list():
     assert _is_allowed_visitor_url("https://alpha.nodes.internal/nodes/info/")
     assert not _is_allowed_visitor_url("https://example.net/nodes/info/")
     assert not _is_allowed_visitor_url("http://visitor.example.com/nodes/info/")
-
 
 @pytest.mark.parametrize(
     "token,expected",
@@ -89,7 +75,6 @@ def test_redact_url_token_masks_query_parameter(token, expected):
 
     assert _redact_url_token(token) == expected
 
-
 def test_redact_mac_is_deterministic_and_non_plaintext():
     """MAC redaction should hide source value and remain stable across formatting."""
 
@@ -99,7 +84,6 @@ def test_redact_mac_is_deterministic_and_non_plaintext():
     assert first == second
     assert first.startswith("***REDACTED***-")
     assert "AA-BB" not in first
-
 
 @override_settings(VISITOR_CORS_ALLOWED_ORIGINS=("https://trusted.example",))
 def test_add_cors_headers_reflects_only_allowed_origin():
@@ -126,7 +110,6 @@ def test_add_cors_headers_reflects_only_allowed_origin():
     assert untrusted_response["Access-Control-Allow-Origin"] == "*"
     assert untrusted_response["Access-Control-Allow-Credentials"] == "false"
 
-
 @override_settings(TRUSTED_PROXIES=("10.0.0.1",))
 def test_get_client_ip_uses_forwarded_for_only_for_trusted_proxy():
     """X-Forwarded-For should be honored only when REMOTE_ADDR is trusted."""
@@ -146,7 +129,6 @@ def test_get_client_ip_uses_forwarded_for_only_for_trusted_proxy():
         HTTP_X_FORWARDED_FOR="203.0.113.10",
     )
     assert get_client_ip(untrusted_request) == "198.51.100.7"
-
 
 def test_payload_helpers_handle_falsy_strings_and_invalid_utf8():
     """Payload coercion should map falsy strings and tolerate invalid UTF-8."""

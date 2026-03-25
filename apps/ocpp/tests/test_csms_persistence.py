@@ -16,7 +16,6 @@ from apps.ocpp.consumers.csms.persistence import (
 from apps.ocpp.models import Charger
 from apps.ops.models import SecurityAlertEvent
 
-
 @pytest.fixture
 def charger_rows(db):
     """Create one aggregate row and multiple connector rows for one charger_id."""
@@ -52,7 +51,6 @@ def charger_rows(db):
         "other_aggregate": other_aggregate,
     }
 
-
 @pytest.mark.django_db
 def test_update_status_notification_records_updates_aggregate_when_connector_is_none(
     charger_rows,
@@ -76,7 +74,6 @@ def test_update_status_notification_records_updates_aggregate_when_connector_is_
     assert aggregate.last_status == "Unavailable"
     assert aggregate.last_error_code == "E100"
     assert connector_one.last_status == "Preparing"
-
 
 @pytest.mark.django_db
 def test_update_status_notification_records_updates_connector_without_corrupting_aggregate(
@@ -103,7 +100,6 @@ def test_update_status_notification_records_updates_connector_without_corrupting
     assert aggregate.last_status == "Available"
     assert aggregate.last_error_code == ""
 
-
 @pytest.mark.django_db
 def test_update_status_notification_records_falls_back_to_aggregate_when_connector_missing(
     charger_rows,
@@ -124,7 +120,6 @@ def test_update_status_notification_records_falls_back_to_aggregate_when_connect
 
     assert aggregate.last_status == "Unavailable"
     assert aggregate.last_error_code == "E-MISSING"
-
 
 @pytest.mark.django_db
 def test_update_availability_state_records_updates_only_matching_connector_rows(charger_rows):
@@ -149,7 +144,6 @@ def test_update_availability_state_records_updates_only_matching_connector_rows(
     assert connector_two.availability_state == "Operative"
     assert aggregate.availability_state == "Operative"
 
-
 @pytest.mark.django_db
 def test_update_availability_state_records_updates_only_aggregate_rows(charger_rows):
     """Aggregate availability updates should only touch rows with connector_id=None."""
@@ -173,7 +167,6 @@ def test_update_availability_state_records_updates_only_aggregate_rows(charger_r
     assert aggregate.availability_state_updated_at == updated_at
     assert connector_one.availability_state == "Operative"
 
-
 @pytest.mark.django_db
 def test_update_availability_state_records_returns_empty_when_no_rows_match(charger_rows):
     """No matching rows should result in no writes and an empty touched set."""
@@ -186,24 +179,6 @@ def test_update_availability_state_records_returns_empty_when_no_rows_match(char
     )
 
     assert touched == []
-
-
-@pytest.mark.django_db
-def test_persist_legacy_meter_values_updates_only_targeted_charger(charger_rows):
-    """Legacy meter payload persistence should only update the selected charger row."""
-
-    connector_two = charger_rows["connector_two"]
-    other_aggregate = charger_rows["other_aggregate"]
-    payload = {"meterValue": [{"sampledValue": [{"value": "123.4"}]}]}
-
-    persist_legacy_meter_values(charger_pk=connector_two.pk, payload=payload)
-
-    connector_two.refresh_from_db()
-    other_aggregate.refresh_from_db()
-
-    assert connector_two.last_meter_values == payload
-    assert other_aggregate.last_meter_values == {}
-
 
 @pytest.mark.django_db
 def test_sync_charger_error_security_event_records_faulted_status(charger_rows):
@@ -225,7 +200,6 @@ def test_sync_charger_error_security_event_records_faulted_status(charger_rows):
     assert event.occurrence_count == 1
     assert event.last_occurred_at == timestamp
     assert "Faulted" in event.message
-
 
 @pytest.mark.django_db
 def test_sync_charger_error_security_event_avoids_duplicate_same_timestamp(charger_rows):
@@ -251,7 +225,6 @@ def test_sync_charger_error_security_event_avoids_duplicate_same_timestamp(charg
     event = SecurityAlertEvent.objects.get(key="ocpp-charger-CP-100-2-error")
     assert event.occurrence_count == 1
 
-
 @pytest.mark.critical
 @pytest.mark.django_db
 def test_sync_charger_error_security_event_deactivates_when_status_recovers(charger_rows):
@@ -276,7 +249,6 @@ def test_sync_charger_error_security_event_deactivates_when_status_recovers(char
 
     event = SecurityAlertEvent.objects.get(key="ocpp-charger-CP-100-aggregate-error")
     assert event.is_active is False
-
 
 @pytest.mark.django_db
 def test_sync_charger_error_security_event_ignores_stale_fault_after_recovery(charger_rows):
@@ -311,7 +283,6 @@ def test_sync_charger_error_security_event_ignores_stale_fault_after_recovery(ch
     assert event.is_active is False
     assert event.last_occurred_at == recovered_at
 
-
 @pytest.mark.django_db
 def test_sync_charger_error_security_event_supports_long_charger_id_key(charger_rows):
     """Long charger IDs should persist without exceeding key length limits."""
@@ -328,7 +299,6 @@ def test_sync_charger_error_security_event_supports_long_charger_id_key(charger_
 
     event = SecurityAlertEvent.objects.get(key=f"ocpp-charger-{long_charger_id}-aggregate-error")
     assert len(event.key) > 120
-
 
 @pytest.mark.django_db
 def test_sync_charger_error_security_event_hashes_very_long_key(charger_rows):

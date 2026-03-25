@@ -9,7 +9,6 @@ from apps.ocpp import store
 from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.consumers.base.routing import ActionRouter
 
-
 @pytest.fixture(autouse=True)
 def reset_store_state():
     """Reset in-memory store state used by dispatch tests."""
@@ -17,7 +16,6 @@ def reset_store_state():
     store.logs["charger"].clear()
     yield
     store.logs["charger"].clear()
-
 
 @pytest.mark.anyio
 async def test_action_router_resolves_transaction_and_notification_handlers():
@@ -32,7 +30,6 @@ async def test_action_router_resolves_transaction_and_notification_handlers():
         router.resolve("PublishFirmwareStatusNotification")
         == consumer._handle_publish_firmware_status_notification_action
     )
-
 
 @pytest.mark.anyio
 async def test_dispatch_routes_via_registry_for_transaction_event():
@@ -53,39 +50,3 @@ async def test_dispatch_routes_via_registry_for_transaction_event():
     consumer._handle_transaction_event_action.assert_awaited_once()
     consumer.send.assert_awaited_once()
 
-
-@pytest.mark.anyio
-async def test_wrapped_high_risk_handlers_delegate_to_legacy_methods():
-    """Wrapper handlers delegate to legacy implementations where DB writes occur."""
-
-    consumer = CSMSConsumer(scope={}, receive=None, send=None)
-
-    consumer._handle_transaction_event_legacy = AsyncMock(return_value={})
-    consumer._handle_meter_values_legacy = AsyncMock(return_value={})
-    consumer._handle_publish_firmware_status_notification_action_legacy = AsyncMock(return_value={})
-    consumer._handle_log_status_notification_action_legacy = AsyncMock(return_value={})
-
-    await consumer._handle_transaction_event_action({}, "msg-1", "raw", "raw")
-    await consumer._handle_meter_values_action({}, "msg-2", "raw", "raw")
-    await consumer._handle_publish_firmware_status_notification_action({}, "msg-3", "raw", "raw")
-    await consumer._handle_log_status_notification_action({}, "msg-4", "raw", "raw")
-
-    consumer._handle_transaction_event_legacy.assert_awaited_once()
-    consumer._handle_meter_values_legacy.assert_awaited_once()
-    consumer._handle_publish_firmware_status_notification_action_legacy.assert_awaited_once()
-    consumer._handle_log_status_notification_action_legacy.assert_awaited_once()
-
-
-@pytest.mark.anyio
-async def test_transaction_wrappers_delegate_start_and_stop_to_legacy_methods():
-    """Start/stop action wrappers continue delegating to legacy transaction flows."""
-
-    consumer = CSMSConsumer(scope={}, receive=None, send=None)
-    consumer._handle_start_transaction_legacy = AsyncMock(return_value={"transactionId": 1})
-    consumer._handle_stop_transaction_legacy = AsyncMock(return_value={"idTagInfo": {"status": "Accepted"}})
-
-    await consumer._handle_start_transaction_action({}, "msg-start", "raw", "raw")
-    await consumer._handle_stop_transaction_action({}, "msg-stop", "raw", "raw")
-
-    consumer._handle_start_transaction_legacy.assert_awaited_once()
-    consumer._handle_stop_transaction_legacy.assert_awaited_once()

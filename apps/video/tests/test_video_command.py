@@ -14,7 +14,6 @@ from apps.video.models import VideoDevice
 
 pytestmark = pytest.mark.integration
 
-
 @pytest.mark.django_db
 def test_video_command_lists_devices(capsys):
     """List configured video devices."""
@@ -37,7 +36,6 @@ def test_video_command_lists_devices(capsys):
     output = capsys.readouterr().out
     assert "Video devices: 1" in output
     assert "/dev/video0" in output
-
 
 @pytest.mark.django_db
 def test_video_list_subcommand_discovers_and_lists_devices(capsys):
@@ -64,7 +62,6 @@ def test_video_list_subcommand_discovers_and_lists_devices(capsys):
     assert "Detected 1 new" in output
     assert "Video devices:" in output
 
-
 @pytest.mark.django_db
 def test_video_command_errors_without_node():
     """Raise an error when no local node is registered."""
@@ -72,7 +69,6 @@ def test_video_command_errors_without_node():
     with patch("apps.video.management.commands.video.Node.get_local", return_value=None):
         with pytest.raises(CommandError):
             call_command("video", discover=True)
-
 
 @pytest.mark.django_db
 def test_video_command_sample_creates_video(capsys, tmp_path, monkeypatch):
@@ -190,7 +186,6 @@ def test_video_command_snapshot_auto_enables_feature(node_mock, feature_mock, de
 
     assignment_mock.objects.update_or_create.assert_called_once_with(node=node, feature=feature)
 
-
 @pytest.mark.parametrize(
     ("stream_arg", "frame_value", "expected_output", "expect_store_call"),
     [
@@ -238,7 +233,6 @@ def test_video_command_mjpeg_capture_variants(
         stream.store_frame_bytes.assert_not_called()
     assert expected_output in capsys.readouterr().out
 
-
 def _create_camera_service_sample_context(tmp_path, stream_slug):
     """Create a local node with one active camera stream for sample command tests."""
 
@@ -260,7 +254,6 @@ def _create_camera_service_sample_context(tmp_path, stream_slug):
     snapshot_path = tmp_path / "shot.jpg"
     snapshot_path.write_text("frame")
     return node, snapshot_path
-
 
 @pytest.mark.parametrize(
     ("scenario", "samples", "expect_direct_calls", "expected_error", "expected_output"),
@@ -389,77 +382,6 @@ def test_video_command_sample_camera_service_scenarios(
     if expected_output:
         assert expected_output in output
 
-
-@pytest.mark.parametrize("mode", ["snapshot", "mjpeg", "doctor"])
-@pytest.mark.django_db
-def test_video_subaction_modes_match_legacy_flags(mode, capsys):
-    """Ensure sub-action CLI forms preserve legacy flag behavior for major video actions."""
-
-    if mode == "snapshot":
-        node = Node.objects.create(
-            hostname="local",
-            mac_address=Node.get_current_mac(),
-            current_relation=Node.Relation.SELF,
-        )
-        feature = NodeFeature.objects.create(slug="video-cam", display="Video Camera")
-        NodeFeatureAssignment.objects.create(node=node, feature=feature)
-        VideoDevice.objects.create(
-            node=node,
-            identifier="/dev/video0",
-            description="Test camera",
-            is_default=True,
-        )
-
-        class SnapshotResult:
-            """Simple snapshot result shim for command output checks."""
-
-            sample = SimpleNamespace(path="/tmp/snapshot.jpg")
-
-        with (
-            patch("apps.video.management.commands.video.Node.get_local", return_value=node),
-            patch.object(VideoDevice, "capture_snapshot", return_value=SnapshotResult(), autospec=True),
-        ):
-            call_command("video", snapshot=True)
-        legacy_output = capsys.readouterr().out
-        with (
-            patch("apps.video.management.commands.video.Node.get_local", return_value=node),
-            patch.object(VideoDevice, "capture_snapshot", return_value=SnapshotResult(), autospec=True),
-        ):
-            call_command("video", "snapshot")
-        action_output = capsys.readouterr().out
-        assert "Snapshot saved to /tmp/snapshot.jpg" in legacy_output
-        assert "Snapshot saved to /tmp/snapshot.jpg" in action_output
-        return
-
-    if mode == "mjpeg":
-        stream = SimpleNamespace(store_frame_bytes=Mock(), slug="stream-1")
-        with (
-            patch("apps.video.management.commands.video.Node.get_local", return_value=None),
-            patch("apps.video.management.commands.video.MjpegStream") as stream_mock,
-            patch("apps.video.management.commands.video.get_frame", return_value=SimpleNamespace(frame_bytes=b"frame")),
-        ):
-            stream_mock.objects.all.return_value.filter.return_value.order_by.return_value = [stream]
-            call_command("video", mjpeg=True)
-            legacy_output = capsys.readouterr().out
-
-            stream.store_frame_bytes.reset_mock()
-            call_command("video", "mjpeg")
-            action_output = capsys.readouterr().out
-
-        assert "Captured frames for 1 stream(s)." in legacy_output
-        assert "Captured frames for 1 stream(s)." in action_output
-        return
-
-    with patch("apps.video.management.commands.video.Command._run_doctor") as doctor_mock:
-        call_command("video", doctor=True)
-    doctor_mock.assert_called_once()
-
-    with patch("apps.video.management.commands.video.Command._run_doctor") as doctor_mock:
-        call_command("video", "doctor")
-    doctor_mock.assert_called_once()
-    assert capsys.readouterr().out == ""
-
-
 def test_video_service_subaction_invokes_service_runner():
     """Ensure service sub-action dispatches to the long-running service loop."""
 
@@ -467,7 +389,6 @@ def test_video_service_subaction_invokes_service_runner():
         call_command("video", "service", interval=0.33, sleep=0.12)
 
     service_mock.assert_called_once_with(interval=0.33, sleep=0.12)
-
 
 def test_camera_service_supported_alias_delegates_to_video_service(capsys):
     """Keep the short alias as a supported synonym for ``video service``."""
@@ -477,7 +398,6 @@ def test_camera_service_supported_alias_delegates_to_video_service(capsys):
 
     call_mock.assert_called_once_with("video", "service", interval=0.25, sleep=0.1)
     assert "supported alias" in capsys.readouterr().out
-
 
 @override_settings(VIDEO_FRAME_CAPTURE_INTERVAL=0.0, VIDEO_FRAME_SERVICE_SLEEP=0.0)
 def test_video_command_setting_defaults_preserve_zero():

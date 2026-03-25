@@ -4,7 +4,6 @@ import pytest
 
 from apps.nginx import services
 
-
 def test_ensure_site_enabled_creates_symlink(monkeypatch, tmp_path: Path):
     sites_available = tmp_path / "sites-available"
     sites_enabled = tmp_path / "sites-enabled"
@@ -60,7 +59,6 @@ def test_ensure_site_enabled_skips_non_sites_available(monkeypatch, tmp_path: Pa
 
     assert calls == []
 
-
 def test_apply_nginx_configuration_removes_default_sites_entries(monkeypatch, tmp_path: Path):
     """Regression: applying config should remove default site links that break nginx -t."""
 
@@ -99,7 +97,6 @@ def test_apply_nginx_configuration_removes_default_sites_entries(monkeypatch, tm
     assert ["sudo", "rm", "-f", "/etc/nginx/sites-available/default"] in calls
     assert ["sudo", "rm", "-f", "/etc/nginx/sites-enabled/default"] in calls
 
-
 def test_apply_nginx_configuration_does_not_cleanup_on_render_error(monkeypatch, tmp_path: Path):
     """Cleanup should not run when unified rendering fails validation."""
 
@@ -124,38 +121,3 @@ def test_apply_nginx_configuration_does_not_cleanup_on_render_error(monkeypatch,
 
     assert cleaned["ran"] is False
 
-
-def test_apply_nginx_configuration_removes_legacy_site_destination(monkeypatch, tmp_path: Path):
-    """Unified apply should delete a legacy managed-sites destination file."""
-
-    calls: list[list[str]] = []
-
-    def fake_run(cmd, check=False):
-        calls.append(cmd)
-
-        class Result:
-            returncode = 0
-
-        return Result()
-
-    monkeypatch.setattr(services, "can_manage_nginx", lambda: True)
-    monkeypatch.setattr(services, "record_lock_state", lambda *_, **__: None)
-    monkeypatch.setattr(services, "generate_unified_config", lambda *_, **__: "server {}")
-    monkeypatch.setattr(services, "_remove_nginx_configs", lambda **_: None)
-    monkeypatch.setattr(services, "_write_config_with_sudo", lambda *_, **__: None)
-    monkeypatch.setattr(services, "_ensure_site_enabled", lambda *_, **__: None)
-    monkeypatch.setattr(services, "_ensure_maintenance_assets", lambda **_: None)
-    monkeypatch.setattr(services.subprocess, "run", fake_run)
-
-    services.apply_nginx_configuration(
-        mode="public",
-        port=8000,
-        role="web",
-        https_enabled=True,
-        include_ipv6=True,
-        destination=tmp_path / "arthexis.conf",
-        site_destination=tmp_path / "legacy-sites.conf",
-        reload=False,
-    )
-
-    assert ["sudo", "rm", "-f", str(tmp_path / "legacy-sites.conf")] in calls

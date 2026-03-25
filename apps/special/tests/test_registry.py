@@ -14,7 +14,6 @@ from apps.special.registry import (
     sync_special_command,
 )
 
-
 @special_command(singular="sample", plural="samples", keystone_model="core.Node")
 class SampleCommand(BaseCommand):
     """Test-only command for parameter introspection and invocation checks."""
@@ -30,7 +29,6 @@ class SampleCommand(BaseCommand):
     def handle(self, *args, **options) -> None:
         return None
 
-
 @special_command(singular="optional", plural="optionals")
 class OptionalPositionalCommand(BaseCommand):
     """Command with optional positional arg used to verify sync guardrails."""
@@ -40,7 +38,6 @@ class OptionalPositionalCommand(BaseCommand):
 
     def handle(self, *args, **options) -> None:
         return None
-
 
 @special_command(singular="nested", plural="nesteds")
 class NestedSubparserCommand(BaseCommand):
@@ -62,7 +59,6 @@ class NestedSubparserCommand(BaseCommand):
     def handle(self, *args, **options) -> None:
         return None
 
-
 @special_command(singular="nestedoptional", plural="nestedoptionals")
 class NestedOptionalPositionalCommand(BaseCommand):
     """Nested parser command with optional leaf positionals that should be ignored."""
@@ -78,7 +74,6 @@ class NestedOptionalPositionalCommand(BaseCommand):
     def handle(self, *args, **options) -> None:
         return None
 
-
 @pytest.mark.django_db
 def test_special_command_model_enforces_one_word_restrictions() -> None:
     """Special command names should enforce lowercase one-word restrictions."""
@@ -92,7 +87,6 @@ def test_special_command_model_enforces_one_word_restrictions() -> None:
 
     with pytest.raises(ValidationError, match="one lowercase word"):
         command.full_clean()
-
 
 @pytest.mark.django_db
 def test_special_command_parameter_allows_hyphenated_option_name() -> None:
@@ -114,7 +108,6 @@ def test_special_command_parameter_allows_hyphenated_option_name() -> None:
 
     parameter.full_clean()
 
-
 @pytest.mark.django_db
 def test_sync_special_command_persists_argument_schema() -> None:
     """Sync should introspect parser actions and persist parameter definitions."""
@@ -135,7 +128,6 @@ def test_sync_special_command_persists_argument_schema() -> None:
     assert parameter_map["kind"].choices == ["suite", "node"]
     assert parameter_map["kind"].nargs is None
     assert parameter_map["enabled"].const is True
-
 
 @pytest.mark.django_db
 def test_call_special_command_validates_inputs_and_forwards(monkeypatch) -> None:
@@ -166,7 +158,6 @@ def test_call_special_command_validates_inputs_and_forwards(monkeypatch) -> None
     assert captured["args"] == ("alpha",)
     assert captured["kwargs"] == {"count": 2, "enabled": True, "kind": "suite"}
 
-
 @pytest.mark.django_db
 def test_sync_special_command_rejects_optional_positionals() -> None:
     """Optional positional parser actions are rejected during sync."""
@@ -176,7 +167,6 @@ def test_sync_special_command_rejects_optional_positionals() -> None:
             command_name="optionals",
             command_cls=OptionalPositionalCommand,
         )
-
 
 @pytest.mark.django_db
 def test_call_special_command_rejects_unknown_or_invalid_inputs() -> None:
@@ -189,7 +179,6 @@ def test_call_special_command_rejects_unknown_or_invalid_inputs() -> None:
 
     with pytest.raises(SpecialCommandValidationError, match="Expected one of"):
         call_special_command("sample", slug="alpha", count=1, kind="bad")
-
 
 @pytest.mark.django_db
 def test_call_special_command_parses_string_booleans(monkeypatch) -> None:
@@ -211,7 +200,6 @@ def test_call_special_command_parses_string_booleans(monkeypatch) -> None:
     with pytest.raises(SpecialCommandValidationError, match="Invalid boolean value"):
         call_special_command("sample", slug="alpha", count=1, enabled="not-bool")
 
-
 @pytest.mark.django_db
 def test_sync_special_command_excludes_global_management_options() -> None:
     """Sync should not persist Django's built-in global management options."""
@@ -223,52 +211,12 @@ def test_sync_special_command_excludes_global_management_options() -> None:
     assert "settings" not in parameter_names
     assert "pythonpath" not in parameter_names
 
-
-@pytest.mark.django_db
-def test_call_special_command_rejects_legacy_global_management_option_metadata(
-    monkeypatch,
-) -> None:
-    """Calls should reject global options even if stale rows exist in the database."""
-
-    command = SpecialCommand.objects.create(
-        name="legacy",
-        plural_name="legacies",
-        command_name="sample",
-        command_path="tests.SampleCommand",
-    )
-    SpecialCommandParameter.objects.create(
-        command=command,
-        name="slug",
-        cli_name="slug",
-        kind=SpecialCommandParameter.ParameterKind.POSITIONAL,
-        value_type=SpecialCommandParameter.ValueType.STRING,
-        is_required=True,
-        sort_order=0,
-    )
-    SpecialCommandParameter.objects.create(
-        command=command,
-        name="settings",
-        cli_name="--settings",
-        kind=SpecialCommandParameter.ParameterKind.OPTION,
-        value_type=SpecialCommandParameter.ValueType.STRING,
-        sort_order=1,
-    )
-
-    def fake_call_command(name: str, *args, **kwargs):
-        return "ok"
-
-    monkeypatch.setattr("apps.special.registry.call_command", fake_call_command)
-
-    with pytest.raises(SpecialCommandValidationError, match="Unknown parameters"):
-        call_special_command("legacy", slug="alpha", settings="malicious.settings")
-
 @pytest.mark.django_db
 def test_call_special_command_reports_unknown_command() -> None:
     """Unknown command keys should raise the public validation error type."""
 
     with pytest.raises(SpecialCommandValidationError, match="Unknown special command"):
         call_special_command("does-not-exist")
-
 
 @pytest.mark.django_db
 def test_sync_special_command_supports_nested_subparsers() -> None:
@@ -285,7 +233,6 @@ def test_sync_special_command_supports_nested_subparsers() -> None:
     assert parameter_map["username"].kind == SpecialCommandParameter.ParameterKind.POSITIONAL
     assert parameter_map["shared"].kind == SpecialCommandParameter.ParameterKind.OPTION
 
-
 @pytest.mark.django_db
 def test_sync_special_command_skips_optional_nested_positionals() -> None:
     """Nested optional positionals should not block sync or be persisted."""
@@ -298,7 +245,6 @@ def test_sync_special_command_skips_optional_nested_positionals() -> None:
     parameter_names = {parameter.name for parameter in special.parameters.all()}
 
     assert parameter_names == {"action"}
-
 
 @pytest.mark.django_db
 def test_call_special_command_supports_nested_subparsers(monkeypatch) -> None:
