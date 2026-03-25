@@ -39,6 +39,6 @@ jobs:
           clean: false
 
       - name: Submit dependency snapshot
-        uses: advanced-security/component-detection-dependency-submission-action@v0.1.1
+        uses: advanced-security/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
         with:
           detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
