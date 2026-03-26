@@ -137,6 +137,26 @@ class Feature(Ownable):
     def get_absolute_url(self):
         return reverse("features:detail", kwargs={"slug": self.slug})
 
+    @staticmethod
+    def infer_main_app_name(code_locations: object) -> str | None:
+        """Infer an application label from feature code locations."""
+
+        if not isinstance(code_locations, list):
+            return None
+
+        for location in code_locations:
+            if not isinstance(location, str):
+                continue
+            location_parts = [part for part in location.strip(" /").split("/") if part]
+            if len(location_parts) < 2:
+                continue
+            if location_parts[0] != "apps":
+                continue
+            label = location_parts[1].strip()
+            if label:
+                return label
+        return None
+
     @property
     def params_count(self) -> int:
         """Return the count of configured feature parameter values."""
@@ -185,6 +205,17 @@ class Feature(Ownable):
         if not node:
             return False
         return node.features.filter(pk=self.node_feature_id).exists()
+
+    def save(self, *args, **kwargs):
+        """Persist and auto-link a main app when code locations provide one."""
+
+        if not self.main_app_id:
+            inferred_name = self.infer_main_app_name(self.code_locations)
+            if inferred_name:
+                Application = django_apps.get_model("app", "Application")
+                app, _ = Application.objects.get_or_create(name=inferred_name)
+                self.main_app = app
+        return super().save(*args, **kwargs)
 
 
 class FeatureTestManager(models.Manager):

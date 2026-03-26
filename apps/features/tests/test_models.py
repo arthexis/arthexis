@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from django.core.exceptions import ValidationError
 
+from apps.app.models import Application
 from apps.features.models import Feature
 
 
@@ -83,3 +84,32 @@ def test_params_count_handles_missing_metadata_dict() -> None:
     feature.metadata = None
 
     assert feature.params_count == 0
+
+
+@pytest.mark.django_db
+def test_feature_save_infers_main_app_from_code_locations() -> None:
+    """Features with app-prefixed code locations should auto-link main_app."""
+
+    feature = Feature.objects.create(
+        slug="app-inference",
+        display="App Inference",
+        code_locations=["apps/meta/views.py"],
+    )
+
+    assert feature.main_app is not None
+    assert feature.main_app.name == "meta"
+    assert Application.objects.filter(name="meta").exists()
+
+
+def test_infer_main_app_name_ignores_non_app_paths() -> None:
+    """Inference should return None when no app-prefixed paths are present."""
+
+    inferred = Feature.infer_main_app_name(
+        [
+            "config/settings/base.py",
+            "README.md",
+            "  /services/worker.py",
+        ]
+    )
+
+    assert inferred is None
