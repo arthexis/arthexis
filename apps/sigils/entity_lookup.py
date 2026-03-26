@@ -113,8 +113,6 @@ def resolve_entity_aggregate(
     aggregate_func: str | None,
     param_args: list[str],
     call_attribute: Callable[[object, str, list[str]], tuple[bool, object]],
-    failed_resolution: Callable[[str], str],
-    original_token: str,
 ) -> str | None:
     """Resolve aggregate sigils for entity models."""
     aggregate_candidates = {"total", "count", "min", "max"}
@@ -140,7 +138,7 @@ def resolve_entity_aggregate(
             return "" if result is None else str(result)
 
     values: list[float] = []
-    for obj in qs:
+    for obj in qs.iterator():
         source = None
         if target_name:
             if field:
@@ -155,5 +153,4 @@ def resolve_entity_aggregate(
         if numeric is not None:
             values.append(numeric)
 
-    aggregated = _aggregate_values(values, aggregate_func)
-    return aggregated if aggregated is not None else failed_resolution(original_token)
+    return _aggregate_values(values, aggregate_func)

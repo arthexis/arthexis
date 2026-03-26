@@ -684,8 +684,6 @@ def _resolve_entity_root(
             aggregate_func,
             list(context.param_args),
             _call_attribute,
-            _failed_resolution,
-            context.original_token,
         )
         if aggregate_result is not None:
             return aggregate_result
@@ -776,8 +774,7 @@ def _resolve_context_config(root: SigilRoot, context: ResolutionContext) -> str:
     )
 
 
-def _resolve_context_request(root: SigilRoot, context: ResolutionContext) -> str:
-    del root
+def _resolve_context_request(_root: SigilRoot, context: ResolutionContext) -> str:
     return _resolve_request_root(
         context.normalized_key,
         context.raw_key,
