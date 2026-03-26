@@ -87,11 +87,12 @@ LEGACY_MIGRATION_APPS = [
     "apps._legacy.extensions_migration_only.apps.ExtensionsMigrationOnlyConfig",
     "apps._legacy.fitbit_migration_only.apps.FitbitMigrationOnlyConfig",
     "apps._legacy.game_migration_only.apps.GameMigrationOnlyConfig",
+    "apps._legacy.mcp_migration_only.apps.McpMigrationOnlyConfig",
     "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig",
     "apps._legacy.recipes_migration_only.apps.RecipesMigrationOnlyConfig",
     "apps._legacy.screens_migration_only.apps.ScreensMigrationOnlyConfig",
-    "apps._legacy.shortcuts_migration_only.apps.ShortcutsMigrationOnlyConfig",
     "apps._legacy.selenium_migration_only.apps.SeleniumMigrationOnlyConfig",
+    "apps._legacy.shortcuts_migration_only.apps.ShortcutsMigrationOnlyConfig",
     "apps._legacy.smb_migration_only.apps.SmbMigrationOnlyConfig",
     "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig",
     "apps._legacy.sponsors_migration_only.apps.SponsorsMigrationOnlyConfig",
@@ -261,9 +262,14 @@ SITE_ID = 1
 
 MIGRATION_MODULES = {
     "calendars": "apps._legacy.calendars_migration_only.migrations",
+    # Pin django_celery_beat migrations to a local copy so we can override
+    # upstream changes that introduce optional dependencies (e.g. Google
+    # Calendar profile) and avoid InvalidBases errors during migrate.
+    "django_celery_beat": "apps.celery.beat_migrations",
     "extensions": "apps._legacy.extensions_migration_only.migrations",
     "fitbit": "apps._legacy.fitbit_migration_only.migrations",
     "game": "apps._legacy.game_migration_only.migrations",
+    "mcp": "apps._legacy.mcp_migration_only.migrations",
     "prompts": "apps._legacy.prompts_migration_only.migrations",
     "recipes": "apps._legacy.recipes_migration_only.migrations",
     "screens": "apps._legacy.screens_migration_only.migrations",
@@ -274,10 +280,6 @@ MIGRATION_MODULES = {
     "socials": "apps._legacy.socials_migration_only.migrations",
     "sponsors": "apps._legacy.sponsors_migration_only.migrations",
     "survey": "apps._legacy.survey_migration_only.migrations",
-    # Pin django_celery_beat migrations to a local copy so we can override
-    # upstream changes that introduce optional dependencies (e.g. Google
-    # Calendar profile) and avoid InvalidBases errors during migrate.
-    "django_celery_beat": "apps.celery.beat_migrations",
 }
 MIGRATION_MODULES = _drop_legacy_migration_modules(MIGRATION_MODULES, version=REPO_VERSION)
 
