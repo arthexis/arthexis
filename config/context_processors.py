@@ -1,21 +1,21 @@
-import logging
 import ipaddress
+import logging
 import re
 import socket
-from importlib import import_module
 
+from apps.sites import admin_badges
+from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.exceptions import DisallowedHost
 from django.db.utils import OperationalError, ProgrammingError
 from django.http import HttpRequest
-from django.conf import settings
 
 DEFAULT_BADGE_COLOR = "#28a745"
 UNKNOWN_BADGE_COLOR = "#6c757d"
-ALLOWED_ADMIN_BADGE_CALLABLE_PATHS = {
-    "apps.sites.admin_badges.site_badge_data",
-    "apps.sites.admin_badges.node_badge_data",
-    "apps.sites.admin_badges.role_badge_data",
+ADMIN_BADGE_PROVIDER_CALLABLES = {
+    "node": admin_badges.node_badge_data,
+    "role": admin_badges.role_badge_data,
+    "site": admin_badges.site_badge_data,
 }
 
 
@@ -140,17 +140,12 @@ def site_and_node(request: HttpRequest):
     }
 
 
-def _resolve_admin_badge_callable(path: str):
-    """Resolve a badge query callable from a dotted path."""
+def _resolve_admin_badge_callable(provider_key: str):
+    """Resolve a badge query callable from a registered provider key."""
 
-    if path not in ALLOWED_ADMIN_BADGE_CALLABLE_PATHS:
-        raise ValueError(f"Unauthorized badge query path: {path}")
-
-    module_path, _, attr_name = path.rpartition(".")
-    if not module_path or not attr_name:
-        raise ValueError(f"Invalid badge query path: {path}")
-    module = import_module(module_path)
-    return getattr(module, attr_name)
+    if provider_key not in ADMIN_BADGE_PROVIDER_CALLABLES:
+        raise ValueError(f"Unknown badge provider key: {provider_key}")
+    return ADMIN_BADGE_PROVIDER_CALLABLES[provider_key]
 
 
 def _visible_badges_for_user(*, user):
@@ -183,7 +178,7 @@ def _build_admin_badges(*, request, site, node, role):
     badges = []
     for badge in _visible_badges_for_user(user=getattr(request, "user", None)):
         try:
-            query_callable = _resolve_admin_badge_callable(badge.value_query_path)
+            query_callable = _resolve_admin_badge_callable(badge.provider_key)
             payload = query_callable(request=request, site=site, node=node, role=role)
         except Exception:
             logger.exception("Failed rendering admin badge %s", badge.slug)
