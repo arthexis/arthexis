@@ -132,6 +132,7 @@ PROJECT_LOCAL_APPS = [
     "apps.ftp",
     "apps.gdrive",
     "apps.groups",
+    "apps.imager",
     "apps.leads",
     "apps.links",
     "apps.locale",
