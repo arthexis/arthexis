@@ -214,7 +214,7 @@
         }
     }
 
-    function renderSelectionCell(cell, isEligible, featureId) {
+    function renderSelectionCell(cell, isEligible, featureId, featureName) {
         if (!cell) {
             return;
         }
@@ -227,7 +227,9 @@
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = true;
+        checkbox.id = 'feature-select-' + featureId;
         checkbox.dataset.featureId = featureId;
+        checkbox.setAttribute('aria-label', featureName || ('Select ' + featureId));
         checkbox.addEventListener('change', updateSelectedCount);
         cell.appendChild(checkbox);
     }
@@ -283,7 +285,10 @@
             if (!data) {
                 return;
             }
-            renderSelectionCell(selectedCell, !!data.eligible, featureId);
+            const featureName = row.querySelector('th[scope="row"]')
+                ? row.querySelector('th[scope="row"]').textContent.trim()
+                : '';
+            renderSelectionCell(selectedCell, !!data.eligible, featureId, featureName);
             setCellText(eligibilityCell, data.message || '');
             renderManualToggleCell(manualCell, data.manual_enablement, featureId, enablementCell);
             if (data.eligible) {

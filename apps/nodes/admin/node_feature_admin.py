@@ -290,7 +290,12 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
             return JsonResponse({"detail": "Invalid feature id"}, status=400)
         discovery_id = request.POST.get("discovery_id") or ""
         apply_param = (request.POST.get("apply") or "true").strip().lower()
-        apply_changes = apply_param not in {"0", "false", "no"}
+        if apply_param in {"1", "true", "yes"}:
+            apply_changes = True
+        elif apply_param in {"0", "false", "no"}:
+            apply_changes = False
+        else:
+            return JsonResponse({"detail": "Invalid apply value"}, status=400)
         feature = self.get_queryset(request).filter(pk=feature_id).first()
         if not feature:
             return JsonResponse({"detail": "Feature not found"}, status=404)
@@ -386,7 +391,7 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
                 "message": "Eligibility check failed; feature not enabled.",
             }
 
-        if discovery_id and apply_changes:
+        if discovery_id:
             from apps.discovery.models import Discovery
 
             try:
@@ -399,13 +404,14 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
                     obj=feature,
                     label=str(feature.display),
                     created=assignment_created,
-                    overwritten=not assignment_created and eligible,
+                    overwritten=apply_changes and not assignment_created and eligible,
                     data={
                         "eligible": eligible,
                         "status": status,
                         "message": message,
                         "enablement": enablement,
                         "level": level,
+                        "applied": apply_changes,
                     },
                 )
 
