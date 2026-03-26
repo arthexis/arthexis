@@ -33,12 +33,30 @@ class RFIDBatchApiTests(TestCase):
 
     def test_post_rejects_command_fields(self):
         url = reverse("rfid-batch")
-        payloads = [
-            {"rfids": [{"rfid": "AABBCCDD", "external_command": "echo hi"}]},
-            {"rfids": [{"rfid": "EEFF0011", "post_auth_command": "echo bye"}]},
+        test_cases = [
+            (
+                {"rfids": [{"rfid": "AABBCCDD", "external_command": "echo hi"}]},
+                ["external_command"],
+            ),
+            (
+                {"rfids": [{"rfid": "EEFF0011", "post_auth_command": "echo bye"}]},
+                ["post_auth_command"],
+            ),
+            (
+                {
+                    "rfids": [
+                        {
+                            "rfid": "DEADBEEF",
+                            "external_command": "one",
+                            "post_auth_command": "two",
+                        }
+                    ]
+                },
+                ["external_command", "post_auth_command"],
+            ),
         ]
-        for payload in payloads:
-            with self.subTest(payload=payload):
+        for payload, expected_fields in test_cases:
+            with self.subTest(payload=payload, expected_fields=expected_fields):
                 response = self.client.post(
                     url,
                     data=json.dumps(payload),
@@ -50,4 +68,23 @@ class RFIDBatchApiTests(TestCase):
                     data["detail"],
                     "Command fields are not accepted by this endpoint.",
                 )
-                self.assertIn("fields", data)
+                self.assertEqual(data["fields"], expected_fields)
+
+    def test_post_rejects_entire_batch_without_partial_import(self):
+        url = reverse("rfid-batch")
+        payload = {
+            "rfids": [
+                {"rfid": "11223344", "custom_label": "would be imported"},
+                {"rfid": "55667788", "external_command": "invalid"},
+            ]
+        }
+
+        response = self.client.post(
+            url,
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(RFID.objects.filter(rfid="11223344").exists())
+        self.assertFalse(RFID.objects.filter(rfid="55667788").exists())

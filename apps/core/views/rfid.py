@@ -64,7 +64,6 @@ def rfid_batch(request):
         if not isinstance(tags, list):
             return JsonResponse({"detail": "rfids list required"}, status=400)
 
-        count = 0
         for index, row in enumerate(tags):
             disallowed = sorted(
                 field for field in _DISALLOWED_COMMAND_FIELDS if field in row
@@ -80,6 +79,9 @@ def rfid_batch(request):
                     },
                     status=400,
                 )
+
+        count = 0
+        for row in tags:
             rfid = (row.get("rfid") or "").strip()
             if not rfid:
                 continue
