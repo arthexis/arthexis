@@ -4,6 +4,8 @@ import base64
 from io import BytesIO
 from typing import Any
 
+from apps.cards.actions import get_rfid_action_choices
+
 from django.apps import apps
 from django.core.management.color import no_style
 from django.core.validators import RegexValidator
@@ -14,7 +16,6 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
-
 
 __all__ = ["RFID"]
 
@@ -94,12 +95,31 @@ class RFID(Entity):
     external_command = models.TextField(
         default="",
         blank=True,
-        help_text="Optional command executed during validation.",
+        help_text="Deprecated: legacy raw command text. No longer executed.",
     )
     post_auth_command = models.TextField(
         default="",
         blank=True,
-        help_text="Optional command executed after successful validation.",
+        help_text="Deprecated: legacy post-auth raw command text. No longer executed.",
+    )
+    validation_action = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        choices=get_rfid_action_choices(),
+        help_text="Allowlisted internal action to run during RFID validation.",
+    )
+    post_auth_action = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        choices=get_rfid_action_choices(),
+        help_text="Allowlisted internal action to run after successful authentication.",
+    )
+    legacy_command_archive = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Archived legacy command text retained for audit history.",
     )
     expiry_date = models.DateField(
         null=True,
@@ -178,7 +198,9 @@ class RFID(Entity):
         update_fields = kwargs.get("update_fields")
         if not self.origin_node_id:
             try:
-                from apps.nodes.models import Node  # imported lazily to avoid circular import
+                from apps.nodes.models import (
+                    Node,
+                )  # imported lazily to avoid circular import
             except Exception:  # pragma: no cover - nodes app may be unavailable
                 node = None
             else:
@@ -237,9 +259,9 @@ class RFID(Entity):
         image = qr.make_image(fill_color="black", back_color="white")
         buffer = BytesIO()
         image.save(buffer, format="PNG")
-        data_uri = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(
-            "ascii"
-        )
+        data_uri = "data:image/png;base64," + base64.b64encode(
+            buffer.getvalue()
+        ).decode("ascii")
         return format_html(
             '<a href="{}" target="_blank" rel="noopener">{}</a>',
             data_uri,
@@ -370,7 +392,9 @@ class RFID(Entity):
             return ""
         if len(normalized) % 2 != 0:
             return normalized[::-1]
-        bytes_list = [normalized[index : index + 2] for index in range(0, len(normalized), 2)]
+        bytes_list = [
+            normalized[index : index + 2] for index in range(0, len(normalized), 2)
+        ]
         bytes_list.reverse()
         return "".join(bytes_list)
 
@@ -385,9 +409,7 @@ class RFID(Entity):
             raise ValueError("step must be a positive integer")
         start_value = start if start is not None else step_value
 
-        labels_qs = (
-            cls.objects.order_by("-label_id").values_list("label_id", flat=True)
-        )
+        labels_qs = cls.objects.order_by("-label_id").values_list("label_id", flat=True)
         max_label = 0
         last_multiple = 0
         for value in labels_qs.iterator():
@@ -408,9 +430,7 @@ class RFID(Entity):
         return candidate
 
     @classmethod
-    def next_copy_label(
-        cls, source: "RFID", *, step: int | None = None
-    ) -> int:
+    def next_copy_label(cls, source: "RFID", *, step: int | None = None) -> int:
         """Return the next label id when copying ``source`` to a new card."""
 
         step_value = step or cls.COPY_LABEL_STEP
@@ -495,11 +515,7 @@ class RFID(Entity):
         matches = cls.matching_queryset(value).filter(allowed=True)
         if not matches.exists():
             return None
-        return (
-            CustomerAccount.objects.filter(rfids__in=matches)
-            .distinct()
-            .first()
-        )
+        return CustomerAccount.objects.filter(rfids__in=matches).distinct().first()
 
     class Meta:
         verbose_name = "RFID"

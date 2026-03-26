@@ -52,6 +52,8 @@ def serialize_rfid(tag: RFID) -> dict[str, Any]:
         "color": tag.color,
         "kind": tag.kind,
         "released": tag.released,
+        "validation_action": tag.validation_action,
+        "post_auth_action": tag.post_auth_action,
         "expiry_date": tag.expiry_date.isoformat() if tag.expiry_date else None,
         "last_seen_on": tag.last_seen_on.isoformat() if tag.last_seen_on else None,
         "customer_accounts": id_values,
@@ -84,6 +86,8 @@ def apply_rfid_payload(
         "color": entry.get("color", RFID.BLACK),
         "kind": entry.get("kind", RFID.CLASSIC),
         "released": bool(entry.get("released", False)),
+        "validation_action": str(entry.get("validation_action") or "").strip().upper(),
+        "post_auth_action": str(entry.get("post_auth_action") or "").strip().upper(),
     }
 
     if origin_node is not None:
@@ -120,7 +124,7 @@ def apply_rfid_payload(
 
 
 def _resolve_accounts(
-    entry: Mapping[str, Any]
+    entry: Mapping[str, Any],
 ) -> tuple[list[CustomerAccount], list[str], bool]:
     """Return matching accounts and missing identifiers from payload data."""
 

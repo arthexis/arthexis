@@ -643,21 +643,19 @@
     if(!commandOutputEl){
       return;
     }
-    const details = data && typeof data.command_output === 'object' ? data.command_output : null;
+    const details = data && typeof data.action_output === 'object' ? data.action_output : (data && typeof data.command_output === 'object' ? data.command_output : null);
     if(!details){
       clearCommandOutput();
       return;
     }
-    const stdoutText = details && details.stdout !== undefined && details.stdout !== null
-      ? String(details.stdout)
-      : '';
-    const stderrText = details && details.stderr !== undefined && details.stderr !== null
-      ? String(details.stderr)
-      : '';
+    const stdoutRaw = details && details.output !== undefined && details.output !== null ? details.output : details.stdout;
+    const stderrRaw = details && details.post_output !== undefined && details.post_output !== null ? details.post_output : details.stderr;
+    const stdoutText = stdoutRaw !== undefined && stdoutRaw !== null ? String(stdoutRaw) : '';
+    const stderrText = stderrRaw !== undefined && stderrRaw !== null ? String(stderrRaw) : '';
     const errorText = details && details.error !== undefined && details.error !== null
       ? String(details.error)
       : '';
-    let returnCode = details && details.returncode !== undefined ? details.returncode : null;
+    let returnCode = details && details.returncode !== undefined ? details.returncode : (details && details.success === false ? 1 : null);
     let numericReturnCode = null;
     let returnCodeText = '';
     if(typeof returnCode === 'number' && Number.isFinite(returnCode)){

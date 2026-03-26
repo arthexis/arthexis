@@ -7,7 +7,6 @@ import ipaddress
 import logging
 import os
 import socket
-import subprocess
 import sys
 
 from django.conf import settings
@@ -17,6 +16,7 @@ from django.core.exceptions import DisallowedHost
 from django.http.request import split_domain_port
 from django.db import DatabaseError
 
+from apps.cards.actions import dispatch_rfid_action
 from apps.cards.models import RFID
 from apps.cards.models import RFIDAttempt
 from apps.cards.reader import read_rfid_cell_value
@@ -24,7 +24,6 @@ from apps.energy.models import CustomerAccount
 from apps.features.utils import is_suite_feature_enabled
 from . import temp_passwords
 from .system import ensure_system_user
-
 
 logger = logging.getLogger(__name__)
 RFID_AUTH_AUDIT_FEATURE_SLUG = "rfid-auth-audit"
@@ -251,34 +250,19 @@ class RFIDBackend:
                 metadata={"auth_path": "login_rfid"},
             )
 
-        command = (tag.external_command or "").strip()
-        if command:
-            env = os.environ.copy()
-            env["RFID_VALUE"] = rfid_value
-            env["RFID_LABEL_ID"] = str(tag.pk)
-            env["RFID_ENDIANNESS"] = getattr(tag, "endianness", RFID.BIG_ENDIAN)
-            try:
-                completed = subprocess.run(
-                    command,
-                    shell=True,
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    env=env,
-                )
-            except (OSError, subprocess.SubprocessError, UnicodeDecodeError):
-                return self._reject(
-                    rfid=rfid_value,
-                    reason_code=RFIDAttempt.Reason.EXTERNAL_COMMAND_ERROR,
-                    tag=tag,
-                )
-            if completed.returncode != 0:
-                return self._reject(
-                    rfid=rfid_value,
-                    reason_code=RFIDAttempt.Reason.EXTERNAL_COMMAND_ERROR,
-                    tag=tag,
-                    metadata={"external_returncode": completed.returncode},
-                )
+        validation_action = dispatch_rfid_action(
+            action_id=getattr(tag, "validation_action", ""),
+            rfid=rfid_value,
+            tag=tag,
+            phase="auth_validation",
+        )
+        if not validation_action.success:
+            return self._reject(
+                rfid=rfid_value,
+                reason_code=RFIDAttempt.Reason.EXTERNAL_COMMAND_ERROR,
+                tag=tag,
+                metadata={"action_error": validation_action.error[:128]},
+            )
 
         account = (
             CustomerAccount.objects.filter(
@@ -288,20 +272,18 @@ class RFIDBackend:
             .first()
         )
         if account:
-            post_command = (getattr(tag, "post_auth_command", "") or "").strip()
-            if post_command:
-                env = os.environ.copy()
-                env["RFID_VALUE"] = rfid_value
-                env["RFID_LABEL_ID"] = str(tag.pk)
-                env["RFID_ENDIANNESS"] = getattr(tag, "endianness", RFID.BIG_ENDIAN)
-                with contextlib.suppress(Exception):
-                    subprocess.Popen(
-                        post_command,
-                        shell=True,
-                        env=env,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
+            post_action = dispatch_rfid_action(
+                action_id=getattr(tag, "post_auth_action", ""),
+                rfid=rfid_value,
+                tag=tag,
+                phase="auth_success",
+            )
+            if not post_action.success:
+                logger.info(
+                    "RFID post-auth action failed for label=%s: %s",
+                    tag.pk,
+                    post_action.error,
+                )
             return self._accept(
                 user=account.user,
                 rfid=rfid_value,

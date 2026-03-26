@@ -1,7 +1,6 @@
 import logging
 import os
 import re
-import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from typing import Any
 
+from apps.cards.actions import dispatch_rfid_action
 from apps.cards.models import RFID
 from apps.core.notifications import notify_async
 
@@ -20,7 +20,6 @@ from .constants import (
 )
 from apps.video.rfid import queue_camera_snapshot
 from .utils import convert_endianness_value, normalize_endianness
-
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +55,7 @@ def _normalize_command_text(value: object) -> str:
         lines.append(trimmed + newline)
 
     return "".join(lines)
+
 
 COMMON_MIFARE_CLASSIC_KEYS = (
     "FFFFFFFFFFFF",
@@ -270,7 +270,9 @@ def write_rfid_cell_value(
     return _with_detected_rfid_card(timeout, _write)
 
 
-def _build_key_candidates(tag, key_attr: str, verified_attr: str) -> list[tuple[str, list[int]]]:
+def _build_key_candidates(
+    tag, key_attr: str, verified_attr: str
+) -> list[tuple[str, list[int]]]:
     candidates: list[tuple[str, list[int]]] = []
     seen: set[str] = set()
 
@@ -308,9 +310,9 @@ def resolve_spi_bus_device(
     value = override if override is not None else os.environ.get("RFID_SPI_DEVICE", "")
     cleaned = value.strip()
     if cleaned:
-        match = _SPI_DEVICE_PATTERN.search(cleaned) or _SPI_DEVICE_SHORT_PATTERN.fullmatch(
+        match = _SPI_DEVICE_PATTERN.search(
             cleaned
-        )
+        ) or _SPI_DEVICE_SHORT_PATTERN.fullmatch(cleaned)
         if match:
             return int(match["bus"]), int(match["device"])
         if cleaned.isdigit():
@@ -335,7 +337,9 @@ def resolve_spi_device_path(
     return Path(f"/dev/spidev{bus}.{device}")
 
 
-def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = None) -> dict:
+def _build_tag_response(
+    tag, rfid: str, *, created: bool, kind: str | None = None
+) -> dict:
     """Update metadata and build the standard RFID response payload."""
 
     updates = set()
@@ -347,66 +351,34 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
     if updates:
         tag.save(update_fields=sorted(updates))
     allowed = bool(tag.allowed)
-    raw_command = getattr(tag, "external_command", "")
-    if isinstance(raw_command, str):
-        command = raw_command.strip()
-    else:
-        command = ""
-    command_details: dict[str, object] | None = None
-    command_allowed = True
-    if command:
-        command_details = {
-            "stdout": "",
-            "stderr": "",
-            "returncode": None,
-            "error": "",
+    action_details: dict[str, object] | None = None
+    validation_action = dispatch_rfid_action(
+        action_id=getattr(tag, "validation_action", ""),
+        rfid=rfid,
+        tag=tag,
+        phase="reader_validation",
+    )
+    if getattr(tag, "validation_action", ""):
+        action_details = {
+            "output": _normalize_command_text(validation_action.output),
+            "error": _normalize_command_text(validation_action.error),
+            "success": bool(validation_action.success),
         }
-        env = os.environ.copy()
-        env["RFID_VALUE"] = rfid
-        env["RFID_LABEL_ID"] = str(tag.pk)
-        env["RFID_ENDIANNESS"] = getattr(tag, "endianness", RFID.BIG_ENDIAN)
-        try:
-            completed = subprocess.run(
-                command,
-                shell=True,
-                check=False,
-                capture_output=True,
-                text=True,
-                env=env,
-            )
-        except Exception as exc:
-            command_allowed = False
-            command_details["error"] = _normalize_command_text(str(exc))
-        else:
-            command_returncode = getattr(completed, "returncode", 1)
-            command_allowed = command_returncode == 0
-            command_details["returncode"] = command_returncode
-            command_details["stdout"] = _normalize_command_text(
-                getattr(completed, "stdout", "") or ""
-            )
-            command_details["stderr"] = _normalize_command_text(
-                getattr(completed, "stderr", "") or ""
-            )
-        allowed = allowed and command_allowed
+    allowed = allowed and validation_action.success
 
-    post_command = getattr(tag, "post_auth_command", "")
-    if allowed and isinstance(post_command, str):
-        post = post_command.strip()
-        if post:
-            env = os.environ.copy()
-            env["RFID_VALUE"] = rfid
-            env["RFID_LABEL_ID"] = str(tag.pk)
-            env["RFID_ENDIANNESS"] = getattr(tag, "endianness", RFID.BIG_ENDIAN)
-            try:
-                subprocess.Popen(
-                    post,
-                    shell=True,
-                    env=env,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            except Exception:  # pragma: no cover - best effort fire and forget
-                pass
+    if allowed:
+        post_action = dispatch_rfid_action(
+            action_id=getattr(tag, "post_auth_action", ""),
+            rfid=rfid,
+            tag=tag,
+            phase="reader_success",
+        )
+        if getattr(tag, "post_auth_action", ""):
+            if action_details is None:
+                action_details = {}
+            action_details["post_output"] = _normalize_command_text(post_action.output)
+            action_details["post_error"] = _normalize_command_text(post_action.error)
+            action_details["post_success"] = bool(post_action.success)
 
     result = {
         "rfid": rfid,
@@ -419,20 +391,13 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
         "kind": tag.kind,
         "endianness": tag.endianness,
     }
-    if command_details is not None:
-        command_details["stdout"] = _normalize_command_text(
-            command_details.get("stdout", "")
-        )
-        command_details["stderr"] = _normalize_command_text(
-            command_details.get("stderr", "")
-        )
-        command_details["error"] = _normalize_command_text(
-            command_details.get("error", "")
-        )
-        result["command_output"] = command_details
+    if action_details is not None:
+        result["action_output"] = action_details
     status_text = "OK" if allowed else "BAD"
     color_word = (tag.color or "").upper()
-    notify_async(f"RFID {tag.label_id} {status_text}".strip(), f"{rfid} {color_word}".strip())
+    notify_async(
+        f"RFID {tag.label_id} {status_text}".strip(), f"{rfid} {color_word}".strip()
+    )
     queue_camera_snapshot(rfid, result)
     return result
 
