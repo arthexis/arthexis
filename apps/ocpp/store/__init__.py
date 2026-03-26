@@ -5,9 +5,21 @@ from __future__ import annotations
 import inspect
 from typing import Any
 
-from . import logs as logs_module, pending_calls, scheduler, state, transactions
+from . import (
+    logs as logs_module,
+    pending_calls as pending_calls_module,
+    scheduler as scheduler_module,
+    state as state_module,
+    transactions as transactions_module,
+)
 
-_modules = (state, logs_module, pending_calls, transactions, scheduler)
+_modules = (
+    state_module,
+    logs_module,
+    pending_calls_module,
+    transactions_module,
+    scheduler_module,
+)
 
 _PUBLIC_FUNCTION_NAMES = tuple(
     name
@@ -15,6 +27,16 @@ _PUBLIC_FUNCTION_NAMES = tuple(
     for name in getattr(module, "__all__", [])
     if inspect.isfunction(getattr(module, name, None))
 )
+_SUBMODULE_ALIAS_EXPORTS = ("logs", "pending_calls", "transactions")
+
+for module in _modules:
+    for name in _SUBMODULE_ALIAS_EXPORTS:
+        if hasattr(module, name):
+            globals()[name] = getattr(module, name)
+
+logs = logs_module.logs
+pending_calls = pending_calls_module.pending_calls
+transactions = state_module.transactions
 
 
 def reassign_identity(old_key: str, new_key: str) -> str:
@@ -24,7 +46,11 @@ def reassign_identity(old_key: str, new_key: str) -> str:
         return new_key
     if not old_key:
         return new_key
-    for mapping in (state.connections, state.transactions, logs_module.history):
+    for mapping in (
+        state_module.connections,
+        state_module.transactions,
+        logs_module.history,
+    ):
         if old_key in mapping:
             mapping[new_key] = mapping.pop(old_key)
     for log_type in logs_module.logs:
