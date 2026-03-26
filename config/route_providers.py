@@ -12,17 +12,26 @@ from django.urls.resolvers import URLPattern, URLResolver
 def _configured_route_provider_modules() -> list[str]:
     """Return explicitly registered route-provider module paths."""
 
-    providers = getattr(settings, "ROUTE_PROVIDERS", ())
-    if not isinstance(providers, (list, tuple)):
-        raise ImproperlyConfigured("ROUTE_PROVIDERS must be a list or tuple of module paths.")
+    providers = getattr(settings, "ROUTE_PROVIDERS", None)
+    if not isinstance(providers, (list, tuple)) or not providers:
+        raise ImproperlyConfigured(
+            "ROUTE_PROVIDERS must be a non-empty list or tuple of module paths."
+        )
 
     normalized: list[str] = []
+    seen: set[str] = set()
     for provider in providers:
-        if not isinstance(provider, str) or not provider.strip():
+        provider_path = provider.strip() if isinstance(provider, str) else ""
+        if not provider_path or provider_path.startswith("."):
             raise ImproperlyConfigured(
-                "ROUTE_PROVIDERS entries must be non-empty dotted module path strings."
+                "ROUTE_PROVIDERS entries must be non-empty absolute dotted module path strings."
             )
-        normalized.append(provider.strip())
+        if provider_path in seen:
+            raise ImproperlyConfigured(
+                f"ROUTE_PROVIDERS contains a duplicate provider: {provider_path!r}."
+            )
+        seen.add(provider_path)
+        normalized.append(provider_path)
     return normalized
 
 

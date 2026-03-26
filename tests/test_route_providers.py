@@ -11,6 +11,7 @@ from django.urls import path
 
 from config import route_providers
 
+
 def test_autodiscovered_route_patterns_uses_explicit_provider_list():
     routes_module = ModuleType("apps.example.routes")
     routes_module.ROOT_URLPATTERNS = [
@@ -32,7 +33,25 @@ def test_autodiscovered_route_patterns_uses_explicit_provider_list():
         assert patterns[0].name == "example-home"
 
 
-def test_autodiscovered_route_patterns_rejects_invalid_provider_settings():
-    with override_settings(ROUTE_PROVIDERS="apps.example.routes"):
+@pytest.mark.parametrize(
+    "invalid_setting",
+    [
+        "apps.example.routes",
+        [],
+        [123],
+        ["  "],
+        [".apps.example.routes"],
+    ],
+)
+def test_autodiscovered_route_patterns_rejects_invalid_provider_settings(invalid_setting):
+    with override_settings(ROUTE_PROVIDERS=invalid_setting):
+        with pytest.raises(ImproperlyConfigured):
+            route_providers.autodiscovered_route_patterns()
+
+
+def test_autodiscovered_route_patterns_rejects_duplicate_provider_settings():
+    with override_settings(
+        ROUTE_PROVIDERS=["apps.example.routes", " apps.example.routes "]
+    ):
         with pytest.raises(ImproperlyConfigured):
             route_providers.autodiscovered_route_patterns()
