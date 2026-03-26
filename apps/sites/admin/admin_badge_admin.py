@@ -19,5 +19,6 @@ class AdminBadgeAdmin(OwnableAdminMixin, EntityModelAdmin):
         "owner_display",
     )
     list_filter = ("is_enabled",)
-    search_fields = ("name", "slug", "label", "value_query_path")
+    search_fields = ("name", "slug", "label", "provider_key")
     ordering = ("priority", "name")
+    exclude = ("value_query_path",)
