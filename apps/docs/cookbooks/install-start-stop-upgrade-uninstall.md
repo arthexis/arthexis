@@ -102,8 +102,7 @@ Available options:
 
 Use this checklist after deploying the Constellation site to ensure the reverse proxy is setting proxy headers correctly and that CSP headers are present.
 
-1. **Confirm the managed nginx config sets `X-Forwarded-Proto`.** The generated proxy block in `apps/nginx/config_utils.py` includes `proxy_set_header X-Forwarded-Proto $scheme;`. Validate the deployed file (default `/etc/nginx/sites-enabled/arthexis.conf`) still includes that line for the Constellation server block. You can render a preview without touching production using:
-   - `python manage.py preview_nginx_config --ids <site_configuration_id>`
+1. **Confirm the managed nginx config sets `X-Forwarded-Proto`.** The generated proxy block in `apps/nginx/config_utils.py` includes `proxy_set_header X-Forwarded-Proto $scheme;`. Validate the deployed file (default `/etc/nginx/sites-enabled/arthexis.conf`) still includes that line for the Constellation server block.
 2. **Verify the production reverse proxy forwards HTTPS as expected.** From a host that can reach the deployed nginx or CDN, fetch headers and confirm the upstream sees `X-Forwarded-Proto: https` in access logs or application logs (see logging toggle below).
 3. **Check CSP headers on the Constellation landing page.** Run:
    - `curl -I "https://arthexis.com/#constellation" | rg -i "content-security-policy"`

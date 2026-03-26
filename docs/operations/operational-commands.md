@@ -61,7 +61,6 @@ For advanced admin workflows and any non-allowlisted Django command, run `manage
 - `odoo`
 - `password`
 - `preview`
-- `preview_nginx_config`
 - `prototype`
 - `purge_net_messages`
 - `purge_nodes`
@@ -80,7 +79,6 @@ For advanced admin workflows and any non-allowlisted Django command, run `manage
 - `run_scheduled_sql_reports`
 - `runftpserver`
 - `runserver`
-- `screenshot`
 - `shortcut_listener`
 - `show_rfid_history`
 - `simulator`
