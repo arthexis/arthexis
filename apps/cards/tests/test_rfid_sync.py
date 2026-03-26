@@ -44,3 +44,23 @@ class RFIDSyncContractTests(TestCase):
         self.assertEqual(tag.post_auth_command, "keep me too")
         self.assertEqual(tag.validation_action, "REJECT")
         self.assertEqual(tag.post_auth_action, "LOG")
+
+    def test_apply_rfid_payload_preserves_actions_when_omitted(self):
+        tag = RFID.objects.create(
+            rfid="BEEFFACE",
+            validation_action="REJECT",
+            post_auth_action="LOG",
+        )
+
+        outcome = apply_rfid_payload(
+            {
+                "rfid": "BEEFFACE",
+                "custom_label": "legacy-peer-update",
+            }
+        )
+
+        self.assertTrue(outcome.ok)
+        tag.refresh_from_db()
+        self.assertEqual(tag.custom_label, "legacy-peer-update")
+        self.assertEqual(tag.validation_action, "REJECT")
+        self.assertEqual(tag.post_auth_action, "LOG")

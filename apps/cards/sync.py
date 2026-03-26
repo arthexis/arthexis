@@ -86,9 +86,16 @@ def apply_rfid_payload(
         "color": entry.get("color", RFID.BLACK),
         "kind": entry.get("kind", RFID.CLASSIC),
         "released": bool(entry.get("released", False)),
-        "validation_action": str(entry.get("validation_action") or "").strip().upper(),
-        "post_auth_action": str(entry.get("post_auth_action") or "").strip().upper(),
     }
+
+    if "validation_action" in entry:
+        defaults["validation_action"] = (
+            str(entry.get("validation_action") or "").strip().upper()
+        )
+    if "post_auth_action" in entry:
+        defaults["post_auth_action"] = (
+            str(entry.get("post_auth_action") or "").strip().upper()
+        )
 
     if origin_node is not None:
         defaults["origin_node"] = origin_node

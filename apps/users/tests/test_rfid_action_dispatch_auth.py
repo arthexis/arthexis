@@ -5,6 +5,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from apps.cards.actions import RFIDActionResult
 from apps.cards.models import RFID
 from apps.energy.models import CustomerAccount
 from apps.users.backends import RFIDBackend
@@ -30,8 +31,8 @@ class RFIDActionDispatchAuthTests(TestCase):
         backend = RFIDBackend()
         with patch("apps.users.backends.dispatch_rfid_action") as action_mock:
             action_mock.side_effect = [
-                type("Result", (), {"success": True, "error": ""})(),
-                type("Result", (), {"success": True, "error": ""})(),
+                RFIDActionResult(success=True, error=""),
+                RFIDActionResult(success=True, error=""),
             ]
             authenticated = backend.authenticate(None, rfid=tag.rfid)
 
@@ -55,9 +56,7 @@ class RFIDActionDispatchAuthTests(TestCase):
 
         backend = RFIDBackend()
         with patch("apps.users.backends.dispatch_rfid_action") as action_mock:
-            action_mock.return_value = type(
-                "Result", (), {"success": False, "error": "rejected"}
-            )()
+            action_mock.return_value = RFIDActionResult(success=False, error="rejected")
             authenticated = backend.authenticate(None, rfid=tag.rfid)
 
         self.assertIsNone(authenticated)
