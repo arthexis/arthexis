@@ -10,7 +10,7 @@
       "node_feature": null,
       "admin_requirements": "Allow admins to test browsers.",
       "public_requirements": "",
-      "service_requirements": "Require both global suite enablement and per-engine node feature eligibility before browser launches and on-demand screenshot execution.",
+      "service_requirements": "Require both global suite enablement and per-engine node feature eligibility before Playwright browser launches.",
       "admin_views": [
         "admin:playwright_playwrightbrowser_changelist"
       ],

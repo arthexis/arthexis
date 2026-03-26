@@ -68,7 +68,7 @@ Playwright execution now uses **two gates**:
 
 An engine can run only when both gates are open. Practical effects:
 
-- If `playwright-automation` is disabled, browser launch checks and admin screenshot actions short-circuit globally.
+- If `playwright-automation` is disabled, browser launch checks and admin browser-test actions short-circuit globally.
 - If `playwright-automation` is enabled but a specific `playwright-browser-*` node feature is disabled, that engine is rejected on the local node.
 
 Use this pattern to separate policy from capability:
