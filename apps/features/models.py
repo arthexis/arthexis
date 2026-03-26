@@ -3,12 +3,12 @@ from __future__ import annotations
 from django.apps import apps as django_apps
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, router
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.models import Ownable
 from apps.core.entity import Entity
+from apps.core.models import Ownable
 
 
 class FeatureManager(models.Manager):
@@ -148,9 +148,7 @@ class Feature(Ownable):
             if not isinstance(location, str):
                 continue
             location_parts = [part for part in location.strip(" /").split("/") if part]
-            if len(location_parts) < 2:
-                continue
-            if location_parts[0] != "apps":
+            if len(location_parts) < 2 or location_parts[0] != "apps":
                 continue
             label = location_parts[1].strip()
             if label:
@@ -213,7 +211,11 @@ class Feature(Ownable):
             inferred_name = self.infer_main_app_name(self.code_locations)
             if inferred_name:
                 Application = django_apps.get_model("app", "Application")
-                app, _ = Application.objects.get_or_create(name=inferred_name)
+                db_alias = kwargs.get("using") or self._state.db or router.db_for_write(
+                    Application,
+                    instance=self,
+                )
+                app, _ = Application.objects.using(db_alias).get_or_create(name=inferred_name)
                 self.main_app = app
         return super().save(*args, **kwargs)
 

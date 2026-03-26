@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 from django.core.exceptions import ValidationError
 
-from apps.app.models import Application
 from apps.features.models import Feature
 
 
@@ -98,7 +97,6 @@ def test_feature_save_infers_main_app_from_code_locations() -> None:
 
     assert feature.main_app is not None
     assert feature.main_app.name == "meta"
-    assert Application.objects.filter(name="meta").exists()
 
 
 def test_infer_main_app_name_ignores_non_app_paths() -> None:

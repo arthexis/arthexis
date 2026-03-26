@@ -26,18 +26,44 @@ def _infer_main_app_name(code_locations):
 def backfill_missing_feature_main_app(apps, schema_editor):
     """Populate ``Feature.main_app`` for rows that currently have no classification."""
 
-    del schema_editor
+    from django.utils import timezone
+
+    db_alias = schema_editor.connection.alias
     Application = apps.get_model("app", "Application")
     Feature = apps.get_model("features", "Feature")
 
-    features = Feature.objects.filter(main_app__isnull=True)
+    app_names: set[str] = set()
+    features_by_app_name: dict[str, list[int]] = {}
+    features = Feature.objects.using(db_alias).filter(main_app__isnull=True)
     for feature in features.iterator():
         app_name = _infer_main_app_name(feature.code_locations)
         if not app_name:
             continue
-        app, _ = Application.objects.get_or_create(name=app_name)
-        feature.main_app = app
-        feature.save(update_fields=["main_app", "updated_at"])
+        app_names.add(app_name)
+        features_by_app_name.setdefault(app_name, []).append(feature.pk)
+
+    if not app_names:
+        return
+
+    existing_app_names = set(
+        Application.objects.using(db_alias).filter(name__in=app_names).values_list("name", flat=True)
+    )
+    missing_apps = [Application(name=name) for name in app_names if name not in existing_app_names]
+    if missing_apps:
+        Application.objects.using(db_alias).bulk_create(missing_apps)
+
+    app_id_by_name = dict(
+        Application.objects.using(db_alias).filter(name__in=app_names).values_list("name", "pk")
+    )
+    now = timezone.localtime()
+    for app_name, feature_pks in features_by_app_name.items():
+        app_id = app_id_by_name.get(app_name)
+        if not app_id:
+            continue
+        Feature.objects.using(db_alias).filter(pk__in=feature_pks).update(
+            main_app_id=app_id,
+            updated_at=now,
+        )
 
 
 class Migration(migrations.Migration):
