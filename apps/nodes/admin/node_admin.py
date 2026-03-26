@@ -965,7 +965,10 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 request, f"Current host registered as {node}", messages.SUCCESS
             )
 
-        parsed_request = VisitorRegistrationRequest.from_http_request(request)
+        parsed_request = VisitorRegistrationRequest.from_http_request(
+            request,
+            default_port=8888 if request.method == "POST" else 443,
+        )
         token = parsed_request.token
         visitor_base = parsed_request.visitor_base
         visitor_host = parsed_request.visitor_host

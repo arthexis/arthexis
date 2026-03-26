@@ -28,7 +28,7 @@ class VisitorRegistrationRequest:
         token = (request.POST.get("token") if request.method == "POST" else None) or uuid.uuid4().hex
         query_host = str(request.GET.get("visitor") or "").strip()
         post_host = str(request.POST.get("visitor_host") or "").strip() if request.method == "POST" else ""
-        raw_host = post_host or query_host or "127.0.0.1"
+        raw_host = post_host if request.method == "POST" else query_host or "127.0.0.1"
 
         submitted_port = request.POST.get("visitor_port") if request.method == "POST" else None
         port, invalid_port = cls._parse_port(submitted_port)

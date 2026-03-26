@@ -136,6 +136,32 @@ def test_visitor_registration_request_rejects_malformed_host():
     assert parsed.visitor_base is None
 
 
+def test_visitor_registration_request_post_requires_submitted_host():
+    """POST parser should reject requests that omit the submitted visitor host."""
+    request = RequestFactory().post(
+        "/admin/nodes/node/register-visitor/?visitor=query.example:9443",
+        data={"visitor_host": "", "visitor_port": ""},
+    )
+
+    parsed = VisitorRegistrationRequest.from_http_request(request, default_port=8888)
+
+    assert parsed.visitor_error == "Visitor address missing. Reload with ?visitor=host[:port]."
+    assert parsed.visitor_base is None
+
+
+def test_visitor_registration_request_post_empty_port_uses_post_default():
+    """POST parser should use the provided default when visitor_port is empty."""
+    request = RequestFactory().post(
+        "/admin/nodes/node/register-visitor/",
+        data={"visitor_host": "visitor.test", "visitor_port": ""},
+    )
+
+    parsed = VisitorRegistrationRequest.from_http_request(request, default_port=8888)
+
+    assert parsed.visitor_base == "https://visitor.test:8888"
+    assert parsed.visitor_port == 8888
+
+
 def test_visitor_registration_service_handles_non_json_proxy_response(monkeypatch):
     """Service should normalize non-JSON proxy errors into a structured result."""
 
