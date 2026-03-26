@@ -178,10 +178,9 @@ class DashboardRule(StoredCounter):
             raise ValidationError(errors)
 
     def _resolve_condition_source(self) -> str:
-        source = (self.condition_source or "").strip()
-        if hasattr(self, "resolve_sigils_in_text"):
-            return self.resolve_sigils_in_text(source)
-        return source
+        if hasattr(self, "resolve_sigils"):
+            return (self.resolve_sigils("condition_source") or "").strip()
+        return (self.condition_source or "").strip()
 
     def _evaluate_structured_condition(self) -> tuple[bool, str | None]:
         source_text = (self._resolve_condition_source() or "").strip()

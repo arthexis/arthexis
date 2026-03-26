@@ -62,17 +62,6 @@ def parse_legacy_condition(expression: str) -> tuple[StructuredCondition | None,
         return None, "Missing condition expected value."
 
     normalized_operator = "!=" if operator == "<>" else operator
-    boolean_value = parse_boolean_literal(right_text)
-    if boolean_value is not None:
-        return (
-            StructuredCondition(
-                source=source,
-                operator=normalized_operator,
-                expected_boolean=boolean_value,
-            ),
-            None,
-        )
-
     decimal_value = parse_decimal_literal(right_text)
     if decimal_value is not None:
         return (
@@ -80,6 +69,17 @@ def parse_legacy_condition(expression: str) -> tuple[StructuredCondition | None,
                 source=source,
                 operator=normalized_operator,
                 expected_number=decimal_value,
+            ),
+            None,
+        )
+
+    boolean_value = parse_boolean_literal(right_text)
+    if boolean_value is not None:
+        return (
+            StructuredCondition(
+                source=source,
+                operator=normalized_operator,
+                expected_boolean=boolean_value,
             ),
             None,
         )

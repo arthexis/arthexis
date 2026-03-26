@@ -1,4 +1,5 @@
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
@@ -43,16 +44,42 @@ class DashboardRuleStructuredConditionTests(TestCase):
         self.assertIn("manual triage", result["message"].lower())
         self.assertIn("Unsupported expression format.", result["message"])
 
+    def test_condition_rule_resolves_sigils_in_structured_source(self):
+        rule = DashboardRule.objects.create(
+            name="Structured sigil source",
+            content_type=self.content_type,
+            implementation=DashboardRule.Implementation.CONDITION,
+            condition_source="[ENV.THRESHOLD]",
+            condition_operator=DashboardRule.ConditionOperator.GREATER_THAN,
+            condition_expected_number=Decimal("5"),
+        )
+
+        with patch(
+            "apps.sigils.sigil_resolver.resolve_sigils", return_value="7"
+        ) as resolve_sigils_mock:
+            result = rule.evaluate()
+
+        self.assertTrue(result["success"])
+        resolve_sigils_mock.assert_called_once_with("[ENV.THRESHOLD]", current=rule)
+
 
 class ParseLegacyConditionTests(TestCase):
     def test_parse_legacy_condition_supports_simple_boolean_expression(self):
-        structured, error = parse_legacy_condition("[foo][bar] = 1")
+        structured, error = parse_legacy_condition("[foo][bar] = true")
 
         self.assertIsNone(error)
         self.assertIsNotNone(structured)
         self.assertEqual(structured.source, "[foo][bar]")
         self.assertEqual(structured.operator, "=")
         self.assertTrue(structured.expected_boolean)
+
+    def test_parse_legacy_condition_treats_integer_literals_as_numbers(self):
+        structured, error = parse_legacy_condition("[metric] > 1")
+
+        self.assertIsNone(error)
+        self.assertIsNotNone(structured)
+        self.assertEqual(structured.operator, ">")
+        self.assertEqual(structured.expected_number, Decimal("1"))
 
     def test_parse_legacy_condition_marks_unsupported_expression(self):
         structured, error = parse_legacy_condition("1 = 1 AND 2 = 2")
