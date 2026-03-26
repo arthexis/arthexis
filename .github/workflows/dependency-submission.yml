@@ -38,7 +38,13 @@ jobs:
         with:
           clean: false
 
-      - name: Submit dependency snapshot
+      - name: Submit dependency snapshot (attempt 1)
+        uses: advanced-security/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
+        with:
+          detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
+
+      - name: Submit dependency snapshot (attempt 2)
+        if: failure()
         uses: advanced-security/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
         with:
           detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
