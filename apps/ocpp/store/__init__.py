@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from . import logs as logs_module, pending_calls, scheduler, state, transactions
 
 _modules = (state, logs_module, pending_calls, transactions, scheduler)
 
-for module in _modules:
-    for name in getattr(module, "__all__", []):
-        globals()[name] = getattr(module, name)
+_PUBLIC_FUNCTION_NAMES = tuple(
+    name
+    for module in _modules
+    for name in getattr(module, "__all__", [])
+    if inspect.isfunction(getattr(module, name, None))
+)
 
 
 def reassign_identity(old_key: str, new_key: str) -> str:
@@ -34,11 +38,7 @@ def reassign_identity(old_key: str, new_key: str) -> str:
     return new_key
 
 
-__all__ = [
-    name for module in _modules for name in getattr(module, "__all__", [])
-] + [
-    "reassign_identity",
-]
+__all__ = [*_PUBLIC_FUNCTION_NAMES, "reassign_identity"]
 
 
 def __getattr__(name: str) -> Any:
