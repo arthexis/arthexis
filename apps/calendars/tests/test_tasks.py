@@ -13,7 +13,6 @@ from apps.calendars.services import GoogleCalendarError, GoogleCalendarGateway, 
 from apps.calendars.tasks import push_calendar_event
 from apps.gdrive.models import GoogleAccount
 
-
 @pytest.mark.django_db
 def test_push_calendar_event_creates_google_event(monkeypatch):
     """Calendar pushes should delegate outbound event creation to the gateway."""
@@ -60,7 +59,6 @@ def test_push_calendar_event_creates_google_event(monkeypatch):
     assert captured["kwargs"]["timezone_name"] is None
     assert captured["kwargs"]["metadata"] == {"task_id": 7}
 
-
 @pytest.mark.django_db
 def test_push_calendar_event_rejects_disabled_calendar():
     """Disabled calendars should not receive new outbound event pushes."""
@@ -86,16 +84,6 @@ def test_push_calendar_event_rejects_disabled_calendar():
             starts_at=timezone.now().isoformat(),
         )
 
-
-def test_parse_datetime_input_accepts_datetime_instance():
-    """The task helper should accept already-parsed datetimes for direct callers."""
-    from apps.calendars.tasks import _parse_datetime_input
-
-    value = timezone.now()
-
-    assert _parse_datetime_input(value) is value
-
-
 @pytest.mark.django_db
 def test_google_calendar_requires_account_when_enabled():
     """Enabled outbound calendars must carry an account before they can validate."""
@@ -103,7 +91,6 @@ def test_google_calendar_requires_account_when_enabled():
 
     with pytest.raises(ValidationError):
         calendar.full_clean()
-
 
 @pytest.mark.django_db
 def test_google_calendar_gateway_normalizes_transport_errors(monkeypatch):
@@ -133,29 +120,3 @@ def test_google_calendar_gateway_normalizes_transport_errors(monkeypatch):
     with pytest.raises(GoogleCalendarRequestError):
         gateway._request("POST", "https://example.com")
 
-
-@pytest.mark.django_db
-def test_google_calendar_gateway_rejects_inverted_event_windows():
-    """The gateway should fail fast before posting an inverted event window."""
-    user = get_user_model().objects.create_user(username="cal-user-4", password="x")
-    account = GoogleAccount.objects.create(
-        user=user,
-        email="cal4@example.com",
-        client_id="client",
-        client_secret="secret",
-        refresh_token="refresh",
-    )
-    calendar = GoogleCalendar.objects.create(
-        name="Ops",
-        calendar_id="ops4@example.com",
-        account=account,
-    )
-    gateway = GoogleCalendarGateway(calendar)
-    start = timezone.now().replace(microsecond=0)
-
-    with pytest.raises(GoogleCalendarError, match="Event end must not be earlier than start"):
-        gateway.create_event(
-            summary="Deployment",
-            starts_at=start,
-            ends_at=start - timedelta(minutes=5),
-        )

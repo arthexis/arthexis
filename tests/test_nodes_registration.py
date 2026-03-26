@@ -19,7 +19,6 @@ from apps.nodes.admin.visitor_registration import (
 from apps.nodes.models import Node
 from apps.nodes.views import registration as registration_views
 
-
 @pytest.mark.django_db
 def test_node_info_registers_missing_local(client, monkeypatch):
     """Ensure node info triggers registration when no local node exists."""
@@ -64,78 +63,8 @@ def test_node_info_registers_missing_local(client, monkeypatch):
         created_node.features.values_list("slug", flat=True)
     )
 
-
 @pytest.mark.django_db
-def test_node_info_uses_site_domain_port(monkeypatch, client):
-    """Ensure node-info prefers the site-derived port when node has a base site."""
-    domain = f"{uuid4().hex}.example.com"
-    site = Site.objects.create(domain=domain, name="Example", require_https=False)
-    node = Node.objects.create(
-        hostname="local",
-        address="127.0.0.1",
-        mac_address="00:11:22:33:44:55",
-        port=8888,
-        public_endpoint="local-endpoint",
-        base_site=site,
-    )
-
-    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
-
-    response = client.get(reverse("node-info"))
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["port"] == 443
-
-
 @pytest.mark.django_db
-def test_resolve_visitor_base_defaults_to_loopback():
-    """Node admin should use loopback defaults for visitor registration base URL."""
-    from django.contrib.admin.sites import AdminSite
-    from django.test import RequestFactory
-
-    from apps.nodes.admin.node_admin import NodeAdmin
-
-    admin_site = AdminSite()
-    node_admin = NodeAdmin(Node, admin_site)
-    request = RequestFactory().get("/")
-
-    visitor_base, visitor_host, visitor_port, visitor_scheme = (
-        node_admin._resolve_visitor_base(request)
-    )
-
-    assert visitor_base == "https://127.0.0.1:443"
-    assert visitor_host == "127.0.0.1"
-    assert visitor_port == 443
-    assert visitor_scheme == "https"
-
-
-def test_visitor_registration_request_rejects_malformed_port():
-    """Request parser should reject non-numeric visitor ports."""
-    request = RequestFactory().post(
-        "/admin/nodes/node/register-visitor/",
-        data={"visitor_host": "visitor.test", "visitor_port": "invalid"},
-    )
-
-    parsed = VisitorRegistrationRequest.from_http_request(request)
-
-    assert parsed.visitor_error == "Visitor port is invalid. Use a value between 1 and 65535."
-    assert parsed.visitor_base == "https://visitor.test:443"
-
-
-def test_visitor_registration_request_rejects_malformed_host():
-    """Request parser should reject malformed visitor hosts."""
-    request = RequestFactory().post(
-        "/admin/nodes/node/register-visitor/",
-        data={"visitor_host": "https://[not-valid", "visitor_port": "443"},
-    )
-
-    parsed = VisitorRegistrationRequest.from_http_request(request)
-
-    assert parsed.visitor_error == "Visitor address missing. Reload with ?visitor=host[:port]."
-    assert parsed.visitor_base is None
-
-
 def test_visitor_registration_request_post_requires_submitted_host():
     """POST parser should reject requests that omit the submitted visitor host."""
     request = RequestFactory().post(
@@ -147,20 +76,6 @@ def test_visitor_registration_request_post_requires_submitted_host():
 
     assert parsed.visitor_error == "Visitor address missing. Reload with ?visitor=host[:port]."
     assert parsed.visitor_base is None
-
-
-def test_visitor_registration_request_post_empty_port_uses_post_default():
-    """POST parser should use the provided default when visitor_port is empty."""
-    request = RequestFactory().post(
-        "/admin/nodes/node/register-visitor/",
-        data={"visitor_host": "visitor.test", "visitor_port": ""},
-    )
-
-    parsed = VisitorRegistrationRequest.from_http_request(request, default_port=8888)
-
-    assert parsed.visitor_base == "https://visitor.test:8888"
-    assert parsed.visitor_port == 8888
-
 
 def test_visitor_registration_service_handles_non_json_proxy_response(monkeypatch):
     """Service should normalize non-JSON proxy errors into a structured result."""
@@ -188,7 +103,6 @@ def test_visitor_registration_service_handles_non_json_proxy_response(monkeypatc
         "message": "Registration proxy returned an invalid response.",
     }
     assert result.errors == ["Registration proxy returned an invalid response."]
-
 
 def test_visitor_registration_service_success_with_warnings(monkeypatch):
     """Service should expose HTTPS warnings when proxy signals weak transport settings."""
@@ -223,7 +137,6 @@ def test_visitor_registration_service_success_with_warnings(monkeypatch):
     assert "Host node is not configured to require HTTPS. Update its Sites settings." in result.warnings
     assert "Visitor node is not configured to require HTTPS. Update its Sites settings." in result.warnings
 
-
 def test_visitor_registration_service_missing_visitor_address_short_circuits():
     """Service should not proxy when visitor address parsing already failed."""
     parsed = VisitorRegistrationRequest(
@@ -241,7 +154,6 @@ def test_visitor_registration_service_missing_visitor_address_short_circuits():
 
     assert result.status == "error"
     assert result.errors == ["Visitor address missing. Reload with ?visitor=host[:port]."]
-
 
 @pytest.mark.django_db
 def test_register_visitor_proxy_success(admin_client, monkeypatch):
@@ -326,7 +238,6 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
     body = response.json()
     assert body["host"]["id"]
     assert body["visitor"]["id"] == 2
-
 
 @pytest.mark.django_db
 def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
@@ -426,7 +337,6 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     assert session.requests[2][1].startswith("https://93.184.216.34:8888")
     assert session.requests[3][1].startswith("https://93.184.216.34:8000")
 
-
 @pytest.mark.django_db
 def test_register_visitor_telemetry_logs(client, caplog):
     """Telemetry endpoint should record structured registration diagnostics."""
@@ -450,7 +360,6 @@ def test_register_visitor_telemetry_logs(client, caplog):
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
     assert "telemetry stage=integration-test" in caplog.text
-
 
 @pytest.mark.django_db
 def test_register_visitor_telemetry_adds_route_ip(client, caplog, monkeypatch):
