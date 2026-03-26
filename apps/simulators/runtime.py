@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from datetime import datetime, timezone
 import json
 import random
 import time
@@ -76,10 +77,9 @@ class ChargePointRuntime:
         self.connect_kwargs: dict[str, object] = {}
 
         scheme = resolve_ws_scheme(ws_scheme=config.ws_scheme, use_tls=config.use_tls)
-        fallback_scheme = "wss" if scheme == "ws" else "ws"
         self._candidate_schemes = [scheme]
-        if fallback_scheme != scheme:
-            self._candidate_schemes.append(fallback_scheme)
+        if scheme == "ws":
+            self._candidate_schemes.append("wss")
 
         if config.username and config.password:
             userpass = f"{config.username}:{config.password}"
@@ -98,6 +98,10 @@ class ChargePointRuntime:
         text = json.dumps(payload)
         await ws.send(text)
         self.log(f"> {text}")
+
+    @staticmethod
+    def utc_timestamp() -> str:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     async def recv(self, ws: Any) -> str:
         raw = await ws.recv()
@@ -280,7 +284,7 @@ class ChargePointRuntime:
                             "connectorId": self.config.connector_id,
                             "meterValue": [
                                 {
-                                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S") + "Z",
+                                    "timestamp": self.utc_timestamp(),
                                     "sampledValue": [
                                         {
                                             "value": f"{next_kwh:.3f}",
@@ -327,7 +331,7 @@ class ChargePointRuntime:
                         "transactionId": tx_id,
                         "meterValue": [
                             {
-                                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S") + "Z",
+                                "timestamp": self.utc_timestamp(),
                                 "sampledValue": [
                                     {
                                         "value": f"{meter_kwh:.3f}",
@@ -453,7 +457,7 @@ class ChargePointRuntime:
                             "connectorId": self.config.connector_id,
                             "meterValue": [
                                 {
-                                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S") + "Z",
+                                    "timestamp": self.utc_timestamp(),
                                     "sampledValue": [
                                         {
                                             "value": f"{next_kwh:.3f}",

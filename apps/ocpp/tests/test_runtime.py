@@ -98,6 +98,23 @@ async def test_runtime_establish_connection_falls_back_to_alternate_scheme():
 
 
 @pytest.mark.anyio
+async def test_runtime_establish_connection_does_not_downgrade_explicit_wss():
+    attempts: list[str] = []
+    ws = FakeWebSocket()
+
+    async def connect(uri: str, **kwargs):
+        attempts.append(uri)
+        return ws
+
+    runtime = _runtime(_runtime_config(ws_scheme="wss"), connect=connect)
+
+    connected = await runtime.establish_connection()
+
+    assert connected is ws
+    assert all(uri.startswith("wss://") for uri in attempts)
+
+
+@pytest.mark.anyio
 async def test_runtime_command_listener_handles_remote_stop_and_reset():
     ws = FakeWebSocket(
         responses=[
