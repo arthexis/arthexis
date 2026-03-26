@@ -2385,13 +2385,14 @@ class CSMSConsumer(
         store.forward_ev_charging_schedule(record)
         return {}
 
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyMonitoringReport")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyMonitoringReport")
     async def _handle_notify_monitoring_report_action(
         self, payload, msg_id, raw, text_data
     ):
         return await self._action_handler("NotifyMonitoringReport").handle(
             payload, msg_id, raw, text_data
         )
-
 
     @protocol_call(
         "ocpp201",
