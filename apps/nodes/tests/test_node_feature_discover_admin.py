@@ -1,6 +1,5 @@
-from django.urls import reverse
-
 import pytest
+from django.urls import reverse
 
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
@@ -36,6 +35,21 @@ def test_discover_progress_includes_manual_toggle_metadata(admin_client, monkeyp
     assert payload["manual_enablement"]["status"] == "manual"
     assert payload["manual_enablement"]["can_toggle"] is True
     assert payload["manual_enablement"]["enabled"] is False
+
+
+@pytest.mark.django_db
+def test_discover_page_renders_batch_selection_controls(admin_client):
+    """Discover tool view should expose selection controls before batch apply."""
+
+    NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
+
+    response = admin_client.get(reverse("admin:nodes_nodefeature_discover"))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "discover-run-selected" in content
+    assert "discover-select-eligible" in content
+    assert "discover-deselect-all" in content
 
 
 @pytest.mark.django_db
@@ -158,6 +172,42 @@ def test_discover_progress_auto_enables_gpio_rtc_when_eligible(admin_client, mon
     assert payload["manual_enablement"]["can_toggle"] is False
     assert payload["enablement"]["status"] == "enabled"
     assert NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+
+
+@pytest.mark.django_db
+def test_discover_progress_apply_false_reports_eligible_without_enabling(
+    admin_client, monkeypatch
+):
+    """Eligibility preview mode should not create feature assignments."""
+
+    node = Node.objects.create(hostname="auto-preview", public_endpoint="auto-preview")
+    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    from django.contrib import messages
+
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            True,
+            "RTC detected and feature eligible.",
+            messages.SUCCESS,
+        ),
+    )
+
+    response = admin_client.post(
+        reverse("admin:nodes_nodefeature_discover_progress"),
+        {"feature_id": feature.pk, "apply": "false"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["eligible"] is True
+    assert payload["applied"] is False
+    assert payload["enablement"]["status"] == "eligible"
+    assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
 
 
 @pytest.mark.django_db

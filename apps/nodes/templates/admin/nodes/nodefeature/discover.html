@@ -16,11 +16,13 @@
 {% block content %}
 <div class="module" id="discover-node-features">
     <h2>{% trans 'Discover node features' %}</h2>
-    <p>{% trans 'Checking eligibility and enabling available features for the local node.' %}</p>
+    <p>{% trans 'Check feature eligibility, choose what to apply, then run batch detection for the selected features.' %}</p>
     <p id="discover-summary"
-       data-complete="{% blocktrans %}Finished discovering {{ features|length }} feature(s).{% endblocktrans %}"
-       data-progress="{% blocktrans %}Discovering feature __CURRENT__ of __TOTAL__…{% endblocktrans %}">
-        {% blocktrans with count=features|length %}Preparing to discover {{ count }} feature(s)...{% endblocktrans %}
+       data-check-complete="{% blocktrans %}Eligibility checks complete for {{ features|length }} feature(s).{% endblocktrans %}"
+       data-check-progress="{% blocktrans %}Checking eligibility __CURRENT__ of __TOTAL__…{% endblocktrans %}"
+       data-run-complete="{% trans 'Batch detection complete for selected features.' %}"
+       data-run-progress="{% blocktrans %}Applying batch detection __CURRENT__ of __TOTAL__…{% endblocktrans %}">
+        {% blocktrans with count=features|length %}Preparing eligibility checks for {{ count }} feature(s)...{% endblocktrans %}
     </p>
     <form id="discover-features-form" style="display: none;">
         {% csrf_token %}
@@ -28,6 +30,7 @@
     <table class="admin-table" id="discover-features-table">
         <thead>
             <tr>
+                <th scope="col">{% trans 'Select' %}</th>
                 <th scope="col">{% trans 'Feature' %}</th>
                 <th scope="col">{% trans 'Eligibility' %}</th>
                 <th scope="col">{% trans 'Manual' %}</th>
@@ -37,6 +40,7 @@
         <tbody>
             {% for feature in features %}
             <tr data-feature-id="{{ feature.pk }}">
+                <td data-field="selected">{% trans 'Pending…' %}</td>
                 <th scope="row">{{ feature.display }}</th>
                 <td data-field="eligibility">{% trans 'Pending…' %}</td>
                 <td data-field="manual">{% trans 'Pending…' %}</td>
@@ -49,10 +53,16 @@
         <h3>{% trans 'Discovery report' %}</h3>
         <ul>
             <li>{% trans 'Eligible features:' %} <strong id="discover-report-eligible">0</strong></li>
+            <li>{% trans 'Selected features:' %} <strong id="discover-report-selected">0</strong></li>
             <li>{% trans 'Enabled features:' %} <strong id="discover-report-enabled">0</strong></li>
             <li>{% trans 'Warnings/errors:' %} <strong id="discover-report-errors">0</strong></li>
         </ul>
     </div>
+    <p class="submit-row">
+        <button type="button" class="button" id="discover-select-eligible" disabled>{% trans 'Select eligible' %}</button>
+        <button type="button" class="button" id="discover-deselect-all" disabled>{% trans 'Deselect all' %}</button>
+        <button type="button" class="button default" id="discover-run-selected" disabled>{% trans 'Run selected detection' %}</button>
+    </p>
     <p class="submit-row">
         <a class="button" href="{% url 'admin:nodes_nodefeature_changelist' %}">{% trans 'Back to node features' %}</a>
     </p>
@@ -68,13 +78,21 @@
     const rows = Array.from(document.querySelectorAll('#discover-features-table tbody tr'));
     const summary = document.getElementById('discover-summary');
     const eligibleCount = document.getElementById('discover-report-eligible');
+    const selectedCount = document.getElementById('discover-report-selected');
     const enabledCount = document.getElementById('discover-report-enabled');
     const errorCount = document.getElementById('discover-report-errors');
+    const selectEligibleButton = document.getElementById('discover-select-eligible');
+    const deselectAllButton = document.getElementById('discover-deselect-all');
+    const runSelectedButton = document.getElementById('discover-run-selected');
     const total = rows.length;
-    let completed = 0;
+    let checkingCompleted = 0;
+    let runningCompleted = 0;
+    let runTotal = 0;
     let eligible = 0;
+    let selected = 0;
     let enabled = 0;
     let errors = 0;
+    let phase = 'checking';
 
     function setCellText(cell, text) {
         if (!cell) {
@@ -149,19 +167,33 @@
         if (!summary) {
             return;
         }
-        if (completed >= total) {
-            summary.textContent = summary.dataset.complete;
-        } else {
-            const template = summary.dataset.progress || 'Discovering feature __CURRENT__ of __TOTAL__…';
+        if (phase === 'checking') {
+            if (checkingCompleted >= total) {
+                summary.textContent = summary.dataset.checkComplete;
+                return;
+            }
+            const template = summary.dataset.checkProgress || 'Checking eligibility __CURRENT__ of __TOTAL__…';
             summary.textContent = template
-                .replace('__CURRENT__', completed + 1)
+                .replace('__CURRENT__', checkingCompleted + 1)
                 .replace('__TOTAL__', total);
+            return;
+        }
+        if (runTotal === 0 || runningCompleted >= runTotal) {
+            summary.textContent = summary.dataset.runComplete;
+        } else {
+            const template = summary.dataset.runProgress || 'Applying batch detection __CURRENT__ of __TOTAL__…';
+            summary.textContent = template
+                .replace('__CURRENT__', runningCompleted + 1)
+                .replace('__TOTAL__', runTotal);
         }
     }
 
     function updateReport() {
         if (eligibleCount) {
             eligibleCount.textContent = eligible.toString();
+        }
+        if (selectedCount) {
+            selectedCount.textContent = selected.toString();
         }
         if (enabledCount) {
             enabledCount.textContent = enabled.toString();
@@ -171,20 +203,63 @@
         }
     }
 
-    function runDiscover(index) {
+    function updateSelectedCount() {
+        selected = rows.reduce(function (count, row) {
+            const checkbox = row.querySelector('[data-field="selected"] input[type="checkbox"]');
+            return checkbox && checkbox.checked ? count + 1 : count;
+        }, 0);
+        updateReport();
+        if (runSelectedButton) {
+            runSelectedButton.disabled = phase !== 'ready' || selected === 0;
+        }
+    }
+
+    function renderSelectionCell(cell, isEligible, featureId) {
+        if (!cell) {
+            return;
+        }
+        cell.innerHTML = '';
+        if (!isEligible) {
+            cell.textContent = '—';
+            return;
+        }
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = true;
+        checkbox.dataset.featureId = featureId;
+        checkbox.addEventListener('change', updateSelectedCount);
+        cell.appendChild(checkbox);
+    }
+
+    function setControlButtonsEnabled(enabledState) {
+        if (selectEligibleButton) {
+            selectEligibleButton.disabled = !enabledState;
+        }
+        if (deselectAllButton) {
+            deselectAllButton.disabled = !enabledState;
+        }
+    }
+
+    function runEligibilityChecks(index) {
         if (index >= rows.length) {
+            phase = 'ready';
+            setControlButtonsEnabled(true);
+            updateSelectedCount();
             updateSummary();
             updateReport();
             return;
         }
         const row = rows[index];
         const featureId = row.getAttribute('data-feature-id');
+        const selectedCell = row.querySelector('[data-field="selected"]');
         const eligibilityCell = row.querySelector('[data-field="eligibility"]');
         const manualCell = row.querySelector('[data-field="manual"]');
         const enablementCell = row.querySelector('[data-field="enablement"]');
         updateSummary();
         const body = new FormData();
         body.append('feature_id', featureId);
+        body.append('apply', 'false');
         if (discoveryId) {
             body.append('discovery_id', discoveryId);
         }
@@ -208,6 +283,7 @@
             if (!data) {
                 return;
             }
+            renderSelectionCell(selectedCell, !!data.eligible, featureId);
             setCellText(eligibilityCell, data.message || '');
             renderManualToggleCell(manualCell, data.manual_enablement, featureId, enablementCell);
             if (data.eligible) {
@@ -221,21 +297,121 @@
             }
             setCellText(enablementCell, data.enablement ? data.enablement.message : '');
         }).catch(function (error) {
+            setCellText(selectedCell, '—');
             setCellText(eligibilityCell, error.toString());
             setCellText(manualCell, '');
             setCellText(enablementCell, error.toString());
             errors += 1;
         }).finally(function () {
-            completed += 1;
+            checkingCompleted += 1;
             updateSummary();
             updateReport();
-            runDiscover(index + 1);
+            runEligibilityChecks(index + 1);
+        });
+    }
+
+    function runSelectedFeatures() {
+        const queue = rows.filter(function (row) {
+            const checkbox = row.querySelector('[data-field="selected"] input[type="checkbox"]');
+            return checkbox && checkbox.checked;
+        });
+        runTotal = queue.length;
+        runningCompleted = 0;
+        phase = 'running';
+        setControlButtonsEnabled(false);
+        updateSummary();
+
+        function runAt(index) {
+            if (index >= queue.length) {
+                phase = 'ready';
+                setControlButtonsEnabled(true);
+                updateSelectedCount();
+                updateSummary();
+                return;
+            }
+            const row = queue[index];
+            const featureId = row.getAttribute('data-feature-id');
+            const eligibilityCell = row.querySelector('[data-field="eligibility"]');
+            const enablementCell = row.querySelector('[data-field="enablement"]');
+            const body = new FormData();
+            body.append('feature_id', featureId);
+            body.append('apply', 'true');
+            if (discoveryId) {
+                body.append('discovery_id', discoveryId);
+            }
+
+            fetch(progressUrl, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                body: body
+            }).then(function (response) {
+                if (!response.ok) {
+                    throw new Error(response.status + ' ' + response.statusText);
+                }
+                return response.json();
+            }).then(function (data) {
+                setCellText(eligibilityCell, data.message || '');
+                setCellText(enablementCell, data.enablement ? data.enablement.message : '');
+                if (data.status === 'error' || data.status === 'warning') {
+                    errors += 1;
+                }
+                if (data.enablement && data.enablement.status === 'enabled') {
+                    enabled += 1;
+                }
+                updateReport();
+            }).catch(function (error) {
+                setCellText(enablementCell, error.toString());
+                errors += 1;
+                updateReport();
+            }).finally(function () {
+                runningCompleted += 1;
+                updateSummary();
+                runAt(index + 1);
+            });
+        }
+
+        runAt(0);
+    }
+
+    if (selectEligibleButton) {
+        selectEligibleButton.addEventListener('click', function () {
+            rows.forEach(function (row) {
+                const checkbox = row.querySelector('[data-field="selected"] input[type="checkbox"]');
+                if (checkbox) {
+                    checkbox.checked = true;
+                }
+            });
+            updateSelectedCount();
+        });
+    }
+
+    if (deselectAllButton) {
+        deselectAllButton.addEventListener('click', function () {
+            rows.forEach(function (row) {
+                const checkbox = row.querySelector('[data-field="selected"] input[type="checkbox"]');
+                if (checkbox) {
+                    checkbox.checked = false;
+                }
+            });
+            updateSelectedCount();
+        });
+    }
+
+    if (runSelectedButton) {
+        runSelectedButton.addEventListener('click', function () {
+            if (phase !== 'ready') {
+                return;
+            }
+            runSelectedFeatures();
         });
     }
 
     if (rows.length) {
-        runDiscover(0);
+        runEligibilityChecks(0);
     } else {
+        phase = 'ready';
         updateSummary();
         updateReport();
     }

@@ -17,7 +17,7 @@ RFID_LOCK_NAME = "rfid.lck"
 
 def _lock_paths(
     *,
-    node: "Node" | None,
+    node: Node | None,
     base_dir: Path | None = None,
     base_path: Path | None = None,
 ) -> list[Path]:
@@ -36,7 +36,7 @@ def _lock_paths(
 
 def _lockfile_status(
     *,
-    node: "Node" | None,
+    node: Node | None,
     base_dir: Path | None = None,
     base_path: Path | None = None,
 ) -> tuple[bool, Path | None]:
@@ -107,7 +107,7 @@ def _service_detection(*, base_dir: Path | None = None) -> dict[str, Any]:
 
 def detect_scanner_capability(
     *,
-    node: "Node" | None = None,
+    node: Node | None = None,
     base_dir: Path | None = None,
     base_path: Path | None = None,
 ) -> dict[str, Any]:
@@ -152,9 +152,9 @@ def detect_scanner_capability(
 def check_node_feature(
     slug: str,
     *,
-    node: "Node",
-    base_dir: Path | None = None,
-    base_path: Path | None = None,
+    node: Node,
+    base_dir: Path,
+    base_path: Path,
 ) -> bool | None:
     """Return feature eligibility for the RFID scanner hook."""
 
@@ -171,7 +171,7 @@ def check_node_feature(
 
 def _write_compatibility_lock(
     *,
-    node: "Node",
+    node: Node,
     base_dir: Path | None = None,
     base_path: Path | None = None,
 ) -> None:
@@ -190,9 +190,9 @@ def _write_compatibility_lock(
 def setup_node_feature(
     slug: str,
     *,
-    node: "Node",
-    base_dir: Path | None = None,
-    base_path: Path | None = None,
+    node: Node,
+    base_dir: Path,
+    base_path: Path,
 ) -> bool | None:
     """Perform RFID setup work and report whether the feature is available."""
 

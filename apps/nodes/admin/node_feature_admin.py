@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
@@ -7,14 +9,12 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 
-import logging
-
-from apps.locals.user_data import EntityModelAdmin
+from apps.content.utils import capture_screenshot, save_screenshot
 from apps.discovery.services import record_discovery_item, start_discovery
+from apps.features.utils import is_suite_feature_enabled
+from apps.locals.user_data import EntityModelAdmin
 
 from ..models import Node, NodeFeature, NodeFeatureAssignment
-from apps.content.utils import capture_screenshot, save_screenshot
-from apps.features.utils import is_suite_feature_enabled
 from .actions import (
     check_features_for_eligibility,
     discover_node_features,
@@ -289,6 +289,8 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         except (TypeError, ValueError):
             return JsonResponse({"detail": "Invalid feature id"}, status=400)
         discovery_id = request.POST.get("discovery_id") or ""
+        apply_param = (request.POST.get("apply") or "true").strip().lower()
+        apply_changes = apply_param not in {"0", "false", "no"}
         feature = self.get_queryset(request).filter(pk=feature_id).first()
         if not feature:
             return JsonResponse({"detail": "Feature not found"}, status=404)
@@ -333,7 +335,17 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
         enablement = {"status": "skipped", "message": "Not enabled."}
         assignment_created = False
         is_manual_feature = feature.slug in Node.MANUAL_FEATURE_SLUGS
-        if eligible and feature.slug == "screenshot-poll":
+        if not apply_changes and eligible:
+            enablement = {
+                "status": "eligible",
+                "message": "Eligible for batch detection; select it to apply changes.",
+            }
+        elif not apply_changes:
+            enablement = {
+                "status": "skipped",
+                "message": "Not eligible for batch detection.",
+            }
+        elif eligible and feature.slug == "screenshot-poll":
             enablement = {
                 "status": "suite",
                 "message": (
@@ -374,7 +386,7 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
                 "message": "Eligibility check failed; feature not enabled.",
             }
 
-        if discovery_id:
+        if discovery_id and apply_changes:
             from apps.discovery.models import Discovery
 
             try:
@@ -404,6 +416,7 @@ class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
                 "status": status,
                 "message": message,
                 "eligible": eligible,
+                "applied": apply_changes,
                 "manual_enablement": manual_enablement,
                 "enablement": enablement,
             }
