@@ -1,7 +1,7 @@
 """Application registry and site integration settings."""
 
 from importlib import import_module
-from pathlib import Path
+from importlib.metadata import PackageNotFoundError, version
 
 from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
@@ -29,9 +29,14 @@ def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
 def _read_repo_version() -> str:
     """Return the repository version marker used for migration-line decisions."""
 
-    version_path = Path(__file__).resolve().parents[2] / "VERSION"
+    from .base import BASE_DIR
+
+    version_path = BASE_DIR / "VERSION"
     if not version_path.exists():
-        return ""
+        try:
+            return version("arthexis")
+        except PackageNotFoundError:
+            return ""
     return version_path.read_text(encoding="utf-8").strip()
 
 
@@ -51,12 +56,16 @@ def _include_legacy_shims(version: str) -> bool:
     return major is None or major == 0
 
 
-def _drop_legacy_app_entries(app_paths: list[str], *, version: str) -> list[str]:
+def _drop_legacy_app_entries(
+    app_paths: list[str], legacy_apps: list[str], *, version: str
+) -> list[str]:
     """Drop ``apps._legacy`` app configs once the suite switches major lines."""
 
     if _include_legacy_shims(version):
         return list(app_paths)
-    return [entry for entry in app_paths if "apps._legacy." not in entry]
+
+    legacy_apps_to_drop = set(legacy_apps)
+    return [entry for entry in app_paths if entry not in legacy_apps_to_drop]
 
 
 def _drop_legacy_migration_modules(
@@ -196,7 +205,11 @@ INSTALLED_APPS = (
     + LEGACY_MIGRATION_APPS
 )
 
-INSTALLED_APPS = _drop_legacy_app_entries(INSTALLED_APPS, version=REPO_VERSION)
+INSTALLED_APPS = _drop_legacy_app_entries(
+    INSTALLED_APPS,
+    LEGACY_MIGRATION_APPS,
+    version=REPO_VERSION,
+)
 
 if HAS_DEBUG_TOOLBAR:
     INSTALLED_APPS.append("debug_toolbar")
