@@ -1,10 +1,12 @@
 """Admin integration for Raspberry Pi image artifacts."""
 
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -42,6 +44,60 @@ class RaspberryPiImageBuildForm(forms.Form):
         required=False,
         help_text=_("Copy the base image without injecting Arthexis bootstrap scripts."),
     )
+
+    @staticmethod
+    def _resolved_within(path: Path, roots: tuple[Path, ...]) -> bool:
+        resolved_path = path.resolve(strict=False)
+        return any(root == resolved_path or root in resolved_path.parents for root in roots)
+
+    @staticmethod
+    def _base_image_roots() -> tuple[Path, ...]:
+        configured_roots = getattr(settings, "IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS", None)
+        if configured_roots:
+            return tuple(Path(root).expanduser().resolve(strict=False) for root in configured_roots)
+
+        return (Path(settings.BASE_DIR).resolve(strict=False), Path("/tmp"))
+
+    @staticmethod
+    def _output_roots() -> tuple[Path, ...]:
+        configured_roots = getattr(settings, "IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS", None)
+        if configured_roots:
+            return tuple(Path(root).expanduser().resolve(strict=False) for root in configured_roots)
+
+        return (Path(settings.BASE_DIR).resolve(strict=False),)
+
+    def clean_base_image_uri(self) -> str:
+        """Allow remote URIs and constrain local files to configured safe roots."""
+
+        base_image_uri = self.cleaned_data["base_image_uri"].strip()
+        parsed = urlparse(base_image_uri)
+        if parsed.scheme in {"http", "https"}:
+            return base_image_uri
+
+        if parsed.scheme not in {"", "file"}:
+            raise ValidationError(_("Base image URI must use http, https, file, or a local path."))
+
+        local_path = Path(unquote(parsed.path)) if parsed.scheme == "file" else Path(base_image_uri)
+        if not local_path.is_absolute():
+            local_path = Path(settings.BASE_DIR) / local_path
+
+        if not self._resolved_within(local_path, self._base_image_roots()):
+            raise ValidationError(_("Base image path is outside allowed image directories."))
+
+        return base_image_uri
+
+    def clean_output_dir(self) -> str:
+        """Constrain output directories to configured safe roots."""
+
+        output_dir = self.cleaned_data["output_dir"].strip()
+        output_path = Path(output_dir)
+        if not output_path.is_absolute():
+            output_path = Path(settings.BASE_DIR) / output_path
+
+        if not self._resolved_within(output_path, self._output_roots()):
+            raise ValidationError(_("Output directory is outside allowed output directories."))
+
+        return output_dir
 
 
 @admin.register(RaspberryPiImageArtifact)
