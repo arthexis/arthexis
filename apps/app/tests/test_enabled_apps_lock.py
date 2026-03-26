@@ -102,6 +102,7 @@ def test_load_manifest_app_entries_includes_runtime_and_legacy_migration_apps():
     assert expected_apps.issubset(manifest_app_entries)
     retired_app_labels = [
         "calendars",
+        "mcp",
         "screens",
         "shortcuts",
         "smb",
