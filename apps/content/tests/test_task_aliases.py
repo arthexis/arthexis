@@ -1,4 +1,4 @@
-"""Regression tests for retired web sampler task enforcement migration."""
+"""Validate migration safeguards for fully retired web sampler task aliases."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ def test_retired_web_sampler_task_migration_fails_when_legacy_row_exists():
         name="legacy-web-sampler",
         interval=schedule,
         task=migration.RETIRED_WEB_SAMPLER_TASK_PATH,
+        enabled=True,
     )
 
     with pytest.raises(RuntimeError, match="legacy-web-sampler"):
