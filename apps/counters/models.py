@@ -1,5 +1,5 @@
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
@@ -12,6 +12,7 @@ from apps.base.models import Entity
 from apps.locals.caches import CacheStoreMixin
 from apps.sigils.fields import ConditionTextField
 
+from .condition_structured import parse_boolean_literal, parse_decimal_literal
 from .dashboard_rules import (
     DEFAULT_SUCCESS_MESSAGE,
     bind_rule_model,
@@ -95,6 +96,14 @@ class DashboardRule(StoredCounter):
         CONDITION = "condition", _("SQL + Sigil comparison")
         PYTHON = "python", _("Python callable")
 
+    class ConditionOperator(models.TextChoices):
+        EQUAL = "=", _("Equals")
+        GREATER_THAN = ">", _("Greater than")
+        GREATER_THAN_OR_EQUAL = ">=", _("Greater than or equal")
+        LESS_THAN = "<", _("Less than")
+        LESS_THAN_OR_EQUAL = "<=", _("Less than or equal")
+        NOT_EQUAL = "!=", _("Not equal")
+
     name = models.CharField(max_length=200, unique=True)
     content_type = models.OneToOneField(
         ContentType, on_delete=models.CASCADE, related_name="dashboard_rule"
@@ -103,6 +112,22 @@ class DashboardRule(StoredCounter):
         max_length=20, choices=Implementation.choices, default=Implementation.PYTHON
     )
     condition = ConditionTextField(blank=True, default="")
+    condition_operator = models.CharField(
+        max_length=4,
+        choices=ConditionOperator.choices,
+        default=ConditionOperator.EQUAL,
+    )
+    condition_source = models.CharField(max_length=255, blank=True, default="")
+    condition_expected_boolean = models.BooleanField(null=True, blank=True)
+    condition_expected_number = models.DecimalField(
+        max_digits=20,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
+    condition_expected_text = models.CharField(max_length=255, blank=True, default="")
+    condition_requires_triage = models.BooleanField(default=False)
+    condition_triage_note = models.CharField(max_length=255, blank=True, default="")
     function_name = models.CharField(max_length=255, blank=True)
     success_message = models.CharField(
         max_length=200, default=DEFAULT_SUCCESS_MESSAGE
@@ -132,13 +157,54 @@ class DashboardRule(StoredCounter):
                     "Provide a handler name for Python-based rules."
                 )
         else:
-            if not (self.condition or "").strip():
+            if self.condition_requires_triage:
                 errors["condition"] = _(
-                    "Provide a condition for SQL-based rules."
+                    "This condition must be migrated manually before it can run."
+                )
+            if not (self.condition_source or "").strip():
+                errors["condition"] = _(
+                    "Provide a structured condition source."
+                )
+            has_boolean = self.condition_expected_boolean is not None
+            has_number = self.condition_expected_number is not None
+            has_text = bool((self.condition_expected_text or "").strip())
+            configured_types = [has_boolean, has_number, has_text]
+            if sum(configured_types) != 1:
+                errors["condition"] = _(
+                    "Provide exactly one expected condition value type."
                 )
 
         if errors:
             raise ValidationError(errors)
+
+    def _resolve_condition_source(self) -> str:
+        if hasattr(self, "resolve_sigils"):
+            return (self.resolve_sigils("condition_source") or "").strip()
+        return (self.condition_source or "").strip()
+
+    def _evaluate_structured_condition(self) -> tuple[bool, str | None]:
+        source_text = (self._resolve_condition_source() or "").strip()
+        if not source_text:
+            return False, _("Condition source resolved to an empty value.")
+
+        expected_boolean = self.condition_expected_boolean
+        expected_number = self.condition_expected_number
+        expected_text = (self.condition_expected_text or "").strip()
+        operator = self.condition_operator
+
+        if expected_boolean is not None:
+            parsed_boolean = parse_boolean_literal(source_text)
+            if parsed_boolean is None:
+                return False, _("Condition source is not a boolean value.")
+            return _compare_values(parsed_boolean, expected_boolean, operator), None
+
+        if expected_number is not None:
+            parsed_number = parse_decimal_literal(source_text)
+            if parsed_number is None:
+                return False, _("Condition source is not a numeric value.")
+            return _compare_values(parsed_number, expected_number, operator), None
+
+        return _compare_values(source_text, expected_text, operator), None
 
     def evaluate(self) -> dict[str, object]:
         if self.implementation == self.Implementation.PYTHON:
@@ -153,9 +219,15 @@ class DashboardRule(StoredCounter):
                 logger.exception("Dashboard rule handler failed: %s", self.function_name)
                 return rule_failure(_("Unable to evaluate dashboard rule."))
 
-        condition_field = self._meta.get_field("condition")
-        result = condition_field.evaluate(self)
-        if result.passed:
+        if self.condition_requires_triage:
+            message = self.failure_message or _("Rule condition requires manual triage.")
+            triage_note = (self.condition_triage_note or "").strip()
+            if triage_note:
+                message = f"{message} ({triage_note})"
+            return rule_failure(message)
+
+        passed, error = self._evaluate_structured_condition()
+        if passed:
             message = self.success_message or str(DEFAULT_SUCCESS_MESSAGE)
             return rule_success(
                 message,
@@ -163,8 +235,8 @@ class DashboardRule(StoredCounter):
             )
 
         message = self.failure_message or _("Rule condition not met.")
-        if result.error:
-            message = f"{message} ({result.error})"
+        if error:
+            message = f"{message} ({error})"
         return rule_failure(message)
 
 
@@ -172,3 +244,19 @@ class DashboardRule(StoredCounter):
 @receiver(post_delete, sender=DashboardRule)
 def clear_dashboard_rule_cache(sender, instance: DashboardRule, **_kwargs):
     DashboardRule.invalidate_model_cache(instance.content_type)
+
+
+def _compare_values(left, right, operator: str) -> bool:
+    if operator == DashboardRule.ConditionOperator.EQUAL:
+        return left == right
+    if operator == DashboardRule.ConditionOperator.NOT_EQUAL:
+        return left != right
+    if operator == DashboardRule.ConditionOperator.GREATER_THAN:
+        return left > right
+    if operator == DashboardRule.ConditionOperator.GREATER_THAN_OR_EQUAL:
+        return left >= right
+    if operator == DashboardRule.ConditionOperator.LESS_THAN:
+        return left < right
+    if operator == DashboardRule.ConditionOperator.LESS_THAN_OR_EQUAL:
+        return left <= right
+    return False
