@@ -3,18 +3,13 @@ from __future__ import annotations
 import contextlib
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone as dt_timezone
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from django.conf import settings
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from apps.content.models import ContentSample
-from apps.content.utils import save_screenshot
 from apps.core.entity import Entity, EntityManager
 from apps.core.models import Ownable
 from apps.core.ui import has_graphical_display
@@ -27,7 +22,6 @@ if TYPE_CHECKING:
     from playwright.sync_api import BrowserContext, Page, Playwright
 
 logger = logging.getLogger(__name__)
-SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
 PLAYWRIGHT_AUTOMATION_FEATURE_SLUG = "playwright-automation"
 
 
@@ -339,140 +333,3 @@ class SessionCookie(Ownable):
 
         payload = self.clean_cookie_payload(self.cookies)
         return [normalize_playwright_cookie(cookie) for cookie in payload]
-
-
-class WebsiteScreenshotSchedule(Entity):
-    """Periodic Playwright website screenshot configuration."""
-
-    slug = models.SlugField(max_length=100, unique=True)
-    label = models.CharField(max_length=150)
-    url = models.URLField()
-    is_active = models.BooleanField(default=True)
-    sampling_period_minutes = models.PositiveIntegerField(null=True, blank=True)
-    last_sampled_at = models.DateTimeField(null=True, blank=True)
-    favored_engine = models.CharField(max_length=20, choices=PlaywrightBrowser.Engine.choices, default=PlaywrightBrowser.Engine.CHROMIUM)
-    fallback_engines = models.JSONField(default=list, blank=True, help_text="Optional engine list to try after favored engine.")
-    pre_commands = models.JSONField(default=list, blank=True, help_text="List of Playwright page commands.")
-    post_navigation_delay_ms = models.PositiveIntegerField(default=0)
-    timeout_ms = models.PositiveIntegerField(default=30000)
-    viewport_width = models.PositiveIntegerField(default=1280)
-    viewport_height = models.PositiveIntegerField(default=720)
-    full_page = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ["label", "slug"]
-        verbose_name = "Website Screenshot Schedule"
-        verbose_name_plural = "Website Screenshot Schedules"
-
-    def browser_engine_candidates(self) -> list[str]:
-        """Return deduplicated browser engine candidates in attempt order."""
-
-        engines = [self.favored_engine]
-        engines.extend(engine for engine in self.fallback_engines if isinstance(engine, str))
-        deduped: list[str] = []
-        for engine in engines:
-            if engine not in deduped and engine in PlaywrightBrowser.Engine.values:
-                deduped.append(engine)
-
-        from apps.nodes.models import Node
-
-        local = Node.get_local()
-        feature_map = {
-            PlaywrightBrowser.Engine.CHROMIUM: "playwright-browser-chromium",
-            PlaywrightBrowser.Engine.FIREFOX: "playwright-browser-firefox",
-            PlaywrightBrowser.Engine.WEBKIT: "playwright-browser-webkit",
-        }
-        if local is None:
-            return deduped or [PlaywrightBrowser.Engine.CHROMIUM]
-
-        available = [
-            engine
-            for engine in deduped
-            if is_feature_active_for_node(
-                node=local,
-                slug=feature_map[engine],
-            )
-        ]
-        return available or deduped or [PlaywrightBrowser.Engine.CHROMIUM]
-
-
-class WebsiteScreenshotRun(Entity):
-    """Execution log for website screenshot schedules."""
-
-    schedule = models.ForeignKey(WebsiteScreenshotSchedule, on_delete=models.CASCADE, related_name="runs")
-    document = models.JSONField(default=dict)
-    content_sample = models.ForeignKey(ContentSample, on_delete=models.SET_NULL, null=True, blank=True, related_name="website_screenshot_runs")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-
-
-def execute_website_screenshot_schedule(schedule: WebsiteScreenshotSchedule, *, user=None) -> WebsiteScreenshotRun:
-    """Execute one screenshot schedule and persist a content sample."""
-
-    _ensure_playwright_runtime_enabled()
-
-    from playwright.sync_api import Error as PlaywrightError
-
-    sync_playwright = _load_sync_playwright()
-    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    filename = SCREENSHOT_DIR / f"{schedule.slug}-{datetime.now(dt_timezone.utc):%Y%m%d%H%M%S}.png"
-
-    errors: dict[str, str] = {}
-    for engine in schedule.browser_engine_candidates():
-        try:
-            _ensure_engine_feature_enabled(engine)
-            with sync_playwright() as playwright:
-                launcher = getattr(playwright, engine)
-                browser = launcher.launch(headless=True)
-                context = browser.new_context(viewport={"width": schedule.viewport_width, "height": schedule.viewport_height})
-                page = context.new_page()
-                page.goto(schedule.url, timeout=schedule.timeout_ms, wait_until="networkidle")
-                _run_pre_commands(page, schedule.pre_commands, default_timeout_ms=schedule.timeout_ms)
-                if schedule.post_navigation_delay_ms:
-                    page.wait_for_timeout(schedule.post_navigation_delay_ms)
-                page.screenshot(path=str(filename), full_page=schedule.full_page)
-                context.close()
-                browser.close()
-            sample = save_screenshot(filename, method="PLAYWRIGHT_SCHEDULE", user=user, link_duplicates=True)
-            schedule.last_sampled_at = timezone.now()
-            schedule.save(update_fields=["last_sampled_at"])
-            return WebsiteScreenshotRun.objects.create(
-                schedule=schedule,
-                document={"engine": engine, "url": schedule.url, "path": filename.as_posix()},
-                content_sample=sample,
-            )
-        except (PlaywrightError, KeyError, ValueError) as exc:
-            errors[engine] = str(exc)
-            continue
-
-    raise RuntimeError(f"All browser engines failed for schedule {schedule.slug}: {errors}")
-
-
-def _run_pre_commands(page, pre_commands, *, default_timeout_ms: int) -> None:
-    """Execute supported pre-navigation commands against a Playwright page."""
-
-    for command in pre_commands:
-        if not isinstance(command, dict):
-            continue
-        action = command.get("action")
-        selector = command.get("selector")
-        if action in {"click", "fill", "wait_for_selector"} and not selector:
-            raise ValueError(f"Missing selector for pre-command action: {action}")
-        if action == "click":
-            page.locator(selector).click()
-        elif action == "fill":
-            page.locator(selector).fill(command.get("value", ""))
-        elif action == "wait_for_selector":
-            page.wait_for_selector(selector, timeout=command.get("timeout_ms", default_timeout_ms))
-        elif action == "wait_for_timeout":
-            page.wait_for_timeout(int(command.get("ms", 250)))
-
-
-def schedule_pending_website_screenshots(now=None) -> list[int]:
-    """No-op compatibility shim after retiring automatic schedule execution."""
-
-    del now
-    logger.info("Skipping Playwright screenshot schedules: automatic execution is retired; run schedules on demand from admin.")
-    return []

@@ -101,14 +101,6 @@ def create_manual_task_github_issue(manual_task_id: int, trigger: str) -> str | 
     return issue_url
 
 
-@shared_task(name="apps.playwright.tasks.run_scheduled_website_screenshots")
-def run_scheduled_website_screenshots() -> list[int]:
-    """No-op task kept for backward compatibility after retiring auto schedules."""
-
-    logger.info("Skipping scheduled Playwright screenshot task: run screenshot schedules on demand from admin.")
-    return []
-
-
 @shared_task(name="apps.repos.tasks.report_exception_to_github")
 def report_exception_to_github(payload: dict[str, Any]) -> None:
     """Send exception context to the GitHub issue helper.

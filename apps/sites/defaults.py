@@ -43,7 +43,7 @@ DEFAULT_APPLICATION_DESCRIPTIONS: dict[str, str] = {
     "nginx": "Nginx configuration and reverse proxy helpers.",
     "odoo": "Odoo integrations and ERP data sync helpers.",
     "payments": "Payment gateways and billing helpers.",
-    "playwright": "Playwright browser automation and scheduled screenshot capture.",
+    "playwright": "Playwright browser automation helpers.",
     "pages": "User QA, Continuity Design and Chaos Testing.",
     "protocols": "Protocol helpers and shared interfaces.",
     "rates": "Rates, pricing and tariff helpers.",
