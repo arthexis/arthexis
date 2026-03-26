@@ -103,42 +103,17 @@ def _legacy_runtime_app_packages() -> set[str]:
     return retired_packages
 
 
-def _tracks_file_path() -> Path:
-    return Path(APPS_DIR).resolve().parent / "MIGRATION_TRACKS.json"
-
-
-def _migration_tracks() -> dict[str, object]:
-    tracks_file = _tracks_file_path()
-    if not tracks_file.exists():
-        return {}
-
-    try:
-        payload = json.loads(tracks_file.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {}
-
-    if isinstance(payload, dict):
-        return payload
-    return {}
-
-
-def _legacy_shims_enabled() -> bool:
-    """Return whether migration-only legacy shims should stay enabled."""
-
-    tracks = _migration_tracks()
-    current_line = str(tracks.get("current_line", "")).strip().lower()
-    match = re.match(r"(?P<major>\d+)", current_line)
-    if not match:
-        return True
-
-    return int(match.group("major")) == 0
-
-
-ALL_LEGACY_MIGRATION_APPS = [
+LEGACY_MIGRATION_APPS = [
+    "apps._legacy.calendars_migration_only.apps.CalendarsMigrationOnlyConfig",
     "apps._legacy.extensions_migration_only.apps.ExtensionsMigrationOnlyConfig",
+    "apps._legacy.fitbit_migration_only.apps.FitbitMigrationOnlyConfig",
+    "apps._legacy.game_migration_only.apps.GameMigrationOnlyConfig",
     "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig",
     "apps._legacy.recipes_migration_only.apps.RecipesMigrationOnlyConfig",
+    "apps._legacy.screens_migration_only.apps.ScreensMigrationOnlyConfig",
+    "apps._legacy.shortcuts_migration_only.apps.ShortcutsMigrationOnlyConfig",
     "apps._legacy.selenium_migration_only.apps.SeleniumMigrationOnlyConfig",
+    "apps._legacy.smb_migration_only.apps.SmbMigrationOnlyConfig",
     "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig",
     "apps._legacy.sponsors_migration_only.apps.SponsorsMigrationOnlyConfig",
     "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
@@ -213,8 +188,20 @@ INSTALLED_APPS = _dedupe_app_entries(INSTALLED_APPS)
 SITE_ID = 1
 
 MIGRATION_MODULES = {
-    "selenium": "apps.selenium.migrations",
+    "calendars": "apps._legacy.calendars_migration_only.migrations",
+    "extensions": "apps._legacy.extensions_migration_only.migrations",
+    "fitbit": "apps._legacy.fitbit_migration_only.migrations",
+    "game": "apps._legacy.game_migration_only.migrations",
+    "prompts": "apps._legacy.prompts_migration_only.migrations",
+    "recipes": "apps._legacy.recipes_migration_only.migrations",
+    "screens": "apps._legacy.screens_migration_only.migrations",
+    "selenium": "apps._legacy.selenium_migration_only.migrations",
+    "shortcuts": "apps._legacy.shortcuts_migration_only.migrations",
     "sites": "apps.core.sites_migrations",
+    "smb": "apps._legacy.smb_migration_only.migrations",
+    "socials": "apps._legacy.socials_migration_only.migrations",
+    "sponsors": "apps._legacy.sponsors_migration_only.migrations",
+    "survey": "apps._legacy.survey_migration_only.migrations",
     # Pin django_celery_beat migrations to a local copy so we can override
     # upstream changes that introduce optional dependencies (e.g. Google
     # Calendar profile) and avoid InvalidBases errors during migrate.

@@ -1,54 +1,53 @@
-"""Tests for Celery process startup behavior in ``manage.main``."""
+"""Regression tests for Celery startup behavior in manage.main."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 import manage
 
 
-@pytest.fixture
-def mock_manage_main(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
-    """Mock ``manage.main`` dependencies and capture spawned process commands."""
-    popen_calls: list[list[str]] = []
-
-    class _Proc:
-        def terminate(self) -> None:
-            return None
-
-    def _fake_popen(cmd: list[str]) -> _Proc:
-        popen_calls.append(cmd)
-        return _Proc()
+def test_main_starts_worker_and_beat_only_for_runserver(monkeypatch) -> None:
+    """Celery worker/beat should spawn for runserver when celery lock is present."""
 
     monkeypatch.setattr(manage, "loadenv", lambda: None)
     monkeypatch.setattr(manage, "bootstrap_sqlite_driver", lambda: None)
-    monkeypatch.setattr(manage, "_execute_django", lambda _argv, _base_dir: None)
-    monkeypatch.setattr(manage, "_run_runserver", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(manage.subprocess, "Popen", _fake_popen)
-    monkeypatch.setattr(Path, "exists", lambda self: self.name == "celery.lck")
+    monkeypatch.setattr(Path, "exists", lambda self: str(self).endswith(".locks/celery.lck"))
 
-    return popen_calls
+    popen_commands: list[list[str]] = []
 
+    class DummyProcess:
+        def terminate(self) -> None:
+            return None
 
-def test_main_does_not_spawn_celery_for_non_runserver_commands(
-    mock_manage_main: list[list[str]],
-) -> None:
-    """Celery worker/beat should not be spawned for non-runserver commands."""
-
-    manage.main(["check"])
-
-    assert mock_manage_main == []
-
-
-def test_main_spawns_celery_for_runserver_when_enabled(
-    mock_manage_main: list[list[str]],
-) -> None:
-    """Runserver should still launch worker and beat when Celery is enabled."""
+    monkeypatch.setattr(
+        manage.subprocess,
+        "Popen",
+        lambda command: popen_commands.append(command) or DummyProcess(),
+    )
+    monkeypatch.setattr(manage, "_run_runserver", lambda base_dir, args, is_debug: None)
+    monkeypatch.setattr(manage, "_execute_django", lambda argv, base_dir: None)
 
     manage.main(["runserver", "--noreload"])
 
-    assert len(mock_manage_main) == 2
-    assert any("worker" in command for command in mock_manage_main)
-    assert any("beat" in command for command in mock_manage_main)
+    assert len(popen_commands) == 2
+    assert popen_commands[0][2:4] == ["celery", "-A"]
+    assert popen_commands[0][4:6] == ["config", "worker"]
+    assert popen_commands[1][4:6] == ["config", "beat"]
+
+
+def test_main_skips_celery_for_non_runserver_commands(monkeypatch) -> None:
+    """Non-runserver commands should not spawn celery background processes."""
+
+    monkeypatch.setattr(manage, "loadenv", lambda: None)
+    monkeypatch.setattr(manage, "bootstrap_sqlite_driver", lambda: None)
+    monkeypatch.setattr(Path, "exists", lambda self: str(self).endswith(".locks/celery.lck"))
+
+    popen_calls: list[list[str]] = []
+    monkeypatch.setattr(manage.subprocess, "Popen", lambda command: popen_calls.append(command))
+    monkeypatch.setattr(manage, "_run_runserver", lambda base_dir, args, is_debug: None)
+    monkeypatch.setattr(manage, "_execute_django", lambda argv, base_dir: None)
+
+    manage.main(["check"])
+
+    assert popen_calls == []

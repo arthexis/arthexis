@@ -4,7 +4,7 @@ import logging
 
 from celery import shared_task
 
-from apps.ocpp.forwarder import forwarder
+from apps.forwarder.ocpp import forwarder
 from apps.ocpp.forwarder_feature import ocpp_forwarder_enabled
 
 logger = logging.getLogger(__name__)

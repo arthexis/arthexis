@@ -60,6 +60,28 @@ REQUIRES_REDIS=false
 START_SERVICES=false
 REPAIR=false
 
+is_debian_host() {
+    if [ ! -f /etc/os-release ]; then
+        return 1
+    fi
+
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    case "${ID:-}" in
+        debian)
+            return 0
+            ;;
+    esac
+
+    case " ${ID_LIKE:-} " in
+        *" debian "*)
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
 usage() {
     echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--clean] [--start|--no-start] [--repair]" >&2
     exit 1
@@ -359,6 +381,13 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [ ${#ORIGINAL_ARGS[@]} -eq 0 ] && is_debian_host; then
+    SERVICE="arthexis"
+    ENABLE_CELERY=true
+    NODE_ROLE="Satellite"
+    REQUIRES_REDIS=true
+fi
 
 if [ "$ENABLE_CAMERA_SERVICE" = true ]; then
     REQUIRES_REDIS=true

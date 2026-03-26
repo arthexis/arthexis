@@ -48,6 +48,7 @@ dependencies = [
   "django-timezone-field==7.2.1",
   "Django==5.2.12",
   "dnspython==2.7.0",
+  "docutils==0.22.4",
   "filelock==3.25.2",
   "h11==0.16.0",
   "httpcore==1.0.9",
@@ -78,7 +79,7 @@ dependencies = [
   "PyYAML==6.0.3",
   "redis==7.3.0",
   "reportlab==4.4.10",
-  "requests==2.32.5",
+  "requests==2.33.0",
   "s3transfer==0.16.0",
   "service-identity==24.2.0",
   "setuptools==82.0.1",
@@ -133,7 +134,6 @@ dev = [
   "django-debug-toolbar==6.2.0",
 ]
 docs = [
-  "docutils==0.22.4",
   "mkdocs==1.6.1",
 ]
 hardware = [
@@ -254,6 +254,8 @@ include-package-data = true
 "apps.flows" = [ "**/*",]
 "apps.flows.migrations" = [ "**/*",]
 "apps.flows.tests" = [ "**/*",]
+"apps.forwarder" = [ "**/*",]
+"apps.forwarder.ocpp" = [ "**/*",]
 "apps.ftp" = [ "**/*",]
 "apps.ftp.management" = [ "**/*",]
 "apps.ftp.management.commands" = [ "**/*",]
@@ -304,7 +306,6 @@ include-package-data = true
 "apps.ocpp.admin.miscellaneous" = [ "**/*",]
 "apps.ocpp.consumers" = [ "**/*",]
 "apps.ocpp.consumers.base" = [ "**/*",]
-"apps.ocpp.forwarder" = [ "**/*",]
 "apps.ocpp.management" = [ "**/*",]
 "apps.ocpp.management.commands" = [ "**/*",]
 "apps.ocpp.migrations" = [ "**/*",]
@@ -329,6 +330,18 @@ include-package-data = true
 "apps._legacy.recipes_migration_only" = [ "**/*",]
 "apps._legacy.recipes_migration_only.migrations" = [ "**/*",]
 "apps._legacy.selenium_migration_only" = [ "**/*",]
+"apps._legacy.fitbit_migration_only" = [ "**/*",]
+"apps._legacy.fitbit_migration_only.migrations" = [ "**/*",]
+"apps._legacy.game_migration_only" = [ "**/*",]
+"apps._legacy.game_migration_only.migrations" = [ "**/*",]
+"apps._legacy.calendars_migration_only" = [ "**/*",]
+"apps._legacy.calendars_migration_only.migrations" = [ "**/*",]
+"apps._legacy.screens_migration_only" = [ "**/*",]
+"apps._legacy.screens_migration_only.migrations" = [ "**/*",]
+"apps._legacy.shortcuts_migration_only" = [ "**/*",]
+"apps._legacy.shortcuts_migration_only.migrations" = [ "**/*",]
+"apps._legacy.smb_migration_only" = [ "**/*",]
+"apps._legacy.smb_migration_only.migrations" = [ "**/*",]
 "apps._legacy.socials_migration_only" = [ "**/*",]
 "apps._legacy.socials_migration_only.migrations" = [ "**/*",]
 "apps._legacy.sponsors_migration_only" = [ "**/*",]

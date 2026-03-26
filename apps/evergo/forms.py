@@ -4,7 +4,10 @@ import re
 
 from django import forms
 from django.core.exceptions import ValidationError
+from django.forms import ModelForm
 from django.utils import timezone
+
+from apps.core.admin import OwnableAdminForm
 
 from .models import EvergoUser
 
@@ -35,10 +38,10 @@ class EvergoLoadCustomersForm(forms.Form):
     next_view = forms.ChoiceField(
         label="Open next",
         choices=(
-            ("orders", "Orders"),
             ("customers", "Customers"),
+            ("orders", "Orders"),
         ),
-        initial="orders",
+        initial="customers",
         required=False,
         help_text="Choose which admin list should open after the sync completes.",
     )
@@ -107,15 +110,23 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
         model = EvergoUser
         fields = ("user", "group", "avatar", "evergo_email", "evergo_password")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, request_user=None, **kwargs):
         """Prefill first-time contractor setup defaults for a smoother signup flow."""
         super().__init__(*args, **kwargs)
+        self.request_user = request_user
         self.fields["evergo_password"].widget = forms.PasswordInput()
         if self.instance.pk:
             self.fields["evergo_password"].required = False
         self.fields["user"].required = False
         self.fields["group"].required = False
         self.fields["avatar"].required = False
+        if (
+            not self.is_bound
+            and not self.instance.pk
+            and getattr(request_user, "is_authenticated", False)
+            and self.fields["user"].initial is None
+        ):
+            self.fields["user"].initial = request_user
         self.fields["evergo_email"].help_text = "Email used to sign in to the Evergo contractor portal."
         self.fields["evergo_password"].help_text = "Password used to sign in to the Evergo contractor portal."
 
@@ -130,6 +141,13 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
             for field_name in ("user", "group", "avatar")
             if cleaned_data.get(field_name) is not None
         ]
+        if (
+            not owners
+            and not self.instance.pk
+            and getattr(self.request_user, "is_authenticated", False)
+        ):
+            cleaned_data["user"] = self.request_user
+            owners = ["user"]
         if not owners:
             raise ValidationError("Choose a user, security group, or avatar owner for this contractor.")
         if cleaned_data.get("load_all_customers") and not cleaned_data.get("validate_credentials"):
@@ -137,6 +155,38 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
                 "load_all_customers",
                 "Enable credential validation before running the initial customer load.",
             )
+        return cleaned_data
+
+
+class EvergoUserAdminForm(OwnableAdminForm):
+    """Allow user/group/avatar ownership while defaulting new records to the acting user."""
+
+    class Meta:
+        model = EvergoUser
+        fields = "__all__"
+
+    def __init__(self, *args, request_user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request_user = request_user
+
+    def clean(self):
+        cleaned_data = ModelForm.clean(self)
+        owners = [cleaned_data.get(field_name) for field_name in ("user", "group", "avatar")]
+        owner_count = sum(owner is not None for owner in owners)
+        if owner_count > 1:
+            raise ValidationError("Choose exactly one owner: user, security group, or avatar.")
+
+        if (
+            owner_count == 0
+            and not self.instance.pk
+            and getattr(self.request_user, "is_authenticated", False)
+        ):
+            cleaned_data["user"] = self.request_user
+            owner_count = 1
+
+        owner_required = getattr(self._meta.model, "owner_required", self.owner_required)
+        if owner_required and owner_count == 0:
+            raise ValidationError("Choose a user, security group, or avatar owner for this contractor.")
         return cleaned_data
 
 

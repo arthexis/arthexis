@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 
 from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
+from django.urls import path
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
@@ -19,12 +20,16 @@ from apps.repos.models.repositories import GitHubRepository, PackageRepository
 
 class FetchFromGitHubMixin(DjangoObjectActions):
     changelist_actions: list[str] = []
+    dashboard_actions: list[str] = []
 
     def _redirect_to_changelist(self):
         opts = self.model._meta
         return HttpResponseRedirect(
             reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
         )
+
+    def get_dashboard_actions(self, request):
+        return getattr(self, "dashboard_actions", [])
 
 
 @admin.register(RepositoryIssue)
@@ -133,9 +138,73 @@ class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
 
 
 @admin.register(GitHubRepository)
-class GitHubRepositoryAdmin(admin.ModelAdmin):
+class GitHubRepositoryAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
+    dashboard_actions = ["setup_token"]
     list_display = ("owner", "name", "is_private")
     search_fields = ("owner", "name")
+
+    def _github_token_admin(self):
+        return self.admin_site._registry.get(GitHubToken)
+
+    def _can_setup_token(self, request, token=None):
+        token_admin = self._github_token_admin()
+        if token_admin is None:
+            return False
+        if token is None:
+            return token_admin.has_add_permission(request)
+        return token_admin.has_change_permission(request, obj=token)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "setup-token/",
+                self.admin_site.admin_view(self.setup_token),
+                name="repos_githubrepository_setup_token",
+            )
+        ]
+        return custom_urls + urls
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        links = list(extra_context.get("public_view_links") or [])
+        setup_url = reverse("admin:repos_githubrepository_setup_token")
+        if not any(link.get("url") == setup_url for link in links):
+            links.append({"label": self.setup_token.label, "url": setup_url})
+        extra_context["public_view_links"] = links
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def get_dashboard_actions(self, request):
+        if not self._can_setup_token(request):
+            return []
+        return super().get_dashboard_actions(request)
+
+    def setup_token(self, request, queryset=None):
+        token = GitHubToken.objects.filter(user=request.user).order_by("pk").first()
+        if token is not None:
+            if not self._can_setup_token(request, token=token):
+                self.message_user(
+                    request,
+                    _("You do not have permission to change your GitHub token."),
+                    level=messages.WARNING,
+                )
+                return self._redirect_to_changelist()
+            return HttpResponseRedirect(
+                reverse("admin:repos_githubtoken_change", args=[token.pk])
+            )
+        if not self._can_setup_token(request):
+            self.message_user(
+                request,
+                _("You do not have permission to add a GitHub token."),
+                level=messages.WARNING,
+            )
+            return self._redirect_to_changelist()
+        return HttpResponseRedirect(reverse("admin:repos_githubtoken_add"))
+
+    setup_token.label = _("Setup Token")
+    setup_token.short_description = _("Setup Token")
+    setup_token.requires_queryset = False
+    setup_token.dashboard_url = "admin:repos_githubrepository_setup_token"
 
 
 @admin.register(PackageRepository)

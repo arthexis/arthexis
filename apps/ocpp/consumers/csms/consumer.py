@@ -29,7 +29,7 @@ from config.offline import requires_network
 from decimal import Decimal, InvalidOperation
 from django.utils.dateparse import parse_datetime
 from apps.ocpp import store
-from apps.ocpp.forwarder import forwarder
+from apps.forwarder.ocpp import forwarder
 from apps.ocpp.status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
 from apps.ocpp.models import (
     Transaction,
@@ -103,6 +103,7 @@ from apps.ocpp.consumers.csms.handlers.notifications import (
 )
 from apps.ocpp.consumers.csms.handlers.status import StatusHandlersMixin
 from apps.ocpp.consumers.csms.transport import CSMSTransportMixin
+from apps.ocpp.consumers.csms.actions import build_action_handlers
 
 logger = logging.getLogger(__name__)
 
@@ -230,6 +231,15 @@ class CSMSConsumer(
         """Return forwarding helper for cross-node session relays."""
 
         return ForwardingHandler(self)
+
+    def _action_handler(self, action: str):
+        """Return a focused CSMS action handler."""
+
+        handlers = getattr(self, "_focused_action_handlers", None)
+        if handlers is None:
+            handlers = build_action_handlers(self)
+            self._focused_action_handlers = handlers
+        return handlers[action]
 
     async def _assign_connector(self, connector: int | str | None) -> None:
         """Ensure ``self.charger`` matches the provided connector id."""
@@ -1156,83 +1166,20 @@ class CSMSConsumer(
 
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "Authorize")
     async def _handle_authorize_action(self, payload, msg_id, raw, text_data):
-        id_tag = payload.get("idTag")
-        account = await self._get_account(id_tag)
-        status = "Invalid"
-        if self.charger.require_rfid:
-            tag = None
-            tag_created = False
-            if id_tag:
-                tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(
-                    id_tag
-                )
-            if account:
-                if await database_sync_to_async(account.can_authorize)():
-                    status = "Accepted"
-            elif id_tag and tag and not tag_created and tag.allowed:
-                status = "Accepted"
-                self._log_unlinked_rfid(tag.rfid)
-        else:
-            await self._ensure_rfid_seen(id_tag)
-            status = "Accepted"
-        return {"idTagInfo": {"status": status}}
+        return await self._action_handler("Authorize").handle(
+            payload, msg_id, raw, text_data
+        )
+
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit")
     async def _handle_cleared_charging_limit_action(
         self, payload, msg_id, raw, text_data
     ):
-        payload_data = payload if isinstance(payload, dict) else {}
-        evse_id_value = payload_data.get("evseId")
-        try:
-            evse_id = int(evse_id_value) if evse_id_value is not None else None
-        except (TypeError, ValueError):
-            evse_id = None
-        source_value = str(payload_data.get("chargingLimitSource") or "").strip()
-        details: list[str] = []
-        if source_value:
-            details.append(f"source={source_value}")
-        if evse_id is not None:
-            details.append(f"evseId={evse_id}")
-        message = "ClearedChargingLimit"
-        if details:
-            message += f": {', '.join(details)}"
+        return await self._action_handler("ClearedChargingLimit").handle(
+            payload, msg_id, raw, text_data
+        )
 
-        store.add_log(self.store_key, message, log_type="charger")
-
-        def _persist_cleared_limit() -> None:
-            target = getattr(self, "aggregate_charger", None) or getattr(
-                self, "charger", None
-            )
-            connector_hint = getattr(self, "connector_value", None)
-            if target is None and getattr(self, "charger_id", None):
-                target = (
-                    Charger.objects.filter(
-                        charger_id=self.charger_id,
-                        connector_id=connector_hint,
-                    ).first()
-                    or Charger.objects.filter(
-                        charger_id=self.charger_id, connector_id__isnull=True
-                    ).first()
-                )
-            if target is None and getattr(self, "charger_id", None):
-                target, _created = Charger.objects.get_or_create(
-                    charger_id=self.charger_id,
-                    connector_id=connector_hint,
-                )
-            if target is None:
-                return
-
-            ClearedChargingLimitEvent.objects.create(
-                charger=target,
-                ocpp_message_id=msg_id or "",
-                evse_id=evse_id,
-                charging_limit_source=source_value,
-                raw_payload=payload_data,
-            )
-
-        await database_sync_to_async(_persist_cleared_limit)()
-        return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyReport")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyReport")
@@ -2115,83 +2062,10 @@ class CSMSConsumer(
     async def _handle_notify_charging_limit_action(
         self, payload, msg_id, raw, text_data
     ):
-        payload_data = payload if isinstance(payload, dict) else {}
-        charging_limit = payload_data.get("chargingLimit")
-        if not isinstance(charging_limit, dict):
-            charging_limit = {}
-        source_value = str(charging_limit.get("chargingLimitSource") or "").strip()
-        grid_critical_value = charging_limit.get("isGridCritical")
-        grid_critical = None
-        if grid_critical_value is not None:
-            grid_critical = bool(grid_critical_value)
-        schedules = payload_data.get("chargingSchedule")
-        if not isinstance(schedules, list):
-            schedules = []
-        evse_id_value = payload_data.get("evseId")
-        try:
-            evse_id = int(evse_id_value) if evse_id_value is not None else None
-        except (TypeError, ValueError):
-            evse_id = None
+        return await self._action_handler("NotifyChargingLimit").handle(
+            payload, msg_id, raw, text_data
+        )
 
-        details: list[str] = []
-        if source_value:
-            details.append(f"source={source_value}")
-        if grid_critical is not None:
-            details.append(f"gridCritical={'yes' if grid_critical else 'no'}")
-        if evse_id is not None:
-            details.append(f"evseId={evse_id}")
-        if schedules:
-            details.append(f"schedules={len(schedules)}")
-        message = "NotifyChargingLimit"
-        if details:
-            message += f": {', '.join(details)}"
-        store.add_log(self.store_key, message, log_type="charger")
-
-        normalized_payload: dict[str, object] = {
-            "chargingLimit": charging_limit,
-            "chargingSchedule": schedules,
-        }
-        if evse_id is not None:
-            normalized_payload["evseId"] = evse_id
-
-        received_at = timezone.now()
-
-        def _persist_limit() -> None:
-            target = getattr(self, "aggregate_charger", None) or getattr(
-                self, "charger", None
-            )
-            connector_hint = getattr(self, "connector_value", None)
-            if target is None and getattr(self, "charger_id", None):
-                target = (
-                    Charger.objects.filter(
-                        charger_id=self.charger_id, connector_id=connector_hint
-                    ).first()
-                    or Charger.objects.filter(
-                        charger_id=self.charger_id, connector_id__isnull=True
-                    ).first()
-                )
-            if target is None and getattr(self, "charger_id", None):
-                target, _created = Charger.objects.get_or_create(
-                    charger_id=self.charger_id,
-                    connector_id=connector_hint,
-                )
-            if target is None:
-                return
-
-            updates: dict[str, object] = {
-                "last_charging_limit": normalized_payload,
-                "last_charging_limit_source": source_value,
-                "last_charging_limit_at": received_at,
-            }
-            if grid_critical is not None:
-                updates["last_charging_limit_is_grid_critical"] = grid_critical
-
-            Charger.objects.filter(pk=target.pk).update(**updates)
-            for field, value in updates.items():
-                setattr(target, field, value)
-
-        await database_sync_to_async(_persist_limit)()
-        return {}
 
     @protocol_call(
         "ocpp201",
@@ -2335,129 +2209,10 @@ class CSMSConsumer(
     async def _handle_notify_display_messages_action(
         self, payload, msg_id, raw, text_data
     ):
-        payload_data = payload if isinstance(payload, dict) else {}
-        request_id_value = payload_data.get("requestId")
-        tbc_value = payload_data.get("tbc")
-        try:
-            request_id = int(request_id_value) if request_id_value is not None else None
-        except (TypeError, ValueError):
-            request_id = None
-        tbc = bool(tbc_value) if tbc_value is not None else False
-        received_at = timezone.now()
-        message_info = payload_data.get("messageInfo")
-        if not isinstance(message_info, (list, tuple)):
-            message_info = []
-
-        compliance_messages: list[dict[str, object]] = []
-
-        def _persist_display_messages() -> None:
-            charger = self.charger
-            if charger is None and self.charger_id:
-                charger = Charger.objects.filter(
-                    charger_id=self.charger_id,
-                    connector_id=self.connector_value,
-                ).first()
-            if charger is None and self.charger_id:
-                charger, _created = Charger.objects.get_or_create(
-                    charger_id=self.charger_id,
-                    connector_id=self.connector_value,
-                )
-            if charger is None:
-                return
-
-            notification = None
-            if request_id is not None:
-                notification = (
-                    DisplayMessageNotification.objects.filter(
-                        charger=charger,
-                        request_id=request_id,
-                        completed_at__isnull=True,
-                    )
-                    .order_by("-received_at")
-                    .first()
-                )
-            if notification is None:
-                notification = DisplayMessageNotification.objects.create(
-                    charger=charger,
-                    ocpp_message_id=msg_id or "",
-                    request_id=request_id,
-                    tbc=tbc,
-                    raw_payload=payload_data,
-                )
-            updates: dict[str, object] = {"tbc": tbc}
-            if not tbc:
-                updates["completed_at"] = received_at
-            DisplayMessageNotification.objects.filter(pk=notification.pk).update(
-                **updates
-            )
-            for field, value in updates.items():
-                setattr(notification, field, value)
-
-            for entry in message_info:
-                if not isinstance(entry, dict):
-                    continue
-                message_id_value = entry.get("messageId")
-                try:
-                    message_id = (
-                        int(message_id_value) if message_id_value is not None else None
-                    )
-                except (TypeError, ValueError):
-                    message_id = None
-                message_payload = entry.get("message") or {}
-                if not isinstance(message_payload, dict):
-                    message_payload = {}
-                content_value = (
-                    message_payload.get("content")
-                    or message_payload.get("text")
-                    or entry.get("content")
-                    or ""
-                )
-                language_value = (
-                    message_payload.get("language") or entry.get("language") or ""
-                )
-                component = entry.get("component") or {}
-                variable = entry.get("variable") or {}
-                if not isinstance(component, dict):
-                    component = {}
-                if not isinstance(variable, dict):
-                    variable = {}
-                compliance_messages.append(
-                    {
-                        "message_id": message_id,
-                        "priority": str(entry.get("priority") or ""),
-                        "state": str(entry.get("state") or ""),
-                        "valid_from": _parse_ocpp_timestamp(entry.get("validFrom")),
-                        "valid_to": _parse_ocpp_timestamp(entry.get("validTo")),
-                        "language": str(language_value or ""),
-                        "content": str(content_value or ""),
-                    }
-                )
-                DisplayMessage.objects.create(
-                    notification=notification,
-                    charger=charger,
-                    message_id=message_id,
-                    priority=str(entry.get("priority") or ""),
-                    state=str(entry.get("state") or ""),
-                    valid_from=_parse_ocpp_timestamp(entry.get("validFrom")),
-                    valid_to=_parse_ocpp_timestamp(entry.get("validTo")),
-                    language=str(language_value or ""),
-                    content=str(content_value or ""),
-                    component_name=str(component.get("name") or ""),
-                    component_instance=str(component.get("instance") or ""),
-                    variable_name=str(variable.get("name") or ""),
-                    variable_instance=str(variable.get("instance") or ""),
-                    raw_payload=entry,
-                )
-
-        await database_sync_to_async(_persist_display_messages)()
-        store.record_display_message_compliance(
-            self.charger_id,
-            request_id=request_id,
-            tbc=tbc,
-            messages=compliance_messages,
-            received_at=received_at,
+        return await self._action_handler("NotifyDisplayMessages").handle(
+            payload, msg_id, raw, text_data
         )
-        return {}
+
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingNeeds")
     async def _handle_notify_ev_charging_needs_action(
@@ -2633,189 +2388,10 @@ class CSMSConsumer(
     async def _handle_notify_monitoring_report_action(
         self, payload, msg_id, raw, text_data
     ):
-        payload_data = payload if isinstance(payload, dict) else {}
-        request_id_value = payload_data.get("requestId")
-        seq_no_value = payload_data.get("seqNo")
-        generated_at = _parse_ocpp_timestamp(payload_data.get("generatedAt"))
-        tbc_value = payload_data.get("tbc")
-        received_at = timezone.now()
-        try:
-            request_id = int(request_id_value) if request_id_value is not None else None
-        except (TypeError, ValueError):
-            request_id = None
-        try:
-            seq_no = int(seq_no_value) if seq_no_value is not None else None
-        except (TypeError, ValueError):
-            seq_no = None
-        tbc = bool(tbc_value) if tbc_value is not None else False
-        monitoring_data = payload_data.get("monitoringData")
-        if not isinstance(monitoring_data, (list, tuple)):
-            monitoring_data = []
-
-        normalized_records: list[dict[str, object]] = []
-
-        def _persist_monitoring_report() -> None:
-            charger = None
-            if self.charger and getattr(self.charger, "pk", None):
-                charger = self.charger
-            if charger is None and self.charger_id:
-                charger = Charger.objects.filter(
-                    charger_id=self.charger_id,
-                    connector_id=self.connector_value,
-                ).first()
-            if charger is None and self.charger_id:
-                charger, _created = Charger.objects.get_or_create(
-                    charger_id=self.charger_id,
-                    connector_id=self.connector_value,
-                )
-            if charger is None:
-                return
-
-            MonitoringReport.objects.create(
-                charger=charger,
-                request_id=request_id,
-                seq_no=seq_no,
-                generated_at=generated_at,
-                tbc=tbc,
-                raw_payload=payload_data,
-            )
-
-            for entry in monitoring_data:
-                if not isinstance(entry, dict):
-                    continue
-                component_data = entry.get("component")
-                variable_data = entry.get("variable")
-                if not isinstance(component_data, dict) or not isinstance(
-                    variable_data, dict
-                ):
-                    continue
-                component_name = str(component_data.get("name") or "").strip()
-                variable_name = str(variable_data.get("name") or "").strip()
-                if not component_name or not variable_name:
-                    continue
-                component_instance = str(component_data.get("instance") or "").strip()
-                variable_instance = str(variable_data.get("instance") or "").strip()
-                component_evse = component_data.get("evse")
-                evse_id = None
-                connector_id = None
-                if isinstance(component_evse, dict):
-                    try:
-                        evse_id = int(component_evse.get("id"))
-                    except (TypeError, ValueError):
-                        evse_id = None
-                    connector_id = component_evse.get("connectorId")
-                variable_obj, _created = Variable.objects.get_or_create(
-                    charger=charger,
-                    component_name=component_name,
-                    component_instance=component_instance,
-                    variable_name=variable_name,
-                    variable_instance=variable_instance,
-                    attribute_type="",
-                )
-
-                variable_monitoring = entry.get("variableMonitoring")
-                if not isinstance(variable_monitoring, (list, tuple)):
-                    continue
-                for monitor in variable_monitoring:
-                    if not isinstance(monitor, dict):
-                        continue
-                    monitoring_id_value = monitor.get("id") or monitor.get(
-                        "monitoringId"
-                    )
-                    try:
-                        monitoring_id = (
-                            int(monitoring_id_value)
-                            if monitoring_id_value is not None
-                            else None
-                        )
-                    except (TypeError, ValueError):
-                        monitoring_id = None
-                    if monitoring_id is None:
-                        continue
-                    severity_value = monitor.get("severity")
-                    try:
-                        severity = (
-                            int(severity_value) if severity_value is not None else None
-                        )
-                    except (TypeError, ValueError):
-                        severity = None
-                    threshold_value = monitor.get("value")
-                    threshold_text = (
-                        str(threshold_value) if threshold_value is not None else ""
-                    )
-                    monitor_type = str(monitor.get("type") or "").strip()
-                    transaction_value = monitor.get("transaction")
-                    is_transaction = (
-                        bool(transaction_value)
-                        if transaction_value is not None
-                        else False
-                    )
-                    MonitoringRule.objects.update_or_create(
-                        charger=charger,
-                        monitoring_id=monitoring_id,
-                        defaults={
-                            "variable": variable_obj,
-                            "severity": severity,
-                            "monitor_type": monitor_type,
-                            "threshold": threshold_text,
-                            "is_transaction": is_transaction,
-                            "is_active": True,
-                            "raw_payload": monitor,
-                        },
-                    )
-
-                    normalized_records.append(
-                        {
-                            "charger_id": charger.charger_id,
-                            "request_id": request_id,
-                            "seq_no": seq_no,
-                            "generated_at": generated_at,
-                            "tbc": tbc,
-                            "component_name": component_name,
-                            "component_instance": component_instance,
-                            "variable_name": variable_name,
-                            "variable_instance": variable_instance,
-                            "monitoring_id": monitoring_id,
-                            "severity": severity,
-                            "monitor_type": monitor_type,
-                            "threshold": threshold_text,
-                            "is_transaction": is_transaction,
-                            "evse_id": evse_id,
-                            "connector_id": connector_id,
-                        }
-                    )
-
-        await database_sync_to_async(_persist_monitoring_report)()
-        for record in normalized_records:
-            store.record_monitoring_report(
-                record.get("charger_id"),
-                request_id=record.get("request_id"),
-                seq_no=record.get("seq_no"),
-                generated_at=record.get("generated_at"),
-                tbc=record.get("tbc", False),
-                component_name=record.get("component_name", ""),
-                component_instance=record.get("component_instance", ""),
-                variable_name=record.get("variable_name", ""),
-                variable_instance=record.get("variable_instance", ""),
-                monitoring_id=record.get("monitoring_id"),
-                severity=record.get("severity"),
-                monitor_type=record.get("monitor_type", ""),
-                threshold=record.get("threshold", ""),
-                is_transaction=record.get("is_transaction", False),
-                evse_id=record.get("evse_id"),
-                connector_id=record.get("connector_id"),
-                received_at=received_at,
-            )
-        if request_id is not None and not tbc:
-            store.pop_monitoring_report_request(request_id)
-        self._log_notify_monitoring_report(
-            request_id=request_id,
-            seq_no=seq_no,
-            generated_at=generated_at,
-            tbc=tbc,
-            items=len(monitoring_data),
+        return await self._action_handler("NotifyMonitoringReport").handle(
+            payload, msg_id, raw, text_data
         )
-        return {}
+
 
     @protocol_call(
         "ocpp201",

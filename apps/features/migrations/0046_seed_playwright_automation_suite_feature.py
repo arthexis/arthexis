@@ -18,15 +18,15 @@ def seed_playwright_automation_suite_feature(apps, schema_editor):
             "display": "Playwright Automation",
             "summary": (
                 "Enable Playwright runtime automation entry points used by admin actions, "
-                "browser launch checks and scheduled screenshot workers."
+                "browser launch checks and on-demand screenshot runs."
             ),
             "is_enabled": True,
             "admin_requirements": (
                 "Run Playwright browser tests and trigger screenshot schedules from Django admin."
             ),
             "service_requirements": (
-                "Allow Playwright celery tasks and runtime launchers to execute when global "
-                "automation policy is enabled."
+                "Allow Playwright runtime launchers and admin-triggered screenshot runs when "
+                "global automation policy is enabled."
             ),
             "admin_views": [
                 "admin:playwright_playwrightbrowser_changelist",
@@ -35,7 +35,6 @@ def seed_playwright_automation_suite_feature(apps, schema_editor):
             "service_views": [
                 "apps.playwright.models.PlaywrightBrowser.create_driver",
                 "apps.playwright.models.execute_website_screenshot_schedule",
-                "apps.tasks.tasks.run_scheduled_website_screenshots",
             ],
             "code_locations": [
                 "apps/playwright/admin.py",
@@ -45,8 +44,7 @@ def seed_playwright_automation_suite_feature(apps, schema_editor):
             "metadata": {
                 "runtime_paths": [
                     "apps.playwright.models.PlaywrightBrowser.create_driver",
-                    "apps.playwright.models.schedule_pending_website_screenshots",
-                    "apps.tasks.tasks.run_scheduled_website_screenshots",
+                    "apps.playwright.models.execute_website_screenshot_schedule",
                 ],
                 "admin_paths": [
                     "admin:playwright_playwrightbrowser_changelist",

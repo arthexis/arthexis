@@ -1,0 +1,44 @@
+name: Dependency Submission
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+    paths:
+      - '**/pyproject.toml'
+      - '**/requirements*.txt'
+      - '**/Pipfile'
+      - '**/Pipfile.lock'
+      - '**/poetry.lock'
+      - '**/uv.lock'
+      - '.github/workflows/dependency-submission.yml'
+  pull_request:
+    paths:
+      - '**/pyproject.toml'
+      - '**/requirements*.txt'
+      - '**/Pipfile'
+      - '**/Pipfile.lock'
+      - '**/poetry.lock'
+      - '**/uv.lock'
+      - '.github/workflows/dependency-submission.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  dependency-submission:
+    name: Submit dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          clean: false
+
+      - name: Submit dependency snapshot
+        uses: advanced-security/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
+        with:
+          detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff

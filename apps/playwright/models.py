@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -471,26 +471,8 @@ def _run_pre_commands(page, pre_commands, *, default_timeout_ms: int) -> None:
 
 
 def schedule_pending_website_screenshots(now=None) -> list[int]:
-    """Execute screenshot schedules that are due."""
+    """No-op compatibility shim after retiring automatic schedule execution."""
 
-    if not is_suite_feature_enabled(PLAYWRIGHT_AUTOMATION_FEATURE_SLUG, default=True):
-        logger.info(
-            "Skipping Playwright screenshot schedules because suite feature %s is disabled.",
-            PLAYWRIGHT_AUTOMATION_FEATURE_SLUG,
-        )
-        return []
-
-    now = now or timezone.now()
-    executed: list[int] = []
-    for schedule in WebsiteScreenshotSchedule.objects.filter(is_active=True).exclude(sampling_period_minutes__isnull=True):
-        if schedule.sampling_period_minutes is None:
-            continue
-        due_at = schedule.last_sampled_at or (now - timedelta(minutes=schedule.sampling_period_minutes + 1))
-        if now < due_at + timedelta(minutes=schedule.sampling_period_minutes):
-            continue
-        try:
-            execute_website_screenshot_schedule(schedule)
-            executed.append(schedule.pk)
-        except Exception:
-            logger.exception("Failed to execute screenshot schedule %s", schedule.pk)
-    return executed
+    del now
+    logger.info("Skipping Playwright screenshot schedules: automatic execution is retired; run schedules on demand from admin.")
+    return []

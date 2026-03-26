@@ -5,7 +5,6 @@ from pathlib import Path
 
 from config.settings import apps as settings_apps
 
-
 def _write_app(apps_root: Path, relative_parts: tuple[str, ...]) -> None:
     app_dir = apps_root.joinpath(*relative_parts)
     app_dir.mkdir(parents=True, exist_ok=True)
@@ -26,7 +25,6 @@ def _write_app(apps_root: Path, relative_parts: tuple[str, ...]) -> None:
         encoding="utf-8",
     )
 
-
 def test_hidden_packages_stay_out_of_local_django_app_discovery(monkeypatch, tmp_path):
     apps_root = tmp_path / "apps"
     _write_app(apps_root, ("public_updates",))
@@ -37,7 +35,6 @@ def test_hidden_packages_stay_out_of_local_django_app_discovery(monkeypatch, tmp
 
     assert "apps.public_updates" in discovered
     assert "apps._prototypes.vision_lab" not in discovered
-
 
 def test_camera_utility_package_stays_out_of_local_django_app_discovery(
     monkeypatch, tmp_path
@@ -54,93 +51,9 @@ def test_camera_utility_package_stays_out_of_local_django_app_discovery(
 
     assert "apps.camera" not in settings_apps._load_local_apps()
 
-
-def test_legacy_camera_shim_remains_importable_for_prototype_integrations():
-    camera_module = importlib.import_module("apps.camera")
-    rpi_module = importlib.import_module("apps.camera.rpi")
-    rfid_module = importlib.import_module("apps.camera.rfid")
-
-    assert camera_module.capture_rpi_snapshot is rpi_module.capture_rpi_snapshot
-    assert rfid_module.queue_camera_snapshot is not None
-
-
-def test_removed_runtime_apps_only_remain_available_through_explicit_legacy_shims():
-    assert "apps.extensions" not in settings_apps.LOCAL_APPS
-    assert "apps.prompts" not in settings_apps.LOCAL_APPS
-    assert "apps.selenium" not in settings_apps.LOCAL_APPS
-    assert "apps.socials" not in settings_apps.LOCAL_APPS
-    assert "apps.sponsors" not in settings_apps.LOCAL_APPS
-    assert "apps.survey" not in settings_apps.LOCAL_APPS
-    assert (
-        "apps._legacy.prompts_migration_only.apps.PromptsMigrationOnlyConfig"
-        in settings_apps.LEGACY_MIGRATION_APPS
-    )
-    assert (
-        "apps._legacy.selenium_migration_only.apps.SeleniumMigrationOnlyConfig"
-        in settings_apps.LEGACY_MIGRATION_APPS
-    )
-    assert settings_apps.MIGRATION_MODULES["selenium"] == "apps.selenium.migrations"
-    assert (
-        settings_apps.MIGRATION_MODULES["socials"]
-        == "apps._legacy.socials_migration_only.migrations"
-    )
-    assert (
-        settings_apps.MIGRATION_MODULES["sponsors"]
-        == "apps._legacy.sponsors_migration_only.migrations"
-    )
-    assert (
-        "apps._legacy.socials_migration_only.apps.SocialsMigrationOnlyConfig"
-        in settings_apps.LEGACY_MIGRATION_APPS
-    )
-    assert (
-        "apps._legacy.sponsors_migration_only.apps.SponsorsMigrationOnlyConfig"
-        in settings_apps.LEGACY_MIGRATION_APPS
-    )
-    assert (
-        "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig"
-        in settings_apps.LEGACY_MIGRATION_APPS
-    )
-
-
-def test_legacy_migration_apps_are_kept_sorted_for_maintainability():
-    assert settings_apps.LEGACY_MIGRATION_APPS == sorted(
-        settings_apps.LEGACY_MIGRATION_APPS
-    )
-
-
-def test_legacy_runtime_packages_are_derived_from_legacy_migration_apps():
-    assert settings_apps._legacy_runtime_app_packages() == {
-        "apps.extensions",
-        "apps.prompts",
-        "apps.selenium",
-        "apps.socials",
-        "apps.sponsors",
-        "apps.survey",
-    }
-
-
-def test_legacy_shims_disable_after_switching_to_non_zero_major(monkeypatch):
-    monkeypatch.setattr(
-        settings_apps, "_migration_tracks", lambda: {"current_line": "1.x"}
-    )
-
-    assert settings_apps._legacy_shims_enabled() is False
-
-
-def test_recipes_legacy_migration_app_stays_enabled_after_major_switch(monkeypatch):
-    monkeypatch.setattr(
-        settings_apps, "_migration_tracks", lambda: {"current_line": "1.x"}
-    )
-
-    assert (
-        "apps._legacy.recipes_migration_only.apps.RecipesMigrationOnlyConfig"
-        in settings_apps._enabled_legacy_migration_apps()
-    )
-
-
 def test_archived_socials_and_sponsors_runtime_surfaces_are_removed():
     socials_files = {path.name for path in Path("apps/socials").iterdir() if path.is_file()}
-    sponsors_files = {path.name for path in Path("apps/sponsors").iterdir() if path.is_file()}
 
+    assert not Path("apps/selenium").exists()
     assert socials_files == {"__init__.py"}
-    assert sponsors_files == {"__init__.py"}
+    assert not Path("apps/sponsors").exists()

@@ -137,6 +137,15 @@ class Feature(Ownable):
     def get_absolute_url(self):
         return reverse("features:detail", kwargs={"slug": self.slug})
 
+    @property
+    def params_count(self) -> int:
+        """Return the count of configured feature parameter values."""
+
+        parameters = (self.metadata or {}).get("parameters")
+        if not isinstance(parameters, dict):
+            return 0
+        return len(parameters)
+
     def set_enabled(self, enabled: bool, *, update_fields: list[str] | None = None) -> bool:
         """Set and persist enabled state, returning whether a transition occurred."""
 

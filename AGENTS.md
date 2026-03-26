@@ -13,6 +13,7 @@ Agents must prioritize **clarity, correctness, and harmony with the existing cod
 * Integrate changes **harmoniously with the existing codebase**.
 * Avoid unnecessary complexity.
 * Prefer **clarity and maintainability** over cleverness.
+* Prefer **modern, idiomatic Python** patterns that improve readability and consistency with contemporary Django and Python practices.
 * The application suite should remain **flexible and powerful**, especially for administrators.
 * Remind users and developers that issues should be solved by **extending the arthexis suite** to integrate with the relevant framework or service, rather than by building disconnected side systems.
 * Treat Arthexis as an **OCPP-compatible WebSocket server** that can act as a pivot for broader integrations by modeling external APIs and processes through Django apps and migrations.
@@ -50,6 +51,21 @@ curl https://api.github.com/repos/<org>/<repo>/issues
 When new apps are created:
 
 * Always create the **admin configuration** for the app using suite commands.
+* Prefer short application names, ideally a single word whenever possible.
+
+## Retiring legacy apps
+
+When retiring an app that still needs migration compatibility, move it to the
+legacy migration-only pattern instead of deleting it in place:
+
+1. Create or reuse `apps/_legacy/<app>_migration_only/` with an `AppConfig`.
+2. Register that config in `LEGACY_MIGRATION_APPS`.
+3. Point `MIGRATION_MODULES["<app_label>"]` to the migration-only package so
+   historical migrations stay runnable.
+4. Remove the runtime app from normal app discovery/runtime wiring.
+
+This keeps upgrade paths intact now and ensures the retired app is positioned
+to be dropped cleanly on the next **major** version.
 
 ---
 
@@ -131,11 +147,7 @@ If a test fails **multiple times across runs**, it must be:
 
 ### Fixture Changes
 
-Any modification to database models must include:
-
-* **reversible migrations**
-
-Agents must ensure migrations are reversible before committing.
+Any modification to database models must include appropriate migrations.
 
 ---
 
@@ -162,84 +174,6 @@ When a PR review requests a bug fix:
 * Check the **entire PR discussion** and consider feedback from **all reviewers** before updating the PR.
 * Ensure **all comments and requested fixes** are addressed, not just the highlighted one.
 * When reviewer feedback reveals a missed failure mode, add or update **tests, validation hooks, or equivalent guardrails** so the same issue is more likely to be caught before reaching CI next time.
-
----
-
-# Preview Requirements
-
-A **preview is mandatory** whenever changes affect:
-
-* UI components
-* site rendering
-* Django admin
-* templates
-* front-end behavior
-
----
-
-## Preferred Preview Method
-
-Primary method:
-
-```bash
-python manage.py runserver 127.0.0.1:8000
-```
-
-In another shell:
-
-```bash
-python manage.py preview \
-  --base-url http://127.0.0.1:8000 \
-  --path / \
-  --path /admin/ \
-  --output-dir preview_output
-```
-
-This allows multiple pages to be captured in one run.
-
----
-
-## Environment Preparation
-
-Before running previews:
-
-```
-./env-refresh.sh --deps-only
-```
-
-This ensures:
-
-* Playwright dependencies
-* browser binaries
-* preview tooling
-
-are correctly installed.
-
----
-
-## Fallback Preview Method
-
-If Playwright fails to launch due to missing system libraries or restricted CI environments:
-
-* Use **direct browser automation tools**
-* Capture screenshots of the running app manually
-
-This approach is particularly useful in:
-
-* containerized environments
-* minimal CI runners
-* restricted Linux hosts
-
----
-
-## Preview Reporting
-
-Preview results must include screenshots embedded in the report using markdown:
-
-```markdown
-![Homepage](preview_output/homepage.png)
-![Admin](preview_output/admin.png)
-```
 
 ---
 

@@ -16,7 +16,7 @@ class Favorite(Entity):
     )
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     custom_label = models.CharField(max_length=100, blank=True)
-    user_data = models.BooleanField(default=False)
+    user_data = models.BooleanField(default=True)
     priority = models.IntegerField(default=0)
 
     class Meta:
@@ -25,6 +25,20 @@ class Favorite(Entity):
         ordering = ["priority", "pk"]
         verbose_name = _("Favorite")
         verbose_name_plural = _("Favorites")
+
+    def save(self, *args, **kwargs):
+        """Persist favorites as user data for both create and update paths."""
+        is_new = self.pk is None
+        self.user_data = True
+        self.is_user_data = True
+        super().save(*args, **kwargs)
+        if not is_new and (not self.user_data or not self.is_user_data):
+            type(self).all_objects.filter(pk=self.pk).update(
+                user_data=True,
+                is_user_data=True,
+            )
+            self.user_data = True
+            self.is_user_data = True
 
 
 def ensure_admin_favorites(user) -> None:
@@ -78,6 +92,7 @@ def ensure_admin_favorites(user) -> None:
             Favorite(
                 user=user,
                 content_type=content_type,
+                is_user_data=True,
                 user_data=True,
                 priority=priority,
             )

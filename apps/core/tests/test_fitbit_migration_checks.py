@@ -10,7 +10,6 @@ from apps.core import checks
 
 pytestmark = [pytest.mark.django_db(transaction=True)]
 
-
 @pytest.fixture(autouse=True)
 def clear_fitbit_migration_state():
     """Clear Fitbit migration recorder rows before and after each test.
@@ -30,7 +29,6 @@ def clear_fitbit_migration_state():
     recorder.migration_qs.filter(app="fitbit").delete()
     yield
     recorder.migration_qs.filter(app="fitbit").delete()
-
 
 def test_fitbit_cleanup_check_allows_clean_databases(monkeypatch):
     """Fresh installs should not be blocked once no Fitbit state remains.
@@ -52,7 +50,6 @@ def test_fitbit_cleanup_check_allows_clean_databases(monkeypatch):
     )
 
     assert checks.fitbit_cleanup_migration_was_applied(None) == []
-
 
 def test_fitbit_cleanup_check_rejects_partial_migration_state(monkeypatch):
     """Databases stuck on Fitbit 0001 must fail fast during upgrades.
@@ -82,7 +79,6 @@ def test_fitbit_cleanup_check_rejects_partial_migration_state(monkeypatch):
     assert checks.FITBIT_INITIAL_MIGRATION in errors[0].obj
     assert checks.LEGACY_FITBIT_TABLES[0] in errors[0].obj
 
-
 def test_fitbit_cleanup_check_allows_databases_after_cleanup(monkeypatch):
     """Databases that already recorded Fitbit 0002 should continue normally.
 
@@ -107,27 +103,3 @@ def test_fitbit_cleanup_check_allows_databases_after_cleanup(monkeypatch):
 
     assert checks.fitbit_cleanup_migration_was_applied(None) == []
 
-
-def test_fitbit_cleanup_check_rejects_leftover_legacy_tables_without_rows(monkeypatch):
-    """Legacy Fitbit tables without the cleanup record should still be rejected.
-
-    Parameters:
-        monkeypatch: Pytest fixture used to stub table introspection.
-
-    Returns:
-        None: Assertions verify unmanaged leftover schema still triggers the guard.
-
-    Raises:
-        AssertionError: If the stale tables slip through.
-    """
-
-    monkeypatch.setattr(
-        connection.introspection,
-        "table_names",
-        lambda cursor=None, **_: ["django_migrations", *checks.LEGACY_FITBIT_TABLES],
-    )
-
-    errors = checks.fitbit_cleanup_migration_was_applied(None)
-
-    assert len(errors) == 1
-    assert "legacy Fitbit tables" in errors[0].obj

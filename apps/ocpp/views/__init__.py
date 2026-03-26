@@ -3,6 +3,7 @@ from .charger_api import charger_detail, charger_list
 from .common import _aggregate_dashboard_state, _charger_state, _live_sessions
 from .dashboard import dashboard
 from .public import (
+    charger_account_summary,
     charger_log_page,
     charger_page,
     charger_session_search,
@@ -10,6 +11,7 @@ from .public import (
     charger_status_chart,
     charging_station_map,
     public_connector_page,
+    public_connector_page_create_account,
     supported_charger_detail,
     supported_chargers,
 )

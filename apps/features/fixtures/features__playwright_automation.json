@@ -4,13 +4,13 @@
     "fields": {
       "slug": "playwright-automation",
       "display": "Playwright Automation",
-      "summary": "Enable Playwright browser launch and scheduled screenshot automation across admin and celery workers.",
+      "summary": "Enable Playwright browser launch and on-demand screenshot automation from admin tools.",
       "is_enabled": true,
       "main_app": ["playwright"],
       "node_feature": null,
       "admin_requirements": "Allow admins to test browsers and run screenshot schedules.",
       "public_requirements": "",
-      "service_requirements": "Require both global suite enablement and per-engine node feature eligibility before browser launches and screenshot execution.",
+      "service_requirements": "Require both global suite enablement and per-engine node feature eligibility before browser launches and on-demand screenshot execution.",
       "admin_views": [
         "admin:playwright_playwrightbrowser_changelist",
         "admin:playwright_websitescreenshotschedule_changelist"
@@ -18,8 +18,7 @@
       "public_views": [],
       "service_views": [
         "apps.playwright.models.PlaywrightBrowser.create_driver",
-        "apps.playwright.models.execute_website_screenshot_schedule",
-        "apps.tasks.tasks.run_scheduled_website_screenshots"
+        "apps.playwright.models.execute_website_screenshot_schedule"
       ],
       "code_locations": [
         "apps/playwright/admin.py",
@@ -30,8 +29,7 @@
       "metadata": {
         "runtime_paths": [
           "apps.playwright.models.PlaywrightBrowser.create_driver",
-          "apps.playwright.models.schedule_pending_website_screenshots",
-          "apps.tasks.tasks.run_scheduled_website_screenshots"
+          "apps.playwright.models.execute_website_screenshot_schedule"
         ],
         "admin_paths": [
           "admin:playwright_playwrightbrowser_changelist",

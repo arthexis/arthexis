@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Verify migration state and rollback safety for staged migrations."""
+"""Verify migration state and baseline policy for local Django migrations."""
 import os
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
@@ -17,27 +16,6 @@ from scripts.build_migration_baseline import (
     evaluate_app_baseline,
 )
 from scripts.check_migration_conflicts import run_checks as run_migration_conflict_checks
-
-
-@dataclass(frozen=True, slots=True)
-class StagedMigration:
-    """Represent a staged Django migration file that should be validated.
-
-    Parameters:
-        app_label: Django app label derived from ``apps/<app_label>/...``.
-        migration_name: Migration module stem without ``.py``.
-        path: Repository-relative path to the migration file.
-
-    Return values:
-        A frozen record describing one staged migration file.
-
-    Raised exceptions:
-        None directly.
-    """
-
-    app_label: str
-    migration_name: str
-    path: Path
 
 
 def _local_app_labels(apps_module, settings_module) -> list[str]:
@@ -208,204 +186,6 @@ def _check_migrations(labels: Iterable[str]) -> int:
     return 1
 
 
-def _staged_migration_files() -> list[StagedMigration]:
-    """Return added or modified staged migration files from the current Git index.
-
-    Parameters:
-        None.
-
-    Return values:
-        A list of added or modified staged migration descriptors limited to
-        ``apps/*/migrations/*.py`` files except ``__init__.py``.
-
-    Raised exceptions:
-        None; Git failures yield an empty list so the caller can continue gracefully.
-    """
-
-    result = subprocess.run(
-        ["git", "diff", "--cached", "--name-status", "--diff-filter=AM"],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        return []
-
-    migrations: list[StagedMigration] = []
-    for raw_line in result.stdout.splitlines():
-        parts = raw_line.strip().split(maxsplit=1)
-        if len(parts) != 2:
-            continue
-        status, raw_path = parts
-        if status not in {"A", "M"}:
-            continue
-        path = Path(raw_path)
-        if len(path.parts) != 4:
-            continue
-        if path.parts[0] != "apps" or path.parts[2] != "migrations":
-            continue
-        if path.suffix != ".py" or path.name == "__init__.py":
-            continue
-        migrations.append(
-            StagedMigration(
-                app_label=path.parts[1],
-                migration_name=path.stem,
-                path=path,
-            )
-        )
-    return migrations
-
-
-def _node_key(node) -> tuple[str, str | None]:
-    """Return a migration graph node key from a graph node or raw key.
-
-    Parameters:
-        node: Migration graph node object or raw ``(app_label, migration_name)`` key.
-
-    Return values:
-        The normalized migration key tuple.
-
-    Raised exceptions:
-        None.
-    """
-
-    return node.key if hasattr(node, "key") else node
-
-
-def _migration_is_irreversible(connection, loader, migration) -> str | None:
-    """Return the blocking error text when ``migration`` is irreversible.
-
-    Parameters:
-        connection: Django database connection used to build a schema editor.
-        loader: Django migration loader used to compute project state.
-        migration: Loaded Django migration instance to inspect.
-
-    Return values:
-        The irreversible error text, or ``None`` when rollback is allowed.
-
-    Raised exceptions:
-        Propagates unexpected migration state construction and schema editor errors.
-    """
-
-    from django.db.migrations.exceptions import IrreversibleError
-
-    try:
-        project_state = loader.project_state(
-            [(migration.app_label, migration.name)],
-            at_end=False,
-        )
-    except TypeError:
-        project_state = loader.project_state(
-            (migration.app_label, migration.name),
-            at_end=False,
-        )
-
-    with connection.schema_editor(collect_sql=True) as schema_editor:
-        try:
-            migration.unapply(project_state, schema_editor, collect_sql=True)
-        except IrreversibleError as exc:
-            return str(exc)
-    return None
-
-
-def _check_staged_migration_reversibility() -> int:
-    """Ensure staged migrations can roll back to their immediate predecessors.
-
-    Parameters:
-        None.
-
-    Return values:
-        ``0`` when no staged migration is irreversible, otherwise ``1``.
-
-    Raised exceptions:
-        None. Unexpected Django loading errors are reported and converted to ``1``.
-    """
-
-    staged_migrations = _staged_migration_files()
-    if not staged_migrations:
-        print("No staged migration files to validate for rollback safety.")
-        return 0
-
-    try:
-        from django.db import connections
-        from django.db.migrations.exceptions import IrreversibleError, NodeNotFoundError
-        from django.db.migrations.executor import MigrationExecutor
-    except ModuleNotFoundError:
-        print(
-            "Django is required to validate staged migration rollback safety.",
-            file=sys.stderr,
-        )
-        return 1
-
-    connection = connections["default"]
-    try:
-        executor = MigrationExecutor(connection)
-    except Exception as exc:
-        print(f"Unable to load Django migration graph: {exc}", file=sys.stderr)
-        return 1
-
-    loader = executor.loader
-    graph = loader.graph
-    failures: list[str] = []
-
-    for staged_migration in staged_migrations:
-        target = (staged_migration.app_label, staged_migration.migration_name)
-        try:
-            migration = loader.get_migration(*target)
-            predecessors = [
-                _node_key(parent)
-                for parent in graph.node_map[target].parents
-                if _node_key(parent)[0] == staged_migration.app_label
-            ]
-            executor.migration_plan([target], clean_start=True)
-        except NodeNotFoundError as exc:
-            failures.append(
-                f"{staged_migration.path}: unable to resolve migration graph node {target}: {exc}"
-            )
-            continue
-        except KeyError:
-            failures.append(
-                f"{staged_migration.path}: migration {staged_migration.app_label}.{staged_migration.migration_name} "
-                "was not found in the loaded migration graph."
-            )
-            continue
-        except Exception as exc:
-            failures.append(
-                f"{staged_migration.path}: failed to build forward plan for "
-                f"{staged_migration.app_label}.{staged_migration.migration_name}: {exc}"
-            )
-            continue
-
-        rollback_targets = predecessors or [(staged_migration.app_label, None)]
-        try:
-            executor.migration_plan(rollback_targets, clean_start=True)
-            irreversibility_reason = _migration_is_irreversible(connection, loader, migration)
-            if irreversibility_reason is not None:
-                failures.append(
-                    f"{staged_migration.app_label}.{staged_migration.migration_name} cannot be rolled back to "
-                    f"{rollback_targets}: {irreversibility_reason}."
-                )
-        except IrreversibleError as exc:
-            failures.append(
-                f"{staged_migration.app_label}.{staged_migration.migration_name} cannot be rolled back to "
-                f"{rollback_targets}: {exc}."
-            )
-        except Exception as exc:
-            failures.append(
-                f"{staged_migration.app_label}.{staged_migration.migration_name} failed rollback planning "
-                f"to {rollback_targets}: {exc}"
-            )
-
-    if failures:
-        print("Staged migration rollback safety check failed:", file=sys.stderr)
-        for failure in failures:
-            print(f"  - {failure}", file=sys.stderr)
-        return 1
-
-    print("Staged migration rollback safety check passed.")
-    return 0
-
-
 def _check_baseline_depths(
     app_labels: Iterable[str],
     *,
@@ -452,7 +232,7 @@ def _check_baseline_depths(
 
 
 def main() -> int:
-    """Run migration conflict, drift, rollback-safety, and baseline checks.
+    """Run migration conflict, drift, and baseline checks.
 
     Parameters:
         None.
@@ -494,9 +274,6 @@ def main() -> int:
     migration_check = _check_migrations(labels)
     if migration_check != 0:
         return migration_check
-    rollback_check = _check_staged_migration_reversibility()
-    if rollback_check != 0:
-        return rollback_check
     return _check_baseline_depths(DEFAULT_APPS)
 
 

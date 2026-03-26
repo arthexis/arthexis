@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db.utils import OperationalError, ProgrammingError
 
 from .models import Feature
+from .parameters import get_feature_parameter
 
 PAGES_CHAT_FEATURE_SLUG = "pages-chat"
 STAFF_CHAT_BRIDGE_FEATURE_SLUG = "staff-chat-bridge"
@@ -37,6 +39,41 @@ def is_suite_feature_enabled(slug: str, *, default: bool = True) -> bool:
     if is_enabled is None:
         return default
     return bool(is_enabled)
+
+
+def get_cached_feature_enabled(
+    slug: str,
+    *,
+    cache_key: str,
+    timeout: int = 300,
+    default: bool = False,
+) -> bool:
+    """Return feature-enabled state with a shared cache strategy."""
+
+    cached = cache.get(cache_key)
+    if isinstance(cached, bool):
+        return cached
+    enabled = is_suite_feature_enabled(slug, default=default)
+    cache.set(cache_key, enabled, timeout=timeout)
+    return enabled
+
+
+def get_cached_feature_parameter(
+    slug: str,
+    key: str,
+    *,
+    cache_key: str,
+    timeout: int = 300,
+    fallback: str = "",
+) -> str:
+    """Return feature parameter value with cache-backed reads."""
+
+    cached = cache.get(cache_key)
+    if isinstance(cached, str):
+        return cached
+    value = get_feature_parameter(slug, key, fallback=fallback)
+    cache.set(cache_key, value, timeout=timeout)
+    return value
 
 
 def is_pages_chat_enabled(*, default: bool = False) -> bool:
@@ -71,6 +108,8 @@ def is_pages_chat_runtime_enabled(*, default: bool = False) -> bool:
 __all__ = [
     "PAGES_CHAT_FEATURE_SLUG",
     "STAFF_CHAT_BRIDGE_FEATURE_SLUG",
+    "get_cached_feature_enabled",
+    "get_cached_feature_parameter",
     "is_pages_chat_enabled",
     "is_pages_chat_runtime_enabled",
     "is_suite_feature_enabled",

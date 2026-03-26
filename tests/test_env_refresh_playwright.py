@@ -47,6 +47,26 @@ def test_playwright_host_dependency_install_warns_without_root_access(tmp_path: 
     assert f"'{tmp_path}/fake-python -m playwright install-deps chromium firefox'" in output
 
 
+def test_should_install_preview_dependencies_for_deps_only(tmp_path: Path):
+    result = _run_bash(
+        """
+        source ./env-refresh.sh
+        DEPS_ONLY=1
+        INSTALL_PREVIEW_DEPS=0
+        if should_install_preview_dependencies; then
+          echo ENABLED
+        else
+          echo DISABLED
+        fi
+        """,
+        tmp_path=tmp_path,
+    )
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "ENABLED" in output
+
+
 def test_playwright_browser_install_reports_missing_host_dependencies(tmp_path: Path):
     fake_python = tmp_path / "fake-python.sh"
     command_log = tmp_path / "python-commands.log"

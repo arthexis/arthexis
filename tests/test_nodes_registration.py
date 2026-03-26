@@ -8,8 +8,14 @@ from uuid import uuid4
 import pytest
 import requests
 from django.contrib.sites.models import Site
+from django.http import HttpResponse, JsonResponse
+from django.test import RequestFactory
 from django.urls import reverse
 
+from apps.nodes.admin.visitor_registration import (
+    VisitorRegistrationRequest,
+    VisitorRegistrationService,
+)
 from apps.nodes.models import Node
 from apps.nodes.views import registration as registration_views
 
@@ -102,6 +108,139 @@ def test_resolve_visitor_base_defaults_to_loopback():
     assert visitor_host == "127.0.0.1"
     assert visitor_port == 443
     assert visitor_scheme == "https"
+
+
+def test_visitor_registration_request_rejects_malformed_port():
+    """Request parser should reject non-numeric visitor ports."""
+    request = RequestFactory().post(
+        "/admin/nodes/node/register-visitor/",
+        data={"visitor_host": "visitor.test", "visitor_port": "invalid"},
+    )
+
+    parsed = VisitorRegistrationRequest.from_http_request(request)
+
+    assert parsed.visitor_error == "Visitor port is invalid. Use a value between 1 and 65535."
+    assert parsed.visitor_base == "https://visitor.test:443"
+
+
+def test_visitor_registration_request_rejects_malformed_host():
+    """Request parser should reject malformed visitor hosts."""
+    request = RequestFactory().post(
+        "/admin/nodes/node/register-visitor/",
+        data={"visitor_host": "https://[not-valid", "visitor_port": "443"},
+    )
+
+    parsed = VisitorRegistrationRequest.from_http_request(request)
+
+    assert parsed.visitor_error == "Visitor address missing. Reload with ?visitor=host[:port]."
+    assert parsed.visitor_base is None
+
+
+def test_visitor_registration_request_post_requires_submitted_host():
+    """POST parser should reject requests that omit the submitted visitor host."""
+    request = RequestFactory().post(
+        "/admin/nodes/node/register-visitor/?visitor=query.example:9443",
+        data={"visitor_host": "", "visitor_port": ""},
+    )
+
+    parsed = VisitorRegistrationRequest.from_http_request(request, default_port=8888)
+
+    assert parsed.visitor_error == "Visitor address missing. Reload with ?visitor=host[:port]."
+    assert parsed.visitor_base is None
+
+
+def test_visitor_registration_request_post_empty_port_uses_post_default():
+    """POST parser should use the provided default when visitor_port is empty."""
+    request = RequestFactory().post(
+        "/admin/nodes/node/register-visitor/",
+        data={"visitor_host": "visitor.test", "visitor_port": ""},
+    )
+
+    parsed = VisitorRegistrationRequest.from_http_request(request, default_port=8888)
+
+    assert parsed.visitor_base == "https://visitor.test:8888"
+    assert parsed.visitor_port == 8888
+
+
+def test_visitor_registration_service_handles_non_json_proxy_response(monkeypatch):
+    """Service should normalize non-JSON proxy errors into a structured result."""
+
+    def fake_proxy(_request):
+        return HttpResponse("not-json", status=502, content_type="text/plain")
+
+    monkeypatch.setattr("apps.nodes.admin.visitor_registration.register_visitor_proxy", fake_proxy)
+    parsed = VisitorRegistrationRequest(
+        token="abc123",
+        visitor_base="https://visitor.test:443",
+        visitor_error=None,
+        visitor_host="visitor.test",
+        visitor_info_url="https://visitor.test:443/nodes/info/",
+        visitor_port=443,
+        visitor_register_url="https://visitor.test:443/nodes/register/",
+        visitor_scheme="https",
+    )
+
+    result = VisitorRegistrationService(user=None).register(parsed)
+
+    assert result.status == "error"
+    assert result.summary == {
+        "status": "error",
+        "message": "Registration proxy returned an invalid response.",
+    }
+    assert result.errors == ["Registration proxy returned an invalid response."]
+
+
+def test_visitor_registration_service_success_with_warnings(monkeypatch):
+    """Service should expose HTTPS warnings when proxy signals weak transport settings."""
+
+    def fake_proxy(_request):
+        return JsonResponse(
+            {
+                "host": {"id": 1, "detail": "host-ok"},
+                "visitor": {"id": 2, "detail": "visitor-ok"},
+                "host_requires_https": False,
+                "visitor_requires_https": False,
+            }
+        )
+
+    monkeypatch.setattr("apps.nodes.admin.visitor_registration.register_visitor_proxy", fake_proxy)
+    parsed = VisitorRegistrationRequest(
+        token="abc123",
+        visitor_base="https://visitor.test:443",
+        visitor_error=None,
+        visitor_host="visitor.test",
+        visitor_info_url="https://visitor.test:443/nodes/info/",
+        visitor_port=443,
+        visitor_register_url="https://visitor.test:443/nodes/register/",
+        visitor_scheme="https",
+    )
+
+    result = VisitorRegistrationService(user=None).register(parsed)
+
+    assert result.status == "success"
+    assert result.host["status"] == "success"
+    assert result.visitor["status"] == "success"
+    assert "Host node is not configured to require HTTPS. Update its Sites settings." in result.warnings
+    assert "Visitor node is not configured to require HTTPS. Update its Sites settings." in result.warnings
+
+
+def test_visitor_registration_service_missing_visitor_address_short_circuits():
+    """Service should not proxy when visitor address parsing already failed."""
+    parsed = VisitorRegistrationRequest(
+        token="abc123",
+        visitor_base=None,
+        visitor_error="Visitor address missing. Reload with ?visitor=host[:port].",
+        visitor_host="",
+        visitor_info_url="",
+        visitor_port=None,
+        visitor_register_url="",
+        visitor_scheme="https",
+    )
+
+    result = VisitorRegistrationService(user=None).register(parsed)
+
+    assert result.status == "error"
+    assert result.errors == ["Visitor address missing. Reload with ?visitor=host[:port]."]
 
 
 @pytest.mark.django_db

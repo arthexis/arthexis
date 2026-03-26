@@ -103,14 +103,10 @@ def create_manual_task_github_issue(manual_task_id: int, trigger: str) -> str | 
 
 @shared_task(name="apps.playwright.tasks.run_scheduled_website_screenshots")
 def run_scheduled_website_screenshots() -> list[int]:
-    """Execute due Playwright website screenshot schedules."""
+    """No-op task kept for backward compatibility after retiring auto schedules."""
 
-    from apps.playwright.models import schedule_pending_website_screenshots
-
-    executed = schedule_pending_website_screenshots()
-    if executed:
-        logger.info("Executed %s scheduled website screenshots", len(executed))
-    return executed
+    logger.info("Skipping scheduled Playwright screenshot task: run screenshot schedules on demand from admin.")
+    return []
 
 
 @shared_task(name="apps.repos.tasks.report_exception_to_github")

@@ -1,6 +1,7 @@
 import json
 import re
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from datetime import timezone as dt_timezone
@@ -12,12 +13,6 @@ from urllib.parse import urljoin
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.contrib import messages
-from django.http import Http404, HttpResponse, JsonResponse
-from django.http.request import split_domain_port
-from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import get_object_or_404, redirect, render, resolve_url
-from django.template.loader import render_to_string
-from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import ValidationError
@@ -91,6 +86,227 @@ from .actions.common import (
 _PREFIXED_STATUS_PATTERN = re.compile(
     r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?\s+(StatusNotification processed:)",
 )
+LOG_TIMESTAMP_PREFIX_LENGTH = 24
+SEVERITY_ERROR = ("error", "#dc3545", "Error")
+SEVERITY_INFO = ("info", "#0d6efd", "Info")
+SEVERITY_WARNING = ("warning", "#ffc107", "Warning")
+
+
+@dataclass(frozen=True)
+class EventFeedConfig:
+    """Configuration for building non-transaction event rows from log lines."""
+
+    error_statuses: frozenset[str]
+    excluded_prefixes: tuple[str, ...]
+    important_prefixes: tuple[str, ...]
+    status_prefix: str
+    warning_statuses: frozenset[str]
+
+
+@dataclass(frozen=True)
+class EventRow:
+    """Typed status-page row before template serialization."""
+
+    details: str
+    event: str
+    event_id: int | None
+    severity: str
+    severity_color: str
+    severity_label: str
+    timestamp: datetime
+
+    def to_dict(self) -> dict[str, str | int | datetime | None]:
+        """Serialize row for template rendering."""
+
+        return {
+            "timestamp": self.timestamp,
+            "event": self.event,
+            "details": self.details,
+            "severity": self.severity,
+            "severity_color": self.severity_color,
+            "severity_label": self.severity_label,
+            "event_id": self.event_id,
+        }
+
+
+def classify_event_severity(
+    event_name: str,
+    details: str,
+    config: EventFeedConfig,
+) -> tuple[str, str, str]:
+    """Return severity metadata for a normalized event row."""
+
+    text = f"{event_name} {details}".casefold()
+    if "status" in event_name.casefold():
+        status_token = details.casefold().strip()
+        if status_token in config.error_statuses:
+            return SEVERITY_ERROR
+        if status_token in config.warning_statuses:
+            return SEVERITY_WARNING
+    if any(token in text for token in {"error", "fault", "rejected", "closed"}):
+        return SEVERITY_ERROR
+    if any(token in text for token in {"unavailable", "timeout", "retry"}):
+        return SEVERITY_WARNING
+    return SEVERITY_INFO
+
+
+def _transaction_id_from_payload(payload: dict[str, object]) -> int | None:
+    """Extract a transaction identifier from log payloads when present."""
+
+    for key in ("transactionId", "transaction_id", "txId", "tx_id"):
+        value = payload.get(key)
+        try:
+            normalized = int(value)
+        except (TypeError, ValueError):
+            continue
+        if normalized > 0:
+            return normalized
+    return None
+
+
+def _row_identity_for_dedupe(
+    source_key: str,
+    payload: dict[str, object] | None = None,
+) -> str | int | None:
+    """Return connector identity component used for event deduplication."""
+
+    if payload is not None:
+        connector_value = payload.get("connectorId")
+        try:
+            return int(connector_value)
+        except (TypeError, ValueError):
+            pass
+    if store.IDENTITY_SEPARATOR in source_key:
+        _, slug = source_key.split(store.IDENTITY_SEPARATOR, 1)
+        if slug in {store.AGGREGATE_SLUG, store.PENDING_SLUG}:
+            return None
+        try:
+            return int(slug)
+        except (TypeError, ValueError):
+            return slug
+    return None
+
+
+def _event_dedupe_key(
+    row: EventRow,
+    identity: str | int | None,
+) -> tuple[str, str, int | None, str | int | None, datetime | None]:
+    """Return a stable dedupe key for non-transaction event rows."""
+
+    if row.event == "Status":
+        return row.event, row.details, row.event_id, identity, None
+    return row.event, row.details, row.event_id, identity, row.timestamp
+
+
+def iter_candidate_log_entries(
+    keys: list[str],
+    config: EventFeedConfig,
+) -> Iterator[tuple[str, store.LogEntry, str]]:
+    """Yield normalized candidate log lines with their source key and entry."""
+
+    for source_key in keys:
+        for entry in store.iter_log_entries(source_key, log_type="charger"):
+            if len(entry.text) < LOG_TIMESTAMP_PREFIX_LENGTH:
+                continue
+            message = entry.text[LOG_TIMESTAMP_PREFIX_LENGTH:].strip()
+            prefixed_match = _PREFIXED_STATUS_PATTERN.match(message)
+            if prefixed_match is not None:
+                message = message[prefixed_match.start(1) :]
+            if message.startswith(config.excluded_prefixes):
+                continue
+            yield source_key, entry, message
+
+
+def parse_event_row(
+    source_key: str,
+    entry: store.LogEntry,
+    message: str,
+    config: EventFeedConfig,
+) -> tuple[EventRow | None, str | int | None]:
+    """Parse one normalized message into an event row and dedupe identity."""
+
+    dedupe_identity = _row_identity_for_dedupe(source_key)
+
+    if message.startswith(config.status_prefix):
+        payload_text = message.split(":", 1)[1].strip()
+        try:
+            payload = json.loads(payload_text)
+        except json.JSONDecodeError:
+            return None, dedupe_identity
+        dedupe_identity = _row_identity_for_dedupe(source_key, payload)
+        status_value = str(payload.get("status") or "").strip()
+        if not status_value:
+            return None, dedupe_identity
+        severity, severity_color, severity_label = classify_event_severity(
+            "Status",
+            status_value,
+            config,
+        )
+        return (
+            EventRow(
+                timestamp=entry.timestamp,
+                event="Status",
+                details=status_value,
+                severity=severity,
+                severity_color=severity_color,
+                severity_label=severity_label,
+                event_id=_transaction_id_from_payload(payload),
+            ),
+            dedupe_identity,
+        )
+
+    if message.startswith(config.important_prefixes):
+        event_name, _, detail_text = message.partition(":")
+        details = detail_text.strip() or "-"
+        severity, severity_color, severity_label = classify_event_severity(
+            event_name,
+            details,
+            config,
+        )
+        return (
+            EventRow(
+                timestamp=entry.timestamp,
+                event=event_name.strip(),
+                details=details,
+                severity=severity,
+                severity_color=severity_color,
+                severity_label=severity_label,
+                event_id=None,
+            ),
+            dedupe_identity,
+        )
+
+    return None, dedupe_identity
+
+
+def dedupe_event_rows(
+    rows: list[tuple[EventRow, str | int | None]],
+) -> list[EventRow]:
+    """Dedupe rows while preserving newer rows when keys collide."""
+
+    deduped_rows: dict[
+        tuple[str, str, int | None, str | int | None, datetime | None],
+        EventRow,
+    ] = {}
+    for row, identity in rows:
+        _update_deduped_event_rows(deduped_rows, row, identity)
+    return list(deduped_rows.values())
+
+
+def _update_deduped_event_rows(
+    deduped_rows: dict[
+        tuple[str, str, int | None, str | int | None, datetime | None],
+        EventRow,
+    ],
+    row: EventRow,
+    identity: str | int | None,
+) -> None:
+    """Update dedupe map with newer row for a matching dedupe key."""
+
+    dedupe_key = _event_dedupe_key(row, identity)
+    existing = deduped_rows.get(dedupe_key)
+    if existing is None or row.timestamp > existing.timestamp:
+        deduped_rows[dedupe_key] = row
 
 
 def _clear_stale_statuses_for_view() -> None:
@@ -439,9 +655,9 @@ def _collect_status_events(
     latest_before_window: tuple[datetime, str] | None = None
 
     for entry in store.iter_log_entries(keys, log_type="charger", since=window_start):
-        if len(entry.text) < 24:
+        if len(entry.text) < LOG_TIMESTAMP_PREFIX_LENGTH:
             continue
-        message = entry.text[24:].strip()
+        message = entry.text[LOG_TIMESTAMP_PREFIX_LENGTH:].strip()
         log_timestamp = entry.timestamp
 
         event_time = log_timestamp
@@ -528,195 +744,47 @@ def _important_non_transaction_events(
         keys.append(store.identity_key(serial, None))
         keys.append(store.pending_key(serial))
 
-    status_prefix = "StatusNotification processed:"
-    excluded_prefixes = (
-        "TransactionEvent received:",
-        "StartTransaction processed:",
-        "StopTransaction processed:",
-        "MeterValues processed:",
-        "MeterValues queued:",
-        "MeterValues received:",
-    )
-    important_prefixes = [
-        "Connected",
-        "Closed",
-        "Heartbeat",
-        "BootNotification",
+    important_prefixes = (
         "Authorize",
-    ]
+        "BootNotification",
+        "Closed",
+        "Connected",
+        "Heartbeat",
+    )
     if include_sensitive:
-        important_prefixes.extend(
-            [
-                "DiagnosticsStatusNotification",
-                "FirmwareStatusNotification",
-                "SecurityEventNotification",
-            ]
+        important_prefixes += (
+            "DiagnosticsStatusNotification",
+            "FirmwareStatusNotification",
+            "SecurityEventNotification",
         )
-    important_prefixes = tuple(important_prefixes)
-
-    warning_statuses = {"faulted", "suspendedev", "suspendedevse", "unavailable"}
-    error_statuses = {"error", "offline", "closed", "rejected"}
-
-    def _event_meta(
-        event_name: str,
-        details: str,
-    ) -> tuple[str, str, str]:
-        """Return severity metadata for a normalized event row."""
-
-        text = f"{event_name} {details}".casefold()
-        if any(token in text for token in {"error", "fault", "rejected", "closed"}):
-            return "error", "#dc3545", "Error"
-        if "status" in event_name.casefold():
-            status_token = details.casefold().strip()
-            if status_token in error_statuses:
-                return "error", "#dc3545", "Error"
-            if status_token in warning_statuses:
-                return "warning", "#ffc107", "Warning"
-        if any(token in text for token in {"unavailable", "timeout", "retry"}):
-            return "warning", "#ffc107", "Warning"
-        return "info", "#0d6efd", "Info"
-
-    def _transaction_id_from_payload(payload: dict[str, object]) -> int | None:
-        """Extract a transaction identifier from log payloads when present."""
-
-        for key in ("transactionId", "transaction_id", "txId", "tx_id"):
-            value = payload.get(key)
-            try:
-                normalized = int(value)
-            except (TypeError, ValueError):
-                continue
-            if normalized > 0:
-                return normalized
-        return None
-
-    events: list[dict[str, str | int | datetime | None]] = []
+    config = EventFeedConfig(
+        error_statuses=frozenset({"closed", "error", "offline", "rejected"}),
+        excluded_prefixes=(
+            "TransactionEvent received:",
+            "StartTransaction processed:",
+            "StopTransaction processed:",
+            "MeterValues processed:",
+            "MeterValues queued:",
+            "MeterValues received:",
+        ),
+        important_prefixes=important_prefixes,
+        status_prefix="StatusNotification processed:",
+        warning_statuses=frozenset(
+            {"faulted", "suspendedev", "suspendedevse", "unavailable"}
+        ),
+    )
     deduped_rows: dict[
         tuple[str, str, int | None, str | int | None, datetime | None],
-        dict[str, str | int | datetime | None],
+        EventRow,
     ] = {}
+    for source_key, entry, message in iter_candidate_log_entries(keys, config):
+        row, dedupe_identity = parse_event_row(source_key, entry, message, config)
+        if row is not None:
+            _update_deduped_event_rows(deduped_rows, row, dedupe_identity)
 
-    def _row_identity_for_dedupe(
-        source_key: str,
-        payload: dict[str, object] | None = None,
-    ) -> str | int | None:
-        """Return the connector identity component used for event deduplication."""
-
-        if payload is not None:
-            connector_value = payload.get("connectorId")
-            try:
-                return int(connector_value)
-            except (TypeError, ValueError):
-                pass
-        if store.IDENTITY_SEPARATOR in source_key:
-            _, slug = source_key.split(store.IDENTITY_SEPARATOR, 1)
-            if slug in {store.AGGREGATE_SLUG, store.PENDING_SLUG}:
-                return None
-            try:
-                return int(slug)
-            except (TypeError, ValueError):
-                return slug
-        return None
-
-    def _event_dedupe_key(
-        row: dict[str, str | int | datetime | None],
-        identity: str | int | None,
-    ) -> tuple[str, str, int | None, str | int | None, datetime | None] | None:
-        """Return a stable dedupe key for non-transaction event rows."""
-
-        timestamp = row.get("timestamp")
-        event_name = row.get("event")
-        details = row.get("details")
-        if not isinstance(event_name, str):
-            return None
-        if not isinstance(details, str):
-            return None
-        if timestamp is not None and not isinstance(timestamp, datetime):
-            return None
-        event_id = row.get("event_id")
-        if not isinstance(event_id, int):
-            event_id = None
-        if event_name == "Status":
-            return event_name, details, event_id, identity, None
-        return event_name, details, event_id, identity, timestamp
-
-    for source_key in keys:
-        for entry in store.iter_log_entries(source_key, log_type="charger"):
-            if len(entry.text) < 24:
-                continue
-            message = entry.text[24:].strip()
-            prefixed_match = _PREFIXED_STATUS_PATTERN.match(message)
-            if prefixed_match is not None:
-                message = message[prefixed_match.start(1) :]
-            if message.startswith(excluded_prefixes):
-                continue
-
-            row: dict[str, str | int | datetime | None] | None = None
-            dedupe_identity = _row_identity_for_dedupe(source_key)
-
-            if message.startswith(status_prefix):
-                payload_text = message.split(":", 1)[1].strip()
-                try:
-                    payload = json.loads(payload_text)
-                except json.JSONDecodeError:
-                    continue
-                dedupe_identity = _row_identity_for_dedupe(source_key, payload)
-                status_value = str(payload.get("status") or "").strip()
-                if not status_value:
-                    continue
-                severity, severity_color, severity_label = _event_meta(
-                    "Status", status_value
-                )
-                row = {
-                    "timestamp": entry.timestamp,
-                    "event": "Status",
-                    "details": status_value,
-                    "severity": severity,
-                    "severity_color": severity_color,
-                    "severity_label": severity_label,
-                    "event_id": _transaction_id_from_payload(payload),
-                }
-            elif message.startswith(important_prefixes):
-                event_name, _, detail_text = message.partition(":")
-                details = detail_text.strip() or "-"
-                severity, severity_color, severity_label = _event_meta(
-                    event_name, details
-                )
-                row = {
-                    "timestamp": entry.timestamp,
-                    "event": event_name.strip(),
-                    "details": details,
-                    "severity": severity,
-                    "severity_color": severity_color,
-                    "severity_label": severity_label,
-                    "event_id": None,
-                }
-
-            if row is None:
-                continue
-            dedupe_key = _event_dedupe_key(row, dedupe_identity)
-            if dedupe_key is not None:
-                existing = deduped_rows.get(dedupe_key)
-                if existing is None:
-                    deduped_rows[dedupe_key] = row
-                    continue
-
-                existing_timestamp = existing.get("timestamp")
-                row_timestamp = row.get("timestamp")
-
-                if existing_timestamp is None and row_timestamp is not None:
-                    deduped_rows[dedupe_key] = row
-                elif (
-                    isinstance(existing_timestamp, datetime)
-                    and isinstance(row_timestamp, datetime)
-                    and row_timestamp > existing_timestamp
-                ):
-                    deduped_rows[dedupe_key] = row
-                continue
-            events.append(row)
-
-    events.extend(deduped_rows.values())
-
-    return sorted(events, key=lambda item: item["timestamp"], reverse=True)[:limit]
+    deduped = list(deduped_rows.values())
+    serialized = [row.to_dict() for row in deduped]
+    return sorted(serialized, key=lambda item: item["timestamp"], reverse=True)[:limit]
 
 
 def _usage_timeline(

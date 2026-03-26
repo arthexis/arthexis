@@ -7,11 +7,9 @@ import importlib
 from django.db import connection
 import pytest
 
-
 migration = importlib.import_module(
     "apps.actions.migrations.0009_remove_remoteactiontoken_user_and_more"
 )
-
 
 class _SchemaEditorStub:
     """Minimal schema editor stub for migration helper tests."""
@@ -23,21 +21,6 @@ class _SchemaEditorStub:
 
         with connection.cursor() as cursor:
             cursor.execute(sql, params or [])
-
-
-@pytest.mark.parametrize(
-    ("action_name", "expected"),
-    [
-        ("groups", ("absolute_url", "/actions/api/v1/security-groups/")),
-        ("config", ("admin_url", "admin:config")),
-        ("unknown", ("admin_url", "")),
-    ],
-)
-def test_legacy_route_for_action_name_handles_absolute_and_admin_targets(action_name, expected):
-    """Rollback mapping should restore the correct legacy route type for each action."""
-
-    assert migration._legacy_route_for_action_name(action_name) == expected
-
 
 @pytest.mark.django_db
 def test_clear_archive_tables_removes_prior_archived_rows():

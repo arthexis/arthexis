@@ -36,7 +36,9 @@ class FavoriteToggleViewTests(TestCase):
         favorite = Favorite.objects.get(user=self.user, content_type=self.content_type)
         self.assertEqual(favorite.custom_label, "")
         self.assertEqual(favorite.priority, 0)
-        self.assertFalse(favorite.user_data)
+        self.assertTrue(favorite.user_data)
+        self.assertTrue(favorite.is_user_data)
+
     def test_duplicate_add_falls_back_to_existing_favorite(self):
         """Regression: race-condition duplicate add should update existing favorite."""
 
@@ -78,6 +80,7 @@ class FavoriteToggleViewTests(TestCase):
         self.assertEqual(existing.custom_label, "Updated")
         self.assertEqual(existing.priority, 3)
         self.assertTrue(existing.user_data)
+        self.assertTrue(existing.is_user_data)
 
 
 class FavoriteListViewTests(TestCase):
@@ -102,7 +105,10 @@ class FavoriteListViewTests(TestCase):
             content_type=self.content_type,
             custom_label="Before",
             priority=1,
+        )
+        Favorite.all_objects.filter(pk=favorite.pk).update(
             user_data=False,
+            is_user_data=False,
         )
 
         response = self.client.post(
@@ -118,6 +124,9 @@ class FavoriteListViewTests(TestCase):
         self.assertEqual(favorite.custom_label, "After")
         self.assertEqual(favorite.priority, 1)
         self.assertTrue(favorite.user_data)
+        self.assertTrue(favorite.is_user_data)
+
+
 class RecoverSelectedActionTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
