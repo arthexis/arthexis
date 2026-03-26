@@ -64,7 +64,6 @@ def test_node_info_registers_missing_local(client, monkeypatch):
     )
 
 @pytest.mark.django_db
-@pytest.mark.django_db
 def test_visitor_registration_request_post_requires_submitted_host():
     """POST parser should reject requests that omit the submitted visitor host."""
     request = RequestFactory().post(
@@ -76,6 +75,30 @@ def test_visitor_registration_request_post_requires_submitted_host():
 
     assert parsed.visitor_error == "Visitor address missing. Reload with ?visitor=host[:port]."
     assert parsed.visitor_base is None
+
+def test_visitor_registration_request_post_rejects_malformed_host():
+    """POST parser should reject malformed visitor hosts instead of normalizing unsafe input."""
+    request = RequestFactory().post(
+        "/admin/nodes/node/register-visitor/?visitor=query.example:9443",
+        data={"visitor_host": "https://[broken", "visitor_port": ""},
+    )
+
+    parsed = VisitorRegistrationRequest.from_http_request(request, default_port=8888)
+
+    assert parsed.visitor_error == "Visitor address missing. Reload with ?visitor=host[:port]."
+    assert parsed.visitor_base is None
+
+def test_visitor_registration_request_post_rejects_malformed_port():
+    """POST parser should reject malformed ports and return an explicit validation error."""
+    request = RequestFactory().post(
+        "/admin/nodes/node/register-visitor/?visitor=query.example:9443",
+        data={"visitor_host": "visitor.example", "visitor_port": "not-a-port"},
+    )
+
+    parsed = VisitorRegistrationRequest.from_http_request(request, default_port=8888)
+
+    assert parsed.visitor_error == "Visitor port is invalid. Use a value between 1 and 65535."
+    assert parsed.visitor_base == "https://visitor.example:8888"
 
 def test_visitor_registration_service_handles_non_json_proxy_response(monkeypatch):
     """Service should normalize non-JSON proxy errors into a structured result."""

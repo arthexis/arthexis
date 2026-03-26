@@ -145,6 +145,56 @@ def test_build_godaddy_certbot_command_honors_sandbox_override():
 
     assert env["GODADDY_USE_SANDBOX"] == "0"
 
+def test_extract_live_certificate_paths_from_certbot_output_returns_paths():
+    """Extractor should parse certbot output paths used by issuance workflows."""
+    output = (
+        "Successfully received certificate.\n"
+        "Certificate is saved at: /etc/letsencrypt/live/example.com/fullchain.pem\n"
+        "Key is saved at: /etc/letsencrypt/live/example.com/privkey.pem\n"
+    )
+
+    result = services.extract_live_certificate_paths_from_certbot_output(output)
+
+    assert result == (
+        Path("/etc/letsencrypt/live/example.com/fullchain.pem"),
+        Path("/etc/letsencrypt/live/example.com/privkey.pem"),
+    )
+
+def test_build_godaddy_certbot_command_preserves_env_and_hooks():
+    """GoDaddy certbot command should preserve env and include both manual hooks."""
+    credential = SimpleNamespace(
+        use_sandbox=True,
+        default_domain="example.com",
+        resolve_sigils=lambda name: {
+            "api_key": "key",
+            "api_secret": "secret",
+            "customer_id": "cust123",
+        }.get(name),
+    )
+
+    command, env = services._build_godaddy_certbot_command(
+        domain="example.com",
+        email="ops@example.com",
+        dns_credential=credential,
+        dns_propagation_seconds=120,
+        dns_use_sandbox=None,
+        sudo="sudo",
+    )
+
+    assert command[0] == "sudo"
+    assert command[1].startswith("--preserve-env=")
+    assert "GODADDY_API_KEY" in command[1]
+    assert "--manual-auth-hook" in command
+    assert "--manual-cleanup-hook" in command
+    assert any(item.endswith(" auth") for item in command)
+    assert any(item.endswith(" cleanup") for item in command)
+    assert env["GODADDY_API_KEY"] == "key"
+    assert env["GODADDY_API_SECRET"] == "secret"
+    assert env["GODADDY_USE_SANDBOX"] == "1"
+    assert env["GODADDY_DNS_WAIT_SECONDS"] == "120"
+    assert env["GODADDY_CUSTOMER_ID"] == "cust123"
+    assert env["GODADDY_ZONE"] == "example.com"
+
 def test_request_certbot_certificate_missing_certbot_includes_supported_os_guidance(
     monkeypatch, tmp_path
 ):
