@@ -1,6 +1,7 @@
 """Application registry and site integration settings."""
 
 from importlib import import_module
+from importlib.metadata import PackageNotFoundError, version
 
 from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
@@ -25,6 +26,62 @@ def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
     return deduped
 
 
+def _read_repo_version() -> str:
+    """Return the repository version marker used for migration-line decisions."""
+
+    from .base import BASE_DIR
+
+    version_path = BASE_DIR / "VERSION"
+    if not version_path.exists():
+        try:
+            return version("arthexis")
+        except PackageNotFoundError:
+            return ""
+    return version_path.read_text(encoding="utf-8").strip()
+
+
+def _parse_major_version(version: str) -> int | None:
+    """Return the major version component, or ``None`` when unavailable."""
+
+    head = version.split(".", maxsplit=1)[0].strip()
+    if not head.isdigit():
+        return None
+    return int(head)
+
+
+def _include_legacy_shims(version: str) -> bool:
+    """Keep ``apps._legacy`` shims on 0.x lines; drop them on major upgrades."""
+
+    major = _parse_major_version(version)
+    return major is None or major == 0
+
+
+def _drop_legacy_app_entries(
+    app_paths: list[str], legacy_apps: list[str], *, version: str
+) -> list[str]:
+    """Drop ``apps._legacy`` app configs once the suite switches major lines."""
+
+    if _include_legacy_shims(version):
+        return list(app_paths)
+
+    legacy_apps_to_drop = set(legacy_apps)
+    return [entry for entry in app_paths if entry not in legacy_apps_to_drop]
+
+
+def _drop_legacy_migration_modules(
+    migration_modules: dict[str, str], *, version: str
+) -> dict[str, str]:
+    """Drop migration-module shims under ``apps._legacy`` on major upgrades."""
+
+    if _include_legacy_shims(version):
+        return dict(migration_modules)
+    return {
+        app_label: module_path
+        for app_label, module_path in migration_modules.items()
+        if not module_path.startswith("apps._legacy.")
+    }
+
+
 LEGACY_MIGRATION_APPS = [
     "apps._legacy.calendars_migration_only.apps.CalendarsMigrationOnlyConfig",
     "apps._legacy.extensions_migration_only.apps.ExtensionsMigrationOnlyConfig",
@@ -41,6 +98,7 @@ LEGACY_MIGRATION_APPS = [
     "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
     "config.legacy_mermaid",
 ]
+REPO_VERSION = _read_repo_version()
 PROJECT_LOCAL_APPS = [
     "apps.actions",
     "apps.apis",
@@ -147,6 +205,12 @@ INSTALLED_APPS = (
     + LEGACY_MIGRATION_APPS
 )
 
+INSTALLED_APPS = _drop_legacy_app_entries(
+    INSTALLED_APPS,
+    LEGACY_MIGRATION_APPS,
+    version=REPO_VERSION,
+)
+
 if HAS_DEBUG_TOOLBAR:
     INSTALLED_APPS.append("debug_toolbar")
 
@@ -214,6 +278,7 @@ MIGRATION_MODULES = {
     # Calendar profile) and avoid InvalidBases errors during migrate.
     "django_celery_beat": "apps.celery.beat_migrations",
 }
+MIGRATION_MODULES = _drop_legacy_migration_modules(MIGRATION_MODULES, version=REPO_VERSION)
 
 _original_get_current_site = sites_shortcuts.get_current_site
 
