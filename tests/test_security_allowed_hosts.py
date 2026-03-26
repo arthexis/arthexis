@@ -1,8 +1,11 @@
 """Regression tests for security host allow-list defaults."""
 
-from pathlib import Path
+import pytest
 
 from config.settings_helpers import load_site_config_allowed_hosts, normalize_site_host
+
+
+pytestmark = [pytest.mark.regression]
 
 
 def test_normalize_site_host_rejects_wildcard_hosts() -> None:
@@ -12,7 +15,7 @@ def test_normalize_site_host_rejects_wildcard_hosts() -> None:
     assert normalize_site_host("https://*.example.com/path") == ""
 
 
-def test_load_site_config_allowed_hosts_skips_wildcards(tmp_path: Path) -> None:
+def test_load_site_config_allowed_hosts_skips_wildcards(tmp_path) -> None:
     """Managed site config should ignore wildcard domains from generated JSON."""
 
     generated = tmp_path / "scripts" / "generated"

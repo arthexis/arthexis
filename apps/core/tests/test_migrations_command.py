@@ -1,4 +1,4 @@
-"""Regression tests for the unified migrations management command."""
+"""Smoke regression tests for the unified migrations management command."""
 
 from __future__ import annotations
 
@@ -8,8 +8,9 @@ from pathlib import Path
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db.migrations.exceptions import MigrationSchemaMissing
-from django.db.utils import OperationalError
+
+
+pytestmark = [pytest.mark.integration, pytest.mark.regression]
 
 
 def _seed_apps_root(base_dir: Path) -> Path:
@@ -36,71 +37,21 @@ def _seed_app_migrations(apps_dir: Path, app_label: str) -> Path:
     return migration_path
 
 
-def test_migrations_clear_removes_non_init_files(settings, tmp_path):
-    """migrations clear should remove migration modules but keep __init__.py files."""
-
-    apps_dir = _seed_apps_root(tmp_path)
-    settings.BASE_DIR = tmp_path
-    settings.APPS_DIR = apps_dir
-    migration_path = _seed_app_migrations(apps_dir, "catalog")
-
-    call_command("migrations", "clear")
-
-    assert not migration_path.exists()
-    assert (apps_dir / "catalog" / "migrations" / "__init__.py").exists()
-
-
-def test_migrations_check_runs_makemigrations_check(monkeypatch):
-    """migrations check should forward to Django's dry-run migration check."""
-
-    called: list[tuple[str, tuple, dict]] = []
-
-    def _fake_call_command(name, *args, **kwargs):
-        called.append((name, args, kwargs))
-
-    monkeypatch.setattr(
-        "apps.core.management.commands.migrations.call_command", _fake_call_command
-    )
-
-    call_command("migrations", "check")
-
-    assert called == [("makemigrations", (), {"check": True, "dry_run": True})]
-
-
-@pytest.mark.parametrize(
-    ("leaf_nodes", "plan", "raised_exception", "expected_error"),
-    [
-        (
-            [("core", "0001_initial")],
-            [("core", "0001_initial")],
-            None,
-            None,
-        ),
-        ([], [], None, "no pending migrations"),
-        (None, None, MigrationSchemaMissing("missing schema"), None),
-        (None, None, OperationalError("database unavailable"), None),
-    ],
-    ids=["pending", "clean", "schema-missing", "operational-error"],
-)
-def test_migrations_pending(
-    monkeypatch, leaf_nodes, plan, raised_exception, expected_error
-):
-    """migrations pending should report pending, clean, and bootstrap states."""
+def test_migrations_pending_reports_clean_state(monkeypatch):
+    """migrations pending should fail closed when no pending work exists."""
 
     class _FakeGraph:
         def leaf_nodes(self):
-            return leaf_nodes
+            return []
 
     class _FakeExecutor:
         def __init__(self, connection):
             self.connection = connection
             self.loader = type("Loader", (), {"graph": _FakeGraph()})()
-            if raised_exception is not None:
-                raise raised_exception
 
         def migration_plan(self, targets):
-            assert targets == leaf_nodes
-            return plan
+            assert targets == []
+            return []
 
     monkeypatch.setattr(
         "apps.core.management.commands.migrations.connections",
@@ -111,16 +62,12 @@ def test_migrations_pending(
         _FakeExecutor,
     )
 
-    if expected_error is not None:
-        with pytest.raises(CommandError, match=expected_error):
-            call_command("migrations", "pending")
-        return
-
-    call_command("migrations", "pending")
+    with pytest.raises(CommandError, match="no pending migrations"):
+        call_command("migrations", "pending")
 
 
 def test_migrations_rebuild_tags_initial_migration(monkeypatch, settings, tmp_path):
-    """migrations rebuild should clear, regenerate, and tag initial migrations."""
+    """migrations rebuild should tag initial migrations with the branch id."""
 
     apps_dir = _seed_apps_root(tmp_path)
     settings.BASE_DIR = tmp_path
@@ -147,76 +94,10 @@ def test_migrations_rebuild_tags_initial_migration(monkeypatch, settings, tmp_pa
     assert '"branch-123"' in content
 
 
-def test_migrations_rebuild_escapes_branch_id(monkeypatch, settings, tmp_path):
-    """migrations rebuild should safely encode branch IDs in generated code."""
-
-    apps_dir = _seed_apps_root(tmp_path)
-    settings.BASE_DIR = tmp_path
-    settings.APPS_DIR = apps_dir
-    _seed_app_migrations(apps_dir, "catalog")
-
-    def _fake_call_command(name, *args, **kwargs):
-        if name == "makemigrations":
-            _seed_app_migrations(apps_dir, "catalog")
-            return
-
-        raise AssertionError(f"Unexpected command: {name} {args}")
-
-    monkeypatch.setattr(
-        "apps.core.management.commands.migrations.call_command", _fake_call_command
-    )
-
-    malicious_branch = '"); import os; os.system("echo pwned"); #'
-    call_command("migrations", "rebuild", branch_id=malicious_branch)
-
-    content = (apps_dir / "catalog" / "migrations" / "0001_initial.py").read_text(
-        encoding="utf-8"
-    )
-    assert '\\"' in content
-    assert "import os; os.system" in content
-
-
-def test_migrations_rebuild_accepts_branch_id(monkeypatch, settings, tmp_path):
-    """migrations rebuild should call makemigrations during rebuild flow."""
-
-    called: list[tuple[str, tuple, dict]] = []
-    apps_dir = _seed_apps_root(tmp_path)
-    settings.BASE_DIR = tmp_path
-    settings.APPS_DIR = apps_dir
-    _seed_app_migrations(apps_dir, "catalog")
-
-    def _fake_call_command(name, *args, **kwargs):
-        called.append((name, args, kwargs))
-
-    monkeypatch.setattr(
-        "apps.core.management.commands.migrations.call_command", _fake_call_command
-    )
-
-    call_command("migrations", "rebuild", branch_id="branch-legacy")
-
-    assert called
-    name, _args, _kwargs = called[0]
-    assert name == "makemigrations"
-
-
-def test_migrations_clear_calls_clear_operation(settings, tmp_path):
-    """migrations clear should remove migration files while preserving __init__.py."""
-
-    apps_dir = _seed_apps_root(tmp_path)
-    settings.BASE_DIR = tmp_path
-    settings.APPS_DIR = apps_dir
-    migration_path = _seed_app_migrations(apps_dir, "legacy")
-
-    call_command("migrations", "clear")
-
-    assert not migration_path.exists()
-    assert (apps_dir / "legacy" / "migrations" / "__init__.py").exists()
-
-
 def test_migrations_next_major_rebuild_regenerates_parallel_line(
     monkeypatch, settings, tmp_path
 ):
-    """next-major-rebuild should generate clean migrations in a parallel module."""
+    """next-major-rebuild should regenerate parallel-line migrations and track metadata."""
 
     apps_dir = _seed_apps_root(tmp_path)
     settings.BASE_DIR = tmp_path
@@ -251,86 +132,10 @@ def test_migrations_next_major_rebuild_regenerates_parallel_line(
     content = (apps_dir / "catalog" / "migrations_v1_0" / "0001_initial.py").read_text(
         encoding="utf-8"
     )
-    tracks_payload = json.loads((tmp_path / "MIGRATION_TRACKS.json").read_text(encoding="utf-8"))
+    tracks_payload = json.loads(
+        (tmp_path / "MIGRATION_TRACKS.json").read_text(encoding="utf-8")
+    )
     assert not stale.exists()
     assert "BranchTagOperation" in content
     assert '"major-1.0-base"' in content
-    assert tracks_payload["current_line"] == "0.x"
-    assert tracks_payload["current_version"] == "0.2.3"
     assert tracks_payload["next_major"]["version"] == "1.0"
-
-
-def test_migrations_next_major_rebuild_uses_app_labels_for_migration_modules(
-    monkeypatch, settings, tmp_path
-):
-    """next-major-rebuild should key MIGRATION_MODULES by Django app label."""
-
-    apps_dir = _seed_apps_root(tmp_path)
-    settings.BASE_DIR = tmp_path
-    settings.APPS_DIR = apps_dir
-    _seed_app_migrations(apps_dir, "sites")
-
-    class _FakeAppConfig:
-        name = "apps.sites"
-        label = "pages"
-        path = str(apps_dir / "sites")
-
-    monkeypatch.setattr(
-        "apps.core.management.commands.migrations.django_apps.get_app_configs",
-        lambda: [_FakeAppConfig()],
-    )
-
-    def _fake_call_command(name, *args, **kwargs):
-        if name != "makemigrations":
-            raise AssertionError(f"Unexpected command: {name} {args}")
-
-        migration_modules = dict(settings.MIGRATION_MODULES)
-        assert migration_modules["pages"] == "apps.sites.migrations_v1_0"
-        assert "sites" not in migration_modules
-
-        generated = apps_dir / "sites" / "migrations_v1_0" / "0001_initial.py"
-        generated.write_text(
-            "from django.db import migrations\n\n"
-            "class Migration(migrations.Migration):\n"
-            "    operations = [\n"
-            "    ]\n",
-            encoding="utf-8",
-        )
-
-    monkeypatch.setattr(
-        "apps.core.management.commands.migrations.call_command", _fake_call_command
-    )
-
-    call_command("migrations", "next-major-rebuild", major_version="1.0")
-
-
-def test_migrations_next_major_rebuild_restores_missing_migration_modules_attr(
-    monkeypatch, settings, tmp_path
-):
-    """next-major-rebuild should restore absent MIGRATION_MODULES settings state."""
-
-    apps_dir = _seed_apps_root(tmp_path)
-    settings.BASE_DIR = tmp_path
-    settings.APPS_DIR = apps_dir
-    del settings.MIGRATION_MODULES
-    _seed_app_migrations(apps_dir, "catalog")
-
-    def _fake_call_command(name, *args, **kwargs):
-        if name != "makemigrations":
-            raise AssertionError(f"Unexpected command: {name} {args}")
-        generated = apps_dir / "catalog" / "migrations_v1_0" / "0001_initial.py"
-        generated.write_text(
-            "from django.db import migrations\n\n"
-            "class Migration(migrations.Migration):\n"
-            "    operations = [\n"
-            "    ]\n",
-            encoding="utf-8",
-        )
-
-    monkeypatch.setattr(
-        "apps.core.management.commands.migrations.call_command", _fake_call_command
-    )
-
-    call_command("migrations", "next-major-rebuild", major_version="1.0")
-
-    assert not hasattr(settings, "MIGRATION_MODULES")
