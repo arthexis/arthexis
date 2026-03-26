@@ -1,49 +1,38 @@
-"""Utilities for collecting project route providers.
-
-The route-provider convention allows each app to expose top-level URL patterns
-from ``apps/<app>/routes.py`` as ``ROOT_URLPATTERNS``.
-"""
+"""Utilities for collecting project route providers."""
 
 from __future__ import annotations
 
 from importlib import import_module
-from pathlib import Path
-from types import ModuleType
-from typing import Iterable
 
-from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.urls.resolvers import URLPattern, URLResolver
 
 
-def _iter_project_apps() -> Iterable:
-    """Yield app configs that are part of this repository's ``apps`` package.
+def _configured_route_provider_modules() -> list[str]:
+    """Return explicitly registered route-provider module paths."""
 
-    This intentionally ignores third-party packages that may also live under
-    ``BASE_DIR`` (for example when a local virtualenv lives at ``.venv/`` in
-    the repository root).
-    """
+    providers = getattr(settings, "ROUTE_PROVIDERS", None)
+    if not isinstance(providers, (list, tuple)) or not providers:
+        raise ImproperlyConfigured(
+            "ROUTE_PROVIDERS must be a non-empty list or tuple of module paths."
+        )
 
-    base_dir = Path(settings.BASE_DIR).resolve()
-    apps_dir = Path(getattr(settings, "APPS_DIR", base_dir / "apps")).resolve()
-    for app_config in apps.get_app_configs():
-        app_path = Path(app_config.path).resolve()
-        try:
-            app_path.relative_to(apps_dir)
-        except ValueError:
-            continue
-        yield app_config
-
-
-def _module_exists(module_name: str) -> bool:
-    """Return whether importing ``module_name`` succeeds."""
-
-    try:
-        import_module(module_name)
-    except ModuleNotFoundError:
-        return False
-    return True
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for provider in providers:
+        provider_path = provider.strip() if isinstance(provider, str) else ""
+        if not provider_path or provider_path.startswith("."):
+            raise ImproperlyConfigured(
+                "ROUTE_PROVIDERS entries must be non-empty absolute dotted module path strings."
+            )
+        if provider_path in seen:
+            raise ImproperlyConfigured(
+                f"ROUTE_PROVIDERS contains a duplicate provider: {provider_path!r}."
+            )
+        seen.add(provider_path)
+        normalized.append(provider_path)
+    return normalized
 
 
 def _normalize_literal_route(route: str) -> str:
@@ -90,91 +79,24 @@ def _detect_conflicting_roots(mounts: list[tuple[str, str, str]]) -> None:
         )
 
 
-def _warn_or_fail_for_legacy_fallback(legacy_apps: list[str]) -> None:
-    """Fail when applications rely on implicit legacy URL include fallback."""
-
-    if not legacy_apps:
-        return
-
-    app_list = ", ".join(sorted(legacy_apps))
-    raise ImproperlyConfigured(
-        "Implicit route-provider fallback include has been removed. "
-        f"Add routes.py with ROOT_URLPATTERNS for: {app_list}."
-    )
-
-
-def _collect_included_urlconfs(patterns: Iterable[URLPattern | URLResolver]) -> set[str]:
-    """Collect string urlconf module names included in route patterns."""
-
-    included_urlconfs: set[str] = set()
-
-    for pattern in patterns:
-        if not isinstance(pattern, URLResolver):
-            continue
-
-        urlconf_name = pattern.urlconf_name
-        if isinstance(urlconf_name, str):
-            included_urlconfs.add(urlconf_name)
-        elif isinstance(urlconf_name, ModuleType):
-            included_urlconfs.add(urlconf_name.__name__)
-
-        included_urlconfs.update(_collect_included_urlconfs(pattern.url_patterns))
-
-    return included_urlconfs
-
-
 def autodiscovered_route_patterns() -> list[URLPattern | URLResolver]:
-    """Collect root route providers from project apps.
-
-    Required convention:
-    - ``apps/<app>/routes.py`` exporting ``ROOT_URLPATTERNS``.
-
-    Legacy ``urls`` and ``api.urls`` fallback auto-includes are no longer
-    supported.
-    """
+    """Collect root route patterns from explicitly registered providers."""
 
     patterns: list[URLPattern | URLResolver] = []
     mounted_prefixes: list[tuple[str, str, str]] = []
-    apps_relying_on_legacy_fallback: list[str] = []
-    apps_with_unmounted_legacy_urlconfs: list[str] = []
 
-    for app_config in _iter_project_apps():
-        routes_module_name = f"{app_config.name}.routes"
-        app_urls_module = f"{app_config.name}.urls"
-        app_api_urls_module = f"{app_config.name}.api.urls"
-
-        try:
-            routes_module = import_module(routes_module_name)
-        except ModuleNotFoundError:
-            routes_module = None
-
-        has_legacy_urls = _module_exists(app_urls_module)
-        has_legacy_api_urls = _module_exists(app_api_urls_module)
-
-        if routes_module is None:
-            if has_legacy_urls or has_legacy_api_urls:
-                apps_relying_on_legacy_fallback.append(app_config.label)
-            continue
+    for routes_module_name in _configured_route_provider_modules():
+        routes_module = import_module(routes_module_name)
 
         root_patterns = getattr(routes_module, "ROOT_URLPATTERNS", None)
         if root_patterns is None:
             raise AttributeError(f"{routes_module_name} must define ROOT_URLPATTERNS")
 
-        mounted_urlconfs = _collect_included_urlconfs(root_patterns)
-        missing_legacy_mounts = (
-            has_legacy_urls and app_urls_module not in mounted_urlconfs
-        ) or (has_legacy_api_urls and app_api_urls_module not in mounted_urlconfs)
-        if missing_legacy_mounts:
-            apps_with_unmounted_legacy_urlconfs.append(app_config.label)
-
         patterns.extend(root_patterns)
+        owner = routes_module_name.rsplit(".", maxsplit=1)[0]
         for root_pattern in root_patterns:
-            mounted_prefixes.append(
-                (str(root_pattern.pattern), app_config.label, routes_module_name)
-            )
+            mounted_prefixes.append((str(root_pattern.pattern), owner, routes_module_name))
 
-    _warn_or_fail_for_legacy_fallback(apps_relying_on_legacy_fallback)
-    _warn_or_fail_for_legacy_fallback(apps_with_unmounted_legacy_urlconfs)
     _detect_conflicting_roots(mounted_prefixes)
 
     return patterns

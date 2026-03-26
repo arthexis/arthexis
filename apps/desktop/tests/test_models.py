@@ -2,40 +2,19 @@
 
 from __future__ import annotations
 
+import pytest
 from django.core.exceptions import ValidationError
 
 from apps.desktop.models import DesktopShortcut, RegisteredExtension
 
 
-def test_clean_allows_blank_sigil_when_filename_as_input_enabled() -> None:
-    """Filename sigil can be blank when filename is supplied via stdin."""
+def test_registered_extension_clean_rejects_invalid_extension_chars() -> None:
+    """Archived extension rows still enforce a basic extension format."""
 
-    extension = RegisteredExtension(
-        extension=".txt",
-        django_command="cmd",
-        filename_as_input=True,
-        filename_sigil="",
-    )
+    extension = RegisteredExtension(extension=".bad/name")
 
-    extension.clean()
-
-
-def test_clean_rejects_blank_sigil_when_replacement_mode_enabled() -> None:
-    """Filename sigil cannot be blank when argument replacement mode is enabled."""
-
-    extension = RegisteredExtension(
-        extension=".txt",
-        django_command="cmd",
-        filename_as_input=False,
-        filename_sigil="   ",
-    )
-
-    try:
+    with pytest.raises(ValidationError, match="Extension cannot include spaces"):
         extension.clean()
-    except ValidationError as exc:
-        assert exc.message_dict["filename_sigil"] == ["Filename sigil cannot be empty."]
-    else:  # pragma: no cover - explicit regression guard
-        raise AssertionError("Expected ValidationError for blank filename sigil")
 
 
 def test_desktop_shortcut_clean_rejects_missing_url_in_url_mode() -> None:

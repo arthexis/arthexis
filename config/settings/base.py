@@ -60,9 +60,33 @@ HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not N
 # avoid contacting remote peers.
 NET_MESSAGE_DISABLE_PROPAGATION = env_bool("NET_MESSAGE_DISABLE_PROPAGATION", False)
 ENABLE_USAGE_ANALYTICS = env_bool("ENABLE_USAGE_ANALYTICS", False)
-ROUTE_PROVIDER_ENABLE_LEGACY_FALLBACK = env_bool(
-    "ROUTE_PROVIDER_ENABLE_LEGACY_FALLBACK", False
-)
+ROUTE_PROVIDERS = [
+    "apps.actions.routes",
+    "apps.awg.routes",
+    "apps.cards.routes",
+    "apps.certs.routes",
+    "apps.clocks.routes",
+    "apps.core.routes",
+    "apps.docs.routes",
+    "apps.embeds.routes",
+    "apps.evergo.routes",
+    "apps.features.routes",
+    "apps.links.routes",
+    "apps.logbook.routes",
+    "apps.meta.routes",
+    "apps.nodes.routes",
+    "apps.ocpp.routes",
+    "apps.odoo.routes",
+    "apps.ops.routes",
+    "apps.repos.routes",
+    "apps.shop.routes",
+    "apps.sites.routes",
+    "apps.tasks.routes",
+    "apps.teams.routes",
+    "apps.terms.routes",
+    "apps.video.routes",
+    "apps.widgets.routes",
+]
 ADMIN_URL_PATH = normalize_admin_url_path(os.environ.get("ADMIN_URL_PATH", "admin/"))
 ADMIN_SITE_HEADER = os.environ.get("ADMIN_SITE_HEADER", "Constellation")
 ADMIN_SITE_TITLE = os.environ.get("ADMIN_SITE_TITLE", "Constellation")

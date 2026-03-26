@@ -1,3 +1,10 @@
+"""RFID batch API endpoints.
+
+Contract note:
+* ``GET /core/rfids/`` does not expose command fields.
+* ``POST /core/rfids/`` rejects ``external_command`` and ``post_auth_command``.
+"""
+
 from __future__ import annotations
 
 import json
@@ -8,6 +15,8 @@ from django.views.decorators.csrf import csrf_exempt
 from apps.cards.models import RFID
 from apps.energy.models import CustomerAccount
 from utils.api import api_login_required
+
+_DISALLOWED_COMMAND_FIELDS = ("external_command", "post_auth_command")
 
 
 @csrf_exempt
@@ -36,8 +45,6 @@ def rfid_batch(request):
                 "custom_label": t.custom_label,
                 "customer_accounts": ids,
                 "customer_account_names": names,
-                "pre_auth_action": t.pre_auth_action,
-                "post_auth_action": t.post_auth_action,
                 "allowed": t.allowed,
                 "color": t.color,
                 "released": t.released,
@@ -56,6 +63,22 @@ def rfid_batch(request):
         tags = data.get("rfids") if isinstance(data, dict) else data
         if not isinstance(tags, list):
             return JsonResponse({"detail": "rfids list required"}, status=400)
+
+        for index, row in enumerate(tags):
+            disallowed = sorted(
+                field for field in _DISALLOWED_COMMAND_FIELDS if field in row
+            )
+            if disallowed:
+                return JsonResponse(
+                    {
+                        "detail": (
+                            "Command fields are not accepted by this endpoint."
+                        ),
+                        "index": index,
+                        "fields": disallowed,
+                    },
+                    status=400,
+                )
 
         count = 0
         for row in tags:
@@ -76,6 +99,7 @@ def rfid_batch(request):
             if isinstance(released, str):
                 released = released.lower() == "true"
             custom_label = (row.get("custom_label") or "").strip()
+<<<<<<< lab/deprecate-external_command-and-post_auth_command
             pre_auth_action = row.get("pre_auth_action")
             if not isinstance(pre_auth_action, str):
                 pre_auth_action = ""
@@ -86,6 +110,8 @@ def rfid_batch(request):
                 post_auth_action = ""
             else:
                 post_auth_action = post_auth_action.strip().lower()
+=======
+>>>>>>> main
 
             tag, _ = RFID.update_or_create_from_code(
                 rfid,
@@ -94,8 +120,11 @@ def rfid_batch(request):
                     "color": color,
                     "released": released,
                     "custom_label": custom_label,
+<<<<<<< lab/deprecate-external_command-and-post_auth_command
                     "pre_auth_action": pre_auth_action,
                     "post_auth_action": post_auth_action,
+=======
+>>>>>>> main
                 },
             )
             accounts_qs = CustomerAccount.objects.none()

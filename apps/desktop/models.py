@@ -1,9 +1,8 @@
-"""Models for desktop assistant extension registration and desktop shortcuts."""
+"""Models for desktop shortcut orchestration and legacy extension archives."""
 
 from __future__ import annotations
 
 import ast
-import shlex
 from urllib.parse import urlparse
 
 from django.core.exceptions import ValidationError
@@ -20,7 +19,7 @@ from apps.desktop.expression_utils import (
 
 
 class RegisteredExtension(Entity):
-    """Map a file extension to a Django management command executable."""
+    """Archive legacy extension mappings retained for migration compatibility."""
 
     extension = models.CharField(
         max_length=32,
@@ -29,34 +28,9 @@ class RegisteredExtension(Entity):
     )
     description = models.TextField(
         blank=True,
-        help_text=(
-            "Administrative notes. Use filename sigil in command args to inject "
-            "the opened file path."
-        ),
+        help_text="Administrative notes.",
     )
-    django_command = models.CharField(
-        max_length=128,
-        help_text="Django management command to execute.",
-    )
-    extra_args = models.TextField(
-        blank=True,
-        help_text=(
-            "Optional arguments (shell-style) for the command. The filename sigil "
-            "will be replaced with the opened file path."
-        ),
-    )
-    filename_sigil = models.CharField(
-        max_length=64,
-        default="{filename}",
-        help_text="Sigil token replaced with the opened file path in extra args.",
-    )
-    filename_as_input = models.BooleanField(
-        default=False,
-        help_text=(
-            "Pass the opened file path as command stdin instead of replacing the "
-            "filename sigil."
-        ),
-    )
+    archived_runtime_mapping = models.JSONField(default=dict, blank=True, editable=False)
     is_enabled = models.BooleanField(default=True)
 
     class Meta:
@@ -69,7 +43,7 @@ class RegisteredExtension(Entity):
         return self.extension
 
     def clean(self) -> None:
-        """Validate extension and execution settings."""
+        """Validate extension formatting for archived mapping rows."""
         super().clean()
 
         if not self.extension.startswith("."):
@@ -83,31 +57,6 @@ class RegisteredExtension(Entity):
                     )
                 }
             )
-
-        if not self.django_command.strip():
-            raise ValidationError({"django_command": "Command name is required."})
-
-        if not self.filename_as_input and not self.filename_sigil.strip():
-            raise ValidationError(
-                {"filename_sigil": "Filename sigil cannot be empty."}
-            )
-
-    def build_runtime_command(self, filename: str | None = None) -> tuple[list[str], str | None]:
-        """Build command arguments and optional input payload for execution.
-
-        Parameters:
-            filename: Optional file path selected by the operating system.
-
-        Returns:
-            A tuple containing the management-command argument vector and optional
-            stdin payload.
-        """
-
-        parsed_args = shlex.split(self.extra_args) if self.extra_args else []
-        if filename and not self.filename_as_input:
-            parsed_args = [arg.replace(self.filename_sigil, filename) for arg in parsed_args]
-        input_data = filename if (filename and self.filename_as_input) else None
-        return [self.django_command, *parsed_args], input_data
 
 
 class DesktopShortcut(Entity):

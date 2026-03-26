@@ -1,4 +1,8 @@
-"""Helper utilities for synchronizing RFID records between nodes."""
+"""Helper utilities for synchronizing RFID records between nodes.
+
+RFID synchronization payloads intentionally exclude command fields so command
+execution behavior remains node-local.
+"""
 
 from __future__ import annotations
 
@@ -48,8 +52,11 @@ def serialize_rfid(tag: RFID) -> dict[str, Any]:
         "color": tag.color,
         "kind": tag.kind,
         "released": tag.released,
+<<<<<<< lab/deprecate-external_command-and-post_auth_command
         "pre_auth_action": tag.pre_auth_action,
         "post_auth_action": tag.post_auth_action,
+=======
+>>>>>>> main
         "expiry_date": tag.expiry_date.isoformat() if tag.expiry_date else None,
         "last_seen_on": tag.last_seen_on.isoformat() if tag.last_seen_on else None,
         "customer_accounts": id_values,
@@ -71,6 +78,7 @@ def apply_rfid_payload(
         outcome.error = "Missing RFID value"
         return outcome
 
+<<<<<<< lab/deprecate-external_command-and-post_auth_command
     pre_auth_action = entry.get("pre_auth_action")
     if not isinstance(pre_auth_action, str):
         pre_auth_action = ""
@@ -82,6 +90,8 @@ def apply_rfid_payload(
     else:
         post_auth_action = post_auth_action.strip().lower()
 
+=======
+>>>>>>> main
     defaults: dict[str, Any] = {
         "custom_label": entry.get("custom_label", ""),
         "key_a": entry.get("key_a", RFID._meta.get_field("key_a").default),
@@ -93,8 +103,11 @@ def apply_rfid_payload(
         "color": entry.get("color", RFID.BLACK),
         "kind": entry.get("kind", RFID.CLASSIC),
         "released": bool(entry.get("released", False)),
+<<<<<<< lab/deprecate-external_command-and-post_auth_command
         "pre_auth_action": pre_auth_action,
         "post_auth_action": post_auth_action,
+=======
+>>>>>>> main
     }
 
     if origin_node is not None:

@@ -1,12 +1,12 @@
-"""Services for desktop extension registration, execution, and shortcut sync."""
+"""Services for desktop shortcut synchronization and conditional rendering."""
 
 from __future__ import annotations
 
 import ast
 import base64
+from dataclasses import dataclass
 import logging
 import os
-from dataclasses import dataclass
 from pathlib import Path
 import shlex
 import subprocess
@@ -22,19 +22,11 @@ from apps.desktop.expression_utils import (
     _is_has_feature_callable_name,
     build_ast_parent_map,
 )
-from apps.desktop.models import DesktopShortcut, RegisteredExtension
+from apps.desktop.models import DesktopShortcut
 from apps.nodes.models import Node
 
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(slots=True)
-class RegistrationResult:
-    """Result of attempting an operating system extension registration."""
-
-    success: bool
-    message: str
 
 
 @dataclass(slots=True)
@@ -45,70 +37,6 @@ class DesktopSyncResult:
     skipped: int = 0
     removed: int = 0
     skipped_db_unavailable: bool = False
-
-def build_windows_registry_command(extension: RegisteredExtension) -> str:
-    """Build the Windows shell command used to open a file with this extension."""
-
-    python_executable = Path(sys.executable)
-    manage_py = Path(settings.BASE_DIR) / "manage.py"
-    return (
-        f'"{python_executable}" "{manage_py}" desktop_extension_open '
-        f'--extension-id {extension.pk} --filename "%1"'
-    )
-
-
-def register_extension_with_os(extension: RegisteredExtension) -> RegistrationResult:
-    """Register extension mapping in the local operating system when supported."""
-
-    if not extension.pk:
-        return RegistrationResult(False, "Extension must be saved before registration.")
-
-    if sys.platform != "win32":
-        command_preview = build_windows_registry_command(extension)
-        return RegistrationResult(
-            True,
-            (
-                "Non-Windows host detected. Registration skipped; "
-                f"command preview: {command_preview}"
-            ),
-        )
-
-    try:
-        "optional-import: winreg is only available on Windows."
-        import winreg  # type: ignore[import-not-found]
-    except ImportError as exc:  # pragma: no cover - defensive on non-standard Windows envs
-        return RegistrationResult(False, f"Windows registry module unavailable: {exc}")
-
-    prog_id = f"Arthexis.Desktop{extension.extension.lstrip('.').upper()}"
-    command_value = build_windows_registry_command(extension)
-
-    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, fr"Software\Classes\{extension.extension}") as ext_key:
-        winreg.SetValueEx(ext_key, "", 0, winreg.REG_SZ, prog_id)
-
-    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, fr"Software\Classes\{prog_id}") as progid_key:
-        winreg.SetValueEx(progid_key, "", 0, winreg.REG_SZ, f"Arthexis handler for {extension.extension}")
-
-    with winreg.CreateKey(
-        winreg.HKEY_CURRENT_USER,
-        fr"Software\Classes\{prog_id}\shell\open\command",
-    ) as command_key:
-        winreg.SetValueEx(command_key, "", 0, winreg.REG_SZ, command_value)
-
-    return RegistrationResult(True, f"Registered {extension.extension} with command: {command_value}")
-
-
-def run_registered_extension(extension: RegisteredExtension, filename: str | None) -> subprocess.CompletedProcess:
-    """Execute the configured Django command for a registered extension."""
-
-    command_parts, input_data = extension.build_runtime_command(filename)
-    full_command = [sys.executable, str(Path(settings.BASE_DIR) / "manage.py"), *command_parts]
-    return subprocess.run(
-        full_command,
-        input=(input_data or ""),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
 
 
 def detect_desktop_dir(base_dir: Path, username: str) -> Path | None:

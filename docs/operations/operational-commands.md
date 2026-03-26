@@ -1,0 +1,107 @@
+# Operational commands via `command.sh` / `command.bat`
+
+`command.sh` (POSIX) and `command.bat` (Windows) now expose an explicit allowlist of operational one-word command entrypoints ("ops commands").
+
+For advanced admin workflows and any non-allowlisted Django command, run `manage.py` directly.
+
+## Usage
+
+```bash
+./command.sh list
+./command.sh <command> [args...]
+./manage.py <django-command> [args...]
+```
+
+## Supported operational commands
+
+- `admin`
+- `analytics`
+- `apply_nginx_config`
+- `apply_release_migrations`
+- `availability`
+- `benchmark`
+- `browse`
+- `camera_service`
+- `changelog`
+- `channels`
+- `charger`
+- `chargers`
+- `configure_site`
+- `coverage`
+- `create`
+- `create_docs_admin`
+- `desktop_extension_open`
+- `dns_proxy`
+- `email`
+- `enable_local_https`
+- `env`
+- `estimate`
+- `evergo`
+- `feature`
+- `features`
+- `fixtures`
+- `generate_certs`
+- `generate_public_ocpp_sample_data`
+- `godaddy`
+- `good`
+- `groups`
+- `health`
+- `https`
+- `invite`
+- `lcd`
+- `leads`
+- `message`
+- `migrations`
+- `nginx`
+- `nginx_configure`
+- `nginx_restart`
+- `node`
+- `notify`
+- `ocpp`
+- `odoo`
+- `password`
+- `preview`
+- `preview_nginx_config`
+- `prototype`
+- `purge_net_messages`
+- `purge_nodes`
+- `rebrand`
+- `reconcile_node_features_services`
+- `record`
+- `redis`
+- `refresh_node_features`
+- `register_desktop_extensions`
+- `register_site_apps`
+- `release`
+- `repo`
+- `reset_ocpp_migrations`
+- `rfid`
+- `run_release_data_transforms`
+- `run_scheduled_sql_reports`
+- `runftpserver`
+- `runserver`
+- `screenshot`
+- `shortcut_listener`
+- `show_rfid_history`
+- `simulator`
+- `smb`
+- `startup`
+- `summary`
+- `sync_desktop_shortcuts`
+- `sync_registered_widgets`
+- `sync_specials`
+- `test`
+- `test_login`
+- `track_cp_forward`
+- `upgrade`
+- `uptime`
+- `utils`
+- `verify_certs`
+- `video`
+- `view_errors`
+
+## Notes for AGENTS and operators
+
+When an operation explicitly asks for an **ops command**, use `command.sh` / `command.bat` with one of the allowlisted names above.
+
+For everything else (including Django built-ins like `makemigrations`, `shell`, and direct test targeting), use `manage.py` directly.
