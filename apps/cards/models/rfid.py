@@ -14,6 +14,7 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
+from apps.cards.rfid_actions import POST_AUTH_ACTION_CHOICES, PRE_AUTH_ACTION_CHOICES
 
 
 __all__ = ["RFID"]
@@ -94,12 +95,35 @@ class RFID(Entity):
     external_command = models.TextField(
         default="",
         blank=True,
-        help_text="Optional command executed during validation.",
+        help_text=(
+            "Deprecated: legacy shell command text retained only for migration history."
+        ),
     )
     post_auth_command = models.TextField(
         default="",
         blank=True,
-        help_text="Optional command executed after successful validation.",
+        help_text=(
+            "Deprecated: legacy shell command text retained only for migration history."
+        ),
+    )
+    pre_auth_action = models.CharField(
+        max_length=32,
+        default="",
+        blank=True,
+        choices=PRE_AUTH_ACTION_CHOICES,
+        help_text="Allowlisted pre-auth action hook executed during validation.",
+    )
+    post_auth_action = models.CharField(
+        max_length=32,
+        default="",
+        blank=True,
+        choices=POST_AUTH_ACTION_CHOICES,
+        help_text="Allowlisted post-auth action hook executed after successful validation.",
+    )
+    legacy_command_archive = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Archived legacy command text captured during deprecation migration.",
     )
     expiry_date = models.DateField(
         null=True,

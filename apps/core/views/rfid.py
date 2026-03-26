@@ -36,8 +36,8 @@ def rfid_batch(request):
                 "custom_label": t.custom_label,
                 "customer_accounts": ids,
                 "customer_account_names": names,
-                "external_command": t.external_command,
-                "post_auth_command": t.post_auth_command,
+                "pre_auth_action": t.pre_auth_action,
+                "post_auth_action": t.post_auth_action,
                 "allowed": t.allowed,
                 "color": t.color,
                 "released": t.released,
@@ -76,16 +76,16 @@ def rfid_batch(request):
             if isinstance(released, str):
                 released = released.lower() == "true"
             custom_label = (row.get("custom_label") or "").strip()
-            external_command = row.get("external_command")
-            if not isinstance(external_command, str):
-                external_command = ""
+            pre_auth_action = row.get("pre_auth_action")
+            if not isinstance(pre_auth_action, str):
+                pre_auth_action = ""
             else:
-                external_command = external_command.strip()
-            post_auth_command = row.get("post_auth_command")
-            if not isinstance(post_auth_command, str):
-                post_auth_command = ""
+                pre_auth_action = pre_auth_action.strip().lower()
+            post_auth_action = row.get("post_auth_action")
+            if not isinstance(post_auth_action, str):
+                post_auth_action = ""
             else:
-                post_auth_command = post_auth_command.strip()
+                post_auth_action = post_auth_action.strip().lower()
 
             tag, _ = RFID.update_or_create_from_code(
                 rfid,
@@ -94,8 +94,8 @@ def rfid_batch(request):
                     "color": color,
                     "released": released,
                     "custom_label": custom_label,
-                    "external_command": external_command,
-                    "post_auth_command": post_auth_command,
+                    "pre_auth_action": pre_auth_action,
+                    "post_auth_action": post_auth_action,
                 },
             )
             accounts_qs = CustomerAccount.objects.none()

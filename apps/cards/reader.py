@@ -1,7 +1,6 @@
 import logging
 import os
 import re
-import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +9,9 @@ from django.utils import timezone
 from typing import Any
 
 from apps.cards.models import RFID
+from apps.cards.rfid_actions import RFIDActionContext
+from apps.cards.rfid_actions import dispatch_post_auth_action
+from apps.cards.rfid_actions import dispatch_pre_auth_action
 from apps.core.notifications import notify_async
 
 from .constants import (
@@ -347,66 +349,25 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
     if updates:
         tag.save(update_fields=sorted(updates))
     allowed = bool(tag.allowed)
-    raw_command = getattr(tag, "external_command", "")
-    if isinstance(raw_command, str):
-        command = raw_command.strip()
-    else:
-        command = ""
+    action_context = RFIDActionContext(tag=tag, rfid_value=rfid)
     command_details: dict[str, object] | None = None
-    command_allowed = True
-    if command:
+    pre_auth_action = getattr(tag, "pre_auth_action", "")
+    pre_auth_result = dispatch_pre_auth_action(pre_auth_action, context=action_context)
+    if pre_auth_action:
         command_details = {
-            "stdout": "",
-            "stderr": "",
-            "returncode": None,
-            "error": "",
+            "action": pre_auth_action,
+            "allowed": pre_auth_result.allowed,
+            "details": pre_auth_result.details,
+            "error": _normalize_command_text(pre_auth_result.error),
         }
-        env = os.environ.copy()
-        env["RFID_VALUE"] = rfid
-        env["RFID_LABEL_ID"] = str(tag.pk)
-        env["RFID_ENDIANNESS"] = getattr(tag, "endianness", RFID.BIG_ENDIAN)
-        try:
-            completed = subprocess.run(
-                command,
-                shell=True,
-                check=False,
-                capture_output=True,
-                text=True,
-                env=env,
-            )
-        except Exception as exc:
-            command_allowed = False
-            command_details["error"] = _normalize_command_text(str(exc))
-        else:
-            command_returncode = getattr(completed, "returncode", 1)
-            command_allowed = command_returncode == 0
-            command_details["returncode"] = command_returncode
-            command_details["stdout"] = _normalize_command_text(
-                getattr(completed, "stdout", "") or ""
-            )
-            command_details["stderr"] = _normalize_command_text(
-                getattr(completed, "stderr", "") or ""
-            )
-        allowed = allowed and command_allowed
+    allowed = allowed and pre_auth_result.allowed
 
-    post_command = getattr(tag, "post_auth_command", "")
-    if allowed and isinstance(post_command, str):
-        post = post_command.strip()
-        if post:
-            env = os.environ.copy()
-            env["RFID_VALUE"] = rfid
-            env["RFID_LABEL_ID"] = str(tag.pk)
-            env["RFID_ENDIANNESS"] = getattr(tag, "endianness", RFID.BIG_ENDIAN)
-            try:
-                subprocess.Popen(
-                    post,
-                    shell=True,
-                    env=env,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            except Exception:  # pragma: no cover - best effort fire and forget
-                pass
+    post_auth_action = getattr(tag, "post_auth_action", "")
+    if allowed and post_auth_action:
+        try:
+            dispatch_post_auth_action(post_auth_action, context=action_context)
+        except Exception:  # pragma: no cover - best effort fire and forget
+            pass
 
     result = {
         "rfid": rfid,
@@ -420,12 +381,6 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
         "endianness": tag.endianness,
     }
     if command_details is not None:
-        command_details["stdout"] = _normalize_command_text(
-            command_details.get("stdout", "")
-        )
-        command_details["stderr"] = _normalize_command_text(
-            command_details.get("stderr", "")
-        )
         command_details["error"] = _normalize_command_text(
             command_details.get("error", "")
         )

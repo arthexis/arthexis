@@ -7,7 +7,6 @@ import ipaddress
 import logging
 import os
 import socket
-import subprocess
 import sys
 
 from django.conf import settings
@@ -19,6 +18,9 @@ from django.db import DatabaseError
 
 from apps.cards.models import RFID
 from apps.cards.models import RFIDAttempt
+from apps.cards.rfid_actions import RFIDActionContext
+from apps.cards.rfid_actions import dispatch_post_auth_action
+from apps.cards.rfid_actions import dispatch_pre_auth_action
 from apps.cards.reader import read_rfid_cell_value
 from apps.energy.models import CustomerAccount
 from apps.features.utils import is_suite_feature_enabled
@@ -191,6 +193,24 @@ class RFIDBackend:
         if update_fields:
             tag.save(update_fields=update_fields)
 
+        action_context = RFIDActionContext(tag=tag, rfid_value=rfid_value)
+        pre_auth_result = dispatch_pre_auth_action(
+            getattr(tag, "pre_auth_action", ""),
+            context=action_context,
+        )
+        if not pre_auth_result.allowed:
+            metadata: dict[str, str | int | bool | None] = {
+                "pre_auth_action": getattr(tag, "pre_auth_action", ""),
+            }
+            if pre_auth_result.error:
+                metadata["pre_auth_error"] = pre_auth_result.error[:128]
+            return self._reject(
+                rfid=rfid_value,
+                reason_code=RFIDAttempt.Reason.EXTERNAL_COMMAND_ERROR,
+                tag=tag,
+                metadata=metadata,
+            )
+
         User = get_user_model()
         login_user = User.objects.filter(login_rfid=tag, is_active=True).first()
         if login_user:
@@ -251,35 +271,6 @@ class RFIDBackend:
                 metadata={"auth_path": "login_rfid"},
             )
 
-        command = (tag.external_command or "").strip()
-        if command:
-            env = os.environ.copy()
-            env["RFID_VALUE"] = rfid_value
-            env["RFID_LABEL_ID"] = str(tag.pk)
-            env["RFID_ENDIANNESS"] = getattr(tag, "endianness", RFID.BIG_ENDIAN)
-            try:
-                completed = subprocess.run(
-                    command,
-                    shell=True,
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    env=env,
-                )
-            except (OSError, subprocess.SubprocessError, UnicodeDecodeError):
-                return self._reject(
-                    rfid=rfid_value,
-                    reason_code=RFIDAttempt.Reason.EXTERNAL_COMMAND_ERROR,
-                    tag=tag,
-                )
-            if completed.returncode != 0:
-                return self._reject(
-                    rfid=rfid_value,
-                    reason_code=RFIDAttempt.Reason.EXTERNAL_COMMAND_ERROR,
-                    tag=tag,
-                    metadata={"external_returncode": completed.returncode},
-                )
-
         account = (
             CustomerAccount.objects.filter(
                 rfids__pk=tag.pk, rfids__allowed=True, user__isnull=False
@@ -288,20 +279,11 @@ class RFIDBackend:
             .first()
         )
         if account:
-            post_command = (getattr(tag, "post_auth_command", "") or "").strip()
-            if post_command:
-                env = os.environ.copy()
-                env["RFID_VALUE"] = rfid_value
-                env["RFID_LABEL_ID"] = str(tag.pk)
-                env["RFID_ENDIANNESS"] = getattr(tag, "endianness", RFID.BIG_ENDIAN)
-                with contextlib.suppress(Exception):
-                    subprocess.Popen(
-                        post_command,
-                        shell=True,
-                        env=env,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
+            with contextlib.suppress(Exception):
+                dispatch_post_auth_action(
+                    getattr(tag, "post_auth_action", ""),
+                    context=action_context,
+                )
             return self._accept(
                 user=account.user,
                 rfid=rfid_value,

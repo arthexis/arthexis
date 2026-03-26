@@ -100,3 +100,62 @@ class RFIDAuthAuditSuiteTests(TestCase):
             RFIDAttempt.objects.filter(source=RFIDAttempt.Source.AUTH).count(),
             0,
         )
+
+    def test_rfid_login_success_ignores_legacy_shell_command_fields(self) -> None:
+        """Regression: legacy command text must not influence authentication flow."""
+
+        self._set_audit_feature(enabled=True)
+        user_model = get_user_model()
+        tag = RFID.objects.create(
+            rfid="ABCDEF12",
+            allowed=True,
+            external_command="exit 1",
+            post_auth_command="echo ignored",
+        )
+        user = user_model.objects.create_user(
+            username="legacy_command_user",
+            password="password123",
+            login_rfid=tag,
+        )
+
+        response = self.client.post(
+            reverse("rfid-login"),
+            data='{"rfid":"abcdef12"}',
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        attempt = RFIDAttempt.objects.get(source=RFIDAttempt.Source.AUTH)
+        self.assertEqual(attempt.status, RFIDAttempt.Status.ACCEPTED)
+        self.assertEqual(user.pk, response.json()["id"])
+
+    def test_rfid_login_rejects_when_allowlisted_pre_auth_action_denies(self) -> None:
+        """Regression: pre-auth action hooks should reject authentication safely."""
+
+        self._set_audit_feature(enabled=True)
+        user_model = get_user_model()
+        tag = RFID.objects.create(
+            rfid="CAFEBABE",
+            allowed=True,
+            pre_auth_action="deny",
+        )
+        user_model.objects.create_user(
+            username="deny_action_user",
+            password="password123",
+            login_rfid=tag,
+        )
+
+        response = self.client.post(
+            reverse("rfid-login"),
+            data='{"rfid":"cafebabe"}',
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 401)
+        attempt = RFIDAttempt.objects.get(source=RFIDAttempt.Source.AUTH)
+        self.assertEqual(attempt.status, RFIDAttempt.Status.REJECTED)
+        self.assertEqual(
+            attempt.payload.get("reason_code"),
+            RFIDAttempt.Reason.EXTERNAL_COMMAND_ERROR,
+        )
+        self.assertEqual(attempt.payload.get("pre_auth_action"), "deny")

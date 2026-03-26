@@ -48,8 +48,8 @@ def serialize_rfid(tag: RFID) -> dict[str, Any]:
         "color": tag.color,
         "kind": tag.kind,
         "released": tag.released,
-        "external_command": tag.external_command,
-        "post_auth_command": tag.post_auth_command,
+        "pre_auth_action": tag.pre_auth_action,
+        "post_auth_action": tag.post_auth_action,
         "expiry_date": tag.expiry_date.isoformat() if tag.expiry_date else None,
         "last_seen_on": tag.last_seen_on.isoformat() if tag.last_seen_on else None,
         "customer_accounts": id_values,
@@ -71,16 +71,16 @@ def apply_rfid_payload(
         outcome.error = "Missing RFID value"
         return outcome
 
-    external_command = entry.get("external_command")
-    if not isinstance(external_command, str):
-        external_command = ""
+    pre_auth_action = entry.get("pre_auth_action")
+    if not isinstance(pre_auth_action, str):
+        pre_auth_action = ""
     else:
-        external_command = external_command.strip()
-    post_auth_command = entry.get("post_auth_command")
-    if not isinstance(post_auth_command, str):
-        post_auth_command = ""
+        pre_auth_action = pre_auth_action.strip().lower()
+    post_auth_action = entry.get("post_auth_action")
+    if not isinstance(post_auth_action, str):
+        post_auth_action = ""
     else:
-        post_auth_command = post_auth_command.strip()
+        post_auth_action = post_auth_action.strip().lower()
 
     defaults: dict[str, Any] = {
         "custom_label": entry.get("custom_label", ""),
@@ -93,8 +93,8 @@ def apply_rfid_payload(
         "color": entry.get("color", RFID.BLACK),
         "kind": entry.get("kind", RFID.CLASSIC),
         "released": bool(entry.get("released", False)),
-        "external_command": external_command,
-        "post_auth_command": post_auth_command,
+        "pre_auth_action": pre_auth_action,
+        "post_auth_action": post_auth_action,
     }
 
     if origin_node is not None:
@@ -231,4 +231,3 @@ def _coerce_values(values: Any) -> list[str]:
         if text:
             result.append(text)
     return result
-
