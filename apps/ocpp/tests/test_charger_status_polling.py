@@ -313,9 +313,22 @@ def test_classify_event_severity_handles_status_and_retry_edge_cases():
         ),
     )
 
-    assert classify_event_severity("Status", "Faulted", config)[0] == "warning"
-    assert classify_event_severity("Status", "Closed", config)[0] == "error"
-    assert classify_event_severity("Heartbeat", "retry in 10s", config)[0] == "warning"
+    assert classify_event_severity("Status", "Faulted", config) == (
+        "warning",
+        "#ffc107",
+        "Warning",
+    )
+    assert classify_event_severity("Status", "Closed", config) == (
+        "error",
+        "#dc3545",
+        "Error",
+    )
+    assert classify_event_severity("Heartbeat", "retry in 10s", config) == (
+        "warning",
+        "#ffc107",
+        "Warning",
+    )
+
 
 @pytest.mark.django_db
 def test_status_view_aggregate_includes_pending_events(client):
@@ -334,6 +347,7 @@ def test_status_view_aggregate_includes_pending_events(client):
     assert response.status_code == 200
     events = response.context["non_transaction_events"]
     assert any(item["details"] == "pending" for item in events)
+
 
 @pytest.mark.django_db
 def test_status_view_disables_event_admin_links_when_admin_urls_missing(
@@ -377,6 +391,7 @@ def test_status_view_disables_event_admin_links_when_admin_urls_missing(
     html = response.content.decode()
     assert "1234" in html
     assert "admin/ocpp/transaction/1234/change/" not in html
+
 
 @pytest.mark.django_db
 def test_status_view_filters_sensitive_non_transaction_events_for_non_privileged_users(

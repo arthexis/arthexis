@@ -1,6 +1,7 @@
 import json
 import re
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from datetime import timezone as dt_timezone
@@ -85,6 +86,10 @@ from .actions.common import (
 _PREFIXED_STATUS_PATTERN = re.compile(
     r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?\s+(StatusNotification processed:)",
 )
+LOG_TIMESTAMP_PREFIX_LENGTH = 24
+SEVERITY_ERROR = ("error", "#dc3545", "Error")
+SEVERITY_INFO = ("info", "#0d6efd", "Info")
+SEVERITY_WARNING = ("warning", "#ffc107", "Warning")
 
 
 @dataclass(frozen=True)
@@ -135,14 +140,14 @@ def classify_event_severity(
     if "status" in event_name.casefold():
         status_token = details.casefold().strip()
         if status_token in config.error_statuses:
-            return "error", "#dc3545", "Error"
+            return SEVERITY_ERROR
         if status_token in config.warning_statuses:
-            return "warning", "#ffc107", "Warning"
+            return SEVERITY_WARNING
     if any(token in text for token in {"error", "fault", "rejected", "closed"}):
-        return "error", "#dc3545", "Error"
+        return SEVERITY_ERROR
     if any(token in text for token in {"unavailable", "timeout", "retry"}):
-        return "warning", "#ffc107", "Warning"
-    return "info", "#0d6efd", "Info"
+        return SEVERITY_WARNING
+    return SEVERITY_INFO
 
 
 def _transaction_id_from_payload(payload: dict[str, object]) -> int | None:
@@ -196,14 +201,14 @@ def _event_dedupe_key(
 def iter_candidate_log_entries(
     keys: list[str],
     config: EventFeedConfig,
-):
+) -> Iterator[tuple[str, store.LogEntry, str]]:
     """Yield normalized candidate log lines with their source key and entry."""
 
     for source_key in keys:
         for entry in store.iter_log_entries(source_key, log_type="charger"):
-            if len(entry.text) < 24:
+            if len(entry.text) < LOG_TIMESTAMP_PREFIX_LENGTH:
                 continue
-            message = entry.text[24:].strip()
+            message = entry.text[LOG_TIMESTAMP_PREFIX_LENGTH:].strip()
             prefixed_match = _PREFIXED_STATUS_PATTERN.match(message)
             if prefixed_match is not None:
                 message = message[prefixed_match.start(1) :]
@@ -284,11 +289,24 @@ def dedupe_event_rows(
         EventRow,
     ] = {}
     for row, identity in rows:
-        dedupe_key = _event_dedupe_key(row, identity)
-        existing = deduped_rows.get(dedupe_key)
-        if existing is None or row.timestamp > existing.timestamp:
-            deduped_rows[dedupe_key] = row
+        _update_deduped_event_rows(deduped_rows, row, identity)
     return list(deduped_rows.values())
+
+
+def _update_deduped_event_rows(
+    deduped_rows: dict[
+        tuple[str, str, int | None, str | int | None, datetime | None],
+        EventRow,
+    ],
+    row: EventRow,
+    identity: str | int | None,
+) -> None:
+    """Update dedupe map with newer row for a matching dedupe key."""
+
+    dedupe_key = _event_dedupe_key(row, identity)
+    existing = deduped_rows.get(dedupe_key)
+    if existing is None or row.timestamp > existing.timestamp:
+        deduped_rows[dedupe_key] = row
 
 
 def _clear_stale_statuses_for_view() -> None:
@@ -637,9 +655,9 @@ def _collect_status_events(
     latest_before_window: tuple[datetime, str] | None = None
 
     for entry in store.iter_log_entries(keys, log_type="charger", since=window_start):
-        if len(entry.text) < 24:
+        if len(entry.text) < LOG_TIMESTAMP_PREFIX_LENGTH:
             continue
-        message = entry.text[24:].strip()
+        message = entry.text[LOG_TIMESTAMP_PREFIX_LENGTH:].strip()
         log_timestamp = entry.timestamp
 
         event_time = log_timestamp
@@ -755,13 +773,16 @@ def _important_non_transaction_events(
             {"faulted", "suspendedev", "suspendedevse", "unavailable"}
         ),
     )
-    parsed_rows: list[tuple[EventRow, str | int | None]] = []
+    deduped_rows: dict[
+        tuple[str, str, int | None, str | int | None, datetime | None],
+        EventRow,
+    ] = {}
     for source_key, entry, message in iter_candidate_log_entries(keys, config):
         row, dedupe_identity = parse_event_row(source_key, entry, message, config)
         if row is not None:
-            parsed_rows.append((row, dedupe_identity))
+            _update_deduped_event_rows(deduped_rows, row, dedupe_identity)
 
-    deduped = dedupe_event_rows(parsed_rows)
+    deduped = list(deduped_rows.values())
     serialized = [row.to_dict() for row in deduped]
     return sorted(serialized, key=lambda item: item["timestamp"], reverse=True)[:limit]
 
