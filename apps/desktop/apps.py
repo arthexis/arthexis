@@ -1,11 +1,11 @@
-"""Application configuration for desktop assistant features."""
+"""Application configuration for desktop shortcut features."""
 
 from django.apps import AppConfig
 
 
 class DesktopConfig(AppConfig):
-    """Configure desktop assistant extension registry support."""
+    """Configure desktop shortcut synchronization support."""
 
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.desktop"
-    verbose_name = "Desktop Assistant"
+    verbose_name = "Desktop Shortcuts"
