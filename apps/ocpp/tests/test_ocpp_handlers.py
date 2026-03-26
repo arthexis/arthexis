@@ -966,6 +966,9 @@ async def test_notify_monitoring_report_records_analytics():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
+    calls = getattr(consumer._handle_notify_monitoring_report_action, "__protocol_calls__", set())
+    assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyMonitoringReport") in calls
+    assert ("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyMonitoringReport") in calls
 
     payload = {
         "requestId": 99,
