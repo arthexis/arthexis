@@ -8,32 +8,27 @@
       "is_enabled": true,
       "main_app": ["playwright"],
       "node_feature": null,
-      "admin_requirements": "Allow admins to test browsers and run screenshot schedules.",
+      "admin_requirements": "Allow admins to test browsers.",
       "public_requirements": "",
       "service_requirements": "Require both global suite enablement and per-engine node feature eligibility before browser launches and on-demand screenshot execution.",
       "admin_views": [
-        "admin:playwright_playwrightbrowser_changelist",
-        "admin:playwright_websitescreenshotschedule_changelist"
+        "admin:playwright_playwrightbrowser_changelist"
       ],
       "public_views": [],
       "service_views": [
-        "apps.playwright.models.PlaywrightBrowser.create_driver",
-        "apps.playwright.models.execute_website_screenshot_schedule"
+        "apps.playwright.models.PlaywrightBrowser.create_driver"
       ],
       "code_locations": [
         "apps/playwright/admin.py",
-        "apps/playwright/models.py",
-        "apps/tasks/tasks.py"
+        "apps/playwright/models.py"
       ],
       "protocol_coverage": {},
       "metadata": {
         "runtime_paths": [
-          "apps.playwright.models.PlaywrightBrowser.create_driver",
-          "apps.playwright.models.execute_website_screenshot_schedule"
+          "apps.playwright.models.PlaywrightBrowser.create_driver"
         ],
         "admin_paths": [
-          "admin:playwright_playwrightbrowser_changelist",
-          "admin:playwright_websitescreenshotschedule_changelist"
+          "admin:playwright_playwrightbrowser_changelist"
         ],
         "node_feature_requirements": [
           "playwright-browser-chromium",

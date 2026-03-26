@@ -1,8 +1,7 @@
 import pytest
 from django.contrib.auth import get_user_model
 
-from apps.playwright import models as playwright_models
-from apps.playwright.models import SessionCookie, schedule_pending_website_screenshots
+from apps.playwright.models import SessionCookie
 
 
 @pytest.mark.django_db
@@ -23,13 +22,3 @@ def test_session_cookie_mark_rejected_and_valid_cycle():
     assert cookie.state == SessionCookie.State.ACTIVE
     assert cookie.last_rejection_reason == ""
     assert cookie.last_validated_at is not None
-
-
-def test_schedule_pending_website_screenshots_is_noop(monkeypatch):
-    monkeypatch.setattr(
-        playwright_models,
-        "execute_website_screenshot_schedule",
-        lambda target, *, user=None: pytest.fail(f"unexpected execution for {target.pk}"),
-    )
-
-    assert schedule_pending_website_screenshots() == []
