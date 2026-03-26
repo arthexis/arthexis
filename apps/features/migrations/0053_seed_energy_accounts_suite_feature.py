@@ -20,7 +20,7 @@ def seed_energy_accounts_suite_feature(apps, schema_editor):
                 "Route public charging authorization through customer energy accounts, "
                 "with optional credit enforcement."
             ),
-            "is_enabled": True,
+            "is_enabled": False,
             "node_feature": None,
             "admin_requirements": (
                 "Operators can monitor account balances and adjust whether credits are "
