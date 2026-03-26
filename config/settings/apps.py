@@ -156,7 +156,13 @@ INSTALLED_APPS = _dedupe_app_entries(INSTALLED_APPS)
 def _import_base_module(app_path: str) -> None:
     """Import the base module of an app entry."""
 
-    base_module = app_path.rsplit(".apps.", maxsplit=1)[0]
+    has_app_config_class = app_path.rsplit(".", maxsplit=1)[-1][:1].isupper()
+    if ".apps." in app_path:
+        base_module = app_path.rsplit(".apps.", maxsplit=1)[0]
+    elif has_app_config_class:
+        base_module = app_path.rsplit(".", maxsplit=1)[0]
+    else:
+        base_module = app_path
     import_module(base_module)
 
 

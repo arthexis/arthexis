@@ -57,3 +57,31 @@ def test_archived_socials_and_sponsors_runtime_surfaces_are_removed():
     assert not Path("apps/selenium").exists()
     assert socials_files == {"__init__.py"}
     assert not Path("apps/sponsors").exists()
+
+
+def test_import_base_module_uses_module_path_for_project_local_entries(monkeypatch):
+    imported_modules: list[str] = []
+
+    monkeypatch.setattr(
+        settings_apps,
+        "import_module",
+        lambda module_name: imported_modules.append(module_name),
+    )
+
+    settings_apps._import_base_module("apps.actions")
+
+    assert imported_modules == ["apps.actions"]
+
+
+def test_import_base_module_supports_nested_app_config_paths(monkeypatch):
+    imported_modules: list[str] = []
+
+    monkeypatch.setattr(
+        settings_apps,
+        "import_module",
+        lambda module_name: imported_modules.append(module_name),
+    )
+
+    settings_apps._import_base_module("apps.celery.beat_app.CeleryBeatConfig")
+
+    assert imported_modules == ["apps.celery.beat_app"]
