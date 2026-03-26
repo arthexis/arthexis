@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import shutil
+from pathlib import Path
 from typing import TYPE_CHECKING
-
-from django.conf import settings
 
 from apps.nodes.feature_detection import NodeFeatureDetectionRegistry
 
@@ -31,9 +29,9 @@ def _shortcut_listener_available() -> bool:
 def check_node_feature(
     slug: str,
     *,
-    node: "Node",
-    base_dir: Path | None = None,
-    base_path: Path | None = None,
+    node: Node,
+    base_dir: Path,
+    base_path: Path,
 ) -> bool | None:
     """Return node feature availability for shortcut-listener."""
 
@@ -46,19 +44,16 @@ def check_node_feature(
 def setup_node_feature(
     slug: str,
     *,
-    node: "Node",
-    base_dir: Path | None = None,
-    base_path: Path | None = None,
+    node: Node,
+    base_dir: Path,
+    base_path: Path,
 ) -> bool | None:
     """Use the same check callback during setup invocation."""
-
-    resolved_base_dir = base_dir or Path(settings.BASE_DIR)
-    resolved_base_path = base_path or node.get_base_path()
     return check_node_feature(
         slug,
         node=node,
-        base_dir=resolved_base_dir,
-        base_path=resolved_base_path,
+        base_dir=base_dir,
+        base_path=base_path,
     )
 
 

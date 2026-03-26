@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import inspect
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-import importlib
-import logging
 from pathlib import Path
 from threading import RLock
 from typing import TYPE_CHECKING
@@ -18,6 +18,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 logger = logging.getLogger(__name__)
 
 DetectionCallable = Callable[..., bool | None]
+DetectionRegistrar = Callable[["NodeFeatureDetectionRegistry"], None]
 
 
 def _invoke_detector(
@@ -28,34 +29,49 @@ def _invoke_detector(
     base_dir: Path,
     base_path: Path,
 ) -> bool | None:
-    """Invoke detector callbacks with backwards-compatible call signatures."""
+    """Invoke detector callbacks using the canonical signature."""
 
-    try:
-        return callback(
-            slug,
-            node=node,
-            base_dir=base_dir,
-            base_path=base_path,
+    return callback(
+        slug,
+        node=node,
+        base_dir=base_dir,
+        base_path=base_path,
+    )
+
+
+def _validate_detector_callback(callback: DetectionCallable, *, slug: str) -> None:
+    """Ensure detector callbacks use the canonical ``slug, *, node, base_dir, base_path`` signature."""
+
+    signature = inspect.signature(callback)
+    parameters = list(signature.parameters.values())
+    expected_names = ["slug", "node", "base_dir", "base_path"]
+
+    if len(parameters) != len(expected_names):
+        raise TypeError(
+            f"Detector callback for '{slug}' must accept exactly {expected_names}."
         )
-    except TypeError as exc:
-        message = str(exc)
-        if "unexpected keyword argument" not in message:
-            raise
 
-    for kwargs in (
-        {"node": node, "base_path": base_path},
-        {"node": node, "base_dir": base_dir},
-        {"node": node},
-        {},
+    expected_kinds = [
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        inspect.Parameter.KEYWORD_ONLY,
+        inspect.Parameter.KEYWORD_ONLY,
+        inspect.Parameter.KEYWORD_ONLY,
+    ]
+    for parameter, expected_name, expected_kind in zip(
+        parameters,
+        expected_names,
+        expected_kinds,
+        strict=True,
     ):
-        try:
-            return callback(slug, **kwargs)
-        except TypeError as exc:
-            message = str(exc)
-            if "unexpected keyword argument" in message:
-                continue
-            raise
-    return callback(slug)
+        if parameter.name != expected_name or parameter.kind is not expected_kind:
+            raise TypeError(
+                f"Detector callback for '{slug}' must use signature "
+                "(slug, *, node, base_dir, base_path)."
+            )
+        if parameter.default is not inspect.Parameter.empty:
+            raise TypeError(
+                f"Detector callback for '{slug}' cannot define defaults in canonical signature."
+            )
 
 
 @dataclass(frozen=True)
@@ -133,49 +149,38 @@ class NodeFeatureDetectionRegistry:
         setup: DetectionCallable | None = None,
     ) -> None:
         """Register a detector pair for ``slug``."""
+
+        if not isinstance(slug, str) or not slug.strip():
+            raise ValueError("Detector slug must be a non-empty string.")
+        if check is None and setup is None:
+            raise ValueError(f"Detector for '{slug}' must provide at least one callback.")
+        if check is not None:
+            if not callable(check):
+                raise TypeError(f"Detector 'check' callback for '{slug}' must be callable.")
+            _validate_detector_callback(check, slug=slug)
+        if setup is not None:
+            if not callable(setup):
+                raise TypeError(f"Detector 'setup' callback for '{slug}' must be callable.")
+            _validate_detector_callback(setup, slug=slug)
+
         detector = NodeFeatureDetector(slug=slug, check=check, setup=setup)
         with self._lock:
             self._detectors.setdefault(slug, []).append(detector)
 
     def discover(self) -> None:
-        """Load detector registration from installed apps."""
+        """Load detector registrations from the explicit approved detector registry."""
         with self._lock:
             if self._discovered:
                 return
 
             self._detectors.clear()
 
-            for app_config in django_apps.get_app_configs():
-                module_name = f"{app_config.name}.node_features"
-                try:
-                    module = importlib.import_module(module_name)
-                except ModuleNotFoundError as exc:
-                    if exc.name != module_name:
-                        logger.exception(
-                            "Node feature detector import failed for %s", module_name
-                        )
-                    continue
-                except Exception:
-                    logger.exception(
-                        "Node feature detector import failed for %s", module_name
-                    )
-                    continue
+            from .feature_registry import APPROVED_NODE_FEATURE_REGISTRARS
 
-                register = getattr(module, "register_node_feature_detection", None)
-                if callable(register):
-                    try:
-                        register(self)
-                    except Exception:
-                        logger.exception(
-                            "Node feature detector registration failed for %s",
-                            module_name,
-                        )
-                    continue
-
-                check = getattr(module, "check_node_feature", None)
-                setup = getattr(module, "setup_node_feature", None)
-                if callable(check) or callable(setup):
-                    self.register("*", check=check, setup=setup)
+            for registrar in APPROVED_NODE_FEATURE_REGISTRARS:
+                if not callable(registrar):
+                    raise TypeError("Node feature registrar entries must be callable.")
+                registrar(self)
 
             self._discovered = True
 
@@ -213,7 +218,7 @@ class NodeFeatureDetectionRegistry:
 
 def is_feature_active_for_node(
     *,
-    node: "Node",
+    node: Node,
     slug: str,
     base_dir: Path | None = None,
     base_path: Path | None = None,

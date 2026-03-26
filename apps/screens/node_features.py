@@ -3,8 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from django.conf import settings
-
 from apps.nodes.feature_detection import NodeFeatureDetectionRegistry
 
 from .startup_notifications import lcd_feature_enabled_for_paths
@@ -19,25 +17,23 @@ LCD_SCREEN_SLUG = "lcd-screen"
 def check_node_feature(
     slug: str,
     *,
-    node: "Node",
-    base_dir: Path | None = None,
-    base_path: Path | None = None,
+    node: Node,
+    base_dir: Path,
+    base_path: Path,
 ) -> bool | None:
     """Return ``True`` when the LCD screen feature can be enabled."""
 
     if slug != LCD_SCREEN_SLUG:
         return None
-    resolved_base_dir = base_dir or Path(settings.BASE_DIR)
-    resolved_base_path = base_path or node.get_base_path()
-    return lcd_feature_enabled_for_paths(resolved_base_dir, resolved_base_path)
+    return lcd_feature_enabled_for_paths(base_dir, base_path)
 
 
 def setup_node_feature(
     slug: str,
     *,
-    node: "Node",
-    base_dir: Path | None = None,
-    base_path: Path | None = None,
+    node: Node,
+    base_dir: Path,
+    base_path: Path,
 ) -> bool | None:
     """Allow the LCD feature to manage its own detection lifecycle."""
 

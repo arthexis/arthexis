@@ -40,9 +40,9 @@ def _playwright_engine_available(engine: str) -> bool:
 def check_node_feature(
     slug: str,
     *,
-    node: "Node",
-    base_dir: Path | None = None,
-    base_path: Path | None = None,
+    node: Node,
+    base_dir: Path,
+    base_path: Path,
 ) -> bool | None:
     """Return Playwright browser availability for matching feature slugs."""
 
@@ -56,9 +56,9 @@ def check_node_feature(
 def setup_node_feature(
     slug: str,
     *,
-    node: "Node",
-    base_dir: Path | None = None,
-    base_path: Path | None = None,
+    node: Node,
+    base_dir: Path,
+    base_path: Path,
 ) -> bool | None:
     """Allow Playwright browser features to own setup/detection lifecycle."""
 

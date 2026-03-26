@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from apps.cards import detect
-from apps.cards import node_features
+from apps.cards import detect, node_features
 
 
 @pytest.mark.django_db
@@ -24,7 +23,12 @@ def test_setup_node_feature_writes_compatibility_lock(monkeypatch, settings, tmp
         lambda *, node=None, base_dir=None, base_path=None: {"detected": True},
     )
 
-    result = node_features.setup_node_feature("rfid-scanner", node=StubNode())
+    result = node_features.setup_node_feature(
+        "rfid-scanner",
+        node=StubNode(),
+        base_dir=tmp_path,
+        base_path=tmp_path,
+    )
 
     assert result is True
     assert (tmp_path / ".locks" / "rfid.lck").exists()

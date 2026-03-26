@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
 
 from apps.nodes.feature_detection import NodeFeatureDetectionRegistry
@@ -51,26 +50,23 @@ def _is_llm_summary_active(*, base_dir: Path, base_path: Path) -> bool:
 def check_node_feature(
     slug: str,
     *,
-    node: "Node",
-    base_dir: Path | None = None,
-    base_path: Path | None = None,
+    node: Node,
+    base_dir: Path,
+    base_path: Path,
 ) -> bool | None:
     """Return whether llm-summary can be auto-enabled for ``node``."""
 
     if slug != LLM_SUMMARY_SLUG:
         return None
-
-    resolved_base_dir = base_dir or Path(settings.BASE_DIR)
-    resolved_base_path = base_path or node.get_base_path()
-    return _is_llm_summary_active(base_dir=resolved_base_dir, base_path=resolved_base_path)
+    return _is_llm_summary_active(base_dir=base_dir, base_path=base_path)
 
 
 def setup_node_feature(
     slug: str,
     *,
-    node: "Node",
-    base_dir: Path | None = None,
-    base_path: Path | None = None,
+    node: Node,
+    base_dir: Path,
+    base_path: Path,
 ) -> bool | None:
     """Allow the summary app to own llm-summary auto-detection."""
 

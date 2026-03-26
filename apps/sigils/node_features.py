@@ -17,9 +17,9 @@ LLVM_SIGILS_SLUG = "llvm-sigils"
 def check_node_feature(
     slug: str,
     *,
-    node: "Node",
-    base_dir: Path | None = None,
-    base_path: Path | None = None,
+    node: Node,
+    base_dir: Path,
+    base_path: Path,
 ) -> bool | None:
     """Return runtime availability for the LLVM sigil scanner feature slug."""
 
@@ -32,9 +32,9 @@ def check_node_feature(
 def setup_node_feature(
     slug: str,
     *,
-    node: "Node",
-    base_dir: Path | None = None,
-    base_path: Path | None = None,
+    node: Node,
+    base_dir: Path,
+    base_path: Path,
 ) -> bool | None:
     """Allow sigils app to own setup/detection for llvm-sigils."""
 

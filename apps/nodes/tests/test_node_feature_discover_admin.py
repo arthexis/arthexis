@@ -1,7 +1,7 @@
+import pytest
 from django.urls import reverse
 
-import pytest
-
+from apps.discovery.models import DiscoveryItem
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
 
@@ -36,6 +36,21 @@ def test_discover_progress_includes_manual_toggle_metadata(admin_client, monkeyp
     assert payload["manual_enablement"]["status"] == "manual"
     assert payload["manual_enablement"]["can_toggle"] is True
     assert payload["manual_enablement"]["enabled"] is False
+
+
+@pytest.mark.django_db
+def test_discover_page_renders_batch_selection_controls(admin_client):
+    """Discover tool view should expose selection controls before batch apply."""
+
+    NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
+
+    response = admin_client.get(reverse("admin:nodes_nodefeature_discover"))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert "discover-run-selected" in content
+    assert "discover-select-eligible" in content
+    assert "discover-deselect-all" in content
 
 
 @pytest.mark.django_db
@@ -158,6 +173,99 @@ def test_discover_progress_auto_enables_gpio_rtc_when_eligible(admin_client, mon
     assert payload["manual_enablement"]["can_toggle"] is False
     assert payload["enablement"]["status"] == "enabled"
     assert NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+
+
+@pytest.mark.django_db
+def test_discover_progress_apply_false_reports_eligible_without_enabling(
+    admin_client, monkeypatch
+):
+    """Eligibility preview mode should not create feature assignments."""
+
+    node = Node.objects.create(hostname="auto-preview", public_endpoint="auto-preview")
+    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    from django.contrib import messages
+
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            True,
+            "RTC detected and feature eligible.",
+            messages.SUCCESS,
+        ),
+    )
+
+    response = admin_client.post(
+        reverse("admin:nodes_nodefeature_discover_progress"),
+        {"feature_id": feature.pk, "apply": "false"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["eligible"] is True
+    assert payload["applied"] is False
+    assert payload["enablement"]["status"] == "eligible"
+    assert not NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+
+
+@pytest.mark.django_db
+def test_discover_progress_rejects_invalid_apply_value(admin_client):
+    """Discover progress should reject unrecognized apply parameter values."""
+
+    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
+
+    response = admin_client.post(
+        reverse("admin:nodes_nodefeature_discover_progress"),
+        {"feature_id": feature.pk, "apply": "maybe"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid apply value"
+
+
+@pytest.mark.django_db
+def test_discover_progress_records_preview_discovery_items(admin_client, monkeypatch):
+    """Eligibility preview mode should still record discovery audit items."""
+
+    node = Node.objects.create(hostname="preview-record", public_endpoint="preview-record")
+    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    from django.contrib import messages
+
+    from apps.discovery.models import Discovery
+    from apps.nodes.feature_checks import FeatureCheckResult
+
+    monkeypatch.setattr(
+        "apps.nodes.feature_checks.feature_checks.run",
+        lambda _feature, node=None: FeatureCheckResult(
+            True,
+            "RTC detected and feature eligible.",
+            messages.SUCCESS,
+        ),
+    )
+    discovery = Discovery.objects.create(
+        action_label="Discover",
+        app_label="nodes",
+        model_name="nodefeature",
+    )
+
+    response = admin_client.post(
+        reverse("admin:nodes_nodefeature_discover_progress"),
+        {"feature_id": feature.pk, "apply": "false", "discovery_id": discovery.pk},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["applied"] is False
+    item = DiscoveryItem.objects.get(discovery=discovery, object_id=str(feature.pk))
+    assert item.was_created is False
+    assert item.was_overwritten is False
+    assert item.data["eligible"] is True
+    assert item.data["applied"] is False
 
 
 @pytest.mark.django_db
