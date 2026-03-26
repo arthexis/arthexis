@@ -55,7 +55,9 @@ def test_rebrand_rewrites_tokens_and_prunes_seed_fixtures(tmp_path):
     assert "'acme_suite'" in module_text
 
     assert (tmp_path / "VERSION").read_text(encoding="utf-8") == "0.0.1\n"
-    assert 'version = "0.0.1"' in (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    pyproject_lines = (tmp_path / "pyproject.toml").read_text(encoding="utf-8").splitlines()
+    assert 'name = "acme_suite"' in pyproject_lines
+    assert 'version = "0.0.1"' in pyproject_lines
     assert (tmp_path / "LICENSE").read_text(encoding="utf-8") == "Arthexis License text should remain\n"
 
     assert not (tmp_path / "apps" / "core" / "fixtures" / "users__arthexis.json").exists()
@@ -148,4 +150,36 @@ def test_rebrand_accepts_explicit_version_override(tmp_path):
     )
 
     assert (tmp_path / "VERSION").read_text(encoding="utf-8") == "1.2.3\n"
-    assert 'version = "1.2.3"' in (tmp_path / "pyproject.toml").read_text(encoding="utf-8")
+    pyproject_lines = (tmp_path / "pyproject.toml").read_text(encoding="utf-8").splitlines()
+    assert 'name = "acme"' in pyproject_lines
+    assert 'version = "1.2.3"' in pyproject_lines
+
+
+def test_rebrand_updates_project_version_not_tool_version(tmp_path):
+    _write(
+        tmp_path / "pyproject.toml",
+        (
+            "[tool.example]\n"
+            'version = "9.9.9"\n'
+            '[project]\n'
+            'name = "arthexis"\n'
+            'version = "0.5.0"\n'
+        ),
+    )
+
+    call_command(
+        "rebrand",
+        "acme",
+        "--base-dir",
+        str(tmp_path),
+        "--project-version",
+        "1.2.3",
+        "--acknowledge-license",
+    )
+
+    pyproject_lines = (tmp_path / "pyproject.toml").read_text(encoding="utf-8").splitlines()
+    assert '[tool.example]' in pyproject_lines
+    assert 'version = "9.9.9"' in pyproject_lines
+    assert '[project]' in pyproject_lines
+    assert 'name = "acme"' in pyproject_lines
+    assert 'version = "1.2.3"' in pyproject_lines

@@ -289,28 +289,63 @@ class Command(BaseCommand):
 
     def _update_version_files(self, *, base_dir: Path, version: str, dry_run: bool) -> list[Path]:
         updated: list[Path] = []
+        files_to_update: list[tuple[Path, str]] = []
+
         version_path = base_dir / "VERSION"
         version_content = f"{version}\n"
         if not version_path.exists() or version_path.read_text(encoding="utf-8") != version_content:
-            updated.append(version_path)
-            if not dry_run:
-                version_path.write_text(version_content, encoding="utf-8")
+            files_to_update.append((version_path, version_content))
 
         pyproject_path = base_dir / "pyproject.toml"
         if pyproject_path.is_file():
             original_pyproject = pyproject_path.read_text(encoding="utf-8")
-            rewritten_pyproject = re.sub(
-                r'(?m)^(version\s*=\s*")[^"]*(")\s*$',
-                rf'\g<1>{version}\2',
-                original_pyproject,
-                count=1,
+            rewritten_pyproject = self._rewrite_project_version(
+                pyproject_content=original_pyproject,
+                version=version,
             )
             if rewritten_pyproject != original_pyproject:
-                updated.append(pyproject_path)
-                if not dry_run:
-                    pyproject_path.write_text(rewritten_pyproject, encoding="utf-8")
+                files_to_update.append((pyproject_path, rewritten_pyproject))
+
+        for path, content in files_to_update:
+            updated.append(path)
+            if not dry_run:
+                path.write_text(content, encoding="utf-8")
 
         return updated
+
+    def _rewrite_project_version(self, *, pyproject_content: str, version: str) -> str:
+        lines = pyproject_content.splitlines(keepends=True)
+        has_project_section = False
+        in_project_section = False
+        version_rewritten = False
+        rewritten_lines: list[str] = []
+
+        for line in lines:
+            section_match = re.match(r"^\s*\[(?P<section>[^\]]+)\]\s*$", line.strip())
+            if section_match:
+                in_project_section = section_match.group("section") == "project"
+                if in_project_section:
+                    has_project_section = True
+
+            if in_project_section and not version_rewritten:
+                version_match = re.match(r'^(?P<prefix>\s*version\s*=\s*")[^"]*(?P<suffix>".*)$', line)
+                if version_match:
+                    rewritten_lines.append(f'{version_match.group("prefix")}{version}{version_match.group("suffix")}')
+                    version_rewritten = True
+                    continue
+
+            rewritten_lines.append(line)
+
+        rewritten_content = "".join(rewritten_lines)
+        if has_project_section:
+            return rewritten_content
+
+        return re.sub(
+            r'(?m)^(version\s*=\s*")[^"]*(")\s*$',
+            rf'\g<1>{version}\2',
+            pyproject_content,
+            count=1,
+        )
 
     def _iter_candidate_files(self, base_dir: Path):
         for path in base_dir.rglob("*"):
