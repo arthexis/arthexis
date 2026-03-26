@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlparse
+from tempfile import TemporaryDirectory
+from urllib.error import URLError
+from urllib.parse import unquote, urlparse
+from urllib.request import urlopen
 
 from django.db import transaction
 
@@ -73,6 +77,8 @@ class BuildResult:
 
 
 def _sha256_for_file(path: Path) -> str:
+    """Compute the SHA-256 checksum for a file."""
+
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -81,6 +87,8 @@ def _sha256_for_file(path: Path) -> str:
 
 
 def _ensure_guestfish() -> None:
+    """Ensure guestfish is available for image customization."""
+
     if shutil.which("guestfish"):
         return
     raise ImagerBuildError(
@@ -89,9 +97,12 @@ def _ensure_guestfish() -> None:
 
 
 def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
+    """Resolve local/file/http(s) base image inputs to a local filesystem path."""
+
     parsed = urlparse(base_image_uri)
     if parsed.scheme in ("", "file"):
-        path = Path(parsed.path if parsed.scheme else base_image_uri).expanduser().resolve()
+        resolved_path = unquote(parsed.path) if parsed.scheme else base_image_uri
+        path = Path(resolved_path).expanduser().resolve()
         if not path.exists():
             raise ImagerBuildError(f"Base image does not exist: {path}")
         return path
@@ -99,19 +110,20 @@ def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
     if parsed.scheme not in {"http", "https"}:
         raise ImagerBuildError("Only file, http, and https base image URIs are supported.")
 
-    destination = workspace / Path(parsed.path).name
-    result = subprocess.run(
-        ["curl", "-fsSL", base_image_uri, "-o", str(destination)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise ImagerBuildError(f"Could not download base image: {result.stderr.strip()}")
+    destination_name = Path(unquote(parsed.path)).name or "base-image.img"
+    destination = workspace / destination_name
+    try:
+        with urlopen(base_image_uri) as response, destination.open("wb") as output_handle:
+            shutil.copyfileobj(response, output_handle)
+    except URLError as exc:
+        reason = getattr(exc, "reason", str(exc))
+        raise ImagerBuildError(f"Could not download base image: {reason}") from exc
     return destination
 
 
 def _guestfish_write(image_path: Path, local_path: Path, remote_path: str, chmod_mode: str | None = None) -> None:
+    """Upload a local file into the disk image using guestfish."""
+
     script_parts = [
         f"upload {shlex.quote(str(local_path))} {shlex.quote(remote_path)}",
     ]
@@ -130,25 +142,30 @@ def _guestfish_write(image_path: Path, local_path: Path, remote_path: str, chmod
 
 
 def _customize_image(image_path: Path, *, git_url: str) -> None:
+    """Inject bootstrap scripts and systemd units into the image."""
+
     _ensure_guestfish()
-    work_dir = image_path.parent
-    bootstrap = work_dir / "arthexis-bootstrap.sh"
-    service = work_dir / "arthexis-bootstrap.service"
-    firstrun = work_dir / "firstrun.sh"
+    with TemporaryDirectory(dir=image_path.parent) as temporary_directory:
+        work_dir = Path(temporary_directory)
+        bootstrap = work_dir / "arthexis-bootstrap.sh"
+        service = work_dir / "arthexis-bootstrap.service"
+        firstrun = work_dir / "firstrun.sh"
 
-    bootstrap.write_text(BOOTSTRAP_SCRIPT, encoding="utf-8")
-    service.write_text(SYSTEMD_SERVICE.format(git_url=git_url), encoding="utf-8")
-    firstrun.write_text(FIRST_RUN_SCRIPT, encoding="utf-8")
+        bootstrap.write_text(BOOTSTRAP_SCRIPT, encoding="utf-8")
+        service.write_text(SYSTEMD_SERVICE.format(git_url=git_url), encoding="utf-8")
+        firstrun.write_text(FIRST_RUN_SCRIPT, encoding="utf-8")
 
-    _guestfish_write(image_path, bootstrap, "/usr/local/bin/arthexis-bootstrap.sh", chmod_mode="0755")
-    _guestfish_write(image_path, service, "/etc/systemd/system/arthexis-bootstrap.service")
-    try:
-        _guestfish_write(image_path, firstrun, "/boot/firstrun.sh", chmod_mode="0755")
-    except ImagerBuildError:
-        _guestfish_write(image_path, firstrun, "/boot/firmware/firstrun.sh", chmod_mode="0755")
+        _guestfish_write(image_path, bootstrap, "/usr/local/bin/arthexis-bootstrap.sh", chmod_mode="0755")
+        _guestfish_write(image_path, service, "/etc/systemd/system/arthexis-bootstrap.service")
+        try:
+            _guestfish_write(image_path, firstrun, "/boot/firstrun.sh", chmod_mode="0755")
+        except ImagerBuildError:
+            _guestfish_write(image_path, firstrun, "/boot/firmware/firstrun.sh", chmod_mode="0755")
 
 
 def _build_download_uri(download_base_uri: str, output_filename: str) -> str:
+    """Build an optional hosted download URI for an artifact."""
+
     base = (download_base_uri or "").strip().rstrip("/")
     if not base:
         return ""
@@ -166,11 +183,19 @@ def build_rpi4b_image(
 ) -> BuildResult:
     """Build and register a Raspberry Pi 4B Arthexis image artifact."""
 
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
+        raise ImagerBuildError(
+            "Artifact name must start with an alphanumeric character and use only letters, numbers, dot, underscore, or hyphen."
+        )
+
     output_dir.mkdir(parents=True, exist_ok=True)
-    source_path = _resolve_base_image(base_image_uri, output_dir)
     output_filename = f"{name}-{TARGET_RPI4B}.img"
     output_path = output_dir / output_filename
-    shutil.copyfile(source_path, output_path)
+    with TemporaryDirectory(dir=output_dir) as temporary_directory:
+        source_path = _resolve_base_image(base_image_uri, Path(temporary_directory))
+        if source_path.resolve() == output_path.resolve():
+            raise ImagerBuildError("Base image path must differ from output artifact path.")
+        shutil.copyfile(source_path, output_path)
 
     if customize:
         _customize_image(output_path, git_url=git_url)

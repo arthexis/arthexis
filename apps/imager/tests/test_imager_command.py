@@ -1,6 +1,7 @@
 """Regression tests for Raspberry Pi imager workflows."""
 
-from io import StringIO
+from contextlib import nullcontext
+from io import BytesIO, StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -8,7 +9,7 @@ import pytest
 from django.core.management import call_command
 
 from apps.imager.models import RaspberryPiImageArtifact
-from apps.imager.services import TARGET_RPI4B, build_rpi4b_image
+from apps.imager.services import ImagerBuildError, TARGET_RPI4B, build_rpi4b_image
 
 
 @pytest.mark.django_db
@@ -90,3 +91,61 @@ def test_build_rpi4b_image_creates_artifact_with_download_uri(tmp_path: Path) ->
     assert result.output_path.exists()
     assert artifact.sha256 == result.sha256
     assert artifact.download_uri == "https://cdn.example.com/images/stable-rpi-4b.img"
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_rejects_unsafe_artifact_name(tmp_path: Path) -> None:
+    """Regression: artifact names should not include path traversal or separators."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+
+    with pytest.raises(ImagerBuildError, match="Artifact name must start"):
+        build_rpi4b_image(
+            name="../outside",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+        )
+
+
+@pytest.mark.django_db
+@patch("apps.imager.services.urlopen")
+def test_build_rpi4b_image_downloads_percent_encoded_http_source(mock_urlopen, tmp_path: Path) -> None:
+    """Regression: encoded HTTP paths should download and produce a valid artifact."""
+
+    source_bytes = b"http-image"
+    mock_urlopen.return_value = nullcontext(BytesIO(source_bytes))
+
+    with patch("apps.imager.services._customize_image"):
+        result = build_rpi4b_image(
+            name="httpstable",
+            base_image_uri="https://example.com/Raspberry%20Pi%20OS.img",
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=True,
+        )
+
+    assert result.output_path.exists()
+    assert result.output_path.read_bytes() == source_bytes
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_rejects_same_source_and_output_path(tmp_path: Path) -> None:
+    """Regression: build should fail when source image equals output path."""
+
+    output_path = tmp_path / "stable-rpi-4b.img"
+    output_path.write_bytes(b"raspberrypi")
+
+    with pytest.raises(ImagerBuildError, match="must differ from output artifact path"):
+        build_rpi4b_image(
+            name="stable",
+            base_image_uri=str(output_path),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+        )

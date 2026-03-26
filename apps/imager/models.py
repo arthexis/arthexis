@@ -8,7 +8,7 @@ class RaspberryPiImageArtifact(models.Model):
 
     name = models.CharField(max_length=120, unique=True)
     target = models.CharField(max_length=40, default="rpi-4b")
-    base_image_uri = models.URLField()
+    base_image_uri = models.CharField(max_length=500)
     output_filename = models.CharField(max_length=255)
     output_path = models.CharField(max_length=500)
     sha256 = models.CharField(max_length=64)

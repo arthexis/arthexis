@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("name", models.CharField(max_length=120, unique=True)),
                 ("target", models.CharField(default="rpi-4b", max_length=40)),
-                ("base_image_uri", models.URLField()),
+                ("base_image_uri", models.CharField(max_length=500)),
                 ("output_filename", models.CharField(max_length=255)),
                 ("output_path", models.CharField(max_length=500)),
                 ("sha256", models.CharField(max_length=64)),
