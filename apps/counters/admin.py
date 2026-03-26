@@ -1,6 +1,4 @@
 from django.contrib import admin, messages
-from django.contrib import admin, messages
-from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import EntityModelAdmin
 
@@ -39,6 +37,13 @@ class DashboardRuleAdmin(EntityModelAdmin):
             {
                 "fields": (
                     "condition",
+                    "condition_source",
+                    "condition_operator",
+                    "condition_expected_boolean",
+                    "condition_expected_number",
+                    "condition_expected_text",
+                    "condition_requires_triage",
+                    "condition_triage_note",
                     "success_message",
                     "failure_message",
                 ),
@@ -53,6 +58,19 @@ class DashboardRuleAdmin(EntityModelAdmin):
         ),
     )
 
-    def message_user(self, request, message, level=messages.INFO, extra_tags="", fail_silently=False):
+    def message_user(
+        self,
+        request,
+        message,
+        level=messages.INFO,
+        extra_tags="",
+        fail_silently=False,
+    ):
         # Maintain consistent messaging behavior with EntityModelAdmin
-        return super().message_user(request, message, level=level, extra_tags=extra_tags, fail_silently=fail_silently)
+        return super().message_user(
+            request,
+            message,
+            level=level,
+            extra_tags=extra_tags,
+            fail_silently=fail_silently,
+        )
