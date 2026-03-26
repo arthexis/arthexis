@@ -1,11 +1,12 @@
 """Application registry and site integration settings."""
 
-from pathlib import Path
+from importlib import import_module
 
 from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
+from django.core.exceptions import ImproperlyConfigured
 
-from .base import APPS_DIR, HAS_DEBUG_TOOLBAR
+from .base import HAS_DEBUG_TOOLBAR
 
 
 def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
@@ -24,83 +25,6 @@ def _dedupe_app_entries(app_paths: list[str]) -> list[str]:
     return deduped
 
 
-def _is_private_package_path(path: Path) -> bool:
-    """Return whether any segment in the path is private/hidden."""
-
-    return any(part.startswith((".", "_")) for part in path.parts)
-
-
-def _has_django_app_marker(path: Path, marker: str) -> bool:
-    """Return whether *path* contains a discovery marker for a conventional Django app."""
-
-    marker_path = path / marker
-    if marker == "migrations":
-        return (marker_path / "__init__.py").exists()
-    return marker_path.exists()
-
-
-def _is_django_app_dir(path: Path) -> bool:
-    """Return whether the given directory looks like a conventional Django app package."""
-
-    if not path.is_dir():
-        return False
-
-    relative_path = path.relative_to(APPS_DIR)
-    if _is_private_package_path(relative_path):
-        return False
-
-    if not (path / "__init__.py").exists():
-        return False
-
-    module_path = _to_module_path(path)
-    if module_path in NON_DJANGO_UTILITY_PACKAGES | _legacy_runtime_app_packages():
-        return False
-
-    if (path / "apps.py").exists():
-        return True
-
-    if len(relative_path.parts) != 1:
-        return False
-
-    return any(
-        _has_django_app_marker(path, marker)
-        for marker in ("models.py", "admin.py", "migrations", "templates", "static")
-    )
-
-
-def _to_module_path(path: Path) -> str:
-    """Convert an app directory into its importable ``apps.*`` module path."""
-
-    return f"apps.{'.'.join(path.relative_to(APPS_DIR).parts)}"
-
-
-def _legacy_runtime_app_packages() -> set[str]:
-    """Return retired runtime app packages implied by ``LEGACY_MIGRATION_APPS``.
-
-    Returns:
-        A set of legacy runtime package names that should stay out of automatic
-        local app discovery because their migrations are preserved through
-        ``LEGACY_MIGRATION_APPS`` shims instead.
-    """
-
-    retired_packages: set[str] = set()
-    for app_path in LEGACY_MIGRATION_APPS:
-        legacy_marker = "apps._legacy."
-        migration_suffix = "_migration_only.apps."
-        if legacy_marker not in app_path or migration_suffix not in app_path:
-            continue
-
-        legacy_name = app_path.split(legacy_marker, maxsplit=1)[1].split(
-            migration_suffix, maxsplit=1
-        )[0]
-        runtime_package = f"apps.{legacy_name.removesuffix('_migration_only')}"
-        if runtime_package == "apps.recipes":
-            continue
-        retired_packages.add(runtime_package)
-
-    return retired_packages
-
-
 LEGACY_MIGRATION_APPS = [
     "apps._legacy.calendars_migration_only.apps.CalendarsMigrationOnlyConfig",
     "apps._legacy.extensions_migration_only.apps.ExtensionsMigrationOnlyConfig",
@@ -117,45 +41,109 @@ LEGACY_MIGRATION_APPS = [
     "apps._legacy.survey_migration_only.apps.SurveyMigrationOnlyConfig",
     "config.legacy_mermaid",
 ]
-NON_DJANGO_UTILITY_PACKAGES = {
-    "apps.camera",
-}
-
-
-def _load_local_apps() -> list[str]:
-    """Load local Django apps from ``apps/`` using package discovery."""
-
-    app_dirs = [
-        candidate.parent
-        for candidate in APPS_DIR.rglob("__init__.py")
-        if _is_django_app_dir(candidate.parent)
-    ]
-
-    return sorted(_to_module_path(app_dir) for app_dir in app_dirs)
-
-
-LOCAL_APPS = _load_local_apps()
+PROJECT_LOCAL_APPS = [
+    "apps.actions",
+    "apps.apis",
+    "apps.app",
+    "apps.audio",
+    "apps.awg",
+    "apps.aws",
+    "apps.base",
+    "apps.cards",
+    "apps.cdn",
+    "apps.celery",
+    "apps.certs",
+    "apps.chats",
+    "apps.classification",
+    "apps.clocks",
+    "apps.content",
+    "apps.core",
+    "apps.counters",
+    "apps.credentials",
+    "apps.desktop",
+    "apps.discovery",
+    "apps.dns",
+    "apps.docs",
+    "apps.emails",
+    "apps.embeds",
+    "apps.energy",
+    "apps.evergo",
+    "apps.features",
+    "apps.flows",
+    "apps.forwarder.ocpp",
+    "apps.ftp",
+    "apps.gdrive",
+    "apps.groups",
+    "apps.leads",
+    "apps.links",
+    "apps.locale",
+    "apps.locals",
+    "apps.logbook",
+    "apps.maps",
+    "apps.media",
+    "apps.meta",
+    "apps.modules",
+    "apps.nginx",
+    "apps.nmcli",
+    "apps.nodes",
+    "apps.ocpp",
+    "apps.odoo",
+    "apps.ops",
+    "apps.payments",
+    "apps.playwright",
+    "apps.projects",
+    "apps.protocols",
+    "apps.prototypes",
+    "apps.rates",
+    "apps.release",
+    "apps.reports",
+    "apps.repos",
+    "apps.sensors",
+    "apps.services",
+    "apps.shop",
+    "apps.sigils",
+    "apps.simulators",
+    "apps.sites",
+    "apps.special",
+    "apps.summary",
+    "apps.tasks",
+    "apps.teams",
+    "apps.terms",
+    "apps.tests",
+    "apps.totp",
+    "apps.users",
+    "apps.vehicle",
+    "apps.video",
+    "apps.widgets",
+]
+THIRD_PARTY_APPS = [
+    "channels",
+    "django_mermaid.apps.MermaidConfig",
+    "django_object_actions",
+    "django_otp",
+    "import_export",
+    "parler",
+]
+DJANGO_CORE_APPS = [
+    "django.contrib.admin",
+    "django.contrib.admindocs",
+    "django.contrib.contenttypes",
+    "django.contrib.messages",
+    "django.contrib.sessions",
+    "django.contrib.sites",
+    "django.contrib.staticfiles",
+]
+PROJECT_APPS = [
+    "apps.whitenoise",
+    "config.auth_app.AuthConfig",
+    "apps.celery.beat_app.CeleryBeatConfig",
+]
 
 INSTALLED_APPS = (
-    [
-        "apps.whitenoise",
-        "django.contrib.admin",
-        "django.contrib.admindocs",
-        "config.auth_app.AuthConfig",
-        "django.contrib.contenttypes",
-        "django.contrib.sessions",
-        "django_otp",
-        "django.contrib.messages",
-        "django.contrib.staticfiles",
-        "django_mermaid.apps.MermaidConfig",
-        "parler",
-        "import_export",
-        "django_object_actions",
-        "django.contrib.sites",
-        "channels",
-        "apps.celery.beat_app.CeleryBeatConfig",
-    ]
-    + LOCAL_APPS
+    PROJECT_APPS
+    + DJANGO_CORE_APPS
+    + THIRD_PARTY_APPS
+    + PROJECT_LOCAL_APPS
     + LEGACY_MIGRATION_APPS
 )
 
@@ -163,6 +151,40 @@ if HAS_DEBUG_TOOLBAR:
     INSTALLED_APPS.append("debug_toolbar")
 
 INSTALLED_APPS = _dedupe_app_entries(INSTALLED_APPS)
+
+
+def _import_base_module(app_path: str) -> None:
+    """Import the base module of an app entry."""
+
+    base_module = app_path.rsplit(".apps.", maxsplit=1)[0]
+    import_module(base_module)
+
+
+def _validate_project_local_apps() -> None:
+    """Validate project app wiring is explicit and importable."""
+
+    for app_path in PROJECT_LOCAL_APPS:
+        try:
+            _import_base_module(app_path)
+        except ImportError as exc:
+            raise ImproperlyConfigured(
+                f"PROJECT_LOCAL_APPS entry '{app_path}' could not be imported."
+            ) from exc
+
+    allowed_project_apps = set(PROJECT_LOCAL_APPS) | set(PROJECT_APPS)
+    for app_path in INSTALLED_APPS:
+        if not app_path.startswith("apps."):
+            continue
+        if app_path in LEGACY_MIGRATION_APPS:
+            continue
+        if app_path not in allowed_project_apps:
+            raise ImproperlyConfigured(
+                f"INSTALLED_APPS contains unlisted local app '{app_path}'. "
+                "Declare it in PROJECT_LOCAL_APPS or PROJECT_APPS."
+            )
+
+
+_validate_project_local_apps()
 
 SITE_ID = 1
 
