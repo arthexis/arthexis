@@ -901,20 +901,16 @@ def build_upgrade_decision(
                 args=[],
                 notify=False,
             )
-        decision = AutoUpgradeDecision(
-            skip=False,
-            apply=True,
-            reason=None,
-            args=_upgrade_command_args("latest"),
-            notify=True,
+        return _apply_recency_throttle(
+            AutoUpgradeDecision(
+                skip=False,
+                apply=True,
+                reason=None,
+                args=_upgrade_command_args("latest"),
+                notify=True,
+            ),
+            recency_throttled=recency_throttled,
         )
-        if recency_throttled:
-            decision.skip = True
-            decision.apply = False
-            decision.reason = "recency-throttled"
-            decision.args = []
-            decision.notify = False
-        return decision
     else:
         target_version = repo_state.remote_version or repo_state.local_version or "0"
 
@@ -944,20 +940,76 @@ def build_upgrade_decision(
                     args=[],
                     notify=False,
                 )
-        decision = AutoUpgradeDecision(
-            skip=False,
-            apply=True,
-            reason=None,
-            args=_upgrade_command_args("stable"),
-            notify=True,
+        return _apply_recency_throttle(
+            AutoUpgradeDecision(
+                skip=False,
+                apply=True,
+                reason=None,
+                args=_upgrade_command_args("stable"),
+                notify=True,
+            ),
+            recency_throttled=recency_throttled,
         )
-        if recency_throttled:
-            decision.skip = True
-            decision.apply = False
-            decision.reason = "recency-throttled"
-            decision.args = []
-            decision.notify = False
+
+
+def _apply_recency_throttle(
+    decision: AutoUpgradeDecision, *, recency_throttled: bool
+) -> AutoUpgradeDecision:
+    if not recency_throttled:
         return decision
+
+    decision.skip = True
+    decision.apply = False
+    decision.reason = "recency-throttled"
+    decision.args = []
+    decision.notify = False
+    return decision
+
+
+def _normalize_upgrade_args_for_host(base_dir: Path, args: list[str]) -> list[str]:
+    if os.name != "nt" and args and args[0].lower().endswith(".bat"):
+        append_auto_upgrade_log(
+            base_dir,
+            "Normalized upgrade command for POSIX host",
+        )
+        return ["./upgrade.sh", *args[1:]]
+    return args
+
+
+def _skip_reason_log_message(reason: str | None, mode: AutoUpgradeMode) -> str | None:
+    reason_messages = {
+        "low-severity-unstable-skip": (
+            "Skipping auto-upgrade for low severity patch on latest channel"
+        ),
+        "pypi-release-missing": (
+            "Skipping auto-upgrade; PyPI release has not been published yet."
+        ),
+        "recency-throttled": (
+            "Skipping auto-upgrade; last run was less than "
+            f"{mode.interval_minutes} minutes ago"
+        ),
+        "release-revision-mismatch": (
+            "Skipping stable auto-upgrade; release revision does not match origin/main"
+        ),
+    }
+    return reason_messages.get(reason)
+
+
+def _should_recheck_recency(mode: AutoUpgradeMode) -> bool:
+    return not mode.admin_override and not mode.skip_recency_check
+
+
+def _skip_decision_for_recency_race(
+    base_dir: Path, mode: AutoUpgradeMode, decision: AutoUpgradeDecision
+) -> AutoUpgradeDecision:
+    if not decision.apply or not _should_recheck_recency(mode):
+        return decision
+
+    if not _auto_upgrade_ran_recently(base_dir, mode.interval_minutes):
+        return decision
+
+    return _apply_recency_throttle(decision, recency_throttled=True)
+
 
 def _execute_upgrade_decision(
     base_dir: Path,
@@ -970,33 +1022,12 @@ def _execute_upgrade_decision(
     ops: AutoUpgradeOperations,
     state: AutoUpgradeState,
 ) -> bool:
+    decision = _skip_decision_for_recency_race(base_dir, mode, decision)
+    decision.args = _normalize_upgrade_args_for_host(base_dir, decision.args)
     if decision.skip:
-        if decision.reason == "pypi-release-missing":
-            append_auto_upgrade_log(
-                base_dir,
-                "Skipping auto-upgrade; PyPI release has not been published yet.",
-            )
-        elif decision.reason == "low-severity-unstable-skip":
-            append_auto_upgrade_log(
-                base_dir,
-                "Skipping auto-upgrade for low severity patch on latest channel",
-            )
-        elif decision.reason == "release-revision-mismatch":
-            append_auto_upgrade_log(
-                base_dir,
-                (
-                    "Skipping stable auto-upgrade; release revision does not "
-                    "match origin/main"
-                ),
-            )
-        elif decision.reason == "recency-throttled":
-            append_auto_upgrade_log(
-                base_dir,
-                (
-                    "Skipping auto-upgrade; last run was less than "
-                    f"{mode.interval_minutes} minutes ago"
-                ),
-            )
+        message = _skip_reason_log_message(decision.reason, mode)
+        if message:
+            append_auto_upgrade_log(base_dir, message)
 
         ops.ensure_runtime_services(
             base_dir,
@@ -1204,13 +1235,6 @@ def check_github_updates(
                 and _auto_upgrade_ran_recently(base_dir, mode.interval_minutes)
             ),
         )
-        if os.name != "nt" and decision.args and decision.args[0].lower().endswith(".bat"):
-            decision.args = ["./upgrade.sh", *decision.args[1:]]
-            append_auto_upgrade_log(
-                base_dir,
-                "Normalized upgrade command for POSIX host",
-            )
-
         applied = _execute_upgrade_decision(
             base_dir,
             mode,
