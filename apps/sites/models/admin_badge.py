@@ -14,14 +14,29 @@ class AdminBadge(Ownable):
     PART_LABEL = "label"
     PART_VALUE = "value"
     PART_CHOICES = ((PART_LABEL, _("Label")), (PART_VALUE, _("Value")))
+    PROVIDER_SITE = "site"
+    PROVIDER_NODE = "node"
+    PROVIDER_ROLE = "role"
+    PROVIDER_CHOICES = (
+        (PROVIDER_SITE, _("Site")),
+        (PROVIDER_NODE, _("Node")),
+        (PROVIDER_ROLE, _("Role")),
+    )
 
     slug = models.SlugField(max_length=100, unique=True)
     name = models.CharField(max_length=120)
     label = models.CharField(max_length=32)
+    provider_key = models.CharField(
+        choices=PROVIDER_CHOICES,
+        default=PROVIDER_SITE,
+        max_length=20,
+    )
     value_query_path = models.CharField(
+        blank=True,
+        default="",
         max_length=255,
         help_text=_(
-            "Dotted path to a callable returning badge data for the current request."
+            "Deprecated: provider source is configured via Provider key."
         ),
     )
     first_part = models.CharField(max_length=10, choices=PART_CHOICES, default=PART_LABEL)
