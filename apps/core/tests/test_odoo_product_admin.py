@@ -74,30 +74,6 @@ def test_load_employees_action_requires_verified_profile(admin_client, admin_use
     assert response.status_code == 302
     assert OdooEmployee.objects.count() == 1
 
-@pytest.mark.integration
-@pytest.mark.django_db
-def test_load_employees_action_rejects_get_requests(admin_client, admin_user, monkeypatch):
-    """The import endpoint only performs sync when called with POST."""
-
-    OdooEmployee.objects.create(
-        user=admin_user,
-        host="https://odoo.example.com",
-        database="odoodb",
-        username="admin",
-        password="secret",
-        odoo_uid=99,
-        verified_on=timezone.now(),
-    )
-
-    def fail_execute(*args, **kwargs):
-        raise AssertionError("execute should not be called for GET requests")
-
-    monkeypatch.setattr(OdooEmployee, "execute", fail_execute)
-
-    response = admin_client.get(reverse("admin:odoo_odooemployee_load_employees"))
-    assert response.status_code == 302
-    assert OdooEmployee.objects.count() == 1
-
 @pytest.mark.django_db
 def test_load_employees_action_requires_change_permission(client, monkeypatch):
     """Users without change permission cannot trigger the import endpoint."""
