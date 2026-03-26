@@ -464,7 +464,8 @@ def test_register_visitor_telemetry_adds_route_ip(client, caplog, monkeypatch):
     }
 
     monkeypatch.setattr(
-        "apps.nodes.views._get_route_address", lambda host, port: "10.0.0.5"
+        "apps.nodes.views.registration.handlers._get_route_address",
+        lambda host, port: "10.0.0.5",
     )
 
     with caplog.at_level(logging.INFO, logger="register_visitor_node"):

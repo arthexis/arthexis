@@ -6,7 +6,6 @@ import ipaddress
 import json
 import logging
 from collections.abc import Mapping
-from importlib import import_module
 from urllib.parse import urlsplit
 
 import requests
@@ -43,6 +42,7 @@ from .network import (
     get_public_targets,
     iter_port_fallback_urls,
 )
+from .network_utils import _get_route_address
 from .payload import NodeRegistrationPayload, parse_registration_request, validate_payload
 from .policy import is_allowed_visitor_url
 from .sanitization import redact_mac, redact_network_value, redact_token_value, redact_url_token
@@ -602,8 +602,7 @@ def register_visitor_telemetry(request):
 
     route_ip = ""
     if target_host:
-        views_module = import_module("apps.nodes.views")
-        route_ip = views_module._get_route_address(target_host, target_port or 0)
+        route_ip = _get_route_address(target_host, target_port or 0)
 
     extra_fields = {k: v for k, v in payload.items() if k not in {"stage", "message", "target", "token"}}
     if target_host and "target_host" not in extra_fields:

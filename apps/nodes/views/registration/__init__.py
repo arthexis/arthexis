@@ -6,11 +6,11 @@ import socket
 from .auth import _authenticate_basic_credentials, _enforce_authentication, _verify_signature
 from .cors import add_cors_headers as _add_cors_headers
 from .handlers import node_info, node_list, register_node, register_visitor_proxy, register_visitor_telemetry
+from .network_utils import _get_route_address
 from .network import (
     _get_host_domain,
     _get_host_ip,
     _get_host_port,
-    _get_route_address,
     append_token as _append_token,
     get_advertised_address as _get_advertised_address,
     get_client_ip as _get_client_ip,
