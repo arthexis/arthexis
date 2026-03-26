@@ -132,8 +132,8 @@ class RFIDResource(resources.ModelResource):
             "custom_label",
             "energy_accounts",
             "reference",
-            "external_command",
-            "post_auth_command",
+            "validation_action",
+            "post_auth_action",
             "allowed",
             "color",
             "endianness",
@@ -148,8 +148,8 @@ class RFIDResource(resources.ModelResource):
             "custom_label",
             "energy_accounts",
             "reference",
-            "external_command",
-            "post_auth_command",
+            "validation_action",
+            "post_auth_action",
             "allowed",
             "color",
             "endianness",
@@ -205,9 +205,7 @@ class CopyRFIDForm(forms.Form):
         if not normalized:
             raise forms.ValidationError(_("RFID value is required."))
         if RFID.matching_queryset(normalized).exists():
-            raise forms.ValidationError(
-                _("An RFID with this value already exists.")
-            )
+            raise forms.ValidationError(_("An RFID with this value already exists."))
         return normalized
 
 
@@ -251,9 +249,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         account_field = "id"
         if form and hasattr(form, "cleaned_data"):
             account_field = form.cleaned_data.get("account_field") or "id"
-        resource_kwargs["account_field"] = (
-            "name" if account_field == "name" else "id"
-        )
+        resource_kwargs["account_field"] = "name" if account_field == "name" else "id"
         return resource_kwargs
 
     def get_confirm_form_initial(self, request, import_form):
@@ -269,12 +265,8 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         resource_kwargs = super().get_export_resource_kwargs(request, **kwargs)
         account_field = "id"
         if export_form and hasattr(export_form, "cleaned_data"):
-            account_field = (
-                export_form.cleaned_data.get("account_field") or "id"
-            )
-        resource_kwargs["account_field"] = (
-            "name" if account_field == "name" else "id"
-        )
+            account_field = export_form.cleaned_data.get("account_field") or "id"
+        resource_kwargs["account_field"] = "name" if account_field == "name" else "id"
         return resource_kwargs
 
     def label(self, obj):
@@ -317,9 +309,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 skipped += 1
                 continue
 
-            account_name = self._build_unique_account_name(
-                tag.custom_label or tag.rfid
-            )
+            account_name = self._build_unique_account_name(tag.custom_label or tag.rfid)
             with transaction.atomic():
                 account = CustomerAccount.objects.create(name=account_name)
                 account.rfids.add(tag)
@@ -440,9 +430,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 new_rfid = form.cleaned_data["rfid"]
                 label_id = RFID.next_copy_label(source)
                 data_value = source.data or []
-                copied_data = (
-                    json.loads(json.dumps(data_value)) if data_value else []
-                )
+                copied_data = json.loads(json.dumps(data_value)) if data_value else []
                 create_kwargs = {
                     "label_id": label_id,
                     "rfid": new_rfid,
@@ -452,8 +440,8 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                     "key_a_verified": source.key_a_verified,
                     "key_b_verified": source.key_b_verified,
                     "allowed": source.allowed,
-                    "external_command": source.external_command,
-                    "post_auth_command": source.post_auth_command,
+                    "validation_action": source.validation_action,
+                    "post_auth_action": source.post_auth_action,
                     "color": source.color,
                     "kind": source.kind,
                     "reference": source.reference,
@@ -464,9 +452,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                     with transaction.atomic():
                         new_tag = RFID.objects.create(**create_kwargs)
                 except IntegrityError:
-                    form.add_error(
-                        None, _("Unable to copy RFID. Please try again.")
-                    )
+                    form.add_error(None, _("Unable to copy RFID. Please try again."))
                 else:
                     new_tag.energy_accounts.set(source.energy_accounts.all())
                     self.message_user(
@@ -568,7 +554,10 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                     if accounts:
                         transferable: list[CustomerAccount] = []
                         for account in accounts:
-                            if existing_account_ids and account.pk not in existing_account_ids:
+                            if (
+                                existing_account_ids
+                                and account.pk not in existing_account_ids
+                            ):
                                 conflicting_accounts += 1
                                 continue
                             transferable.append(account)
@@ -672,9 +661,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         available_width = (
             page_width - (2 * page_margin_x) - (columns - 1) * column_spacing
         )
-        available_height = (
-            page_height - (2 * page_margin_y) - (rows - 1) * row_spacing
-        )
+        available_height = page_height - (2 * page_margin_y) - (rows - 1) * row_spacing
         scale_x = available_width / (columns * base_card_width)
         scale_y = available_height / (rows * base_card_height)
         scale = min(scale_x, scale_y, 1)
@@ -717,7 +704,9 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             font_size = max(6, 28 * scale)
             pdf_canvas.setFont(font_name, font_size)
             label_value = str(tag.label_id or "")
-            primary_label = label_value.zfill(4) if label_value.isdigit() else label_value
+            primary_label = (
+                label_value.zfill(4) if label_value.isdigit() else label_value
+            )
             descent = abs(pdfmetrics.getDescent(font_name) / 1000 * font_size)
             vertical_center = highlight_bottom + (highlight_height / 2)
             baseline = vertical_center - (descent / 2)
@@ -843,8 +832,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                     "timezone": generated_on.tzname() or "",
                 }
             generated_text = Paragraph(
-                _("Generated on: %(date)s")
-                % {"date": formatted_generated_on},
+                _("Generated on: %(date)s") % {"date": formatted_generated_on},
                 styles["Normal"],
             )
             story.append(generated_text)
@@ -930,7 +918,9 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             buffer.seek(0)
 
             response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
-            response["Content-Disposition"] = "attachment; filename=rfid-release-form.pdf"
+            response["Content-Disposition"] = (
+                "attachment; filename=rfid-release-form.pdf"
+            )
             return response
 
     def print_release_form(self, request, queryset):
@@ -1025,6 +1015,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     def scan_next(self, request):
         from apps.cards.scanner import poll_scan_attempt, record_scan_attempt
         from apps.cards.reader import validate_rfid_value
+
         ensure_feature_enabled("rfid-scanner", logger=logger)
         rfid_feature_enabled = _feature_enabled("rfid-scanner")
         if request.method == "POST":
