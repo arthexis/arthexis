@@ -321,16 +321,23 @@ class Command(BaseCommand):
         rewritten_lines: list[str] = []
 
         for line in lines:
-            section_match = re.match(r"^\s*\[(?P<section>[^\]]+)\]\s*$", line.strip())
+            section_match = re.match(r"^\s*\[(?P<section>[^\]]+)\]\s*(?:#.*)?$", line.rstrip())
             if section_match:
-                in_project_section = section_match.group("section") == "project"
+                section_name = section_match.group("section").strip()
+                in_project_section = section_name == "project"
                 if in_project_section:
                     has_project_section = True
 
             if in_project_section and not version_rewritten:
-                version_match = re.match(r'^(?P<prefix>\s*version\s*=\s*")[^"]*(?P<suffix>".*)$', line)
+                version_match = re.match(
+                    r"^(?P<prefix>\s*version\s*=\s*)(?P<quote>['\"])[^'\"]*(?P=quote)(?P<suffix>\s*(?:#.*)?\n?)$",
+                    line,
+                )
                 if version_match:
-                    rewritten_lines.append(f'{version_match.group("prefix")}{version}{version_match.group("suffix")}')
+                    rewritten_lines.append(
+                        f'{version_match.group("prefix")}{version_match.group("quote")}{version}'
+                        f'{version_match.group("quote")}{version_match.group("suffix")}'
+                    )
                     version_rewritten = True
                     continue
 
@@ -341,8 +348,8 @@ class Command(BaseCommand):
             return rewritten_content
 
         return re.sub(
-            r'(?m)^(version\s*=\s*")[^"]*(")\s*$',
-            rf'\g<1>{version}\2',
+            r'(?m)^(version\s*=\s*)(["\'])[^"\']*(\2)(\s*(?:#.*)?)$',
+            rf"\g<1>\g<2>{version}\g<2>\g<4>",
             pyproject_content,
             count=1,
         )
