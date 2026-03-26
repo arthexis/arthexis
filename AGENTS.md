@@ -51,6 +51,7 @@ curl https://api.github.com/repos/<org>/<repo>/issues
 When new apps are created:
 
 * Always create the **admin configuration** for the app using suite commands.
+* Prefer short application names, ideally a single word whenever possible.
 
 ## Retiring legacy apps
 
