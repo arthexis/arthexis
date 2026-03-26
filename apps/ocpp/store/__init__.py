@@ -27,12 +27,6 @@ _PUBLIC_FUNCTION_NAMES = tuple(
     for name in getattr(module, "__all__", [])
     if inspect.isfunction(getattr(module, name, None))
 )
-_SUBMODULE_ALIAS_EXPORTS = ("logs", "pending_calls", "transactions")
-
-for module in _modules:
-    for name in _SUBMODULE_ALIAS_EXPORTS:
-        if hasattr(module, name):
-            globals()[name] = getattr(module, name)
 
 logs = logs_module.logs
 pending_calls = pending_calls_module.pending_calls
@@ -64,7 +58,7 @@ def reassign_identity(old_key: str, new_key: str) -> str:
     return new_key
 
 
-__all__ = [*_PUBLIC_FUNCTION_NAMES, "reassign_identity"]
+__all__ = sorted([*_PUBLIC_FUNCTION_NAMES, "reassign_identity"])
 
 
 def __getattr__(name: str) -> Any:
