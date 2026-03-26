@@ -37,9 +37,7 @@ def build_selector_parent() -> argparse.ArgumentParser:
     """Build a parent parser with shared charger selector options."""
 
     parent = argparse.ArgumentParser(add_help=False)
-    parent.add_argument('--sn', dest='serial')
-    parent.add_argument('-cp', '--cp', dest='cp')
-    parent.add_argument('--default-base', action='store_true')
+    add_selector_arguments(parent)
     return parent
 
 

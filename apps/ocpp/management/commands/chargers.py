@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from collections.abc import Iterable
 from datetime import datetime
 from datetime import timezone as dt_timezone
 from pathlib import Path
@@ -650,18 +649,6 @@ class Command(BaseCommand):
         if heartbeat and meter_ts:
             return max(heartbeat, meter_ts)
         return heartbeat or meter_ts
-
-    def _render_tail(self, charger: Charger, limit: int) -> None:
-        self.renderer.render_tail(charger, limit)
-
-    def _render_sessions(self, chargers: Iterable[Charger], limit: int) -> None:
-        self.renderer.render_sessions(chargers, limit)
-
-    def _render_table(self, chargers: Iterable[Charger]) -> None:
-        self.renderer.render_table(chargers)
-
-    def _render_details(self, chargers: Iterable[Charger]) -> None:
-        self.renderer.render_details(chargers)
 
     def _upsert_ws_auth_user(self, *, username: str, password: str):
         """Create or update the websocket HTTP Basic user for charger protection."""

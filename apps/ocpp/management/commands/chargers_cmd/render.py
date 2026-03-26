@@ -19,6 +19,18 @@ class ChargersRenderer:
     def __init__(self, command):
         self.command = command
 
+    @staticmethod
+    def _format_dt(value: datetime | None) -> str | None:
+        if not value:
+            return None
+        if timezone.is_aware(value):
+            return timezone.localtime(value).isoformat()
+        return value.isoformat()
+
+    @staticmethod
+    def _format_energy(total: float) -> str:
+        return f"{total:.2f}"
+
     def render_tail(self, charger: Charger, limit: int) -> None:
         connector_label = self.connector_descriptor(charger)
         heading = f"Log tail ({connector_label}; last {limit} entries)"
@@ -52,56 +64,18 @@ class ChargersRenderer:
             charger = entry["charger"]
             connector_label = self.connector_descriptor(charger)
             label = charger.display_name or charger.charger_id
-            timestamp = self.command._format_dt(entry["timestamp"]) or "-"
+            timestamp = self._format_dt(entry["timestamp"]) or "-"
             tx_id = entry["tx_id"] or "-"
             self.command.stdout.write(
                 f"{timestamp}  {label} ({connector_label})  tx={tx_id}  {entry['path']}"
             )
 
     def render_table(self, chargers: Iterable[Charger]) -> None:
-        totals: dict[int, float] = {}
-        aggregate_totals: dict[str, float] = {}
-        aggregate_sources: set[str] = set()
-
-        for charger in chargers:
-            total = self.command._total_energy_kwh(charger)
-            totals[charger.pk] = total
-            if charger.connector_id is not None:
-                aggregate_sources.add(charger.charger_id)
-                aggregate_totals[charger.charger_id] = (
-                    aggregate_totals.get(charger.charger_id, 0.0) + total
-                )
-
-        rows: list[dict[str, str]] = []
-        for charger in chargers:
-            total = totals.get(charger.pk, 0.0)
-            if charger.connector_id is None and charger.charger_id in aggregate_sources:
-                total = aggregate_totals.get(charger.charger_id, total)
-            status_label = self.command._status_label(charger)
-            rfid_value = "on" if charger.require_rfid else "off"
-            if charger.connector_id is not None and status_label.casefold() == "charging":
-                tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
-                if tx_obj is not None:
-                    active_rfid = str(getattr(tx_obj, "rfid", "") or "").strip()
-                    if active_rfid:
-                        rfid_value = active_rfid.upper()
-            last_contact = self.command._last_contact_timestamp(charger)
-            rows.append(
-                {
-                    "serial": charger.charger_id,
-                    "name": charger.display_name or "-",
-                    "connector": (
-                        Charger.connector_letter_from_value(charger.connector_id)
-                        if charger.connector_id is not None
-                        else "all"
-                    ),
-                    "rfid": rfid_value,
-                    "public": "yes" if charger.public_display else "no",
-                    "status": status_label,
-                    "energy": self.command._format_energy(total),
-                    "last_contact": self.command._format_dt(last_contact) or "-",
-                }
-            )
+        totals, aggregate_totals, aggregate_sources = self._compute_aggregates(chargers)
+        rows = [
+            self._build_row(charger, totals, aggregate_totals, aggregate_sources)
+            for charger in chargers
+        ]
 
         headers = {
             "serial": "Serial",
@@ -155,11 +129,11 @@ class ChargersRenderer:
                     "Manager Node",
                     charger.manager_node.hostname if charger.manager_node else "-",
                 ),
-                ("Last Heartbeat", self.command._format_dt(charger.last_heartbeat) or "-"),
+                ("Last Heartbeat", self._format_dt(charger.last_heartbeat) or "-"),
                 ("Last Status", charger.last_status or "-"),
                 (
                     "Last Status Timestamp",
-                    self.command._format_dt(charger.last_status_timestamp) or "-",
+                    self._format_dt(charger.last_status_timestamp) or "-",
                 ),
                 ("Last Error Code", charger.last_error_code or "-"),
                 ("Availability State", charger.availability_state or "-"),
@@ -169,7 +143,7 @@ class ChargersRenderer:
                 ("Firmware Info", charger.firmware_status_info or "-"),
                 (
                     "Firmware Timestamp",
-                    self.command._format_dt(charger.firmware_timestamp) or "-",
+                    self._format_dt(charger.firmware_timestamp) or "-",
                 ),
                 ("Last Path", charger.last_path or "-"),
             ]
@@ -260,21 +234,25 @@ class ChargersRenderer:
 
     def collect_session_entries(self, chargers: Iterable[Charger]) -> list[dict[str, object]]:
         entries: list[dict[str, object]] = []
+        seen_paths: set[Path] = set()
         for charger in chargers:
             for folder in self.session_folders_for_charger(charger):
                 for path in folder.glob("*.json"):
+                    if path in seen_paths:
+                        continue
                     if not path.is_file():
                         continue
                     try:
                         stat = path.stat()
                     except FileNotFoundError:
                         continue
+                    seen_paths.add(path)
                     timestamp = datetime.fromtimestamp(stat.st_mtime, tz=dt_timezone.utc)
                     entries.append(
                         {
-                            "timestamp": timezone.localtime(timestamp),
                             "charger": charger,
                             "path": path,
+                            "timestamp": timezone.localtime(timestamp),
                             "tx_id": self.session_transaction_id(path.name),
                         }
                     )
@@ -305,10 +283,78 @@ class ChargersRenderer:
             registered = log_names.get(key)
             if registered:
                 candidates.add(registered)
-        folders = []
+        folders: list[Path] = []
+        seen_paths: set[Path] = set()
         for name in candidates:
             safe_name = self.safe_session_name(name)
             path = store.SESSION_DIR / safe_name
+            if path in seen_paths:
+                continue
             if path.exists() and path.is_dir():
+                seen_paths.add(path)
                 folders.append(path)
         return folders
+
+    def _compute_aggregates(
+        self, chargers: Iterable[Charger]
+    ) -> tuple[dict[int, float], dict[str, float], set[str]]:
+        totals: dict[int, float] = {}
+        aggregate_totals: dict[str, float] = {}
+        aggregate_sources: set[str] = set()
+
+        for charger in chargers:
+            total = self.command._total_energy_kwh(charger)
+            totals[charger.pk] = total
+            if charger.connector_id is None:
+                continue
+            aggregate_sources.add(charger.charger_id)
+            aggregate_totals[charger.charger_id] = (
+                aggregate_totals.get(charger.charger_id, 0.0) + total
+            )
+        return totals, aggregate_totals, aggregate_sources
+
+    def _get_active_rfid(self, charger: Charger, status_label: str) -> str | None:
+        if charger.connector_id is None or status_label.casefold() != "charging":
+            return None
+        tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
+        if tx_obj is None:
+            return None
+        active_rfid = str(getattr(tx_obj, "rfid", "") or "").strip()
+        if not active_rfid:
+            return None
+        return active_rfid.upper()
+
+    def _build_row(
+        self,
+        charger: Charger,
+        totals: dict[int, float],
+        aggregate_totals: dict[str, float],
+        aggregate_sources: set[str],
+    ) -> dict[str, str]:
+        total = totals.get(charger.pk, 0.0)
+        if charger.connector_id is None and charger.charger_id in aggregate_sources:
+            total = aggregate_totals.get(charger.charger_id, total)
+
+        status_label = self.command._status_label(charger)
+        rfid_value = self._get_active_rfid(charger, status_label)
+        if not rfid_value:
+            rfid_value = "on" if charger.require_rfid else "off"
+
+        last_contact = self.command._last_contact_timestamp(charger)
+        connector = "all"
+        if charger.connector_id is not None:
+            connector = (
+                Charger.connector_letter_from_value(charger.connector_id)
+                or str(charger.connector_id)
+            )
+
+        return {
+            "connector": connector,
+            "energy": self._format_energy(total),
+            "last_contact": self._format_dt(last_contact) or "-",
+            "name": charger.display_name or "-",
+            "public": "yes" if charger.public_display else "no",
+            "rfid": rfid_value,
+            "serial": charger.charger_id,
+            "status": status_label,
+        }

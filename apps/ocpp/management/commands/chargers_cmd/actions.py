@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from django.core.management.base import CommandError
+from django.db.models import QuerySet
+
+from apps.ocpp.models import Charger
 
 
 class ChargersActionRunner:
@@ -24,8 +27,8 @@ class ChargersActionRunner:
         self,
         *,
         action: dict[str, object],
-        chargers,
-        queryset,
+        chargers: list[Charger],
+        queryset: QuerySet[Charger],
         selection: dict[str, object],
     ) -> None:
         name = str(action['name'])
@@ -34,13 +37,27 @@ class ChargersActionRunner:
             raise CommandError(f'Unknown charger action: {name}')
         handler(action=action, chargers=chargers, queryset=queryset, selection=selection)
 
-    def _show(self, *, action, chargers, queryset, selection) -> None:
+    def _show(
+        self,
+        *,
+        action: dict[str, object],
+        chargers: list[Charger],
+        queryset: QuerySet[Charger],
+        selection: dict[str, object],
+    ) -> None:
         if selection['serial'] or selection['cp_raw']:
             self.command.renderer.render_details(chargers)
             return
         self.command.renderer.render_table(chargers)
 
-    def _tail(self, *, action, chargers, queryset, selection) -> None:
+    def _tail(
+        self,
+        *,
+        action: dict[str, object],
+        chargers: list[Charger],
+        queryset: QuerySet[Charger],
+        selection: dict[str, object],
+    ) -> None:
         count = self.command._validate_positive_count(action.get('count'), '--tail')
         self.command._require_selector(
             selection,
@@ -56,11 +73,25 @@ class ChargersActionRunner:
         self.command.renderer.render_details(chargers)
         self.command.renderer.render_tail(chargers[0], count)
 
-    def _sessions(self, *, action, chargers, queryset, selection) -> None:
+    def _sessions(
+        self,
+        *,
+        action: dict[str, object],
+        chargers: list[Charger],
+        queryset: QuerySet[Charger],
+        selection: dict[str, object],
+    ) -> None:
         count = self.command._validate_positive_count(action.get('count'), '--sessions')
         self.command.renderer.render_sessions(chargers, count)
 
-    def _auth_set(self, *, action, chargers, queryset, selection) -> None:
+    def _auth_set(
+        self,
+        *,
+        action: dict[str, object],
+        chargers: list[Charger],
+        queryset: QuerySet[Charger],
+        selection: dict[str, object],
+    ) -> None:
         self.command._require_selector(
             selection,
             message=(
@@ -75,7 +106,14 @@ class ChargersActionRunner:
             username=str(action.get('username') or ''),
         )
 
-    def _auth_clear(self, *, action, chargers, queryset, selection) -> None:
+    def _auth_clear(
+        self,
+        *,
+        action: dict[str, object],
+        chargers: list[Charger],
+        queryset: QuerySet[Charger],
+        selection: dict[str, object],
+    ) -> None:
         self.command._require_selector(
             selection,
             message=(
@@ -90,7 +128,14 @@ class ChargersActionRunner:
             )
         )
 
-    def _rfid(self, *, action, chargers, queryset, selection) -> None:
+    def _rfid(
+        self,
+        *,
+        action: dict[str, object],
+        chargers: list[Charger],
+        queryset: QuerySet[Charger],
+        selection: dict[str, object],
+    ) -> None:
         self.command._require_selector(selection)
         self.command._handle_rfid_action(
             chargers=chargers,
@@ -98,18 +143,39 @@ class ChargersActionRunner:
             queryset=queryset,
         )
 
-    def _rename(self, *, action, chargers, queryset, selection) -> None:
+    def _rename(
+        self,
+        *,
+        action: dict[str, object],
+        chargers: list[Charger],
+        queryset: QuerySet[Charger],
+        selection: dict[str, object],
+    ) -> None:
         self.command._require_selector(selection)
         self.command._handle_rename(chargers=chargers, value=action.get('value'))
 
-    def _stop(self, *, action, chargers, queryset, selection) -> None:
+    def _stop(
+        self,
+        *,
+        action: dict[str, object],
+        chargers: list[Charger],
+        queryset: QuerySet[Charger],
+        selection: dict[str, object],
+    ) -> None:
         self.command._require_selector(selection)
         sent = self.command._send_stop(chargers)
         self.command.stdout.write(
             self.command.style.SUCCESS(f'Sent remote stop request to {sent} charger(s).')
         )
 
-    def _restart(self, *, action, chargers, queryset, selection) -> None:
+    def _restart(
+        self,
+        *,
+        action: dict[str, object],
+        chargers: list[Charger],
+        queryset: QuerySet[Charger],
+        selection: dict[str, object],
+    ) -> None:
         self.command._require_selector(selection)
         restart_targets = self.command._action_targets_for_single_station(chargers)
         sent = self.command._send_restart(restart_targets)
