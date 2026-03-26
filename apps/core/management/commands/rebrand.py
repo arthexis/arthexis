@@ -10,6 +10,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 LICENSE_ACKNOWLEDGEMENT = "I ACKNOWLEDGE THE ARTHEXIS LICENSE"
 DEFAULT_REPO_OWNER = "arthexis"
+DEFAULT_REBRAND_VERSION = "0.0.1"
 LICENSE_REF_PLACEHOLDER = "__REBRAND_LICENSE_REF__"
 URL_GIT_PLACEHOLDER = "__REBRAND_GITHUB_URL_GIT__"
 URL_PLACEHOLDER = "__REBRAND_GITHUB_URL__"
@@ -106,6 +107,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Preview changes without writing files.",
         )
+        parser.add_argument(
+            "--project-version",
+            default=DEFAULT_REBRAND_VERSION,
+            help="Project version to write after rebrand (default: 0.0.1).",
+        )
 
     def handle(self, *args, **options):
         base_dir = Path(options.get("base_dir") or settings.BASE_DIR).resolve()
@@ -127,6 +133,7 @@ class Command(BaseCommand):
             raise CommandError("Cannot proceed without acknowledging the Arthexis License.")
 
         dry_run = bool(options.get("dry_run"))
+        version = self._normalize_version(options.get("project_version"))
         changed_files = self._replace_tokens(
             base_dir=base_dir,
             primary_name=primary_name,
@@ -136,11 +143,17 @@ class Command(BaseCommand):
             python_package=python_package,
             dry_run=dry_run,
         )
+        version_updated_files = self._update_version_files(
+            base_dir=base_dir,
+            version=version,
+            dry_run=dry_run,
+        )
         removed_seed_files = self._remove_seed_data(base_dir=base_dir, dry_run=dry_run)
 
         action = "Would update" if dry_run else "Updated"
         removal_action = "Would remove" if dry_run else "Removed"
         self.stdout.write(self.style.SUCCESS(f"{action} {len(changed_files)} file(s) with rebrand replacements."))
+        self.stdout.write(self.style.SUCCESS(f"{action} {len(version_updated_files)} version file(s)."))
         self.stdout.write(self.style.SUCCESS(f"{removal_action} {len(removed_seed_files)} seed fixture file(s)."))
 
         self.stdout.write("\nRebrand summary:")
@@ -148,6 +161,7 @@ class Command(BaseCommand):
         self.stdout.write(f"- service name: {service_name}")
         self.stdout.write(f"- repository slug: {repo_owner}/{repo_name}")
         self.stdout.write(f"- python package token: {python_package}")
+        self.stdout.write(f"- version: {version}")
         self.stdout.write("- license: Arthexis License preserved (LICENSE left untouched)")
 
     def _resolve_name(self, *, name_option: str | None, no_input: bool) -> str:
@@ -273,6 +287,73 @@ class Command(BaseCommand):
                     candidate.unlink()
         return removed
 
+    def _update_version_files(self, *, base_dir: Path, version: str, dry_run: bool) -> list[Path]:
+        updated: list[Path] = []
+        files_to_update: list[tuple[Path, str]] = []
+
+        version_path = base_dir / "VERSION"
+        version_content = f"{version}\n"
+        if not version_path.exists() or version_path.read_text(encoding="utf-8") != version_content:
+            files_to_update.append((version_path, version_content))
+
+        pyproject_path = base_dir / "pyproject.toml"
+        if pyproject_path.is_file():
+            original_pyproject = pyproject_path.read_text(encoding="utf-8")
+            rewritten_pyproject = self._rewrite_project_version(
+                pyproject_content=original_pyproject,
+                version=version,
+            )
+            if rewritten_pyproject != original_pyproject:
+                files_to_update.append((pyproject_path, rewritten_pyproject))
+
+        for path, content in files_to_update:
+            updated.append(path)
+            if not dry_run:
+                path.write_text(content, encoding="utf-8")
+
+        return updated
+
+    def _rewrite_project_version(self, *, pyproject_content: str, version: str) -> str:
+        lines = pyproject_content.splitlines(keepends=True)
+        has_project_section = False
+        in_project_section = False
+        version_rewritten = False
+        rewritten_lines: list[str] = []
+
+        for line in lines:
+            section_match = re.match(r"^\s*\[(?P<section>[^\]]+)\]\s*(?:#.*)?$", line.rstrip())
+            if section_match:
+                section_name = section_match.group("section").strip()
+                in_project_section = section_name == "project"
+                if in_project_section:
+                    has_project_section = True
+
+            if in_project_section and not version_rewritten:
+                version_match = re.match(
+                    r"^(?P<prefix>\s*version\s*=\s*)(?P<quote>['\"])[^'\"]*(?P=quote)(?P<suffix>\s*(?:#.*)?\n?)$",
+                    line,
+                )
+                if version_match:
+                    rewritten_lines.append(
+                        f'{version_match.group("prefix")}{version_match.group("quote")}{version}'
+                        f'{version_match.group("quote")}{version_match.group("suffix")}'
+                    )
+                    version_rewritten = True
+                    continue
+
+            rewritten_lines.append(line)
+
+        rewritten_content = "".join(rewritten_lines)
+        if has_project_section:
+            return rewritten_content
+
+        return re.sub(
+            r'(?m)^(version\s*=\s*)(["\'])[^"\']*(\2)(\s*(?:#.*)?)$',
+            rf"\g<1>\g<2>{version}\g<2>\g<4>",
+            pyproject_content,
+            count=1,
+        )
+
     def _iter_candidate_files(self, base_dir: Path):
         for path in base_dir.rglob("*"):
             if path.is_symlink():
@@ -298,5 +379,15 @@ class Command(BaseCommand):
         if not re.fullmatch(r"[a-z][a-z0-9_]*", cleaned):
             raise CommandError(
                 f"Invalid python package token: '{value}'. Use lowercase letters, numbers, and underscore only."
+            )
+        return cleaned
+
+    def _normalize_version(self, value: str | None) -> str:
+        cleaned = str(value or "").strip()
+        if not cleaned:
+            raise CommandError("Version cannot be empty.")
+        if not re.fullmatch(r"\d+\.\d+\.\d+(?:[A-Za-z0-9._+-]*)?", cleaned):
+            raise CommandError(
+                f"Invalid version: '{value}'. Use semantic-like versions such as 0.0.1."
             )
         return cleaned

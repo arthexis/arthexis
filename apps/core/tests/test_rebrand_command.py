@@ -17,6 +17,8 @@ def _write(path: Path, content: str) -> None:
 
 def test_rebrand_rewrites_tokens_and_prunes_seed_fixtures(tmp_path):
     _write(tmp_path / "README.md", "Arthexis project https://github.com/arthexis/arthexis\n")
+    _write(tmp_path / "VERSION", "0.2.3\n")
+    _write(tmp_path / "pyproject.toml", 'name = "arthexis"\nversion = "0.2.3"\n')
     _write(tmp_path / "scripts" / "service.sh", "service arthexis\n--name arthexis\n")
     _write(tmp_path / "module.py", "import arthexis\nVALUE='arthexis'\n")
     _write(tmp_path / "LICENSE", "Arthexis License text should remain\n")
@@ -52,6 +54,10 @@ def test_rebrand_rewrites_tokens_and_prunes_seed_fixtures(tmp_path):
     assert "import acme_suite" in module_text
     assert "'acme_suite'" in module_text
 
+    assert (tmp_path / "VERSION").read_text(encoding="utf-8") == "0.0.1\n"
+    pyproject_lines = (tmp_path / "pyproject.toml").read_text(encoding="utf-8").splitlines()
+    assert 'name = "acme_suite"' in pyproject_lines
+    assert 'version = "0.0.1"' in pyproject_lines
     assert (tmp_path / "LICENSE").read_text(encoding="utf-8") == "Arthexis License text should remain\n"
 
     assert not (tmp_path / "apps" / "core" / "fixtures" / "users__arthexis.json").exists()
@@ -126,3 +132,109 @@ def test_rebrand_interactive_license_acknowledgement(monkeypatch, tmp_path):
     )
 
     assert (tmp_path / "README.md").read_text(encoding="utf-8") == "acme\n"
+
+
+def test_rebrand_accepts_explicit_version_override(tmp_path):
+    _write(tmp_path / "README.md", "arthexis\n")
+    _write(tmp_path / "VERSION", "4.5.6\n")
+    _write(tmp_path / "pyproject.toml", 'name = "arthexis"\nversion = "4.5.6"\n')
+
+    call_command(
+        "rebrand",
+        "acme",
+        "--base-dir",
+        str(tmp_path),
+        "--project-version",
+        "1.2.3",
+        "--acknowledge-license",
+    )
+
+    assert (tmp_path / "VERSION").read_text(encoding="utf-8") == "1.2.3\n"
+    pyproject_lines = (tmp_path / "pyproject.toml").read_text(encoding="utf-8").splitlines()
+    assert 'name = "acme"' in pyproject_lines
+    assert 'version = "1.2.3"' in pyproject_lines
+
+
+def test_rebrand_updates_project_version_not_tool_version(tmp_path):
+    _write(
+        tmp_path / "pyproject.toml",
+        (
+            "[tool.example]\n"
+            'version = "9.9.9"\n'
+            '[project]\n'
+            'name = "arthexis"\n'
+            'version = "0.5.0"\n'
+        ),
+    )
+
+    call_command(
+        "rebrand",
+        "acme",
+        "--base-dir",
+        str(tmp_path),
+        "--project-version",
+        "1.2.3",
+        "--acknowledge-license",
+    )
+
+    pyproject_lines = (tmp_path / "pyproject.toml").read_text(encoding="utf-8").splitlines()
+    assert '[tool.example]' in pyproject_lines
+    assert 'version = "9.9.9"' in pyproject_lines
+    assert '[project]' in pyproject_lines
+    assert 'name = "acme"' in pyproject_lines
+    assert 'version = "1.2.3"' in pyproject_lines
+
+
+def test_rebrand_updates_spaced_project_section_with_inline_comment(tmp_path):
+    _write(
+        tmp_path / "pyproject.toml",
+        (
+            "[tool.example]\n"
+            'version = "9.9.9"\n'
+            "[ project ] # comment\n"
+            'name = "arthexis"\n'
+            'version = "0.5.0"\n'
+        ),
+    )
+
+    call_command(
+        "rebrand",
+        "acme",
+        "--base-dir",
+        str(tmp_path),
+        "--project-version",
+        "1.2.3",
+        "--acknowledge-license",
+    )
+
+    pyproject_lines = (tmp_path / "pyproject.toml").read_text(encoding="utf-8").splitlines()
+    assert '[tool.example]' in pyproject_lines
+    assert 'version = "9.9.9"' in pyproject_lines
+    assert "[ project ] # comment" in pyproject_lines
+    assert 'name = "acme"' in pyproject_lines
+    assert 'version = "1.2.3"' in pyproject_lines
+
+
+def test_rebrand_updates_single_quoted_project_version(tmp_path):
+    _write(
+        tmp_path / "pyproject.toml",
+        (
+            "[project]\n"
+            "name = 'arthexis'\n"
+            "version = '0.5.0'\n"
+        ),
+    )
+
+    call_command(
+        "rebrand",
+        "acme",
+        "--base-dir",
+        str(tmp_path),
+        "--project-version",
+        "1.2.3",
+        "--acknowledge-license",
+    )
+
+    pyproject_lines = (tmp_path / "pyproject.toml").read_text(encoding="utf-8").splitlines()
+    assert "name = 'acme'" in pyproject_lines
+    assert "version = '1.2.3'" in pyproject_lines
