@@ -13,6 +13,7 @@ from apps.odoo.tests.helpers import odoo_sync_metadata
 from apps.users.models import User
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("disable_suite", [True, False])
 def test_load_employees_action_respects_sync_feature_toggle(
     admin_client,
     admin_user,
