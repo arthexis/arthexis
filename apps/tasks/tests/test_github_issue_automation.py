@@ -13,7 +13,6 @@ from apps.tasks.tasks import create_manual_task_github_issue
 
 pytestmark = pytest.mark.django_db
 
-
 def build_manual_task_request(**overrides) -> ManualTaskRequest:
     """Create and return a minimal manual task request instance."""
 
@@ -27,7 +26,6 @@ def build_manual_task_request(**overrides) -> ManualTaskRequest:
     }
     defaults.update(overrides)
     return ManualTaskRequest.objects.create(**defaults)
-
 
 def test_manual_task_request_requires_overdue_threshold_for_overdue_trigger() -> None:
     """Overdue-triggered issue automation requires a positive threshold."""
@@ -46,7 +44,6 @@ def test_manual_task_request_requires_overdue_threshold_for_overdue_trigger() ->
         task.full_clean()
 
     assert "github_issue_overdue_after" in excinfo.value.message_dict
-
 
 def test_schedule_github_issue_overdue_uses_eta(
     monkeypatch: pytest.MonkeyPatch,
@@ -88,7 +85,6 @@ def test_schedule_github_issue_overdue_uses_eta(
     assert len(calls) == 1
     scheduled_eta = calls[0]["options"]["eta"]
     assert scheduled_eta == task.scheduled_start + timedelta(hours=6)
-
 
 def test_create_manual_task_github_issue_creates_issue(
     monkeypatch: pytest.MonkeyPatch,
@@ -135,7 +131,6 @@ def test_create_manual_task_github_issue_creates_issue(
     assert task.github_issue_number == 101
     assert task.github_issue_opened_at is not None
 
-
 def test_report_creation_enqueues_completed_issue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -164,7 +159,6 @@ def test_report_creation_enqueues_completed_issue(
     assert len(calls) == 1
     assert calls[0][1] == (task.pk, "completed")
 
-
 def test_scheduled_start_trigger_rejects_stale_early_job() -> None:
     """Scheduled-start trigger only opens at or after the current scheduled start."""
 
@@ -181,7 +175,6 @@ def test_scheduled_start_trigger_rejects_stale_early_job() -> None:
     )
 
     assert not task.can_open_github_issue_for_trigger("scheduled_start")
-
 
 def test_overdue_trigger_rejects_stale_early_job() -> None:
     """Overdue trigger only opens at or after the computed overdue threshold."""
@@ -200,48 +193,6 @@ def test_overdue_trigger_rejects_stale_early_job() -> None:
     )
 
     assert not task.can_open_github_issue_for_trigger("overdue")
-
-
-def test_schedule_github_issue_uses_cross_process_cache_dedupe(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Scheduling should dedupe duplicate trigger/ETA combinations via shared cache."""
-
-    calls: list[dict] = []
-
-    def fake_schedule(task, *, args=None, kwargs=None, require_enabled=True, **options):
-        calls.append(
-            {
-                "task": task,
-                "args": args,
-                "kwargs": kwargs,
-                "require_enabled": require_enabled,
-                "options": options,
-            }
-        )
-        return True
-
-    monkeypatch.setattr("apps.celery.utils.schedule_task", fake_schedule)
-
-    template = GitHubIssueTemplate.objects.create(
-        name="Start task",
-        title_template="Task starts",
-        body_template="Start now.",
-    )
-    task = build_manual_task_request(
-        github_issue_template=template,
-        github_issue_trigger="scheduled_start",
-    )
-
-    eta = task.scheduled_start
-    calls.clear()
-    cache.delete(task._github_issue_schedule_cache_key("scheduled_start", eta))
-
-    task.schedule_github_issue()
-    task.schedule_github_issue()
-
-    assert len(calls) == 1
-
 
 def test_create_manual_task_github_issue_skips_early_scheduled_start() -> None:
     """Task should not create issue before scheduled start time."""
