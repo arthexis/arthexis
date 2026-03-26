@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.test import RequestFactory
@@ -100,7 +101,7 @@ def test_imager_admin_create_rpi_image_view_submission_paths(
     if build_called:
         kwargs = mock_build.call_args.kwargs
         assert kwargs["name"] == payload.get("name")
-        assert kwargs["output_dir"] == Path("build/rpi-imager")
+        assert kwargs["output_dir"] == Path(settings.BASE_DIR) / "build/rpi-imager"
         assert kwargs["customize"] is customize_value
 
     if expected_message:

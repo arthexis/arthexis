@@ -51,6 +51,28 @@ class RaspberryPiImageBuildForm(forms.Form):
         return any(root == resolved_path or root in resolved_path.parents for root in roots)
 
     @staticmethod
+    def _clean_local_path(raw_path: str, *, allow_file_uri: bool) -> Path:
+        parsed = urlparse(raw_path)
+        if parsed.scheme in {"http", "https"}:
+            raise ValidationError(_("Remote URLs are not valid in this field."))
+
+        if parsed.scheme == "file":
+            if not allow_file_uri:
+                raise ValidationError(_("File URIs are not valid in this field."))
+            if parsed.netloc and parsed.netloc not in {"", "localhost"}:
+                raise ValidationError(_("File URI host must be empty or localhost."))
+            local_path = Path(unquote(parsed.path))
+        elif parsed.scheme == "":
+            local_path = Path(raw_path)
+        else:
+            raise ValidationError(_("Unsupported path scheme."))
+
+        if not local_path.is_absolute():
+            local_path = Path(settings.BASE_DIR) / local_path
+
+        return local_path.resolve(strict=False)
+
+    @staticmethod
     def _base_image_roots() -> tuple[Path, ...]:
         configured_roots = getattr(settings, "IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS", None)
         if configured_roots:
@@ -74,30 +96,23 @@ class RaspberryPiImageBuildForm(forms.Form):
         if parsed.scheme in {"http", "https"}:
             return base_image_uri
 
-        if parsed.scheme not in {"", "file"}:
-            raise ValidationError(_("Base image URI must use http, https, file, or a local path."))
-
-        local_path = Path(unquote(parsed.path)) if parsed.scheme == "file" else Path(base_image_uri)
-        if not local_path.is_absolute():
-            local_path = Path(settings.BASE_DIR) / local_path
+        local_path = self._clean_local_path(base_image_uri, allow_file_uri=True)
 
         if not self._resolved_within(local_path, self._base_image_roots()):
             raise ValidationError(_("Base image path is outside allowed image directories."))
 
-        return base_image_uri
+        return str(local_path)
 
     def clean_output_dir(self) -> str:
         """Constrain output directories to configured safe roots."""
 
         output_dir = self.cleaned_data["output_dir"].strip()
-        output_path = Path(output_dir)
-        if not output_path.is_absolute():
-            output_path = Path(settings.BASE_DIR) / output_path
+        output_path = self._clean_local_path(output_dir, allow_file_uri=False)
 
         if not self._resolved_within(output_path, self._output_roots()):
             raise ValidationError(_("Output directory is outside allowed output directories."))
 
-        return output_dir
+        return str(output_path)
 
 
 @admin.register(RaspberryPiImageArtifact)
