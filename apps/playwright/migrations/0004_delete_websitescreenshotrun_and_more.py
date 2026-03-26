@@ -2,6 +2,32 @@
 
 from django.db import migrations
 
+LEGACY_SCREENSHOT_TASK_PATH = "apps.playwright.tasks.run_scheduled_website_screenshots"
+
+
+def _periodic_task_model(apps):
+    """Return periodic task model for migration runtime and direct test imports."""
+
+    if apps is None:
+        from django_celery_beat.models import PeriodicTask
+
+        return PeriodicTask
+
+    return apps.get_model("django_celery_beat", "PeriodicTask")
+
+
+def remove_legacy_screenshot_periodic_tasks(apps, schema_editor):
+    """Delete stale beat rows for the retired screenshot sampling task path."""
+
+    del schema_editor
+
+    try:
+        PeriodicTask = _periodic_task_model(apps)
+    except LookupError:
+        return
+
+    PeriodicTask.objects.filter(task=LEGACY_SCREENSHOT_TASK_PATH).delete()
+
 
 class Migration(migrations.Migration):
 
@@ -10,6 +36,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(
+            remove_legacy_screenshot_periodic_tasks,
+            migrations.RunPython.noop,
+        ),
         migrations.DeleteModel(
             name="WebsiteScreenshotRun",
         ),
