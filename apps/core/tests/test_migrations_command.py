@@ -11,6 +11,7 @@ from django.core.management.base import CommandError
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.regression]
+MIGRATIONS_FILENAME = "MIGRATIONS.json"
 
 
 def _seed_apps_root(base_dir: Path) -> Path:
@@ -133,9 +134,49 @@ def test_migrations_next_major_rebuild_regenerates_parallel_line(
         encoding="utf-8"
     )
     tracks_payload = json.loads(
-        (tmp_path / "MIGRATION_TRACKS.json").read_text(encoding="utf-8")
+        (tmp_path / MIGRATIONS_FILENAME).read_text(encoding="utf-8")
     )
     assert not stale.exists()
     assert "BranchTagOperation" in content
     assert '"major-1.0-base"' in content
     assert tracks_payload["next_major"]["version"] == "1.0"
+
+
+def test_migrations_next_major_rebuild_reads_legacy_tracks_file(
+    monkeypatch, settings, tmp_path
+):
+    """next-major-rebuild should read legacy tracking metadata before writing new file."""
+
+    apps_dir = _seed_apps_root(tmp_path)
+    settings.BASE_DIR = tmp_path
+    settings.APPS_DIR = apps_dir
+    (tmp_path / "VERSION").write_text("0.2.3\n", encoding="utf-8")
+    _seed_app_migrations(apps_dir, "catalog")
+    (tmp_path / "MIGRATION_TRACKS.json").write_text(
+        '{"next_major": {"version": "2.0"}}\n',
+        encoding="utf-8",
+    )
+
+    def _fake_call_command(name, *args, **kwargs):
+        if name != "makemigrations":
+            raise AssertionError(f"Unexpected command: {name} {args}")
+        generated = apps_dir / "catalog" / "migrations_v2_0" / "0001_initial.py"
+        generated.write_text(
+            "from django.db import migrations\n\n"
+            "class Migration(migrations.Migration):\n"
+            "    operations = [\n"
+            "    ]\n",
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(
+        "apps.core.management.commands.migrations.call_command", _fake_call_command
+    )
+
+    call_command("migrations", "next-major-rebuild")
+
+    tracks_payload = json.loads(
+        (tmp_path / MIGRATIONS_FILENAME).read_text(encoding="utf-8")
+    )
+    assert tracks_payload["next_major"]["version"] == "2.0"
+    assert not (tmp_path / "MIGRATION_TRACKS.json").exists()
