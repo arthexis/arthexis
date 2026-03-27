@@ -126,7 +126,7 @@ def _resolve_database_alias(extra_args: list[str] | None = None) -> str:
     for index, token in enumerate(extra_args):
         if token == "--database" and index + 1 < len(extra_args):
             candidate = extra_args[index + 1].strip()
-            if candidate:
+            if candidate and not candidate.startswith("--"):
                 return candidate
         if token.startswith("--database="):
             candidate = token.split("=", maxsplit=1)[1].strip()
@@ -154,7 +154,9 @@ def _replace_database_args(
     iterator = iter(extra_args or [])
     for token in iterator:
         if token == "--database":
-            next(iterator, None)
+            candidate = next(iterator, None)
+            if candidate and candidate.startswith("--"):
+                filtered_args.append(candidate)
             continue
         if token.startswith("--database="):
             continue

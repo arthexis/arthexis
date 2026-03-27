@@ -43,6 +43,11 @@ def _completed(*, returncode: int, stderr: str = "", stdout: str = "") -> subpro
             ["--plan", "--database", "next_line"],
             id="removes-multiple-database-flags",
         ),
+        pytest.param(
+            ["--database", "--plan"],
+            ["--plan", "--database", "next_line"],
+            id="keeps-following-flag-when-database-value-missing",
+        ),
     ],
 )
 def test_run_migrations_retries_on_next_database_for_known_line_failure(
@@ -93,6 +98,29 @@ def test_run_migrations_skips_line_bump_when_error_is_not_candidate(monkeypatch)
     monkeypatch.setattr(migration_server, "_run_command", fake_run_command)
 
     exit_code = migration_server.run_migrations(next_database="next_line")
+
+    assert exit_code == 1
+    assert len(commands) == 1
+
+
+def test_run_migrations_skips_retry_when_next_database_matches_current(monkeypatch):
+    """Retry should not run when the fallback alias matches the active database."""
+
+    commands: list[list[str]] = []
+
+    def fake_run_command(command: list[str]):
+        commands.append(command)
+        return _completed(
+            returncode=1,
+            stderr="This database never completed the historical game cleanup migration.",
+        )
+
+    monkeypatch.setattr(migration_server, "_run_command", fake_run_command)
+
+    exit_code = migration_server.run_migrations(
+        extra_args=["--database", "next_line"],
+        next_database="next_line",
+    )
 
     assert exit_code == 1
     assert len(commands) == 1
