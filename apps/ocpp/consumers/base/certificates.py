@@ -12,9 +12,17 @@ from ...models import (
     CertificateRequest,
     CertificateStatusCheck,
     Charger,
-    InstalledCertificate,
 )
 from ...services import certificate_signing
+from ...services.certificate_status import (
+    STATE_ACCEPTED,
+    STATE_NOT_FOUND,
+    STATE_RESPONDER_UNAVAILABLE,
+    STATE_REVOKED,
+    STATE_UNKNOWN,
+    STATE_VALIDATION_ERROR,
+    check_certificate_status,
+)
 
 
 class CertificatesMixin:
@@ -150,22 +158,47 @@ class CertificatesMixin:
             target = self._resolve_certificate_target()
             status_value = "Failed"
             status_info = "Unknown charge point."
-            response_payload: dict[str, object] = {"status": status_value}
+            response_payload: dict[str, object] = {
+                "status": status_value,
+                "statusInfo": {
+                    "reasonCode": "Failed",
+                    "additionalInfo": status_info,
+                },
+            }
+            ocsp_result: dict[str, object] = {}
+            persisted_status = CertificateStatusCheck.STATUS_ERROR
 
             if target is not None:
-                installed = InstalledCertificate.objects.filter(
-                    charger=target, certificate_hash_data=hash_data
-                ).first()
-                if installed and installed.status == InstalledCertificate.STATUS_INSTALLED:
+                outcome = check_certificate_status(hash_data=hash_data, target=target)
+                ocsp_result = outcome.ocsp_result
+                status_info = outcome.status_info
+
+                reason_code = "Failed"
+                if outcome.state == STATE_ACCEPTED:
                     status_value = "Accepted"
-                    status_info = ""
                     response_payload = {"status": status_value}
-                else:
-                    status_info = "Certificate not found."
+                    persisted_status = CertificateStatusCheck.STATUS_ACCEPTED
+                elif outcome.state == STATE_NOT_FOUND:
+                    reason_code = "NotFound"
+                    persisted_status = CertificateStatusCheck.STATUS_REJECTED
+                elif outcome.state == STATE_REVOKED:
+                    reason_code = "Revoked"
+                    persisted_status = CertificateStatusCheck.STATUS_REJECTED
+                elif outcome.state == STATE_UNKNOWN:
+                    reason_code = "Unknown"
+                    persisted_status = CertificateStatusCheck.STATUS_REJECTED
+                elif outcome.state == STATE_RESPONDER_UNAVAILABLE:
+                    reason_code = "ResponderUnavailable"
+                    persisted_status = CertificateStatusCheck.STATUS_ERROR
+                elif outcome.state == STATE_VALIDATION_ERROR:
+                    reason_code = "FormatViolation"
+                    persisted_status = CertificateStatusCheck.STATUS_REJECTED
+
+                if status_value != "Accepted":
                     response_payload = {
                         "status": status_value,
                         "statusInfo": {
-                            "reasonCode": "NotFound",
+                            "reasonCode": reason_code,
                             "additionalInfo": status_info,
                         },
                     }
@@ -173,12 +206,8 @@ class CertificatesMixin:
                 CertificateStatusCheck.objects.create(
                     charger=target,
                     certificate_hash_data=hash_data,
-                    ocsp_result={},
-                    status=(
-                        CertificateStatusCheck.STATUS_ACCEPTED
-                        if status_value == "Accepted"
-                        else CertificateStatusCheck.STATUS_REJECTED
-                    ),
+                    ocsp_result=ocsp_result,
+                    status=persisted_status,
                     status_info=status_info,
                     request_payload=payload,
                     response_payload=response_payload,

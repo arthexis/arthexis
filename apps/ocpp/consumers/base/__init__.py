@@ -1,6 +1,7 @@
 """Base OCPP consumer components."""
 
 from ...services import certificate_signing
+from ...services import certificate_status
 from .certificates import CertificatesMixin
 from .dispatch import DispatchMixin
 from .identity import (
@@ -22,4 +23,5 @@ __all__ = [
     "_register_log_names_for_identity",
     "_resolve_client_ip",
     "certificate_signing",
+    "certificate_status",
 ]
