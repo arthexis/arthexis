@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 
 from apps.groups.constants import (
     EXTERNAL_AGENT_GROUP_NAME,
@@ -73,3 +74,13 @@ def test_explicit_groups_skip_external_agent_default(db):
 
     assert added == ()
     assert not user.groups.filter(name=EXTERNAL_AGENT_GROUP_NAME).exists()
+
+
+def test_site_operator_fixture_loads_without_explicit_permissions(db):
+    """Security-group fixture should load without requiring explicit M2M permissions."""
+
+    fixture_path = "apps/groups/fixtures/security_groups__site_operator.json"
+
+    call_command("loaddata", fixture_path, verbosity=0)
+
+    assert SecurityGroup.objects.filter(name=SITE_OPERATOR_GROUP_NAME).exists()
