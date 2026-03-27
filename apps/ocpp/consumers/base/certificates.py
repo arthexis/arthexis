@@ -18,6 +18,7 @@ from ...services import certificate_signing
 from ...services.certificate_validation import (
     CertificateValidationResult,
     validate_certificate_type,
+    validate_optional_certificate_type,
     validate_csr_payload,
 )
 
@@ -83,11 +84,15 @@ class CertificatesMixin:
                     details={"message": status_info},
                 )
             else:
-                validation = validate_certificate_type(certificate_type)
-                if validation.valid:
-                    validation = validate_csr_payload(
-                        csr_value, payload_name="EXI request"
+                validation = CertificateValidationResult(valid=True)
+                if not csr_value:
+                    validation = CertificateValidationResult(
+                        valid=False,
+                        reason_code="FormatViolation",
+                        details={"message": "EXI request payload is missing."},
                     )
+                if validation.valid:
+                    validation = validate_optional_certificate_type(certificate_type)
 
             if target is not None and not validation.valid:
                 status_info = validation.details.get(
@@ -261,7 +266,7 @@ class CertificatesMixin:
                     details={"message": status_info},
                 )
             else:
-                validation = validate_certificate_type(certificate_type)
+                validation = validate_optional_certificate_type(certificate_type)
                 if validation.valid:
                     validation = validate_csr_payload(csr_value, payload_name="CSR")
 

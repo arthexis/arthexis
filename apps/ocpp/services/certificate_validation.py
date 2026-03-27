@@ -45,6 +45,15 @@ def validate_certificate_type(certificate_type: str) -> CertificateValidationRes
     return CertificateValidationResult(valid=True)
 
 
+def validate_optional_certificate_type(
+    certificate_type: str,
+) -> CertificateValidationResult:
+    value = str(certificate_type or "").strip()
+    if not value:
+        return CertificateValidationResult(valid=True)
+    return validate_certificate_type(value)
+
+
 def validate_csr_payload(
     value: str, *, payload_name: str
 ) -> CertificateValidationResult:
@@ -117,5 +126,6 @@ __all__ = [
     "REASON_UNSUPPORTED_CERTIFICATE_TYPE",
     "SUPPORTED_CERTIFICATE_TYPES",
     "validate_certificate_type",
+    "validate_optional_certificate_type",
     "validate_csr_payload",
 ]
