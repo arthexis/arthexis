@@ -135,6 +135,33 @@ def _resolve_database_alias(extra_args: list[str] | None = None) -> str:
     return "default"
 
 
+def _replace_database_args(
+    extra_args: list[str] | None,
+    *,
+    database_alias: str,
+) -> list[str]:
+    """Return migration args with a single ``--database`` selector.
+
+    Args:
+        extra_args: Raw args forwarded to ``manage.py migrate``.
+        database_alias: Alias that should be used for the retry command.
+
+    Returns:
+        Args with prior database selectors removed and the target appended.
+    """
+
+    filtered_args: list[str] = []
+    iterator = iter(extra_args or [])
+    for token in iterator:
+        if token == "--database":
+            next(iterator, None)
+            continue
+        if token.startswith("--database="):
+            continue
+        filtered_args.append(token)
+    return [*filtered_args, "--database", database_alias]
+
+
 def _build_popen_kwargs() -> PopenKwargs:
     """Build common subprocess arguments for migration-related commands.
 
@@ -308,22 +335,10 @@ def run_migrations(
         and next_database
         and next_database != current_database
     ):
-        next_args = list(extra_args or [])
-        if "--database" in next_args:
-            db_index = next_args.index("--database")
-            if db_index + 1 < len(next_args):
-                next_args[db_index + 1] = next_database
-            else:
-                next_args.append(next_database)
-        elif any(token.startswith("--database=") for token in next_args):
-            next_args = [
-                f"--database={next_database}"
-                if token.startswith("--database=")
-                else token
-                for token in next_args
-            ]
-        else:
-            next_args.extend(["--database", next_database])
+        next_args = _replace_database_args(
+            extra_args,
+            database_alias=next_database,
+        )
 
         print(
             f"{PREFIX} Known migration-line failure detected on database "

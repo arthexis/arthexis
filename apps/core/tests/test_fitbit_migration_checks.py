@@ -103,3 +103,25 @@ def test_fitbit_cleanup_check_allows_databases_after_cleanup(monkeypatch):
 
     assert checks.fitbit_cleanup_migration_was_applied(None) == []
 
+
+def test_fitbit_cleanup_check_honors_selected_database_alias(monkeypatch):
+    """System check should inspect the database selected by migration checks."""
+
+    selected_connections = {
+        "default": object(),
+        "next_line": object(),
+    }
+    chosen_connections: list[object] = []
+
+    class FakeRecorder:
+        def __init__(self, connection):
+            chosen_connections.append(connection)
+
+        def has_table(self):
+            return False
+
+    monkeypatch.setattr(checks, "connections", selected_connections)
+    monkeypatch.setattr(checks, "MigrationRecorder", FakeRecorder)
+
+    assert checks.fitbit_cleanup_migration_was_applied(None, databases=["next_line"]) == []
+    assert chosen_connections == [selected_connections["next_line"]]
