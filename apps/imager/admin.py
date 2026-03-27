@@ -45,6 +45,14 @@ class RaspberryPiImageBuildForm(forms.Form):
         help_text=_("Copy the base image without injecting Arthexis bootstrap scripts."),
     )
 
+    def clean_name(self) -> str:
+        """Keep artifact names safe to embed into output filenames."""
+
+        name = self.cleaned_data["name"].strip()
+        if not name or name in {".", ".."} or "/" in name or "\\" in name:
+            raise ValidationError(_("Artifact name must not contain path separators or traversal segments."))
+        return name
+
     @staticmethod
     def _resolved_within(path: Path, roots: tuple[Path, ...]) -> bool:
         resolved_path = path.resolve(strict=False)
@@ -176,7 +184,7 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
                     git_url=cleaned["git_url"],
                     customize=not cleaned["skip_customize"],
                 )
-            except ImagerBuildError as exc:
+            except (ImagerBuildError, OSError) as exc:
                 messages.error(request, str(exc))
             else:
                 messages.success(request, _("RPI image '%(name)s' was created.") % {"name": cleaned["name"]})

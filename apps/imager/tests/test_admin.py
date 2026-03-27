@@ -58,6 +58,7 @@ def test_imager_dashboard_model_row_actions_include_create_rpi_image() -> None:
         ({}, None, 302, True, True, True, None),
         ({"name": ""}, None, 200, False, False, None, "This field is required."),
         ({}, ImagerBuildError("build failed"), 200, False, True, True, "build failed"),
+        ({}, OSError("permission denied"), 200, False, True, True, "permission denied"),
     ],
 )
 @patch("apps.imager.admin.build_rpi4b_image")
@@ -114,13 +115,18 @@ def test_imager_admin_create_rpi_image_view_submission_paths(
 
 @pytest.mark.django_db
 @patch("apps.imager.admin.build_rpi4b_image")
-def test_imager_admin_create_rpi_image_view_rejects_disallowed_paths(mock_build, admin_client) -> None:
-    """Regression: admin form should reject path traversal input for local paths."""
+@pytest.mark.parametrize("invalid_name", ["../../tmp/pwned", "nested/image"])
+def test_imager_admin_create_rpi_image_view_rejects_disallowed_paths(
+    mock_build,
+    admin_client,
+    invalid_name,
+) -> None:
+    """Regression: admin form should reject path traversal input for local paths and names."""
 
     response = admin_client.post(
         reverse("admin:imager_raspberrypiimageartifact_create_rpi_image"),
         data={
-            "name": "nightly",
+            "name": invalid_name,
             "base_image_uri": "file:///etc/passwd",
             "output_dir": "../../tmp/pwned",
             "download_base_uri": "",
@@ -129,6 +135,7 @@ def test_imager_admin_create_rpi_image_view_rejects_disallowed_paths(mock_build,
     )
 
     assert response.status_code == 200
+    assert "Artifact name must not contain path separators or traversal segments." in response.content.decode("utf-8")
     assert "Base image path is outside allowed image directories." in response.content.decode("utf-8")
     assert "Output directory is outside allowed output directories." in response.content.decode("utf-8")
     mock_build.assert_not_called()
