@@ -262,9 +262,16 @@ jobs:
 
           marker = "<!-- dashboard-screenshot-preview -->"
           output = Path("artifacts/pr-screenshot-comment.md")
-          images = [
-              ("Admin dashboard", Path("artifacts/admin-desktop.png")),
-              ("OCPP dashboard", Path("artifacts/ocpp-cpms-dashboard-desktop.png")),
+          images = sorted(Path("artifacts").glob("*.png"))
+          expected_images = [
+              (
+                  Path("artifacts/admin-desktop.png"),
+                  "Admin Desktop",
+              ),
+              (
+                  Path("artifacts/ocpp-cpms-dashboard-desktop.png"),
+                  "Ocpp Cpms Dashboard Desktop",
+              ),
           ]
 
           def inline_preview(path: Path) -> str:
@@ -296,10 +303,17 @@ jobs:
               "",
           ]
 
-          for label, path in images:
-              if not path.exists():
-                  lines.append(f"- ⚠️ {label}: screenshot not found at `{path}`.")
-                  continue
+          if not images:
+              lines.append("- ⚠️ No screenshots were produced in this run.")
+          else:
+              for expected_path, expected_label in expected_images:
+                  if not expected_path.exists():
+                      lines.append(
+                          f"- ⚠️ {expected_label}: expected screenshot was not produced."
+                      )
+
+          for path in images:
+              label = path.stem.replace("-", " ").replace("_", " ").title()
               preview = inline_preview(path)
               if len(preview) > 24000:
                   lines.append(f"- ⚠️ {label}: image was too large to embed inline; see workflow artifacts.")
