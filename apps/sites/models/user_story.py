@@ -39,11 +39,6 @@ class UserStory(Lead):
         db_default=False,
         help_text=_("Whether JavaScript was enabled when feedback was submitted."),
     )
-    screenshot = models.ImageField(
-        upload_to="sites/user_story_screenshots/",
-        blank=True,
-        help_text=_("Optional screenshot captured while submitting feedback."),
-    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -117,8 +112,6 @@ class UserStory(Lead):
             f"**Contact via chat:** {'Yes' if self.contact_via_chat else 'No'}",
             f"**JavaScript enabled:** {'Yes' if self.javascript_enabled else 'No'}",
         ]
-        if self.screenshot:
-            lines.append("**Screenshot:** Provided (see admin attachments).")
 
         language_code = (self.language_code or "").strip()
         if language_code:

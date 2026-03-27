@@ -3,6 +3,7 @@ from pathlib import Path
 from django.template import Context, TemplateDoesNotExist
 
 from apps.sites.admin.story_admin import UserStoryAdmin
+from apps.sites.models import UserStory
 from apps.sites.templatetags.admin_extras import include_if_exists
 
 
@@ -41,3 +42,7 @@ def test_feedback_widgets_only_render_attachment_upload_field():
 def test_user_story_admin_form_omits_screenshot_upload_field():
     assert "screenshot" not in UserStoryAdmin.fields
     assert "screenshot" not in UserStoryAdmin.readonly_fields
+
+
+def test_user_story_model_omits_screenshot_field():
+    assert "screenshot" not in {field.name for field in UserStory._meta.get_fields()}
