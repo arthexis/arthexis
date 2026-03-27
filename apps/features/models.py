@@ -207,6 +207,7 @@ class Feature(Ownable):
     def save(self, *args, **kwargs):
         """Persist and auto-link a main app when code locations provide one."""
 
+        update_fields = kwargs.get("update_fields")
         if not self.main_app_id:
             inferred_name = self.infer_main_app_name(self.code_locations)
             if inferred_name:
@@ -217,6 +218,8 @@ class Feature(Ownable):
                 )
                 app, _ = Application.objects.using(db_alias).get_or_create(name=inferred_name)
                 self.main_app = app
+                if update_fields is not None:
+                    kwargs["update_fields"] = sorted({*update_fields, "main_app"})
         return super().save(*args, **kwargs)
 
 

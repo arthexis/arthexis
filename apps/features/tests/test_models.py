@@ -99,6 +99,26 @@ def test_feature_save_infers_main_app_from_code_locations() -> None:
     assert feature.main_app.name == "meta"
 
 
+@pytest.mark.django_db
+def test_set_enabled_persists_inferred_main_app_with_update_fields() -> None:
+    """set_enabled should persist inferred main_app even with scoped update_fields."""
+
+    feature = Feature.objects.create(
+        slug="app-inference-update-fields",
+        display="App Inference Update Fields",
+        code_locations=[],
+    )
+    Feature.objects.filter(pk=feature.pk).update(code_locations=["apps/meta/views.py"])
+    feature.refresh_from_db()
+
+    assert feature.main_app_id is None
+    assert feature.set_enabled(False, update_fields=["is_enabled"]) is True
+
+    feature.refresh_from_db()
+    assert feature.main_app is not None
+    assert feature.main_app.name == "meta"
+
+
 def test_infer_main_app_name_ignores_non_app_paths() -> None:
     """Inference should return None when no app-prefixed paths are present."""
 
