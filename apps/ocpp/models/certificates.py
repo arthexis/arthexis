@@ -32,6 +32,8 @@ class CertificateRequest(Entity):
     certificate_type = models.CharField(max_length=80, blank=True, default="")
     csr = models.TextField(blank=True, default="")
     signed_certificate = models.TextField(blank=True, default="")
+    validation_reason_code = models.CharField(max_length=80, blank=True, default="")
+    validation_details = models.JSONField(default=dict, blank=True)
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,

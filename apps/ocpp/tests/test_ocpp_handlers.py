@@ -6,6 +6,9 @@ from unittest.mock import AsyncMock
 import anyio
 import pytest
 from channels.db import database_sync_to_async
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from django.utils import timezone
 
 from apps.ocpp import store, call_error_handlers, call_result_handlers
@@ -41,6 +44,18 @@ from apps.ocpp.models import (
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 from apps.ocpp.models.location import Location
 from django.utils.dateparse import parse_datetime
+
+
+def _build_valid_csr() -> str:
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    csr = (
+        x509.CertificateSigningRequestBuilder()
+        .subject_name(
+            x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, "CP-Test")])
+        )
+        .sign(key, hashes.SHA256())
+    )
+    return csr.public_bytes(serialization.Encoding.PEM).decode()
 
 
 @pytest.fixture(autouse=True)
@@ -96,11 +111,15 @@ def _reset_pending_calls() -> None:
         except Exception:
             pass
     store._pending_call_handles.clear()
+
+
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.critical
 async def test_handle_clear_charging_profile_result_updates_profile():
-    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CLR-CP-1")
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CLR-CP-1"
+    )
     profile = ChargingProfile(
         charger=charger,
         connector_id=1,
@@ -129,7 +148,7 @@ async def test_handle_clear_charging_profile_result_updates_profile():
         charger=charger, charging_profile_id=9
     )
     assert updated.last_status == "Accepted"
-    assert updated.last_status_info == "{\"detail\": \"ok\"}"
+    assert updated.last_status_info == '{"detail": "ok"}'
     assert updated.last_response_payload.get("status") == "Accepted"
     assert "msg-clear-1" in store._pending_call_results
     logs = list(store.logs["charger"].get(consumer.store_key, []))
@@ -144,7 +163,11 @@ async def test_set_monitoring_base_result_clears_pending_call():
     consumer.store_key = "CP-MON-BASE"
     consumer.charger_id = consumer.store_key
     message_id = "msg-monitoring-base"
-    metadata = {"action": "SetMonitoringBase", "charger_id": consumer.charger_id, "log_key": consumer.store_key}
+    metadata = {
+        "action": "SetMonitoringBase",
+        "charger_id": consumer.charger_id,
+        "log_key": consumer.store_key,
+    }
 
     store.register_pending_call(message_id, metadata)
 
@@ -168,7 +191,11 @@ async def test_set_monitoring_level_error_clears_pending_call():
     consumer.store_key = "CP-MON-LEVEL"
     consumer.charger_id = consumer.store_key
     message_id = "msg-monitoring-level"
-    metadata = {"action": "SetMonitoringLevel", "charger_id": consumer.charger_id, "log_key": consumer.store_key}
+    metadata = {
+        "action": "SetMonitoringLevel",
+        "charger_id": consumer.charger_id,
+        "log_key": consumer.store_key,
+    }
 
     store.register_pending_call(message_id, metadata)
 
@@ -202,9 +229,7 @@ async def test_set_monitoring_base_result_clears_pending_call_from_action():
     log_key = store.identity_key("CP-MON-ACT", None)
     context = ActionContext("CP-MON-ACT", None, charger=None, ws=ws, log_key=log_key)
     action_call = await anyio.to_thread.run_sync(
-        lambda: actions._handle_set_monitoring_base(
-            context, {"monitoringBase": "All"}
-        )
+        lambda: actions._handle_set_monitoring_base(context, {"monitoringBase": "All"})
     )
 
     assert isinstance(action_call, actions.ActionCall)
@@ -287,7 +312,11 @@ async def test_unlock_connector_result_updates_state():
     log_key = store.identity_key(charger.charger_id, charger.connector_id)
     ws = DummyWebSocket()
     context = ActionContext(
-        charger.charger_id, charger.connector_id, charger=charger, ws=ws, log_key=log_key
+        charger.charger_id,
+        charger.connector_id,
+        charger=charger,
+        ws=ws,
+        log_key=log_key,
     )
     action_call = await anyio.to_thread.run_sync(
         lambda: actions._handle_unlock_connector(context, {})
@@ -331,7 +360,11 @@ async def test_unlock_connector_error_records_failure():
     log_key = store.identity_key(charger.charger_id, charger.connector_id)
     ws = DummyWebSocket()
     context = ActionContext(
-        charger.charger_id, charger.connector_id, charger=charger, ws=ws, log_key=log_key
+        charger.charger_id,
+        charger.connector_id,
+        charger=charger,
+        ws=ws,
+        log_key=log_key,
     )
     action_call = await anyio.to_thread.run_sync(
         lambda: actions._handle_unlock_connector(context, {})
@@ -366,7 +399,9 @@ async def test_unlock_connector_error_records_failure():
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.critical
 async def test_handle_clear_charging_profile_error_records_failure():
-    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CLR-CP-2")
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CLR-CP-2"
+    )
     profile = ChargingProfile(
         charger=charger,
         connector_id=1,
@@ -409,7 +444,9 @@ async def test_cleared_charging_limit_logs_payload():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-201"
 
-    calls = getattr(consumer._handle_cleared_charging_limit_action, "__protocol_calls__", set())
+    calls = getattr(
+        consumer._handle_cleared_charging_limit_action, "__protocol_calls__", set()
+    )
     assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit") in calls
     assert ("ocpp21", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit") in calls
 
@@ -550,9 +587,7 @@ async def test_publish_firmware_status_updates_deployment():
     firmware = await database_sync_to_async(CPFirmware.objects.create)(
         name="Test Firmware", payload_json={}
     )
-    charger = await database_sync_to_async(Charger.objects.create)(
-        charger_id="PUB-201"
-    )
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="PUB-201")
     deployment = await database_sync_to_async(CPFirmwareDeployment.objects.create)(
         firmware=firmware,
         charger=charger,
@@ -646,9 +681,7 @@ async def test_notify_report_requires_mandatory_fields():
 @pytest.mark.slow
 @pytest.mark.integration
 async def test_cost_updated_persists_and_forwards():
-    charger = await database_sync_to_async(Charger.objects.create)(
-        charger_id="COST-1"
-    )
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="COST-1")
     transaction = await database_sync_to_async(Transaction.objects.create)(
         charger=charger,
         start_time=timezone.now(),
@@ -671,9 +704,7 @@ async def test_cost_updated_persists_and_forwards():
     result = await consumer._handle_cost_updated_action(payload, "msg-cost", "", "")
 
     assert result == {}
-    cost_update = await database_sync_to_async(CostUpdate.objects.get)(
-        charger=charger
-    )
+    cost_update = await database_sync_to_async(CostUpdate.objects.get)(charger=charger)
     assert cost_update.transaction_id == transaction.pk
     assert cost_update.ocpp_transaction_id == "TX-1"
     assert str(cost_update.total_cost) == "15.750"
@@ -688,9 +719,7 @@ async def test_cost_updated_persists_and_forwards():
 @pytest.mark.slow
 @pytest.mark.integration
 async def test_cost_updated_rejects_invalid_payload():
-    charger = await database_sync_to_async(Charger.objects.create)(
-        charger_id="COST-2"
-    )
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="COST-2")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, 1)
     consumer.charger_id = charger.charger_id
@@ -726,7 +755,9 @@ async def test_transaction_event_registered_for_ocpp201_and_ocpp21():
 
     assert result == {}
     consumer._assign_connector.assert_awaited()
-    calls = getattr(consumer._handle_transaction_event_action, "__protocol_calls__", set())
+    calls = getattr(
+        consumer._handle_transaction_event_action, "__protocol_calls__", set()
+    )
     assert (
         "ocpp201",
         ProtocolCallModel.CP_TO_CSMS,
@@ -756,18 +787,22 @@ async def test_get_15118_ev_certificate_persists_request(monkeypatch):
         consumers_base.certificate_signing, "sign_certificate_request", fake_sign
     )
 
-    payload = {"certificateType": "V2G", "exiRequest": "CSRDATA"}
+    payload = {"certificateType": "V2G", "exiRequest": _build_valid_csr()}
     result = await consumer._handle_get_15118_ev_certificate_action(
         payload, "msg-1", "", ""
     )
 
     assert result["status"] == "Accepted"
     assert result["exiResponse"] == "EXI-RESPONSE"
-    request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
+    request = await database_sync_to_async(CertificateRequest.objects.get)(
+        charger=charger
+    )
     assert request.action == CertificateRequest.ACTION_15118
-    assert request.csr == "CSRDATA"
+    assert request.csr == payload["exiRequest"].strip()
     assert request.status == CertificateRequest.STATUS_ACCEPTED
     assert request.signed_certificate == "EXI-RESPONSE"
+    assert request.validation_reason_code == ""
+    assert request.validation_details == {}
     assert request.response_payload["status"] == "Accepted"
 
 
@@ -791,7 +826,10 @@ async def test_get_certificate_status_persists_check():
 
     payload = {"certificateHashData": hash_data}
     result = await consumer._handle_get_certificate_status_action(
-        payload, "msg-2", "", "",
+        payload,
+        "msg-2",
+        "",
+        "",
     )
 
     assert result["status"] == "Accepted"
@@ -801,6 +839,7 @@ async def test_get_certificate_status_persists_check():
     assert status_check.status == CertificateStatusCheck.STATUS_ACCEPTED
     assert status_check.certificate_hash_data["hashAlgorithm"] == "SHA256"
     assert status_check.responded_at is not None
+
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
@@ -814,7 +853,10 @@ async def test_get_certificate_status_rejects_missing_certificate_by_default():
 
     payload = {"certificateHashData": {"hashAlgorithm": "SHA256"}}
     result = await consumer._handle_get_certificate_status_action(
-        payload, "msg-3", "", "",
+        payload,
+        "msg-3",
+        "",
+        "",
     )
 
     assert result["status"] == "Failed"
@@ -845,16 +887,60 @@ async def test_sign_certificate_validates_csr(monkeypatch):
         consumers_base.certificate_signing, "sign_certificate_request", fake_sign
     )
 
-    payload = {"csr": "   ", "certificateType": "V2G"}
+    payload = {"csr": "not-a-csr", "certificateType": "V2G"}
+    result = await consumer._handle_sign_certificate_action(payload, "msg-3", "", "")
+
+    assert result["status"] == "Rejected"
+    assert result["statusInfo"]["reasonCode"] == "FormatViolation"
+    assert called is False
+    request = await database_sync_to_async(CertificateRequest.objects.get)(
+        charger=charger
+    )
+    assert request.status == CertificateRequest.STATUS_REJECTED
+    assert request.validation_reason_code == "FormatViolation"
+    assert (
+        request.validation_details["message"]
+        == "CSR payload is not a valid PKCS#10 request."
+    )
+    assert request.status_info == "CSR payload is not a valid PKCS#10 request."
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_sign_certificate_rejects_unsupported_certificate_type(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-5")
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-5"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    called = False
+
+    def fake_sign(**kwargs):
+        nonlocal called
+        called = True
+        return "CHAIN"
+
+    monkeypatch.setattr(
+        consumers_base.certificate_signing, "sign_certificate_request", fake_sign
+    )
+
+    payload = {
+        "csr": "-----BEGIN CERTIFICATE REQUEST-----\nabc\n-----END CERTIFICATE REQUEST-----",
+        "certificateType": "BogusType",
+    }
     result = await consumer._handle_sign_certificate_action(
-        payload, "msg-3", "", ""
+        payload, "msg-unsupported", "", ""
     )
 
     assert result["status"] == "Rejected"
+    assert result["statusInfo"]["reasonCode"] == "UnsupportedCertificateType"
     assert called is False
-    request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
-    assert request.status == CertificateRequest.STATUS_REJECTED
-    assert request.status_info == "CSR payload is missing or invalid."
+    request = await database_sync_to_async(CertificateRequest.objects.get)(
+        charger=charger
+    )
+    assert request.validation_reason_code == "UnsupportedCertificateType"
+    assert request.status_info == "Unsupported certificate type 'BogusType'."
 
 
 @pytest.mark.anyio
@@ -880,22 +966,22 @@ async def test_sign_certificate_signs_and_dispatches_certificate(monkeypatch):
         consumers_base.certificate_signing, "sign_certificate_request", fake_sign
     )
 
-    payload = {"csr": "CSR-123", "certificateType": "V2G"}
-    result = await consumer._handle_sign_certificate_action(
-        payload, "msg-4", "", ""
-    )
+    payload = {"csr": _build_valid_csr(), "certificateType": "V2G"}
+    result = await consumer._handle_sign_certificate_action(payload, "msg-4", "", "")
 
     assert result["status"] == "Accepted"
 
-    request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
+    request = await database_sync_to_async(CertificateRequest.objects.get)(
+        charger=charger
+    )
     assert request.action == CertificateRequest.ACTION_SIGN
-    assert request.csr == "CSR-123"
+    assert request.csr == payload["csr"].strip()
     assert request.signed_certificate == "CERTCHAIN"
     assert request.status == CertificateRequest.STATUS_PENDING
 
-    operation = await database_sync_to_async(
-        CertificateOperation.objects.get
-    )(charger=charger, action=CertificateOperation.ACTION_SIGNED)
+    operation = await database_sync_to_async(CertificateOperation.objects.get)(
+        charger=charger, action=CertificateOperation.ACTION_SIGNED
+    )
     assert operation.status == CertificateOperation.STATUS_PENDING
 
     assert len(sent) == 1
@@ -966,7 +1052,9 @@ async def test_notify_monitoring_report_records_analytics():
     consumer.charger_id = charger.charger_id
     consumer.charger = charger
     consumer.aggregate_charger = None
-    calls = getattr(consumer._handle_notify_monitoring_report_action, "__protocol_calls__", set())
+    calls = getattr(
+        consumer._handle_notify_monitoring_report_action, "__protocol_calls__", set()
+    )
     assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyMonitoringReport") in calls
     assert ("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyMonitoringReport") in calls
 
@@ -978,7 +1066,9 @@ async def test_notify_monitoring_report_records_analytics():
         "monitoringData": [
             {
                 "component": {
-                    "name": "Meter", "instance": "main", "evse": {"id": 4, "connectorId": 2}
+                    "name": "Meter",
+                    "instance": "main",
+                    "evse": {"id": 4, "connectorId": 2},
                 },
                 "variable": {"name": "Energy", "instance": "A"},
                 "variableMonitoring": [
@@ -1077,7 +1167,9 @@ async def test_notify_customer_information_rejects_non_dict_payload():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "INFO-BAD"
 
-    result = await consumer._handle_notify_customer_information_action([], "msg-bad", "", "")
+    result = await consumer._handle_notify_customer_information_action(
+        [], "msg-bad", "", ""
+    )
 
     assert result == {}
     entries = list(store.logs["charger"].get(consumer.store_key, []))
@@ -1116,9 +1208,9 @@ async def test_notify_display_messages_persists_messages():
     )
 
     assert result == {}
-    notification = await database_sync_to_async(
-        DisplayMessageNotification.objects.get
-    )(charger=charger, request_id=9)
+    notification = await database_sync_to_async(DisplayMessageNotification.objects.get)(
+        charger=charger, request_id=9
+    )
     assert notification.completed_at is not None
     message = await database_sync_to_async(DisplayMessage.objects.get)(
         charger=charger, message_id=101
@@ -1240,8 +1332,6 @@ async def test_transaction_event_updates_request_status(monkeypatch):
     assert store.transaction_requests["msg-req-2"]["status"] == "completed"
 
 
-
-
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.critical
@@ -1281,21 +1371,22 @@ async def test_transaction_event_does_not_start_request_when_authorization_fails
         "transactionInfo": {"transactionId": "TX-RFID"},
     }
 
-    result = await consumer._handle_transaction_event_action(payload, "msg-evt-rfid", "", "")
+    result = await consumer._handle_transaction_event_action(
+        payload, "msg-evt-rfid", "", ""
+    )
 
     assert result == {"idTokenInfo": {"status": "Invalid"}}
     assert store.transaction_requests["msg-req-rfid"]["status"] == "accepted"
-    assert store.transaction_requests["msg-req-rfid"].get("transaction_id") in (None, "")
+    assert store.transaction_requests["msg-req-rfid"].get("transaction_id") in (
+        None,
+        "",
+    )
     rejected_tx = await database_sync_to_async(Transaction.objects.get)(
         charger=charger, ocpp_transaction_id="TX-RFID"
     )
-    assert (
-        rejected_tx.authorization_status
-        == Transaction.AuthorizationStatus.REJECTED
-    )
+    assert rejected_tx.authorization_status == Transaction.AuthorizationStatus.REJECTED
     assert rejected_tx.authorization_reason == "Invalid"
     assert rejected_tx.rejected_at is not None
-
 
 
 @pytest.mark.anyio
@@ -1324,18 +1415,19 @@ async def test_start_transaction_rejection_creates_transaction_record():
         "timestamp": "2024-01-01T00:00:00Z",
     }
 
-    result = await consumer._handle_start_transaction_action(payload, "msg-start-invalid", "", "")
+    result = await consumer._handle_start_transaction_action(
+        payload, "msg-start-invalid", "", ""
+    )
 
     assert result == {"idTagInfo": {"status": "Invalid"}}
     rejected_tx = await database_sync_to_async(Transaction.objects.get)(
         charger=charger, connector_id=1
     )
-    assert (
-        rejected_tx.authorization_status
-        == Transaction.AuthorizationStatus.REJECTED
-    )
+    assert rejected_tx.authorization_status == Transaction.AuthorizationStatus.REJECTED
     assert rejected_tx.authorization_reason == "Invalid"
     assert rejected_tx.rejected_at is not None
+
+
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.critical
@@ -1662,7 +1754,9 @@ async def test_report_charging_profiles_matches_local_state(monkeypatch):
     consumer._log_ocpp201_notification = lambda *args, **kwargs: None
 
     logs: list[str] = []
-    monkeypatch.setattr(store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry))
+    monkeypatch.setattr(
+        store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry)
+    )
 
     payload = {
         "requestId": 7,
@@ -1686,9 +1780,7 @@ async def test_report_charging_profiles_matches_local_state(monkeypatch):
     refreshed_schedule = await database_sync_to_async(
         lambda: refreshed.schedule.charging_schedule_periods
     )()
-    assert refreshed_schedule == [
-        {"start_period": 0, "limit": 32.0}
-    ]
+    assert refreshed_schedule == [{"start_period": 0, "limit": 32.0}]
 
 
 @pytest.mark.anyio
@@ -1720,7 +1812,9 @@ async def test_report_charging_profiles_flags_mismatch(monkeypatch):
     consumer._log_ocpp201_notification = lambda *args, **kwargs: None
 
     logs: list[str] = []
-    monkeypatch.setattr(store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry))
+    monkeypatch.setattr(
+        store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry)
+    )
 
     payload_profile = profile.as_cs_charging_profile()
     payload_profile["stackLevel"] = 3
@@ -1958,7 +2052,9 @@ async def test_report_charging_profiles_flags_missing_entries(monkeypatch):
     consumer._log_ocpp201_notification = lambda *args, **kwargs: None
 
     logs: list[str] = []
-    monkeypatch.setattr(store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry))
+    monkeypatch.setattr(
+        store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry)
+    )
 
     payload = {
         "requestId": 15,
@@ -2094,9 +2190,7 @@ async def test_report_charging_profiles_partial_update_clears_missing_optionals(
     )()
     assert updated_schedule[0] is None
     assert updated_schedule[1] is None
-    assert updated_schedule[2] == [
-        {"start_period": 0, "limit": 20.0}
-    ]
+    assert updated_schedule[2] == [{"start_period": 0, "limit": 20.0}]
 
 
 @pytest.mark.anyio
@@ -2162,9 +2256,7 @@ async def test_report_charging_profiles_persists_multi_profile_payload():
     first_schedule = await database_sync_to_async(
         lambda: profiles[0].schedule.charging_schedule_periods
     )()
-    assert first_schedule == [
-        {"start_period": 0, "limit": 16.0}
-    ]
+    assert first_schedule == [{"start_period": 0, "limit": 16.0}]
     assert profiles[1].recurrency_kind == ChargingProfile.RecurrencyKind.DAILY
     second_schedule = await database_sync_to_async(
         lambda: (
@@ -2220,8 +2312,7 @@ async def test_report_charging_profiles_uses_connector_context_without_evse_id()
 
     assert result == {}
     profile_data = await database_sync_to_async(
-        lambda: ChargingProfile.objects.select_related("charger")
-        .get(
+        lambda: ChargingProfile.objects.select_related("charger").get(
             charger=connector_charger,
             charging_profile_id=12,
         )
@@ -2269,7 +2360,9 @@ async def test_report_charging_profiles_resolves_evse_row_from_aggregate_charger
     )
 
     assert result == {}
-    profile = await database_sync_to_async(ChargingProfile.objects.select_related("charger").get)(
+    profile = await database_sync_to_async(
+        ChargingProfile.objects.select_related("charger").get
+    )(
         charger__charger_id="RCP-EVSE-1",
         charging_profile_id=11,
     )
