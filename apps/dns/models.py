@@ -125,15 +125,22 @@ class DNSProxyConfig(Entity):
     )
     include_nmcli_dns = models.BooleanField(
         default=True,
-        help_text="Include DNS servers discovered from the linked NMCLI connection.",
+        help_text="Include DNS servers from the stored NMCLI DNS snapshot fields.",
     )
-    nmcli_connection = models.ForeignKey(
-        "nmcli.NetworkConnection",
-        on_delete=models.SET_NULL,
-        null=True,
+    nmcli_source_connection_id = models.CharField(
+        max_length=255,
         blank=True,
-        related_name="dns_proxy_configs",
-        help_text="NMCLI connection used as an upstream DNS source.",
+        help_text="Legacy NMCLI connection identifier retained for reference.",
+    )
+    nmcli_ip4_dns = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Stored IPv4 DNS servers copied from the retired NMCLI source.",
+    )
+    nmcli_ip6_dns = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Stored IPv6 DNS servers copied from the retired NMCLI source.",
     )
     use_tcp_upstream = models.BooleanField(
         default=False,
@@ -161,14 +168,11 @@ class DNSProxyConfig(Entity):
         return normalized
 
     def get_nmcli_upstream_servers(self) -> list[str]:
-        if not self.include_nmcli_dns or not self.nmcli_connection:
+        if not self.include_nmcli_dns:
             return []
-        connection = self.nmcli_connection
-        from apps.dns.proxy import parse_dns_servers
 
         return self._dedupe(
-            parse_dns_servers(connection.ip4_dns)
-            + parse_dns_servers(connection.ip6_dns)
+            self._normalize_servers([self.nmcli_ip4_dns, self.nmcli_ip6_dns])
         )
 
     def get_upstream_servers(self) -> list[str]:

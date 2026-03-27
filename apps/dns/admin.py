@@ -134,10 +134,15 @@ class DNSProviderCredentialAdmin(OwnableAdminMixin, EntityModelAdmin):
 
 @admin.register(DNSProxyConfig)
 class DNSProxyConfigAdmin(EntityModelAdmin):
-    list_display = ("name", "listen_host", "listen_port", "is_enabled", "nmcli_connection")
+    list_display = (
+        "name",
+        "listen_host",
+        "listen_port",
+        "is_enabled",
+        "nmcli_source_connection_id",
+    )
     list_filter = ("is_enabled", "include_nmcli_dns", "use_tcp_upstream")
-    search_fields = ("name", "listen_host")
-    autocomplete_fields = ("nmcli_connection",)
+    search_fields = ("name", "listen_host", "nmcli_source_connection_id")
     fieldsets = (
         (
             None,
@@ -156,7 +161,9 @@ class DNSProxyConfigAdmin(EntityModelAdmin):
                 "fields": (
                     "upstream_servers",
                     "include_nmcli_dns",
-                    "nmcli_connection",
+                    "nmcli_source_connection_id",
+                    "nmcli_ip4_dns",
+                    "nmcli_ip6_dns",
                     "use_tcp_upstream",
                     "timeout_seconds",
                 )

@@ -1,7 +1,7 @@
-"""Manifest entries for Django app loading."""
+"""Manifest entries for legacy nmcli migration compatibility."""
 
 DJANGO_APPS = [
-    "apps.nmcli",
+    "apps._legacy.nmcli_migration_only.apps.NmcliMigrationOnlyConfig",
 ]
 
 REQUIRES_APPS = [

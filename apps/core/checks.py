@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.conf import settings
 from django.core.checks import Error, register
 from django.db import connections
 from django.db.migrations.recorder import MigrationRecorder
@@ -23,6 +24,8 @@ LEGACY_GAME_TABLES = (
     "game_avatar",
     "game_archived_avatar",
 )
+NMCLI_RUNTIME_APP = "apps.nmcli"
+NMCLI_LEGACY_MIGRATION_MODULE = "apps._legacy.nmcli_migration_only.migrations"
 
 
 @register()
@@ -138,3 +141,39 @@ def game_cleanup_migration_was_applied(app_configs, **kwargs):
             id="core.E002",
         )
     ]
+
+
+@register()
+def nmcli_runtime_retirement_is_consistent(app_configs, **kwargs):
+    """Reject configuration drift that accidentally re-enables runtime nmcli code."""
+
+    del app_configs, kwargs
+
+    errors: list[Error] = []
+    installed_apps = set(getattr(settings, "INSTALLED_APPS", []))
+    if NMCLI_RUNTIME_APP in installed_apps:
+        errors.append(
+            Error(
+                "The retired nmcli runtime app is still enabled.",
+                hint=(
+                    "Remove 'apps.nmcli' from runtime app wiring and rely on "
+                    "apps._legacy.nmcli_migration_only for migration compatibility."
+                ),
+                id="core.E003",
+            )
+        )
+
+    migration_modules = dict(getattr(settings, "MIGRATION_MODULES", {}))
+    if migration_modules.get("nmcli") != NMCLI_LEGACY_MIGRATION_MODULE:
+        errors.append(
+            Error(
+                "nmcli migration wiring is not routed through the legacy shim package.",
+                hint=(
+                    "Set MIGRATION_MODULES['nmcli'] to "
+                    "'apps._legacy.nmcli_migration_only.migrations'."
+                ),
+                id="core.E004",
+            )
+        )
+
+    return errors
