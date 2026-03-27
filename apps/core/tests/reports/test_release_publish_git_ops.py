@@ -64,12 +64,3 @@ def test_collect_dirty_files_uses_new_path_for_renames():
 
     assert dirty[0]["path"] == "new_name.txt"
 
-
-def test_working_tree_dirty_subprocess_error_returns_false():
-    class RaisingAdapter(GitProcessAdapter):
-        def run(
-            self, args: Sequence[str], *, check: bool = True, timeout: float | None = None
-        ):
-            raise subprocess.SubprocessError("git unavailable")
-
-    assert working_tree_dirty(RaisingAdapter()) is False

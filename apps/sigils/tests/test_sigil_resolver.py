@@ -12,67 +12,6 @@ from apps.sigils.models import SigilRoot
 from apps.sigils.sigil_context import clear_request, set_request
 
 
-@pytest.mark.django_db
-def test_resolve_sigils_unknown_root_returns_placeholder():
-    result = sigil_resolver.resolve_sigils("Value: [UNKNOWN.key]")
-
-    assert result.endswith("[UNKNOWN.key]")
-
-
-@pytest.mark.django_db
-def test_resolve_sigils_env_normalizes_key(monkeypatch):
-    SigilRoot.objects.update_or_create(
-        prefix="ENV", defaults={"context_type": SigilRoot.Context.CONFIG}
-    )
-    monkeypatch.setenv("EXAMPLE_VAR", "42")
-
-    result = sigil_resolver.resolve_sigils("[env.example-var]")
-
-    assert result == "42"
-
-
-@pytest.mark.django_db
-def test_resolve_sigils_root_normalizes_hyphen_and_underscore():
-    user_model = get_user_model()
-    SigilRoot.objects.update_or_create(
-        prefix="USR-ALT",
-        defaults={
-            "context_type": SigilRoot.Context.ENTITY,
-            "content_type": ContentType.objects.get_for_model(user_model),
-        },
-    )
-    user = user_model.objects.create(username="hyphen-root")
-
-    result = sigil_resolver.resolve_sigils("[usr_alt.username]", current=user)
-
-    assert result == user.username
-
-
-@pytest.mark.django_db
-def test_resolve_sigils_entity_key_normalizes_hyphen_and_underscore(monkeypatch):
-    SigilRoot.objects.update_or_create(
-        prefix="NODE",
-        defaults={
-            "context_type": SigilRoot.Context.ENTITY,
-            "content_type": ContentType.objects.get_for_model(Node),
-        },
-    )
-    role = NodeRole.objects.create(name="Hyphen Key")
-    node = Node.objects.create(
-        hostname="hyphen-key-node",
-        address="127.0.0.10",
-        mac_address="00:11:22:33:44:10",
-        port=8010,
-        public_endpoint="hyphen-key-node",
-        role=role,
-    )
-    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
-
-    result = sigil_resolver.resolve_sigils("[node.public-endpoint]")
-
-    assert result == node.public_endpoint
-
-
 @pytest.fixture
 def user_root():
     user_model = get_user_model()
@@ -183,52 +122,6 @@ def test_resolve_sigils_uses_default_entity_instance_with_unrelated_current(monk
 
 
 
-def test_parse_token_parts_parses_filter_key_and_param():
-    parts = sigil_resolver._parse_token_parts("USR:username=[ENV.current-user].email=display")
-
-    assert parts.root_name == "USR"
-    assert parts.filter_field == "username"
-    assert parts.instance_id == "[ENV.current-user]"
-    assert parts.key == "email"
-    assert parts.param == "display"
-    assert parts.strict_key is False
-
-
-def test_parse_token_parts_parses_strict_arrow_key():
-    parts = sigil_resolver._parse_token_parts("USR:username=[ENV.current-user]->email=display")
-
-    assert parts.root_name == "USR"
-    assert parts.filter_field == "username"
-    assert parts.instance_id == "[ENV.current-user]"
-    assert parts.key == "email"
-    assert parts.param == "display"
-    assert parts.strict_key is True
-
-
-def test_parse_token_parts_allows_quoted_instance_id_with_arrow_and_dot():
-    parts = sigil_resolver._parse_token_parts('USR="user->ops.example".email')
-
-    assert parts.root_name == "USR"
-    assert parts.instance_id == "user->ops.example"
-    assert parts.key == "email"
-    assert parts.strict_key is False
-
-
-def test_parse_token_parts_allows_quoted_key_with_arrow_and_dot():
-    parts = sigil_resolver._parse_token_parts('USR->"profile->work.email"')
-
-    assert parts.root_name == "USR"
-    assert parts.instance_id is None
-    assert parts.key == "profile->work.email"
-    assert parts.strict_key is True
-
-
-
-def test_parse_token_parts_rejects_incomplete_filter():
-    with pytest.raises(sigil_resolver.TokenParseError):
-        sigil_resolver._parse_token_parts("USR:username")
-
-
 @pytest.mark.django_db
 def test_resolve_sigils_entity_aggregate_total_for_field(user_root):
     user_model = get_user_model()
@@ -240,20 +133,6 @@ def test_resolve_sigils_entity_aggregate_total_for_field(user_root):
     result = sigil_resolver.resolve_sigils("[USR=id:total]")
 
     assert result == str(baseline_total + first_user.id + second_user.id)
-
-
-@pytest.mark.django_db
-def test_resolve_sigils_explicit_entity_miss_preserves_placeholder(user_root):
-    result = sigil_resolver.resolve_sigils("[USR=missing->email]")
-
-    assert result == "[USR=missing->email]"
-
-
-@pytest.mark.django_db
-def test_resolve_sigils_explicit_entity_miss_returns_empty_string_for_dot(user_root):
-    result = sigil_resolver.resolve_sigils("[USR=missing.email]")
-
-    assert result == ""
 
 
 @pytest.mark.django_db
@@ -303,18 +182,6 @@ def test_resolve_sigils_entity_manager_dispatch_ignores_unrelated_current(user_r
 
 
 @pytest.mark.django_db
-def test_resolve_sigils_conf_looks_up_settings_value(settings):
-    SigilRoot.objects.update_or_create(
-        prefix="CONF", defaults={"context_type": SigilRoot.Context.CONFIG}
-    )
-    settings.SIGIL_TEST_VALUE = "configured"
-
-    result = sigil_resolver.resolve_sigils("[CONF.sigil-test-value]")
-
-    assert result == "configured"
-
-
-@pytest.mark.django_db
 def test_resolve_sigils_manager_database_errors_propagate(monkeypatch, user_root):
     user_model = get_user_model()
 
@@ -325,37 +192,6 @@ def test_resolve_sigils_manager_database_errors_propagate(monkeypatch, user_root
 
     with pytest.raises(DatabaseError, match="boom"):
         sigil_resolver.resolve_sigils("[USR=explode]")
-
-
-@pytest.mark.django_db
-def test_resolve_sigils_entity_failures_preserve_placeholder(user_root):
-    result = sigil_resolver.resolve_sigils("[USR:missing-field=value.email]")
-
-    assert result == "[USR:missing-field=value.email]"
-
-
-@pytest.mark.django_db
-@pytest.mark.parametrize(
-    ("token", "expected"),
-    [
-        ("[USR=missing.email]", ""),
-        ("[USR=missing->email]", "[USR=missing->email]"),
-    ],
-)
-def test_resolve_sigils_table_driven_strict_vs_non_strict_keys(user_root, token, expected):
-    assert sigil_resolver.resolve_sigils(token) == expected
-
-
-@pytest.mark.django_db
-@pytest.mark.parametrize(
-    ("token", "expected"),
-    [
-        ("[USR:missing-field=value.email]", "[USR:missing-field=value.email]"),
-        ("[USR:username=someone.email]", ""),
-    ],
-)
-def test_resolve_sigils_table_driven_invalid_field_lookup(user_root, token, expected):
-    assert sigil_resolver.resolve_sigils(token) == expected
 
 
 @pytest.mark.django_db

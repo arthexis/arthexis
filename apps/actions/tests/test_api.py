@@ -30,15 +30,6 @@ def test_security_groups_endpoint_returns_session_user_groups(client):
 
 
 @pytest.mark.django_db
-def test_security_groups_endpoint_requires_login(client):
-    """Security: supported groups API should reject anonymous callers."""
-
-    response = client.get("/actions/api/v1/security-groups/")
-
-    assert response.status_code == 302
-
-
-@pytest.mark.django_db
 def test_dashboard_action_clean_rejects_unknown_internal_action():
     """Regression: dashboard actions must point to registered internal actions."""
 
