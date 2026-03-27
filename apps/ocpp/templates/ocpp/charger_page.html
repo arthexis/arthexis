@@ -83,9 +83,9 @@
             </div>
           </div>
           {% endif %}
-          {% if charger.require_rfid %}
-          <div class="alert alert-warning" role="alert" data-i18n="require_rfid_label">
-            {% trans "Require RFID Authorization" %}
+          {% if charger.resolved_authorization_policy != "open" %}
+          <div class="alert alert-warning" role="alert" data-i18n="authorization_policy_label">
+            {% trans "Authorization policy requires validated RFID/account credentials." %}
           </div>
           {% endif %}
           {% if tx %}

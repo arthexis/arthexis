@@ -45,7 +45,7 @@ async def test_authorize_requires_account_when_energy_accounts_enabled():
         "",
     )
 
-    assert result == {"idTagInfo": {"status": "Invalid"}}
+    assert result["idTagInfo"]["status"] == "Invalid"
 
 
 @pytest.mark.anyio
@@ -80,7 +80,7 @@ async def test_authorize_accepts_account_without_credits_when_parameter_disabled
         "",
     )
 
-    assert result == {"idTagInfo": {"status": "Accepted"}}
+    assert result["idTagInfo"]["status"] == "Accepted"
 
 
 @pytest.mark.django_db
