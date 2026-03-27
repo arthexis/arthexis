@@ -83,6 +83,7 @@ def _drop_legacy_migration_modules(
 
 
 LEGACY_MIGRATION_APPS = [
+    "apps._legacy.apis_migration_only.apps.ApisMigrationOnlyConfig",
     "apps._legacy.calendars_migration_only.apps.CalendarsMigrationOnlyConfig",
     "apps._legacy.extensions_migration_only.apps.ExtensionsMigrationOnlyConfig",
     "apps._legacy.fitbit_migration_only.apps.FitbitMigrationOnlyConfig",
@@ -103,7 +104,6 @@ LEGACY_MIGRATION_APPS = [
 REPO_VERSION = _read_repo_version()
 PROJECT_LOCAL_APPS = [
     "apps.actions",
-    "apps.apis",
     "apps.app",
     "apps.audio",
     "apps.awg",
@@ -261,6 +261,7 @@ _validate_project_local_apps()
 SITE_ID = 1
 
 MIGRATION_MODULES = {
+    "apis": "apps._legacy.apis_migration_only.migrations",
     "calendars": "apps._legacy.calendars_migration_only.migrations",
     # Pin django_celery_beat migrations to a local copy so we can override
     # upstream changes that introduce optional dependencies (e.g. Google

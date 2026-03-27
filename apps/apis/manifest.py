@@ -1,5 +1,3 @@
-"""Manifest entries for Django app loading."""
+"""Manifest entries for the retired apis runtime app."""
 
-DJANGO_APPS = [
-    "apps.apis",
-]
+DJANGO_APPS: list[str] = []
