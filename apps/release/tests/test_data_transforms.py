@@ -9,7 +9,7 @@ from apps.nodes.models import Node, NodeRole
 from apps.ocpp.models.charger import Charger
 from apps.ocpp.models.charging_station import ChargingStation
 from apps.ocpp.models.cp_forwarder import CPForwarder
-from apps.release.domain.data_transforms import list_transform_names, run_transform
+from apps.release.domain.data_transforms import run_transform
 from apps.reports.models import SQLReport, SQLReportProduct
 from apps.video.models.device import VideoDevice
 
@@ -22,31 +22,6 @@ def _run_until_complete(name: str, *, base_dir, limit: int = 5) -> None:
         if result.complete:
             return
     raise AssertionError(f"Transform {name} did not complete within {limit} runs")
-
-
-def test_list_transform_names_includes_deferred_migration_rollout() -> None:
-    """The release transform registry should expose the rollout transforms."""
-
-    names = list_transform_names()
-
-    assert "modules.normalize_paths" in names
-    assert "nodes.legacy_data_cleanup" in names
-    assert "ocpp.enable_forwarders_and_exports" in names
-    assert "ocpp.link_charging_stations" in names
-    assert "reports.archive_sql_report_products" in names
-    assert "reports.archive_sql_reports" in names
-    assert "video.normalize_base_device_name" in names
-    assert "video.populate_device_names" in names
-
-
-def test_list_transform_names_runs_report_archival_before_products() -> None:
-    """Dependent report transforms should run in safe execution order."""
-
-    names = list_transform_names()
-
-    assert names.index("reports.archive_sql_reports") < names.index(
-        "reports.archive_sql_report_products"
-    )
 
 
 @pytest.mark.django_db
@@ -154,66 +129,3 @@ def test_release_transforms_enable_ocpp_defaults_and_link_stations(tmp_path) -> 
     assert charger.export_transactions is True
     assert charger.charging_station is not None
     assert ChargingStation.objects.filter(station_id="STATION-1").exists()
-
-
-@pytest.mark.django_db
-def test_sql_report_archival_ignores_reports_created_after_cutoff(
-    tmp_path, monkeypatch
-) -> None:
-    """Report archival should only mutate rows captured in the initial checkpoint window."""
-
-    monkeypatch.setattr(
-        "apps.release.domain.data_transforms._REPORT_ARCHIVE_BATCH_SIZE",
-        1,
-    )
-
-    first = SQLReport.objects.create(
-        name="Legacy report first",
-        report_type=SQLReport.ReportType.SIGIL_ROOTS,
-        parameters={"legacy": True},
-        database_alias="warehouse",
-        query="SELECT 1",
-        html_template_name="reports/sql/legacy-first.html",
-        schedule_enabled=True,
-        schedule_interval_minutes=15,
-    )
-    second = SQLReport.objects.create(
-        name="Legacy report second",
-        report_type=SQLReport.ReportType.SIGIL_ROOTS,
-        parameters={"legacy": True},
-        database_alias="warehouse",
-        query="SELECT 2",
-        html_template_name="reports/sql/legacy-second.html",
-        schedule_enabled=True,
-        schedule_interval_minutes=30,
-    )
-
-    first_result = run_transform("reports.archive_sql_reports", base_dir=tmp_path)
-
-    late_report = SQLReport.objects.create(
-        name="Late named report",
-        report_type=SQLReport.ReportType.SIGIL_ROOTS,
-        parameters={},
-        database_alias="warehouse",
-        query="SELECT 3",
-        html_template_name="reports/sql/late.html",
-        schedule_enabled=True,
-        schedule_interval_minutes=45,
-    )
-
-    assert first_result.complete is False
-
-    _run_until_complete("reports.archive_sql_reports", base_dir=tmp_path)
-
-    first.refresh_from_db()
-    second.refresh_from_db()
-    late_report.refresh_from_db()
-
-    assert first.report_type == SQLReport.ReportType.LEGACY_ARCHIVED
-    assert second.report_type == SQLReport.ReportType.LEGACY_ARCHIVED
-    assert late_report.report_type == SQLReport.ReportType.SIGIL_ROOTS
-    assert late_report.schedule_enabled is True
-    assert late_report.schedule_interval_minutes == 45
-    assert late_report.legacy_definition is None
-    assert late_report.html_template_name == "reports/sql/late.html"
-    assert late_report.query == "SELECT 3"

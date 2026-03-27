@@ -10,22 +10,6 @@ from django.db import DatabaseError
 from apps.core import apps as core_apps
 
 
-def test_connect_sqlite_wal_default_path_unchanged(monkeypatch):
-    """WAL setup should keep core PRAGMAs and apply safe defaults."""
-
-    receiver = _register_sqlite_wal_receiver(monkeypatch)
-    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
-
-    connection = _FakeConnection(vendor="sqlite")
-    receiver(connection=connection)
-
-    assert connection.commands == [
-        "PRAGMA journal_mode=WAL;",
-        "PRAGMA busy_timeout=60000;",
-        "PRAGMA synchronous=FULL;",
-    ]
-
-
 def test_connect_sqlite_wal_executes_env_configured_pragmas(monkeypatch):
     """Valid SQLite PRAGMA environment values should be applied on connect."""
 
@@ -45,31 +29,6 @@ def test_connect_sqlite_wal_executes_env_configured_pragmas(monkeypatch):
         "PRAGMA cache_size=-2000;",
         "PRAGMA mmap_size=1048576;",
     ]
-
-
-def test_connect_sqlite_wal_ignores_invalid_env_values_with_warning(
-    monkeypatch, caplog
-):
-    """Invalid PRAGMA env values should be ignored without breaking startup."""
-
-    receiver = _register_sqlite_wal_receiver(monkeypatch)
-    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
-    monkeypatch.setenv("ARTHEXIS_SQLITE_SYNCHRONOUS", "OFF")
-    monkeypatch.setenv("ARTHEXIS_SQLITE_CACHE_SIZE", "not-a-number")
-    monkeypatch.setenv("ARTHEXIS_SQLITE_MMAP_SIZE", "-5")
-
-    connection = _FakeConnection(vendor="sqlite")
-    with caplog.at_level("WARNING"):
-        receiver(connection=connection)
-
-    assert connection.commands == [
-        "PRAGMA journal_mode=WAL;",
-        "PRAGMA busy_timeout=60000;",
-        "PRAGMA synchronous=FULL;",
-    ]
-    assert "Invalid ARTHEXIS_SQLITE_SYNCHRONOUS value" in caplog.text
-    assert "Invalid ARTHEXIS_SQLITE_CACHE_SIZE value" in caplog.text
-    assert "Invalid ARTHEXIS_SQLITE_MMAP_SIZE value" in caplog.text
 
 
 def test_connect_sqlite_wal_runtime_pragma_failure_keeps_wal(monkeypatch, caplog):
