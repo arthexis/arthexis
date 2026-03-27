@@ -1,10 +1,20 @@
 [
   {
+    "model": "apis.apiexplorer",
+    "pk": 1,
+    "fields": {
+      "name": "Evergo API",
+      "base_url": "https://portal-backend.evergo.com/api/mex/v1/",
+      "description": "API explorer baseline for Evergo integration endpoints.",
+      "is_active": true,
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  },
+  {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": [
-        "Evergo API"
-      ],
+      "api": 1,
       "operation_name": "Login",
       "resource_path": "/login",
       "http_method": "POST",
@@ -34,9 +44,7 @@
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": [
-        "Evergo API"
-      ],
+      "api": 1,
       "operation_name": "List Sites",
       "resource_path": "/config/catalogs/sitios/all",
       "http_method": "GET",
@@ -56,9 +64,7 @@
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": [
-        "Evergo API"
-      ],
+      "api": 1,
       "operation_name": "Search Engineers",
       "resource_path": "/ordenes/search-ingenieros",
       "http_method": "GET",
@@ -78,9 +84,7 @@
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": [
-        "Evergo API"
-      ],
+      "api": 1,
       "operation_name": "List Order Statuses",
       "resource_path": "/config/catalogs/orden-estatus",
       "http_method": "GET",
@@ -100,9 +104,7 @@
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": [
-        "Evergo API"
-      ],
+      "api": 1,
       "operation_name": "List Coordinator Orders",
       "resource_path": "/ordenes/instalador-coordinador",
       "http_method": "GET",
@@ -129,9 +131,7 @@
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": [
-        "Evergo API"
-      ],
+      "api": 1,
       "operation_name": "Get Current User",
       "resource_path": "/user",
       "http_method": "GET",
@@ -150,9 +150,7 @@
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": [
-        "Evergo API"
-      ],
+      "api": 1,
       "operation_name": "Get Order Detail",
       "resource_path": "/ordenes/{order_id}",
       "http_method": "GET",
@@ -170,9 +168,7 @@
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": [
-        "Evergo API"
-      ],
+      "api": 1,
       "operation_name": "Get Order Kit CFE",
       "resource_path": "/ordenes/kit-cfe/{order_id}",
       "http_method": "GET",
@@ -189,9 +185,7 @@
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": [
-        "Evergo API"
-      ],
+      "api": 1,
       "operation_name": "List Assignment Crews",
       "resource_path": "/config/catalogs/instaladores/empresas/coord-para-asignar",
       "http_method": "GET",
@@ -211,9 +205,7 @@
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": [
-        "Evergo API"
-      ],
+      "api": 1,
       "operation_name": "Get Technical Visit Questions",
       "resource_path": "/reportes/ordenes/{order_id}/visita-tecnica/cuestionario-preguntas",
       "http_method": "GET",
@@ -233,9 +225,7 @@
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": [
-        "Evergo API"
-      ],
+      "api": 1,
       "operation_name": "List Reassignment Reasons",
       "resource_path": "/users/reassignment_reason",
       "http_method": "GET",
@@ -255,9 +245,7 @@
   {
     "model": "apis.resourcemethod",
     "fields": {
-      "api": [
-        "Evergo API"
-      ],
+      "api": 1,
       "operation_name": "List Crew People",
       "resource_path": "/users/crew-people",
       "http_method": "GET",

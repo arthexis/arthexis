@@ -79,3 +79,13 @@ def test_evergo_fixture_loaddata_is_idempotent() -> None:
     call_command("loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0)
 
     assert ResourceMethod.objects.filter(api=api).count() == initial_count
+
+
+@pytest.mark.django_db
+def test_evergo_fixture_loaddata_bootstraps_parent_api() -> None:
+    """Regression: fixture should load successfully even when APIExplorer row is absent."""
+
+    call_command("loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0)
+
+    api = APIExplorer.objects.get(name="Evergo API")
+    assert ResourceMethod.objects.filter(api=api).count() == len(EXPECTED_METHOD_PATHS)
