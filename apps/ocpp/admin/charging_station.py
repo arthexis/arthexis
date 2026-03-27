@@ -18,7 +18,10 @@ class ChargingStationAdminForm(forms.ModelForm):
     language = forms.ModelChoiceField(queryset=Language.objects.none(), required=False)
     preferred_ocpp_version = forms.CharField(required=False, max_length=16)
     energy_unit = forms.ChoiceField(choices=Charger.EnergyUnit.choices)
-    require_rfid = forms.BooleanField(required=False)
+    authorization_policy = forms.ChoiceField(
+        choices=Charger.AuthorizationPolicy.choices,
+        required=False,
+    )
 
     class Meta:
         model = ChargingStation
@@ -48,7 +51,7 @@ class ChargingStationAdminForm(forms.ModelForm):
         self.fields["language"].initial = root_cp.language_id
         self.fields["preferred_ocpp_version"].initial = root_cp.preferred_ocpp_version
         self.fields["energy_unit"].initial = root_cp.energy_unit
-        self.fields["require_rfid"].initial = root_cp.require_rfid
+        self.fields["authorization_policy"].initial = root_cp.authorization_policy
 
 
 @admin.register(ChargingStation)
@@ -83,7 +86,7 @@ class ChargingStationAdmin(AuthorizationActionsMixin, OwnableAdminMixin, EntityM
                     "language",
                     "preferred_ocpp_version",
                     "energy_unit",
-                    "require_rfid",
+                    "authorization_policy",
                 ),
             },
         ),
@@ -122,7 +125,11 @@ class ChargingStationAdmin(AuthorizationActionsMixin, OwnableAdminMixin, EntityM
             "language": form.cleaned_data.get("language"),
             "preferred_ocpp_version": form.cleaned_data.get("preferred_ocpp_version", ""),
             "energy_unit": form.cleaned_data.get("energy_unit", Charger.EnergyUnit.KW),
-            "require_rfid": form.cleaned_data.get("require_rfid", False),
+            "authorization_policy": form.cleaned_data.get("authorization_policy", ""),
+            "require_rfid": (
+                form.cleaned_data.get("authorization_policy", "")
+                != Charger.AuthorizationPolicy.OPEN
+            ),
             "display_name": obj.display_name,
             "location": obj.location,
             "station_model": obj.station_model,

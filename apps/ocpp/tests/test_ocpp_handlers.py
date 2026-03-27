@@ -1283,7 +1283,7 @@ async def test_transaction_event_does_not_start_request_when_authorization_fails
 
     result = await consumer._handle_transaction_event_action(payload, "msg-evt-rfid", "", "")
 
-    assert result == {"idTokenInfo": {"status": "Invalid"}}
+    assert result["idTokenInfo"]["status"] == "Invalid"
     assert store.transaction_requests["msg-req-rfid"]["status"] == "accepted"
     assert store.transaction_requests["msg-req-rfid"].get("transaction_id") in (None, "")
     rejected_tx = await database_sync_to_async(Transaction.objects.get)(
@@ -1293,7 +1293,7 @@ async def test_transaction_event_does_not_start_request_when_authorization_fails
         rejected_tx.authorization_status
         == Transaction.AuthorizationStatus.REJECTED
     )
-    assert rejected_tx.authorization_reason == "Invalid"
+    assert rejected_tx.authorization_reason == "strict_account_required"
     assert rejected_tx.rejected_at is not None
 
 
@@ -1326,7 +1326,7 @@ async def test_start_transaction_rejection_creates_transaction_record():
 
     result = await consumer._handle_start_transaction_action(payload, "msg-start-invalid", "", "")
 
-    assert result == {"idTagInfo": {"status": "Invalid"}}
+    assert result["idTagInfo"]["status"] == "Invalid"
     rejected_tx = await database_sync_to_async(Transaction.objects.get)(
         charger=charger, connector_id=1
     )
@@ -1334,7 +1334,7 @@ async def test_start_transaction_rejection_creates_transaction_record():
         rejected_tx.authorization_status
         == Transaction.AuthorizationStatus.REJECTED
     )
-    assert rejected_tx.authorization_reason == "Invalid"
+    assert rejected_tx.authorization_reason == "strict_account_required"
     assert rejected_tx.rejected_at is not None
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)

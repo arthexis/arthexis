@@ -47,12 +47,20 @@ class AuthorizationActionsMixin(ActionServiceMixin):
     def toggle_rfid_authentication(self, request, queryset):
         enabled = disabled = 0
         for charger, is_local, local_node, private_key in self._iter_chargers(request, queryset):
-            new_value = not charger.require_rfid
+            new_value = charger.resolved_authorization_policy() == Charger.AuthorizationPolicy.OPEN
             if is_local:
-                Charger.objects.filter(pk=charger.pk).update(require_rfid=new_value)
-                charger.require_rfid = new_value
-                enabled += int(new_value)
-                disabled += int(not new_value)
+                next_policy = (
+                    Charger.AuthorizationPolicy.STRICT
+                    if new_value
+                    else Charger.AuthorizationPolicy.OPEN
+                )
+                Charger.objects.filter(pk=charger.pk).update(
+                    authorization_policy=next_policy,
+                    require_rfid=(next_policy != Charger.AuthorizationPolicy.OPEN),
+                )
+                charger.authorization_policy = next_policy
+                enabled += int(next_policy != Charger.AuthorizationPolicy.OPEN)
+                disabled += int(next_policy == Charger.AuthorizationPolicy.OPEN)
                 continue
             success, updates = self._call_remote_action(request, local_node, private_key, charger, "toggle-rfid", {"enable": new_value})
             if success:
@@ -143,4 +151,3 @@ class AuthorizationActionsMixin(ActionServiceMixin):
             self.message_user(request, _("Purged selected charge point data."))
         if failed:
             self.message_user(request, _("Failed to purge %(count)d charger(s): %(chargers)s") % {"count": len(failed), "chargers": "; ".join(failed)}, level=messages.ERROR)
-

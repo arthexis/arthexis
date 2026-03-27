@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from channels.db import database_sync_to_async
 
-from apps.cards.models import RFID as CoreRFID
+from apps.cards.models import RFID as CoreRFID, RFIDAttempt
 
 
 class AuthorizationActionHandler:
@@ -16,35 +16,48 @@ class AuthorizationActionHandler:
     async def handle(self, payload, _msg_id, _raw, _text_data) -> dict:
         id_tag = payload.get("idTag")
         account = await self.consumer._get_account(id_tag)
-        status = "Invalid"
+        tag = None
+        tag_created = False
+        if id_tag:
+            tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(id_tag)
 
-        if self.consumer.charger.require_rfid:
-            energy_accounts_enabled = await self.consumer._energy_accounts_enabled()
-            credits_required = await self.consumer._energy_credits_required()
-            tag = None
-            tag_created = False
-            if id_tag:
-                tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(
-                    id_tag
-                )
+        decision = await self.consumer._evaluate_authorization_policy(
+            id_tag=id_tag,
+            account=account,
+            tag=tag,
+            tag_created=tag_created,
+        )
 
-            if account:
-                account_authorized = (
-                    energy_accounts_enabled and not credits_required
-                ) or await database_sync_to_async(account.can_authorize)()
-                if account_authorized:
-                    status = "Accepted"
-            elif (
-                not energy_accounts_enabled
-                and id_tag
-                and tag
-                and not tag_created
-                and tag.allowed
-            ):
-                status = "Accepted"
-                self.consumer._log_unlinked_rfid(tag.rfid)
-        else:
-            await self.consumer._ensure_rfid_seen(id_tag)
-            status = "Accepted"
+        if id_tag and decision.should_mark_seen:
+            tag = await self.consumer._ensure_rfid_seen(
+                id_tag,
+                tag=tag,
+                auto_enroll=decision.should_auto_enroll,
+            )
 
-        return {"idTagInfo": {"status": status}}
+        if decision.log_unlinked_rfid and tag:
+            self.consumer._log_unlinked_rfid(
+                tag.rfid,
+                reason=decision.reason,
+                policy=decision.policy,
+            )
+
+        await self.consumer._record_rfid_attempt(
+            rfid=id_tag or "",
+            status=(
+                RFIDAttempt.Status.ACCEPTED
+                if decision.status == "Accepted"
+                else RFIDAttempt.Status.REJECTED
+            ),
+            account=account,
+            policy=decision.policy,
+            reason=decision.reason,
+        )
+
+        return {
+            "idTagInfo": {
+                "status": decision.status,
+                "authorizationPolicy": decision.policy,
+                "reason": decision.reason,
+            }
+        }

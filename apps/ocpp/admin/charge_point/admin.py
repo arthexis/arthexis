@@ -109,7 +109,7 @@ class ChargerAdmin(
             {
                 "fields": (
                     "public_display",
-                    "require_rfid",
+                    "authorization_policy",
                     "configuration_check_enabled",
                     "power_projection_enabled",
                     "firmware_snapshot_enabled",
@@ -196,7 +196,7 @@ class ChargerAdmin(
         "charging_station_display_name",
         "connector_number",
         "local_indicator",
-        "require_rfid_display",
+        "authorization_policy_display",
         "public_display",
         "forwarding_ready",
         "last_heartbeat_display",
@@ -259,7 +259,7 @@ class ChargerAdmin(
                 "language",
                 "preferred_ocpp_version",
                 "energy_unit",
-                "require_rfid",
+                "authorization_policy",
                 "location",
                 "station_model",
             )
@@ -275,11 +275,11 @@ class ChargerAdmin(
     def get_view_on_site_url(self, obj=None):
         return obj.get_absolute_url() if obj else None
 
-    def require_rfid_display(self, obj):
-        return obj.require_rfid
-
-    require_rfid_display.boolean = True
-    require_rfid_display.short_description = "RF Auth"
+    @admin.display(description="Auth Policy")
+    def authorization_policy_display(self, obj):
+        if obj.authorization_policy:
+            return obj.get_authorization_policy_display()
+        return f"Global ({obj.resolved_authorization_policy()})"
 
     @admin.display(boolean=True, description="Fwd OK")
     def forwarding_ready(self, obj):

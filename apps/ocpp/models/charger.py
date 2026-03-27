@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.conf import settings
 from django.urls import NoReverseMatch
 
 from apps.locale.models import Language
@@ -21,6 +22,11 @@ class Charger(Ownable):
     class EnergyUnit(models.TextChoices):
         KW = "kW", _("kW")
         W = "W", _("W")
+
+    class AuthorizationPolicy(models.TextChoices):
+        STRICT = "strict", _("Strict")
+        ALLOWLIST = "allowlist", _("Allowlist")
+        OPEN = "open", _("Open (insecure compatibility mode)")
 
     OPERATIVE_STATUSES = {
         "Available",
@@ -92,6 +98,16 @@ class Charger(Ownable):
         _("Require RFID Authorization"),
         default=False,
         help_text="Require a valid RFID before starting a charging session.",
+    )
+    authorization_policy = models.CharField(
+        _("Authorization Policy"),
+        max_length=16,
+        choices=AuthorizationPolicy.choices,
+        blank=True,
+        default="",
+        help_text=_(
+            "How to evaluate RFID/account authorization. Leave blank to use the global default."
+        ),
     )
     configuration_check_enabled = models.BooleanField(
         _("Configuration Check"),
@@ -691,6 +707,15 @@ class Charger(Ownable):
         if self.station_model and self.station_model.preferred_ocpp_version:
             return self.station_model.preferred_ocpp_version
         return ""
+
+    def resolved_authorization_policy(self) -> str:
+        """Return charger-level auth policy with global fallback."""
+        if self.authorization_policy:
+            return self.authorization_policy
+        configured = str(getattr(settings, "OCPP_AUTHORIZATION_POLICY", "") or "").strip().lower()
+        if configured in self.AuthorizationPolicy.values:
+            return configured
+        return self.AuthorizationPolicy.STRICT
 
     @classmethod
     def sanitize_auto_location_name(cls, value: str) -> str:

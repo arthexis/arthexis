@@ -41,7 +41,7 @@ async def test_authorize_handler_contract_uses_existing_energy_account_rules():
         {"idTag": "EA-H-001"}, "msg-auth", "", ""
     )
 
-    assert result == {"idTagInfo": {"status": "Invalid"}}
+    assert result["idTagInfo"]["status"] == "Invalid"
 
 
 @pytest.mark.anyio

@@ -1012,7 +1012,9 @@ def _landing_page_translations() -> dict[str, dict[str, str]]:
                 "serial_number_label": gettext("Serial Number"),
                 "connector_label": gettext("Connector"),
                 "advanced_view_label": gettext("Advanced View"),
-                "require_rfid_label": gettext("Require RFID Authorization"),
+                "authorization_policy_label": gettext(
+                    "Authorization policy requires validated RFID/account credentials."
+                ),
                 "charging_label": gettext("Charging"),
                 "energy_label": gettext("Energy"),
                 "started_label": gettext("Started"),

@@ -71,38 +71,32 @@ class LegacyTransactionHandlersMixin:
             if id_tag:
                 tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(id_tag)
             account = await self._get_account(id_tag)
-            energy_accounts_enabled = False
-            credits_required = False
-            if self.charger.require_rfid:
-                energy_accounts_enabled = await self._energy_accounts_enabled()
-                credits_required = await self._energy_credits_required()
-            if id_tag and not self.charger.require_rfid:
-                seen_tag = await self._ensure_rfid_seen(id_tag, tag=tag)
+            decision = await self._evaluate_authorization_policy(
+                id_tag=id_tag,
+                account=account,
+                tag=tag,
+                tag_created=tag_created,
+            )
+            if id_tag and decision.should_mark_seen:
+                seen_tag = await self._ensure_rfid_seen(
+                    id_tag,
+                    tag=tag,
+                    auto_enroll=decision.should_auto_enroll,
+                )
                 if seen_tag:
                     tag = seen_tag
-            authorized = True
-            authorized_via_tag = False
-            if self.charger.require_rfid:
-                if account is not None:
-                    if energy_accounts_enabled and not credits_required:
-                        authorized = True
-                    else:
-                        authorized = await database_sync_to_async(account.can_authorize)()
-                elif energy_accounts_enabled:
-                    authorized = False
-                elif id_tag and tag and not tag_created and getattr(tag, "allowed", False):
-                    authorized = True
-                    authorized_via_tag = True
-                else:
-                    authorized = False
-            if authorized:
+            if decision.status == "Accepted":
                 update_kwargs: dict[str, str] = {"status": "started"}
                 if ocpp_tx_id:
                     update_kwargs["transaction_id"] = ocpp_tx_id
                 for request_message_id, _ in requests_to_start:
                     store.update_transaction_request(request_message_id, **update_kwargs)
-                if authorized_via_tag and tag:
-                    self._log_unlinked_rfid(tag.rfid)
+                if decision.log_unlinked_rfid and tag:
+                    self._log_unlinked_rfid(
+                        tag.rfid,
+                        reason=decision.reason,
+                        policy=decision.policy,
+                    )
                 tx_obj = await database_sync_to_async(Transaction.objects.create)(
                     charger=self.charger,
                     account=account,
@@ -128,8 +122,16 @@ class LegacyTransactionHandlersMixin:
                     status=RFIDAttempt.Status.ACCEPTED,
                     account=account,
                     transaction=tx_obj,
+                    policy=decision.policy,
+                    reason=decision.reason,
                 )
-                return {"idTokenInfo": {"status": "Accepted"}}
+                return {
+                    "idTokenInfo": {
+                        "status": "Accepted",
+                        "authorizationPolicy": decision.policy,
+                        "reason": decision.reason,
+                    }
+                }
 
             rejected_time = timezone.now()
             await database_sync_to_async(Transaction.objects.create)(
@@ -141,13 +143,23 @@ class LegacyTransactionHandlersMixin:
                 received_start_time=rejected_time,
                 ocpp_transaction_id=ocpp_tx_id,
                 authorization_status=Transaction.AuthorizationStatus.REJECTED,
-                authorization_reason="Invalid",
+                authorization_reason=decision.reason,
                 rejected_at=rejected_time,
             )
             await self._record_rfid_attempt(
-                rfid=id_tag or "", status=RFIDAttempt.Status.REJECTED, account=account
+                rfid=id_tag or "",
+                status=RFIDAttempt.Status.REJECTED,
+                account=account,
+                policy=decision.policy,
+                reason=decision.reason,
             )
-            return {"idTokenInfo": {"status": "Invalid"}}
+            return {
+                "idTokenInfo": {
+                    "status": "Invalid",
+                    "authorizationPolicy": decision.policy,
+                    "reason": decision.reason,
+                }
+            }
 
         if event_type == "ended":
             trigger_reason = str((payload.get("triggerReason") or "")).strip()
@@ -248,34 +260,28 @@ class LegacyTransactionHandlersMixin:
         if id_tag:
             tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(id_tag)
         account = await self._get_account(id_tag)
-        energy_accounts_enabled = False
-        credits_required = False
-        if self.charger.require_rfid:
-            energy_accounts_enabled = await self._energy_accounts_enabled()
-            credits_required = await self._energy_credits_required()
-        if id_tag and not self.charger.require_rfid:
-            seen_tag = await self._ensure_rfid_seen(id_tag, tag=tag)
+        decision = await self._evaluate_authorization_policy(
+            id_tag=id_tag,
+            account=account,
+            tag=tag,
+            tag_created=tag_created,
+        )
+        if id_tag and decision.should_mark_seen:
+            seen_tag = await self._ensure_rfid_seen(
+                id_tag,
+                tag=tag,
+                auto_enroll=decision.should_auto_enroll,
+            )
             if seen_tag:
                 tag = seen_tag
         await self._assign_connector(payload.get("connectorId"))
-        authorized = True
-        authorized_via_tag = False
-        if self.charger.require_rfid:
-            if account is not None:
-                if energy_accounts_enabled and not credits_required:
-                    authorized = True
-                else:
-                    authorized = await database_sync_to_async(account.can_authorize)()
-            elif energy_accounts_enabled:
-                authorized = False
-            elif id_tag and tag and not tag_created and getattr(tag, "allowed", False):
-                authorized = True
-                authorized_via_tag = True
-            else:
-                authorized = False
-        if authorized:
-            if authorized_via_tag and tag:
-                self._log_unlinked_rfid(tag.rfid)
+        if decision.status == "Accepted":
+            if decision.log_unlinked_rfid and tag:
+                self._log_unlinked_rfid(
+                    tag.rfid,
+                    reason=decision.reason,
+                    policy=decision.policy,
+                )
             start_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
             received_start = timezone.now()
             vid_value, vin_value = _extract_vehicle_identifier(payload)
@@ -301,8 +307,17 @@ class LegacyTransactionHandlersMixin:
                 status=RFIDAttempt.Status.ACCEPTED,
                 account=account,
                 transaction=tx_obj,
+                policy=decision.policy,
+                reason=decision.reason,
             )
-            return {"transactionId": tx_obj.pk, "idTagInfo": {"status": "Accepted"}}
+            return {
+                "transactionId": tx_obj.pk,
+                "idTagInfo": {
+                    "status": "Accepted",
+                    "authorizationPolicy": decision.policy,
+                    "reason": decision.reason,
+                },
+            }
         rejected_time = timezone.now()
         await database_sync_to_async(Transaction.objects.create)(
             charger=self.charger,
@@ -312,15 +327,23 @@ class LegacyTransactionHandlersMixin:
             start_time=rejected_time,
             received_start_time=rejected_time,
             authorization_status=Transaction.AuthorizationStatus.REJECTED,
-            authorization_reason="Invalid",
+            authorization_reason=decision.reason,
             rejected_at=rejected_time,
         )
         await self._record_rfid_attempt(
             rfid=id_tag or "",
             status=RFIDAttempt.Status.REJECTED,
             account=account,
+            policy=decision.policy,
+            reason=decision.reason,
         )
-        return {"idTagInfo": {"status": "Invalid"}}
+        return {
+            "idTagInfo": {
+                "status": "Invalid",
+                "authorizationPolicy": decision.policy,
+                "reason": decision.reason,
+            }
+        }
 
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StopTransaction")
     async def _handle_stop_transaction_legacy(self, payload, _msg_id, _raw, text_data):
