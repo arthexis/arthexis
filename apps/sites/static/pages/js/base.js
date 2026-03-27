@@ -294,6 +294,7 @@ const setupShareModal = () => {
     if (thumbnailFrame && !window.matchMedia(MOBILE_BREAKPOINT).matches) {
       const previewUrl = new URL(currentPageUrl);
       previewUrl.searchParams.set('djdt', 'share-preview');
+      previewUrl.searchParams.set('share_preview_public', '1');
       if (thumbnailFrame.src !== previewUrl.toString()) {
         thumbnailFrame.src = previewUrl.toString();
       }

@@ -18,6 +18,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.sites.middleware.SharePreviewPublicMiddleware",
     "apps.ops.middleware.ActiveOperationMiddleware",
     "config.middleware.UsageAnalyticsMiddleware",
     "apps.sigils.middleware.SigilContextMiddleware",
