@@ -809,6 +809,50 @@ async def test_get_15118_ev_certificate_persists_request(monkeypatch):
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.integration
+async def test_get_15118_ev_certificate_accepts_standard_exi_payload(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CERT-15118"
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-15118"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    captured: dict[str, object] = {}
+
+    def fake_sign(**kwargs):
+        captured.update(kwargs)
+        return "EXI-RESPONSE"
+
+    monkeypatch.setattr(
+        consumers_base.certificate_signing, "sign_certificate_request", fake_sign
+    )
+
+    payload = {
+        "iso15118SchemaVersion": "2.0.1",
+        "action": "Install",
+        "exiRequest": "AQIDBA==",
+    }
+    result = await consumer._handle_get_15118_ev_certificate_action(
+        payload, "msg-15118", "", ""
+    )
+
+    assert result["status"] == "Accepted"
+    assert result["exiResponse"] == "EXI-RESPONSE"
+    assert captured["csr"] == "AQIDBA=="
+    assert captured["certificate_type"] == ""
+
+    request = await database_sync_to_async(CertificateRequest.objects.get)(
+        charger=charger
+    )
+    assert request.certificate_type == ""
+    assert request.validation_reason_code == ""
+    assert request.validation_details == {}
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.integration
 @pytest.mark.slow
 async def test_get_certificate_status_persists_check():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-2")
@@ -941,6 +985,45 @@ async def test_sign_certificate_rejects_unsupported_certificate_type(monkeypatch
     )
     assert request.validation_reason_code == "UnsupportedCertificateType"
     assert request.status_info == "Unsupported certificate type 'BogusType'."
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_sign_certificate_accepts_missing_certificate_type(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CERT-NO-TYPE"
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-NO-TYPE"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    captured: dict[str, object] = {}
+
+    async def fake_send(_message):
+        return None
+
+    def fake_sign(**kwargs):
+        captured.update(kwargs)
+        return "CERTCHAIN"
+
+    consumer.send = fake_send
+    monkeypatch.setattr(
+        consumers_base.certificate_signing, "sign_certificate_request", fake_sign
+    )
+
+    payload = {"csr": _build_valid_csr()}
+    result = await consumer._handle_sign_certificate_action(
+        payload, "msg-no-type", "", ""
+    )
+
+    assert result["status"] == "Accepted"
+    assert captured["certificate_type"] == ""
+    request = await database_sync_to_async(CertificateRequest.objects.get)(
+        charger=charger
+    )
+    assert request.validation_reason_code == ""
+    assert request.validation_details == {}
 
 
 @pytest.mark.anyio
