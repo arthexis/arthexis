@@ -1,9 +1,8 @@
 """Expand Evergo API explorer endpoint catalog from fixture definitions."""
 
-import json
-from pathlib import Path
-
 from django.db import migrations
+
+from ._utils import load_fixture_payload, resolve_resource_method_api_field_name
 
 
 EVERGO_API_NAME = "Evergo API"
@@ -18,17 +17,11 @@ SEEDED_ENDPOINT_KEYS = {
 }
 
 
-def _load_fixture_payload() -> tuple[dict, ...]:
-    """Load Evergo endpoint definitions from fixture data."""
-    fixture_path = Path(__file__).resolve().parent.parent / "fixtures" / "apis__evergo_endpoints.json"
-    payload = json.loads(fixture_path.read_text(encoding="utf-8"))
-    return tuple(entry["fields"] for entry in payload if entry.get("model") == "apis.resourcemethod")
-
-
 def _load_seed_endpoints() -> tuple[dict, ...]:
     """Return only the endpoint definitions seeded by this migration."""
+
     selected = []
-    for endpoint in _load_fixture_payload():
+    for endpoint in load_fixture_payload():
         endpoint_key = (endpoint["operation_name"], endpoint["resource_path"], endpoint["http_method"])
         if endpoint_key in SEEDED_ENDPOINT_KEYS:
             selected.append(endpoint)
@@ -37,6 +30,7 @@ def _load_seed_endpoints() -> tuple[dict, ...]:
 
 def seed_missing_evergo_api_methods(apps, schema_editor):
     """Create any fixture-defined Evergo API methods not yet present in the explorer."""
+
     del schema_editor
     APIExplorer = apps.get_model("apis", "APIExplorer")
     ResourceMethod = apps.get_model("apis", "ResourceMethod")
@@ -45,37 +39,22 @@ def seed_missing_evergo_api_methods(apps, schema_editor):
     if api is None:
         return
 
+    api_field_name = resolve_resource_method_api_field_name(ResourceMethod)
     for endpoint in _load_seed_endpoints():
+        lookup = {
+            api_field_name: api,
+            "operation_name": endpoint["operation_name"],
+            "resource_path": endpoint["resource_path"],
+            "http_method": endpoint["http_method"],
+        }
         ResourceMethod.objects.get_or_create(
-            api=api,
-            operation_name=endpoint["operation_name"],
-            resource_path=endpoint["resource_path"],
-            http_method=endpoint["http_method"],
+            **lookup,
             defaults={
                 "request_structure": endpoint["request_structure"],
                 "response_structure": endpoint["response_structure"],
                 "notes": endpoint["notes"],
             },
         )
-
-
-def unseed_added_evergo_api_methods(apps, schema_editor):
-    """Reverse only the exact endpoints introduced by this expansion migration."""
-    del schema_editor
-    APIExplorer = apps.get_model("apis", "APIExplorer")
-    ResourceMethod = apps.get_model("apis", "ResourceMethod")
-
-    api = APIExplorer.objects.filter(name=EVERGO_API_NAME).first()
-    if api is None:
-        return
-
-    for endpoint in _load_seed_endpoints():
-        ResourceMethod.objects.filter(
-            api=api,
-            operation_name=endpoint["operation_name"],
-            resource_path=endpoint["resource_path"],
-            http_method=endpoint["http_method"],
-        ).delete()
 
 
 class Migration(migrations.Migration):
@@ -85,5 +64,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(seed_missing_evergo_api_methods, unseed_added_evergo_api_methods),
+        migrations.RunPython(seed_missing_evergo_api_methods, migrations.RunPython.noop),
     ]
