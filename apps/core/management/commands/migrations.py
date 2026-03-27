@@ -23,6 +23,9 @@ from django.utils.connection import ConnectionDoesNotExist
 class Command(BaseCommand):
     """Run migration maintenance workflows for project-local apps."""
 
+    _LEGACY_MIGRATIONS_FILENAME = "MIGRATION_TRACKS.json"
+    _MIGRATIONS_FILENAME = "MIGRATIONS.json"
+
     help = (
         "Run migration maintenance workflows "
         "(check, clear, rebuild) for apps.* packages."
@@ -123,19 +126,29 @@ class Command(BaseCommand):
         return Path(apps_dir_option or getattr(settings, "APPS_DIR", Path(settings.BASE_DIR) / "apps"))
 
     def _tracks_file(self) -> Path:
-        return Path(settings.BASE_DIR) / "MIGRATIONS.json"
+        return Path(settings.BASE_DIR) / self._MIGRATIONS_FILENAME
+
+    def _legacy_tracks_file(self) -> Path:
+        return Path(settings.BASE_DIR) / self._LEGACY_MIGRATIONS_FILENAME
 
     def _load_tracks(self) -> dict[str, Any]:
         tracks_file = self._tracks_file()
-        if not tracks_file.exists():
+        legacy_tracks_file = self._legacy_tracks_file()
+        source_file = tracks_file if tracks_file.exists() else legacy_tracks_file
+        if not source_file.exists():
             return {}
         try:
-            data = json.loads(tracks_file.read_text(encoding="utf-8"))
+            data = json.loads(source_file.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            raise CommandError(f"Invalid migration tracks file: {tracks_file}") from exc
-        if isinstance(data, dict):
-            return data
-        raise CommandError(f"Migration tracks file must contain a JSON object: {tracks_file}")
+            raise CommandError(f"Invalid migration tracks file: {source_file}") from exc
+        if not isinstance(data, dict):
+            raise CommandError(
+                f"Migration tracks file must contain a JSON object: {source_file}"
+            )
+        if source_file == legacy_tracks_file and not tracks_file.exists():
+            self._save_tracks(data)
+            legacy_tracks_file.unlink(missing_ok=True)
+        return data
 
     def _save_tracks(self, payload: dict[str, Any]) -> None:
         tracks_file = self._tracks_file()
