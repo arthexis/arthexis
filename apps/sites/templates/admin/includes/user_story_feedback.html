@@ -131,15 +131,6 @@
             placeholder="{% trans 'Share details about your experience' %}"
             required
           ></textarea>
-          {% if request.user.is_authenticated %}
-            <div class="user-story-field">
-              <label for="user-story-attachments" class="user-story-label">{% trans 'Attachments' %}</label>
-              <input class="user-story-input" id="user-story-attachments" name="attachments" type="file" multiple>
-            </div>
-            {% if not request.user.is_staff %}
-              <div class="user-story-help">{% blocktrans with limit=user_story_attachment_limit %}You can upload up to {{ limit }} files.{% endblocktrans %}</div>
-            {% endif %}
-          {% endif %}
         </div>
         <button type="submit" class="user-story-submit">
           {% trans 'Submit feedback' %}
