@@ -131,6 +131,7 @@ Agents must run relevant tests after code changes.
 * Each **feature should have a test**.
 * Prefer **quality over quantity** of tests.
 * Do **not create tests solely to validate styling**.
+* Do **not create tests solely to confirm removed features are gone**.
 
 Styling will be validated through previews.
 
