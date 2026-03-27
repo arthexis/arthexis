@@ -1,0 +1,4 @@
+# Extra authenticated screenshot paths for `.github/workflows/dashboard-screenshot.yml`.
+# One path per line. Comments and blank lines are ignored.
+# Example:
+# /admin/links/reference/

@@ -124,6 +124,16 @@ Agents must run relevant tests after code changes.
   * they are security-relevant, or
   * they protect critical logic.
 
+### Screenshot Capture Policy
+
+* Do **not** take manual screenshots in the agent runtime.
+* The Screenshot CI workflow is the source of truth for previews and artifacts.
+* If you need extra screenshot coverage, add route paths (one per line) to:
+  * `.github/screenshot-paths.authenticated.txt` for pages that require login.
+  * `.github/screenshot-paths.public.txt` for public pages.
+* Keep entries as URL paths (for example `/admin/` or `/ocpp/c/SIM-CP-1/`).
+* Comments (`# ...`) and blank lines are allowed in the path files.
+
 ---
 
 ### Test Creation Guidelines
