@@ -80,6 +80,15 @@ class RfidMixin:
         energy_accounts_enabled = await self._energy_accounts_enabled()
         credits_required = await self._energy_credits_required()
 
+        if policy == self.charger.AuthorizationPolicy.OPEN:
+            return AuthorizationDecision(
+                status="Accepted",
+                reason="open_policy_insecure_compatibility_mode",
+                policy=policy,
+                should_mark_seen=bool(id_tag),
+                should_auto_enroll=bool(id_tag),
+            )
+
         if account is not None:
             if energy_accounts_enabled and not credits_required:
                 return AuthorizationDecision(
@@ -104,15 +113,6 @@ class RfidMixin:
                 policy=policy,
                 should_mark_seen=bool(id_tag),
                 should_auto_enroll=False,
-            )
-
-        if policy == self.charger.AuthorizationPolicy.OPEN:
-            return AuthorizationDecision(
-                status="Accepted",
-                reason="open_policy_insecure_compatibility_mode",
-                policy=policy,
-                should_mark_seen=bool(id_tag),
-                should_auto_enroll=bool(id_tag),
             )
 
         if energy_accounts_enabled:

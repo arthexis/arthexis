@@ -154,19 +154,39 @@ def _toggle_rfid(
     charger: Charger, payload: Mapping | None = None
 ) -> tuple[bool, str, dict[str, object]]:
     enable = None
+    authorization_policy = None
     if payload is not None:
         enable = payload.get("enable")
+        authorization_policy = payload.get("authorization_policy")
     if isinstance(enable, str):
         enable = enable.lower() in {"1", "true", "yes", "on"}
     elif isinstance(enable, (int, bool)):
         enable = bool(enable)
-    if enable is None:
-        enable = not charger.require_rfid
-    enable_bool = bool(enable)
-    Charger.objects.filter(pk=charger.pk).update(require_rfid=enable_bool)
-    charger.require_rfid = enable_bool
-    detail = "RFID authentication enabled" if enable_bool else "RFID authentication disabled"
-    return True, detail, {"require_rfid": enable_bool}
+
+    normalized_policy = str(authorization_policy or "").strip().lower()
+    if normalized_policy in Charger.AuthorizationPolicy.values:
+        next_policy = normalized_policy
+    else:
+        if enable is None:
+            enable = charger.resolved_authorization_policy() == Charger.AuthorizationPolicy.OPEN
+        next_policy = (
+            Charger.AuthorizationPolicy.STRICT
+            if bool(enable)
+            else Charger.AuthorizationPolicy.OPEN
+        )
+
+    require_rfid = next_policy != Charger.AuthorizationPolicy.OPEN
+    Charger.objects.filter(pk=charger.pk).update(
+        authorization_policy=next_policy,
+        require_rfid=require_rfid,
+    )
+    charger.authorization_policy = next_policy
+    charger.require_rfid = require_rfid
+    detail = "RFID authentication enabled" if require_rfid else "RFID authentication disabled"
+    return True, detail, {
+        "authorization_policy": next_policy,
+        "require_rfid": require_rfid,
+    }
 
 
 def _send_local_rfid_list_remote(

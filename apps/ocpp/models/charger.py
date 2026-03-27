@@ -710,8 +710,9 @@ class Charger(Ownable):
 
     def resolved_authorization_policy(self) -> str:
         """Return charger-level auth policy with global fallback."""
-        if self.authorization_policy:
-            return self.authorization_policy
+        explicit = str(self.authorization_policy or "").strip().lower()
+        if explicit in self.AuthorizationPolicy.values:
+            return explicit
         configured = str(getattr(settings, "OCPP_AUTHORIZATION_POLICY", "") or "").strip().lower()
         if configured in self.AuthorizationPolicy.values:
             return configured

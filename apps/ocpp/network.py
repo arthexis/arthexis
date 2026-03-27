@@ -211,6 +211,14 @@ def apply_remote_charger_payload(
             value = payload.get(field)
             if field in {"require_rfid", "public_display"} and value is None:
                 value = False
+            if field == "authorization_policy":
+                normalized = str(value or "").strip().lower()
+                if normalized in Charger.AuthorizationPolicy.values:
+                    value = normalized
+                elif normalized == "":
+                    value = ""
+                else:
+                    value = charger.authorization_policy
             updates[field] = value
         else:
             updates[field] = getattr(charger, field)

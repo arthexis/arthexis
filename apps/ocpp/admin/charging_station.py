@@ -2,6 +2,7 @@
 
 from django import forms
 from django.contrib import admin
+from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import OwnableAdminMixin
 from apps.locale.models import Language
@@ -19,7 +20,7 @@ class ChargingStationAdminForm(forms.ModelForm):
     preferred_ocpp_version = forms.CharField(required=False, max_length=16)
     energy_unit = forms.ChoiceField(choices=Charger.EnergyUnit.choices)
     authorization_policy = forms.ChoiceField(
-        choices=Charger.AuthorizationPolicy.choices,
+        choices=[("", _("Use global default")), *Charger.AuthorizationPolicy.choices],
         required=False,
     )
 
@@ -120,21 +121,40 @@ class ChargingStationAdmin(AuthorizationActionsMixin, OwnableAdminMixin, EntityM
 
         super().save_model(request, obj, form, change)
 
+        station_chargers = Charger.objects.filter(charging_station=obj)
+        previous_station_policy = (
+            station_chargers.filter(connector_id__isnull=True)
+            .order_by("pk")
+            .values_list("authorization_policy", flat=True)
+            .first()
+        )
+
+        selected_policy = form.cleaned_data.get("authorization_policy", "")
+
         station_fields = {
             "public_display": form.cleaned_data.get("public_display", True),
             "language": form.cleaned_data.get("language"),
             "preferred_ocpp_version": form.cleaned_data.get("preferred_ocpp_version", ""),
             "energy_unit": form.cleaned_data.get("energy_unit", Charger.EnergyUnit.KW),
-            "authorization_policy": form.cleaned_data.get("authorization_policy", ""),
-            "require_rfid": (
-                form.cleaned_data.get("authorization_policy", "")
-                != Charger.AuthorizationPolicy.OPEN
-            ),
             "display_name": obj.display_name,
             "location": obj.location,
             "station_model": obj.station_model,
         }
-        Charger.objects.filter(charging_station=obj).update(**station_fields)
+        station_chargers.update(**station_fields)
+
+        policy_fields = {
+            "authorization_policy": selected_policy,
+            "require_rfid": bool(
+                selected_policy and selected_policy != Charger.AuthorizationPolicy.OPEN
+            ),
+        }
+        if not change or previous_station_policy is None:
+            station_chargers.update(**policy_fields)
+            return
+
+        station_chargers.filter(authorization_policy=previous_station_policy).update(
+            **policy_fields
+        )
 
     def _station_charge_points(self, station_queryset):
         """Return charge-point rows linked to selected stations."""

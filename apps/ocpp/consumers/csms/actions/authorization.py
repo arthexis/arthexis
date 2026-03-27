@@ -57,7 +57,5 @@ class AuthorizationActionHandler:
         return {
             "idTagInfo": {
                 "status": decision.status,
-                "authorizationPolicy": decision.policy,
-                "reason": decision.reason,
             }
         }
