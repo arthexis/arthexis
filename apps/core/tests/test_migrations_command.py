@@ -73,14 +73,20 @@ def test_migrations_rebuild_regenerates_initial_migration(monkeypatch, settings,
 
     stale = apps_dir / "catalog" / "migrations" / "0002_stale.py"
     stale.write_text("# stale\n", encoding="utf-8")
+    invoked_labels = []
 
     def _fake_call_command(name, *args, **kwargs):
         if name != "makemigrations":
             raise AssertionError(f"Unexpected command: {name} {args}")
+        invoked_labels.extend(args)
         _seed_app_migrations(apps_dir, "catalog")
 
     monkeypatch.setattr(
         "apps.core.management.commands.migrations.call_command", _fake_call_command
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.migrations.Command._get_project_app_labels",
+        lambda self, _apps_dir: ["catalog"],
     )
 
     call_command("migrations", "rebuild")
@@ -90,3 +96,4 @@ def test_migrations_rebuild_regenerates_initial_migration(monkeypatch, settings,
     )
     assert not stale.exists()
     assert "BranchTagOperation" not in content
+    assert invoked_labels == ["catalog"]

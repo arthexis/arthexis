@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("ftp", "0003_initial"),
+        ("ftp", "0003_remove_ftpfolder_ftp_ftpfolder_owner_exclusive_and_more"),
         ("nodes", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

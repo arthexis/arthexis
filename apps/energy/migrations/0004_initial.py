@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("cards", "0003_initial"),
+        ("cards", "0003_cardface"),
         ("django_celery_beat", "0020_googlecalendarprofile"),
         ("energy", "0003_initial"),
         ("ocpp", "0002_initial"),

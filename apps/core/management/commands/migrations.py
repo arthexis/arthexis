@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from django.apps import apps as django_apps
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
@@ -93,6 +94,17 @@ class Command(BaseCommand):
 
         call_command("makemigrations", check=True, dry_run=True)
 
+    def _get_project_app_labels(self, apps_dir: Path) -> list[str]:
+        """Collect Django app labels rooted under the configured apps directory."""
+
+        root = apps_dir.resolve()
+        labels = []
+        for app_config in django_apps.get_app_configs():
+            app_path = Path(app_config.path).resolve()
+            if app_path == root or root in app_path.parents:
+                labels.append(app_config.label)
+        return sorted(labels)
+
     def _clear_migrations(self, apps_dir: Path) -> None:
         """Remove generated migration modules while keeping package markers."""
 
@@ -127,8 +139,9 @@ class Command(BaseCommand):
             self.stderr.write(f"Apps directory not found: {apps_dir}")
             return
 
+        project_apps = self._get_project_app_labels(apps_dir)
         self._clear_migrations(apps_dir)
-        call_command("makemigrations")
+        call_command("makemigrations", *project_apps)
 
     def _pending_migrations(self, database: str) -> None:
         """Report pending migration state with a single database round-trip."""

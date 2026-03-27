@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("auth", "0012_alter_user_first_name_max_length"),
-        ("cards", "0003_initial"),
+        ("cards", "0003_cardface"),
         ("chats", "0002_initial"),
         ("groups", "0002_initial"),
         ("pages", "0003_initial"),

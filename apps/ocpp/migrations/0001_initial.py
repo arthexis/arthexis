@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("ftp", "0003_initial"),
+        ("ftp", "0003_remove_ftpfolder_ftp_ftpfolder_owner_exclusive_and_more"),
         ("groups", "0001_initial"),
         ("locale", "0001_initial"),
         ("maps", "0001_initial"),
