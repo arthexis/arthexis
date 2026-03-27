@@ -263,6 +263,16 @@ jobs:
           marker = "<!-- dashboard-screenshot-preview -->"
           output = Path("artifacts/pr-screenshot-comment.md")
           images = sorted(Path("artifacts").glob("*.png"))
+          expected_images = [
+              (
+                  Path("artifacts/admin-desktop.png"),
+                  "Admin Desktop",
+              ),
+              (
+                  Path("artifacts/ocpp-cpms-dashboard-desktop.png"),
+                  "Ocpp Cpms Dashboard Desktop",
+              ),
+          ]
 
           def inline_preview(path: Path) -> str:
               from PIL import Image
@@ -295,6 +305,12 @@ jobs:
 
           if not images:
               lines.append("- ⚠️ No screenshots were produced in this run.")
+          else:
+              for expected_path, expected_label in expected_images:
+                  if not expected_path.exists():
+                      lines.append(
+                          f"- ⚠️ {expected_label}: expected screenshot was not produced."
+                      )
 
           for path in images:
               label = path.stem.replace("-", " ").replace("_", " ").title()
