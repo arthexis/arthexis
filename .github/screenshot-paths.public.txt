@@ -1,0 +1,4 @@
+# Extra public screenshot paths for `.github/workflows/dashboard-screenshot.yml`.
+# One path per line. Comments and blank lines are ignored.
+# Example:
+# /status/

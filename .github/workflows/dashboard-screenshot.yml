@@ -49,6 +49,8 @@ jobs:
           filters: |
             preview:
               - '.github/workflows/dashboard-screenshot.yml'
+              - '.github/screenshot-paths.authenticated.txt'
+              - '.github/screenshot-paths.public.txt'
               - 'apps/playwright/management/commands/preview.py'
               - 'apps/**/context_processors.py'
               - 'apps/**/context_processors/**/*.py'
@@ -228,14 +230,40 @@ jobs:
       - name: Capture authenticated previews
         run: |
           source .venv/bin/activate
+          python <<'PY' > /tmp/authenticated-screenshot-paths.txt
+          from pathlib import Path
+
+          defaults = ["/admin/", "/ocpp/cpms/dashboard/"]
+          configured_paths_file = Path(".github/screenshot-paths.authenticated.txt")
+          configured = []
+
+          if configured_paths_file.exists():
+              for raw_line in configured_paths_file.read_text(encoding="utf-8").splitlines():
+                  line = raw_line.strip()
+                  if not line or line.startswith("#"):
+                      continue
+                  configured.append(line if line.startswith("/") else f"/{line}")
+
+          ordered = []
+          for path in defaults + configured:
+              if path not in ordered:
+                  ordered.append(path)
+
+          print("\n".join(ordered))
+          PY
+
+          capture_paths=()
+          while IFS= read -r path; do
+            capture_paths+=("--path" "$path")
+          done < /tmp/authenticated-screenshot-paths.txt
+
           python manage.py preview \
             --base-url http://127.0.0.1:8888 \
             --wait-for-suite \
             --suite-timeout 60 \
             --ci-fast \
             --ready-selector "body" \
-            --path /admin/ \
-            --path /ocpp/cpms/dashboard/ \
+            "${capture_paths[@]}" \
             --output-dir artifacts
 
       - name: Upload dashboard screenshot
@@ -354,6 +382,33 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         run: |
           source .venv/bin/activate
+          python <<'PY' > /tmp/public-screenshot-paths.txt
+          from pathlib import Path
+
+          defaults = ["/", "/ocpp/c/SIM-CP-1/"]
+          configured_paths_file = Path(".github/screenshot-paths.public.txt")
+          configured = []
+
+          if configured_paths_file.exists():
+              for raw_line in configured_paths_file.read_text(encoding="utf-8").splitlines():
+                  line = raw_line.strip()
+                  if not line or line.startswith("#"):
+                      continue
+                  configured.append(line if line.startswith("/") else f"/{line}")
+
+          ordered = []
+          for path in defaults + configured:
+              if path not in ordered:
+                  ordered.append(path)
+
+          print("\n".join(ordered))
+          PY
+
+          capture_paths=()
+          while IFS= read -r path; do
+            capture_paths+=("--path" "$path")
+          done < /tmp/public-screenshot-paths.txt
+
           python manage.py preview \
             --base-url http://127.0.0.1:8888 \
             --wait-for-suite \
@@ -361,8 +416,7 @@ jobs:
             --ci-fast \
             --no-login \
             --ready-selector "body" \
-            --path / \
-            --path /ocpp/c/SIM-CP-1/ \
+            "${capture_paths[@]}" \
             --output-dir artifacts
 
       - name: Upload public screenshot

@@ -9,3 +9,14 @@ To resolve it:
 - Ensure `BASE_REF` points to the correct upstream branch and that your feature branch is descended from it.
 
 Increasing the fetch depth restores the missing ancestor commit so `git merge-base origin/main HEAD` can succeed.
+
+## Screenshot coverage in CI
+
+The screenshot workflow already captures baseline routes. To request additional CI screenshot coverage without taking manual screenshots:
+
+- Add authenticated paths (admin/session-required pages) to `.github/screenshot-paths.authenticated.txt`.
+- Add public paths to `.github/screenshot-paths.public.txt`.
+- Keep one path per line and start with `/` (for example `/admin/links/reference/`).
+- Blank lines and `#` comments are ignored.
+
+These path files are read by `.github/workflows/dashboard-screenshot.yml`, which appends them to the default capture list and uploads the resulting screenshots as workflow artifacts.
