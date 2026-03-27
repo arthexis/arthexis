@@ -20,8 +20,6 @@ from apps.content.models import (
     ContentClassifier,
     ContentSample,
     ContentTag,
-    WebSample,
-    WebSampleAttachment,
 )
 from apps.content.upload_handlers import MaxContentDropUploadSizeHandler
 from apps.content.utils import (
@@ -323,29 +321,3 @@ class ContentSampleAdmin(EntityModelAdmin):
             '<audio controls style="width:100%%;" src="{}"></audio>',
             data_uri,
         )
-
-
-class WebSampleAttachmentInline(admin.TabularInline):
-    model = WebSampleAttachment
-    extra = 0
-    readonly_fields = (
-        "content_sample",
-        "legacy_step_id",
-        "step_slug",
-        "step_name",
-        "uri",
-    )
-
-
-@admin.register(WebSample)
-class WebSampleAdmin(EntityModelAdmin):
-    list_display = ("sampler_label", "sampler_slug", "executed_by", "created_at")
-    readonly_fields = (
-        "legacy_sampler_id",
-        "sampler_slug",
-        "sampler_label",
-        "document",
-        "executed_by",
-        "created_at",
-    )
-    inlines = (WebSampleAttachmentInline,)
