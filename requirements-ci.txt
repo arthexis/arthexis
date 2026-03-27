@@ -90,8 +90,8 @@ qrcode==8.2
 redis==7.3.0
 reportlab==4.4.10
 requests==2.33.0
-s3transfer==0.16.0
 ruff==0.15.7
+s3transfer==0.16.0
 selenium==4.41.0
 service-identity==24.2.0
 setuptools==82.0.1
