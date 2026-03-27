@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import anyio
 import pytest
 from channels.db import database_sync_to_async
+from django.test import override_settings
 from django.utils import timezone
 
 from apps.ocpp import store, call_error_handlers, call_result_handlers
@@ -780,7 +781,12 @@ async def test_get_15118_ev_certificate_persists_request(monkeypatch):
 @pytest.mark.slow
 async def test_get_certificate_status_persists_check():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-2")
-    hash_data = {"hashAlgorithm": "SHA256", "issuerNameHash": "abc"}
+    hash_data = {
+        "hashAlgorithm": "SHA256",
+        "issuerKeyHash": "def",
+        "issuerNameHash": "abc",
+        "serialNumber": "01",
+    }
     await database_sync_to_async(InstalledCertificate.objects.create)(
         charger=charger,
         certificate_type="V2G",
@@ -802,8 +808,10 @@ async def test_get_certificate_status_persists_check():
         charger=charger
     )
     assert status_check.status == CertificateStatusCheck.STATUS_ACCEPTED
+    assert status_check.ocsp_result["status"] == "good"
     assert status_check.certificate_hash_data["hashAlgorithm"] == "SHA256"
     assert status_check.responded_at is not None
+
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
@@ -815,7 +823,14 @@ async def test_get_certificate_status_rejects_missing_certificate_by_default():
     consumer.charger = charger
     consumer.aggregate_charger = None
 
-    payload = {"certificateHashData": {"hashAlgorithm": "SHA256"}}
+    payload = {
+        "certificateHashData": {
+            "hashAlgorithm": "SHA256",
+            "issuerKeyHash": "abc",
+            "issuerNameHash": "def",
+            "serialNumber": "99",
+        }
+    }
     result = await consumer._handle_get_certificate_status_action(
         payload, "msg-3", "", "",
     )
@@ -826,6 +841,132 @@ async def test_get_certificate_status_rejects_missing_certificate_by_default():
     )
     assert status_check.status == CertificateStatusCheck.STATUS_REJECTED
     assert status_check.status_info == "Certificate not found."
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@override_settings(
+    OCPP_CERT_STATUS_OCSP_URL="https://ocsp.example.test/status",
+    OCPP_CERT_STATUS_RETRIES=0,
+)
+async def test_get_certificate_status_marks_revoked_when_ocsp_revoked(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-REV")
+    hash_data = {
+        "hashAlgorithm": "SHA256",
+        "issuerKeyHash": "def",
+        "issuerNameHash": "abc",
+        "serialNumber": "AA",
+    }
+    await database_sync_to_async(InstalledCertificate.objects.create)(
+        charger=charger,
+        certificate_type="V2G",
+        certificate_hash_data=hash_data,
+        status=InstalledCertificate.STATUS_INSTALLED,
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-REV"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "status": "revoked",
+                "responderUrl": "https://ocsp.example.test/status",
+                "producedAt": "2025-01-01T00:00:00Z",
+                "thisUpdate": "2025-01-01T00:00:00Z",
+                "nextUpdate": "2025-01-02T00:00:00Z",
+                "errors": [],
+            }
+
+    monkeypatch.setattr(
+        consumers_base.certificate_status.requests,
+        "post",
+        lambda *_args, **_kwargs: FakeResponse(),
+    )
+
+    result = await consumer._handle_get_certificate_status_action(
+        {"certificateHashData": hash_data}, "msg-ocsp-rev", "", ""
+    )
+
+    assert result["status"] == "Failed"
+    assert result["statusInfo"]["reasonCode"] == "Revoked"
+    status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
+        charger=charger
+    )
+    assert status_check.status == CertificateStatusCheck.STATUS_REJECTED
+    assert status_check.ocsp_result["status"] == "revoked"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@override_settings(
+    OCPP_CERT_STATUS_OCSP_URL="https://ocsp.example.test/status",
+    OCPP_CERT_STATUS_FAIL_CLOSED=True,
+    OCPP_CERT_STATUS_RETRIES=1,
+    OCPP_CERT_STATUS_TIMEOUT_SECONDS=1,
+)
+async def test_get_certificate_status_ocsp_timeout_uses_responder_unavailable(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-TIMEOUT")
+    hash_data = {
+        "hashAlgorithm": "SHA256",
+        "issuerKeyHash": "def",
+        "issuerNameHash": "abc",
+        "serialNumber": "AB",
+    }
+    await database_sync_to_async(InstalledCertificate.objects.create)(
+        charger=charger,
+        certificate_type="V2G",
+        certificate_hash_data=hash_data,
+        status=InstalledCertificate.STATUS_INSTALLED,
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-TIMEOUT"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    def _raise_timeout(*_args, **_kwargs):
+        raise consumers_base.certificate_status.requests.Timeout("timed out")
+
+    monkeypatch.setattr(consumers_base.certificate_status.requests, "post", _raise_timeout)
+
+    result = await consumer._handle_get_certificate_status_action(
+        {"certificateHashData": hash_data}, "msg-ocsp-timeout", "", ""
+    )
+
+    assert result["status"] == "Failed"
+    assert result["statusInfo"]["reasonCode"] == "ResponderUnavailable"
+    status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
+        charger=charger
+    )
+    assert status_check.status == CertificateStatusCheck.STATUS_ERROR
+    assert status_check.ocsp_result["status"] == "unknown"
+    assert status_check.ocsp_result["errors"]
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_get_certificate_status_rejects_malformed_hash_data():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-HASH")
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-HASH"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    result = await consumer._handle_get_certificate_status_action(
+        {"certificateHashData": {"hashAlgorithm": "SHA256"}}, "msg-malformed", "", ""
+    )
+
+    assert result["status"] == "Failed"
+    assert result["statusInfo"]["reasonCode"] == "FormatViolation"
+    status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
+        charger=charger
+    )
+    assert status_check.status == CertificateStatusCheck.STATUS_REJECTED
+    assert "Malformed certificate hash data" in status_check.status_info
 
 
 @pytest.mark.anyio
