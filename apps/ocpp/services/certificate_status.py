@@ -69,7 +69,7 @@ def check_certificate_status(*, hash_data: dict[str, Any], target) -> Certificat
     if ocsp_error:
         fail_closed = bool(getattr(settings, "OCPP_CERT_STATUS_FAIL_CLOSED", False))
         return CertificateStatusOutcome(
-            state=STATE_RESPONDER_UNAVAILABLE if fail_closed else STATE_UNKNOWN,
+            state=STATE_RESPONDER_UNAVAILABLE if fail_closed else STATE_ACCEPTED,
             status_info=ocsp_error,
             responder_errors=[ocsp_error],
             ocsp_result=ocsp_data,
@@ -100,7 +100,7 @@ def check_certificate_status(*, hash_data: dict[str, Any], target) -> Certificat
     if crl_error:
         fail_closed = bool(getattr(settings, "OCPP_CERT_STATUS_FAIL_CLOSED", False))
         return CertificateStatusOutcome(
-            state=STATE_RESPONDER_UNAVAILABLE if fail_closed else STATE_UNKNOWN,
+            state=STATE_RESPONDER_UNAVAILABLE if fail_closed else STATE_ACCEPTED,
             status_info=crl_error,
             responder_errors=[crl_error],
             ocsp_result=ocsp_data,
@@ -178,7 +178,7 @@ def _check_crl(hash_data: dict[str, Any]) -> tuple[bool, str]:
     serial_number = str(hash_data.get("serialNumber") or "").strip()
     revoked_serials = response_json.get("revokedSerialNumbers")
     if not isinstance(revoked_serials, list):
-        return False, ""
+        return False, "CRL responder returned invalid payload."
     normalized_serials = {str(value).strip() for value in revoked_serials}
     return serial_number in normalized_serials, ""
 

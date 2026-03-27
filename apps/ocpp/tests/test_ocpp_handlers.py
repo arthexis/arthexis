@@ -949,6 +949,103 @@ async def test_get_certificate_status_ocsp_timeout_uses_responder_unavailable(mo
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+@override_settings(
+    OCPP_CERT_STATUS_OCSP_URL="https://ocsp.example.test/status",
+    OCPP_CERT_STATUS_FAIL_CLOSED=False,
+    OCPP_CERT_STATUS_RETRIES=0,
+    OCPP_CERT_STATUS_TIMEOUT_SECONDS=1,
+)
+async def test_get_certificate_status_ocsp_timeout_fail_open_accepts(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-OPEN")
+    hash_data = {
+        "hashAlgorithm": "SHA256",
+        "issuerKeyHash": "def",
+        "issuerNameHash": "abc",
+        "serialNumber": "AC",
+    }
+    await database_sync_to_async(InstalledCertificate.objects.create)(
+        charger=charger,
+        certificate_type="V2G",
+        certificate_hash_data=hash_data,
+        status=InstalledCertificate.STATUS_INSTALLED,
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-OPEN"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    def _raise_timeout(*_args, **_kwargs):
+        raise consumers_base.certificate_status.requests.Timeout("timed out")
+
+    monkeypatch.setattr(consumers_base.certificate_status.requests, "post", _raise_timeout)
+
+    result = await consumer._handle_get_certificate_status_action(
+        {"certificateHashData": hash_data}, "msg-ocsp-open", "", ""
+    )
+
+    assert result["status"] == "Accepted"
+    status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
+        charger=charger
+    )
+    assert status_check.status == CertificateStatusCheck.STATUS_ACCEPTED
+    assert status_check.ocsp_result["status"] == "unknown"
+    assert status_check.ocsp_result["errors"]
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@override_settings(
+    OCPP_CERT_STATUS_CRL_URL="https://crl.example.test/status",
+    OCPP_CERT_STATUS_FAIL_CLOSED=True,
+    OCPP_CERT_STATUS_RETRIES=0,
+)
+async def test_get_certificate_status_invalid_crl_payload_is_responder_unavailable(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-CRL")
+    hash_data = {
+        "hashAlgorithm": "SHA256",
+        "issuerKeyHash": "def",
+        "issuerNameHash": "abc",
+        "serialNumber": "AD",
+    }
+    await database_sync_to_async(InstalledCertificate.objects.create)(
+        charger=charger,
+        certificate_type="V2G",
+        certificate_hash_data=hash_data,
+        status=InstalledCertificate.STATUS_INSTALLED,
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-CRL"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    class FakeCRLResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"revokedSerialNumbers": "not-a-list"}
+
+    monkeypatch.setattr(
+        consumers_base.certificate_status.requests,
+        "get",
+        lambda *_args, **_kwargs: FakeCRLResponse(),
+    )
+
+    result = await consumer._handle_get_certificate_status_action(
+        {"certificateHashData": hash_data}, "msg-crl-invalid", "", ""
+    )
+
+    assert result["status"] == "Failed"
+    assert result["statusInfo"]["reasonCode"] == "ResponderUnavailable"
+    status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
+        charger=charger
+    )
+    assert status_check.status == CertificateStatusCheck.STATUS_ERROR
+    assert "invalid payload" in status_check.status_info.lower()
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
 async def test_get_certificate_status_rejects_malformed_hash_data():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-HASH")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
