@@ -12,7 +12,7 @@ line while preparing a compressed, clean migration base for the next major.
 
 ## Tracking file
 
-The repository stores migration-track state in `MIGRATION_TRACKS.json` at the
+The repository stores migration-track state in `MIGRATIONS.json` at the
 project root. It records the current version/line and the active next-major
 branch module suffix.
 
@@ -31,7 +31,7 @@ Behavior:
 3. Regenerates migrations into `migrations_v1_0` via `MIGRATION_MODULES`.
 4. Tags each regenerated initial migration with `BranchTagOperation` using
    `major-1.0-base`.
-5. Updates `MIGRATION_TRACKS.json`.
+5. Updates `MIGRATIONS.json`.
 
 ## Upgrade policy
 

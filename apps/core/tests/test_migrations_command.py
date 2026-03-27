@@ -133,7 +133,7 @@ def test_migrations_next_major_rebuild_regenerates_parallel_line(
         encoding="utf-8"
     )
     tracks_payload = json.loads(
-        (tmp_path / "MIGRATION_TRACKS.json").read_text(encoding="utf-8")
+        (tmp_path / "MIGRATIONS.json").read_text(encoding="utf-8")
     )
     assert not stale.exists()
     assert "BranchTagOperation" in content

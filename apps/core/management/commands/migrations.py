@@ -123,7 +123,7 @@ class Command(BaseCommand):
         return Path(apps_dir_option or getattr(settings, "APPS_DIR", Path(settings.BASE_DIR) / "apps"))
 
     def _tracks_file(self) -> Path:
-        return Path(settings.BASE_DIR) / "MIGRATION_TRACKS.json"
+        return Path(settings.BASE_DIR) / "MIGRATIONS.json"
 
     def _load_tracks(self) -> dict[str, Any]:
         tracks_file = self._tracks_file()
