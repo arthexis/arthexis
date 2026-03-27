@@ -1,8 +1,13 @@
 from datetime import timedelta
 
+import pytest
+from django.apps import apps as django_apps
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
+
+if not django_apps.is_installed("apps.screens"):
+    pytest.skip("apps.screens is not installed", allow_module_level=True)
 
 from apps.screens.models import CharacterScreen, LCDAnimation, PixelScreen
 

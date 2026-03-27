@@ -4,9 +4,13 @@ from datetime import timedelta
 
 import pytest
 import requests
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+
+if not django_apps.is_installed("apps.calendars"):
+    pytest.skip("apps.calendars is not installed", allow_module_level=True)
 
 from apps.calendars.models import GoogleCalendar
 from apps.calendars.services import GoogleCalendarError, GoogleCalendarGateway, GoogleCalendarRequestError
@@ -119,4 +123,3 @@ def test_google_calendar_gateway_normalizes_transport_errors(monkeypatch):
 
     with pytest.raises(GoogleCalendarRequestError):
         gateway._request("POST", "https://example.com")
-

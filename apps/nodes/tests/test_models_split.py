@@ -307,10 +307,10 @@ def test_detect_auto_feature_uses_app_node_feature_hooks(
     monkeypatch.setattr(
         cards_node_features,
         "check_node_feature",
-        lambda slug, *, node: True if slug == "rfid-scanner" else None,
+        lambda slug, *, node, base_dir, base_path: True if slug == "rfid-scanner" else None,
     )
 
-    def _setup(slug, *, node):
+    def _setup(slug, *, node, base_dir, base_path):
         if slug == "rfid-scanner":
             setup_calls.append(slug)
             return True

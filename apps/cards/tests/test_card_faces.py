@@ -65,6 +65,7 @@ def test_fixed_back_relations_are_mutual():
     assert face_b.fixed_back_id == face_a.pk
 
 
+@pytest.mark.django_db
 def test_resolve_text_overrides_and_fallback():
     text = "Hello [UNKNOWN.VALUE] and [KNOWN.VALUE]"
     resolved = CardFace.resolve_text(text, overrides={"known.value": "ok"})

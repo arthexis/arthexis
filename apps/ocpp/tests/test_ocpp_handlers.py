@@ -404,10 +404,13 @@ async def test_handle_clear_charging_profile_error_records_failure():
 
 
 @pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
 @pytest.mark.integration
 async def test_cleared_charging_limit_logs_payload():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-201"
+    consumer.charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-201")
+    consumer.aggregate_charger = None
 
     calls = getattr(consumer._handle_cleared_charging_limit_action, "__protocol_calls__", set())
     assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit") in calls
