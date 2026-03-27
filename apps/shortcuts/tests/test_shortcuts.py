@@ -6,8 +6,12 @@ import importlib
 import json
 
 import pytest
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+
+if not django_apps.is_installed("apps.shortcuts"):
+    pytest.skip("apps.shortcuts is not installed", allow_module_level=True)
 
 from apps.features.models import Feature
 from apps.shortcuts.constants import SHORTCUT_MANAGEMENT_FEATURE_SLUG
