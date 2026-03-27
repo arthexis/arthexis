@@ -7,6 +7,7 @@ import logging
 from http import HTTPStatus
 
 from django.conf import settings
+from django.contrib.auth.models import AnonymousUser
 from django.urls import Resolver404, resolve
 
 from .models import Landing, LandingLead, ViewHistory
@@ -259,3 +260,21 @@ class ViewHistoryMiddleware:
                 "Failed to update last_visit_ip_address for user %s", user.pk,
                 exc_info=True,
             )
+
+
+class SharePreviewPublicMiddleware:
+    """Render share previews as an anonymous user when explicitly requested."""
+
+    _PREVIEW_MARKER = "share-preview"
+    _PUBLIC_FLAG = "share_preview_public"
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if (
+            request.GET.get("djdt") == self._PREVIEW_MARKER
+            and request.GET.get(self._PUBLIC_FLAG) == "1"
+        ):
+            request.user = AnonymousUser()
+        return self.get_response(request)
