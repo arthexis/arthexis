@@ -35,6 +35,11 @@ CONFLICT_PATTERN = re.compile(
     r"Conflicting migrations detected; multiple leaf nodes in the migration graph",
     re.IGNORECASE,
 )
+LINE_BUMP_PATTERN = re.compile(
+    r"This database never completed the historical .* cleanup migration",
+    re.IGNORECASE,
+)
+NEXT_DATABASE_ENV = "ARTHEXIS_NEXT_MIGRATION_DATABASE"
 
 
 class ProcessLike(Protocol):
@@ -103,6 +108,31 @@ def build_merge_command() -> list[str]:
         "--merge",
         "--noinput",
     ]
+
+
+def _resolve_database_alias(extra_args: list[str] | None = None) -> str:
+    """Return the explicit migration database alias or ``default``.
+
+    Args:
+        extra_args: Raw args forwarded to ``manage.py migrate``.
+
+    Returns:
+        Selected database alias.
+    """
+
+    if not extra_args:
+        return "default"
+
+    for index, token in enumerate(extra_args):
+        if token == "--database" and index + 1 < len(extra_args):
+            candidate = extra_args[index + 1].strip()
+            if candidate:
+                return candidate
+        if token.startswith("--database="):
+            candidate = token.split("=", maxsplit=1)[1].strip()
+            if candidate:
+                return candidate
+    return "default"
 
 
 def _build_popen_kwargs() -> PopenKwargs:
@@ -221,11 +251,31 @@ def _has_conflicting_migrations(completed: CommandResult) -> bool:
     return bool(CONFLICT_PATTERN.search(output))
 
 
-def run_migrations(extra_args: list[str] | None = None) -> int:
+def _is_line_bump_candidate(completed: CommandResult) -> bool:
+    """Return ``True`` when output suggests a line transition can recover.
+
+    Args:
+        completed: Completed migration command output.
+
+    Returns:
+        Whether the output matches known line-transition failures.
+    """
+
+    output = f"{completed.stdout}\n{completed.stderr}"
+    return bool(LINE_BUMP_PATTERN.search(output))
+
+
+def run_migrations(
+    extra_args: list[str] | None = None,
+    *,
+    next_database: str | None = None,
+) -> int:
     """Run ``manage.py migrate`` and return the subprocess exit code.
 
     Args:
         extra_args: Optional arguments forwarded to ``manage.py migrate``.
+        next_database: Optional database alias retried when a known line-transition
+            failure occurs.
 
     Returns:
         Migration process exit code.
@@ -248,6 +298,38 @@ def run_migrations(extra_args: list[str] | None = None) -> int:
 
         print(f"{PREFIX} Merge completed. Re-running migrations.")
         completed = _run_command(build_migration_command(extra_args))
+        if completed is None:
+            return 130
+
+    current_database = _resolve_database_alias(extra_args)
+    if (
+        completed.returncode != 0
+        and _is_line_bump_candidate(completed)
+        and next_database
+        and next_database != current_database
+    ):
+        next_args = list(extra_args or [])
+        if "--database" in next_args:
+            db_index = next_args.index("--database")
+            if db_index + 1 < len(next_args):
+                next_args[db_index + 1] = next_database
+            else:
+                next_args.append(next_database)
+        elif any(token.startswith("--database=") for token in next_args):
+            next_args = [
+                f"--database={next_database}"
+                if token.startswith("--database=")
+                else token
+                for token in next_args
+            ]
+        else:
+            next_args.extend(["--database", next_database])
+
+        print(
+            f"{PREFIX} Known migration-line failure detected on database "
+            f"'{current_database}'. Retrying on '{next_database}'."
+        )
+        completed = _run_command(build_migration_command(next_args))
         if completed is None:
             return 130
 
@@ -359,6 +441,7 @@ def run_migration_server(
     interval: float = 1.0,
     debounce: float = 1.0,
     watch: bool = False,
+    next_database: str | None = None,
 ) -> int:
     """Run migrations once or keep rerunning when watched source files change.
 
@@ -367,12 +450,13 @@ def run_migration_server(
         interval: Polling interval in seconds.
         debounce: Debounce window before a rerun.
         watch: Whether to continue watching for file changes.
+        next_database: Optional fallback database alias used for line-bump retries.
 
     Returns:
         Migration process exit code.
     """
 
-    exit_code = run_migrations(extra_args)
+    exit_code = run_migrations(extra_args, next_database=next_database)
     if not watch or exit_code == 130:
         return exit_code
 
@@ -401,7 +485,7 @@ def run_migration_server(
         if len(changed_files) > 3:
             preview += f", +{len(changed_files) - 3} more"
         print(f"{PREFIX} Source changes detected ({preview}). Re-running migrations.")
-        exit_code = run_migrations(extra_args)
+        exit_code = run_migrations(extra_args, next_database=next_database)
         if exit_code == 130:
             return exit_code
 
@@ -437,6 +521,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Keep running and re-run migrations when code files change.",
     )
     parser.add_argument(
+        "--next-database",
+        default=os.environ.get(NEXT_DATABASE_ENV),
+        help=(
+            "Fallback database alias for known migration-line failures "
+            f"(default: ${NEXT_DATABASE_ENV})."
+        ),
+    )
+    parser.add_argument(
         "extra_args",
         nargs=argparse.REMAINDER,
         help="Additional args passed to `manage.py migrate`.",
@@ -464,6 +556,7 @@ def main(argv: list[str] | None = None) -> int:
         interval=args.interval,
         debounce=args.debounce,
         watch=args.watch,
+        next_database=args.next_database,
     )
 
 
