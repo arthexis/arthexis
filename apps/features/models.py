@@ -3,12 +3,12 @@ from __future__ import annotations
 from django.apps import apps as django_apps
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, router
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.models import Ownable
 from apps.core.entity import Entity
+from apps.core.models import Ownable
 
 
 class FeatureManager(models.Manager):
@@ -137,6 +137,24 @@ class Feature(Ownable):
     def get_absolute_url(self):
         return reverse("features:detail", kwargs={"slug": self.slug})
 
+    @staticmethod
+    def infer_main_app_name(code_locations: object) -> str | None:
+        """Infer an application label from feature code locations."""
+
+        if not isinstance(code_locations, list):
+            return None
+
+        for location in code_locations:
+            if not isinstance(location, str):
+                continue
+            location_parts = [part for part in location.strip(" /").split("/") if part]
+            if len(location_parts) < 2 or location_parts[0] != "apps":
+                continue
+            label = location_parts[1].strip()
+            if label:
+                return label
+        return None
+
     @property
     def params_count(self) -> int:
         """Return the count of configured feature parameter values."""
@@ -185,6 +203,24 @@ class Feature(Ownable):
         if not node:
             return False
         return node.features.filter(pk=self.node_feature_id).exists()
+
+    def save(self, *args, **kwargs):
+        """Persist and auto-link a main app when code locations provide one."""
+
+        update_fields = kwargs.get("update_fields")
+        if not self.main_app_id:
+            inferred_name = self.infer_main_app_name(self.code_locations)
+            if inferred_name:
+                Application = django_apps.get_model("app", "Application")
+                db_alias = kwargs.get("using") or self._state.db or router.db_for_write(
+                    Application,
+                    instance=self,
+                )
+                app, _ = Application.objects.using(db_alias).get_or_create(name=inferred_name)
+                self.main_app = app
+                if update_fields is not None:
+                    kwargs["update_fields"] = sorted({*update_fields, "main_app"})
+        return super().save(*args, **kwargs)
 
 
 class FeatureTestManager(models.Manager):
