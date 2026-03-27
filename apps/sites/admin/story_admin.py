@@ -56,6 +56,7 @@ class UserStoryAdmin(
         "name",
         "rating",
         "comments",
+        "legacy_screenshot",
         "path",
         "user",
         "owner",
@@ -75,6 +76,7 @@ class UserStoryAdmin(
         "name",
         "rating",
         "comments",
+        "legacy_screenshot",
         "path",
         "language_code",
         "user",
@@ -107,6 +109,17 @@ class UserStoryAdmin(
         if obj.github_issue_number is not None:
             return f"#{obj.github_issue_number}"
         return ""
+
+    @admin.display(description=_("Screenshot"))
+    def legacy_screenshot(self, obj):
+        if not obj.screenshot:
+            return ""
+
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
+            obj.screenshot.url,
+            obj.screenshot.name,
+        )
 
     @admin.action(description=_("Create GitHub issues"))
     def create_github_issues(self, request, queryset):
