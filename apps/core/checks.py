@@ -25,6 +25,22 @@ LEGACY_GAME_TABLES = (
 )
 
 
+def _resolve_check_database_alias(kwargs: dict[str, object]) -> str:
+    """Return the database alias targeted by the active system-check run."""
+
+    database = kwargs.get("database")
+    if isinstance(database, str) and database:
+        return database
+
+    databases = kwargs.get("databases")
+    if isinstance(databases, (list, tuple)):
+        for alias in databases:
+            if isinstance(alias, str) and alias:
+                return alias
+
+    return "default"
+
+
 @register()
 def fitbit_cleanup_migration_was_applied(app_configs, **kwargs):
     """Reject upgrades that skipped the historical Fitbit cleanup migration.
@@ -41,9 +57,9 @@ def fitbit_cleanup_migration_was_applied(app_configs, **kwargs):
         None.
     """
 
-    del app_configs, kwargs
+    del app_configs
 
-    connection = connections["default"]
+    connection = connections[_resolve_check_database_alias(kwargs)]
     recorder = MigrationRecorder(connection)
     try:
         if not recorder.has_table():
@@ -94,9 +110,9 @@ def fitbit_cleanup_migration_was_applied(app_configs, **kwargs):
 def game_cleanup_migration_was_applied(app_configs, **kwargs):
     """Reject upgrades that skipped the historical game cleanup migration."""
 
-    del app_configs, kwargs
+    del app_configs
 
-    connection = connections["default"]
+    connection = connections[_resolve_check_database_alias(kwargs)]
     recorder = MigrationRecorder(connection)
     try:
         if not recorder.has_table():
