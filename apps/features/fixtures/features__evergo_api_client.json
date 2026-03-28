@@ -3,16 +3,16 @@
     "model": "features.feature",
     "fields": {
       "slug": "evergo-api-client",
-      "display": "Evergo API Client",
-      "summary": "Manage Evergo API credentials and synchronize user, customer, and order metadata through Evergo endpoints.",
+      "display": "Evergo Integration",
+      "summary": "Bind Suite users to Evergo credentials and synchronize profile, customer, and order metadata through Evergo endpoints.",
       "is_enabled": true,
       "main_app": [
         "evergo"
       ],
       "node_feature": null,
-      "admin_requirements": "Provide admin model management for Evergo API credentials with actions to validate authentication and load customer/order data.",
+      "admin_requirements": "Provide admin model management for Evergo credentials with actions to validate authentication and load customer/order data.",
       "public_requirements": "",
-      "service_requirements": "Provide a Django management command for CLI credential setup and Evergo API login validation.",
+      "service_requirements": "Provide a Django management command for CLI credential setup, login validation, and data synchronization.",
       "admin_views": [
         "admin:evergo_evergouser_changelist"
       ],
@@ -27,7 +27,7 @@
       ],
       "protocol_coverage": {},
       "created_at": "2026-02-24T00:00:00Z",
-      "updated_at": "2026-02-24T00:00:00Z",
+      "updated_at": "2026-03-28T00:00:00Z",
       "is_seed_data": true,
       "is_deleted": false,
       "source": "mainstream"

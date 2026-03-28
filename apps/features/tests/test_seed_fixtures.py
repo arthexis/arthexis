@@ -10,7 +10,6 @@ REQUIRED_SUITE_FEATURE_SLUGS = {
     "celery-workers",
     "energy-accounts",
     "evergo-api-client",
-    "evergo-integration",
     "feedback-ingestion",
     "github-issue-reporting",
     "llm-summary-suite",
