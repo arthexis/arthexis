@@ -119,6 +119,14 @@ class Command(BaseCommand):
             help="Force certbot to issue a fresh certificate even if one already exists.",
         )
         parser.add_argument(
+            "--key",
+            metavar="CREDENTIAL",
+            help=(
+                "GoDaddy credential selector for DNS-01 runs. "
+                "Accepts a credential ID or an exact stored GoDaddy API key."
+            ),
+        )
+        parser.add_argument(
             "--warn-days",
             type=int,
             default=14,
