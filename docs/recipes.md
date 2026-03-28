@@ -1,6 +1,6 @@
 # Recipes
 
-The old `apps.recipes` runtime has been decommissioned. Arthexis now treats recipe rows as migration-only legacy data that must be replaced with first-class app behavior before the legacy tables are dropped.
+The historical `apps.recipes` runtime has been fully retired.
 
 ## Why recipes were removed
 
@@ -37,13 +37,3 @@ When an operational task still matters, add a dedicated management command under
 ### 3. Obsolete behavior
 
 If a legacy recipe does not map cleanly to a maintained workflow, archive the script in change history or an operator note and do not migrate it back into the product.
-
-## Database upgrade compatibility
-
-Existing databases can still upgrade through the legacy `recipes` migration path. The migration-only compatibility app preserves historical migrations long enough to:
-
-1. satisfy old migration dependencies,
-2. let typed replacements in other apps run, and
-3. drop the obsolete recipe tables once downstream migrations no longer rely on them.
-
-This compatibility path is for schema upgrades only. It does **not** restore admin screens, runtime models, or the legacy CLI command.
