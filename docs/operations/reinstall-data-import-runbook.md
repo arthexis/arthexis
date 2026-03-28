@@ -10,6 +10,8 @@ Latest planning baseline (from recent release prep commits):
 
 - 1.0 architecture freeze landed as a migration-baseline reset with no dual-track
   migration support.
+- Until `1.0.0` is published on PyPI, continue updating that clean migration
+  baseline in place instead of creating new migration files.
 - Runtime legacy migration shims were removed.
 - 1.0 release prep work focused on fresh-install/import operations instead of
   in-place migration from old graphs.
