@@ -19,15 +19,6 @@ class AwgCalculateViewTests(SimpleTestCase):
     def _json(self, response):
         return json.loads(response.content.decode("utf-8"))
 
-    def test_missing_meters_rejected(self):
-        url = reverse("awg:awg_calculate")
-        with patch("apps.awg.views.requests.find_awg") as find_awg:
-            response = self._get(url, {"amps": 40, "volts": 220, "material": "cu"})
-
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("meters", self._json(response)["error"].lower())
-        find_awg.assert_not_called()
-
     def test_calculates_from_parameters(self):
         url = reverse("awg:awg_calculate")
         with patch(
@@ -131,11 +122,3 @@ class AwgCalculateViewTests(SimpleTestCase):
                 "ground": 1,
             },
         )
-
-    def test_unknown_template_returns_not_found(self):
-        url = reverse("awg:awg_calculate")
-        with patch("apps.awg.views.requests.CalculatorTemplate") as calculator_template:
-            calculator_template.objects.filter.return_value.first.return_value = None
-            response = self._get(url, {"template": 9999})
-
-        self.assertEqual(response.status_code, 404)

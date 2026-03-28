@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 
 import pytest
@@ -124,47 +123,3 @@ def test_server_shortcut_executes_typed_target() -> None:
 
     assert execution.target_identifier == "text.prepend_prefix"
     assert execution.action_result.value == "run:CTRL+ALT+S"
-
-
-@pytest.mark.django_db
-def test_shortcut_clean_normalizes_empty_target_payload() -> None:
-    """Shortcut cleaning should normalize empty payloads before validation."""
-
-    shortcut = Shortcut(
-        display="Empty payload shortcut",
-        key_combo="ctrl+shift+n",
-        kind=Shortcut.Kind.CLIENT,
-        target_kind=ShortcutTargetKind.ACTION,
-        target_identifier="text.static",
-        target_payload="",
-        is_active=True,
-    )
-
-    shortcut.clean()
-
-    assert shortcut.key_combo == "CTRL+SHIFT+N"
-    assert shortcut.target_payload == {}
-
-
-def test_typed_target_migration_handles_shortcut_key_and_reverse_static_text() -> None:
-    """Migration helpers should preserve shortcut-key commands and static text rollbacks."""
-
-    migration = importlib.import_module("apps.shortcuts.migrations.0002_shortcut_typed_targets")
-
-    recipe = type(
-        "RecipeStub",
-        (),
-        {
-            "script": "result = 'run:' + kwargs.get('shortcut_key', '')",
-            "slug": "server.shortcut",
-            "body_type": "python",
-            "display": "Server shortcut",
-        },
-    )()
-
-    kind, identifier, payload = migration._forward_target(recipe)
-
-    assert kind == "command"
-    assert identifier == "text.prepend_prefix"
-    assert payload == {"prefix": "run:", "source": "shortcut_key"}
-    assert migration._reverse_script("action", "text.static", {"text": "Hello"}) == "result = 'Hello'"

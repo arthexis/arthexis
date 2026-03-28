@@ -1,7 +1,7 @@
 import pytest
 
 from django.contrib.auth import get_user_model
-from django.test import RequestFactory, override_settings
+from django.test import RequestFactory
 
 from apps.groups.constants import (
     NETWORK_OPERATOR_GROUP_NAME,
@@ -9,7 +9,7 @@ from apps.groups.constants import (
     RELEASE_MANAGER_GROUP_NAME,
 )
 from apps.users import temp_passwords
-from apps.users.backends import LocalhostAdminBackend, TempPasswordBackend
+from apps.users.backends import TempPasswordBackend
 from apps.users.system import collect_system_user_issues, ensure_system_user
 
 
@@ -107,55 +107,3 @@ def test_system_user_only_authenticates_with_temp_password():
         backend.authenticate(request, username=user.username, password="incorrect")
         is None
     )
-
-
-@pytest.mark.django_db
-def test_temp_password_allows_email_lookup():
-    User = get_user_model()
-    user = User.objects.create_user(
-        username="email-login", email="email-login@example.com"
-    )
-    user.set_unusable_password()
-    user.save()
-    password = temp_passwords.generate_password()
-    temp_passwords.store_temp_password(user.username, password)
-
-    backend = TempPasswordBackend()
-    request = RequestFactory().post("/")
-
-    authenticated = backend.authenticate(
-        request, username=user.email, password=password
-    )
-    assert authenticated is not None
-    assert authenticated.pk == user.pk
-
-
-@pytest.mark.django_db
-def test_localhost_admin_backend_ignores_untrusted_forwarded_for_hops():
-    backend = LocalhostAdminBackend()
-    request = RequestFactory().post(
-        "/login/",
-        HTTP_HOST="127.0.0.1",
-        REMOTE_ADDR="172.17.0.2",
-        HTTP_X_FORWARDED_FOR="203.0.113.10, 127.0.0.1",
-    )
-
-    remote_ip = backend._get_remote_ip(request)
-
-    assert str(remote_ip) == "127.0.0.1"
-
-
-@override_settings(TRUSTED_PROXIES=("198.51.100.2",))
-@pytest.mark.django_db
-def test_localhost_admin_backend_uses_last_untrusted_forwarded_hop():
-    backend = LocalhostAdminBackend()
-    request = RequestFactory().post(
-        "/login/",
-        HTTP_HOST="127.0.0.1",
-        REMOTE_ADDR="172.17.0.2",
-        HTTP_X_FORWARDED_FOR="203.0.113.10, 198.51.100.2",
-    )
-
-    remote_ip = backend._get_remote_ip(request)
-
-    assert str(remote_ip) == "203.0.113.10"

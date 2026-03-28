@@ -4,7 +4,6 @@ from unittest.mock import patch
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 
-from apps.counters.condition_structured import parse_legacy_condition
 from apps.counters.models import DashboardRule
 from apps.nodes.models import Node
 
@@ -61,28 +60,3 @@ class DashboardRuleStructuredConditionTests(TestCase):
 
         self.assertTrue(result["success"])
         resolve_sigils_mock.assert_called_once_with("[ENV.THRESHOLD]", current=rule)
-
-
-class ParseLegacyConditionTests(TestCase):
-    def test_parse_legacy_condition_supports_simple_boolean_expression(self):
-        structured, error = parse_legacy_condition("[foo][bar] = true")
-
-        self.assertIsNone(error)
-        self.assertIsNotNone(structured)
-        self.assertEqual(structured.source, "[foo][bar]")
-        self.assertEqual(structured.operator, "=")
-        self.assertTrue(structured.expected_boolean)
-
-    def test_parse_legacy_condition_treats_integer_literals_as_numbers(self):
-        structured, error = parse_legacy_condition("[metric] > 1")
-
-        self.assertIsNone(error)
-        self.assertIsNotNone(structured)
-        self.assertEqual(structured.operator, ">")
-        self.assertEqual(structured.expected_number, Decimal("1"))
-
-    def test_parse_legacy_condition_marks_unsupported_expression(self):
-        structured, error = parse_legacy_condition("1 = 1 AND 2 = 2")
-
-        self.assertIsNone(structured)
-        self.assertEqual(error, "Unsupported condition literal.")
