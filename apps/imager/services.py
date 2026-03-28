@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.error import URLError
-from urllib.parse import unquote, urlparse
+from urllib.parse import ParseResult, unquote, urlparse
 from urllib.request import urlopen
 
 from django.db import transaction
@@ -96,13 +96,35 @@ def _ensure_guestfish() -> None:
     )
 
 
+def _normalize_local_source_path(base_image_uri: str, parsed_uri: ParseResult) -> Path | None:
+    """Normalize local filesystem path inputs across URI and platform-specific forms."""
+
+    if len(parsed_uri.scheme) == 1 and parsed_uri.scheme.isalpha() and parsed_uri.path.startswith("/"):
+        return Path(f"{parsed_uri.scheme}:{unquote(parsed_uri.path)}")
+
+    if parsed_uri.scheme == "":
+        if re.match(r"^[A-Za-z]:[\\/]", base_image_uri):
+            return Path(base_image_uri)
+        return Path(base_image_uri)
+
+    if parsed_uri.scheme != "file":
+        return None
+
+    decoded_path = unquote(parsed_uri.path)
+    if parsed_uri.netloc and parsed_uri.netloc != "localhost":
+        return Path(f"//{parsed_uri.netloc}{decoded_path}")
+    if re.match(r"^/[A-Za-z]:/", decoded_path):
+        return Path(decoded_path[1:])
+    return Path(decoded_path)
+
+
 def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
     """Resolve local/file/http(s) base image inputs to a local filesystem path."""
 
     parsed = urlparse(base_image_uri)
-    if parsed.scheme in ("", "file"):
-        resolved_path = unquote(parsed.path) if parsed.scheme else base_image_uri
-        path = Path(resolved_path).expanduser().resolve()
+    local_path = _normalize_local_source_path(base_image_uri, parsed)
+    if local_path is not None:
+        path = local_path.expanduser().resolve()
         if not path.exists():
             raise ImagerBuildError(f"Base image does not exist: {path}")
         return path
