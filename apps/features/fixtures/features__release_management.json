@@ -1,0 +1,36 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "slug": "release-management",
+      "display": "Release Management",
+      "summary": "Controls integrated release management workflows and execution strategy.",
+      "is_enabled": true,
+      "main_app": [
+        "repos"
+      ],
+      "node_feature": null,
+      "admin_requirements": "Admin release tools should respect suite execution mode parameters.",
+      "public_requirements": "No direct public interface; used by internal release tooling.",
+      "service_requirements": "Requires repository automation integration with git/gh and suite APIs.",
+      "admin_views": [
+        "admin:features_feature_changelist"
+      ],
+      "public_views": [],
+      "service_views": [
+        "apps.repos.release_management.ReleaseManagementConfig.enabled"
+      ],
+      "code_locations": [
+        "apps/repos/release_management.py",
+        "apps/features/parameters.py"
+      ],
+      "protocol_coverage": {},
+      "metadata": {},
+      "created_at": "2024-03-01T00:00:00Z",
+      "updated_at": "2024-03-01T00:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false,
+      "source": "mainstream"
+    }
+  }
+]

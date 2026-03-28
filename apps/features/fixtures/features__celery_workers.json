@@ -1,0 +1,38 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "slug": "celery-workers",
+      "display": "Celery Workers",
+      "summary": "Controls local Celery worker process scaling for suite background jobs.",
+      "is_enabled": true,
+      "main_app": [
+        "services"
+      ],
+      "node_feature": null,
+      "admin_requirements": "Operators can set worker count parameters from Suite Features.",
+      "public_requirements": "No direct public surface; affects async processing capacity.",
+      "service_requirements": "Requires local service orchestration to restart Celery workers after parameter changes.",
+      "admin_views": [
+        "admin:features_feature_changelist",
+        "admin:services_lifecycleservice_changelist"
+      ],
+      "public_views": [],
+      "service_views": [
+        "apps.services.celery_workers.configured_worker_count"
+      ],
+      "code_locations": [
+        "apps/services/celery_workers.py",
+        "apps/services/admin.py",
+        "apps/features/parameters.py"
+      ],
+      "protocol_coverage": {},
+      "metadata": {},
+      "created_at": "2024-03-01T00:00:00Z",
+      "updated_at": "2024-03-01T00:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false,
+      "source": "mainstream"
+    }
+  }
+]

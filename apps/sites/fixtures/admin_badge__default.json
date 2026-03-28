@@ -1,0 +1,53 @@
+[
+  {
+    "model": "sites.adminbadge",
+    "fields": {
+      "slug": "site",
+      "name": "Site",
+      "label": "Site",
+      "provider_key": "site",
+      "first_part": "label",
+      "second_part": "value",
+      "filled_color": "#28a745",
+      "missing_color": "#6c757d",
+      "is_enabled": true,
+      "priority": 10,
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "sites.adminbadge",
+    "fields": {
+      "slug": "node",
+      "name": "Node",
+      "label": "Node",
+      "provider_key": "node",
+      "first_part": "label",
+      "second_part": "value",
+      "filled_color": "#28a745",
+      "missing_color": "#6c757d",
+      "is_enabled": true,
+      "priority": 20,
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  },
+  {
+    "model": "sites.adminbadge",
+    "fields": {
+      "slug": "role",
+      "name": "Role",
+      "label": "Role",
+      "provider_key": "role",
+      "first_part": "label",
+      "second_part": "value",
+      "filled_color": "#28a745",
+      "missing_color": "#6c757d",
+      "is_enabled": true,
+      "priority": 30,
+      "is_seed_data": true,
+      "is_deleted": false
+    }
+  }
+]
