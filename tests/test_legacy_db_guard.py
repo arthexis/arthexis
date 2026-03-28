@@ -177,3 +177,28 @@ def test_guard_fails_when_migration_graph_cannot_be_detected(tmp_path: Path) -> 
 
     assert result.returncode == 1
     assert "Cannot perform legacy DB guard check." in result.stderr
+
+
+def test_guard_fails_cleanly_for_unreadable_sqlite_db(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    db_path = tmp_path / "db.sqlite3"
+    _write_migration(repo_root, "core", "0001_initial")
+    db_path.write_text("not-a-sqlite-database", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--db",
+            str(db_path),
+            "--repo",
+            str(repo_root),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "Could not read django_migrations" in result.stderr
+    assert "Cannot perform legacy DB guard check." in result.stderr

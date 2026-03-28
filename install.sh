@@ -450,11 +450,6 @@ if [ -z "$PORT" ]; then
     PORT="$(arthexis_detect_backend_port "$SCRIPT_DIR")"
 fi
 
-if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
-    stop_existing_units_for_repair "$SERVICE"
-fi
-
-
 BASE_DIR="$SCRIPT_DIR"
 cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/.locks"
@@ -516,11 +511,23 @@ if ! PYTHON_BOOTSTRAP_BIN="$(arthexis_python_bin)"; then
     exit 1
 fi
 
-if [[ -f "$DB_FILE" && "$CLEAN" = false && ( "$UPGRADE" = true || "$REPAIR" = true ) ]] && \
-    ! "$PYTHON_BOOTSTRAP_BIN" "$LEGACY_DB_GUARD" --db "$DB_FILE" --repo "$BASE_DIR"; then
-    echo "Install aborted: existing database follows an unsupported legacy migration path." >&2
-    echo "Use --clean for a fresh reinstall, then import data per docs/operations/reinstall-data-import-runbook.md." >&2
-    exit 1
+if [[ -f "$DB_FILE" && "$CLEAN" = false && ( "$UPGRADE" = true || "$REPAIR" = true ) ]]; then
+    guard_rc=0
+    "$PYTHON_BOOTSTRAP_BIN" "$LEGACY_DB_GUARD" --db "$DB_FILE" --repo "$BASE_DIR" || guard_rc=$?
+    if [ "$guard_rc" -ne 0 ]; then
+        if [ "$guard_rc" -eq 2 ]; then
+            echo "Install aborted: existing database follows an unsupported legacy migration path." >&2
+            echo "Use --clean for a fresh reinstall, then import data per docs/operations/reinstall-data-import-runbook.md." >&2
+        else
+            echo "Install aborted: unable to validate legacy migration history for existing database (guard exit code: $guard_rc)." >&2
+            echo "Resolve the guard error above, or use --clean and follow docs/operations/reinstall-data-import-runbook.md." >&2
+        fi
+        exit 1
+    fi
+fi
+
+if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
+    stop_existing_units_for_repair "$SERVICE"
 fi
 
 # Record role-specific prerequisites and capture supporting state for service management.

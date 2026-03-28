@@ -131,7 +131,16 @@ def main() -> int:
         )
         return 1
 
-    applied = _applied_migration_keys(db_path)
+    try:
+        applied = _applied_migration_keys(db_path)
+    except sqlite3.Error as exc:
+        print(
+            f"Error: Could not read django_migrations from {db_path}: {exc}",
+            file=sys.stderr,
+        )
+        print("Cannot perform legacy DB guard check.", file=sys.stderr)
+        return 1
+
     project_labels = _current_project_labels(repo_root)
     unknown = sorted(
         (app_label, migration_name)
