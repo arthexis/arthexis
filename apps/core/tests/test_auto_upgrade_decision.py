@@ -41,6 +41,11 @@ def test_build_upgrade_decision_applies_stable_and_unstable(monkeypatch):
 
     monkeypatch.setattr(tasks, "_canary_gate", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(tasks, "_get_package_release_model", lambda: _ReleaseModel)
+    expected_script = (
+        "upgrade.bat"
+        if tasks.os.name == "nt" or tasks.sys.platform == "win32"
+        else "upgrade.sh"
+    )
 
     stable_decision = tasks.build_upgrade_decision(
         Path("/tmp/base"),
@@ -54,9 +59,13 @@ def test_build_upgrade_decision_applies_stable_and_unstable(monkeypatch):
     )
 
     assert stable_decision.apply is True
-    assert stable_decision.args == ["./upgrade.sh", "--stable"]
+    assert len(stable_decision.args) == 2
+    assert Path(stable_decision.args[0]).name == expected_script
+    assert stable_decision.args[1] == "--stable"
     assert unstable_decision.apply is True
-    assert unstable_decision.args == ["./upgrade.sh", "--latest"]
+    assert len(unstable_decision.args) == 2
+    assert Path(unstable_decision.args[0]).name == expected_script
+    assert unstable_decision.args[1] == "--latest"
 
 
 def test_build_upgrade_decision_skips_when_pypi_gate_blocks(monkeypatch):
