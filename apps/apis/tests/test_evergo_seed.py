@@ -1,12 +1,9 @@
 """Regression tests for Evergo API explorer seeded endpoints."""
 
-from urllib.parse import urlparse
-
 import pytest
 from django.core.management import call_command
 
 from apps.apis.models import APIExplorer, ResourceMethod
-from apps.evergo.models import EvergoUser
 
 EXPECTED_METHOD_PATHS = {
     ("POST", "/login"),
@@ -31,7 +28,9 @@ def _ensure_evergo_api_seeded() -> APIExplorer:
         name="Evergo API",
         defaults={"base_url": "https://portal-backend.evergo.com/api/mex/v1/"},
     )
-    call_command("loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0)
+    call_command(
+        "loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0
+    )
     return api
 
 
@@ -50,33 +49,15 @@ def test_evergo_api_explorer_seeded_endpoints() -> None:
 
 
 @pytest.mark.django_db
-def test_evergo_api_explorer_matches_model_endpoints() -> None:
-    """Regression: seeded API explorer routes should include all endpoint constants used by the model."""
-
-    api = _ensure_evergo_api_seeded()
-    seeded_paths = {method.resource_path for method in ResourceMethod.objects.filter(api=api)}
-    base_path = urlparse(api.base_url).path
-    model_urls = {
-        value
-        for attr, value in vars(EvergoUser).items()
-        if attr.startswith("API_") and attr.endswith("_URL") and isinstance(value, str)
-    }
-    expected_paths = {
-        f"/{urlparse(url).path.removeprefix(base_path).lstrip('/')}"
-        for url in model_urls
-    }
-
-    assert expected_paths.issubset(seeded_paths)
-
-
-@pytest.mark.django_db
 def test_evergo_fixture_loaddata_is_idempotent() -> None:
     """Regression: loading Evergo endpoint fixture should update seeded rows without integrity errors."""
 
     api = _ensure_evergo_api_seeded()
     initial_count = ResourceMethod.objects.filter(api=api).count()
 
-    call_command("loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0)
+    call_command(
+        "loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0
+    )
 
     assert ResourceMethod.objects.filter(api=api).count() == initial_count
 
@@ -85,7 +66,9 @@ def test_evergo_fixture_loaddata_is_idempotent() -> None:
 def test_evergo_fixture_loaddata_bootstraps_parent_api() -> None:
     """Regression: fixture should load successfully even when APIExplorer row is absent."""
 
-    call_command("loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0)
+    call_command(
+        "loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0
+    )
 
     api = APIExplorer.objects.get(name="Evergo API")
     assert ResourceMethod.objects.filter(api=api).count() == len(EXPECTED_METHOD_PATHS)

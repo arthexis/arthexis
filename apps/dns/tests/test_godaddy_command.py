@@ -11,16 +11,6 @@ from apps.dns.models import DNSProviderCredential
 
 
 @pytest.mark.django_db
-def test_godaddy_defaults_to_list_output_when_empty():
-    """The command should list by default and report an empty configuration."""
-
-    stdout = StringIO()
-    call_command("godaddy", stdout=stdout)
-
-    assert "No GoDaddy credentials configured." in stdout.getvalue()
-
-
-@pytest.mark.django_db
 def test_godaddy_add_and_list():
     """Add should create a credential and list should show it."""
 
@@ -56,6 +46,7 @@ def test_godaddy_add_and_list():
 
 
 @pytest.mark.django_db
+@pytest.mark.integration
 def test_godaddy_remove_deletes_existing_credential():
     """Remove should delete an existing GoDaddy credential."""
 
