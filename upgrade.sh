@@ -1089,6 +1089,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ $CLEAN -eq 1 && $MIGRATE_RECONCILE -eq 1 ]]; then
+  echo "Cannot combine --clean with --migrate." >&2
+  echo "Use --migrate on its own to preserve and reconcile the pre-upgrade SQLite database." >&2
+  exit 1
+fi
+
 rerun_with_updated_script() {
   local depth="${ARTHEXIS_UPGRADE_SELF_UPDATE_DEPTH:-0}"
 

@@ -34,11 +34,19 @@ def _table_names(conn: sqlite3.Connection, *, database: str = "main") -> set[str
 
 
 
+def _quote_identifier(identifier: str) -> str:
+    escaped = identifier.replace('"', '""')
+    return f'"{escaped}"'
+
+
 def _column_names(
     conn: sqlite3.Connection, table: str, *, database: str = "main"
 ) -> list[str]:
-    rows = conn.execute(f"PRAGMA {database}.table_info('{table}')").fetchall()
-    return [row[1] for row in rows]
+    rows = conn.execute(
+        "SELECT name FROM pragma_table_info(?, ?)",
+        (table, database),
+    ).fetchall()
+    return [row[0] for row in rows]
 
 
 
@@ -74,10 +82,13 @@ def reconcile_sqlite_tables(source_db: Path, target_db: Path) -> ReconcileReport
                 skipped_tables[table] = "no common columns"
                 continue
 
-            quoted_columns = ", ".join(f'"{column}"' for column in target_columns)
+            quoted_table = _quote_identifier(table)
+            quoted_columns = ", ".join(
+                _quote_identifier(column) for column in target_columns
+            )
             statement = (
-                f'INSERT OR IGNORE INTO "{table}" ({quoted_columns}) '
-                f'SELECT {quoted_columns} FROM source_db."{table}"'
+                f"INSERT OR IGNORE INTO {quoted_table} ({quoted_columns}) "
+                f"SELECT {quoted_columns} FROM source_db.{quoted_table}"
             )
 
             try:

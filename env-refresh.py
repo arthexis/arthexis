@@ -745,11 +745,6 @@ def run_database_tasks(
             for table, reason in sorted(report.skipped_tables.items()):
                 print(f"  - {table}: {reason}", flush=True)
 
-        try:
-            reconcile_backup_db.unlink()
-        except OSError:
-            pass
-
     # SigilRoot entries are protected from deletion; fixtures will update them.
 
     # Track Site entries provided via fixtures so we can update them without
@@ -1054,6 +1049,12 @@ def run_database_tasks(
 
     # Update the migrations hash file after a successful run.
     hash_file.write_text(new_hash)
+
+    if migrate_reconcile and reconcile_backup_db:
+        try:
+            reconcile_backup_db.unlink()
+        except OSError:
+            pass
 
 
 TASKS = {"database": run_database_tasks}
