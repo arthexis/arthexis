@@ -51,10 +51,10 @@ def test_imager_dashboard_model_row_actions_include_create_rpi_image() -> None:
 
 
 @pytest.mark.django_db
-@override_settings(
-    IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=("/tmp/arthexis-imager-tests/base-roots",),
-    IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS=("/tmp/arthexis-imager-tests/output-roots",),
-)
+@pytest.mark.django_db
+@pytest.mark.parametrize("base_uri, expected_status", [("valid", 200), ("invalid", 400)])
+def test_imager_admin_create_rpi_image_view_paths(client, tmp_path, base_uri, expected_status):
+    base_root = tmp_path / "base-roots"
 @pytest.mark.parametrize(
     ("payload_overrides", "build_side_effect", "expected_status", "expected_redirect", "build_called", "customize_value", "expected_message"),
     [
