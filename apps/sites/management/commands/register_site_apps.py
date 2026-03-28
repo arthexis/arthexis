@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from django.apps import apps as django_apps
 from django.conf import settings
 from django.contrib.sites.models import Site
@@ -15,10 +17,11 @@ class Command(BaseCommand):
         """Return local application labels that should exist in ``Application``."""
 
         configured_apps = getattr(settings, "PROJECT_LOCAL_APPS", None)
-        if not isinstance(configured_apps, list):
+        if not isinstance(configured_apps, Sequence) or isinstance(configured_apps, (str, bytes)):
             configured_apps = getattr(settings, "LOCAL_APPS", [])
 
         labels: set[str] = set()
+        app_configs = tuple(django_apps.get_app_configs())
         for app_entry in configured_apps:
             if not isinstance(app_entry, str):
                 continue
@@ -26,34 +29,29 @@ class Command(BaseCommand):
             if not app_path:
                 continue
 
-            try:
-                config = django_apps.get_app_config(app_path)
-            except LookupError:
-                config = next(
-                    (candidate for candidate in django_apps.get_app_configs() if candidate.name == app_path),
-                    None,
-                )
-            if config is not None:
-                labels.add(config.label)
+            config = next((candidate for candidate in app_configs if candidate.name == app_path), None)
+            if config is None:
+                try:
+                    config = django_apps.get_app_config(app_path)
+                except LookupError:
+                    continue
+            labels.add(config.label)
 
         if labels:
             return sorted(labels)
 
-        return sorted(
-            config.label for config in django_apps.get_app_configs() if config.name.startswith("apps.")
-        )
+        return sorted(config.label for config in app_configs if config.name.startswith("apps."))
 
     def handle(self, *args, **options):
         Site.objects.filter(domain="zephyrus").delete()
-        site, _ = Site.objects.update_or_create(
+        _, _ = Site.objects.update_or_create(
             domain="127.0.0.1", defaults={"name": "Local"}
         )
-        del site
 
         for app_label in self._application_labels():
             config = django_apps.get_app_config(app_label)
             description = DEFAULT_APPLICATION_DESCRIPTIONS.get(config.label, "")
-            app, created = Application.objects.get_or_create(
+            app, _ = Application.objects.get_or_create(
                 name=config.label, defaults={"description": description}
             )
             updates = {}

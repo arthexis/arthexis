@@ -2,18 +2,28 @@
 
 from __future__ import annotations
 
-from django.conf import settings
+import pytest
 from django.core.management import call_command
+from django.test.utils import override_settings
 
 from apps.app.models import Application
 
 
-def test_register_site_apps_uses_project_local_apps_when_local_apps_missing(db) -> None:
-    """Command should seed app rows from ``PROJECT_LOCAL_APPS`` on fresh installs."""
+@pytest.mark.parametrize(
+    ("settings_kwargs", "expected_app_label"),
+    [
+        ({"PROJECT_LOCAL_APPS": ("apps.features",), "LOCAL_APPS": []}, "features"),
+        ({"PROJECT_LOCAL_APPS": None, "LOCAL_APPS": ["apps.features"]}, "features"),
+    ],
+)
+def test_register_site_apps_seeds_from_configured_local_apps(
+    db, settings_kwargs: dict[str, object], expected_app_label: str
+) -> None:
+    """Command should seed app rows from configured local app settings on fresh installs."""
 
-    assert "apps.features" in settings.PROJECT_LOCAL_APPS
     Application.objects.all().delete()
 
-    call_command("register_site_apps")
+    with override_settings(**settings_kwargs):
+        call_command("register_site_apps")
 
-    assert Application.objects.filter(name="features").exists()
+    assert Application.objects.filter(name=expected_app_label).exists()
