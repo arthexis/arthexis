@@ -89,8 +89,8 @@ def test_refresh_enabled_apps_lock_respects_disabled_manifest_labels(
     assert "enabled-core" in lock_entries
 
 
-def test_load_manifest_app_entries_includes_runtime_and_legacy_migration_apps():
-    """Manifest discovery should include runtime apps and migration-only shims."""
+def test_load_manifest_app_entries_includes_runtime_apps_only():
+    """Manifest discovery should include runtime apps and exclude legacy shims."""
 
     manifest_app_entries = _load_manifest_app_entries()
     expected_apps = {
@@ -100,21 +100,7 @@ def test_load_manifest_app_entries_includes_runtime_and_legacy_migration_apps():
     }
 
     assert expected_apps.issubset(manifest_app_entries)
-    retired_app_labels = [
-        "calendars",
-        "mcp",
-        "prototypes",
-        "screens",
-        "shortcuts",
-        "smb",
-        "sponsors",
-    ]
-    for app_label in retired_app_labels:
-        legacy_app_config = (
-            f"apps._legacy.{app_label}_migration_only.apps."
-            f"{app_label.title()}MigrationOnlyConfig"
-        )
-        assert legacy_app_config in manifest_app_entries
-        assert f"apps.{app_label}" not in manifest_app_entries
-
-    assert "apps.game" not in manifest_app_entries
+    assert all(
+        not app_entry.startswith("apps._legacy.")
+        for app_entry in manifest_app_entries
+    )
