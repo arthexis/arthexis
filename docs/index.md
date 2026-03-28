@@ -19,6 +19,7 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [Migration Branch Guards](development/migration-branch-guards.md)
 - [OCPP 1.6 Compliance Review](ocpp16_compliance_review.md)
 - [Ops Command Wrapper](operations/operational-commands.md)
+- [Reinstall + Data Import Runbook (1.0+)](operations/reinstall-data-import-runbook.md)
 - [Recipes decommission path](recipes.md)
 - [Standalone Desktop Implementation Plan](development/standalone-desktop-implementation.md)
 - [Suite Services Report](suite-services-report.md)

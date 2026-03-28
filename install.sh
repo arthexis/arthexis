@@ -460,6 +460,7 @@ cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/.locks"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 DB_FILE="$BASE_DIR/db.sqlite3"
+LEGACY_DB_GUARD="$BASE_DIR/scripts/helpers/legacy_db_guard.py"
 
 arthexis_ensure_upstream_remotes "$BASE_DIR"
 
@@ -481,6 +482,7 @@ elif [ -f "$DB_FILE" ]; then
         exit 1
     fi
 fi
+
 mkdir -p "$LOCK_DIR"
 arthexis_record_service_mode "$LOCK_DIR" "$SERVICE_MANAGEMENT_MODE"
 if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
@@ -512,6 +514,14 @@ fi
 if ! PYTHON_BOOTSTRAP_BIN="$(arthexis_python_bin)"; then
     echo "Python 3 interpreter not found (tried python3, python, and python3.x aliases)." >&2
     exit 1
+fi
+
+if [ -f "$DB_FILE" ] && [ "$CLEAN" = false ] && { [ "$UPGRADE" = true ] || [ "$REPAIR" = true ]; }; then
+    if ! "$PYTHON_BOOTSTRAP_BIN" "$LEGACY_DB_GUARD" --db "$DB_FILE" --repo "$BASE_DIR"; then
+        echo "Install aborted: existing database follows an unsupported legacy migration path." >&2
+        echo "Use --clean for a fresh reinstall, then import data per docs/operations/reinstall-data-import-runbook.md." >&2
+        exit 1
+    fi
 fi
 
 # Record role-specific prerequisites and capture supporting state for service management.
