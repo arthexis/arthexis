@@ -1,0 +1,38 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Summary admin surfaces can configure backend and model path parameters.",
+      "admin_views": [
+        "admin:features_feature_changelist",
+        "admin:summary_lcdlogsummary_changelist"
+      ],
+      "code_locations": [
+        "apps/summary/services.py",
+        "apps/summary/admin.py",
+        "apps/features/parameters.py"
+      ],
+      "created_at": "2024-03-01T00:00:00Z",
+      "display": "LLM Summary Suite",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "summary"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "No direct public interface; summarization updates internal displays.",
+      "public_views": [],
+      "service_requirements": "Requires summary command/task pipeline and optional model files.",
+      "service_views": [
+        "apps.summary.services.generate_lcd_log_summaries"
+      ],
+      "slug": "llm-summary-suite",
+      "source": "mainstream",
+      "summary": "Controls automated LCD summary generation and related local model settings.",
+      "updated_at": "2024-03-01T00:00:00Z"
+    }
+  }
+]

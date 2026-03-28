@@ -1,0 +1,41 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Admin management pages may hide ingestion workflows when disabled.",
+      "admin_views": [
+        "admin:features_feature_changelist",
+        "admin:index"
+      ],
+      "code_locations": [
+        "apps/sites/views/landing.py",
+        "apps/sites/context_processors.py",
+        "apps/evergo/views.py",
+        "apps/repos/admin_feedback_config.py"
+      ],
+      "created_at": "2024-03-01T00:00:00Z",
+      "display": "Feedback Ingestion",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "sites"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "Public feedback forms should not enqueue ingestion work when disabled.",
+      "public_views": [
+        "sites:landing"
+      ],
+      "service_requirements": "Applies to inbound feedback webhook and queue entry points.",
+      "service_views": [
+        "apps.sites.views.landing.feedback_ingest"
+      ],
+      "slug": "feedback-ingestion",
+      "source": "mainstream",
+      "summary": "Controls ingestion paths that accept and process feedback payloads from suite UIs.",
+      "updated_at": "2024-03-01T00:00:00Z"
+    }
+  }
+]

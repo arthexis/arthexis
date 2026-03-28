@@ -1,0 +1,36 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Take Screenshot actions should only be available when enabled.",
+      "admin_views": [
+        "admin:nodes_nodefeature_changelist"
+      ],
+      "code_locations": [
+        "apps/nodes/admin/node_feature_admin.py",
+        "apps/nodes/models/features.py"
+      ],
+      "created_at": "2024-03-01T00:00:00Z",
+      "display": "Screenshot Capture",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "nodes"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "No direct public interface.",
+      "public_views": [],
+      "service_requirements": "Works with screenshot node feature assignment and polling lifecycle.",
+      "service_views": [
+        "apps.nodes.models.features.Node.refresh_features"
+      ],
+      "slug": "screenshot-capture",
+      "source": "mainstream",
+      "summary": "Controls screenshot capture operations exposed through node feature admin tools.",
+      "updated_at": "2024-03-01T00:00:00Z"
+    }
+  }
+]

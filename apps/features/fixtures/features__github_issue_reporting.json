@@ -1,0 +1,36 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Operators can enable issue reporting guardrails from Suite Features.",
+      "admin_views": [
+        "admin:features_feature_changelist"
+      ],
+      "code_locations": [
+        "apps/repos/issue_reporting.py",
+        "apps/repos/admin_feedback_config.py"
+      ],
+      "created_at": "2024-03-01T00:00:00Z",
+      "display": "GitHub Issue Reporting",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "repos"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "No direct public interface; affects internal reporting behavior.",
+      "public_views": [],
+      "service_requirements": "Requires repository issue reporting integrations and queue workers.",
+      "service_views": [
+        "apps.repos.issue_reporting.github_issue_reporting_enabled"
+      ],
+      "slug": "github-issue-reporting",
+      "source": "mainstream",
+      "summary": "Controls automatic GitHub issue reporting for selected request exceptions and workflows.",
+      "updated_at": "2024-03-01T00:00:00Z"
+    }
+  }
+]

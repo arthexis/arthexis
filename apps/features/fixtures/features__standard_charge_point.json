@@ -1,0 +1,35 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Operators can gate charge-point onboarding behavior globally.",
+      "admin_views": [
+        "admin:features_feature_changelist"
+      ],
+      "code_locations": [
+        "apps/ocpp/consumers/base/connection_flow.py"
+      ],
+      "created_at": "2024-03-01T00:00:00Z",
+      "display": "Standard Charge Point Creation",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "ocpp"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "No direct public interface; affects charger registration/session creation.",
+      "public_views": [],
+      "service_requirements": "Used by OCPP websocket connection admission checks.",
+      "service_views": [
+        "apps.ocpp.consumers.base.connection_flow.CSMSConnectionFlow._is_creation_allowed"
+      ],
+      "slug": "standard-charge-point",
+      "source": "mainstream",
+      "summary": "Controls baseline charge-point creation admission for websocket connections.",
+      "updated_at": "2024-03-01T00:00:00Z"
+    }
+  }
+]

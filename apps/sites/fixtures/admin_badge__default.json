@@ -1,0 +1,47 @@
+[
+  {
+    "model": "pages.adminbadge",
+    "fields": {
+      "first_part": "label",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "label": "Site",
+      "name": "Site",
+      "priority": 10,
+      "provider_key": "site",
+      "second_part": "value",
+      "slug": "site"
+    }
+  },
+  {
+    "model": "pages.adminbadge",
+    "fields": {
+      "first_part": "label",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "label": "Node",
+      "name": "Node",
+      "priority": 20,
+      "provider_key": "node",
+      "second_part": "value",
+      "slug": "node"
+    }
+  },
+  {
+    "model": "pages.adminbadge",
+    "fields": {
+      "first_part": "label",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "label": "Role",
+      "name": "Role",
+      "priority": 30,
+      "provider_key": "role",
+      "second_part": "value",
+      "slug": "role"
+    }
+  }
+]

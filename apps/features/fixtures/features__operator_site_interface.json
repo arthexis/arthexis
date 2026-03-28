@@ -1,0 +1,41 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Operators can configure default language and fallback landing behavior.",
+      "admin_views": [
+        "admin:features_feature_changelist",
+        "admin:pages_siteproxy_changelist"
+      ],
+      "code_locations": [
+        "apps/sites/views/landing.py",
+        "apps/sites/context_processors.py",
+        "apps/sites/utils.py",
+        "apps/features/parameters.py"
+      ],
+      "created_at": "2024-03-01T00:00:00Z",
+      "display": "Operator Site Interface",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "sites"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "Public/landing site interfaces are disabled when this feature is off.",
+      "public_views": [
+        "sites:landing"
+      ],
+      "service_requirements": "Used by landing/context processors and site utility helpers.",
+      "service_views": [
+        "apps.sites.views.landing.landing_view"
+      ],
+      "slug": "operator-site-interface",
+      "source": "mainstream",
+      "summary": "Controls whether operator-facing site interfaces are served for landing and management flows.",
+      "updated_at": "2024-03-01T00:00:00Z"
+    }
+  }
+]
