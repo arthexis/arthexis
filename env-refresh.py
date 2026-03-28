@@ -59,6 +59,10 @@ from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
 from scripts.fixtures_changed import fixtures_changed
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from scripts.helpers.migration_reconcile import (
+    backup_sqlite_database,
+    reconcile_sqlite_tables,
+)
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing support
@@ -561,7 +565,11 @@ def _remove_integrator_from_auth_migration() -> None:
 
 
 def run_database_tasks(
-    *, latest: bool = False, clean: bool = False, force_db: bool = False
+    *,
+    latest: bool = False,
+    clean: bool = False,
+    force_db: bool = False,
+    migrate_reconcile: bool = False,
 ) -> None:
     """Run all database related maintenance steps."""
     default_db = settings.DATABASES["default"]
@@ -570,7 +578,22 @@ def run_database_tasks(
     base_dir = Path(settings.BASE_DIR)
     locks_dir = base_dir / ".locks"
     locks_dir.mkdir(exist_ok=True)
+    reconcile_backup_db: Path | None = None
+    reconcile_db_path: Path | None = None
     local_apps = _local_app_labels()
+
+    if migrate_reconcile:
+        if not using_sqlite:
+            raise CommandError("--migrate is currently supported only for SQLite")
+        reconcile_db_path = Path(default_db["NAME"])
+        if reconcile_db_path.exists():
+            reconcile_backup_db = backup_sqlite_database(reconcile_db_path, locks_dir)
+            print(
+                "Prepared pre-migration backup for major-version reconciliation: "
+                f"{reconcile_backup_db.relative_to(base_dir)}",
+                flush=True,
+            )
+        clean = True
 
     _remove_integrator_from_auth_migration()
 
@@ -693,6 +716,34 @@ def run_database_tasks(
                         migrations_ran = True
                     except Exception:
                         raise exc
+
+    if migrate_reconcile and reconcile_backup_db and reconcile_db_path:
+        _close_old_connections_safely()
+        report = reconcile_sqlite_tables(
+            source_db=reconcile_backup_db,
+            target_db=reconcile_db_path,
+        )
+        print(
+            "Major-version migration reconciliation copied "
+            f"{len(report.copied_tables)} table(s).",
+            flush=True,
+        )
+        if report.missing_in_target:
+            print(
+                "Ignored legacy-only tables (not in current schema): "
+                f"{', '.join(report.missing_in_target)}",
+                flush=True,
+            )
+        if report.missing_in_source:
+            print(
+                "Ignored new-schema tables missing from legacy database: "
+                f"{', '.join(report.missing_in_source)}",
+                flush=True,
+            )
+        if report.skipped_tables:
+            print("Skipped incompatible tables:", flush=True)
+            for table, reason in sorted(report.skipped_tables.items()):
+                print(f"  - {table}: {reason}", flush=True)
 
     # SigilRoot entries are protected from deletion; fixtures will update them.
 
@@ -999,6 +1050,12 @@ def run_database_tasks(
     # Update the migrations hash file after a successful run.
     hash_file.write_text(new_hash)
 
+    if migrate_reconcile and reconcile_backup_db:
+        try:
+            reconcile_backup_db.unlink()
+        except OSError:
+            pass
+
 
 TASKS = {"database": run_database_tasks}
 
@@ -1009,11 +1066,17 @@ def main(
     latest: bool = False,
     clean: bool = False,
     force_db: bool = False,
+    migrate_reconcile: bool = False,
 ) -> None:
     """Run the selected maintenance tasks."""
     to_run = selected or list(TASKS)
     for name in to_run:
-        TASKS[name](latest=latest, clean=clean, force_db=force_db)
+        TASKS[name](
+            latest=latest,
+            clean=clean,
+            force_db=force_db,
+            migrate_reconcile=migrate_reconcile,
+        )
 
 
 if __name__ == "__main__":
@@ -1030,5 +1093,19 @@ if __name__ == "__main__":
         action="store_true",
         help="Force running migrations and fixtures even if preflight is clean",
     )
+    parser.add_argument(
+        "--migrate",
+        action="store_true",
+        help=(
+            "Rebuild the SQLite database and reconcile data from the previous file, "
+            "ignoring missing/incompatible tables."
+        ),
+    )
     args = parser.parse_args()
-    main(args.tasks, latest=args.latest, clean=args.clean, force_db=args.force_db)
+    main(
+        args.tasks,
+        latest=args.latest,
+        clean=args.clean,
+        force_db=args.force_db,
+        migrate_reconcile=args.migrate,
+    )

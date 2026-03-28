@@ -957,6 +957,7 @@ PRE_CHECK=0
 REVERT_UPGRADE=0
 CLEAR_LOGS=0
 CLEAR_WORK=0
+MIGRATE_RECONCILE=0
 REQUESTED_BRANCH=""
 REVERT_TARGET_REVISION=""
 FORWARDED_ARGS=()
@@ -991,6 +992,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --clean)
       CLEAN=1
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+    --migrate)
+      MIGRATE_RECONCILE=1
       FORWARDED_ARGS+=("$1")
       shift
       ;;
@@ -1082,6 +1088,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ $CLEAN -eq 1 && $MIGRATE_RECONCILE -eq 1 ]]; then
+  echo "Cannot combine --clean with --migrate." >&2
+  echo "Use --migrate on its own to preserve and reconcile the pre-upgrade SQLite database." >&2
+  exit 1
+fi
 
 rerun_with_updated_script() {
   local depth="${ARTHEXIS_UPGRADE_SELF_UPDATE_DEPTH:-0}"
@@ -2008,6 +2020,9 @@ if [[ "$CHANNEL" == "unstable" ]]; then
 fi
 if [[ $FORCE_ENV_REFRESH -eq 1 ]]; then
   ENV_ARGS="$ENV_ARGS --force-refresh"
+fi
+if [[ $MIGRATE_RECONCILE -eq 1 ]]; then
+  ENV_ARGS="$ENV_ARGS --migrate"
 fi
 echo "Refreshing environment..."
 arthexis_timing_start "env_refresh"

@@ -90,6 +90,7 @@ PIP_FRESHNESS_MINUTES=0
 DEPS_ONLY=0
 INSTALL_AND_REFRESH=0
 INSTALL_PREVIEW_DEPS=0
+MIGRATE_RECONCILE=0
 
 LATEST=0
 CLEAN=0
@@ -121,6 +122,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --preview-deps)
       INSTALL_PREVIEW_DEPS=1
+      shift
+      ;;
+    --migrate)
+      MIGRATE_RECONCILE=1
       shift
       ;;
     *)
@@ -699,6 +704,9 @@ if [ "$LATEST" -eq 1 ]; then
 fi
 if [ "$CLEAN" -eq 1 ]; then
   ARGS="$ARGS --clean"
+fi
+if [ "$MIGRATE_RECONCILE" -eq 1 ]; then
+  ARGS="$ARGS --migrate"
 fi
 "$PYTHON" env-refresh.py $ARGS database
 echo "Timing: env-refresh.sh completed in $(elapsed_ms "$SCRIPT_START_MS")ms"
