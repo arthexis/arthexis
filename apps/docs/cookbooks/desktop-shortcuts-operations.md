@@ -25,3 +25,17 @@ Example:
   management commands there.
 - Do not reintroduce generic file-extension command execution; route operator
   workflows through maintained commands and model-backed admin surfaces.
+
+## Upgrade mapping for retired commands
+
+Use `sync_desktop_shortcuts` as the supported replacement for both retired commands:
+
+- `desktop_extension_open` → `sync_desktop_shortcuts`
+- `register_desktop_extensions` → `sync_desktop_shortcuts`
+
+Run the replacement command. It can auto-detect the local username and suite port,
+or you can provide them explicitly when needed:
+
+```bash
+.venv/bin/python manage.py sync_desktop_shortcuts [--username <local-user>] [--port <suite-port>]
+```
