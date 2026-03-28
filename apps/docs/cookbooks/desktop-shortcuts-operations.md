@@ -25,3 +25,17 @@ Example:
   management commands there.
 - Do not reintroduce generic file-extension command execution; route operator
   workflows through maintained commands and model-backed admin surfaces.
+
+## Upgrade mapping for retired commands
+
+Use `sync_desktop_shortcuts` as the supported replacement for both retired commands:
+
+- `desktop_extension_open` → `sync_desktop_shortcuts`
+- `register_desktop_extensions` → `sync_desktop_shortcuts`
+
+Run the replacement command with the same local user and Arthexis port that the node uses today:
+
+```bash
+.venv/bin/python manage.py sync_desktop_shortcuts --username <local-user> --port <suite-port>
+```
+

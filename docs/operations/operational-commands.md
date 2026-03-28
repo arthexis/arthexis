@@ -30,7 +30,6 @@ For advanced admin workflows and any non-allowlisted Django command, run `manage
 - `coverage`
 - `create`
 - `create_docs_admin`
-- `desktop_extension_open`
 - `dns_proxy`
 - `email`
 - `enable_local_https`
@@ -69,7 +68,6 @@ For advanced admin workflows and any non-allowlisted Django command, run `manage
 - `record`
 - `redis`
 - `refresh_node_features`
-- `register_desktop_extensions`
 - `register_site_apps`
 - `release`
 - `repo`
