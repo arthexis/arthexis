@@ -131,7 +131,12 @@ def _normalize_local_base_image_path(base_image_uri: str, parsed: ParseResult) -
     if parsed.scheme == "":
         return base_image_uri
     if parsed.scheme == "file":
-        return unquote(parsed.path)
+        if parsed.netloc not in {"", "localhost"}:
+            return None
+        path = unquote(parsed.path)
+        if path.startswith("/") and WINDOWS_ABSOLUTE_PATH_RE.match(path[1:]):
+            return path[1:]
+        return path
     return None
 
 

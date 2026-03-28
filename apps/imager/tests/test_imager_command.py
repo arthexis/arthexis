@@ -3,6 +3,7 @@
 from contextlib import nullcontext
 from io import BytesIO, StringIO
 from pathlib import Path
+import sys
 from unittest.mock import patch
 
 import pytest
@@ -176,14 +177,20 @@ def test_build_rpi4b_image_accepts_posix_absolute_source_path(tmp_path: Path) ->
 def test_build_rpi4b_image_accepts_windows_drive_source_path(tmp_path: Path, monkeypatch) -> None:
     """Regression: Windows drive-letter paths should be treated as local files."""
 
-    monkeypatch.chdir(tmp_path)
-    base_image = tmp_path / "C:" / "images" / "base.img"
+    if sys.platform == "win32":
+        base_image = (tmp_path / "images" / "base.img").resolve()
+        base_image_uri = str(base_image)
+    else:
+        monkeypatch.chdir(tmp_path)
+        base_image = tmp_path / "C:" / "images" / "base.img"
+        base_image_uri = "C:/images/base.img"
+
     base_image.parent.mkdir(parents=True)
     base_image.write_bytes(b"windows-base")
 
     result = build_rpi4b_image(
         name="winstable",
-        base_image_uri="C:/images/base.img",
+        base_image_uri=base_image_uri.replace("\\", "/"),
         output_dir=tmp_path,
         download_base_uri="",
         git_url="https://github.com/arthexis/arthexis.git",
@@ -207,3 +214,40 @@ def test_build_rpi4b_image_rejects_unsupported_uri_scheme(tmp_path: Path) -> Non
             git_url="https://github.com/arthexis/arthexis.git",
             customize=False,
         )
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_rejects_file_uri_with_nonlocal_authority(tmp_path: Path) -> None:
+    """Regression: non-local file URI authorities should be rejected."""
+
+    with pytest.raises(ImagerBuildError, match="Only file, http, and https base image URIs are supported."):
+        build_rpi4b_image(
+            name="remotefilestable",
+            base_image_uri="file://server/share/base.img",
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+        )
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_accepts_file_uri_windows_drive_path(tmp_path: Path, monkeypatch) -> None:
+    """Regression: file URIs with Windows drive paths should normalize to local files."""
+
+    monkeypatch.chdir(tmp_path)
+    base_image = tmp_path / "C:" / "images" / "base.img"
+    base_image.parent.mkdir(parents=True)
+    base_image.write_bytes(b"windows-file-uri-base")
+
+    result = build_rpi4b_image(
+        name="winfileuristable",
+        base_image_uri="file:///C:/images/base.img",
+        output_dir=tmp_path,
+        download_base_uri="",
+        git_url="https://github.com/arthexis/arthexis.git",
+        customize=False,
+    )
+
+    assert result.output_path.exists()
+    assert result.output_path.read_bytes() == b"windows-file-uri-base"
