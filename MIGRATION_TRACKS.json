@@ -1,9 +1,0 @@
-{
-  "current_line": "0.x",
-  "current_version": "0.2.3",
-  "next_major": {
-    "module_suffix": "migrations_v1_0",
-    "status": "rebuild",
-    "version": "1.0"
-  }
-}

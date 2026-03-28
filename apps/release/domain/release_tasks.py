@@ -13,17 +13,7 @@ from typing import Iterable
 
 from apps.release import git_utils
 
-MIGRATION_BASELINE_APPS: tuple[str, ...] = ("nodes", "features", "ocpp", "links")
-MIGRATION_BASELINE_THRESHOLD = 12
-MIGRATION_BASELINE_RECENT_WINDOW = 3
 RELEASE_VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-"""Release-train baseline window.
-
-A baseline is required when one of the high-churn apps grows beyond
-``MIGRATION_BASELINE_THRESHOLD`` active migrations and the most recent squash
-marker is older than ``MIGRATION_BASELINE_RECENT_WINDOW`` migration numbers.
-"""
-
 
 def _run(
     cmd: Iterable[str], *, check: bool = True, cwd: Path | str | None = None
@@ -150,42 +140,6 @@ def _maybe_create_maintenance_branch(
     if not remote_exists:
         _git_push("origin", maintenance_branch, base_dir=base_dir)
 
-
-
-def _stage_migration_baselines(*, base_dir: Path | None = None) -> None:
-    """Stage migration files updated by baseline automation."""
-
-    base_dir = base_dir or Path.cwd()
-    migration_dirs = [
-        base_dir / "apps" / app_label / "migrations"
-        for app_label in MIGRATION_BASELINE_APPS
-    ]
-    existing_dirs = [path for path in migration_dirs if path.exists()]
-    if not existing_dirs:
-        return
-
-    migration_args = [path.as_posix() for path in existing_dirs]
-    _run(["git", "add", "-A", *migration_args], cwd=base_dir)
-
-
-def run_migration_baseline_window(*, base_dir: Path | None = None) -> None:
-    """Run the release-train migration baseline helper with policy defaults."""
-
-    base_dir = base_dir or Path.cwd()
-    _run(
-        [
-            "python",
-            "scripts/build_migration_baseline.py",
-            "--apps",
-            *MIGRATION_BASELINE_APPS,
-            "--threshold",
-            str(MIGRATION_BASELINE_THRESHOLD),
-            "--recent-window",
-            str(MIGRATION_BASELINE_RECENT_WINDOW),
-            "--execute",
-        ],
-        cwd=base_dir,
-    )
 
 
 def capture_migration_state(version: str, base_dir: Path | None = None) -> Path:
@@ -346,8 +300,6 @@ def prepare_release(version: str, *, base_dir: Path | None = None) -> None:
     _maybe_create_maintenance_branch(previous_version, version, base_dir=base_dir)
     version_file.write_text(f"{version}\n")
 
-    run_migration_baseline_window(base_dir=base_dir)
-    _stage_migration_baselines(base_dir=base_dir)
     capture_migration_state(version, base_dir=base_dir)
 
     release_dir = base_dir / "releases" / version

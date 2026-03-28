@@ -1,41 +1,76 @@
 [
   {
-    "model": "groups.securitygroup",
+    "model": "auth.group",
+    "pk": 1,
     "fields": {
       "name": "Site Operator",
-      "permissions": [],
-      "parent": null
+      "permissions": []
     }
   },
   {
     "model": "groups.securitygroup",
+    "pk": 1,
+    "fields": {
+      "parent": null
+    }
+  },
+  {
+    "model": "auth.group",
+    "pk": 2,
     "fields": {
       "name": "Network Operator",
-      "permissions": [],
-      "parent": null
+      "permissions": []
     }
   },
   {
     "model": "groups.securitygroup",
+    "pk": 2,
+    "fields": {
+      "parent": null
+    }
+  },
+  {
+    "model": "auth.group",
+    "pk": 3,
     "fields": {
       "name": "Product Developer",
-      "permissions": [],
-      "parent": null
+      "permissions": []
     }
   },
   {
     "model": "groups.securitygroup",
+    "pk": 3,
+    "fields": {
+      "parent": null
+    }
+  },
+  {
+    "model": "auth.group",
+    "pk": 4,
     "fields": {
       "name": "Release Manager",
-      "permissions": [],
-      "parent": null
+      "permissions": []
     }
   },
   {
     "model": "groups.securitygroup",
+    "pk": 4,
+    "fields": {
+      "parent": null
+    }
+  },
+  {
+    "model": "auth.group",
+    "pk": 5,
     "fields": {
       "name": "External Agent",
-      "permissions": [],
+      "permissions": []
+    }
+  },
+  {
+    "model": "groups.securitygroup",
+    "pk": 5,
+    "fields": {
       "parent": null
     }
   }
