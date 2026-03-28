@@ -32,10 +32,10 @@ allow_indirect_imports = True
 name = Leaf apps cannot import unrelated domain admin internals
 type = forbidden
 source_modules =
-    apps.blog
+    apps.leads
     apps.payments
-    apps.recipes
-    apps.socials
+    apps.shop
+    apps.sites
 forbidden_modules =
     apps.energy.admin
     apps.nodes.admin
@@ -47,10 +47,10 @@ allow_indirect_imports = True
 name = Leaf app config modules stay independent
 type = independence
 modules =
-    apps.blog.apps
+    apps.leads.apps
     apps.payments.apps
-    apps.recipes.apps
-    apps.socials.apps
+    apps.shop.apps
+    apps.sites.apps
 
 [importlinter:contract:emails-admin-boundary]
 name = Emails admin should not depend on nodes admin internals

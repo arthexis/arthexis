@@ -71,6 +71,11 @@ jobs:
       - name: Validate generated requirements
         run: |
           python "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
+      - name: Install redis CLI
+        if: ${{ matrix.role == 'control' || matrix.role == 'satellite' || matrix.role == 'watchtower' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends redis-tools
       - name: Install suite from repository
         run: |
           ./install.sh ${{ matrix.install_args }} --no-start
