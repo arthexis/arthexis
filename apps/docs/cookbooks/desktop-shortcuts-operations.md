@@ -33,9 +33,9 @@ Use `sync_desktop_shortcuts` as the supported replacement for both retired comma
 - `desktop_extension_open` → `sync_desktop_shortcuts`
 - `register_desktop_extensions` → `sync_desktop_shortcuts`
 
-Run the replacement command with the same local user and Arthexis port that the node uses today:
+Run the replacement command. It can auto-detect the local username and suite port,
+or you can provide them explicitly when needed:
 
 ```bash
-.venv/bin/python manage.py sync_desktop_shortcuts --username <local-user> --port <suite-port>
+.venv/bin/python manage.py sync_desktop_shortcuts [--username <local-user>] [--port <suite-port>]
 ```
-
