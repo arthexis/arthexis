@@ -957,6 +957,7 @@ PRE_CHECK=0
 REVERT_UPGRADE=0
 CLEAR_LOGS=0
 CLEAR_WORK=0
+MIGRATE_RECONCILE=0
 REQUESTED_BRANCH=""
 REVERT_TARGET_REVISION=""
 FORWARDED_ARGS=()
@@ -991,6 +992,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --clean)
       CLEAN=1
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+    --migrate)
+      MIGRATE_RECONCILE=1
       FORWARDED_ARGS+=("$1")
       shift
       ;;
@@ -2008,6 +2014,9 @@ if [[ "$CHANNEL" == "unstable" ]]; then
 fi
 if [[ $FORCE_ENV_REFRESH -eq 1 ]]; then
   ENV_ARGS="$ENV_ARGS --force-refresh"
+fi
+if [[ $MIGRATE_RECONCILE -eq 1 ]]; then
+  ENV_ARGS="$ENV_ARGS --migrate"
 fi
 echo "Refreshing environment..."
 arthexis_timing_start "env_refresh"
