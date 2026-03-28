@@ -17,7 +17,20 @@ on:
 
 jobs:
   install:
+    name: install (${{ matrix.role }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - role: terminal
+            install_args: --terminal
+          - role: control
+            install_args: --control
+          - role: satellite
+            install_args: --satellite
+          - role: watchtower
+            install_args: --watchtower
     permissions:
       contents: read
     services:
@@ -60,7 +73,7 @@ jobs:
           python "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
       - name: Install suite from repository
         run: |
-          ./install.sh --no-start
+          ./install.sh ${{ matrix.install_args }} --no-start
       - name: Install CI dependencies
         run: |
           source .venv/bin/activate
@@ -128,7 +141,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: install-hourly-pytest-log
+          name: install-hourly-pytest-log-${{ matrix.role }}
           path: pytest.log
           if-no-files-found: warn
 
@@ -152,6 +165,7 @@ jobs:
             const marker = '<!-- install-health-check-failure -->';
             let runData = null;
             let failedSteps = '';
+            let failedRoles = '';
 
             try {
               const { data: fetchedRunData } = await github.rest.actions.getWorkflowRun({
@@ -169,6 +183,14 @@ jobs:
               });
 
               const failedJobs = jobsData.jobs.filter((job) => job.conclusion === 'failure');
+              const failedRoleSet = new Set();
+              failedJobs.forEach((job) => {
+                const match = /^install \((.+)\)$/.exec(job.name || '');
+                if (match?.[1]) {
+                  failedRoleSet.add(match[1]);
+                }
+              });
+              failedRoles = Array.from(failedRoleSet).sort().join(', ');
               failedSteps = failedJobs
                 .map((job) => {
                   const failedStep = (job.steps || []).find((step) => step.conclusion === 'failure');
@@ -195,6 +217,8 @@ jobs:
               '',
               '## Failure details',
               '',
+              failedRoles ? `- Failed roles: ${failedRoles}` : '- Failed roles: Unable to determine failed roles from workflow metadata.',
+              '',
               failedSteps ? failedSteps : '- Unable to identify failed steps from workflow metadata.',
               '',
               'Please investigate and close this issue once resolved.'
@@ -218,6 +242,8 @@ jobs:
                   '',
                   `- Workflow run: ${runUrl}`,
                   `- Commit: ${context.sha}`,
+                  '',
+                  failedRoles ? `### Failed roles\n- ${failedRoles}` : '### Failed roles\n- Unable to determine failed roles from workflow metadata.',
                   '',
                   failedSteps ? '### Failed steps\n' + failedSteps : '### Failed steps\n- Unable to identify failed steps from workflow metadata.'
                 ].join('\n')
