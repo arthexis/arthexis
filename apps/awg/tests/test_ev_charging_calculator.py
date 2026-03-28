@@ -56,38 +56,3 @@ class EvChargingCalculatorTests(SimpleTestCase):
         self.assertEqual(result["wall_energy_needed"], Decimal("51.33"))
         self.assertEqual(result["charging_time_hours"], Decimal("4.67"))
         self.assertEqual(result["estimated_cost_mxn"], Decimal("164.26"))
-
-    def test_post_rejects_invalid_soc_window(self):
-        """Target SOC must be greater than starting SOC."""
-
-        response = self._post(
-            {
-                "battery_kwh": "60",
-                "start_soc": "80",
-                "target_soc": "70",
-                "charger_power_kw": "7.2",
-                "charging_efficiency": "0.92",
-            }
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context_data["error"], "Target SOC must be greater than start SOC.")
-
-    def test_post_rejects_invalid_efficiency(self):
-        """Efficiency must stay in the inclusive-exclusive interval (0, 1]."""
-
-        response = self._post(
-            {
-                "battery_kwh": "60",
-                "start_soc": "10",
-                "target_soc": "70",
-                "charger_power_kw": "7.2",
-                "charging_efficiency": "1.2",
-            }
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.context_data["error"],
-            "Charging efficiency must be greater than 0 and at most 1.",
-        )

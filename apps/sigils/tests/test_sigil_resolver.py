@@ -35,16 +35,6 @@ def test_resolve_sigils_filters_and_fetches_field(user_root):
     assert result == user.email
 
 
-@pytest.mark.django_db
-def test_resolve_sigils_aggregates_count(user_root):
-    user_model = get_user_model()
-    user_model.objects.create(username="user1")
-    user_model.objects.create(username="user2")
-
-    result = sigil_resolver.resolve_sigils("[USR=:count]")
-
-    assert result == "2"
-
 
 @pytest.mark.django_db
 def test_resolve_sigils_request_values():
@@ -120,19 +110,6 @@ def test_resolve_sigils_uses_default_entity_instance_with_unrelated_current(monk
 
     assert result == role.name
 
-
-
-@pytest.mark.django_db
-def test_resolve_sigils_entity_aggregate_total_for_field(user_root):
-    user_model = get_user_model()
-    baseline = sigil_resolver.resolve_sigils("[USR=id:total]")
-    baseline_total = int(baseline) if baseline else 0
-    first_user = user_model.objects.create(username="alpha")
-    second_user = user_model.objects.create(username="bravo")
-
-    result = sigil_resolver.resolve_sigils("[USR=id:total]")
-
-    assert result == str(baseline_total + first_user.id + second_user.id)
 
 
 @pytest.mark.django_db

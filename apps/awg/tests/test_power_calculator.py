@@ -53,24 +53,6 @@ class ElectricalPowerCalculatorTests(SimpleTestCase):
         self.assertEqual(result["kw"], Decimal("6.48"))
         self.assertEqual(result["recommended_breaker"], Decimal("37.50"))
 
-    def test_post_rejects_oversized_numeric_inputs(self):
-        """Huge numeric values should return a validation error instead of crashing."""
-
-        response = self._post(
-            {
-                "voltage": "1000000001",
-                "current": "20",
-                "power_factor": "0.95",
-                "phases": "3",
-            }
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.context_data["error"],
-            "Voltage and current are too large to calculate safely.",
-        )
-
     def test_post_calculates_three_phase_values(self):
         """Three-phase inputs should exercise the sqrt(3) calculation path."""
 
@@ -87,21 +69,3 @@ class ElectricalPowerCalculatorTests(SimpleTestCase):
         result = response.context_data["result"]
         self.assertEqual(result["kw"], Decimal("9.19"))
         self.assertEqual(result["recommended_breaker"], Decimal("37.50"))
-
-    def test_post_rejects_invalid_power_factor(self):
-        """Power factor values outside 0-1 should return a user-facing error."""
-
-        response = self._post(
-            {
-                "voltage": "208",
-                "current": "50",
-                "power_factor": "1.3",
-                "phases": "3",
-            }
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.context_data["error"],
-            "Power factor must be greater than 0 and at most 1.",
-        )

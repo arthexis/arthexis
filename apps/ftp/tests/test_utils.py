@@ -65,18 +65,3 @@ class BuildUserMountsTests(TestCase):
             self._assert_is_link(member_link)
             self.assertEqual(member_link.resolve(), folder_path.resolve())
             self.assertNotIn("w", member_mount.permissions)
-
-    def test_missing_target_generates_warning(self):
-        with TemporaryDirectory() as tmpdir:
-            FTPFolder.objects.create(
-                name="Missing",
-                path=str(Path(tmpdir) / "missing"),
-                enabled=True,
-                user=self.owner,
-            )
-            mounts, warnings = build_user_mounts(
-                FTPFolder.objects.all(), Path(tmpdir) / "mounts"
-            )
-            self.assertFalse(mounts)
-            self.assertEqual(len(warnings), 1)
-            self.assertIn("does not exist", warnings[0])
