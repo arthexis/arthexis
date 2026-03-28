@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.error import URLError
-from urllib.parse import unquote, urlparse
+from urllib.parse import ParseResult, unquote, urlparse
 from urllib.request import urlopen
 
 from django.db import transaction
@@ -19,6 +19,7 @@ from django.db import transaction
 from apps.imager.models import RaspberryPiImageArtifact
 
 TARGET_RPI4B = "rpi-4b"
+WINDOWS_ABSOLUTE_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
 
 BOOTSTRAP_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
@@ -100,8 +101,9 @@ def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
     """Resolve local/file/http(s) base image inputs to a local filesystem path."""
 
     parsed = urlparse(base_image_uri)
-    if parsed.scheme in ("", "file"):
-        resolved_path = unquote(parsed.path) if parsed.scheme else base_image_uri
+
+    resolved_path = _normalize_local_base_image_path(base_image_uri, parsed)
+    if resolved_path is not None:
         path = Path(resolved_path).expanduser().resolve()
         if not path.exists():
             raise ImagerBuildError(f"Base image does not exist: {path}")
@@ -119,6 +121,18 @@ def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
         reason = getattr(exc, "reason", str(exc))
         raise ImagerBuildError(f"Could not download base image: {reason}") from exc
     return destination
+
+
+def _normalize_local_base_image_path(base_image_uri: str, parsed: ParseResult) -> str | None:
+    """Return a normalized local filesystem path for local base image inputs."""
+
+    if WINDOWS_ABSOLUTE_PATH_RE.match(base_image_uri):
+        return base_image_uri
+    if parsed.scheme == "":
+        return base_image_uri
+    if parsed.scheme == "file":
+        return unquote(parsed.path)
+    return None
 
 
 def _guestfish_write(image_path: Path, local_path: Path, remote_path: str, chmod_mode: str | None = None) -> None:

@@ -149,3 +149,61 @@ def test_build_rpi4b_image_rejects_same_source_and_output_path(tmp_path: Path) -
             git_url="https://github.com/arthexis/arthexis.git",
             customize=False,
         )
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_accepts_posix_absolute_source_path(tmp_path: Path) -> None:
+    """Regression: POSIX absolute source paths should be treated as local files."""
+
+    base_image = (tmp_path / "images" / "base.img").resolve()
+    base_image.parent.mkdir(parents=True)
+    base_image.write_bytes(b"posix-base")
+
+    result = build_rpi4b_image(
+        name="posixstable",
+        base_image_uri=str(base_image),
+        output_dir=tmp_path,
+        download_base_uri="",
+        git_url="https://github.com/arthexis/arthexis.git",
+        customize=False,
+    )
+
+    assert result.output_path.exists()
+    assert result.output_path.read_bytes() == b"posix-base"
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_accepts_windows_drive_source_path(tmp_path: Path, monkeypatch) -> None:
+    """Regression: Windows drive-letter paths should be treated as local files."""
+
+    monkeypatch.chdir(tmp_path)
+    base_image = tmp_path / "C:" / "images" / "base.img"
+    base_image.parent.mkdir(parents=True)
+    base_image.write_bytes(b"windows-base")
+
+    result = build_rpi4b_image(
+        name="winstable",
+        base_image_uri="C:/images/base.img",
+        output_dir=tmp_path,
+        download_base_uri="",
+        git_url="https://github.com/arthexis/arthexis.git",
+        customize=False,
+    )
+
+    assert result.output_path.exists()
+    assert result.output_path.read_bytes() == b"windows-base"
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_rejects_unsupported_uri_scheme(tmp_path: Path) -> None:
+    """Regression: unsupported URI schemes should continue to fail."""
+
+    with pytest.raises(ImagerBuildError, match="Only file, http, and https base image URIs are supported."):
+        build_rpi4b_image(
+            name="ftpstable",
+            base_image_uri="ftp://example.com/base.img",
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+        )
