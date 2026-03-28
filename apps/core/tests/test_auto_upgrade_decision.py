@@ -43,7 +43,7 @@ def test_build_upgrade_decision_applies_stable_and_unstable(monkeypatch):
     monkeypatch.setattr(tasks, "_get_package_release_model", lambda: _ReleaseModel)
     expected_script = (
         "upgrade.bat"
-        if tasks.os.name == "nt" or tasks.sys.platform == "win32"
+        if tasks.os.name == "nt"
         else "upgrade.sh"
     )
 
