@@ -10,6 +10,20 @@ To resolve it:
 
 Increasing the fetch depth restores the missing ancestor commit so `git merge-base origin/main HEAD` can succeed.
 
+## App registry integrity check
+
+Arthexis keeps settings module import lean by validating `PROJECT_LOCAL_APPS` wiring through the Django checks framework instead of importing every local app during settings import.
+
+Run this check locally before opening a PR and in CI guardrail steps:
+
+```bash
+.venv/bin/python manage.py check --tag core
+```
+
+This catches:
+- local app entries in `PROJECT_LOCAL_APPS` that are not importable
+- `apps.*` entries in `INSTALLED_APPS` that are missing from `PROJECT_LOCAL_APPS` and `PROJECT_APPS`
+
 ## Screenshot coverage in CI
 
 The screenshot workflow already captures baseline routes. To request additional CI screenshot coverage without taking manual screenshots:

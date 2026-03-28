@@ -1,10 +1,7 @@
 """Application registry and site integration settings."""
 
-from importlib import import_module
-
 from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
-from django.core.exceptions import ImproperlyConfigured
 
 from .base import HAS_DEBUG_TOOLBAR
 
@@ -134,44 +131,6 @@ if HAS_DEBUG_TOOLBAR:
     INSTALLED_APPS.append("debug_toolbar")
 
 INSTALLED_APPS = _dedupe_app_entries(INSTALLED_APPS)
-
-
-def _import_base_module(app_path: str) -> None:
-    """Import the base module of an app entry."""
-
-    has_app_config_class = app_path.rsplit(".", maxsplit=1)[-1][:1].isupper()
-    if ".apps." in app_path:
-        base_module = app_path.rsplit(".apps.", maxsplit=1)[0]
-    elif has_app_config_class:
-        base_module = app_path.rsplit(".", maxsplit=1)[0]
-    else:
-        base_module = app_path
-    import_module(base_module)
-
-
-def _validate_project_local_apps() -> None:
-    """Validate project app wiring is explicit and importable."""
-
-    for app_path in PROJECT_LOCAL_APPS:
-        try:
-            _import_base_module(app_path)
-        except ImportError as exc:
-            raise ImproperlyConfigured(
-                f"PROJECT_LOCAL_APPS entry '{app_path}' could not be imported."
-            ) from exc
-
-    allowed_project_apps = set(PROJECT_LOCAL_APPS) | set(PROJECT_APPS)
-    for app_path in INSTALLED_APPS:
-        if not app_path.startswith("apps."):
-            continue
-        if app_path not in allowed_project_apps:
-            raise ImproperlyConfigured(
-                f"INSTALLED_APPS contains unlisted local app '{app_path}'. "
-                "Declare it in PROJECT_LOCAL_APPS or PROJECT_APPS."
-            )
-
-
-_validate_project_local_apps()
 
 SITE_ID = 1
 

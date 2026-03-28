@@ -13,6 +13,7 @@ class CoreConfig(AppConfig):
     label = "core"
 
     def ready(self):  # pragma: no cover - called by Django
+        _load_core_checks()
         _setup_celery_beat_integrations()
         _register_admin_and_post_migrate_handlers(self)
         _patch_entity_deserialization()
@@ -20,6 +21,10 @@ class CoreConfig(AppConfig):
         _configure_urlfield_assume_scheme()
         _connect_sqlite_wal()
         _enable_usage_analytics()
+
+
+def _load_core_checks():
+    import apps.core.checks.apps_registry  # noqa: F401
 
 
 def _setup_celery_beat_integrations():
