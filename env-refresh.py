@@ -64,6 +64,12 @@ from scripts.helpers.migration_reconcile import (
     reconcile_sqlite_tables,
 )
 
+UPGRADE_WITH_MIGRATE_MESSAGE = (
+    "Detected migration graph/version mismatch for this database.\n"
+    "Re-run the upgrade workflow with reconciliation enabled:\n"
+    "  ./upgrade.sh --migrate"
+)
+
 
 if TYPE_CHECKING:  # pragma: no cover - typing support
     from django.db.models import Model
@@ -661,15 +667,10 @@ def run_database_tasks(
                 )
                 migrations_ran = True
             except MissingBranchSplinterError as exc:
-                print(
-                    "Detected a retroactively edited migration branch that this database "
-                    "skipped.\n"
-                    f"{exc}\n"
-                    "Manually recreate the database or roll it back to the splinter "
-                    "migration before retrying the installation.",
-                    flush=True,
-                )
-                raise
+                raise CommandError(
+                    "Detected a retroactively edited migration branch that this "
+                    f"database skipped.\n{exc}\n{UPGRADE_WITH_MIGRATE_MESSAGE}"
+                ) from exc
             except InconsistentMigrationHistory:
                 call_command("reset_ocpp_migrations")
                 _run_migrate(
@@ -679,7 +680,7 @@ def run_database_tasks(
                 )
                 migrations_ran = True
             except InvalidBasesError:
-                raise
+                raise CommandError(UPGRADE_WITH_MIGRATE_MESSAGE)
             except OperationalError as exc:
                 if using_sqlite:
                     _unlink_sqlite_db(Path(default_db["NAME"]))
@@ -1102,10 +1103,14 @@ if __name__ == "__main__":
         ),
     )
     args = parser.parse_args()
-    main(
-        args.tasks,
-        latest=args.latest,
-        clean=args.clean,
-        force_db=args.force_db,
-        migrate_reconcile=args.migrate,
-    )
+    try:
+        main(
+            args.tasks,
+            latest=args.latest,
+            clean=args.clean,
+            force_db=args.force_db,
+            migrate_reconcile=args.migrate,
+        )
+    except CommandError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(1) from exc
