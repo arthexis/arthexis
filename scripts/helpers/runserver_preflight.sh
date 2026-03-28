@@ -10,6 +10,7 @@ LOCK_DIR="${LOCK_DIR:-${BASE_DIR}/.locks}"
 LOCK_DIR="$(normalize_path "$LOCK_DIR")"
 
 MIGRATIONS_SHA_FILE="${LOCK_DIR}/migrations.sha"
+MIGRATIONS_META_FILE="${LOCK_DIR}/migrations.meta"
 PREDEPLOY_MIGRATIONS_MARKER_FILE="${LOCK_DIR}/predeploy_migrate_success.json"
 
 # Default behavior: Satellite/Watchtower nodes run in check-only mode, while all
@@ -87,6 +88,85 @@ print(hasher.hexdigest())
 PY
 }
 
+compute_migration_metadata_snapshot() {
+  local base_dir
+  local python_bin
+  base_dir="${1:-${BASE_DIR:-$(pwd)}}"
+  base_dir="$(normalize_path "$base_dir")"
+  if [ -z "$base_dir" ]; then
+    echo "" >&2
+    return 1
+  fi
+
+  if ! python_bin="$(arthexis_python_bin)"; then
+    echo "python3 or python not available" >&2
+    return 1
+  fi
+
+  "$python_bin" - "$base_dir" <<'PY'
+import json
+import pathlib
+import sys
+
+base = pathlib.Path(sys.argv[1])
+paths = sorted(base.glob("apps/**/migrations/*.py"))
+
+entries = []
+for path in paths:
+    if not path.is_file():
+        continue
+    stat = path.stat()
+    entries.append([str(path.relative_to(base)), stat.st_mtime_ns, stat.st_size])
+
+print(json.dumps({"version": 1, "entries": entries}, sort_keys=True, separators=(",", ":")))
+PY
+}
+
+read_migration_metadata_snapshot() {
+  local metadata_file="${1:-$MIGRATIONS_META_FILE}"
+  local python_bin
+
+  if [ ! -f "$metadata_file" ]; then
+    return 1
+  fi
+
+  if ! python_bin="$(arthexis_python_bin)"; then
+    return 1
+  fi
+
+  "$python_bin" - "$metadata_file" <<'PY'
+import json
+import pathlib
+import sys
+
+metadata_file = pathlib.Path(sys.argv[1])
+try:
+    payload = json.loads(metadata_file.read_text(encoding="utf-8"))
+except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    raise SystemExit(1)
+
+if payload.get("version") != 1:
+    raise SystemExit(1)
+
+entries = payload.get("entries")
+if not isinstance(entries, list):
+    raise SystemExit(1)
+
+for entry in entries:
+    if not isinstance(entry, list) or len(entry) != 3:
+        raise SystemExit(1)
+    relative_path, mtime_ns, size = entry
+    if not isinstance(relative_path, str):
+        raise SystemExit(1)
+    if not isinstance(mtime_ns, int):
+        raise SystemExit(1)
+    if not isinstance(size, int):
+        raise SystemExit(1)
+
+print(json.dumps({"version": 1, "entries": entries}, sort_keys=True, separators=(",", ":")))
+PY
+}
+
 read_predeploy_marker_fingerprint() {
   local marker_file="${1:-$PREDEPLOY_MIGRATIONS_MARKER_FILE}"
   local python_bin
@@ -148,16 +228,21 @@ run_runserver_preflight() {
     return 0
   }
 
+  write_migration_metadata() {
+    local value="$1"
+
+    if ! printf '%s\n' "$value" > "$MIGRATIONS_META_FILE"; then
+      echo "Failed to write migrations metadata cache '$MIGRATIONS_META_FILE'." >&2
+      return 1
+    fi
+
+    return 0
+  }
+
   if [ "$migration_policy" = "skip" ]; then
     echo "Skipping runserver migration preflight (ARTHEXIS_MIGRATION_POLICY=skip)."
     RUNSERVER_PREFLIGHT_DONE=true
     return 0
-  fi
-
-  local fingerprint
-  if ! fingerprint=$(compute_migration_fingerprint); then
-    echo "Failed to compute migration fingerprint" >&2
-    return 1
   fi
 
   if ! mkdir -p "$LOCK_DIR"; then
@@ -165,11 +250,37 @@ run_runserver_preflight() {
     return 1
   fi
 
+  local metadata_snapshot=""
+  if ! metadata_snapshot=$(compute_migration_metadata_snapshot); then
+    echo "Failed to compute migration metadata snapshot." >&2
+    return 1
+  fi
+
+  local fingerprint=""
+  local fingerprint_from_cache=false
   local stored_fingerprint=""
+  local stored_metadata_snapshot=""
   if [ "${RUNSERVER_PREFLIGHT_FORCE_REFRESH:-false}" = true ]; then
     echo "Forcing migration preflight refresh..."
+    rm -f "$MIGRATIONS_SHA_FILE" "$MIGRATIONS_META_FILE"
   elif [ -f "$MIGRATIONS_SHA_FILE" ]; then
     stored_fingerprint=$(cat "$MIGRATIONS_SHA_FILE")
+    if stored_metadata_snapshot=$(read_migration_metadata_snapshot); then
+      if [ -n "$stored_fingerprint" ] && [ "$stored_metadata_snapshot" = "$metadata_snapshot" ]; then
+        fingerprint="$stored_fingerprint"
+        fingerprint_from_cache=true
+        echo "Migrations metadata unchanged; reusing cached fingerprint."
+      fi
+    fi
+  elif [ -f "$MIGRATIONS_META_FILE" ]; then
+    stored_metadata_snapshot=$(read_migration_metadata_snapshot || true)
+  fi
+
+  if [ "$fingerprint_from_cache" != true ]; then
+    if ! fingerprint=$(compute_migration_fingerprint); then
+      echo "Failed to compute migration fingerprint" >&2
+      return 1
+    fi
   fi
 
   local marker_fingerprint=""
@@ -179,6 +290,9 @@ run_runserver_preflight() {
       if "$python_bin" manage.py migrate --check; then
         echo "Pre-deploy migration marker verified; skipping migration apply fallback."
         if ! write_migration_fingerprint "$fingerprint"; then
+          return 1
+        fi
+        if ! write_migration_metadata "$metadata_snapshot"; then
           return 1
         fi
         RUNSERVER_PREFLIGHT_DONE=true
@@ -196,6 +310,9 @@ run_runserver_preflight() {
     if "$python_bin" manage.py migrate --check; then
       echo "Database matches cached migrations fingerprint; skipping migration checks."
       if ! write_migration_fingerprint "$fingerprint"; then
+        return 1
+      fi
+      if ! write_migration_metadata "$metadata_snapshot"; then
         return 1
       fi
       RUNSERVER_PREFLIGHT_DONE=true
@@ -253,6 +370,9 @@ run_runserver_preflight() {
   fi
 
   if ! write_migration_fingerprint "$fingerprint"; then
+    return 1
+  fi
+  if ! write_migration_metadata "$metadata_snapshot"; then
     return 1
   fi
   RUNSERVER_PREFLIGHT_DONE=true
