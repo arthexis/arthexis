@@ -4,6 +4,7 @@ from importlib import import_module
 
 from django.conf import settings
 from django.core.checks import Error, register
+from django.core.exceptions import ImproperlyConfigured
 
 
 APPS_REGISTRY_ENTRY_NOT_IMPORTABLE_ID = "core.E001"
@@ -21,13 +22,10 @@ def _get_base_module(app_path: str) -> str:
     return app_path
 
 
-@register("core")
-def check_apps_registry_configuration(app_configs=None, **kwargs):
-    """Validate local app declarations are importable and explicitly listed."""
+def get_apps_registry_configuration_errors() -> list[Error]:
+    """Return app registry wiring errors for project and local app declarations."""
 
-    del app_configs, kwargs
-
-    errors = []
+    errors: list[Error] = []
     project_local_apps = list(getattr(settings, "PROJECT_LOCAL_APPS", []))
     project_apps = list(getattr(settings, "PROJECT_APPS", []))
     installed_apps = list(getattr(settings, "INSTALLED_APPS", []))
@@ -64,3 +62,24 @@ def check_apps_registry_configuration(app_configs=None, **kwargs):
         )
 
     return errors
+
+
+def enforce_apps_registry_configuration() -> None:
+    """Raise an ImproperlyConfigured error when app registry checks fail."""
+
+    errors = get_apps_registry_configuration_errors()
+    if not errors:
+        return
+
+    message = "\n".join(f"[{error.id}] {error.msg}" for error in errors)
+    raise ImproperlyConfigured(
+        "App registry configuration is invalid:\n" + message
+    )
+
+
+@register("core")
+def check_apps_registry_configuration(app_configs=None, **kwargs):
+    """Validate local app declarations are importable and explicitly listed."""
+
+    del app_configs, kwargs
+    return get_apps_registry_configuration_errors()
