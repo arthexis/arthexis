@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from django.db.models import DateTimeField, F, OuterRef, Subquery
-from django.db.models.functions import Coalesce, Greatest
+from collections import OrderedDict
+
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.widgets import register_widget
 from apps.widgets.models import WidgetZone
 
-from .models import FeatureNote, Feature
+from .models import Feature
 
 LATEST_FEATURE_UPDATES_ORDER = 30
 
@@ -18,50 +18,38 @@ LATEST_FEATURE_UPDATES_ORDER = 30
     name=_("Latest feature updates"),
     zone=WidgetZone.ZONE_SIDEBAR,
     template_name="widgets/latest_feature_updates.html",
-    description=_("Recently updated features, including note changes."),
+    description=_("Active suite features grouped by owning app."),
     order=LATEST_FEATURE_UPDATES_ORDER,
 )
 def latest_feature_updates_widget(**_kwargs):
-    latest_note_updated = FeatureNote.objects.filter(
-        feature=OuterRef("pk")
-    ).order_by("-updated_at")
     features = (
-        Feature.objects.annotate(
-            latest_note_updated_at=Subquery(
-                latest_note_updated.values("updated_at")[:1],
-                output_field=DateTimeField(),
-            ),
-        )
-        .annotate(
-            latest_activity_at=Greatest(
-                F("updated_at"),
-                Coalesce(F("latest_note_updated_at"), F("updated_at")),
-            ),
-        )
+        Feature.objects.select_related("main_app")
         .filter(is_enabled=True)
-        .order_by("-latest_activity_at", "-updated_at", "display")
+        .order_by("main_app__name", "display")
     )
-    entries = []
+    app_entries: OrderedDict[str, dict[str, object]] = OrderedDict()
     for feature in features:
         admin_url = reverse(
             "admin:features_feature_change",
             args=[feature.pk],
         )
-        toggle_url = reverse(
-            "admin:features_feature_toggle",
-            args=[feature.pk],
-        )
-        entries.append(
+        app_name = feature.main_app.display_name if feature.main_app_id else _("Unassigned")
+        app_key = feature.main_app.name if feature.main_app_id else ""
+        entry = app_entries.setdefault(
+            app_key,
             {
-                "feature": feature,
+                "app_name": app_name,
+                "features": [],
+            },
+        )
+        entry["features"].append(
+            {
+                "display": feature.display,
                 "admin_url": admin_url,
-                "toggle_url": toggle_url,
-                "updated_at": feature.latest_activity_at,
-                "params_count": feature.params_count,
             }
         )
     return {
-        "features": entries,
+        "app_entries": list(app_entries.values()),
         "feature_admin_url": reverse("admin:features_feature_changelist"),
         "feature_disabled_admin_url": (
             f"{reverse('admin:features_feature_changelist')}?is_enabled__exact=0"
