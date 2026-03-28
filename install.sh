@@ -450,16 +450,12 @@ if [ -z "$PORT" ]; then
     PORT="$(arthexis_detect_backend_port "$SCRIPT_DIR")"
 fi
 
-if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
-    stop_existing_units_for_repair "$SERVICE"
-fi
-
-
 BASE_DIR="$SCRIPT_DIR"
 cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/.locks"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 DB_FILE="$BASE_DIR/db.sqlite3"
+LEGACY_DB_GUARD="$BASE_DIR/scripts/helpers/legacy_db_guard.py"
 
 arthexis_ensure_upstream_remotes "$BASE_DIR"
 
@@ -481,12 +477,9 @@ elif [ -f "$DB_FILE" ]; then
         exit 1
     fi
 fi
+
 mkdir -p "$LOCK_DIR"
 arthexis_record_service_mode "$LOCK_DIR" "$SERVICE_MANAGEMENT_MODE"
-if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
-    reset_service_units_for_repair "$SERVICE"
-fi
-
 if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ]; then
     if [ -n "$SERVICE" ]; then
         arthexis_remove_celery_unit_stack "$LOCK_DIR" "$SERVICE"
@@ -512,6 +505,26 @@ fi
 if ! PYTHON_BOOTSTRAP_BIN="$(arthexis_python_bin)"; then
     echo "Python 3 interpreter not found (tried python3, python, and python3.x aliases)." >&2
     exit 1
+fi
+
+if [[ -f "$DB_FILE" && "$CLEAN" = false && ( "$UPGRADE" = true || "$REPAIR" = true ) ]]; then
+    guard_rc=0
+    "$PYTHON_BOOTSTRAP_BIN" "$LEGACY_DB_GUARD" --db "$DB_FILE" --repo "$BASE_DIR" || guard_rc=$?
+    if [[ "$guard_rc" -ne 0 ]]; then
+        if [[ "$guard_rc" -eq 2 ]]; then
+            echo "Install aborted: existing database follows an unsupported legacy migration path." >&2
+            echo "Use --clean for a fresh reinstall, then import data per docs/operations/reinstall-data-import-runbook.md." >&2
+        else
+            echo "Install aborted: unable to validate legacy migration history for existing database (guard exit code: $guard_rc)." >&2
+            echo "Resolve the guard error above, or use --clean and follow docs/operations/reinstall-data-import-runbook.md." >&2
+        fi
+        exit 1
+    fi
+fi
+
+if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
+    reset_service_units_for_repair "$SERVICE"
+    stop_existing_units_for_repair "$SERVICE"
 fi
 
 # Record role-specific prerequisites and capture supporting state for service management.
