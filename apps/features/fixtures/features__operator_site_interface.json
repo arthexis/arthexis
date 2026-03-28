@@ -2,26 +2,10 @@
   {
     "model": "features.feature",
     "fields": {
-      "slug": "operator-site-interface",
-      "display": "Operator Site Interface",
-      "summary": "Controls whether operator-facing site interfaces are served for landing and management flows.",
-      "is_enabled": true,
-      "main_app": [
-        "sites"
-      ],
-      "node_feature": null,
       "admin_requirements": "Operators can configure default language and fallback landing behavior.",
-      "public_requirements": "Public/landing site interfaces are disabled when this feature is off.",
-      "service_requirements": "Used by landing/context processors and site utility helpers.",
       "admin_views": [
         "admin:features_feature_changelist",
         "admin:pages_siteproxy_changelist"
-      ],
-      "public_views": [
-        "sites:landing"
-      ],
-      "service_views": [
-        "apps.sites.views.landing.landing_view"
       ],
       "code_locations": [
         "apps/sites/views/landing.py",
@@ -29,13 +13,29 @@
         "apps/sites/utils.py",
         "apps/features/parameters.py"
       ],
-      "protocol_coverage": {},
-      "metadata": {},
       "created_at": "2024-03-01T00:00:00Z",
-      "updated_at": "2024-03-01T00:00:00Z",
-      "is_seed_data": true,
+      "display": "Operator Site Interface",
       "is_deleted": false,
-      "source": "mainstream"
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "sites"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "Public/landing site interfaces are disabled when this feature is off.",
+      "public_views": [
+        "sites:landing"
+      ],
+      "service_requirements": "Used by landing/context processors and site utility helpers.",
+      "service_views": [
+        "apps.sites.views.landing.landing_view"
+      ],
+      "slug": "operator-site-interface",
+      "source": "mainstream",
+      "summary": "Controls whether operator-facing site interfaces are served for landing and management flows.",
+      "updated_at": "2024-03-01T00:00:00Z"
     }
   }
 ]

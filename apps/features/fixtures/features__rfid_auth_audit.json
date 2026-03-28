@@ -2,34 +2,34 @@
   {
     "model": "features.feature",
     "fields": {
-      "slug": "rfid-auth-audit",
-      "display": "RFID Auth Audit",
-      "summary": "Controls persistence of RFID authentication attempt audit records.",
-      "is_enabled": true,
-      "main_app": [
-        "users"
-      ],
-      "node_feature": null,
       "admin_requirements": "Admins can disable RFID auth audit persistence for constrained deployments.",
-      "public_requirements": "No direct public interface; affects backend auth audit records.",
-      "service_requirements": "Used by RFID authentication backend flow.",
       "admin_views": [
         "admin:features_feature_changelist"
-      ],
-      "public_views": [],
-      "service_views": [
-        "apps.users.backends.RFIDBackend.store_auth_attempt"
       ],
       "code_locations": [
         "apps/users/backends.py"
       ],
-      "protocol_coverage": {},
-      "metadata": {},
       "created_at": "2024-03-01T00:00:00Z",
-      "updated_at": "2024-03-01T00:00:00Z",
-      "is_seed_data": true,
+      "display": "RFID Auth Audit",
       "is_deleted": false,
-      "source": "mainstream"
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "users"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "No direct public interface; affects backend auth audit records.",
+      "public_views": [],
+      "service_requirements": "Used by RFID authentication backend flow.",
+      "service_views": [
+        "apps.users.backends.RFIDBackend.store_auth_attempt"
+      ],
+      "slug": "rfid-auth-audit",
+      "source": "mainstream",
+      "summary": "Controls persistence of RFID authentication attempt audit records.",
+      "updated_at": "2024-03-01T00:00:00Z"
     }
   }
 ]

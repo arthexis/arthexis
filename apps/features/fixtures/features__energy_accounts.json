@@ -2,38 +2,38 @@
   {
     "model": "features.feature",
     "fields": {
-      "slug": "energy-accounts",
-      "display": "Energy Accounts",
-      "summary": "Controls RFID charging authorization rules that require energy account credits.",
-      "is_enabled": true,
-      "main_app": [
-        "ocpp"
-      ],
-      "node_feature": null,
       "admin_requirements": "Operators can decide whether positive credits are required for authorization.",
-      "public_requirements": "Impacts whether user-facing charging sessions can start with depleted credits.",
-      "service_requirements": "Used by OCPP RFID authorization and public charging views.",
       "admin_views": [
         "admin:features_feature_changelist"
-      ],
-      "public_views": [
-        "ocpp:charging"
-      ],
-      "service_views": [
-        "apps.ocpp.consumers.base.rfid.RfidConnectionHandler.authorize_user"
       ],
       "code_locations": [
         "apps/ocpp/consumers/base/rfid.py",
         "apps/ocpp/views/public.py",
         "apps/features/parameters.py"
       ],
-      "protocol_coverage": {},
-      "metadata": {},
       "created_at": "2024-03-01T00:00:00Z",
-      "updated_at": "2024-03-01T00:00:00Z",
-      "is_seed_data": true,
+      "display": "Energy Accounts",
       "is_deleted": false,
-      "source": "mainstream"
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "ocpp"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "Impacts whether user-facing charging sessions can start with depleted credits.",
+      "public_views": [
+        "ocpp:charging"
+      ],
+      "service_requirements": "Used by OCPP RFID authorization and public charging views.",
+      "service_views": [
+        "apps.ocpp.consumers.base.rfid.RfidConnectionHandler.authorize_user"
+      ],
+      "slug": "energy-accounts",
+      "source": "mainstream",
+      "summary": "Controls RFID charging authorization rules that require energy account credits.",
+      "updated_at": "2024-03-01T00:00:00Z"
     }
   }
 ]

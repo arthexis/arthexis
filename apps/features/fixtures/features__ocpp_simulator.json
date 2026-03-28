@@ -2,37 +2,37 @@
   {
     "model": "features.feature",
     "fields": {
-      "slug": "ocpp-simulator",
-      "display": "OCPP Simulator",
-      "summary": "Controls simulator runtime backends for OCPP protocol testing and tooling.",
-      "is_enabled": true,
-      "main_app": [
-        "ocpp"
-      ],
-      "node_feature": null,
       "admin_requirements": "Admin simulator controls should respect this suite-level gate.",
-      "public_requirements": "No direct public interface; affects simulator endpoints and runs.",
-      "service_requirements": "Used by simulator runtime and OCPP simulator service commands.",
       "admin_views": [
         "admin:features_feature_changelist",
         "admin:ocpp_chargepointsimulator_changelist"
-      ],
-      "public_views": [],
-      "service_views": [
-        "apps.ocpp.cpsim_service.cpsim_service_enabled"
       ],
       "code_locations": [
         "apps/ocpp/cpsim_service.py",
         "apps/simulators/simulator_runtime.py",
         "apps/features/parameters.py"
       ],
-      "protocol_coverage": {},
-      "metadata": {},
       "created_at": "2024-03-01T00:00:00Z",
-      "updated_at": "2024-03-01T00:00:00Z",
-      "is_seed_data": true,
+      "display": "OCPP Simulator",
       "is_deleted": false,
-      "source": "mainstream"
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "ocpp"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "No direct public interface; affects simulator endpoints and runs.",
+      "public_views": [],
+      "service_requirements": "Used by simulator runtime and OCPP simulator service commands.",
+      "service_views": [
+        "apps.ocpp.cpsim_service.cpsim_service_enabled"
+      ],
+      "slug": "ocpp-simulator",
+      "source": "mainstream",
+      "summary": "Controls simulator runtime backends for OCPP protocol testing and tooling.",
+      "updated_at": "2024-03-01T00:00:00Z"
     }
   }
 ]

@@ -2,26 +2,10 @@
   {
     "model": "features.feature",
     "fields": {
-      "slug": "feedback-ingestion",
-      "display": "Feedback Ingestion",
-      "summary": "Controls ingestion paths that accept and process feedback payloads from suite UIs.",
-      "is_enabled": true,
-      "main_app": [
-        "sites"
-      ],
-      "node_feature": null,
       "admin_requirements": "Admin management pages may hide ingestion workflows when disabled.",
-      "public_requirements": "Public feedback forms should not enqueue ingestion work when disabled.",
-      "service_requirements": "Applies to inbound feedback webhook and queue entry points.",
       "admin_views": [
         "admin:features_feature_changelist",
         "admin:index"
-      ],
-      "public_views": [
-        "sites:landing"
-      ],
-      "service_views": [
-        "apps.sites.views.landing.feedback_ingest"
       ],
       "code_locations": [
         "apps/sites/views/landing.py",
@@ -29,13 +13,29 @@
         "apps/evergo/views.py",
         "apps/repos/admin_feedback_config.py"
       ],
-      "protocol_coverage": {},
-      "metadata": {},
       "created_at": "2024-03-01T00:00:00Z",
-      "updated_at": "2024-03-01T00:00:00Z",
-      "is_seed_data": true,
+      "display": "Feedback Ingestion",
       "is_deleted": false,
-      "source": "mainstream"
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "sites"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "Public feedback forms should not enqueue ingestion work when disabled.",
+      "public_views": [
+        "sites:landing"
+      ],
+      "service_requirements": "Applies to inbound feedback webhook and queue entry points.",
+      "service_views": [
+        "apps.sites.views.landing.feedback_ingest"
+      ],
+      "slug": "feedback-ingestion",
+      "source": "mainstream",
+      "summary": "Controls ingestion paths that accept and process feedback payloads from suite UIs.",
+      "updated_at": "2024-03-01T00:00:00Z"
     }
   }
 ]

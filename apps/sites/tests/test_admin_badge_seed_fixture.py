@@ -18,7 +18,7 @@ def test_default_admin_badge_seed_fixture_covers_all_default_providers() -> None
     providers = {
         entry.get("fields", {}).get("provider_key")
         for entry in payload
-        if entry.get("model") == "sites.adminbadge"
+        if entry.get("model") == "pages.adminbadge"
         and entry.get("fields", {}).get("is_enabled") is True
     }
 
