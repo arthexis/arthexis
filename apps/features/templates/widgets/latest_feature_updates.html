@@ -9,38 +9,15 @@
     </div>
   </div>
   <ul class="actionlist latest-feature-updates-list">
-    {% for entry in features %}
+    {% for app_entry in app_entries %}
       <li class="latest-feature-updates-item">
-        <div class="d-flex justify-content-between align-items-start gap-2">
-          <div>
-            <span class="latest-feature-updates-name">{{ entry.feature.display }}</span>
-            <span class="latest-feature-updates-count">{% blocktranslate with count=entry.params_count %}Params: {{ count }}{% endblocktranslate %}</span>
-            <div class="latest-feature-updates-links">
-              <a href="{{ entry.admin_url }}">{% translate "View" %}</a>
-              <span aria-hidden="true">·</span>
-              <form
-                method="post"
-                action="{{ entry.toggle_url }}"
-                class="latest-feature-updates-toggle"
-              >
-                {% csrf_token %}
-                <button
-                  type="submit"
-                  class="button-link"
-                  aria-label="{% if entry.feature.is_enabled %}{% blocktranslate with name=entry.feature.display %}Disable {{ name }}{% endblocktranslate %}{% else %}{% blocktranslate with name=entry.feature.display %}Enable {{ name }}{% endblocktranslate %}{% endif %}"
-                >
-                  {% if entry.feature.is_enabled %}
-                    {% translate "Disable" %}
-                  {% else %}
-                    {% translate "Enable" %}
-                  {% endif %}
-                </button>
-              </form>
-            </div>
-          </div>
-          <span class="latest-feature-updates-timestamp">
-            {{ entry.updated_at|date:"M j, H:i" }}
-          </span>
+        <div>
+          <strong>{{ app_entry.app_name }}</strong>
+        </div>
+        <div class="latest-feature-updates-links">
+          {% for feature in app_entry.features %}
+            <a href="{{ feature.admin_url }}">{{ feature.display }}</a>{% if not forloop.last %}<span aria-hidden="true"> · </span>{% endif %}
+          {% endfor %}
         </div>
       </li>
     {% empty %}
