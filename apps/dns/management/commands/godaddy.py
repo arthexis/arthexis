@@ -4,8 +4,8 @@ import os
 import sys
 from getpass import getpass
 
-from django.contrib.auth import get_user_model
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.dns.models import DNSProviderCredential
@@ -15,6 +15,7 @@ class Command(BaseCommand):
     """Manage GoDaddy DNS credentials from the CLI."""
 
     help = "Add, remove, or list GoDaddy DNS credentials."
+    SIGIL_FIELDS = frozenset({"api_secret", "customer_id", "default_domain"})
 
     def add_arguments(self, parser):
         """Register command-line arguments."""
@@ -22,7 +23,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "action",
             nargs="?",
-            choices=("add", "remove", "list"),
+            choices=("add", "remove", "list", "setup"),
             default="list",
             help="Action to perform. Defaults to 'list'.",
         )
@@ -65,6 +66,9 @@ class Command(BaseCommand):
             return
         if action == "remove":
             self._handle_remove(options)
+            return
+        if action == "setup":
+            self._handle_setup(options)
             return
         self._handle_list()
 
@@ -174,6 +178,68 @@ class Command(BaseCommand):
             raise CommandError(f"GoDaddy credential #{credential_id} was not found.")
 
         self.stdout.write(self.style.SUCCESS(f"Removed GoDaddy credential #{credential_id}."))
+
+    def _handle_setup(self, options: dict[str, object]) -> None:
+        """Create or update a GoDaddy DNS credential from key/secret input."""
+
+        api_key, api_secret = self._resolve_api_credentials(options)
+        username = str(options.get("user") or "").strip()
+        user = self._resolve_user(username) if username else None
+
+        credential = (
+            DNSProviderCredential.objects.filter(
+                provider=DNSProviderCredential.Provider.GODADDY,
+                api_key=api_key,
+            )
+            .order_by("pk")
+            .first()
+        )
+        defaults = {
+            "api_secret": api_secret,
+            "customer_id": str(options.get("customer_id") or "").strip(),
+            "default_domain": str(options.get("default_domain") or "").strip(),
+            "use_sandbox": bool(options.get("sandbox")),
+            "is_enabled": not bool(options.get("disabled")),
+        }
+        if user is not None:
+            defaults["user"] = user
+
+        if credential is None:
+            credential = DNSProviderCredential.objects.create(
+                provider=DNSProviderCredential.Provider.GODADDY,
+                api_key=api_key,
+                **defaults,
+            )
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Configured GoDaddy credential #{credential.pk} for API key '{api_key}'."
+                )
+            )
+            return
+
+        updated_fields: list[str] = []
+        for field, value in defaults.items():
+            current_value = (
+                credential.resolve_sigils(field)
+                if field in self.SIGIL_FIELDS
+                else getattr(credential, field)
+            )
+            if current_value != value:
+                setattr(credential, field, value)
+                updated_fields.append(field)
+        if updated_fields:
+            credential.save(update_fields=updated_fields)
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Updated GoDaddy credential #{credential.pk} for API key '{api_key}'."
+                )
+            )
+            return
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"GoDaddy credential #{credential.pk} for API key '{api_key}' is already up to date."
+            )
+        )
 
     def _handle_list(self) -> None:
         """Print GoDaddy DNS credentials."""

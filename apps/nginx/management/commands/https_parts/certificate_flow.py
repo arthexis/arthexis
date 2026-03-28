@@ -165,7 +165,12 @@ def _get_or_create_certificate(domain: str, config: SiteConfiguration, *, use_lo
     return certificate
 
 
-def _validate_godaddy_setup(service, certificate) -> None:
+def _validate_godaddy_setup(
+    service,
+    certificate,
+    *,
+    key: str | None = None,
+) -> None:
     """Validate GoDaddy DNS challenge prerequisites before provisioning."""
 
     if not isinstance(certificate._specific_certificate, CertbotCertificate):
@@ -175,21 +180,21 @@ def _validate_godaddy_setup(service, certificate) -> None:
         return
 
     credential = certbot.dns_credential
-    if not (
+    if key:
+        credential = _resolve_godaddy_credential(key=key)
+        if credential is None:
+            raise CommandError(
+                f"GoDaddy credential '{key}' was not found or is disabled. "
+                "Configure it with './command.sh godaddy setup ...' and retry."
+            )
+    elif not (
         credential
         and credential.is_enabled
         and credential.provider == DNSProviderCredential.Provider.GODADDY
     ):
-        credential = (
-            DNSProviderCredential.objects.filter(
-                provider=DNSProviderCredential.Provider.GODADDY,
-                is_enabled=True,
-            )
-            .order_by("pk")
-            .first()
-        )
-    if credential is None:
-        credential = _prompt_for_godaddy_credential(service, certbot.domain)
+        credential = _resolve_godaddy_credential(key=None)
+        if credential is None:
+            credential = _prompt_for_godaddy_credential(service, certbot.domain)
         if credential is None:
             raise CommandError(
                 "GoDaddy DNS validation requires credentials. Re-run with an interactive terminal or configure DNS > DNS Credentials in admin."
@@ -200,6 +205,27 @@ def _validate_godaddy_setup(service, certificate) -> None:
         "Using GoDaddy credential '%s'. Ensure certbot and Python requests are available to run DNS hooks."
         % credential
     )
+
+
+def _resolve_godaddy_credential(*, key: str | None = None) -> DNSProviderCredential | None:
+    """Resolve an enabled GoDaddy credential by selector or default ordering."""
+
+    queryset = DNSProviderCredential.objects.filter(
+        provider=DNSProviderCredential.Provider.GODADDY,
+        is_enabled=True,
+    ).order_by("pk")
+    if not key:
+        return queryset.first()
+
+    if key.isdigit():
+        credential = queryset.filter(pk=int(key)).first()
+        if credential:
+            return credential
+
+    for credential in queryset:
+        if (credential.resolve_sigils("api_key") or "").strip() == key:
+            return credential
+    return None
 
 
 def _prompt_for_godaddy_credential(service, domain: str) -> DNSProviderCredential | None:
@@ -255,6 +281,7 @@ def _provision_certificate(
     sudo: str,
     reload: bool,
     force_renewal: bool,
+    godaddy_credential_key: str | None,
 ) -> None:
     """Provision local or certbot certificates and handle recovery/warnings."""
 
@@ -280,7 +307,11 @@ def _provision_certificate(
             http01_bootstrapped = True
             _prepare_http01_challenge_site(service, domain, reload=reload)
         if use_godaddy:
-            _validate_godaddy_setup(service, certificate)
+            _validate_godaddy_setup(
+                service,
+                certificate,
+                key=godaddy_credential_key,
+            )
         certificate.provision(
             sudo=sudo,
             dns_use_sandbox=sandbox_override,

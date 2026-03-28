@@ -10,6 +10,7 @@ from django.core.management.base import CommandError
 
 from apps.certs.models import CertbotCertificate, CertificateBase
 from apps.certs.services import CertbotChallengeError, CertificateVerificationResult
+from apps.dns.models import DNSProviderCredential
 from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
 
@@ -49,7 +50,9 @@ def test_https_enable_with_godaddy_sets_dns_challenge(monkeypatch):
     from apps.nginx.management.commands.https_parts import certificate_flow
 
     monkeypatch.setattr(
-        certificate_flow, "_validate_godaddy_setup", lambda service, certificate: None
+        certificate_flow,
+        "_validate_godaddy_setup",
+        lambda service, certificate, **kwargs: None,
     )
 
     call_command("https", "--enable", "--godaddy", "example.com", "--no-sudo")
@@ -77,6 +80,129 @@ def test_https_enable_with_godaddy_requires_dns_credential(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_https_enable_with_godaddy_key_selects_matching_credential(monkeypatch):
+    """`https --godaddy --key` should bind the matching credential before provisioning."""
+
+    DNSProviderCredential.objects.create(api_key="primary", api_secret="secret-primary")
+    selected = DNSProviderCredential.objects.create(
+        api_key="preferred-key",
+        api_secret="secret-preferred",
+    )
+
+    provision_calls: dict[str, object] = {}
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        provision_calls["credential_id"] = self.dns_credential_id
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--enable", "--godaddy", "example.com", "--key", "preferred-key")
+
+    assert provision_calls["credential_id"] == selected.pk
+
+
+@pytest.mark.django_db
+def test_https_enable_with_godaddy_key_errors_when_missing(monkeypatch):
+    """`https --godaddy --key` should fail fast when the requested credential is unavailable."""
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    with pytest.raises(CommandError, match="credential 'missing-key' was not found"):
+        call_command(
+            "https",
+            "--enable",
+            "--godaddy",
+            "example.com",
+            "--key",
+            "missing-key",
+        )
+
+
+@pytest.mark.django_db
+def test_https_enable_with_godaddy_key_overrides_existing_bound_credential(monkeypatch):
+    """`--key` should override an existing enabled dns_credential binding."""
+
+    existing = DNSProviderCredential.objects.create(api_key="existing", api_secret="secret-existing")
+    selected = DNSProviderCredential.objects.create(api_key="selected", api_secret="secret-selected")
+
+    provision_calls: dict[str, object] = {}
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        provision_calls["credential_id"] = self.dns_credential_id
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    config = SiteConfiguration.objects.create(name="example.com")
+    cert = CertbotCertificate.objects.create(
+        name="existing-cert",
+        domain="example.com",
+        challenge_type=CertbotCertificate.ChallengeType.GODADDY,
+        dns_credential=existing,
+        certificate_path="/tmp/fullchain.pem",
+        certificate_key_path="/tmp/privkey.pem",
+    )
+    config.certificate = cert
+    config.save(update_fields=["certificate"])
+
+    call_command("https", "--enable", "--godaddy", "example.com", "--key", "selected")
+
+    assert provision_calls["credential_id"] == selected.pk
+
+
+@pytest.mark.django_db
+def test_https_enable_with_godaddy_numeric_key_can_match_api_key(monkeypatch):
+    """Numeric selectors should fall back to API key matching when pk lookup misses."""
+
+    selected = DNSProviderCredential.objects.create(api_key="424242", api_secret="secret-selected")
+
+    provision_calls: dict[str, object] = {}
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        provision_calls["credential_id"] = self.dns_credential_id
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--enable", "--godaddy", "example.com", "--key", "424242")
+
+    assert provision_calls["credential_id"] == selected.pk
+
+
+@pytest.mark.django_db
 def test_https_godaddy_implies_enable(monkeypatch):
     """`https --godaddy` should implicitly behave like `https --enable --godaddy`."""
 
@@ -100,7 +226,9 @@ def test_https_godaddy_implies_enable(monkeypatch):
     from apps.nginx.management.commands.https_parts import certificate_flow
 
     monkeypatch.setattr(
-        certificate_flow, "_validate_godaddy_setup", lambda service, certificate: None
+        certificate_flow,
+        "_validate_godaddy_setup",
+        lambda service, certificate, **kwargs: None,
     )
 
     call_command("https", "--godaddy", "example.net", "--no-sudo")

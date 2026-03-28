@@ -101,3 +101,79 @@ def test_godaddy_remove_errors_when_credential_not_found():
 
     with pytest.raises(CommandError, match="GoDaddy credential #9999"):
         call_command("godaddy", "remove", "9999")
+
+
+@pytest.mark.django_db
+def test_godaddy_setup_creates_credential_without_owner():
+    """Setup should persist key/secret so HTTPS DNS-01 can reuse them later."""
+
+    stdout = StringIO()
+    call_command(
+        "godaddy",
+        "setup",
+        api_key="stored-key",
+        api_secret="stored-secret",
+        default_domain="example.com",
+        sandbox=True,
+        stdout=stdout,
+    )
+
+    credential = DNSProviderCredential.objects.get()
+    assert credential.resolve_sigils("api_key") == "stored-key"
+    assert credential.resolve_sigils("api_secret") == "stored-secret"
+    assert credential.get_default_domain() == "example.com"
+    assert "Configured GoDaddy credential" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_godaddy_setup_updates_existing_credential():
+    """Setup should update the existing credential when API key already exists."""
+
+    credential = DNSProviderCredential.objects.create(
+        api_key="shared-key",
+        api_secret="old-secret",
+        customer_id="old-customer",
+    )
+
+    stdout = StringIO()
+    call_command(
+        "godaddy",
+        "setup",
+        api_key="shared-key",
+        api_secret="new-secret",
+        customer_id="new-customer",
+        sandbox=True,
+        stdout=stdout,
+    )
+
+    credential.refresh_from_db()
+    assert credential.resolve_sigils("api_secret") == "new-secret"
+    assert credential.get_customer_id() == "new-customer"
+    assert "Updated GoDaddy credential" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_godaddy_setup_reports_up_to_date_for_matching_encrypted_fields():
+    """Setup should not rewrite encrypted fields when values are unchanged."""
+
+    DNSProviderCredential.objects.create(
+        api_key="stable-key",
+        api_secret="stable-secret",
+        customer_id="stable-customer",
+        default_domain="stable.example.com",
+        use_sandbox=True,
+    )
+
+    stdout = StringIO()
+    call_command(
+        "godaddy",
+        "setup",
+        api_key="stable-key",
+        api_secret="stable-secret",
+        customer_id="stable-customer",
+        default_domain="stable.example.com",
+        sandbox=True,
+        stdout=stdout,
+    )
+
+    assert "is already up to date" in stdout.getvalue()

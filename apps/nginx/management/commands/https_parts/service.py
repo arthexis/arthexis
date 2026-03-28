@@ -104,6 +104,7 @@ class HttpsProvisioningService:
         reload = not options["no_reload"]
         sudo = "" if options["no_sudo"] else "sudo"
         force_renewal = options["force_renewal"]
+        godaddy_credential_key = (options.get("key") or "").strip() or None
         warn_days = options["warn_days"]
 
         if warn_days < 0:
@@ -179,6 +180,7 @@ class HttpsProvisioningService:
                     sudo=sudo,
                     reload=reload,
                     force_renewal=force_renewal,
+                    godaddy_credential_key=godaddy_credential_key,
                     warn_days=warn_days,
                     migrate_from_config=migration_source_config,
                 )
@@ -192,6 +194,7 @@ class HttpsProvisioningService:
                 sudo=sudo,
                 reload=reload,
                 force_renewal=force_renewal,
+                godaddy_credential_key=godaddy_credential_key,
                 warn_days=warn_days,
             )
             transaction.on_commit(update_local_nginx_scripts)
@@ -212,6 +215,7 @@ class HttpsProvisioningService:
         sudo: str,
         reload: bool,
         force_renewal: bool,
+        godaddy_credential_key: str | None,
         warn_days: int,
         migrate_from_config: SiteConfiguration | None = None,
     ):
@@ -225,6 +229,7 @@ class HttpsProvisioningService:
             sudo: Prefix used for shell commands requiring privileged access.
             reload: Whether nginx should be reloaded after config changes.
             force_renewal: Whether certificate issuance should force renewal.
+            godaddy_credential_key: Optional GoDaddy credential selector used for DNS-01 flows.
             warn_days: Threshold in days to warn if certificate expiry is near.
             migrate_from_config: Optional source configuration to copy during migration.
 
@@ -260,6 +265,7 @@ class HttpsProvisioningService:
             sudo=sudo,
             reload=reload,
             force_renewal=force_renewal,
+            godaddy_credential_key=godaddy_credential_key,
         )
 
         _warn_if_certificate_expiring_soon(self, certificate, warn_days=warn_days)
