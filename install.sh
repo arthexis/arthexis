@@ -516,12 +516,11 @@ if ! PYTHON_BOOTSTRAP_BIN="$(arthexis_python_bin)"; then
     exit 1
 fi
 
-if [ -f "$DB_FILE" ] && [ "$CLEAN" = false ] && { [ "$UPGRADE" = true ] || [ "$REPAIR" = true ]; }; then
-    if ! "$PYTHON_BOOTSTRAP_BIN" "$LEGACY_DB_GUARD" --db "$DB_FILE" --repo "$BASE_DIR"; then
-        echo "Install aborted: existing database follows an unsupported legacy migration path." >&2
-        echo "Use --clean for a fresh reinstall, then import data per docs/operations/reinstall-data-import-runbook.md." >&2
-        exit 1
-    fi
+if [[ -f "$DB_FILE" && "$CLEAN" = false && ( "$UPGRADE" = true || "$REPAIR" = true ) ]] && \
+    ! "$PYTHON_BOOTSTRAP_BIN" "$LEGACY_DB_GUARD" --db "$DB_FILE" --repo "$BASE_DIR"; then
+    echo "Install aborted: existing database follows an unsupported legacy migration path." >&2
+    echo "Use --clean for a fresh reinstall, then import data per docs/operations/reinstall-data-import-runbook.md." >&2
+    exit 1
 fi
 
 # Record role-specific prerequisites and capture supporting state for service management.

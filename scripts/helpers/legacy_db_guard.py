@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import sqlite3
 import sys
 from pathlib import Path
@@ -35,13 +36,14 @@ def _current_migration_keys(repo_root: Path) -> set[tuple[str, str]]:
         return keys
 
     for app_dir in sorted(path for path in apps_dir.iterdir() if path.is_dir()):
+        app_label = _app_label_for_dir(app_dir)
         migrations_dir = app_dir / "migrations"
         if not migrations_dir.is_dir():
             continue
         for migration_file in sorted(migrations_dir.glob("*.py")):
             if migration_file.name == "__init__.py":
                 continue
-            keys.add((app_dir.name, migration_file.stem))
+            keys.add((app_label, migration_file.stem))
     return keys
 
 
@@ -49,7 +51,33 @@ def _current_project_labels(repo_root: Path) -> set[str]:
     apps_dir = repo_root / "apps"
     if not apps_dir.exists():
         return set()
-    return {path.name for path in apps_dir.iterdir() if path.is_dir()}
+    return {_app_label_for_dir(path) for path in apps_dir.iterdir() if path.is_dir()}
+
+
+def _app_label_for_dir(app_dir: Path) -> str:
+    default_label = app_dir.name
+    apps_module = app_dir / "apps.py"
+    if not apps_module.is_file():
+        return default_label
+    try:
+        parsed = ast.parse(apps_module.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return default_label
+
+    for node in parsed.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for stmt in node.body:
+            if not isinstance(stmt, ast.Assign):
+                continue
+            if len(stmt.targets) != 1:
+                continue
+            target = stmt.targets[0]
+            if not isinstance(target, ast.Name) or target.id != "label":
+                continue
+            if isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
+                return stmt.value.value
+    return default_label
 
 
 def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
@@ -61,14 +89,11 @@ def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
 
 
 def _applied_migration_keys(db_path: Path) -> set[tuple[str, str]]:
-    conn = sqlite3.connect(db_path)
-    try:
+    with sqlite3.connect(db_path) as conn:
         if not _table_exists(conn, "django_migrations"):
             return set()
         rows = conn.execute("SELECT app, name FROM django_migrations").fetchall()
         return {(str(app), str(name)) for app, name in rows}
-    finally:
-        conn.close()
 
 
 def _parse_args() -> argparse.Namespace:
@@ -100,11 +125,11 @@ def main() -> int:
     known = _current_migration_keys(repo_root)
     if not known:
         print(
-            "Could not detect current migration files under apps/*/migrations; "
-            "skipping legacy DB guard.",
+            "Error: Could not detect current migration files under apps/*/migrations. "
+            "Cannot perform legacy DB guard check.",
             file=sys.stderr,
         )
-        return 0
+        return 1
 
     applied = _applied_migration_keys(db_path)
     project_labels = _current_project_labels(repo_root)

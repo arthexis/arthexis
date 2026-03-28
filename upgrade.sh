@@ -1986,12 +1986,11 @@ if [ "$CLEAN" -eq 1 ]; then
   rm -f db_*.sqlite3* 2>/dev/null || true
 fi
 
-if [ -f "$BASE_DIR/db.sqlite3" ] && [ "$CLEAN" -ne 1 ]; then
-  if ! "$PYTHON_BIN" "$LEGACY_DB_GUARD" --db "$BASE_DIR/db.sqlite3" --repo "$BASE_DIR"; then
-    echo "Upgrade aborted: existing database follows an unsupported legacy migration path." >&2
-    echo "Reinstall on a fresh database and import data per docs/operations/reinstall-data-import-runbook.md." >&2
-    exit 1
-  fi
+if [[ -f "$BASE_DIR/db.sqlite3" && "$CLEAN" -ne 1 ]] && \
+   ! "$PYTHON_BIN" "$LEGACY_DB_GUARD" --db "$BASE_DIR/db.sqlite3" --repo "$BASE_DIR"; then
+  echo "Upgrade aborted: existing database follows an unsupported legacy migration path." >&2
+  echo "Reinstall on a fresh database and import data per docs/operations/reinstall-data-import-runbook.md." >&2
+  exit 1
 fi
 
 # Refresh environment and restart service
