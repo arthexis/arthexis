@@ -10,23 +10,48 @@ from apps.sites.defaults import DEFAULT_APPLICATION_DESCRIPTIONS
 class Command(BaseCommand):
     help = "Create Application entries for installed local apps."
 
+    @staticmethod
+    def _application_labels() -> list[str]:
+        """Return local application labels that should exist in ``Application``."""
+
+        configured_apps = getattr(settings, "PROJECT_LOCAL_APPS", None)
+        if not isinstance(configured_apps, list):
+            configured_apps = getattr(settings, "LOCAL_APPS", [])
+
+        labels: set[str] = set()
+        for app_entry in configured_apps:
+            if not isinstance(app_entry, str):
+                continue
+            app_path = app_entry.strip()
+            if not app_path:
+                continue
+
+            try:
+                config = django_apps.get_app_config(app_path)
+            except LookupError:
+                config = next(
+                    (candidate for candidate in django_apps.get_app_configs() if candidate.name == app_path),
+                    None,
+                )
+            if config is not None:
+                labels.add(config.label)
+
+        if labels:
+            return sorted(labels)
+
+        return sorted(
+            config.label for config in django_apps.get_app_configs() if config.name.startswith("apps.")
+        )
+
     def handle(self, *args, **options):
         Site.objects.filter(domain="zephyrus").delete()
         site, _ = Site.objects.update_or_create(
             domain="127.0.0.1", defaults={"name": "Local"}
         )
-        application_apps = getattr(settings, "LOCAL_APPS", [])
+        del site
 
-        for app_label in application_apps:
-            try:
-                config = django_apps.get_app_config(app_label)
-            except LookupError:
-                config = next(
-                    (c for c in django_apps.get_app_configs() if c.name == app_label),
-                    None,
-                )
-                if config is None:
-                    continue
+        for app_label in self._application_labels():
+            config = django_apps.get_app_config(app_label)
             description = DEFAULT_APPLICATION_DESCRIPTIONS.get(config.label, "")
             app, created = Application.objects.get_or_create(
                 name=config.label, defaults={"description": description}
