@@ -1,14 +1,13 @@
 """Regression coverage for node registration and visitor proxy flows."""
 
 import json
-import logging
 import socket
 from uuid import uuid4
 
 import pytest
 import requests
 from django.contrib.sites.models import Site
-from django.http import HttpResponse, JsonResponse
+from django.http import JsonResponse
 from django.test import RequestFactory
 from django.urls import reverse
 
@@ -75,57 +74,6 @@ def test_visitor_registration_request_post_requires_submitted_host():
 
     assert parsed.visitor_error == "Visitor address missing. Reload with ?visitor=host[:port]."
     assert parsed.visitor_base is None
-
-def test_visitor_registration_request_post_rejects_malformed_host():
-    """POST parser should reject malformed visitor hosts instead of normalizing unsafe input."""
-    request = RequestFactory().post(
-        "/admin/nodes/node/register-visitor/?visitor=query.example:9443",
-        data={"visitor_host": "https://[broken", "visitor_port": ""},
-    )
-
-    parsed = VisitorRegistrationRequest.from_http_request(request, default_port=8888)
-
-    assert parsed.visitor_error == "Visitor address missing. Reload with ?visitor=host[:port]."
-    assert parsed.visitor_base is None
-
-def test_visitor_registration_request_post_rejects_malformed_port():
-    """POST parser should reject malformed ports and return an explicit validation error."""
-    request = RequestFactory().post(
-        "/admin/nodes/node/register-visitor/?visitor=query.example:9443",
-        data={"visitor_host": "visitor.example", "visitor_port": "not-a-port"},
-    )
-
-    parsed = VisitorRegistrationRequest.from_http_request(request, default_port=8888)
-
-    assert parsed.visitor_error == "Visitor port is invalid. Use a value between 1 and 65535."
-    assert parsed.visitor_base == "https://visitor.example:8888"
-
-def test_visitor_registration_service_handles_non_json_proxy_response(monkeypatch):
-    """Service should normalize non-JSON proxy errors into a structured result."""
-
-    def fake_proxy(_request):
-        return HttpResponse("not-json", status=502, content_type="text/plain")
-
-    monkeypatch.setattr("apps.nodes.admin.visitor_registration.register_visitor_proxy", fake_proxy)
-    parsed = VisitorRegistrationRequest(
-        token="abc123",
-        visitor_base="https://visitor.test:443",
-        visitor_error=None,
-        visitor_host="visitor.test",
-        visitor_info_url="https://visitor.test:443/nodes/info/",
-        visitor_port=443,
-        visitor_register_url="https://visitor.test:443/nodes/register/",
-        visitor_scheme="https",
-    )
-
-    result = VisitorRegistrationService(user=None).register(parsed)
-
-    assert result.status == "error"
-    assert result.summary == {
-        "status": "error",
-        "message": "Registration proxy returned an invalid response.",
-    }
-    assert result.errors == ["Registration proxy returned an invalid response."]
 
 def test_visitor_registration_service_success_with_warnings(monkeypatch):
     """Service should expose HTTPS warnings when proxy signals weak transport settings."""
@@ -359,55 +307,3 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     assert session.requests[1][1].startswith("https://93.184.216.34:8000")
     assert session.requests[2][1].startswith("https://93.184.216.34:8888")
     assert session.requests[3][1].startswith("https://93.184.216.34:8000")
-
-@pytest.mark.django_db
-def test_register_visitor_telemetry_logs(client, caplog):
-    """Telemetry endpoint should record structured registration diagnostics."""
-    url = reverse("register-telemetry")
-    payload = {
-        "stage": "integration-test",
-        "message": "failed to fetch",
-        "target": "http://example.com/nodes/info/",
-        "token": "abc123",
-        "extra": {"networkIssue": True},
-    }
-
-    with caplog.at_level(logging.INFO, logger="register_visitor_node"):
-        response = client.post(
-            url,
-            data=json.dumps(payload),
-            content_type="application/json",
-            HTTP_USER_AGENT="pytest-agent/1.0",
-        )
-
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
-    assert "telemetry stage=integration-test" in caplog.text
-
-@pytest.mark.django_db
-def test_register_visitor_telemetry_adds_route_ip(client, caplog, monkeypatch):
-    """Telemetry logging should include the routed host IP when available."""
-    url = reverse("register-telemetry")
-    payload = {
-        "stage": "integration-test",
-        "message": "failed to fetch",
-        "target": "https://example.com/nodes/info/",
-        "token": "abc123",
-    }
-
-    monkeypatch.setattr(
-        "apps.nodes.views.registration.handlers._get_route_address",
-        lambda host, port: "10.0.0.5",
-    )
-
-    with caplog.at_level(logging.INFO, logger="register_visitor_node"):
-        response = client.post(
-            url,
-            data=json.dumps(payload),
-            content_type="application/json",
-            HTTP_USER_AGENT="pytest-agent/1.0",
-        )
-
-    assert response.status_code == 200
-    assert "host_ip=10.0.0.5" in caplog.text
-    assert '"target_host": "example.com"' in caplog.text

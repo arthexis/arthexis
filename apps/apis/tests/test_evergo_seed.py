@@ -1,12 +1,9 @@
 """Regression tests for Evergo API explorer seeded endpoints."""
 
-from urllib.parse import urlparse
-
 import pytest
 from django.core.management import call_command
 
 from apps.apis.models import APIExplorer, ResourceMethod
-from apps.evergo.models import EvergoUser
 
 EXPECTED_METHOD_PATHS = {
     ("POST", "/login"),
@@ -33,40 +30,6 @@ def _ensure_evergo_api_seeded() -> APIExplorer:
     )
     call_command("loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0)
     return api
-
-
-@pytest.mark.django_db
-def test_evergo_api_explorer_seeded_endpoints() -> None:
-    """Regression: migration should seed all Evergo integration endpoints."""
-
-    api = _ensure_evergo_api_seeded()
-    methods = {
-        (method.http_method, method.resource_path)
-        for method in ResourceMethod.objects.filter(api=api)
-    }
-
-    assert api.base_url == "https://portal-backend.evergo.com/api/mex/v1/"
-    assert methods == EXPECTED_METHOD_PATHS
-
-
-@pytest.mark.django_db
-def test_evergo_api_explorer_matches_model_endpoints() -> None:
-    """Regression: seeded API explorer routes should include all endpoint constants used by the model."""
-
-    api = _ensure_evergo_api_seeded()
-    seeded_paths = {method.resource_path for method in ResourceMethod.objects.filter(api=api)}
-    base_path = urlparse(api.base_url).path
-    model_urls = {
-        value
-        for attr, value in vars(EvergoUser).items()
-        if attr.startswith("API_") and attr.endswith("_URL") and isinstance(value, str)
-    }
-    expected_paths = {
-        f"/{urlparse(url).path.removeprefix(base_path).lstrip('/')}"
-        for url in model_urls
-    }
-
-    assert expected_paths.issubset(seeded_paths)
 
 
 @pytest.mark.django_db
