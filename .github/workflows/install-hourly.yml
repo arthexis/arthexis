@@ -17,7 +17,20 @@ on:
 
 jobs:
   install:
+    name: install (${{ matrix.role }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - role: terminal
+            install_args: --terminal
+          - role: control
+            install_args: --control
+          - role: satellite
+            install_args: --satellite
+          - role: watchtower
+            install_args: --watchtower
     permissions:
       contents: read
     services:
@@ -60,7 +73,7 @@ jobs:
           python "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
       - name: Install suite from repository
         run: |
-          ./install.sh --no-start
+          ./install.sh ${{ matrix.install_args }} --no-start
       - name: Install CI dependencies
         run: |
           source .venv/bin/activate
@@ -128,7 +141,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: install-hourly-pytest-log
+          name: install-hourly-pytest-log-${{ matrix.role }}
           path: pytest.log
           if-no-files-found: warn
 
