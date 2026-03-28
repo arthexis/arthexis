@@ -1,0 +1,22 @@
+# Management command deprecation pattern
+
+Arthexis no longer ships runtime shims for deprecated management commands.
+When a command is absorbed into a newer surface, keep the compatibility guidance in documentation and release notes instead of importing transitional helpers at runtime.
+
+## Minimal migration note template
+
+Use a short mapping table in docs/changelog content so operators can update automation scripts:
+
+| Removed command | Replacement |
+| --- | --- |
+| `python manage.py old_command [args...]` | `python manage.py new_command [args...]` |
+
+## Optional shell migration snippet
+
+For one-time script updates, include a simple substitution example:
+
+```bash
+sed -i \
+  -e 's/python manage.py old_command/python manage.py new_command/g' \
+  path/to/ops-script.sh
+```
