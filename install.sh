@@ -480,10 +480,6 @@ fi
 
 mkdir -p "$LOCK_DIR"
 arthexis_record_service_mode "$LOCK_DIR" "$SERVICE_MANAGEMENT_MODE"
-if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
-    reset_service_units_for_repair "$SERVICE"
-fi
-
 if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ]; then
     if [ -n "$SERVICE" ]; then
         arthexis_remove_celery_unit_stack "$LOCK_DIR" "$SERVICE"
@@ -514,8 +510,8 @@ fi
 if [[ -f "$DB_FILE" && "$CLEAN" = false && ( "$UPGRADE" = true || "$REPAIR" = true ) ]]; then
     guard_rc=0
     "$PYTHON_BOOTSTRAP_BIN" "$LEGACY_DB_GUARD" --db "$DB_FILE" --repo "$BASE_DIR" || guard_rc=$?
-    if [ "$guard_rc" -ne 0 ]; then
-        if [ "$guard_rc" -eq 2 ]; then
+    if [[ "$guard_rc" -ne 0 ]]; then
+        if [[ "$guard_rc" -eq 2 ]]; then
             echo "Install aborted: existing database follows an unsupported legacy migration path." >&2
             echo "Use --clean for a fresh reinstall, then import data per docs/operations/reinstall-data-import-runbook.md." >&2
         else
@@ -527,6 +523,7 @@ if [[ -f "$DB_FILE" && "$CLEAN" = false && ( "$UPGRADE" = true || "$REPAIR" = tr
 fi
 
 if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
+    reset_service_units_for_repair "$SERVICE"
     stop_existing_units_for_repair "$SERVICE"
 fi
 

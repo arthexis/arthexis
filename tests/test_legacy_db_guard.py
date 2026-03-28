@@ -155,6 +155,40 @@ def test_guard_uses_django_app_labels_from_app_config(tmp_path: Path) -> None:
     assert result.stderr == ""
 
 
+def test_guard_discovers_nested_apps_and_labels(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    db_path = tmp_path / "db.sqlite3"
+    nested_app_dir = repo_root / "apps" / "forwarder" / "ocpp"
+    (nested_app_dir / "migrations").mkdir(parents=True, exist_ok=True)
+    (nested_app_dir / "migrations" / "__init__.py").write_text("", encoding="utf-8")
+    (nested_app_dir / "migrations" / "0001_initial.py").write_text("", encoding="utf-8")
+    (nested_app_dir / "apps.py").write_text(
+        "from django.apps import AppConfig\n\n"
+        "class OcppForwarderConfig(AppConfig):\n"
+        "    name = 'apps.forwarder.ocpp'\n"
+        "    label = 'ocpp_forwarder'\n",
+        encoding="utf-8",
+    )
+    _write_db(db_path, [("ocpp_forwarder", "0001_initial"), ("ocpp_forwarder", "0099_legacy")])
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--db",
+            str(db_path),
+            "--repo",
+            str(repo_root),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "ocpp_forwarder.0099_legacy" in result.stderr
+
+
 def test_guard_fails_when_migration_graph_cannot_be_detected(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     db_path = tmp_path / "db.sqlite3"

@@ -29,13 +29,26 @@ LEGACY_BLOCKED_LABELS = {
 }
 
 
-def _current_migration_keys(repo_root: Path) -> set[tuple[str, str]]:
-    keys: set[tuple[str, str]] = set()
+def _candidate_app_dirs(repo_root: Path) -> list[Path]:
     apps_dir = repo_root / "apps"
     if not apps_dir.exists():
-        return keys
+        return []
+    candidates = {
+        path.parent
+        for path in apps_dir.rglob("apps.py")
+        if path.is_file()
+    }
+    candidates |= {
+        path.parent
+        for path in apps_dir.rglob("migrations")
+        if path.is_dir()
+    }
+    return sorted(candidates)
 
-    for app_dir in sorted(path for path in apps_dir.iterdir() if path.is_dir()):
+
+def _current_migration_keys(repo_root: Path) -> set[tuple[str, str]]:
+    keys: set[tuple[str, str]] = set()
+    for app_dir in _candidate_app_dirs(repo_root):
         app_label = _app_label_for_dir(app_dir)
         migrations_dir = app_dir / "migrations"
         if not migrations_dir.is_dir():
@@ -48,10 +61,7 @@ def _current_migration_keys(repo_root: Path) -> set[tuple[str, str]]:
 
 
 def _current_project_labels(repo_root: Path) -> set[str]:
-    apps_dir = repo_root / "apps"
-    if not apps_dir.exists():
-        return set()
-    return {_app_label_for_dir(path) for path in apps_dir.iterdir() if path.is_dir()}
+    return {_app_label_for_dir(path) for path in _candidate_app_dirs(repo_root)}
 
 
 def _app_label_for_dir(app_dir: Path) -> str:
