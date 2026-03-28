@@ -164,3 +164,18 @@ def test_build_rpi4b_image_treats_windows_drive_paths_as_local_sources(tmp_path:
             git_url="https://github.com/arthexis/arthexis.git",
             customize=False,
         )
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_treats_windows_backslash_drive_paths_as_local_sources(tmp_path: Path) -> None:
+    """Regression: Windows drive-letter backslash paths should fail as missing local files."""
+
+    with pytest.raises(ImagerBuildError, match="Base image does not exist:"):
+        build_rpi4b_image(
+            name="stable",
+            base_image_uri=r"C:\missing\base.img",
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+        )
