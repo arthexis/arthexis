@@ -134,6 +134,75 @@ def test_https_enable_with_godaddy_key_errors_when_missing(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_https_enable_with_godaddy_key_overrides_existing_bound_credential(monkeypatch):
+    """`--key` should override an existing enabled dns_credential binding."""
+
+    existing = DNSProviderCredential.objects.create(api_key="existing", api_secret="secret-existing")
+    selected = DNSProviderCredential.objects.create(api_key="selected", api_secret="secret-selected")
+
+    provision_calls: dict[str, object] = {}
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        provision_calls["credential_id"] = self.dns_credential_id
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    config = SiteConfiguration.objects.create(name="example.com")
+    cert = CertbotCertificate.objects.create(
+        name="existing-cert",
+        domain="example.com",
+        challenge_type=CertbotCertificate.ChallengeType.GODADDY,
+        dns_credential=existing,
+        certificate_path="/tmp/fullchain.pem",
+        certificate_key_path="/tmp/privkey.pem",
+    )
+    config.certificate = cert
+    config.save(update_fields=["certificate"])
+
+    call_command("https", "--enable", "--godaddy", "example.com", "--key", "selected")
+
+    assert provision_calls["credential_id"] == selected.pk
+
+
+@pytest.mark.django_db
+def test_https_enable_with_godaddy_numeric_key_can_match_api_key(monkeypatch):
+    """Numeric selectors should fall back to API key matching when pk lookup misses."""
+
+    selected = DNSProviderCredential.objects.create(api_key="424242", api_secret="secret-selected")
+
+    provision_calls: dict[str, object] = {}
+
+    def fake_request(
+        self, *, sudo: str = "sudo", dns_use_sandbox=None, force_renewal: bool = False
+    ):
+        provision_calls["credential_id"] = self.dns_credential_id
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="ok"
+        )
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    call_command("https", "--enable", "--godaddy", "example.com", "--key", "424242")
+
+    assert provision_calls["credential_id"] == selected.pk
+
+
+@pytest.mark.django_db
 def test_https_godaddy_implies_enable(monkeypatch):
     """`https --godaddy` should implicitly behave like `https --enable --godaddy`."""
 

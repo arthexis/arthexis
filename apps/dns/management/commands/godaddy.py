@@ -15,6 +15,7 @@ class Command(BaseCommand):
     """Manage GoDaddy DNS credentials from the CLI."""
 
     help = "Add, remove, or list GoDaddy DNS credentials."
+    SIGIL_FIELDS = frozenset({"api_secret", "customer_id", "default_domain"})
 
     def add_arguments(self, parser):
         """Register command-line arguments."""
@@ -218,7 +219,12 @@ class Command(BaseCommand):
 
         updated_fields: list[str] = []
         for field, value in defaults.items():
-            if getattr(credential, field) != value:
+            current_value = (
+                credential.resolve_sigils(field)
+                if field in self.SIGIL_FIELDS
+                else getattr(credential, field)
+            )
+            if current_value != value:
                 setattr(credential, field, value)
                 updated_fields.append(field)
         if updated_fields:

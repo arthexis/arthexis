@@ -150,3 +150,30 @@ def test_godaddy_setup_updates_existing_credential():
     assert credential.resolve_sigils("api_secret") == "new-secret"
     assert credential.get_customer_id() == "new-customer"
     assert "Updated GoDaddy credential" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_godaddy_setup_reports_up_to_date_for_matching_encrypted_fields():
+    """Setup should not rewrite encrypted fields when values are unchanged."""
+
+    DNSProviderCredential.objects.create(
+        api_key="stable-key",
+        api_secret="stable-secret",
+        customer_id="stable-customer",
+        default_domain="stable.example.com",
+        use_sandbox=True,
+    )
+
+    stdout = StringIO()
+    call_command(
+        "godaddy",
+        "setup",
+        api_key="stable-key",
+        api_secret="stable-secret",
+        customer_id="stable-customer",
+        default_domain="stable.example.com",
+        sandbox=True,
+        stdout=stdout,
+    )
+
+    assert "is already up to date" in stdout.getvalue()

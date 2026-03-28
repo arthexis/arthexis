@@ -180,18 +180,20 @@ def _validate_godaddy_setup(
         return
 
     credential = certbot.dns_credential
-    if not (
+    if key:
+        credential = _resolve_godaddy_credential(key=key)
+        if credential is None:
+            raise CommandError(
+                f"GoDaddy credential '{key}' was not found or is disabled. "
+                "Configure it with './command.sh godaddy setup ...' and retry."
+            )
+    elif not (
         credential
         and credential.is_enabled
         and credential.provider == DNSProviderCredential.Provider.GODADDY
     ):
-        credential = _resolve_godaddy_credential(key=key)
+        credential = _resolve_godaddy_credential(key=None)
         if credential is None:
-            if key:
-                raise CommandError(
-                    f"GoDaddy credential '{key}' was not found or is disabled. "
-                    "Configure it with './command.sh godaddy setup ...' and retry."
-                )
             credential = _prompt_for_godaddy_credential(service, certbot.domain)
         if credential is None:
             raise CommandError(
@@ -216,7 +218,9 @@ def _resolve_godaddy_credential(*, key: str | None = None) -> DNSProviderCredent
         return queryset.first()
 
     if key.isdigit():
-        return queryset.filter(pk=int(key)).first()
+        credential = queryset.filter(pk=int(key)).first()
+        if credential:
+            return credential
 
     for credential in queryset:
         if (credential.resolve_sigils("api_key") or "").strip() == key:

@@ -123,7 +123,8 @@ class Command(BaseCommand):
             metavar="CREDENTIAL",
             help=(
                 "GoDaddy credential selector for DNS-01 runs. "
-                "Accepts a credential ID or an exact stored GoDaddy API key."
+                "Accepts a credential ID or an exact stored GoDaddy API key. "
+                "When omitted, HTTPS uses the first enabled GoDaddy credential ordered by ID."
             ),
         )
         parser.add_argument(
