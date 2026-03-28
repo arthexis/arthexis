@@ -1,4 +1,5 @@
 from django.apps import AppConfig
+from django.db.models.signals import post_migrate
 
 
 class FeaturesConfig(AppConfig):
@@ -9,3 +10,11 @@ class FeaturesConfig(AppConfig):
 
     def ready(self):  # pragma: no cover - import for side effects
         from . import widgets  # noqa: F401
+        from .loader import load_feature_seed_data
+
+        post_migrate.connect(
+            load_feature_seed_data,
+            sender=self,
+            dispatch_uid="features_load_feature_seed_data",
+            weak=False,
+        )

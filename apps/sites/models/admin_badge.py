@@ -6,6 +6,11 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.models.ownable import Ownable
 
 
+class AdminBadgeManager(models.Manager):
+    def get_by_natural_key(self, slug: str):  # pragma: no cover - fixture hook
+        return self.get(slug=slug)
+
+
 class AdminBadge(Ownable):
     """Configurable admin header badge definition."""
 
@@ -46,10 +51,15 @@ class AdminBadge(Ownable):
     is_enabled = models.BooleanField(default=True)
     priority = models.IntegerField(default=0)
 
+    objects = AdminBadgeManager()
+
     class Meta:
         ordering = ("priority", "pk")
         verbose_name = _("Admin Badge")
         verbose_name_plural = _("Admin Badges")
+
+    def natural_key(self):  # pragma: no cover - fixture hook
+        return (self.slug,)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
