@@ -87,6 +87,16 @@ def reset_store(monkeypatch, tmp_path):
     store.charging_profile_reports.clear()
 
 
+
+
+@pytest.fixture
+def charger_factory():
+    async def _create_charger(**kwargs):
+        return await database_sync_to_async(Charger.objects.create)(**kwargs)
+
+    return _create_charger
+
+
 def _reset_pending_calls() -> None:
     store.pending_calls.clear()
     store._pending_call_events.clear()
@@ -97,6 +107,8 @@ def _reset_pending_calls() -> None:
         except Exception:
             pass
     store._pending_call_handles.clear()
+
+
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.critical
@@ -1434,8 +1446,11 @@ async def test_request_start_transaction_result_tracks_status():
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.critical
-async def test_transaction_event_updates_request_status(monkeypatch):
-    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TRX")
+async def test_transaction_event_updates_request_status(monkeypatch, charger_factory):
+    charger = await charger_factory(
+        charger_id="CP-TRX",
+        authorization_policy=Charger.AuthorizationPolicy.OPEN,
+    )
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, 1)
     consumer.charger_id = charger.charger_id
@@ -1474,6 +1489,13 @@ async def test_transaction_event_updates_request_status(monkeypatch):
 
     assert store.transaction_requests["msg-req-2"]["status"] == "started"
     assert store.transaction_requests["msg-req-2"]["transaction_id"] == "TX-201"
+    started_tx = await database_sync_to_async(Transaction.objects.get)(
+        charger=charger, ocpp_transaction_id="TX-201"
+    )
+    assert (
+        started_tx.authorization_status
+        == Transaction.AuthorizationStatus.ACCEPTED
+    )
 
     payload["eventType"] = "Ended"
     await consumer._handle_transaction_event_action(payload, "msg-evt-2", "", "")
@@ -1486,9 +1508,11 @@ async def test_transaction_event_updates_request_status(monkeypatch):
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.critical
-async def test_transaction_event_does_not_start_request_when_authorization_fails():
-    charger = await database_sync_to_async(Charger.objects.create)(
-        charger_id="CP-TRX-RFID", require_rfid=True
+async def test_transaction_event_does_not_start_request_when_authorization_fails(charger_factory):
+    charger = await charger_factory(
+        charger_id="CP-TRX-RFID",
+        authorization_policy=Charger.AuthorizationPolicy.STRICT,
+        require_rfid=True,
     )
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, 1)
@@ -1541,9 +1565,11 @@ async def test_transaction_event_does_not_start_request_when_authorization_fails
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_start_transaction_rejection_creates_transaction_record():
-    charger = await database_sync_to_async(Charger.objects.create)(
-        charger_id="CP-START-REJECT", require_rfid=True
+async def test_start_transaction_rejection_creates_transaction_record(charger_factory):
+    charger = await charger_factory(
+        charger_id="CP-START-REJECT",
+        authorization_policy=Charger.AuthorizationPolicy.STRICT,
+        require_rfid=True,
     )
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, 1)
@@ -1577,11 +1603,16 @@ async def test_start_transaction_rejection_creates_transaction_record():
     )
     assert rejected_tx.authorization_reason == "strict_account_required"
     assert rejected_tx.rejected_at is not None
+
+
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.critical
-async def test_transaction_event_started_notifies_and_persists():
-    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TE-1")
+async def test_transaction_event_started_notifies_and_persists(charger_factory):
+    charger = await charger_factory(
+        charger_id="CP-TE-1",
+        authorization_policy=Charger.AuthorizationPolicy.OPEN,
+    )
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key(charger.charger_id, 1)
     consumer.charger_id = charger.charger_id
@@ -1609,6 +1640,10 @@ async def test_transaction_event_started_notifies_and_persists():
     assert tx_obj.ocpp_transaction_id == "TX-TE-1"
     assert tx_obj.meter_start == 5
     assert tx_obj.start_time == parse_datetime("2024-01-02T00:00:00Z")
+    assert (
+        tx_obj.authorization_status
+        == Transaction.AuthorizationStatus.ACCEPTED
+    )
 
     assert store.transaction_events
     event = store.transaction_events[-1]
