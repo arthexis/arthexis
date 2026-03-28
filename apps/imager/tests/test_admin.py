@@ -4,10 +4,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
-from django.test import RequestFactory
+from django.test import RequestFactory, override_settings
 from django.urls import reverse
 
 from apps.imager.services import ImagerBuildError
@@ -52,6 +51,10 @@ def test_imager_dashboard_model_row_actions_include_create_rpi_image() -> None:
 
 
 @pytest.mark.django_db
+@override_settings(
+    IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=("/tmp/arthexis-imager-tests/base-roots",),
+    IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS=("/tmp/arthexis-imager-tests/output-roots",),
+)
 @pytest.mark.parametrize(
     ("payload_overrides", "build_side_effect", "expected_status", "expected_redirect", "build_called", "customize_value", "expected_message"),
     [
@@ -80,8 +83,8 @@ def test_imager_admin_create_rpi_image_view_submission_paths(
 
     payload = {
         "name": "nightly",
-        "base_image_uri": "/tmp/base.img",
-        "output_dir": "build/rpi-imager",
+        "base_image_uri": "/tmp/arthexis-imager-tests/base-roots/base.img",
+        "output_dir": "/tmp/arthexis-imager-tests/output-roots/build/rpi-imager",
         "download_base_uri": "https://downloads.example.com/imager",
         "git_url": "https://github.com/arthexis/arthexis.git",
     }
@@ -102,7 +105,8 @@ def test_imager_admin_create_rpi_image_view_submission_paths(
     if build_called:
         kwargs = mock_build.call_args.kwargs
         assert kwargs["name"] == payload.get("name")
-        assert kwargs["output_dir"] == Path(settings.BASE_DIR) / "build/rpi-imager"
+        assert kwargs["base_image_uri"] == "/tmp/arthexis-imager-tests/base-roots/base.img"
+        assert kwargs["output_dir"] == Path("/tmp/arthexis-imager-tests/output-roots/build/rpi-imager")
         assert kwargs["customize"] is customize_value
 
     if expected_message:
@@ -114,6 +118,10 @@ def test_imager_admin_create_rpi_image_view_submission_paths(
 
 
 @pytest.mark.django_db
+@override_settings(
+    IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=("/tmp/arthexis-imager-tests/base-roots",),
+    IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS=("/tmp/arthexis-imager-tests/output-roots",),
+)
 @patch("apps.imager.admin.build_rpi4b_image")
 @pytest.mark.parametrize("invalid_name", ["../../tmp/pwned", "nested/image"])
 def test_imager_admin_create_rpi_image_view_rejects_disallowed_paths(
