@@ -100,6 +100,15 @@ If your automation still calls legacy entrypoints, update scripts to the canonic
 | `python manage.py export_transactions <output.json> [--start ... --end ... --chargers ...]` | `python manage.py ocpp transactions export <output.json> [--start ... --end ... --chargers ...]` |
 | `python manage.py ocpp_replay <extract.json>` | `python manage.py ocpp trace replay <extract.json>` |
 
+### Release migration notes (simulator import path removal)
+The compatibility package at `apps.ocpp.simulator` has been removed.
+
+If external integrations still import the legacy module path, update imports to `apps.simulators`:
+
+| Removed import path | Replacement import path |
+| --- | --- |
+| `from apps.ocpp.simulator import ChargePointSimulator, SimulatorConfig` | `from apps.simulators import ChargePointSimulator, SimulatorConfig` |
+
 For shell migration, a direct one-time update can be done with substitutions like:
 
 ```bash
