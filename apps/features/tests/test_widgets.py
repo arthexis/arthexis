@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from django.urls import reverse
 
 from apps.app.models import Application
 from apps.features.models import Feature
@@ -15,6 +16,7 @@ def test_latest_feature_updates_widget_groups_active_features_by_app() -> None:
 
     billing = Application.objects.create(name="billing")
     sites = Application.objects.create(name="sites")
+    unnamed = Application.objects.create(name="")
 
     billing_alpha = Feature.objects.create(
         slug="billing-alpha",
@@ -39,29 +41,48 @@ def test_latest_feature_updates_widget_groups_active_features_by_app() -> None:
         display="Unassigned Alpha",
         is_enabled=True,
     )
+    unnamed_alpha = Feature.objects.create(
+        slug="unnamed-alpha",
+        display="Unnamed Alpha",
+        is_enabled=True,
+        main_app=unnamed,
+    )
 
     context = latest_feature_updates_widget()
 
     assert [entry["app_name"] for entry in context["app_entries"]] == [
         "Unassigned",
+        "",
         "billing",
         "sites",
     ]
     assert context["app_entries"][0]["features"] == [
         {
             "display": unassigned.display,
-            "admin_url": f"/admin/features/feature/{unassigned.pk}/change/",
+            "admin_url": reverse("admin:features_feature_change", args=[unassigned.pk]),
         }
     ]
     assert context["app_entries"][1]["features"] == [
         {
-            "display": billing_alpha.display,
-            "admin_url": f"/admin/features/feature/{billing_alpha.pk}/change/",
+            "display": unnamed_alpha.display,
+            "admin_url": reverse(
+                "admin:features_feature_change",
+                args=[unnamed_alpha.pk],
+            ),
         }
     ]
     assert context["app_entries"][2]["features"] == [
         {
+            "display": billing_alpha.display,
+            "admin_url": reverse(
+                "admin:features_feature_change",
+                args=[billing_alpha.pk],
+            ),
+        }
+    ]
+    assert context["app_entries"][3]["features"] == [
+        {
             "display": sites_alpha.display,
-            "admin_url": f"/admin/features/feature/{sites_alpha.pk}/change/",
+            "admin_url": reverse("admin:features_feature_change", args=[sites_alpha.pk]),
         }
     ]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 
+from django.db.models import F
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
@@ -25,16 +26,17 @@ def latest_feature_updates_widget(**_kwargs):
     features = (
         Feature.objects.select_related("main_app")
         .filter(is_enabled=True)
-        .order_by("main_app__name", "display")
+        .order_by(F("main_app__name").asc(nulls_first=True), "display")
     )
-    app_entries: OrderedDict[str, dict[str, object]] = OrderedDict()
+    app_entries: OrderedDict[object, dict[str, object]] = OrderedDict()
+    unassigned_app_key = object()
     for feature in features:
         admin_url = reverse(
             "admin:features_feature_change",
             args=[feature.pk],
         )
         app_name = feature.main_app.display_name if feature.main_app_id else _("Unassigned")
-        app_key = feature.main_app.name if feature.main_app_id else ""
+        app_key = feature.main_app_id if feature.main_app_id else unassigned_app_key
         entry = app_entries.setdefault(
             app_key,
             {
