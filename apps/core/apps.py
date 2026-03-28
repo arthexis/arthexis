@@ -13,8 +13,6 @@ class CoreConfig(AppConfig):
     label = "core"
 
     def ready(self):  # pragma: no cover - called by Django
-        from . import checks  # noqa: F401
-
         _setup_celery_beat_integrations()
         _register_admin_and_post_migrate_handlers(self)
         _patch_entity_deserialization()

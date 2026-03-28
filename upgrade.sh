@@ -5,7 +5,6 @@ set -eE
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 export TZ="${TZ:-America/Monterrey}"
 PIP_INSTALL_HELPER="$BASE_DIR/scripts/helpers/pip_install.py"
-LEGACY_DB_GUARD="$BASE_DIR/scripts/helpers/legacy_db_guard.py"
 UPGRADE_STARTED_AT=$(date +%s)
 UPGRADE_DURATION_LOCK="$BASE_DIR/.locks/upgrade_duration.lck"
 # Track upgrade script changes triggered by git pull so the newer version can be re-run.
@@ -1996,21 +1995,6 @@ if [ "$CLEAN" -eq 1 ]; then
   fi
   rm -f db.sqlite3 db.sqlite3* 2>/dev/null || true
   rm -f db_*.sqlite3* 2>/dev/null || true
-fi
-
-if [[ -f "$BASE_DIR/db.sqlite3" && "$CLEAN" -ne 1 ]]; then
-  guard_rc=0
-  "$PYTHON_BIN" "$LEGACY_DB_GUARD" --db "$BASE_DIR/db.sqlite3" --repo "$BASE_DIR" || guard_rc=$?
-  if [[ "$guard_rc" -ne 0 ]]; then
-    if [[ "$guard_rc" -eq 2 ]]; then
-      echo "Upgrade aborted: existing database follows an unsupported legacy migration path." >&2
-      echo "Reinstall on a fresh database and import data per docs/operations/reinstall-data-import-runbook.md." >&2
-    else
-      echo "Upgrade aborted: unable to validate legacy migration history (guard exit code: $guard_rc)." >&2
-      echo "Resolve the guard error above, or reinstall per docs/operations/reinstall-data-import-runbook.md." >&2
-    fi
-    exit 1
-  fi
 fi
 
 # Refresh environment and restart service
