@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from apps.aws.models import AWSCredentials
+from apps.deploy.management.commands import deploy as deploy_command
 from apps.deploy.models import DeployInstance, DeployRun, DeployServer
 
 pytestmark = pytest.mark.django_db
@@ -100,3 +102,68 @@ def test_deploy_setup_lightsail_creates_records(monkeypatch, capsys):
     assert server.host == "18.1.2.3"
     assert deploy_instance.service_name == "arthexis-ops-node-1"
     assert DeployRun.objects.filter(instance=deploy_instance, action=DeployRun.Action.DEPLOY).exists()
+
+
+@pytest.mark.parametrize(
+    ("details", "fetch_error", "expected_error"),
+    [
+        pytest.param(
+            {},
+            None,
+            "Lightsail instance details were empty; setup cannot continue.",
+            id="empty-details",
+        ),
+        pytest.param(
+            {"name": "ops-node-1", "publicIpAddress": "", "privateIpAddress": ""},
+            None,
+            "Lightsail instance has no public/private IP yet; try again shortly.",
+            id="missing-ip-addresses",
+        ),
+        pytest.param(
+            None,
+            "unable to fetch",
+            "Unable to fetch Lightsail instance details: unable to fetch",
+            id="fetch-lightsail-error",
+        ),
+    ],
+)
+def test_deploy_setup_lightsail_handles_fetch_failures(
+    monkeypatch,
+    details,
+    fetch_error,
+    expected_error,
+):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+
+    def fake_fetch_lightsail_instance(**kwargs):
+        if fetch_error:
+            raise deploy_command.LightsailFetchError(fetch_error)
+        return details
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.deploy.fetch_lightsail_instance",
+        fake_fetch_lightsail_instance,
+    )
+
+    with pytest.raises(CommandError, match=expected_error):
+        call_command(
+            "deploy",
+            "setup-lightsail",
+            "--credentials",
+            str(credentials.pk),
+            "--region",
+            "us-east-1",
+            "--instance-name",
+            "ops-node-1",
+            "--blueprint-id",
+            "debian_12",
+            "--bundle-id",
+            "small_3_0",
+            "--skip-create",
+        )
+
+    assert not DeployServer.objects.exists()

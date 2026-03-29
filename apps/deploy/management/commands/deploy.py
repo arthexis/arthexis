@@ -136,8 +136,12 @@ class Command(BaseCommand):
         region = str(options["region"]).strip()
         instance_name = str(options["instance_name"]).strip()
         deploy_instance_name = str(options["deploy_instance_name"]).strip()
-        install_dir = str(options.get("install_dir") or "").strip() or f"/srv/{instance_name}"
-        service_name = str(options.get("service_name") or "").strip() or f"arthexis-{instance_name}"
+        install_dir = str(options.get("install_dir") or "").strip()
+        if not install_dir:
+            install_dir = f"/srv/{instance_name}"
+        service_name = str(options.get("service_name") or "").strip()
+        if not service_name:
+            service_name = f"arthexis-{instance_name}"
 
         if not bool(options.get("skip_create")):
             try:

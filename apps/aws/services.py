@@ -92,7 +92,7 @@ def create_lightsail_instance(
     )
     payload: dict[str, Any] = {
         "instanceNames": [name],
-        "availabilityZone": availability_zone or "all",
+        "availabilityZone": availability_zone or f"{region}a",
         "blueprintId": blueprint_id,
         "bundleId": bundle_id,
     }
@@ -114,7 +114,14 @@ def create_lightsail_instance(
                 access_key_id=access_key_id,
                 secret_access_key=secret_access_key,
             )
-        except LightsailFetchError:
+        except LightsailFetchError as exc:
+            original_exc = exc.__cause__
+            if not (
+                original_exc
+                and isinstance(original_exc, ClientError)
+                and original_exc.response.get("Error", {}).get("Code") == "NotFoundException"
+            ):
+                raise
             details = {}
         if details:
             return details
