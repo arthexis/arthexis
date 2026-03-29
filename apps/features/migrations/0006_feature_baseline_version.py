@@ -4,7 +4,6 @@ from pathlib import Path
 
 from django.conf import settings
 from django.db import migrations, models
-
 from packaging.version import InvalidVersion, Version
 
 
@@ -34,16 +33,17 @@ def _disable_future_baseline_features(apps, schema_editor):
     if current_version is None:
         return
 
-    for feature in Feature.objects.exclude(baseline_version=""):
+    features_to_disable_pks = []
+    for feature in Feature.objects.filter(is_enabled=True).exclude(baseline_version=""):
         baseline = _parse_version(feature.baseline_version)
         if baseline is None:
             continue
         if current_version >= baseline:
             continue
-        if not feature.is_enabled:
-            continue
-        feature.is_enabled = False
-        feature.save(update_fields=["is_enabled", "updated_at"])
+        features_to_disable_pks.append(feature.pk)
+
+    if features_to_disable_pks:
+        Feature.objects.filter(pk__in=features_to_disable_pks).update(is_enabled=False)
 
 
 class Migration(migrations.Migration):

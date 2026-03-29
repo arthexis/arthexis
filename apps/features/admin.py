@@ -7,13 +7,13 @@ from django.contrib.admin.utils import flatten_fieldsets
 from django.core.exceptions import FieldError, PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import models
-from django.db import transaction
+from django.db import models, transaction
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.utils.translation import gettext_lazy as _, ngettext
+from django.utils.translation import gettext_lazy as _
+from django.utils.translation import ngettext
 from django_object_actions import DjangoObjectActions
 
 from apps.app.models import Application
@@ -304,13 +304,14 @@ class FeatureAdmin(
             return HttpResponseRedirect(reverse("admin:features_feature_changelist"))
 
         deleted_count = preview_context["active_feature_count"]
+        baseline_disabled_count = 0
         try:
             feature_manager = getattr(self.model, "all_objects", self.model._default_manager)
             with transaction.atomic():
                 feature_manager.update(is_seed_data=False, is_enabled=False)
                 feature_manager.all().delete()
                 call_command("loaddata", *(str(path) for path in fixture_paths), verbosity=0)
-                apply_suite_feature_baseline_defaults()
+                baseline_disabled_count = apply_suite_feature_baseline_defaults()
         except CommandError as exc:
             self.message_user(
                 request,
@@ -339,6 +340,17 @@ class FeatureAdmin(
             % {"count": len(fixture_paths)},
             level=messages.SUCCESS,
         )
+        if baseline_disabled_count:
+            self.message_user(
+                request,
+                ngettext(
+                    "Disabled %(count)d suite feature due to baseline version gating.",
+                    "Disabled %(count)d suite features due to baseline version gating.",
+                    baseline_disabled_count,
+                )
+                % {"count": baseline_disabled_count},
+                level=messages.WARNING,
+            )
 
         return HttpResponseRedirect(reverse("admin:features_feature_changelist"))
 
