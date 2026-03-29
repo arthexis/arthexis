@@ -7,27 +7,28 @@ import subprocess
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from pathlib import Path
 
-import requests
 import psutil
+import requests
 from celery import shared_task
-from django.conf import settings
-from django.db import DatabaseError
-from django.core.cache import cache
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from django.contrib import admin
+from django.conf import settings
+from django.core.cache import cache
+from django.db import DatabaseError
 from django.utils import timezone as django_timezone
 
 from apps.content.models import ContentSample
-from apps.core.tasks.auto_upgrade import check_github_updates
+from apps.content.utils import capture_and_save_screenshot
 from apps.core import uptime_constants, uptime_utils
+from apps.core.auto_upgrade import auto_upgrade_suite_feature_enabled
+from apps.core.tasks.auto_upgrade import check_github_updates
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
     lcd_feature_enabled,
     queue_startup_message,
 )
 from .models import NetMessage, Node, NodeUpgradePolicyAssignment, PendingNetMessage
-from apps.content.utils import capture_and_save_screenshot
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,9 @@ def send_startup_net_message(
 @shared_task
 def apply_upgrade_policies() -> str:
     """Apply upgrade policies for the local node when they are due."""
+
+    if not auto_upgrade_suite_feature_enabled(default=True):
+        return "skipped:feature-disabled"
 
     try:
         local = Node.get_local()

@@ -14,6 +14,7 @@ from django.utils import timezone
 AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
 AUTO_UPGRADE_TASK_NAME = "auto-upgrade-check"
 AUTO_UPGRADE_TASK_PATH = "apps.nodes.tasks.apply_upgrade_policies"
+AUTO_UPGRADE_FEATURE_SLUG = "auto-upgrade"
 AUTO_UPGRADE_FAST_LANE_LOCK_NAME = "auto_upgrade_fast_lane.lck"
 AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES = 60
 
@@ -319,6 +320,17 @@ def _get_or_create_interval_schedule(*, every: int, period: str):
     return IntervalSchedule.objects.create(every=every, period=period)
 
 
+def auto_upgrade_suite_feature_enabled(*, default: bool = True) -> bool:
+    """Return whether the auto-upgrade suite feature is enabled."""
+
+    try:
+        from apps.features.utils import is_suite_feature_enabled
+    except Exception:
+        return default
+
+    return is_suite_feature_enabled(AUTO_UPGRADE_FEATURE_SLUG, default=default)
+
+
 def ensure_auto_upgrade_periodic_task(
     sender=None, *, base_dir: Path | None = None, **kwargs
 ) -> None:
@@ -358,6 +370,7 @@ def ensure_auto_upgrade_periodic_task(
             every=interval_minutes,
             period=IntervalSchedule.MINUTES,
         )
+        feature_enabled = auto_upgrade_suite_feature_enabled(default=True)
         defaults = {
             "interval": schedule,
             "crontab": None,
@@ -365,6 +378,7 @@ def ensure_auto_upgrade_periodic_task(
             "clocked": None,
             "task": AUTO_UPGRADE_TASK_PATH,
             "description": description,
+            "enabled": feature_enabled,
         }
         PeriodicTask.objects.update_or_create(
             name=AUTO_UPGRADE_TASK_NAME,
