@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import getpass
+import sys
+
 from django.core.management.base import BaseCommand, CommandError
+from django.db import IntegrityError
 from django.db import transaction
 from django.db.utils import OperationalError, ProgrammingError
 
@@ -12,9 +16,14 @@ from apps.aws.services import (
     create_lightsail_instance,
     delete_lightsail_instance,
     fetch_lightsail_instance,
+    issue_mfa_session_credentials,
     parse_instance_details,
 )
 from apps.deploy.models import DeployInstance, DeployRun, DeployServer
+from apps.features.utils import is_suite_feature_enabled
+
+
+LIGHTSAIL_CLI_AUTH_BOOTSTRAP_FEATURE_SLUG = "deploy-lightsail-cli-auth-bootstrap"
 
 
 class Command(BaseCommand):
@@ -65,6 +74,22 @@ class Command(BaseCommand):
         )
         parser.add_argument("--admin-url", default="", help="Optional admin URL.")
         parser.add_argument("--env-file", default="", help="Optional env file path.")
+        parser.add_argument(
+            "--mfa-serial",
+            default="",
+            help="AWS MFA device ARN/serial for accounts that require MFA.",
+        )
+        parser.add_argument(
+            "--mfa-code",
+            default="",
+            help="Optional MFA token code. If omitted while --mfa-serial is set, prompt interactively.",
+        )
+        parser.add_argument(
+            "--mfa-duration-seconds",
+            type=int,
+            default=900,
+            help="STS session duration in seconds when MFA is used (minimum 900).",
+        )
         parser.add_argument("--ssh-user", default="ubuntu", help="SSH username.")
         parser.add_argument("--ssh-port", type=int, default=22, help="SSH port.")
 
@@ -78,6 +103,13 @@ class Command(BaseCommand):
         self._validate_local_prerequisites()
         install_dir = str(options.get("install_dir") or "").strip() or f"/srv/{instance_name}"
         service_name = str(options.get("service_name") or "").strip() or f"arthexis-{instance_name}"
+        auth_kwargs = self._resolve_aws_auth_kwargs(
+            credentials=credentials,
+            region=region,
+            mfa_serial=options["mfa_serial"].strip(),
+            mfa_code=options["mfa_code"].strip(),
+            mfa_duration_seconds=options["mfa_duration_seconds"],
+        )
         skip_create = bool(options.get("skip_create"))
         created_remote_instance = False
         persisted_records = False
@@ -96,9 +128,9 @@ class Command(BaseCommand):
                     region=region,
                     blueprint_id=blueprint_id,
                     bundle_id=bundle_id,
-                    credentials=credentials,
                     key_pair_name=str(options.get("key_pair_name") or "").strip() or None,
                     availability_zone=str(options.get("availability_zone") or "").strip() or None,
+                    **auth_kwargs,
                 )
             except LightsailFetchError as exc:
                 raise CommandError(f"Unable to create Lightsail instance: {exc}") from exc
@@ -110,7 +142,7 @@ class Command(BaseCommand):
                     details = fetch_lightsail_instance(
                         name=instance_name,
                         region=region,
-                        credentials=credentials,
+                        **auth_kwargs,
                     )
                 except LightsailFetchError as exc:
                     raise CommandError(f"Unable to fetch Lightsail instance details: {exc}") from exc
@@ -169,7 +201,7 @@ class Command(BaseCommand):
                 self._cleanup_remote_instance(
                     instance_name=instance_name,
                     region=region,
-                    credentials=credentials,
+                    auth_kwargs=auth_kwargs,
                 )
             raise CommandError("Required deployment tables are not available. Run migrations first.") from exc
         except Exception:
@@ -177,7 +209,7 @@ class Command(BaseCommand):
                 self._cleanup_remote_instance(
                     instance_name=instance_name,
                     region=region,
-                    credentials=credentials,
+                    auth_kwargs=auth_kwargs,
                 )
             raise
 
@@ -192,7 +224,7 @@ class Command(BaseCommand):
         *,
         instance_name: str,
         region: str,
-        credentials: AWSCredentials,
+        auth_kwargs: dict[str, object],
     ) -> None:
         """Best-effort cleanup when post-create setup fails before persistence."""
 
@@ -200,7 +232,7 @@ class Command(BaseCommand):
             delete_lightsail_instance(
                 name=instance_name,
                 region=region,
-                credentials=credentials,
+                **auth_kwargs,
             )
         except LightsailFetchError as exc:
             self.stderr.write(
@@ -223,7 +255,7 @@ class Command(BaseCommand):
             raise CommandError("Required deployment tables are not available. Run migrations first.") from exc
 
     def _resolve_credentials(self, raw_credentials: str) -> AWSCredentials:
-        """Resolve AWS credentials by integer id or by name."""
+        """Resolve AWS credentials by integer id or by name, prompting to create when missing."""
 
         candidate = raw_credentials.strip()
         if not candidate:
@@ -239,6 +271,81 @@ class Command(BaseCommand):
         except (OperationalError, ProgrammingError) as exc:
             raise CommandError("AWS credential tables are not available. Run migrations first.") from exc
 
-        if not creds:
+        if creds:
+            return creds
+
+        if candidate.isdigit():
             raise CommandError(f"AWS credentials not found for '{raw_credentials}'.")
-        return creds
+
+        if not is_suite_feature_enabled(LIGHTSAIL_CLI_AUTH_BOOTSTRAP_FEATURE_SLUG, default=True):
+            raise CommandError(
+                "AWS credentials not found and CLI credential bootstrap is disabled by suite feature."
+            )
+
+        self.stdout.write(
+            self.style.WARNING(
+                f"AWS credentials '{candidate}' were not found. Creating a new credential record."
+            )
+        )
+        access_key_id = self._prompt_required("AWS access key id")
+        secret_access_key = self._prompt_required("AWS secret access key", secret=True)
+        try:
+            return AWSCredentials.objects.create(
+                name=candidate,
+                access_key_id=access_key_id,
+                secret_access_key=secret_access_key,
+            )
+        except IntegrityError as exc:
+            raise CommandError(
+                f"Unable to create AWS credentials '{candidate}'. "
+                "The access key may already exist or values are invalid."
+            ) from exc
+
+    def _prompt_required(self, label: str, *, secret: bool = False) -> str:
+        """Prompt for a required non-empty value, optionally hiding input."""
+
+        if not sys.stdin.isatty():
+            raise CommandError(
+                f"{label} is required, but interactive prompts are unavailable in non-interactive mode."
+            )
+
+        prompt_func = getpass.getpass if secret else input
+        value = ""
+        while not value:
+            try:
+                value = prompt_func(f"{label}: ").strip()
+            except EOFError as exc:
+                raise CommandError(
+                    f"{label} is required, but no interactive input was received."
+                ) from exc
+        return value
+
+    def _resolve_aws_auth_kwargs(
+        self,
+        *,
+        credentials: AWSCredentials,
+        region: str,
+        mfa_serial: str,
+        mfa_code: str,
+        mfa_duration_seconds: int,
+    ) -> dict[str, object]:
+        """Return AWS auth kwargs, optionally converting long-lived keys into MFA session creds."""
+
+        if not mfa_serial:
+            return {"credentials": credentials}
+
+        if not is_suite_feature_enabled(LIGHTSAIL_CLI_AUTH_BOOTSTRAP_FEATURE_SLUG, default=True):
+            raise CommandError("MFA CLI auth bootstrap is disabled by suite feature.")
+
+        token_code = mfa_code.strip() or self._prompt_required("AWS MFA code")
+        try:
+            session_credentials = issue_mfa_session_credentials(
+                region=region,
+                credentials=credentials,
+                mfa_serial=mfa_serial,
+                mfa_code=token_code,
+                duration_seconds=mfa_duration_seconds,
+            )
+        except LightsailFetchError as exc:
+            raise CommandError(f"Unable to issue AWS session credentials with MFA: {exc}") from exc
+        return session_credentials

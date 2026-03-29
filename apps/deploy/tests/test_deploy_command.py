@@ -186,6 +186,254 @@ def test_lightsail_command_requires_blueprint_and_bundle_without_skip_create():
         )
 
 
+def test_lightsail_command_creates_credentials_when_named_record_missing(monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
+    def fake_fetch_lightsail_instance(**kwargs):
+        assert kwargs["credentials"].name == "new-creds"
+        return {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        }
+
+    monkeypatch.setattr("builtins.input", lambda _: "AKIA_NEW")
+    monkeypatch.setattr("getpass.getpass", lambda _: "new-secret")
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        fake_fetch_lightsail_instance,
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        "new-creds",
+        "--region",
+        "us-east-1",
+        "--instance-name",
+        "ops-node-1",
+        "--skip-create",
+    )
+
+    output = capsys.readouterr().out
+
+    created_credentials = AWSCredentials.objects.get(name="new-creds")
+    assert "Creating a new credential record." in output
+    assert created_credentials.access_key_id == "AKIA_NEW"
+    assert created_credentials.secret_access_key == "new-secret"
+
+
+def test_lightsail_command_does_not_prompt_for_missing_numeric_credentials(monkeypatch):
+    prompts: list[str] = []
+
+    monkeypatch.setattr("builtins.input", lambda prompt: prompts.append(prompt) or "")
+    monkeypatch.setattr("getpass.getpass", lambda prompt: prompts.append(prompt) or "")
+
+    with pytest.raises(CommandError, match="AWS credentials not found for '42'."):
+        call_command(
+            "lightsail",
+            "--credentials",
+            "42",
+            "--region",
+            "us-east-1",
+            "--instance-name",
+            "ops-node-1",
+            "--skip-create",
+        )
+
+    assert prompts == []
+
+
+def test_lightsail_command_respects_feature_toggle_for_credential_bootstrap(monkeypatch):
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.is_suite_feature_enabled",
+        lambda slug, default=True: False,
+    )
+
+    with pytest.raises(
+        CommandError,
+        match="AWS credentials not found and CLI credential bootstrap is disabled by suite feature.",
+    ):
+        call_command(
+            "lightsail",
+            "--credentials",
+            "missing-name",
+            "--region",
+            "us-east-1",
+            "--instance-name",
+            "ops-node-1",
+            "--skip-create",
+        )
+
+
+def test_lightsail_command_uses_mfa_session_credentials(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="root-account",
+        access_key_id="AKIA_ROOT",
+        secret_access_key="root-secret",
+    )
+
+    def fake_issue_mfa_session_credentials(**kwargs):
+        assert kwargs["credentials"] == credentials
+        assert kwargs["mfa_serial"] == "arn:aws:iam::123456789012:mfa/root-account-mfa-device"
+        assert kwargs["mfa_code"] == "654321"
+        return {
+            "access_key_id": "ASIA_TEMP",
+            "secret_access_key": "temp-secret",
+            "session_token": "temp-token",
+        }
+
+    def fake_fetch_lightsail_instance(**kwargs):
+        assert kwargs.get("credentials") is None
+        assert kwargs["access_key_id"] == "ASIA_TEMP"
+        assert kwargs["secret_access_key"] == "temp-secret"
+        assert kwargs["session_token"] == "temp-token"
+        return {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        }
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.issue_mfa_session_credentials",
+        fake_issue_mfa_session_credentials,
+    )
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        fake_fetch_lightsail_instance,
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--region",
+        "us-east-1",
+        "--instance-name",
+        "ops-node-1",
+        "--skip-create",
+        "--mfa-serial",
+        "arn:aws:iam::123456789012:mfa/root-account-mfa-device",
+        "--mfa-code",
+        "654321",
+    )
+
+
+def test_lightsail_command_respects_feature_toggle_for_mfa_bootstrap(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="root-account",
+        access_key_id="AKIA_ROOT",
+        secret_access_key="root-secret",
+    )
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.is_suite_feature_enabled",
+        lambda slug, default=True: False,
+    )
+
+    with pytest.raises(CommandError, match="MFA CLI auth bootstrap is disabled by suite feature."):
+        call_command(
+            "lightsail",
+            "--credentials",
+            str(credentials.pk),
+            "--region",
+            "us-east-1",
+            "--instance-name",
+            "ops-node-1",
+            "--skip-create",
+            "--mfa-serial",
+            "arn:aws:iam::123456789012:mfa/root-account-mfa-device",
+        )
+
+
+def test_lightsail_command_prompts_for_mfa_code_when_missing(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="root-account",
+        access_key_id="AKIA_ROOT",
+        secret_access_key="root-secret",
+    )
+
+    prompts: list[str] = []
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda prompt: prompts.append(prompt) or ("123456" if "MFA code" in prompt else ""),
+    )
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.issue_mfa_session_credentials",
+        lambda **kwargs: {
+            "access_key_id": "ASIA_TEMP",
+            "secret_access_key": "temp-secret",
+            "session_token": "temp-token",
+        },
+    )
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        lambda **kwargs: {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        },
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--region",
+        "us-east-1",
+        "--instance-name",
+        "ops-node-1",
+        "--skip-create",
+        "--mfa-serial",
+        "arn:aws:iam::123456789012:mfa/root-account-mfa-device",
+    )
+
+    assert prompts == ["AWS MFA code: "]
+
+
+def test_lightsail_command_rejects_interactive_prompt_in_non_tty_mode(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="root-account",
+        access_key_id="AKIA_ROOT",
+        secret_access_key="root-secret",
+    )
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+
+    with pytest.raises(
+        CommandError,
+        match="AWS MFA code is required, but interactive prompts are unavailable in non-interactive mode.",
+    ):
+        call_command(
+            "lightsail",
+            "--credentials",
+            str(credentials.pk),
+            "--region",
+            "us-east-1",
+            "--instance-name",
+            "ops-node-1",
+            "--skip-create",
+            "--mfa-serial",
+            "arn:aws:iam::123456789012:mfa/root-account-mfa-device",
+        )
+
+
 def test_lightsail_command_cleans_up_remote_instance_on_post_create_failure(monkeypatch):
     credentials = AWSCredentials.objects.create(
         name="primary",
