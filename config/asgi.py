@@ -19,7 +19,10 @@ from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
 
+from apps.core.checks.apps_registry import enforce_apps_registry_configuration
+
 django_asgi_app = get_asgi_application()
+enforce_apps_registry_configuration()
 
 # Import routing modules after Django has initialized to ensure models are
 # registered before consumers are loaded.

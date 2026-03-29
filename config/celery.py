@@ -11,6 +11,7 @@ loadenv()
 bootstrap_sqlite_driver()
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
+from apps.core.checks.apps_registry import enforce_apps_registry_configuration  # noqa: E402
 from django.conf import settings  # noqa: E402
 
 # When running on production-oriented nodes, avoid Celery debug mode.
@@ -29,6 +30,9 @@ if node_role in production_roles:
     if not os.environ.get("CELERY_RESULT_BACKEND"):
         os.environ.setdefault("CELERY_RESULT_BACKEND", default_prod_broker_url)
         settings.CELERY_RESULT_BACKEND = default_prod_broker_url
+
+
+enforce_apps_registry_configuration()
 
 app = Celery("config")
 app.config_from_object("django.conf:settings", namespace="CELERY")

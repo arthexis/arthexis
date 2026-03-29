@@ -17,4 +17,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 from django.core.wsgi import get_wsgi_application
 
+from apps.core.checks.apps_registry import enforce_apps_registry_configuration
+
 application = get_wsgi_application()
+enforce_apps_registry_configuration()
