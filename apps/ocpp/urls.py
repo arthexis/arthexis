@@ -1,7 +1,9 @@
 from django.urls import include, path
 
-from . import views
+from apps.energy import views as energy_views
 from apps.media import views as media_views
+
+from . import views
 
 app_name = "ocpp"
 
@@ -19,10 +21,14 @@ urlpatterns = [
         views.supported_charger_detail,
         name="supported-charger-detail",
     ),
-    path("c/<uuid:slug>/", views.public_connector_page, name="public-connector-page"),
+    path(
+        "c/<uuid:slug>/",
+        energy_views.public_connector_page,
+        name="public-connector-page",
+    ),
     path(
         "c/<uuid:slug>/create-account/",
-        views.public_connector_page_create_account,
+        energy_views.public_connector_page_create_account,
         name="public-connector-page-create-account",
     ),
     path(
@@ -56,12 +62,12 @@ urlpatterns = [
     ),
     path(
         "c/<str:cid>/account/",
-        views.charger_account_summary,
+        energy_views.charger_account_summary,
         name="charger-account-summary",
     ),
     path(
         "c/<str:cid>/connector/<slug:connector>/account/",
-        views.charger_account_summary,
+        energy_views.charger_account_summary,
         name="charger-account-summary-connector",
     ),
     path(

@@ -1,7 +1,6 @@
 import pytest
 from channels.db import database_sync_to_async
-from django.contrib.auth import BACKEND_SESSION_KEY
-from django.contrib.auth import get_user_model
+from django.contrib.auth import BACKEND_SESSION_KEY, get_user_model
 from django.contrib.messages import get_messages
 from django.test import override_settings
 from django.urls import reverse
