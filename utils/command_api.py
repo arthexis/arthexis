@@ -34,6 +34,7 @@ SUPPORTED_OPERATIONAL_COMMANDS: tuple[str, ...] = (
     "coverage",
     "create",
     "create_docs_admin",
+    "deploy",
     "dns_proxy",
     "email",
     "enable_local_https",
