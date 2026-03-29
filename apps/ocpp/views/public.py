@@ -47,11 +47,12 @@ from .common import (
 )
 
 logger = logging.getLogger(__name__)
+ENERGY_ACCOUNTS_FEATURE_SLUG = "energy-accounts"
 
 
 def _energy_accounts_enabled() -> bool:
     return get_cached_feature_enabled(
-        "energy-accounts",
+        ENERGY_ACCOUNTS_FEATURE_SLUG,
         cache_key="feature-enabled:energy-accounts",
         timeout=300,
         default=False,
@@ -780,4 +781,4 @@ def supported_charger_detail(request, station_model_id: int):
             "images": images,
             "documents": documents,
         },
-)
+    )

@@ -61,7 +61,9 @@ def _energy_accounts_enabled() -> bool:
 def _signup_auth_backend() -> str | None:
     """Return a safe auth backend path for post-signup login."""
 
-    localhost_backend = f"{LocalhostAdminBackend.__module__}.{LocalhostAdminBackend.__name__}"
+    localhost_backend = (
+        f"{LocalhostAdminBackend.__module__}.{LocalhostAdminBackend.__name__}"
+    )
     for backend in settings.AUTHENTICATION_BACKENDS:
         if backend != localhost_backend:
             return backend
@@ -104,7 +106,7 @@ def _get_client_ip(request) -> str:
 
 def _hash_ip(value: str) -> str:
     secret = getattr(settings, "SECRET_KEY", "")
-    payload = f"{value}:{secret}".encode()
+    payload = f"{value}:{secret}".encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -244,9 +246,6 @@ def public_connector_page_create_account(request, slug):
     email = form.cleaned_data.get("email", "")
     password = form.cleaned_data["password"]
     user_model = get_user_model()
-    if user_model.objects.filter(username=username).exists():
-        messages.error(request, _("Username is already in use."))
-        return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
 
     try:
         with transaction.atomic():
@@ -265,11 +264,15 @@ def public_connector_page_create_account(request, slug):
     signup_backend = _signup_auth_backend()
     if signup_backend is not None:
         login(request, user, backend=signup_backend)
-        messages.success(request, _("Account created. Charging authorization has been updated."))
+        messages.success(
+            request, _("Account created. Charging authorization has been updated.")
+        )
     else:
         messages.warning(
             request,
-            _("Account created, but you are not signed in. Please sign in to switch to the new account."),
+            _(
+                "Account created, but you are not signed in. Please sign in to switch to the new account."
+            ),
         )
     return redirect(next_url)
 
@@ -286,9 +289,9 @@ def charger_account_summary(request, cid, connector=None):
     if account is None:
         messages.warning(request, _("No energy account is attached to your user yet."))
     recent_sessions = (
-        Transaction.objects.filter(account=account).select_related("charger").order_by("-start_time")[:20]
-        if account is not None
-        else []
+        Transaction.objects.filter(account=account)
+        .select_related("charger")
+        .order_by("-start_time")[:20]
     )
     return render(
         request,
