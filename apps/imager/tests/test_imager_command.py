@@ -173,7 +173,7 @@ def test_build_rpi4b_image_treats_windows_backslash_drive_paths_as_local_sources
     with pytest.raises(ImagerBuildError, match="Base image does not exist:"):
         build_rpi4b_image(
             name="stable",
-            base_image_uri=r"C:\\missing\\base.img",
+            base_image_uri="C:\\missing\\base.img",
             output_dir=tmp_path,
             download_base_uri="",
             git_url="https://github.com/arthexis/arthexis.git",
