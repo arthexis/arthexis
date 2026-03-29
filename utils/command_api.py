@@ -54,6 +54,7 @@ SUPPORTED_OPERATIONAL_COMMANDS: tuple[str, ...] = (
     "invite",
     "lcd",
     "leads",
+    "lightsail",
     "message",
     "migrations",
     "nginx",

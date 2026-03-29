@@ -5,7 +5,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from apps.aws.models import AWSCredentials
-from apps.deploy.management.commands import deploy as deploy_command
+from apps.deploy.management.commands import lightsail as lightsail_command
 from apps.deploy.models import DeployInstance, DeployRun, DeployServer
 
 pytestmark = pytest.mark.django_db
@@ -43,7 +43,12 @@ def test_deploy_command_lists_instances_and_recent_runs(capsys):
     assert "action=deploy status=succeeded" in output
 
 
-def test_deploy_setup_lightsail_creates_records(monkeypatch, capsys):
+def test_deploy_command_rejects_removed_setup_subcommand():
+    with pytest.raises(CommandError, match="unrecognized arguments: setup-lightsail"):
+        call_command("deploy", "setup-lightsail")
+
+
+def test_lightsail_command_creates_records(monkeypatch, capsys):
     credentials = AWSCredentials.objects.create(
         name="primary",
         access_key_id="AKIA_TEST",
@@ -55,13 +60,6 @@ def test_deploy_setup_lightsail_creates_records(monkeypatch, capsys):
             "name": kwargs["name"],
             "publicIpAddress": "18.1.2.3",
             "privateIpAddress": "10.0.0.5",
-        }
-
-    def fake_fetch_lightsail_instance(**kwargs):
-        return {
-            "name": kwargs["name"],
-            "publicIpAddress": "18.1.2.3",
-            "privateIpAddress": "10.0.0.5",
             "location": {"availabilityZone": "us-east-1a"},
             "state": {"name": "running"},
             "blueprintId": "debian_12",
@@ -69,18 +67,20 @@ def test_deploy_setup_lightsail_creates_records(monkeypatch, capsys):
             "arn": "arn:aws:lightsail:::instance/ops-node-1",
         }
 
+    def fail_fetch_lightsail_instance(**kwargs):
+        pytest.fail("fetch_lightsail_instance should not be called when create returns details")
+
     monkeypatch.setattr(
-        "apps.deploy.management.commands.deploy.create_lightsail_instance",
+        "apps.deploy.management.commands.lightsail.create_lightsail_instance",
         fake_create_lightsail_instance,
     )
     monkeypatch.setattr(
-        "apps.deploy.management.commands.deploy.fetch_lightsail_instance",
-        fake_fetch_lightsail_instance,
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        fail_fetch_lightsail_instance,
     )
 
     call_command(
-        "deploy",
-        "setup-lightsail",
+        "lightsail",
         "--credentials",
         str(credentials.pk),
         "--region",
@@ -127,7 +127,7 @@ def test_deploy_setup_lightsail_creates_records(monkeypatch, capsys):
         ),
     ],
 )
-def test_deploy_setup_lightsail_handles_fetch_failures(
+def test_lightsail_command_handles_fetch_failures(
     monkeypatch,
     details,
     fetch_error,
@@ -141,18 +141,86 @@ def test_deploy_setup_lightsail_handles_fetch_failures(
 
     def fake_fetch_lightsail_instance(**kwargs):
         if fetch_error:
-            raise deploy_command.LightsailFetchError(fetch_error)
+            raise lightsail_command.LightsailFetchError(fetch_error)
         return details
 
     monkeypatch.setattr(
-        "apps.deploy.management.commands.deploy.fetch_lightsail_instance",
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
         fake_fetch_lightsail_instance,
     )
 
     with pytest.raises(CommandError, match=expected_error):
         call_command(
-            "deploy",
-            "setup-lightsail",
+            "lightsail",
+            "--credentials",
+            str(credentials.pk),
+            "--region",
+            "us-east-1",
+            "--instance-name",
+            "ops-node-1",
+            "--skip-create",
+        )
+
+    assert not DeployServer.objects.exists()
+
+
+def test_lightsail_command_requires_blueprint_and_bundle_without_skip_create():
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+
+    with pytest.raises(
+        CommandError,
+        match="--blueprint-id and --bundle-id are required unless --skip-create is set.",
+    ):
+        call_command(
+            "lightsail",
+            "--credentials",
+            str(credentials.pk),
+            "--region",
+            "us-east-1",
+            "--instance-name",
+            "ops-node-1",
+        )
+
+
+def test_lightsail_command_cleans_up_remote_instance_on_post_create_failure(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+    calls: list[str] = []
+
+    def fake_create_lightsail_instance(**kwargs):
+        calls.append(f"create:{kwargs['name']}")
+        return {}
+
+    def fake_fetch_lightsail_instance(**kwargs):
+        calls.append(f"fetch:{kwargs['name']}")
+        raise lightsail_command.LightsailFetchError("fetch failed")
+
+    def fake_delete_lightsail_instance(**kwargs):
+        calls.append(f"delete:{kwargs['name']}")
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.create_lightsail_instance",
+        fake_create_lightsail_instance,
+    )
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        fake_fetch_lightsail_instance,
+    )
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.delete_lightsail_instance",
+        fake_delete_lightsail_instance,
+    )
+
+    with pytest.raises(CommandError, match="Unable to fetch Lightsail instance details: fetch failed"):
+        call_command(
+            "lightsail",
             "--credentials",
             str(credentials.pk),
             "--region",
@@ -163,7 +231,6 @@ def test_deploy_setup_lightsail_handles_fetch_failures(
             "debian_12",
             "--bundle-id",
             "small_3_0",
-            "--skip-create",
         )
 
-    assert not DeployServer.objects.exists()
+    assert calls == ["create:ops-node-1", "fetch:ops-node-1", "delete:ops-node-1"]

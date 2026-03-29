@@ -151,6 +151,28 @@ def fetch_lightsail_instance(
     return response.get("instance", {})
 
 
+def delete_lightsail_instance(
+    *,
+    name: str,
+    region: str,
+    credentials: Optional[AWSCredentials] = None,
+    access_key_id: str | None = None,
+    secret_access_key: str | None = None,
+) -> None:
+    """Delete a Lightsail instance."""
+
+    client = _lightsail_client(
+        region,
+        credentials,
+        access_key_id=access_key_id,
+        secret_access_key=secret_access_key,
+    )
+    try:
+        client.delete_instance(instanceName=name, forceDeleteAddOns=True)
+    except (BotoCoreError, ClientError) as exc:  # pragma: no cover - runtime safety
+        raise LightsailFetchError(str(exc)) from exc
+
+
 def parse_instance_details(data: dict[str, Any]) -> dict[str, Any]:
     location = data.get("location") or {}
     state = data.get("state") or {}
