@@ -9,6 +9,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
 from apps.core.models import Ownable
+from .versioning import current_suite_version, is_baseline_version_reached
 
 
 class FeatureManager(models.Manager):
@@ -46,6 +47,15 @@ class Feature(Ownable):
         ),
     )
     summary = models.TextField(blank=True)
+    baseline_version = models.CharField(
+        max_length=40,
+        blank=True,
+        default="",
+        help_text=_(
+            "Optional minimum Arthexis version where this suite feature should be "
+            "enabled by default."
+        ),
+    )
     is_enabled = models.BooleanField(
         default=True,
         help_text=_(
@@ -203,6 +213,15 @@ class Feature(Ownable):
         if not node:
             return False
         return node.features.filter(pk=self.node_feature_id).exists()
+
+    def baseline_reached(self, *, current_version: str | None = None) -> bool:
+        """Return whether the current suite version reaches this feature baseline."""
+
+        resolved_current = current_suite_version() if current_version is None else current_version
+        return is_baseline_version_reached(
+            baseline_version=self.baseline_version,
+            current_version=resolved_current,
+        )
 
     def save(self, *args, **kwargs):
         """Persist and auto-link a main app when code locations provide one."""

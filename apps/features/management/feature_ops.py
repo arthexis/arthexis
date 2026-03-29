@@ -11,6 +11,7 @@ from django.db import transaction
 
 from apps.app.models import Application
 from apps.features.models import Feature
+from apps.features.versioning import current_suite_version, is_baseline_version_reached
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
 
@@ -187,6 +188,25 @@ def _ensure_reset_baseline_features() -> None:
     Feature.objects.filter(slug="development-blog").delete()
 
 
+def apply_suite_feature_baseline_defaults(*, current_version: str | None = None) -> int:
+    """Disable suite features whose baseline version is above the running version."""
+
+    resolved_current = current_suite_version() if current_version is None else current_version
+    updated = 0
+    for feature in Feature.objects.exclude(baseline_version=""):
+        if is_baseline_version_reached(
+            baseline_version=feature.baseline_version,
+            current_version=resolved_current,
+        ):
+            continue
+        if not feature.is_enabled:
+            continue
+        feature.is_enabled = False
+        feature.save(update_fields=["is_enabled", "updated_at"])
+        updated += 1
+    return updated
+
+
 def reset_all_suite_features() -> tuple[int, int]:
     """Reload mainstream suite feature fixtures.
 
@@ -211,5 +231,6 @@ def reset_all_suite_features() -> tuple[int, int]:
         call_command(
             "loaddata", *(str(path) for path in fixture_paths), verbosity=0
         )
+        apply_suite_feature_baseline_defaults()
         _ensure_reset_baseline_features()
     return deleted_count, len(fixture_paths)

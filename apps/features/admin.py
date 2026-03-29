@@ -24,6 +24,7 @@ from apps.services.celery_workers import (
     sync_celery_workers_from_feature,
 )
 
+from .management.feature_ops import apply_suite_feature_baseline_defaults
 from .models import Feature, FeatureNote, FeatureTest
 from .parameters import get_feature_parameter_definitions, set_feature_parameter_values
 
@@ -212,6 +213,7 @@ class FeatureAdmin(
                     "slug",
                     "source",
                     "summary",
+                    "baseline_version",
                     "is_enabled",
                     "main_app",
                     "node_feature",
@@ -308,6 +310,7 @@ class FeatureAdmin(
                 feature_manager.update(is_seed_data=False, is_enabled=False)
                 feature_manager.all().delete()
                 call_command("loaddata", *(str(path) for path in fixture_paths), verbosity=0)
+                apply_suite_feature_baseline_defaults()
         except CommandError as exc:
             self.message_user(
                 request,
