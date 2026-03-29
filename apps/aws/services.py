@@ -29,12 +29,52 @@ class LightsailPaginationError(LightsailFetchError):
     """Raised when paginated Lightsail listing calls fail."""
 
 
+def issue_mfa_session_credentials(
+    *,
+    region: str,
+    credentials: AWSCredentials,
+    mfa_serial: str,
+    mfa_code: str,
+    duration_seconds: int = 900,
+) -> dict[str, str]:
+    """Return temporary session credentials from AWS STS for MFA-protected accounts."""
+
+    module = _require_boto3()
+    session = module.session.Session(
+        region_name=region,
+        aws_access_key_id=credentials.access_key_id,
+        aws_secret_access_key=credentials.secret_access_key,
+    )
+    sts_client = session.client("sts")
+    try:
+        response = sts_client.get_session_token(
+            SerialNumber=mfa_serial,
+            TokenCode=mfa_code,
+            DurationSeconds=max(900, int(duration_seconds)),
+        )
+    except (BotoCoreError, ClientError) as exc:  # pragma: no cover - runtime safety
+        raise LightsailFetchError(str(exc)) from exc
+
+    temporary_credentials = response.get("Credentials") or {}
+    access_key_id = str(temporary_credentials.get("AccessKeyId") or "").strip()
+    secret_access_key = str(temporary_credentials.get("SecretAccessKey") or "").strip()
+    session_token = str(temporary_credentials.get("SessionToken") or "").strip()
+    if not access_key_id or not secret_access_key or not session_token:
+        raise LightsailFetchError("AWS STS did not return complete temporary credentials.")
+    return {
+        "access_key_id": access_key_id,
+        "secret_access_key": secret_access_key,
+        "session_token": session_token,
+    }
+
+
 def _lightsail_client(
     region: str,
     credentials: Optional[AWSCredentials] = None,
     *,
     access_key_id: str | None = None,
     secret_access_key: str | None = None,
+    session_token: str | None = None,
 ):
     module = _require_boto3()
     session_kwargs: dict[str, Any] = {"region_name": region}
@@ -52,6 +92,8 @@ def _lightsail_client(
                 "aws_secret_access_key": secret_access_key,
             }
         )
+    if session_token:
+        session_kwargs["aws_session_token"] = session_token
     session = module.session.Session(**session_kwargs)
     return session.client("lightsail")
 
@@ -78,6 +120,7 @@ def create_lightsail_instance(
     credentials: Optional[AWSCredentials] = None,
     access_key_id: str | None = None,
     secret_access_key: str | None = None,
+    session_token: str | None = None,
     key_pair_name: str | None = None,
     availability_zone: str | None = None,
     wait_timeout_seconds: int = 90,
@@ -89,6 +132,7 @@ def create_lightsail_instance(
         credentials,
         access_key_id=access_key_id,
         secret_access_key=secret_access_key,
+        session_token=session_token,
     )
     payload: dict[str, Any] = {
         "instanceNames": [name],
@@ -113,6 +157,7 @@ def create_lightsail_instance(
                 credentials=credentials,
                 access_key_id=access_key_id,
                 secret_access_key=secret_access_key,
+                session_token=session_token,
             )
         except LightsailFetchError as exc:
             original_exc = exc.__cause__
@@ -137,12 +182,14 @@ def fetch_lightsail_instance(
     credentials: Optional[AWSCredentials] = None,
     access_key_id: str | None = None,
     secret_access_key: str | None = None,
+    session_token: str | None = None,
 ) -> dict[str, Any]:
     client = _lightsail_client(
         region,
         credentials,
         access_key_id=access_key_id,
         secret_access_key=secret_access_key,
+        session_token=session_token,
     )
     try:
         response = client.get_instance(instanceName=name)
@@ -158,6 +205,7 @@ def delete_lightsail_instance(
     credentials: Optional[AWSCredentials] = None,
     access_key_id: str | None = None,
     secret_access_key: str | None = None,
+    session_token: str | None = None,
 ) -> None:
     """Delete a Lightsail instance."""
 
@@ -166,6 +214,7 @@ def delete_lightsail_instance(
         credentials,
         access_key_id=access_key_id,
         secret_access_key=secret_access_key,
+        session_token=session_token,
     )
     try:
         client.delete_instance(instanceName=name, forceDeleteAddOns=True)
@@ -199,12 +248,14 @@ def fetch_lightsail_database(
     credentials: Optional[AWSCredentials] = None,
     access_key_id: str | None = None,
     secret_access_key: str | None = None,
+    session_token: str | None = None,
 ) -> dict[str, Any]:
     client = _lightsail_client(
         region,
         credentials,
         access_key_id=access_key_id,
         secret_access_key=secret_access_key,
+        session_token=session_token,
     )
     try:
         response = client.get_relational_database(relationalDatabaseName=name)
@@ -219,6 +270,7 @@ def list_lightsail_instances(
     credentials: Optional[AWSCredentials] = None,
     access_key_id: str | None = None,
     secret_access_key: str | None = None,
+    session_token: str | None = None,
 ) -> list[dict[str, Any]]:
     """Return all Lightsail instances for one region."""
 
@@ -227,6 +279,7 @@ def list_lightsail_instances(
         credentials,
         access_key_id=access_key_id,
         secret_access_key=secret_access_key,
+        session_token=session_token,
     )
     instances: list[dict[str, Any]] = []
     page_token: str | None = None

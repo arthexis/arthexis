@@ -1,0 +1,37 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Operators can enable or disable Lightsail CLI auth bootstrap from Suite Features.",
+      "admin_views": [
+        "admin:features_feature_changelist"
+      ],
+      "code_locations": [
+        "apps/deploy/management/commands/lightsail.py",
+        "apps/aws/services.py"
+      ],
+      "created_at": "2026-03-29T00:00:00Z",
+      "display": "Deploy Lightsail CLI Auth Bootstrap",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "deploy"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "No direct public interface.",
+      "public_views": [],
+      "service_requirements": "Allows CLI credential bootstrap and MFA session issuance for AWS Lightsail deploy setup.",
+      "service_views": [
+        "apps.deploy.management.commands.lightsail.Command._resolve_credentials",
+        "apps.deploy.management.commands.lightsail.Command._resolve_aws_auth_kwargs"
+      ],
+      "slug": "deploy-lightsail-cli-auth-bootstrap",
+      "source": "mainstream",
+      "summary": "Controls interactive credential and MFA auth bootstrap in deploy lightsail CLI flows.",
+      "updated_at": "2026-03-29T00:00:00Z"
+    }
+  }
+]
