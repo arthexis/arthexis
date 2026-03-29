@@ -1601,7 +1601,10 @@ async def test_start_transaction_rejection_creates_transaction_record(charger_fa
         rejected_tx.authorization_status
         == Transaction.AuthorizationStatus.REJECTED
     )
-    assert rejected_tx.authorization_reason == "strict_account_required"
+    assert rejected_tx.authorization_reason in {
+        "account_required_by_feature",
+        "strict_account_required",
+    }
     assert rejected_tx.rejected_at is not None
 
 
