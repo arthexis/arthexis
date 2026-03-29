@@ -193,40 +193,6 @@ def _default_feature_check(
 
 
 
-@feature_checks.register("user-desktop")
-def _check_user_desktop(feature: "NodeFeature", node: Optional["Node"]):
-    """Validate whether desktop UI access appears available on this node."""
-
-    from .models import Node
-    from apps.desktop.services import is_desktop_ui_available
-
-    target: Optional["Node"] = node or Node.get_local()
-    if target is None:
-        return FeatureCheckResult(
-            False,
-            f"No local node is registered; cannot verify {feature.display}.",
-            messages.WARNING,
-        )
-
-    if not is_desktop_ui_available():
-        return FeatureCheckResult(
-            False,
-            f"Desktop UI access is unavailable on {target.hostname} for {feature.display}.",
-            messages.WARNING,
-        )
-
-    if target.has_feature("user-desktop"):
-        return FeatureCheckResult(
-            True,
-            f"{feature.display} is enabled on {target.hostname} and desktop UI access is available.",
-            messages.SUCCESS,
-        )
-
-    return FeatureCheckResult(
-        True,
-        f"{feature.display} is eligible on {target.hostname}; desktop UI access is available.",
-        messages.INFO,
-    )
 @feature_checks.register("llm-summary")
 def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
     from .models import Node

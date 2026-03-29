@@ -134,11 +134,6 @@ apps/tasks/tests/test_models.py::test_schedule_order
 apps/tasks/tests/test_models.py::test_periodic_requires_period
 apps/tasks/tests/test_models.py::test_period_deadline_must_be_within_period
 apps/tasks/tests/test_models.py::test_string_representation
-apps/desktop/tests/test_services.py::test_should_install_shortcut_requires_enabled_node_feature
-apps/desktop/tests/test_services.py::test_sync_desktop_shortcuts_writes_desktop_entries
-apps/desktop/tests/test_services.py::test_should_install_shortcut_rejects_unsafe_expression
-apps/desktop/tests/test_services.py::test_render_shortcut_desktop_entry_sanitizes_newlines
-apps/desktop/tests/test_services.py::test_sync_desktop_shortcuts_removes_only_managed_stale_files
 apps/nodes/tests/test_netmessage_sigils.py::test_net_message_payload_resolves_sigils
 apps/nodes/tests/test_netmessage_sigils.py::test_net_message_payload_includes_expiration
 apps/nodes/tests/test_netmessage_sigils.py::test_net_message_propagation_skips_when_expired

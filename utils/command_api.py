@@ -87,7 +87,6 @@ SUPPORTED_OPERATIONAL_COMMANDS: tuple[str, ...] = (
     "smb",
     "startup",
     "summary",
-    "sync_desktop_shortcuts",
     "sync_registered_widgets",
     "sync_specials",
     "test",

@@ -118,12 +118,6 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 url_name="admin:summary_llmsummaryconfig_wizard",
             ),
         ),
-        "user-desktop": (
-            NodeFeatureDefaultAction(
-                label=_("Desktop shortcuts"),
-                url_name="admin:desktop_desktopshortcut_changelist",
-            ),
-        ),
     }
 
     class Meta:

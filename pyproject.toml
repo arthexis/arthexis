@@ -199,7 +199,6 @@ include-package-data = true
 "apps.counters.tests" = [ "**/*",]
 "apps.credentials" = [ "**/*",]
 "apps.credentials.migrations" = [ "**/*",]
-"apps.desktop" = [ "**/*",]
 "apps.discovery" = [ "**/*",]
 "apps.discovery.migrations" = [ "**/*",]
 "apps.dns" = [ "**/*",]

@@ -10,8 +10,6 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/git_remote.sh
 . "$SCRIPT_DIR/scripts/helpers/git_remote.sh"
-# shellcheck source=scripts/helpers/desktop_shortcuts.sh
-. "$SCRIPT_DIR/scripts/helpers/desktop_shortcuts.sh"
 # shellcheck source=scripts/helpers/version_marker.sh
 . "$SCRIPT_DIR/scripts/helpers/version_marker.sh"
 # shellcheck source=scripts/helpers/ports.sh
@@ -835,5 +833,3 @@ fi
 if [ "$START_SERVICES" = true ]; then
     "$BASE_DIR/start.sh"
 fi
-
-arthexis_refresh_desktop_shortcuts "$BASE_DIR"
