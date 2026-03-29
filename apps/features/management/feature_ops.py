@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from django.conf import settings
@@ -11,6 +11,7 @@ from django.db import transaction
 
 from apps.app.models import Application
 from apps.features.models import Feature
+from apps.features.versioning import current_suite_version, is_baseline_version_reached
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
 
@@ -187,11 +188,30 @@ def _ensure_reset_baseline_features() -> None:
     Feature.objects.filter(slug="development-blog").delete()
 
 
-def reset_all_suite_features() -> tuple[int, int]:
+def apply_suite_feature_baseline_defaults(*, current_version: str | None = None) -> int:
+    """Disable suite features whose baseline version is above the running version."""
+
+    resolved_current = current_suite_version() if current_version is None else current_version
+    features_to_disable_pks: list[int] = []
+    for feature in Feature.objects.filter(is_enabled=True).exclude(baseline_version=""):
+        if is_baseline_version_reached(
+            baseline_version=feature.baseline_version,
+            current_version=resolved_current,
+        ):
+            continue
+        features_to_disable_pks.append(feature.pk)
+
+    if not features_to_disable_pks:
+        return 0
+
+    return Feature.objects.filter(pk__in=features_to_disable_pks).update(is_enabled=False)
+
+
+def reset_all_suite_features() -> tuple[int, int, int]:
     """Reload mainstream suite feature fixtures.
 
     Returns:
-        tuple[int, int]: ``(deleted_count, fixture_count)``.
+        tuple[int, int, int]: ``(deleted_count, fixture_count, baseline_disabled_count)``.
 
     Raises:
         CommandError: If no mainstream fixtures are available.
@@ -211,5 +231,6 @@ def reset_all_suite_features() -> tuple[int, int]:
         call_command(
             "loaddata", *(str(path) for path in fixture_paths), verbosity=0
         )
+        baseline_disabled_count = apply_suite_feature_baseline_defaults()
         _ensure_reset_baseline_features()
-    return deleted_count, len(fixture_paths)
+    return deleted_count, len(fixture_paths), baseline_disabled_count
