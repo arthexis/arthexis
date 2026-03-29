@@ -333,15 +333,20 @@ def _configure_urlfield_assume_scheme():
 
 def _configure_lock_dependent_tasks(config):
     from django.db.backends.signals import connection_created
+    from django.db.models.signals import post_save
     from django.db.models.signals import post_migrate
     from django.db.utils import OperationalError, ProgrammingError
 
     from apps.celery.utils import is_celery_enabled
+    from apps.features.models import Feature
 
     if not is_celery_enabled():
         return
 
-    from .auto_upgrade import ensure_auto_upgrade_periodic_task
+    from .auto_upgrade import (
+        ensure_auto_upgrade_periodic_task,
+        sync_auto_upgrade_periodic_task_for_feature_change,
+    )
 
     def migrate_legacy_heartbeat_task(**kwargs):
         del kwargs
@@ -411,6 +416,12 @@ def _configure_lock_dependent_tasks(config):
     connection_created.connect(
         ensure_auto_upgrade_on_connection,
         dispatch_uid=auto_upgrade_dispatch_uid,
+        weak=False,
+    )
+    post_save.connect(
+        sync_auto_upgrade_periodic_task_for_feature_change,
+        sender=Feature,
+        dispatch_uid="apps.core.apps.sync_auto_upgrade_periodic_task_for_feature_change",
         weak=False,
     )
 

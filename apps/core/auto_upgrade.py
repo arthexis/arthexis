@@ -325,10 +325,25 @@ def auto_upgrade_suite_feature_enabled(*, default: bool = True) -> bool:
 
     try:
         from apps.features.utils import is_suite_feature_enabled
-    except Exception:
+    except ImportError:
         return default
 
     return is_suite_feature_enabled(AUTO_UPGRADE_FEATURE_SLUG, default=default)
+
+
+def sync_auto_upgrade_periodic_task_for_feature_change(
+    *, instance=None, update_fields=None, **kwargs
+) -> None:
+    """Sync beat task state when the auto-upgrade suite feature toggles."""
+
+    del kwargs
+    if instance is None:
+        return
+    if getattr(instance, "slug", None) != AUTO_UPGRADE_FEATURE_SLUG:
+        return
+    if update_fields is not None and "is_enabled" not in set(update_fields):
+        return
+    ensure_auto_upgrade_periodic_task()
 
 
 def ensure_auto_upgrade_periodic_task(
