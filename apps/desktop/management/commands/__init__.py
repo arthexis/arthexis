@@ -1,1 +1,0 @@
-"""Desktop management command package."""

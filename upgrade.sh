@@ -32,8 +32,6 @@ log_upgrade_exit() {
   arthexis_record_upgrade_duration "$status"
 }
 trap log_upgrade_exit EXIT
-# shellcheck source=scripts/helpers/desktop_shortcuts.sh
-. "$BASE_DIR/scripts/helpers/desktop_shortcuts.sh"
 # shellcheck source=scripts/helpers/ports.sh
 . "$BASE_DIR/scripts/helpers/ports.sh"
 # shellcheck source=scripts/helpers/version_marker.sh
@@ -2129,4 +2127,3 @@ if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
   fi
 fi
 
-arthexis_refresh_desktop_shortcuts "$BASE_DIR"

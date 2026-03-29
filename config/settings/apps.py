@@ -44,7 +44,6 @@ PROJECT_LOCAL_APPS = [
     "apps.core",
     "apps.counters",
     "apps.credentials",
-    "apps.desktop",
     "apps.deploy",
     "apps.discovery",
     "apps.dns",
