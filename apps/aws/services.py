@@ -56,9 +56,9 @@ def issue_mfa_session_credentials(
         raise LightsailFetchError(str(exc)) from exc
 
     temporary_credentials = response.get("Credentials") or {}
-    access_key_id = str(temporary_credentials.get("AccessKeyId") or "").strip()
-    secret_access_key = str(temporary_credentials.get("SecretAccessKey") or "").strip()
-    session_token = str(temporary_credentials.get("SessionToken") or "").strip()
+    access_key_id = str(temporary_credentials.get("AccessKeyId", "")).strip()
+    secret_access_key = str(temporary_credentials.get("SecretAccessKey", "")).strip()
+    session_token = str(temporary_credentials.get("SessionToken", "")).strip()
     if not access_key_id or not secret_access_key or not session_token:
         raise LightsailFetchError("AWS STS did not return complete temporary credentials.")
     return {

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import getpass
+import sys
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import IntegrityError
@@ -105,9 +106,9 @@ class Command(BaseCommand):
         auth_kwargs = self._resolve_aws_auth_kwargs(
             credentials=credentials,
             region=region,
-            mfa_serial=str(options.get("mfa_serial") or "").strip(),
-            mfa_code=str(options.get("mfa_code") or "").strip(),
-            mfa_duration_seconds=int(options.get("mfa_duration_seconds") or 900),
+            mfa_serial=options["mfa_serial"].strip(),
+            mfa_code=options["mfa_code"].strip(),
+            mfa_duration_seconds=options["mfa_duration_seconds"],
         )
         skip_create = bool(options.get("skip_create"))
         created_remote_instance = False
@@ -287,7 +288,7 @@ class Command(BaseCommand):
             )
         )
         access_key_id = self._prompt_required("AWS access key id")
-        secret_access_key = self._prompt_secret_access_key()
+        secret_access_key = self._prompt_required("AWS secret access key", secret=True)
         try:
             return AWSCredentials.objects.create(
                 name=candidate,
@@ -300,21 +301,24 @@ class Command(BaseCommand):
                 "The access key may already exist or values are invalid."
             ) from exc
 
-    def _prompt_required(self, label: str) -> str:
-        """Prompt for a required non-empty value."""
+    def _prompt_required(self, label: str, *, secret: bool = False) -> str:
+        """Prompt for a required non-empty value, optionally hiding input."""
 
+        if not sys.stdin.isatty():
+            raise CommandError(
+                f"{label} is required, but interactive prompts are unavailable in non-interactive mode."
+            )
+
+        prompt_func = getpass.getpass if secret else input
         value = ""
         while not value:
-            value = input(f"{label}: ").strip()
+            try:
+                value = prompt_func(f"{label}: ").strip()
+            except EOFError as exc:
+                raise CommandError(
+                    f"{label} is required, but no interactive input was received."
+                ) from exc
         return value
-
-    def _prompt_secret_access_key(self) -> str:
-        """Prompt for AWS secret access key without echoing the value."""
-
-        secret = ""
-        while not secret:
-            secret = getpass.getpass("AWS secret access key: ").strip()
-        return secret
 
     def _resolve_aws_auth_kwargs(
         self,

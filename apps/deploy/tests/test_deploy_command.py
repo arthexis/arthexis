@@ -187,6 +187,8 @@ def test_lightsail_command_requires_blueprint_and_bundle_without_skip_create():
 
 
 def test_lightsail_command_creates_credentials_when_named_record_missing(monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
     def fake_fetch_lightsail_instance(**kwargs):
         assert kwargs["credentials"].name == "new-creds"
         return {
@@ -362,6 +364,7 @@ def test_lightsail_command_prompts_for_mfa_code_when_missing(monkeypatch):
 
     prompts: list[str] = []
 
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr(
         "builtins.input",
         lambda prompt: prompts.append(prompt) or ("123456" if "MFA code" in prompt else ""),
@@ -402,6 +405,33 @@ def test_lightsail_command_prompts_for_mfa_code_when_missing(monkeypatch):
     )
 
     assert prompts == ["AWS MFA code: "]
+
+
+def test_lightsail_command_rejects_interactive_prompt_in_non_tty_mode(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="root-account",
+        access_key_id="AKIA_ROOT",
+        secret_access_key="root-secret",
+    )
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+
+    with pytest.raises(
+        CommandError,
+        match="AWS MFA code is required, but interactive prompts are unavailable in non-interactive mode.",
+    ):
+        call_command(
+            "lightsail",
+            "--credentials",
+            str(credentials.pk),
+            "--region",
+            "us-east-1",
+            "--instance-name",
+            "ops-node-1",
+            "--skip-create",
+            "--mfa-serial",
+            "arn:aws:iam::123456789012:mfa/root-account-mfa-device",
+        )
 
 
 def test_lightsail_command_cleans_up_remote_instance_on_post_create_failure(monkeypatch):
