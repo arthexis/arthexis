@@ -131,22 +131,34 @@ class DeployInstance(Entity):
             self.install_dir,
             field_name="install_dir",
         )
-        if self.env_file:
-            self.env_file = self._normalize_absolute_path(
-                self.env_file,
-                field_name="env_file",
-            )
+        self.env_file = self._normalize_absolute_path(
+            self.env_file,
+            field_name="env_file",
+            required=False,
+        )
 
     @staticmethod
-    def _normalize_absolute_path(path: str, *, field_name: str) -> str:
+    def _normalize_absolute_path(
+        path: str,
+        *,
+        field_name: str,
+        required: bool = True,
+    ) -> str:
         candidate = (path or "").strip()
         if not candidate:
-            raise ValidationError({field_name: _("This field is required.")})
+            if required:
+                raise ValidationError({field_name: _("This field is required.")})
+            return ""
 
         normalized = posixpath.normpath(candidate)
         if not normalized.startswith("/"):
             raise ValidationError({field_name: _("Path must be absolute.")})
         return normalized
+
+    def save(self, *args, **kwargs) -> None:
+        if not kwargs.get("raw", False):
+            self.full_clean(validate_unique=False, validate_constraints=False)
+        super().save(*args, **kwargs)
 
 
 class DeployRelease(Entity):

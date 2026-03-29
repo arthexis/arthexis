@@ -40,7 +40,15 @@ def test_deploy_instance_rejects_relative_paths():
     assert "install_dir" in exc_info.value.message_dict
 
 
-def test_deploy_instance_enforces_unique_names_per_server():
+@pytest.mark.parametrize(
+    "duplicate_fields",
+    [
+        {"name": "instance-a"},
+        {"install_dir": "/srv/arthexis-a"},
+        {"service_name": "arthexis-a"},
+    ],
+)
+def test_deploy_instance_enforces_unique_constraints_per_server(duplicate_fields):
     server = DeployServer.objects.create(name="lightsail-3", host="10.1.2.5")
     DeployInstance.objects.create(
         server=server,
@@ -50,12 +58,14 @@ def test_deploy_instance_enforces_unique_names_per_server():
     )
 
     with pytest.raises(IntegrityError):
-        DeployInstance.objects.create(
-            server=server,
-            name="instance-a",
-            install_dir="/srv/arthexis-b",
-            service_name="arthexis-b",
-        )
+        data = {
+            "server": server,
+            "name": "instance-b",
+            "install_dir": "/srv/arthexis-b",
+            "service_name": "arthexis-b",
+        }
+        data.update(duplicate_fields)
+        DeployInstance.objects.create(**data)
 
 
 def test_multiple_instances_can_share_names_across_servers():
@@ -76,3 +86,32 @@ def test_multiple_instances_can_share_names_across_servers():
     )
 
     assert DeployInstance.objects.filter(name="prod").count() == 2
+
+
+def test_deploy_instance_treats_blank_env_file_as_optional():
+    server = DeployServer.objects.create(name="lightsail-6", host="10.1.2.8")
+    instance = DeployInstance(
+        server=server,
+        name="optional-env",
+        install_dir="/srv/optional-env",
+        env_file="   ",
+        service_name="optional-env",
+    )
+
+    instance.full_clean()
+
+    assert instance.env_file == ""
+
+
+def test_deploy_instance_save_enforces_path_validation():
+    server = DeployServer.objects.create(name="lightsail-7", host="10.1.2.9")
+
+    with pytest.raises(ValidationError) as exc_info:
+        DeployInstance.objects.create(
+            server=server,
+            name="invalid-path",
+            install_dir="relative/path",
+            service_name="invalid-path",
+        )
+
+    assert "install_dir" in exc_info.value.message_dict
