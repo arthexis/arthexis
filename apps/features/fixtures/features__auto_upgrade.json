@@ -1,0 +1,37 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Suite administrators can enable or disable scheduled upgrade policy checks across the node.",
+      "admin_views": [
+        "admin:features_feature_changelist",
+        "admin:core_report_system_upgrade"
+      ],
+      "code_locations": [
+        "apps/core/auto_upgrade.py",
+        "apps/nodes/tasks.py"
+      ],
+      "created_at": "2024-03-01T00:00:00Z",
+      "display": "Auto Upgrade",
+      "is_deleted": false,
+      "is_enabled": true,
+      "is_seed_data": true,
+      "main_app": [
+        "core"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "No public surface; this is an operational suite control.",
+      "public_views": [],
+      "service_requirements": "When disabled, scheduled auto-upgrade policy checks remain paused until re-enabled.",
+      "service_views": [
+        "apps.nodes.tasks.apply_upgrade_policies"
+      ],
+      "slug": "auto-upgrade",
+      "source": "mainstream",
+      "summary": "Controls whether the suite runs scheduled auto-upgrade policy checks.",
+      "updated_at": "2024-03-01T00:00:00Z"
+    }
+  }
+]
