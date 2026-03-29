@@ -85,7 +85,6 @@ For advanced admin workflows and any non-allowlisted Django command, run `manage
 - `smb`
 - `startup`
 - `summary`
-- `sync_desktop_shortcuts`
 - `sync_registered_widgets`
 - `sync_specials`
 - `test`

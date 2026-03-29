@@ -10,6 +10,7 @@ from apps.aws.models import AWSCredentials, LightsailInstance
 from apps.aws.services import (
     LightsailFetchError,
     create_lightsail_instance,
+    delete_lightsail_instance,
     fetch_lightsail_instance,
     parse_instance_details,
 )
@@ -27,8 +28,8 @@ class Command(BaseCommand):
         parser.add_argument("--credentials", required=True, help="AWS credential id or name.")
         parser.add_argument("--region", required=True, help="Lightsail region code.")
         parser.add_argument("--instance-name", required=True, help="Lightsail instance name.")
-        parser.add_argument("--blueprint-id", required=True, help="Lightsail blueprint id.")
-        parser.add_argument("--bundle-id", required=True, help="Lightsail bundle id.")
+        parser.add_argument("--blueprint-id", default="", help="Lightsail blueprint id.")
+        parser.add_argument("--bundle-id", default="", help="Lightsail bundle id.")
         parser.add_argument("--key-pair-name", default="", help="Lightsail SSH key pair.")
         parser.add_argument(
             "--availability-zone",
@@ -74,43 +75,54 @@ class Command(BaseCommand):
         region = str(options["region"]).strip()
         instance_name = str(options["instance_name"]).strip()
         deploy_instance_name = str(options["deploy_instance_name"]).strip()
+        self._validate_local_prerequisites()
         install_dir = str(options.get("install_dir") or "").strip() or f"/srv/{instance_name}"
         service_name = str(options.get("service_name") or "").strip() or f"arthexis-{instance_name}"
+        skip_create = bool(options.get("skip_create"))
+        created_remote_instance = False
+        persisted_records = False
 
-        if not bool(options.get("skip_create")):
+        if not skip_create:
+            blueprint_id = str(options.get("blueprint_id") or "").strip()
+            bundle_id = str(options.get("bundle_id") or "").strip()
+            if not blueprint_id or not bundle_id:
+                raise CommandError(
+                    "--blueprint-id and --bundle-id are required unless --skip-create is set."
+                )
             try:
                 create_lightsail_instance(
                     name=instance_name,
                     region=region,
-                    blueprint_id=str(options["blueprint_id"]).strip(),
-                    bundle_id=str(options["bundle_id"]).strip(),
+                    blueprint_id=blueprint_id,
+                    bundle_id=bundle_id,
                     credentials=credentials,
                     key_pair_name=str(options.get("key_pair_name") or "").strip() or None,
                     availability_zone=str(options.get("availability_zone") or "").strip() or None,
                 )
             except LightsailFetchError as exc:
                 raise CommandError(f"Unable to create Lightsail instance: {exc}") from exc
+            created_remote_instance = True
 
         try:
-            details = fetch_lightsail_instance(
-                name=instance_name,
-                region=region,
-                credentials=credentials,
-            )
-        except LightsailFetchError as exc:
-            raise CommandError(f"Unable to fetch Lightsail instance details: {exc}") from exc
+            try:
+                details = fetch_lightsail_instance(
+                    name=instance_name,
+                    region=region,
+                    credentials=credentials,
+                )
+            except LightsailFetchError as exc:
+                raise CommandError(f"Unable to fetch Lightsail instance details: {exc}") from exc
 
-        if not details:
-            raise CommandError("Lightsail instance details were empty; setup cannot continue.")
+            if not details:
+                raise CommandError("Lightsail instance details were empty; setup cannot continue.")
 
-        host = (details.get("publicIpAddress") or details.get("privateIpAddress") or "").strip()
-        if not host:
-            raise CommandError("Lightsail instance has no public/private IP yet; try again shortly.")
+            host = (details.get("publicIpAddress") or details.get("privateIpAddress") or "").strip()
+            if not host:
+                raise CommandError("Lightsail instance has no public/private IP yet; try again shortly.")
 
-        lightsail_defaults = parse_instance_details(details)
-        lightsail_defaults["credentials"] = credentials
+            lightsail_defaults = parse_instance_details(details)
+            lightsail_defaults["credentials"] = credentials
 
-        try:
             with transaction.atomic():
                 lightsail_instance, _ = LightsailInstance.objects.update_or_create(
                     name=instance_name,
@@ -149,14 +161,62 @@ class Command(BaseCommand):
                     requested_by="lightsail",
                     output="CLI Lightsail setup prepared deployment records.",
                 )
+            persisted_records = True
         except (OperationalError, ProgrammingError) as exc:
+            if created_remote_instance and not persisted_records:
+                self._cleanup_remote_instance(
+                    instance_name=instance_name,
+                    region=region,
+                    credentials=credentials,
+                )
             raise CommandError("Required deployment tables are not available. Run migrations first.") from exc
+        except Exception:
+            if created_remote_instance and not persisted_records:
+                self._cleanup_remote_instance(
+                    instance_name=instance_name,
+                    region=region,
+                    credentials=credentials,
+                )
+            raise
 
         self.stdout.write(self.style.SUCCESS("Lightsail deployment records configured."))
         self.stdout.write(f"Server: {instance_name} ({region}) host={host}")
         self.stdout.write(
             f"Deploy instance: {deploy_instance_name} service={service_name} install_dir={install_dir}"
         )
+
+    def _cleanup_remote_instance(
+        self,
+        *,
+        instance_name: str,
+        region: str,
+        credentials: AWSCredentials,
+    ) -> None:
+        """Best-effort cleanup when post-create setup fails before persistence."""
+
+        try:
+            delete_lightsail_instance(
+                name=instance_name,
+                region=region,
+                credentials=credentials,
+            )
+        except LightsailFetchError as exc:
+            self.stderr.write(
+                self.style.WARNING(
+                    "Warning: failed to cleanup created Lightsail instance "
+                    f"'{instance_name}' in '{region}': {exc}"
+                )
+            )
+
+    def _validate_local_prerequisites(self) -> None:
+        """Fail fast when deployment tables are unavailable."""
+
+        try:
+            AWSCredentials.objects.exists()
+            DeployInstance.objects.exists()
+            DeployServer.objects.exists()
+        except (OperationalError, ProgrammingError) as exc:
+            raise CommandError("Required deployment tables are not available. Run migrations first.") from exc
 
     def _resolve_credentials(self, raw_credentials: str) -> AWSCredentials:
         """Resolve AWS credentials by integer id or by name."""
@@ -166,14 +226,15 @@ class Command(BaseCommand):
             raise CommandError("--credentials is required.")
 
         try:
+            creds = None
             if candidate.isdigit():
                 creds = AWSCredentials.objects.filter(pk=int(candidate)).first()
-                if creds:
-                    return creds
-            creds = AWSCredentials.objects.filter(name=candidate).first()
+
+            if not creds:
+                creds = AWSCredentials.objects.filter(name=candidate).first()
         except (OperationalError, ProgrammingError) as exc:
             raise CommandError("AWS credential tables are not available. Run migrations first.") from exc
 
-        if creds:
-            return creds
-        raise CommandError(f"AWS credentials not found for '{raw_credentials}'.")
+        if not creds:
+            raise CommandError(f"AWS credentials not found for '{raw_credentials}'.")
+        return creds

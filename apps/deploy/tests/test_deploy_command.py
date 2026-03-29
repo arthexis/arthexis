@@ -162,11 +162,79 @@ def test_lightsail_command_handles_fetch_failures(
             "us-east-1",
             "--instance-name",
             "ops-node-1",
-            "--blueprint-id",
-            "debian_12",
-            "--bundle-id",
-            "small_3_0",
             "--skip-create",
         )
 
     assert not DeployServer.objects.exists()
+
+
+def test_lightsail_command_requires_blueprint_and_bundle_without_skip_create():
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+
+    with pytest.raises(
+        CommandError,
+        match="--blueprint-id and --bundle-id are required unless --skip-create is set.",
+    ):
+        call_command(
+            "lightsail",
+            "--credentials",
+            str(credentials.pk),
+            "--region",
+            "us-east-1",
+            "--instance-name",
+            "ops-node-1",
+        )
+
+
+def test_lightsail_command_cleans_up_remote_instance_on_post_create_failure(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+    calls: list[str] = []
+
+    def fake_create_lightsail_instance(**kwargs):
+        calls.append(f"create:{kwargs['name']}")
+        return {}
+
+    def fake_fetch_lightsail_instance(**kwargs):
+        calls.append(f"fetch:{kwargs['name']}")
+        raise lightsail_command.LightsailFetchError("fetch failed")
+
+    def fake_delete_lightsail_instance(**kwargs):
+        calls.append(f"delete:{kwargs['name']}")
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.create_lightsail_instance",
+        fake_create_lightsail_instance,
+    )
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        fake_fetch_lightsail_instance,
+    )
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.delete_lightsail_instance",
+        fake_delete_lightsail_instance,
+    )
+
+    with pytest.raises(CommandError, match="Unable to fetch Lightsail instance details: fetch failed"):
+        call_command(
+            "lightsail",
+            "--credentials",
+            str(credentials.pk),
+            "--region",
+            "us-east-1",
+            "--instance-name",
+            "ops-node-1",
+            "--blueprint-id",
+            "debian_12",
+            "--bundle-id",
+            "small_3_0",
+        )
+
+    assert calls == ["create:ops-node-1", "fetch:ops-node-1", "delete:ops-node-1"]
