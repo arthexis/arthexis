@@ -50,6 +50,7 @@ For advanced admin workflows and any non-allowlisted Django command, run `manage
 - `invite`
 - `lcd`
 - `leads`
+- `lightsail`
 - `message`
 - `migrations`
 - `nginx`
@@ -103,12 +104,12 @@ When an operation explicitly asks for an **ops command**, use `command.sh` / `co
 
 For everything else (including Django built-ins like `makemigrations`, `shell`, and direct test targeting), use `manage.py` directly.
 
-### `deploy` command quickstart
+### `lightsail` command quickstart
 
-Use Arthexis deploy setup to create and register a new AWS Lightsail target in one CLI flow:
+Use Arthexis lightsail setup to create and register a new AWS Lightsail target in one CLI flow:
 
 ```bash
-./command.sh deploy setup-lightsail \
+./command.sh lightsail \
   --credentials <aws-credential-id-or-name> \
   --region us-east-1 \
   --instance-name ops-node-1 \

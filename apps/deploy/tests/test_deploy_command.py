@@ -5,7 +5,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from apps.aws.models import AWSCredentials
-from apps.deploy.management.commands import deploy as deploy_command
+from apps.deploy.management.commands import lightsail as lightsail_command
 from apps.deploy.models import DeployInstance, DeployRun, DeployServer
 
 pytestmark = pytest.mark.django_db
@@ -43,7 +43,12 @@ def test_deploy_command_lists_instances_and_recent_runs(capsys):
     assert "action=deploy status=succeeded" in output
 
 
-def test_deploy_setup_lightsail_creates_records(monkeypatch, capsys):
+def test_deploy_command_rejects_removed_setup_subcommand():
+    with pytest.raises(CommandError, match="unrecognized arguments: setup-lightsail"):
+        call_command("deploy", "setup-lightsail")
+
+
+def test_lightsail_command_creates_records(monkeypatch, capsys):
     credentials = AWSCredentials.objects.create(
         name="primary",
         access_key_id="AKIA_TEST",
@@ -70,17 +75,16 @@ def test_deploy_setup_lightsail_creates_records(monkeypatch, capsys):
         }
 
     monkeypatch.setattr(
-        "apps.deploy.management.commands.deploy.create_lightsail_instance",
+        "apps.deploy.management.commands.lightsail.create_lightsail_instance",
         fake_create_lightsail_instance,
     )
     monkeypatch.setattr(
-        "apps.deploy.management.commands.deploy.fetch_lightsail_instance",
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
         fake_fetch_lightsail_instance,
     )
 
     call_command(
-        "deploy",
-        "setup-lightsail",
+        "lightsail",
         "--credentials",
         str(credentials.pk),
         "--region",
@@ -127,7 +131,7 @@ def test_deploy_setup_lightsail_creates_records(monkeypatch, capsys):
         ),
     ],
 )
-def test_deploy_setup_lightsail_handles_fetch_failures(
+def test_lightsail_command_handles_fetch_failures(
     monkeypatch,
     details,
     fetch_error,
@@ -141,18 +145,17 @@ def test_deploy_setup_lightsail_handles_fetch_failures(
 
     def fake_fetch_lightsail_instance(**kwargs):
         if fetch_error:
-            raise deploy_command.LightsailFetchError(fetch_error)
+            raise lightsail_command.LightsailFetchError(fetch_error)
         return details
 
     monkeypatch.setattr(
-        "apps.deploy.management.commands.deploy.fetch_lightsail_instance",
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
         fake_fetch_lightsail_instance,
     )
 
     with pytest.raises(CommandError, match=expected_error):
         call_command(
-            "deploy",
-            "setup-lightsail",
+            "lightsail",
             "--credentials",
             str(credentials.pk),
             "--region",
