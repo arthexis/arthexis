@@ -81,6 +81,7 @@ class Command(BaseCommand):
         skip_create = bool(options.get("skip_create"))
         created_remote_instance = False
         persisted_records = False
+        details: dict[str, object] = {}
 
         if not skip_create:
             blueprint_id = str(options.get("blueprint_id") or "").strip()
@@ -90,7 +91,7 @@ class Command(BaseCommand):
                     "--blueprint-id and --bundle-id are required unless --skip-create is set."
                 )
             try:
-                create_lightsail_instance(
+                details = create_lightsail_instance(
                     name=instance_name,
                     region=region,
                     blueprint_id=blueprint_id,
@@ -104,14 +105,15 @@ class Command(BaseCommand):
             created_remote_instance = True
 
         try:
-            try:
-                details = fetch_lightsail_instance(
-                    name=instance_name,
-                    region=region,
-                    credentials=credentials,
-                )
-            except LightsailFetchError as exc:
-                raise CommandError(f"Unable to fetch Lightsail instance details: {exc}") from exc
+            if skip_create or not details:
+                try:
+                    details = fetch_lightsail_instance(
+                        name=instance_name,
+                        region=region,
+                        credentials=credentials,
+                    )
+                except LightsailFetchError as exc:
+                    raise CommandError(f"Unable to fetch Lightsail instance details: {exc}") from exc
 
             if not details:
                 raise CommandError("Lightsail instance details were empty; setup cannot continue.")
@@ -213,7 +215,9 @@ class Command(BaseCommand):
 
         try:
             AWSCredentials.objects.exists()
+            LightsailInstance.objects.exists()
             DeployInstance.objects.exists()
+            DeployRun.objects.exists()
             DeployServer.objects.exists()
         except (OperationalError, ProgrammingError) as exc:
             raise CommandError("Required deployment tables are not available. Run migrations first.") from exc

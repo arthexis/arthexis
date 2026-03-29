@@ -60,13 +60,6 @@ def test_lightsail_command_creates_records(monkeypatch, capsys):
             "name": kwargs["name"],
             "publicIpAddress": "18.1.2.3",
             "privateIpAddress": "10.0.0.5",
-        }
-
-    def fake_fetch_lightsail_instance(**kwargs):
-        return {
-            "name": kwargs["name"],
-            "publicIpAddress": "18.1.2.3",
-            "privateIpAddress": "10.0.0.5",
             "location": {"availabilityZone": "us-east-1a"},
             "state": {"name": "running"},
             "blueprintId": "debian_12",
@@ -74,13 +67,16 @@ def test_lightsail_command_creates_records(monkeypatch, capsys):
             "arn": "arn:aws:lightsail:::instance/ops-node-1",
         }
 
+    def fail_fetch_lightsail_instance(**kwargs):
+        pytest.fail("fetch_lightsail_instance should not be called when create returns details")
+
     monkeypatch.setattr(
         "apps.deploy.management.commands.lightsail.create_lightsail_instance",
         fake_create_lightsail_instance,
     )
     monkeypatch.setattr(
         "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
-        fake_fetch_lightsail_instance,
+        fail_fetch_lightsail_instance,
     )
 
     call_command(
