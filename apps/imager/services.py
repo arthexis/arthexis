@@ -99,7 +99,11 @@ def _ensure_guestfish() -> None:
 def _normalize_local_source_path(base_image_uri: str, parsed_uri: ParseResult) -> Path | None:
     """Normalize local filesystem path inputs across URI and platform-specific forms."""
 
-    if len(parsed_uri.scheme) == 1 and parsed_uri.scheme.isalpha() and parsed_uri.path.startswith("/"):
+    if (
+        len(parsed_uri.scheme) == 1
+        and parsed_uri.scheme.isalpha()
+        and parsed_uri.path.startswith(("/", "\\"))
+    ):
         return Path(f"{parsed_uri.scheme}:{unquote(parsed_uri.path)}")
 
     if parsed_uri.scheme == "":
