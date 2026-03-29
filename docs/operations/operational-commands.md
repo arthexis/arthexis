@@ -30,6 +30,7 @@ For advanced admin workflows and any non-allowlisted Django command, run `manage
 - `coverage`
 - `create`
 - `create_docs_admin`
+- `deploy`
 - `dns_proxy`
 - `email`
 - `enable_local_https`
@@ -101,3 +102,22 @@ For advanced admin workflows and any non-allowlisted Django command, run `manage
 When an operation explicitly asks for an **ops command**, use `command.sh` / `command.bat` with one of the allowlisted names above.
 
 For everything else (including Django built-ins like `makemigrations`, `shell`, and direct test targeting), use `manage.py` directly.
+
+### `deploy` command quickstart
+
+Use Arthexis deploy setup to create and register a new AWS Lightsail target in one CLI flow:
+
+```bash
+./command.sh deploy setup-lightsail \
+  --credentials <aws-credential-id-or-name> \
+  --region us-east-1 \
+  --instance-name ops-node-1 \
+  --blueprint-id debian_12 \
+  --bundle-id small_3_0
+```
+
+Then inspect the configured deployment inventory:
+
+```bash
+./command.sh deploy
+```

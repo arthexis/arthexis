@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Optional
 
 from .models import AWSCredentials, LightsailDatabase, LightsailInstance
@@ -65,6 +66,68 @@ def list_lightsail_regions() -> list[str]:
     session = module.session.Session()
     regions: list[str] = session.get_available_regions("lightsail") or []
     return sorted({code for code in regions})
+
+
+
+def create_lightsail_instance(
+    *,
+    name: str,
+    region: str,
+    blueprint_id: str,
+    bundle_id: str,
+    credentials: Optional[AWSCredentials] = None,
+    access_key_id: str | None = None,
+    secret_access_key: str | None = None,
+    key_pair_name: str | None = None,
+    availability_zone: str | None = None,
+    wait_timeout_seconds: int = 90,
+) -> dict[str, Any]:
+    """Create a Lightsail instance and return fetched instance details when available."""
+
+    client = _lightsail_client(
+        region,
+        credentials,
+        access_key_id=access_key_id,
+        secret_access_key=secret_access_key,
+    )
+    payload: dict[str, Any] = {
+        "instanceNames": [name],
+        "availabilityZone": availability_zone or f"{region}a",
+        "blueprintId": blueprint_id,
+        "bundleId": bundle_id,
+    }
+    if key_pair_name:
+        payload["keyPairName"] = key_pair_name
+
+    try:
+        client.create_instances(**payload)
+    except (BotoCoreError, ClientError) as exc:  # pragma: no cover - runtime safety
+        raise LightsailFetchError(str(exc)) from exc
+
+    deadline = time.time() + max(wait_timeout_seconds, 0)
+    while time.time() <= deadline:
+        try:
+            details = fetch_lightsail_instance(
+                name=name,
+                region=region,
+                credentials=credentials,
+                access_key_id=access_key_id,
+                secret_access_key=secret_access_key,
+            )
+        except LightsailFetchError as exc:
+            original_exc = exc.__cause__
+            if not (
+                original_exc
+                and isinstance(original_exc, ClientError)
+                and original_exc.response.get("Error", {}).get("Code") == "NotFoundException"
+            ):
+                raise
+            details = {}
+        if details:
+            return details
+        time.sleep(3)
+
+    return {}
 
 
 def fetch_lightsail_instance(
