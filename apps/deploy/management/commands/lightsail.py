@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import getpass
+import ipaddress
 import os
 import sys
 
@@ -10,6 +11,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import IntegrityError
 from django.db import transaction
 from django.db.utils import OperationalError, ProgrammingError
+from django.utils.text import slugify
 
 from apps.aws.lightsail_regions import COMMON_LIGHTSAIL_REGIONS
 from apps.aws.models import AWSCredentials, LightsailInstance
@@ -24,6 +26,7 @@ from apps.aws.services import (
 )
 from apps.deploy.models import DeployInstance, DeployRun, DeployServer
 from apps.features.utils import is_suite_feature_enabled
+from apps.nodes.models import Node
 
 
 LIGHTSAIL_CLI_AUTH_BOOTSTRAP_FEATURE_SLUG = "deploy-lightsail-cli-auth-bootstrap"
@@ -142,6 +145,15 @@ class Command(BaseCommand):
         )
         parser.add_argument("--ssh-user", default="ubuntu", help="SSH username.")
         parser.add_argument("--ssh-port", type=int, default=22, help="SSH port.")
+        parser.add_argument(
+            "--relation",
+            default="",
+            choices=tuple(relation.value for relation in Node.Relation),
+            help=(
+                "Node relation used when registering the deployed node "
+                "(default: DOWNSTREAM when this server has a managed top domain, otherwise PEER)."
+            ),
+        )
 
     def handle(self, *args, **options):
         """Create/fetch Lightsail instance and wire deploy models."""
@@ -171,6 +183,7 @@ class Command(BaseCommand):
             mfa_duration_seconds=options["mfa_duration_seconds"],
         )
         skip_create = bool(options.get("skip_create"))
+        requested_relation = str(options.get("relation") or "").strip()
         created_remote_instance = False
         persisted_records = False
         details: dict[str, object] = {}
@@ -269,6 +282,12 @@ class Command(BaseCommand):
                     requested_by="lightsail",
                     output="CLI Lightsail setup prepared deployment records.",
                 )
+                node_relation = self._resolve_node_relation(requested_relation)
+                node = self._register_deployed_node(
+                    instance_name=instance_name,
+                    host=host,
+                    relation=node_relation,
+                )
             persisted_records = True
         except (OperationalError, ProgrammingError) as exc:
             if created_remote_instance and not persisted_records:
@@ -296,6 +315,7 @@ class Command(BaseCommand):
         self.stdout.write(
             f"Deploy instance: {deploy_instance_name} service={service_name} install_dir={install_dir}"
         )
+        self.stdout.write(f"Node: {node.hostname} relation={node.current_relation}")
 
     def _region_choices(self) -> tuple[str, ...]:
         """Return normalized Lightsail region choices for CLI validation."""
@@ -492,3 +512,80 @@ class Command(BaseCommand):
                 f"Unable to issue AWS session credentials with MFA: {exc}"
             ) from exc
         return session_credentials
+
+    def _resolve_node_relation(self, requested_relation: str) -> Node.Relation:
+        """Return relation override, or infer a default from local site configuration."""
+
+        if requested_relation:
+            return Node.normalize_relation(requested_relation)
+
+        local_node = Node.get_local()
+        local_domain = (
+            local_node.get_base_domain().strip()
+            if local_node is not None
+            else ""
+        )
+        if not local_domain:
+            _, local_domain, _ = Node._detect_managed_site()
+
+        if self._has_top_domain(local_domain):
+            return Node.Relation.DOWNSTREAM
+        return Node.Relation.PEER
+
+    def _register_deployed_node(
+        self,
+        *,
+        instance_name: str,
+        host: str,
+        relation: Node.Relation,
+    ) -> Node:
+        """Create or update the node record associated with the deployed instance."""
+
+        endpoint = slugify(f"deploy-{instance_name}") or slugify(instance_name)
+        node = Node.objects.filter(public_endpoint=endpoint).first()
+        if not node:
+            node = Node.objects.filter(hostname=instance_name).first()
+
+        defaults: dict[str, object] = {
+            "address": host,
+            "current_relation": relation,
+            "hostname": instance_name,
+            "network_hostname": instance_name,
+            "port": Node.get_preferred_port(),
+            "public_endpoint": endpoint,
+            "trusted": True,
+        }
+        try:
+            parsed_host = ipaddress.ip_address(host)
+        except ValueError:
+            parsed_host = None
+
+        if parsed_host and parsed_host.version == 4:
+            defaults["ipv4_address"] = host
+        elif parsed_host and parsed_host.version == 6:
+            defaults["ipv6_address"] = host
+        elif "." in host:
+            defaults["network_hostname"] = host
+        if relation == Node.Relation.DOWNSTREAM:
+            managed_site, _, _ = Node._detect_managed_site()
+            if managed_site is not None:
+                defaults["base_site"] = managed_site
+
+        if node:
+            for field, value in defaults.items():
+                setattr(node, field, value)
+            node.save(update_fields=list(defaults.keys()))
+            return node
+        return Node.objects.create(**defaults)
+
+    def _has_top_domain(self, domain: str) -> bool:
+        """Return whether ``domain`` appears to be a routable host with a top domain."""
+
+        cleaned = (domain or "").strip().strip(".")
+        if not cleaned or cleaned.lower() == "localhost":
+            return False
+        try:
+            ipaddress.ip_address(cleaned)
+        except ValueError:
+            return "." in cleaned
+        return False
