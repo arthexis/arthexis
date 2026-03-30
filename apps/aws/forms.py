@@ -1,25 +1,22 @@
 from __future__ import annotations
 
 import os
-from typing import Iterable
 
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
+from .lightsail_regions import COMMON_LIGHTSAIL_REGIONS
 from .models import AWSCredentials
+from .services import LightsailFetchError, list_lightsail_regions
 
 
 def _region_choices() -> list[tuple[str, str]]:
     try:
-        import boto3
-    except ModuleNotFoundError:
-        return [("us-east-1", "us-east-1")]
+        regions = list_lightsail_regions()
+    except LightsailFetchError:
+        regions = []
 
-    session = boto3.session.Session()
-    regions: Iterable[str] = session.get_available_regions("lightsail") or []
-    normalized = sorted({code for code in regions})
-    if not normalized:
-        normalized = ["us-east-1"]
+    normalized = sorted({*COMMON_LIGHTSAIL_REGIONS, *regions})
     return [(code, code) for code in normalized]
 
 
@@ -40,7 +37,9 @@ class BaseLightsailFetchForm(forms.Form):
     access_key_id = forms.CharField(
         label=_("AWS access key ID"),
         required=False,
-        help_text=_("Only required when no saved credentials or environment variables are available."),
+        help_text=_(
+            "Only required when no saved credentials or environment variables are available."
+        ),
     )
     secret_access_key = forms.CharField(
         label=_("AWS secret access key"),
@@ -51,9 +50,13 @@ class BaseLightsailFetchForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["region"].choices = _region_choices()
-        default_region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
-        if default_region:
-            self.fields["region"].initial = default_region
+        default_region = "us-east-1"
+        env_region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+        if env_region and any(
+            env_region == choice[0] for choice in self.fields["region"].choices
+        ):
+            default_region = env_region
+        self.fields["region"].initial = default_region
         self.fields["credentials"].queryset = AWSCredentials.objects.order_by("name")
 
     def clean(self):
@@ -66,13 +69,20 @@ class BaseLightsailFetchForm(forms.Form):
         env_secret = os.getenv("AWS_SECRET_ACCESS_KEY")
 
         if secret_key and not access_key:
-            self.add_error("access_key_id", _("Provide the access key for the supplied secret."))
+            self.add_error(
+                "access_key_id", _("Provide the access key for the supplied secret.")
+            )
         if access_key and not secret_key:
-            self.add_error("secret_access_key", _("Provide the secret key for the supplied access key."))
+            self.add_error(
+                "secret_access_key",
+                _("Provide the secret key for the supplied access key."),
+            )
 
         if stored is None and not provided_pair and not (env_access and env_secret):
             raise forms.ValidationError(
-                _("Enter AWS credentials or configure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."),
+                _(
+                    "Enter AWS credentials or configure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."
+                ),
                 code="missing-credentials",
             )
         return data
