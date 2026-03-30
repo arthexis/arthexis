@@ -159,7 +159,14 @@ def test_upsert_txt_record_replaces_existing_records(monkeypatch):
         return Response()
 
     monkeypatch.setattr(MODULE, "_godaddy_request", fake_request)
-    monkeypatch.setattr(MODULE, "_wait_for_dns_txt_propagation", lambda **_kwargs: None)
+
+    wait_called = False
+
+    def fake_wait(**_kwargs):
+        nonlocal wait_called
+        wait_called = True
+
+    monkeypatch.setattr(MODULE, "_wait_for_dns_txt_propagation", fake_wait)
 
     MODULE._upsert_txt_record()
 
@@ -170,6 +177,7 @@ def test_upsert_txt_record_replaces_existing_records(monkeypatch):
             [{"data": "new-value", "ttl": 600}],
         )
     ]
+    assert wait_called is False
 
 
 def test_upsert_txt_record_uses_300_second_default_wait(monkeypatch):

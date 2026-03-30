@@ -225,12 +225,13 @@ def _upsert_txt_record() -> None:
         )
 
     wait_seconds = int(_optional_env("GODADDY_DNS_WAIT_SECONDS", "300"))
-    _wait_for_dns_txt_propagation(
-        zone=zone,
-        challenge_domain=challenge_domain,
-        expected_value=validation,
-        timeout_seconds=wait_seconds,
-    )
+    if wait_seconds > 0:
+        _wait_for_dns_txt_propagation(
+            zone=zone,
+            challenge_domain=challenge_domain,
+            expected_value=validation,
+            timeout_seconds=wait_seconds,
+        )
 
 
 def _cleanup_txt_record() -> None:
