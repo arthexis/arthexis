@@ -17,7 +17,29 @@
   {% csrf_token %}
   {{ form.non_field_errors }}
   <table>
-    {{ form.as_table }}
+    <thead>
+      <tr>
+        <th scope="col">{% trans "Field" %}</th>
+        <th scope="col">{% trans "Value" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for field in form %}
+      <tr>
+        <th scope="row">
+          {{ field.label_tag }}
+          {% if field.field.required %}*{% endif %}
+        </th>
+        <td>
+          {{ field }}
+          {% if field.help_text %}
+          <div class="help">{{ field.help_text }}</div>
+          {% endif %}
+          {{ field.errors }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
   </table>
   <div class="submit-row">
     <input type="submit" value="{% trans 'Save and register' %}" class="default">

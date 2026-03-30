@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
+from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponseRedirect
@@ -75,6 +76,14 @@ class LightsailActionMixin(DjangoObjectActions):
             )
         return credentials, created
 
+    def user_input_summary_text(self, obj) -> str:
+        credentials_name = obj.credentials.name if obj.credentials else "—"
+        return _("name=%(name)s; region=%(region)s; credentials=%(credentials)s") % {
+            "name": obj.name,
+            "region": obj.region,
+            "credentials": credentials_name,
+        }
+
     def _load_instances_for_credentials(
         self,
         *,
@@ -141,6 +150,11 @@ class AWSCredentialsAdmin(LightsailActionMixin, admin.ModelAdmin):
     list_display = ("name", "access_key_id", "created_at")
     search_fields = ("name", "access_key_id")
     readonly_fields = ("created_at",)
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        form.base_fields["secret_access_key"].widget = forms.PasswordInput(render_value=False)
+        return form
 
     def load_instances(self, request, queryset=None):  # pragma: no cover - admin action
         """Tool action that loads instances with the first credential set."""
@@ -220,12 +234,7 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
 
     @admin.display(description=_("User-provided fields"))
     def user_input_summary(self, obj):
-        credentials_name = obj.credentials.name if obj.credentials else "—"
-        return _("name=%(name)s; region=%(region)s; credentials=%(credentials)s") % {
-            "name": obj.name,
-            "region": obj.region,
-            "credentials": credentials_name,
-        }
+        return self.user_input_summary_text(obj)
 
     @admin.display(description=_("Discovered fields"))
     def discovered_summary(self, obj):
@@ -397,12 +406,7 @@ class LightsailDatabaseAdmin(LightsailActionMixin, admin.ModelAdmin):
 
     @admin.display(description=_("User-provided fields"))
     def user_input_summary(self, obj):
-        credentials_name = obj.credentials.name if obj.credentials else "—"
-        return _("name=%(name)s; region=%(region)s; credentials=%(credentials)s") % {
-            "name": obj.name,
-            "region": obj.region,
-            "credentials": credentials_name,
-        }
+        return self.user_input_summary_text(obj)
 
     @admin.display(description=_("Discovered fields"))
     def discovered_summary(self, obj):

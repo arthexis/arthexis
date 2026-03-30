@@ -57,12 +57,20 @@ class LightsailSetupForm(BaseLightsailFetchForm):
 
     def clean(self):
         data = super().clean()
+        instance_name = (data.get("name") or "").strip()
         skip_create = data.get("skip_create", False)
         blueprint_id = (data.get("blueprint_id") or "").strip()
         bundle_id = (data.get("bundle_id") or "").strip()
         if not skip_create and (not blueprint_id or not bundle_id):
             raise forms.ValidationError(
-                _("--blueprint-id and --bundle-id are required when creating a new instance."),
+                _("Blueprint ID and Bundle ID are required when creating a new instance."),
                 code="missing-create-options",
             )
+        if instance_name:
+            data["install_dir"] = str(data.get("install_dir") or "").strip() or f"/srv/{instance_name}"
+            data["service_name"] = str(data.get("service_name") or "").strip() or f"arthexis-{instance_name}"
+        else:
+            data["install_dir"] = str(data.get("install_dir") or "").strip()
+            data["service_name"] = str(data.get("service_name") or "").strip()
+        data["branch"] = str(data.get("branch") or "main").strip() or "main"
         return data

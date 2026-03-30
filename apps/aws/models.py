@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from encrypted_model_fields.fields import EncryptedCharField
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -14,7 +15,7 @@ class AWSCredentials(Entity):
 
     name = models.CharField(max_length=150)
     access_key_id = models.CharField(max_length=128, unique=True)
-    secret_access_key = models.CharField(max_length=128)
+    secret_access_key = EncryptedCharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

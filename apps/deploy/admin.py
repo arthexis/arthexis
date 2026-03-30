@@ -12,6 +12,7 @@ from apps.aws.models import AWSCredentials, LightsailInstance
 from apps.aws.services import (
     LightsailFetchError,
     create_lightsail_instance,
+    delete_lightsail_instance,
     fetch_lightsail_instance,
     parse_instance_details,
 )
@@ -41,6 +42,8 @@ class DeployServerAdmin(EntityModelAdmin):
 
     @admin.display(description=_("Lightsail setup"))
     def lightsail_user_inputs(self, obj):
+        if obj is None:
+            return _("No linked Lightsail instance.")
         if not obj.lightsail_instance_id:
             return _("No linked Lightsail instance.")
         credentials_name = obj.lightsail_instance.credentials.name if obj.lightsail_instance.credentials else "—"
@@ -54,6 +57,8 @@ class DeployServerAdmin(EntityModelAdmin):
 
     @admin.display(description=_("Lightsail discovery"))
     def lightsail_discovered_details(self, obj):
+        if obj is None:
+            return _("No discovered metadata linked yet.")
         if not obj.lightsail_instance_id:
             return _("No discovered metadata linked yet.")
         instance = obj.lightsail_instance
@@ -147,6 +152,82 @@ class DeployServerAdmin(EntityModelAdmin):
             **auth_kwargs,
         )
 
+    def _persist_lightsail_setup(
+        self,
+        *,
+        request: HttpRequest,
+        form: LightsailSetupForm,
+        details: dict,
+        credentials: AWSCredentials | None,
+        created_credentials: bool,
+        changelist_url: str,
+    ) -> HttpResponseRedirect | None:
+        instance_name = form.cleaned_data["name"].strip()
+        region = form.cleaned_data["region"].strip()
+        deploy_instance_name = form.cleaned_data["deploy_instance_name"].strip()
+        created_remote = not form.cleaned_data["skip_create"]
+        try:
+            with transaction.atomic():
+                lightsail_defaults = parse_instance_details(details)
+                lightsail_defaults["credentials"] = credentials
+                lightsail_instance = LightsailInstance.objects.update_or_create(
+                    name=instance_name,
+                    region=region,
+                    defaults=lightsail_defaults,
+                )[0]
+                deploy_server = DeployServer.objects.update_or_create(
+                    name=instance_name,
+                    defaults={
+                        "provider": DeployServer.Provider.AWS_LIGHTSAIL,
+                        "region": region,
+                        "host": (details.get("publicIpAddress") or details.get("privateIpAddress") or "").strip(),
+                        "ssh_port": form.cleaned_data["ssh_port"],
+                        "ssh_user": form.cleaned_data["ssh_user"].strip(),
+                        "lightsail_instance": lightsail_instance,
+                        "is_enabled": True,
+                    },
+                )[0]
+                deploy_instance = DeployInstance.objects.update_or_create(
+                    server=deploy_server,
+                    name=deploy_instance_name,
+                    defaults={
+                        "install_dir": form.cleaned_data["install_dir"],
+                        "service_name": form.cleaned_data["service_name"],
+                        "env_file": str(form.cleaned_data.get("env_file") or "").strip(),
+                        "branch": form.cleaned_data["branch"],
+                        "ocpp_port": form.cleaned_data["ocpp_port"],
+                        "admin_url": str(form.cleaned_data.get("admin_url") or "").strip(),
+                        "is_enabled": True,
+                    },
+                )[0]
+                DeployRun.objects.create(
+                    instance=deploy_instance,
+                    action=DeployRun.Action.DEPLOY,
+                    status=DeployRun.Status.PENDING,
+                    requested_by="lightsail_admin_wizard",
+                    output="Admin Lightsail setup wizard prepared deployment records.",
+                )
+        except Exception:
+            if created_remote:
+                try:
+                    delete_lightsail_instance(name=instance_name, region=region, credentials=credentials)
+                except LightsailFetchError:
+                    pass
+            raise
+        if created_credentials:
+            self.message_user(
+                request,
+                _("Stored new AWS credentials linked to this Lightsail setup."),
+                messages.INFO,
+            )
+        self.message_user(
+            request,
+            _("Lightsail deployment records configured for %(name)s (%(region)s).")
+            % {"name": instance_name, "region": region},
+            messages.SUCCESS,
+        )
+        return HttpResponseRedirect(changelist_url)
+
     def lightsail_setup_view(self, request: HttpRequest):
         if not self.has_view_or_change_permission(request):
             raise PermissionDenied
@@ -182,66 +263,16 @@ class DeployServerAdmin(EntityModelAdmin):
                             _("Lightsail instance has no public/private IP yet; try again shortly."),
                         )
                     else:
-                        instance_name = form.cleaned_data["name"].strip()
-                        region = form.cleaned_data["region"].strip()
-                        deploy_instance_name = form.cleaned_data["deploy_instance_name"].strip()
-                        install_dir = str(form.cleaned_data.get("install_dir") or "").strip() or f"/srv/{instance_name}"
-                        service_name = (
-                            str(form.cleaned_data.get("service_name") or "").strip() or f"arthexis-{instance_name}"
+                        redirect = self._persist_lightsail_setup(
+                            request=request,
+                            form=form,
+                            details=details,
+                            credentials=credentials,
+                            created_credentials=created_credentials,
+                            changelist_url=changelist_url,
                         )
-                        with transaction.atomic():
-                            lightsail_defaults = parse_instance_details(details)
-                            lightsail_defaults["credentials"] = credentials
-                            lightsail_instance = LightsailInstance.objects.update_or_create(
-                                name=instance_name,
-                                region=region,
-                                defaults=lightsail_defaults,
-                            )[0]
-                            deploy_server = DeployServer.objects.update_or_create(
-                                name=instance_name,
-                                defaults={
-                                    "provider": DeployServer.Provider.AWS_LIGHTSAIL,
-                                    "region": region,
-                                    "host": host,
-                                    "ssh_port": form.cleaned_data["ssh_port"],
-                                    "ssh_user": form.cleaned_data["ssh_user"].strip(),
-                                    "lightsail_instance": lightsail_instance,
-                                    "is_enabled": True,
-                                },
-                            )[0]
-                            deploy_instance = DeployInstance.objects.update_or_create(
-                                server=deploy_server,
-                                name=deploy_instance_name,
-                                defaults={
-                                    "install_dir": install_dir,
-                                    "service_name": service_name,
-                                    "env_file": str(form.cleaned_data.get("env_file") or "").strip(),
-                                    "branch": str(form.cleaned_data.get("branch") or "main").strip() or "main",
-                                    "ocpp_port": form.cleaned_data["ocpp_port"],
-                                    "admin_url": str(form.cleaned_data.get("admin_url") or "").strip(),
-                                    "is_enabled": True,
-                                },
-                            )[0]
-                            DeployRun.objects.create(
-                                instance=deploy_instance,
-                                action=DeployRun.Action.DEPLOY,
-                                status=DeployRun.Status.PENDING,
-                                requested_by="lightsail_admin_wizard",
-                                output="Admin Lightsail setup wizard prepared deployment records.",
-                            )
-                        if created_credentials:
-                            self.message_user(
-                                request,
-                                _("Stored new AWS credentials linked to this Lightsail setup."),
-                                messages.INFO,
-                            )
-                        self.message_user(
-                            request,
-                            _("Lightsail deployment records configured for %(name)s (%(region)s).")
-                            % {"name": instance_name, "region": region},
-                            messages.SUCCESS,
-                        )
-                        return HttpResponseRedirect(changelist_url)
+                        if redirect is not None:
+                            return redirect
 
         return TemplateResponse(request, "admin/deploy/deployserver/lightsail_setup.html", context)
 
