@@ -22,17 +22,22 @@ def test_ensure_auto_upgrade_periodic_task_reuses_duplicate_interval_schedules(
     from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
     monkeypatch.delenv("ARTHEXIS_UPGRADE_FREQ", raising=False)
+    interval_minutes = 113
     monkeypatch.setattr(
         "apps.core.auto_upgrade._resolve_policy_interval_minutes",
-        lambda: 15,
+        lambda: interval_minutes,
     )
+    IntervalSchedule.objects.filter(
+        every=interval_minutes,
+        period=IntervalSchedule.MINUTES,
+    ).delete()
 
     schedule_one = IntervalSchedule.objects.create(
-        every=15,
+        every=interval_minutes,
         period=IntervalSchedule.MINUTES,
     )
     schedule_two = IntervalSchedule.objects.create(
-        every=15,
+        every=interval_minutes,
         period=IntervalSchedule.MINUTES,
     )
     if schedule_one.pk < schedule_two.pk:
