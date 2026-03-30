@@ -27,6 +27,10 @@ def test_ensure_auto_upgrade_periodic_task_reuses_duplicate_interval_schedules(
         "apps.core.auto_upgrade._resolve_policy_interval_minutes",
         lambda: interval_minutes,
     )
+    IntervalSchedule.objects.filter(
+        every=interval_minutes,
+        period=IntervalSchedule.MINUTES,
+    ).delete()
 
     schedule_one = IntervalSchedule.objects.create(
         every=interval_minutes,
