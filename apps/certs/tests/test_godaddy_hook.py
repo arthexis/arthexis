@@ -100,6 +100,46 @@ def test_query_authoritative_txt_values_ignores_nxdomain(monkeypatch):
     assert observed == set()
 
 
+def test_query_authoritative_txt_values_does_not_repeat_a_lookup_when_aaaa_missing(
+    monkeypatch,
+):
+    class Answer:
+        def __init__(self, value):
+            self.target = value
+
+        def __str__(self):
+            return self.target
+
+    queries: list[tuple[bool, str, str]] = []
+
+    class Resolver:
+        def __init__(self, configure=True):
+            self.configure = configure
+            self.nameservers = []
+            self.lifetime = 0
+
+        def resolve(self, name, rdtype):
+            queries.append((self.configure, name, rdtype))
+            if self.configure and rdtype == "NS":
+                return [Answer("ns1.example.net.")]
+            if self.configure and name == "ns1.example.net" and rdtype == "A":
+                return [Answer("192.0.2.10")]
+            if self.configure and name == "ns1.example.net" and rdtype == "AAAA":
+                raise MODULE.dns.resolver.NoAnswer
+            if not self.configure and rdtype == "TXT":
+                raise MODULE.dns.resolver.NXDOMAIN
+            raise AssertionError(f"Unexpected query {name} {rdtype}")
+
+    monkeypatch.setattr(MODULE.dns.resolver, "Resolver", Resolver)
+
+    observed = MODULE._query_authoritative_txt_values(
+        "example.com", "_acme-challenge.example.com"
+    )
+
+    assert observed == set()
+    assert queries.count((True, "ns1.example.net", "A")) == 1
+
+
 def test_upsert_txt_record_replaces_existing_records(monkeypatch):
     calls: list[tuple[str, str, object]] = []
 

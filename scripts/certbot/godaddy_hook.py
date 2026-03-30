@@ -130,16 +130,16 @@ def _query_authoritative_txt_values(zone: str, challenge_domain: str) -> set[str
     for nameserver in nameservers:
         try:
             ns_ips = [str(answer) for answer in resolver.resolve(nameserver, "A")]
-            ns_ips.extend(str(answer) for answer in resolver.resolve(nameserver, "AAAA"))
-        except dns.resolver.NoAnswer:
-            try:
-                ns_ips = [str(answer) for answer in resolver.resolve(nameserver, "A")]
-            except dns.exception.DNSException as exc:
-                errors.append(f"{nameserver}: {exc}")
-                continue
         except dns.exception.DNSException as exc:
             errors.append(f"{nameserver}: {exc}")
             continue
+
+        try:
+            ns_ips.extend(str(answer) for answer in resolver.resolve(nameserver, "AAAA"))
+        except dns.resolver.NoAnswer:
+            pass
+        except dns.exception.DNSException as exc:
+            errors.append(f"{nameserver} (AAAA): {exc}")
 
         for ns_ip in ns_ips:
             ns_resolver = dns.resolver.Resolver(configure=False)
