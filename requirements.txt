@@ -52,7 +52,7 @@ python-crontab==3.3.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 PyYAML==6.0.3
-redis==7.3.0
+redis==7.4.0
 reportlab==4.4.10
 requests==2.33.0
 setuptools==82.0.1
