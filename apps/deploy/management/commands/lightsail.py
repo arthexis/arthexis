@@ -17,6 +17,7 @@ from apps.aws.services import (
     delete_lightsail_instance,
     fetch_lightsail_instance,
     issue_mfa_session_credentials,
+    list_lightsail_regions,
     parse_instance_details,
 )
 from apps.deploy.models import DeployInstance, DeployRun, DeployServer
@@ -24,6 +25,17 @@ from apps.features.utils import is_suite_feature_enabled
 
 
 LIGHTSAIL_CLI_AUTH_BOOTSTRAP_FEATURE_SLUG = "deploy-lightsail-cli-auth-bootstrap"
+COMMON_LIGHTSAIL_REGIONS = (
+    "ap-south-1",
+    "ap-southeast-1",
+    "ap-southeast-2",
+    "eu-central-1",
+    "eu-west-1",
+    "eu-west-2",
+    "us-east-1",
+    "us-east-2",
+    "us-west-2",
+)
 
 
 class Command(BaseCommand):
@@ -34,12 +46,34 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         """Register setup options."""
 
-        parser.add_argument("--credentials", required=True, help="AWS credential id or name.")
-        parser.add_argument("--region", required=True, help="Lightsail region code.")
-        parser.add_argument("--instance-name", required=True, help="Lightsail instance name.")
-        parser.add_argument("--blueprint-id", default="", help="Lightsail blueprint id.")
+        region_choices = self._region_choices()
+        parser.add_argument(
+            "--credentials", required=True, help="AWS credential id or name."
+        )
+        parser.add_argument(
+            "--region",
+            default="us-east-1",
+            choices=region_choices,
+            help="Lightsail region code (default: us-east-1).",
+        )
+        parser.add_argument(
+            "--instance",
+            "--instance-name",
+            required=True,
+            dest="instance",
+            help="Lightsail instance name.",
+        )
+        parser.add_argument(
+            "--blueprint-id", default="", help="Lightsail blueprint id."
+        )
         parser.add_argument("--bundle-id", default="", help="Lightsail bundle id.")
-        parser.add_argument("--key-pair-name", default="", help="Lightsail SSH key pair.")
+        parser.add_argument(
+            "--key-pair",
+            "--key-pair-name",
+            default="",
+            dest="key_pair",
+            help="Lightsail SSH key pair.",
+        )
         parser.add_argument(
             "--availability-zone",
             default="",
@@ -66,8 +100,10 @@ class Command(BaseCommand):
             help="Optional AWS secret access key used with --refresh-credentials.",
         )
         parser.add_argument(
+            "--deploy-instance",
             "--deploy-instance-name",
             default="main",
+            dest="deploy_instance",
             help="Deploy instance label stored under the deploy server (default: main).",
         )
         parser.add_argument(
@@ -76,8 +112,10 @@ class Command(BaseCommand):
             help="Absolute install directory for the Arthexis checkout. Defaults to /srv/<instance-name>.",
         )
         parser.add_argument(
+            "--service",
             "--service-name",
             default="",
+            dest="service",
             help="System service name for Arthexis. Defaults to arthexis-<instance-name>.",
         )
         parser.add_argument("--branch", default="main", help="Git branch to track.")
@@ -119,11 +157,15 @@ class Command(BaseCommand):
                 secret_access_key=str(options.get("secret_access_key") or "").strip(),
             )
         region = str(options["region"]).strip()
-        instance_name = str(options["instance_name"]).strip()
-        deploy_instance_name = str(options["deploy_instance_name"]).strip()
+        instance_name = str(options["instance"]).strip()
+        deploy_instance_name = str(options["deploy_instance"]).strip()
         self._validate_local_prerequisites()
-        install_dir = str(options.get("install_dir") or "").strip() or f"/srv/{instance_name}"
-        service_name = str(options.get("service_name") or "").strip() or f"arthexis-{instance_name}"
+        install_dir = (
+            str(options.get("install_dir") or "").strip() or f"/srv/{instance_name}"
+        )
+        service_name = (
+            str(options.get("service") or "").strip() or f"arthexis-{instance_name}"
+        )
         auth_kwargs = self._resolve_aws_auth_kwargs(
             credentials=credentials,
             region=region,
@@ -149,12 +191,17 @@ class Command(BaseCommand):
                     region=region,
                     blueprint_id=blueprint_id,
                     bundle_id=bundle_id,
-                    key_pair_name=str(options.get("key_pair_name") or "").strip() or None,
-                    availability_zone=str(options.get("availability_zone") or "").strip() or None,
+                    key_pair_name=str(options.get("key_pair") or "").strip() or None,
+                    availability_zone=str(
+                        options.get("availability_zone") or ""
+                    ).strip()
+                    or None,
                     **auth_kwargs,
                 )
             except LightsailFetchError as exc:
-                raise CommandError(f"Unable to create Lightsail instance: {exc}") from exc
+                raise CommandError(
+                    f"Unable to create Lightsail instance: {exc}"
+                ) from exc
             created_remote_instance = True
 
         try:
@@ -166,14 +213,22 @@ class Command(BaseCommand):
                         **auth_kwargs,
                     )
                 except LightsailFetchError as exc:
-                    raise CommandError(f"Unable to fetch Lightsail instance details: {exc}") from exc
+                    raise CommandError(
+                        f"Unable to fetch Lightsail instance details: {exc}"
+                    ) from exc
 
             if not details:
-                raise CommandError("Lightsail instance details were empty; setup cannot continue.")
+                raise CommandError(
+                    "Lightsail instance details were empty; setup cannot continue."
+                )
 
-            host = (details.get("publicIpAddress") or details.get("privateIpAddress") or "").strip()
+            host = (
+                details.get("publicIpAddress") or details.get("privateIpAddress") or ""
+            ).strip()
             if not host:
-                raise CommandError("Lightsail instance has no public/private IP yet; try again shortly.")
+                raise CommandError(
+                    "Lightsail instance has no public/private IP yet; try again shortly."
+                )
 
             lightsail_defaults = parse_instance_details(details)
             lightsail_defaults["credentials"] = credentials
@@ -203,7 +258,8 @@ class Command(BaseCommand):
                         "install_dir": install_dir,
                         "service_name": service_name,
                         "env_file": str(options.get("env_file") or "").strip(),
-                        "branch": str(options.get("branch") or "main").strip() or "main",
+                        "branch": str(options.get("branch") or "main").strip()
+                        or "main",
                         "ocpp_port": int(options["ocpp_port"]),
                         "admin_url": str(options.get("admin_url") or "").strip(),
                         "is_enabled": True,
@@ -224,7 +280,9 @@ class Command(BaseCommand):
                     region=region,
                     auth_kwargs=auth_kwargs,
                 )
-            raise CommandError("Required deployment tables are not available. Run migrations first.") from exc
+            raise CommandError(
+                "Required deployment tables are not available. Run migrations first."
+            ) from exc
         except Exception:
             if created_remote_instance and not persisted_records:
                 self._cleanup_remote_instance(
@@ -234,11 +292,24 @@ class Command(BaseCommand):
                 )
             raise
 
-        self.stdout.write(self.style.SUCCESS("Lightsail deployment records configured."))
+        self.stdout.write(
+            self.style.SUCCESS("Lightsail deployment records configured.")
+        )
         self.stdout.write(f"Server: {instance_name} ({region}) host={host}")
         self.stdout.write(
             f"Deploy instance: {deploy_instance_name} service={service_name} install_dir={install_dir}"
         )
+
+    def _region_choices(self) -> tuple[str, ...]:
+        """Return normalized Lightsail region choices for CLI validation."""
+
+        discovered: list[str] = []
+        try:
+            discovered = list_lightsail_regions()
+        except LightsailFetchError:
+            discovered = []
+        merged = sorted({*COMMON_LIGHTSAIL_REGIONS, *discovered})
+        return tuple(merged)
 
     def _cleanup_remote_instance(
         self,
@@ -273,7 +344,9 @@ class Command(BaseCommand):
             DeployRun.objects.exists()
             DeployServer.objects.exists()
         except (OperationalError, ProgrammingError) as exc:
-            raise CommandError("Required deployment tables are not available. Run migrations first.") from exc
+            raise CommandError(
+                "Required deployment tables are not available. Run migrations first."
+            ) from exc
 
     def _resolve_credentials(self, raw_credentials: str) -> AWSCredentials:
         """Resolve AWS credentials by integer id or by name, prompting to create when missing."""
@@ -290,7 +363,9 @@ class Command(BaseCommand):
             if not creds:
                 creds = AWSCredentials.objects.filter(name=candidate).first()
         except (OperationalError, ProgrammingError) as exc:
-            raise CommandError("AWS credential tables are not available. Run migrations first.") from exc
+            raise CommandError(
+                "AWS credential tables are not available. Run migrations first."
+            ) from exc
 
         if creds:
             return creds
@@ -298,7 +373,9 @@ class Command(BaseCommand):
         if candidate.isdigit():
             raise CommandError(f"AWS credentials not found for '{raw_credentials}'.")
 
-        if not is_suite_feature_enabled(LIGHTSAIL_CLI_AUTH_BOOTSTRAP_FEATURE_SLUG, default=True):
+        if not is_suite_feature_enabled(
+            LIGHTSAIL_CLI_AUTH_BOOTSTRAP_FEATURE_SLUG, default=True
+        ):
             raise CommandError(
                 "AWS credentials not found and CLI credential bootstrap is disabled by suite feature."
             )
@@ -334,7 +411,9 @@ class Command(BaseCommand):
         provided_access = access_key_id.strip()
         provided_secret = secret_access_key.strip()
         if bool(provided_access) != bool(provided_secret):
-            raise CommandError("--access-key-id and --secret-access-key must be provided together.")
+            raise CommandError(
+                "--access-key-id and --secret-access-key must be provided together."
+            )
 
         if provided_access and provided_secret:
             new_access_key_id = provided_access
@@ -346,7 +425,9 @@ class Command(BaseCommand):
                 )
             )
             new_access_key_id = self._prompt_required("AWS access key id")
-            new_secret_access_key = self._prompt_required("AWS secret access key", secret=True)
+            new_secret_access_key = self._prompt_required(
+                "AWS secret access key", secret=True
+            )
 
         credentials.access_key_id = new_access_key_id
         credentials.secret_access_key = new_secret_access_key
@@ -357,7 +438,9 @@ class Command(BaseCommand):
                 f"Unable to update AWS credentials '{credentials.name}'. "
                 "The access key may already exist or values are invalid."
             ) from exc
-        self.stdout.write(self.style.SUCCESS(f"Updated AWS credentials '{credentials.name}'"))
+        self.stdout.write(
+            self.style.SUCCESS(f"Updated AWS credentials '{credentials.name}'")
+        )
         return credentials
 
     def _prompt_required(self, label: str, *, secret: bool = False) -> str:
@@ -393,7 +476,9 @@ class Command(BaseCommand):
         if not mfa_serial:
             return {"credentials": credentials}
 
-        if not is_suite_feature_enabled(LIGHTSAIL_CLI_AUTH_BOOTSTRAP_FEATURE_SLUG, default=True):
+        if not is_suite_feature_enabled(
+            LIGHTSAIL_CLI_AUTH_BOOTSTRAP_FEATURE_SLUG, default=True
+        ):
             raise CommandError("MFA CLI auth bootstrap is disabled by suite feature.")
 
         token_code = mfa_code.strip() or self._prompt_required("AWS MFA code")
@@ -406,5 +491,7 @@ class Command(BaseCommand):
                 duration_seconds=mfa_duration_seconds,
             )
         except LightsailFetchError as exc:
-            raise CommandError(f"Unable to issue AWS session credentials with MFA: {exc}") from exc
+            raise CommandError(
+                f"Unable to issue AWS session credentials with MFA: {exc}"
+            ) from exc
         return session_credentials

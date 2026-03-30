@@ -68,7 +68,9 @@ def test_lightsail_command_creates_records(monkeypatch, capsys):
         }
 
     def fail_fetch_lightsail_instance(**kwargs):
-        pytest.fail("fetch_lightsail_instance should not be called when create returns details")
+        pytest.fail(
+            "fetch_lightsail_instance should not be called when create returns details"
+        )
 
     monkeypatch.setattr(
         "apps.deploy.management.commands.lightsail.create_lightsail_instance",
@@ -85,7 +87,7 @@ def test_lightsail_command_creates_records(monkeypatch, capsys):
         str(credentials.pk),
         "--region",
         "us-east-1",
-        "--instance-name",
+        "--instance",
         "ops-node-1",
         "--blueprint-id",
         "debian_12",
@@ -101,7 +103,9 @@ def test_lightsail_command_creates_records(monkeypatch, capsys):
     assert "Lightsail deployment records configured." in output
     assert server.host == "18.1.2.3"
     assert deploy_instance.service_name == "arthexis-ops-node-1"
-    assert DeployRun.objects.filter(instance=deploy_instance, action=DeployRun.Action.DEPLOY).exists()
+    assert DeployRun.objects.filter(
+        instance=deploy_instance, action=DeployRun.Action.DEPLOY
+    ).exists()
 
 
 @pytest.mark.parametrize(
@@ -156,7 +160,7 @@ def test_lightsail_command_handles_fetch_failures(
             str(credentials.pk),
             "--region",
             "us-east-1",
-            "--instance-name",
+            "--instance",
             "ops-node-1",
             "--skip-create",
         )
@@ -181,12 +185,14 @@ def test_lightsail_command_requires_blueprint_and_bundle_without_skip_create():
             str(credentials.pk),
             "--region",
             "us-east-1",
-            "--instance-name",
+            "--instance",
             "ops-node-1",
         )
 
 
-def test_lightsail_command_creates_credentials_when_named_record_missing(monkeypatch, capsys):
+def test_lightsail_command_creates_credentials_when_named_record_missing(
+    monkeypatch, capsys
+):
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
     def fake_fetch_lightsail_instance(**kwargs):
@@ -215,7 +221,7 @@ def test_lightsail_command_creates_credentials_when_named_record_missing(monkeyp
         "new-creds",
         "--region",
         "us-east-1",
-        "--instance-name",
+        "--instance",
         "ops-node-1",
         "--skip-create",
     )
@@ -241,7 +247,7 @@ def test_lightsail_command_does_not_prompt_for_missing_numeric_credentials(monke
             "42",
             "--region",
             "us-east-1",
-            "--instance-name",
+            "--instance",
             "ops-node-1",
             "--skip-create",
         )
@@ -249,7 +255,9 @@ def test_lightsail_command_does_not_prompt_for_missing_numeric_credentials(monke
     assert prompts == []
 
 
-def test_lightsail_command_respects_feature_toggle_for_credential_bootstrap(monkeypatch):
+def test_lightsail_command_respects_feature_toggle_for_credential_bootstrap(
+    monkeypatch,
+):
     monkeypatch.setattr(
         "apps.deploy.management.commands.lightsail.is_suite_feature_enabled",
         lambda slug, default=True: False,
@@ -265,7 +273,7 @@ def test_lightsail_command_respects_feature_toggle_for_credential_bootstrap(monk
             "missing-name",
             "--region",
             "us-east-1",
-            "--instance-name",
+            "--instance",
             "ops-node-1",
             "--skip-create",
         )
@@ -280,7 +288,10 @@ def test_lightsail_command_uses_mfa_session_credentials(monkeypatch):
 
     def fake_issue_mfa_session_credentials(**kwargs):
         assert kwargs["credentials"] == credentials
-        assert kwargs["mfa_serial"] == "arn:aws:iam::123456789012:mfa/root-account-mfa-device"
+        assert (
+            kwargs["mfa_serial"]
+            == "arn:aws:iam::123456789012:mfa/root-account-mfa-device"
+        )
         assert kwargs["mfa_code"] == "654321"
         return {
             "access_key_id": "ASIA_TEMP",
@@ -319,7 +330,7 @@ def test_lightsail_command_uses_mfa_session_credentials(monkeypatch):
         str(credentials.pk),
         "--region",
         "us-east-1",
-        "--instance-name",
+        "--instance",
         "ops-node-1",
         "--skip-create",
         "--mfa-serial",
@@ -340,14 +351,16 @@ def test_lightsail_command_respects_feature_toggle_for_mfa_bootstrap(monkeypatch
         lambda slug, default=True: False,
     )
 
-    with pytest.raises(CommandError, match="MFA CLI auth bootstrap is disabled by suite feature."):
+    with pytest.raises(
+        CommandError, match="MFA CLI auth bootstrap is disabled by suite feature."
+    ):
         call_command(
             "lightsail",
             "--credentials",
             str(credentials.pk),
             "--region",
             "us-east-1",
-            "--instance-name",
+            "--instance",
             "ops-node-1",
             "--skip-create",
             "--mfa-serial",
@@ -367,7 +380,9 @@ def test_lightsail_command_prompts_for_mfa_code_when_missing(monkeypatch):
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr(
         "builtins.input",
-        lambda prompt: prompts.append(prompt) or ("123456" if "MFA code" in prompt else ""),
+        lambda prompt: (
+            prompts.append(prompt) or ("123456" if "MFA code" in prompt else "")
+        ),
     )
     monkeypatch.setattr(
         "apps.deploy.management.commands.lightsail.issue_mfa_session_credentials",
@@ -397,7 +412,7 @@ def test_lightsail_command_prompts_for_mfa_code_when_missing(monkeypatch):
         str(credentials.pk),
         "--region",
         "us-east-1",
-        "--instance-name",
+        "--instance",
         "ops-node-1",
         "--skip-create",
         "--mfa-serial",
@@ -426,7 +441,7 @@ def test_lightsail_command_rejects_interactive_prompt_in_non_tty_mode(monkeypatc
             str(credentials.pk),
             "--region",
             "us-east-1",
-            "--instance-name",
+            "--instance",
             "ops-node-1",
             "--skip-create",
             "--mfa-serial",
@@ -434,7 +449,9 @@ def test_lightsail_command_rejects_interactive_prompt_in_non_tty_mode(monkeypatc
         )
 
 
-def test_lightsail_command_cleans_up_remote_instance_on_post_create_failure(monkeypatch):
+def test_lightsail_command_cleans_up_remote_instance_on_post_create_failure(
+    monkeypatch,
+):
     credentials = AWSCredentials.objects.create(
         name="primary",
         access_key_id="AKIA_TEST",
@@ -466,14 +483,16 @@ def test_lightsail_command_cleans_up_remote_instance_on_post_create_failure(monk
         fake_delete_lightsail_instance,
     )
 
-    with pytest.raises(CommandError, match="Unable to fetch Lightsail instance details: fetch failed"):
+    with pytest.raises(
+        CommandError, match="Unable to fetch Lightsail instance details: fetch failed"
+    ):
         call_command(
             "lightsail",
             "--credentials",
             str(credentials.pk),
             "--region",
             "us-east-1",
-            "--instance-name",
+            "--instance",
             "ops-node-1",
             "--blueprint-id",
             "debian_12",
@@ -511,7 +530,7 @@ def test_lightsail_command_refreshes_credentials_with_flags(monkeypatch):
         str(credentials.pk),
         "--region",
         "us-east-1",
-        "--instance-name",
+        "--instance",
         "ops-node-1",
         "--skip-create",
         "--refresh-credentials",
@@ -543,10 +562,88 @@ def test_lightsail_command_refresh_credentials_requires_both_values():
             str(credentials.pk),
             "--region",
             "us-east-1",
-            "--instance-name",
+            "--instance",
             "ops-node-1",
             "--skip-create",
             "--refresh-credentials",
             "--access-key-id",
             "AKIA_NEW",
         )
+
+
+def test_lightsail_command_defaults_region_to_us_east_1(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+    calls: list[tuple[str, str]] = []
+
+    def fake_fetch_lightsail_instance(**kwargs):
+        calls.append((kwargs["name"], kwargs["region"]))
+        return {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        }
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        fake_fetch_lightsail_instance,
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--instance",
+        "ops-node-1",
+        "--skip-create",
+    )
+
+    assert calls == [("ops-node-1", "us-east-1")]
+
+
+def test_lightsail_command_supports_legacy_flag_aliases(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        lambda **kwargs: {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        },
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--region",
+        "us-east-1",
+        "--instance-name",
+        "ops-node-1",
+        "--deploy-instance-name",
+        "main",
+        "--service-name",
+        "arthexis-ops-node-1",
+        "--skip-create",
+    )
+
+    deploy_instance = DeployInstance.objects.get(server__name="ops-node-1", name="main")
+    assert deploy_instance.service_name == "arthexis-ops-node-1"
