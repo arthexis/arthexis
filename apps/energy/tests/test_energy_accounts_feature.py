@@ -16,8 +16,6 @@ from apps.users.backends import LocalhostAdminBackend
 
 
 def _enable_energy_accounts() -> None:
-    cache.delete("feature-enabled:energy-accounts")
-    cache.delete("feature-parameter:energy-accounts:energy_credits_required")
     Feature.objects.update_or_create(
         slug="energy-accounts",
         defaults={
@@ -26,6 +24,8 @@ def _enable_energy_accounts() -> None:
             "metadata": {"parameters": {"energy_credits_required": "disabled"}},
         },
     )
+    cache.delete("feature-enabled:energy-accounts")
+    cache.delete("feature-parameter:energy-accounts:energy_credits_required")
 
 
 @pytest.mark.anyio
