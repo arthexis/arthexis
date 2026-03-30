@@ -71,7 +71,7 @@ Small follow-ups:
 
 ### `apps/repos/`
 
-Backlog snapshot as of 2026-03-21:
+Backlog snapshot as of 2026-03-21 (with `from typing import Any` and unparameterized collection counts manually adjusted after that snapshot to reflect the `release_management.py` rollout):
 
 - `TYPE_CHECKING`: 8
 - `from typing import Any`: 4

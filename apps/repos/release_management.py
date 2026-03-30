@@ -6,7 +6,7 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass
-from typing import TypedDict, cast
+from typing import cast, TypedDict
 
 from typing_extensions import NotRequired
 
@@ -34,10 +34,11 @@ class GitHubIssuePayload(TypedDict, total=False):
     """Subset of issue fields consumed from suite API or gh output."""
 
     author: GitHubAuthorPayload
+    html_url: str
     number: int
-    pull_request: dict[str, JSONValue]
     state: str
     title: str
+    user: GitHubAuthorPayload
     url: str
 
 
@@ -51,6 +52,7 @@ class GitHubIssueCreatePayload(TypedDict):
 class GitHubPullRequestPayload(TypedDict, total=False):
     """Subset of pull-request fields consumed from suite API or gh output."""
 
+    draft: bool
     isDraft: bool
     number: int
     state: str
@@ -198,7 +200,9 @@ class ReleaseManagementClient:
                 )
             )
             return [
-                cast(GitHubIssuePayload, item) for item in issues if "pull_request" not in item
+                self._coerce_issue_payload(cast(dict[str, JSONValue], item))
+                for item in issues
+                if "pull_request" not in item
             ]
 
         query = "number,title,state,url,author"
@@ -262,7 +266,10 @@ class ReleaseManagementClient:
                     state=state,
                 )
             )
-            return [cast(GitHubPullRequestPayload, item) for item in pull_requests]
+            return [
+                self._coerce_pull_request_payload(cast(dict[str, JSONValue], item))
+                for item in pull_requests
+            ]
 
         query = "number,title,state,url,isDraft"
         rows = self._run_gh_json(
@@ -304,6 +311,25 @@ class ReleaseManagementClient:
             ]
         )
         return cast(list[GitHubReleasePayload], rows) if isinstance(rows, list) else []
+
+    @staticmethod
+    def _coerce_issue_payload(item: dict[str, JSONValue]) -> GitHubIssuePayload:
+        payload: GitHubIssuePayload = cast(GitHubIssuePayload, item)
+        user = item.get("user")
+        if isinstance(user, dict) and "author" not in payload:
+            payload["author"] = cast(GitHubAuthorPayload, user)
+        html_url = item.get("html_url")
+        if isinstance(html_url, str) and "url" not in payload:
+            payload["url"] = html_url
+        return payload
+
+    @staticmethod
+    def _coerce_pull_request_payload(item: dict[str, JSONValue]) -> GitHubPullRequestPayload:
+        payload: GitHubPullRequestPayload = cast(GitHubPullRequestPayload, item)
+        draft = item.get("draft")
+        if isinstance(draft, bool) and "isDraft" not in payload:
+            payload["isDraft"] = draft
+        return payload
 
 
 __all__ = [
