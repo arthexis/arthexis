@@ -517,7 +517,7 @@ class Command(BaseCommand):
         """Return relation override, or infer a default from local site configuration."""
 
         if requested_relation:
-            return Node.normalize_relation(requested_relation)
+            return Node.Relation(requested_relation)
 
         local_node = Node.get_local()
         local_domain = (
@@ -550,7 +550,7 @@ class Command(BaseCommand):
             "address": host,
             "current_relation": relation,
             "hostname": instance_name,
-            "network_hostname": instance_name,
+            "network_hostname": host,
             "port": Node.get_preferred_port(),
             "public_endpoint": endpoint,
             "trusted": True,
@@ -570,6 +570,8 @@ class Command(BaseCommand):
             managed_site, _, _ = Node._detect_managed_site()
             if managed_site is not None:
                 defaults["base_site"] = managed_site
+        else:
+            defaults["base_site"] = None
 
         if node:
             for field, value in defaults.items():
