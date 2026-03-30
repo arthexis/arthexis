@@ -482,3 +482,71 @@ def test_lightsail_command_cleans_up_remote_instance_on_post_create_failure(monk
         )
 
     assert calls == ["create:ops-node-1", "fetch:ops-node-1", "delete:ops-node-1"]
+
+
+def test_lightsail_command_refreshes_credentials_with_flags(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_OLD",
+        secret_access_key="old-secret",
+    )
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        lambda **kwargs: {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        },
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--region",
+        "us-east-1",
+        "--instance-name",
+        "ops-node-1",
+        "--skip-create",
+        "--refresh-credentials",
+        "--access-key-id",
+        "AKIA_NEW",
+        "--secret-access-key",
+        "new-secret",
+    )
+
+    credentials.refresh_from_db()
+    assert credentials.access_key_id == "AKIA_NEW"
+    assert credentials.secret_access_key == "new-secret"
+
+
+def test_lightsail_command_refresh_credentials_requires_both_values():
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_OLD",
+        secret_access_key="old-secret",
+    )
+
+    with pytest.raises(
+        CommandError,
+        match="--access-key-id and --secret-access-key must be provided together.",
+    ):
+        call_command(
+            "lightsail",
+            "--credentials",
+            str(credentials.pk),
+            "--region",
+            "us-east-1",
+            "--instance-name",
+            "ops-node-1",
+            "--skip-create",
+            "--refresh-credentials",
+            "--access-key-id",
+            "AKIA_NEW",
+        )

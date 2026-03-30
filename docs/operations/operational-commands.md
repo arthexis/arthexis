@@ -121,3 +121,16 @@ Then inspect the configured deployment inventory:
 ```bash
 ./command.sh deploy
 ```
+
+If saved AWS credentials are stale/invalid, refresh them inline before setup/fetch:
+
+```bash
+./command.sh lightsail \
+  --credentials <aws-credential-id-or-name> \
+  --refresh-credentials \
+  --access-key-id <new-access-key-id> \
+  --secret-access-key <new-secret-access-key> \
+  --region us-east-1 \
+  --instance-name ops-node-1 \
+  --skip-create
+```
