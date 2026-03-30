@@ -303,7 +303,7 @@ class Command(BaseCommand):
         discovered: list[str] = []
         try:
             discovered = list_lightsail_regions()
-        except LightsailFetchError:
+        except Exception:
             discovered = []
         merged = sorted({*COMMON_LIGHTSAIL_REGIONS, *discovered})
         return tuple(merged)
