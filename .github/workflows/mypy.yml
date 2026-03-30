@@ -13,6 +13,7 @@ x-mypy-paths: &mypy-paths
   - 'apps/protocols/**'
   - 'apps/repos/github.py'
   - 'apps/repos/services/github.py'
+  - 'apps/repos/release_management.py'
   - 'apps/core/services/health.py'
   - 'apps/core/services/health_checks.py'
   - 'apps/core/modeling/**'
