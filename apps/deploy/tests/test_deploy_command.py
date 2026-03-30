@@ -609,6 +609,45 @@ def test_lightsail_command_defaults_region_to_us_east_1(monkeypatch):
     assert calls == [("ops-node-1", "us-east-1")]
 
 
+def test_lightsail_command_defaults_region_from_valid_environment(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+    calls: list[tuple[str, str]] = []
+
+    def fake_fetch_lightsail_instance(**kwargs):
+        calls.append((kwargs["name"], kwargs["region"]))
+        return {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-2a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        }
+
+    monkeypatch.setenv("AWS_REGION", "us-east-2")
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        fake_fetch_lightsail_instance,
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--instance",
+        "ops-node-1",
+        "--skip-create",
+    )
+
+    assert calls == [("ops-node-1", "us-east-2")]
+
+
 def test_lightsail_command_supports_legacy_flag_aliases(monkeypatch):
     credentials = AWSCredentials.objects.create(
         name="primary",
@@ -638,6 +677,8 @@ def test_lightsail_command_supports_legacy_flag_aliases(monkeypatch):
         "us-east-1",
         "--instance-name",
         "ops-node-1",
+        "--key-pair-name",
+        "legacy-keypair",
         "--deploy-instance-name",
         "main",
         "--service-name",

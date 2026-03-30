@@ -1,37 +1,22 @@
 from __future__ import annotations
 
 import os
-from typing import Iterable
 
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
+from .lightsail_regions import COMMON_LIGHTSAIL_REGIONS
 from .models import AWSCredentials
-
-COMMON_LIGHTSAIL_REGIONS = (
-    "ap-south-1",
-    "ap-southeast-1",
-    "ap-southeast-2",
-    "eu-central-1",
-    "eu-west-1",
-    "eu-west-2",
-    "us-east-1",
-    "us-east-2",
-    "us-west-2",
-)
+from .services import LightsailFetchError, list_lightsail_regions
 
 
 def _region_choices() -> list[tuple[str, str]]:
     try:
-        import boto3
-    except ModuleNotFoundError:
-        return [(code, code) for code in COMMON_LIGHTSAIL_REGIONS]
+        regions = list_lightsail_regions()
+    except LightsailFetchError:
+        regions = []
 
-    session = boto3.session.Session()
-    regions: Iterable[str] = session.get_available_regions("lightsail") or []
     normalized = sorted({*COMMON_LIGHTSAIL_REGIONS, *regions})
-    if not normalized:
-        normalized = ["us-east-1"]
     return [(code, code) for code in normalized]
 
 
@@ -67,7 +52,9 @@ class BaseLightsailFetchForm(forms.Form):
         self.fields["region"].choices = _region_choices()
         default_region = "us-east-1"
         env_region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
-        if env_region and env_region in dict(self.fields["region"].choices):
+        if env_region and any(
+            env_region == choice[0] for choice in self.fields["region"].choices
+        ):
             default_region = env_region
         self.fields["region"].initial = default_region
         self.fields["credentials"].queryset = AWSCredentials.objects.order_by("name")

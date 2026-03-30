@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import getpass
+import os
 import sys
 
 from django.core.management.base import BaseCommand, CommandError
@@ -10,6 +11,7 @@ from django.db import IntegrityError
 from django.db import transaction
 from django.db.utils import OperationalError, ProgrammingError
 
+from apps.aws.lightsail_regions import COMMON_LIGHTSAIL_REGIONS
 from apps.aws.models import AWSCredentials, LightsailInstance
 from apps.aws.services import (
     LightsailFetchError,
@@ -25,17 +27,6 @@ from apps.features.utils import is_suite_feature_enabled
 
 
 LIGHTSAIL_CLI_AUTH_BOOTSTRAP_FEATURE_SLUG = "deploy-lightsail-cli-auth-bootstrap"
-COMMON_LIGHTSAIL_REGIONS = (
-    "ap-south-1",
-    "ap-southeast-1",
-    "ap-southeast-2",
-    "eu-central-1",
-    "eu-west-1",
-    "eu-west-2",
-    "us-east-1",
-    "us-east-2",
-    "us-west-2",
-)
 
 
 class Command(BaseCommand):
@@ -47,12 +38,18 @@ class Command(BaseCommand):
         """Register setup options."""
 
         region_choices = self._region_choices()
+        default_region = "us-east-1"
+        env_region = (
+            os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or ""
+        ).strip()
+        if env_region in region_choices:
+            default_region = env_region
         parser.add_argument(
             "--credentials", required=True, help="AWS credential id or name."
         )
         parser.add_argument(
             "--region",
-            default="us-east-1",
+            default=default_region,
             choices=region_choices,
             help="Lightsail region code (default: us-east-1).",
         )
