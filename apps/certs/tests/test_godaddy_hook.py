@@ -56,6 +56,50 @@ def test_wait_for_dns_txt_propagation_raises_timeout(monkeypatch):
         )
 
 
+def test_fetch_existing_txt_values_returns_empty_for_404(monkeypatch):
+    class Response:
+        status_code = 404
+        text = "not found"
+
+    monkeypatch.setattr(MODULE, "_godaddy_request", lambda *_args, **_kwargs: Response())
+
+    assert MODULE._fetch_existing_txt_values("example.com", "_acme-challenge") == []
+
+
+def test_query_authoritative_txt_values_ignores_nxdomain(monkeypatch):
+    class Answer:
+        def __init__(self, value):
+            self.target = value
+
+        def __str__(self):
+            return self.target
+
+    class Resolver:
+        def __init__(self, configure=True):
+            self.configure = configure
+            self.nameservers = []
+            self.lifetime = 0
+
+        def resolve(self, name, rdtype):
+            if self.configure and rdtype == "NS":
+                return [Answer("ns1.example.net.")]
+            if self.configure and name == "ns1.example.net" and rdtype == "A":
+                return [Answer("192.0.2.10")]
+            if self.configure and name == "ns1.example.net" and rdtype == "AAAA":
+                raise MODULE.dns.resolver.NoAnswer
+            if not self.configure and rdtype == "TXT":
+                raise MODULE.dns.resolver.NXDOMAIN
+            raise AssertionError(f"Unexpected query {name} {rdtype}")
+
+    monkeypatch.setattr(MODULE.dns.resolver, "Resolver", Resolver)
+
+    observed = MODULE._query_authoritative_txt_values(
+        "example.com", "_acme-challenge.example.com"
+    )
+
+    assert observed == set()
+
+
 def test_upsert_txt_record_replaces_existing_records(monkeypatch):
     calls: list[tuple[str, str, object]] = []
 
@@ -86,3 +130,28 @@ def test_upsert_txt_record_replaces_existing_records(monkeypatch):
             [{"data": "new-value", "ttl": 600}],
         )
     ]
+
+
+def test_upsert_txt_record_uses_300_second_default_wait(monkeypatch):
+    monkeypatch.setenv("CERTBOT_DOMAIN", "example.com")
+    monkeypatch.setenv("CERTBOT_VALIDATION", "new-value")
+    monkeypatch.setenv("GODADDY_ZONE", "example.com")
+    monkeypatch.delenv("GODADDY_DNS_WAIT_SECONDS", raising=False)
+
+    class Response:
+        status_code = 200
+        text = "ok"
+
+    monkeypatch.setattr(MODULE, "_fetch_existing_txt_values", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(MODULE, "_godaddy_request", lambda *_args, **_kwargs: Response())
+
+    wait_calls: list[dict[str, object]] = []
+
+    def fake_wait(**kwargs):
+        wait_calls.append(kwargs)
+
+    monkeypatch.setattr(MODULE, "_wait_for_dns_txt_propagation", fake_wait)
+
+    MODULE._upsert_txt_record()
+
+    assert wait_calls[0]["timeout_seconds"] == 300

@@ -102,6 +102,8 @@ def _fetch_existing_txt_values(zone: str, host: str) -> list[str]:
     """Return existing GoDaddy TXT values for the ACME host."""
 
     response = _godaddy_request("GET", f"/v1/domains/{zone}/records/TXT/{host or '@'}")
+    if response.status_code == 404:
+        return []
     if response.status_code >= 400:
         raise RuntimeError(
             f"GoDaddy TXT lookup failed: {response.status_code} {response.text}"
@@ -126,30 +128,40 @@ def _query_authoritative_txt_values(zone: str, challenge_domain: str) -> set[str
     observed_values: set[str] = set()
     errors: list[str] = []
     for nameserver in nameservers:
-        ns_resolver = dns.resolver.Resolver(configure=False)
-        ns_resolver.nameservers = [nameserver]
-        ns_resolver.lifetime = 5
         try:
-            answers = ns_resolver.resolve(challenge_domain, "TXT")
+            ns_ips = [str(answer) for answer in resolver.resolve(nameserver, "A")]
+            ns_ips.extend(str(answer) for answer in resolver.resolve(nameserver, "AAAA"))
+        except dns.resolver.NoAnswer:
+            try:
+                ns_ips = [str(answer) for answer in resolver.resolve(nameserver, "A")]
+            except dns.exception.DNSException as exc:
+                errors.append(f"{nameserver}: {exc}")
+                continue
         except dns.exception.DNSException as exc:
             errors.append(f"{nameserver}: {exc}")
             continue
 
-        for answer in answers:
-            text = b"".join(answer.strings).decode("utf-8").strip()
-            if text:
-                observed_values.add(text)
+        for ns_ip in ns_ips:
+            ns_resolver = dns.resolver.Resolver(configure=False)
+            ns_resolver.nameservers = [ns_ip]
+            ns_resolver.lifetime = 5
+            try:
+                answers = ns_resolver.resolve(challenge_domain, "TXT")
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                continue
+            except dns.exception.DNSException as exc:
+                errors.append(f"{nameserver} ({ns_ip}): {exc}")
+                continue
 
-    if observed_values:
-        return observed_values
+            for answer in answers:
+                text = b"".join(answer.strings).decode("utf-8").strip()
+                if text:
+                    observed_values.add(text)
 
-    if errors:
-        raise RuntimeError(
-            "Could not read TXT records from authoritative nameservers: "
-            + "; ".join(errors)
-        )
+    if not observed_values and errors:
+        _emit_log("Authoritative DNS query errors: " + "; ".join(errors))
 
-    return set()
+    return observed_values
 
 
 def _wait_for_dns_txt_propagation(
@@ -212,7 +224,7 @@ def _upsert_txt_record() -> None:
             f"GoDaddy auth hook failed: {response.status_code} {response.text}"
         )
 
-    wait_seconds = int(_optional_env("GODADDY_DNS_WAIT_SECONDS", "120"))
+    wait_seconds = int(_optional_env("GODADDY_DNS_WAIT_SECONDS", "300"))
     _wait_for_dns_txt_propagation(
         zone=zone,
         challenge_domain=challenge_domain,
