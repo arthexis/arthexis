@@ -27,7 +27,7 @@ def test_ensure_auto_upgrade_periodic_task_reuses_duplicate_interval_schedules(
         lambda: 15,
     )
 
-    first_schedule = IntervalSchedule.objects.create(
+    IntervalSchedule.objects.create(
         every=15,
         period=IntervalSchedule.MINUTES,
     )
@@ -35,11 +35,20 @@ def test_ensure_auto_upgrade_periodic_task_reuses_duplicate_interval_schedules(
         every=15,
         period=IntervalSchedule.MINUTES,
     )
+    canonical_schedule = (
+        IntervalSchedule.objects.filter(
+            every=15,
+            period=IntervalSchedule.MINUTES,
+        )
+        .order_by("pk")
+        .first()
+    )
 
     ensure_auto_upgrade_periodic_task()
 
     task = PeriodicTask.objects.get(name=AUTO_UPGRADE_TASK_NAME)
-    assert task.interval_id == first_schedule.pk
+    assert canonical_schedule is not None
+    assert task.interval_id == canonical_schedule.pk
     assert task.interval_id != duplicate_schedule.pk
     assert PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).count() == 1
 
