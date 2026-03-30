@@ -186,7 +186,7 @@ class CertbotCertificate(CertificateBase):
         on_delete=models.SET_NULL,
         related_name="certbot_certificates",
     )
-    dns_propagation_seconds = models.PositiveIntegerField(default=120)
+    dns_propagation_seconds = models.PositiveIntegerField(default=300)
 
     class Meta:
         verbose_name = _("Certbot certificate")

@@ -62,7 +62,22 @@ class CertbotCertificateAdmin(CertificateProvisioningMixin, admin.ModelAdmin):
         "last_requested_at",
     )
     search_fields = ("name", "domain", "email")
+    list_filter = ("challenge_type", "auto_renew")
     readonly_fields = ("last_requested_at", "last_message")
+    fields = (
+        "name",
+        "domain",
+        "email",
+        "challenge_type",
+        "dns_credential",
+        "dns_propagation_seconds",
+        "certificate_path",
+        "certificate_key_path",
+        "expiration_date",
+        "auto_renew",
+        "last_requested_at",
+        "last_message",
+    )
     actions: ClassVar[list[str]] = [
         "generate_certificates",
         "request_certbot",
