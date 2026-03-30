@@ -71,15 +71,16 @@ Small follow-ups:
 
 ### `apps/repos/`
 
-Backlog snapshot as of 2026-03-21:
+Backlog snapshot as of 2026-03-21 (with `from typing import Any` and unparameterized collection counts manually adjusted after that snapshot to reflect the `release_management.py` rollout):
 
 - `TYPE_CHECKING`: 8
-- `from typing import Any`: 5
-- unparameterized collections: 22
+- `from typing import Any`: 4
+- unparameterized collections: 20
 
 Small follow-ups:
 
-- Service-heavy candidates: `apps/repos/release_management.py` and `apps/repos/views/webhooks.py`.
+- Service-heavy candidates: `apps/repos/views/webhooks.py`.
+- Recently completed: `apps/repos/release_management.py` now uses narrow `TypedDict` payloads for release/issue/PR data and is included in the MyPy approved path set.
 - Registry and model-adjacent candidates: `apps/repos/task_utils.py` and `apps/repos/models/repositories.py`.
 - Replace `Any` payloads with `TypedDict` shapes for webhook and GitHub CLI data as those modules become owned.
 

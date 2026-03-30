@@ -6,7 +6,9 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass
-from typing import Any
+from typing import cast, TypedDict
+
+from typing_extensions import NotRequired
 
 from apps.features.utils import is_suite_feature_enabled
 from apps.repos.services import github as github_service
@@ -15,6 +17,58 @@ RELEASE_MANAGEMENT_FEATURE_SLUG = "release-management"
 EXECUTION_MODE_KEY = "execution_mode"
 EXECUTION_MODE_SUITE = "suite"
 EXECUTION_MODE_BINARY = "binary"
+
+
+JSONPrimitive = str | int | float | bool | None
+JSONValue = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
+
+
+class GitHubAuthorPayload(TypedDict, total=False):
+    """Subset of GitHub author payload fields consumed by Arthexis."""
+
+    login: str
+    url: str
+
+
+class GitHubIssuePayload(TypedDict, total=False):
+    """Subset of issue fields consumed from suite API or gh output."""
+
+    author: GitHubAuthorPayload
+    html_url: str
+    number: int
+    state: str
+    title: str
+    user: GitHubAuthorPayload
+    url: str
+
+
+class GitHubIssueCreatePayload(TypedDict):
+    """Subset of issue create response fields used for links."""
+
+    html_url: NotRequired[str]
+    url: NotRequired[str]
+
+
+class GitHubPullRequestPayload(TypedDict, total=False):
+    """Subset of pull-request fields consumed from suite API or gh output."""
+
+    draft: bool
+    isDraft: bool
+    number: int
+    state: str
+    title: str
+    url: str
+
+
+class GitHubReleasePayload(TypedDict, total=False):
+    """Subset of release fields consumed from gh output."""
+
+    isDraft: bool
+    isLatest: bool
+    name: str
+    publishedAt: str
+    tagName: str
+    url: str
 
 
 class ReleaseManagementError(RuntimeError):
@@ -101,7 +155,7 @@ class ReleaseManagementClient:
         except (FileNotFoundError, subprocess.CalledProcessError) as exc:
             raise ReleaseManagementError("GitHub CLI is unavailable; install/authenticate gh first") from exc
 
-    def _run_gh_json(self, args: list[str]) -> Any:
+    def _run_gh_json(self, args: list[str]) -> JSONValue:
         self._ensure_gh_available()
         completed = subprocess.run(
             ["gh", *args],
@@ -115,7 +169,7 @@ class ReleaseManagementClient:
         output = completed.stdout.strip()
         if not output:
             return []
-        return json.loads(output)
+        return cast(JSONValue, json.loads(output))
 
     def _run_gh(self, args: list[str]) -> str:
         self._ensure_gh_available()
@@ -132,7 +186,7 @@ class ReleaseManagementClient:
     def _can_use_suite_api(self) -> bool:
         return bool(self._resolve_token()) and self._feature_enabled()
 
-    def list_issues(self, repository: RepositoryRef, *, state: str = "open") -> list[dict[str, Any]]:
+    def list_issues(self, repository: RepositoryRef, *, state: str = "open") -> list[GitHubIssuePayload]:
         """List issues using suite API first unless binary mode is selected."""
 
         token = self._resolve_token()
@@ -145,7 +199,11 @@ class ReleaseManagementClient:
                     state=state,
                 )
             )
-            return [item for item in issues if "pull_request" not in item]
+            return [
+                self._coerce_issue_payload(cast(dict[str, JSONValue], item))
+                for item in issues
+                if "pull_request" not in item
+            ]
 
         query = "number,title,state,url,author"
         rows = self._run_gh_json(
@@ -160,7 +218,7 @@ class ReleaseManagementClient:
                 query,
             ]
         )
-        return rows if isinstance(rows, list) else []
+        return cast(list[GitHubIssuePayload], rows) if isinstance(rows, list) else []
 
     def create_issue(self, repository: RepositoryRef, *, title: str, body: str) -> str:
         """Create an issue through suite API with binary fallback."""
@@ -175,8 +233,9 @@ class ReleaseManagementClient:
                 body=body,
             )
             if response is not None:
-                payload = response.json()
-                if isinstance(payload, dict):
+                raw_payload = response.json()
+                if isinstance(raw_payload, dict):
+                    payload = cast(GitHubIssueCreatePayload, raw_payload)
                     return str(payload.get("html_url") or payload.get("url") or "")
 
         return self._run_gh(
@@ -192,12 +251,14 @@ class ReleaseManagementClient:
             ]
         )
 
-    def list_pull_requests(self, repository: RepositoryRef, *, state: str = "open") -> list[dict[str, Any]]:
+    def list_pull_requests(
+        self, repository: RepositoryRef, *, state: str = "open"
+    ) -> list[GitHubPullRequestPayload]:
         """List pull requests through suite API with gh fallback."""
 
         token = self._resolve_token()
         if not self._should_use_binary_first() and token and self._can_use_suite_api():
-            return list(
+            pull_requests = list(
                 github_service.fetch_repository_pull_requests(
                     token=token,
                     owner=repository.owner,
@@ -205,12 +266,16 @@ class ReleaseManagementClient:
                     state=state,
                 )
             )
+            return [
+                self._coerce_pull_request_payload(cast(dict[str, JSONValue], item))
+                for item in pull_requests
+            ]
 
         query = "number,title,state,url,isDraft"
         rows = self._run_gh_json(
             ["pr", "list", "--repo", repository.slug, "--state", state, "--json", query]
         )
-        return rows if isinstance(rows, list) else []
+        return cast(list[GitHubPullRequestPayload], rows) if isinstance(rows, list) else []
 
     def create_release(self, repository: RepositoryRef, *, tag: str, title: str, notes: str) -> str:
         """Create a GitHub release via gh CLI."""
@@ -230,7 +295,7 @@ class ReleaseManagementClient:
             ]
         )
 
-    def list_releases(self, repository: RepositoryRef, *, limit: int = 20) -> list[dict[str, Any]]:
+    def list_releases(self, repository: RepositoryRef, *, limit: int = 20) -> list[GitHubReleasePayload]:
         """List releases via gh CLI JSON output."""
 
         rows = self._run_gh_json(
@@ -245,7 +310,26 @@ class ReleaseManagementClient:
                 "tagName,name,isDraft,isLatest,publishedAt,url",
             ]
         )
-        return rows if isinstance(rows, list) else []
+        return cast(list[GitHubReleasePayload], rows) if isinstance(rows, list) else []
+
+    @staticmethod
+    def _coerce_issue_payload(item: dict[str, JSONValue]) -> GitHubIssuePayload:
+        payload: GitHubIssuePayload = cast(GitHubIssuePayload, item)
+        user = item.get("user")
+        if isinstance(user, dict) and "author" not in payload:
+            payload["author"] = cast(GitHubAuthorPayload, user)
+        html_url = item.get("html_url")
+        if isinstance(html_url, str) and "url" not in payload:
+            payload["url"] = html_url
+        return payload
+
+    @staticmethod
+    def _coerce_pull_request_payload(item: dict[str, JSONValue]) -> GitHubPullRequestPayload:
+        payload: GitHubPullRequestPayload = cast(GitHubPullRequestPayload, item)
+        draft = item.get("draft")
+        if isinstance(draft, bool) and "isDraft" not in payload:
+            payload["isDraft"] = draft
+        return payload
 
 
 __all__ = [

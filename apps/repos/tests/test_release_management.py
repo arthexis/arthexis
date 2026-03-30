@@ -209,3 +209,62 @@ def test_release_management_disabled_feature_forces_gh_fallback(monkeypatch):
 
     assert rows[0]["number"] == 9
     assert called["args"][0:2] == ["issue", "list"]
+
+
+@pytest.mark.django_db
+def test_release_management_normalizes_suite_issue_payload(monkeypatch):
+    """Suite issue payloads should expose gh-style author and url keys."""
+
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_resolve_token",
+        lambda self: "token-1",
+    )
+
+    from apps.repos.services import github as github_service
+
+    monkeypatch.setattr(
+        github_service,
+        "fetch_repository_issues",
+        lambda **kwargs: [
+            {
+                "number": 12,
+                "state": "open",
+                "title": "Issue",
+                "html_url": "https://example.com/issues/12",
+                "user": {"login": "octocat"},
+            }
+        ],
+    )
+
+    client = ReleaseManagementClient()
+    rows = client.list_issues(RepositoryRef(owner="octo", name="demo"))
+
+    assert rows[0]["url"] == "https://example.com/issues/12"
+    assert rows[0]["author"]["login"] == "octocat"
+
+
+@pytest.mark.django_db
+def test_release_management_normalizes_suite_pull_request_payload(monkeypatch):
+    """Suite pull-request payloads should expose gh-style isDraft key."""
+
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_resolve_token",
+        lambda self: "token-1",
+    )
+
+    from apps.repos.services import github as github_service
+
+    monkeypatch.setattr(
+        github_service,
+        "fetch_repository_pull_requests",
+        lambda **kwargs: [
+            {"number": 14, "state": "open", "title": "PR", "draft": True, "url": "https://example.com/pr/14"}
+        ],
+    )
+
+    client = ReleaseManagementClient()
+    rows = client.list_pull_requests(RepositoryRef(owner="octo", name="demo"))
+
+    assert rows[0]["isDraft"] is True
