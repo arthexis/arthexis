@@ -2,6 +2,7 @@ import pytest
 from channels.db import database_sync_to_async
 from django.contrib.auth import BACKEND_SESSION_KEY, get_user_model
 from django.contrib.messages import get_messages
+from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 
@@ -14,14 +15,10 @@ from apps.ocpp.models import Charger, PublicConnectorPage
 from apps.users.backends import LocalhostAdminBackend
 
 
-@pytest.mark.anyio
-@pytest.mark.django_db(transaction=True)
-async def test_authorize_requires_account_when_energy_accounts_enabled():
-    charger = await database_sync_to_async(Charger.objects.create)(
-        charger_id="CP-EA-AUTH",
-        require_rfid=True,
-    )
-    await database_sync_to_async(Feature.objects.update_or_create)(
+def _enable_energy_accounts() -> None:
+    cache.delete("feature-enabled:energy-accounts")
+    cache.delete("feature-parameter:energy-accounts:energy_credits_required")
+    Feature.objects.update_or_create(
         slug="energy-accounts",
         defaults={
             "display": "Energy Accounts",
@@ -29,6 +26,16 @@ async def test_authorize_requires_account_when_energy_accounts_enabled():
             "metadata": {"parameters": {"energy_credits_required": "disabled"}},
         },
     )
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_authorize_requires_account_when_energy_accounts_enabled():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CP-EA-AUTH",
+        require_rfid=True,
+    )
+    await database_sync_to_async(_enable_energy_accounts)()
     await database_sync_to_async(RFID.objects.create)(rfid="EA001", allowed=True)
 
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -54,14 +61,7 @@ async def test_authorize_accepts_account_without_credits_when_parameter_disabled
         charger_id="CP-EA-ACCOUNT",
         require_rfid=True,
     )
-    await database_sync_to_async(Feature.objects.update_or_create)(
-        slug="energy-accounts",
-        defaults={
-            "display": "Energy Accounts",
-            "is_enabled": True,
-            "metadata": {"parameters": {"energy_credits_required": "disabled"}},
-        },
-    )
+    await database_sync_to_async(_enable_energy_accounts)()
     tag = await database_sync_to_async(RFID.objects.create)(rfid="EA002", allowed=True)
     account = await database_sync_to_async(CustomerAccount.objects.create)(name="EA002ACC")
     await database_sync_to_async(account.rfids.add)(tag)
@@ -84,14 +84,7 @@ async def test_authorize_accepts_account_without_credits_when_parameter_disabled
 
 @pytest.mark.django_db
 def test_public_connector_page_prompts_account_creation_when_enabled(client):
-    Feature.objects.update_or_create(
-        slug="energy-accounts",
-        defaults={
-            "display": "Energy Accounts",
-            "is_enabled": True,
-            "metadata": {"parameters": {"energy_credits_required": "disabled"}},
-        },
-    )
+    _enable_energy_accounts()
     charger = Charger.objects.create(charger_id="CP-EA-PAGE", connector_id=1)
     page = PublicConnectorPage.objects.create(charger=charger, enabled=True)
 
@@ -105,14 +98,7 @@ def test_public_connector_page_prompts_account_creation_when_enabled(client):
 
 @pytest.mark.django_db
 def test_public_connector_page_create_account_creates_user_and_account(client):
-    Feature.objects.update_or_create(
-        slug="energy-accounts",
-        defaults={
-            "display": "Energy Accounts",
-            "is_enabled": True,
-            "metadata": {"parameters": {"energy_credits_required": "disabled"}},
-        },
-    )
+    _enable_energy_accounts()
     charger = Charger.objects.create(charger_id="CP-EA-CREATE", connector_id=1)
     page = PublicConnectorPage.objects.create(charger=charger, enabled=True)
 
@@ -137,14 +123,7 @@ def test_public_connector_page_create_account_creates_user_and_account(client):
 
 @pytest.mark.django_db
 def test_public_connector_page_create_account_rejects_hidden_charger(client):
-    Feature.objects.update_or_create(
-        slug="energy-accounts",
-        defaults={
-            "display": "Energy Accounts",
-            "is_enabled": True,
-            "metadata": {"parameters": {"energy_credits_required": "disabled"}},
-        },
-    )
+    _enable_energy_accounts()
     charger = Charger.objects.create(
         charger_id="CP-EA-HIDDEN",
         connector_id=1,
@@ -167,14 +146,7 @@ def test_public_connector_page_create_account_rejects_hidden_charger(client):
 @pytest.mark.django_db
 @override_settings(AUTHENTICATION_BACKENDS=["apps.users.backends.LocalhostAdminBackend"])
 def test_public_connector_page_create_account_skips_login_with_unsafe_only_backends(client):
-    Feature.objects.update_or_create(
-        slug="energy-accounts",
-        defaults={
-            "display": "Energy Accounts",
-            "is_enabled": True,
-            "metadata": {"parameters": {"energy_credits_required": "disabled"}},
-        },
-    )
+    _enable_energy_accounts()
     charger = Charger.objects.create(charger_id="CP-EA-UNSAFE-ONLY", connector_id=1)
     page = PublicConnectorPage.objects.create(charger=charger, enabled=True)
 
@@ -196,14 +168,7 @@ def test_public_connector_page_create_account_skips_login_with_unsafe_only_backe
 
 @pytest.mark.django_db
 def test_public_connector_page_create_account_rejects_authenticated_post(client):
-    Feature.objects.update_or_create(
-        slug="energy-accounts",
-        defaults={
-            "display": "Energy Accounts",
-            "is_enabled": True,
-            "metadata": {"parameters": {"energy_credits_required": "disabled"}},
-        },
-    )
+    _enable_energy_accounts()
     existing_user = get_user_model().objects.create_user(
         username="existing-energy-user",
         email="existing@example.com",

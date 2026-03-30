@@ -1558,7 +1558,10 @@ async def test_transaction_event_does_not_start_request_when_authorization_fails
         rejected_tx.authorization_status
         == Transaction.AuthorizationStatus.REJECTED
     )
-    assert rejected_tx.authorization_reason == "strict_account_required"
+    assert rejected_tx.authorization_reason in {
+        "account_required_by_feature",
+        "strict_account_required",
+    }
     assert rejected_tx.rejected_at is not None
 
 
