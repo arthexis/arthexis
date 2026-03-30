@@ -262,7 +262,7 @@ def _iso_datetime_or_now(value: Any) -> str:
     if isinstance(value, str) and value.strip():
         return value.strip()
     if isinstance(value, datetime):
-        return value.astimezone(UTC).isoformat()
+        return value.astimezone(timezone.utc).isoformat()
     return datetime.now(tz=timezone.utc).isoformat()
 
 
