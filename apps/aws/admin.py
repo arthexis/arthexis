@@ -196,12 +196,11 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
     changelist_actions = ["fetch", "load_instances"]
     dashboard_actions = ["fetch", "load_instances"]
     list_display = (
-        "name",
-        "region",
+        "user_input_summary",
+        "discovered_summary",
         "state",
         "public_ip",
         "private_ip",
-        "bundle_id",
         "availability_zone",
     )
     search_fields = (
@@ -218,6 +217,23 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
         "raw_details",
     )
     autocomplete_fields = ("credentials",)
+
+    @admin.display(description=_("User-provided fields"))
+    def user_input_summary(self, obj):
+        credentials_name = obj.credentials.name if obj.credentials else "—"
+        return _("name=%(name)s; region=%(region)s; credentials=%(credentials)s") % {
+            "name": obj.name,
+            "region": obj.region,
+            "credentials": credentials_name,
+        }
+
+    @admin.display(description=_("Discovered fields"))
+    def discovered_summary(self, obj):
+        return _("bundle=%(bundle)s; blueprint=%(blueprint)s; arn=%(arn)s") % {
+            "bundle": obj.bundle_id or "—",
+            "blueprint": obj.blueprint_id or "—",
+            "arn": obj.arn or "—",
+        }
 
     def get_urls(self):  # pragma: no cover - admin hook
         urls = super().get_urls()
@@ -357,8 +373,8 @@ class LightsailDatabaseAdmin(LightsailActionMixin, admin.ModelAdmin):
     changelist_actions = ["fetch"]
     dashboard_actions = ["fetch"]
     list_display = (
-        "name",
-        "region",
+        "user_input_summary",
+        "discovered_summary",
         "state",
         "engine",
         "engine_version",
@@ -378,6 +394,23 @@ class LightsailDatabaseAdmin(LightsailActionMixin, admin.ModelAdmin):
         "raw_details",
     )
     autocomplete_fields = ("credentials",)
+
+    @admin.display(description=_("User-provided fields"))
+    def user_input_summary(self, obj):
+        credentials_name = obj.credentials.name if obj.credentials else "—"
+        return _("name=%(name)s; region=%(region)s; credentials=%(credentials)s") % {
+            "name": obj.name,
+            "region": obj.region,
+            "credentials": credentials_name,
+        }
+
+    @admin.display(description=_("Discovered fields"))
+    def discovered_summary(self, obj):
+        return _("arn=%(arn)s; endpoint=%(endpoint)s:%(port)s") % {
+            "arn": obj.arn or "—",
+            "endpoint": obj.endpoint_address or "—",
+            "port": obj.endpoint_port or "—",
+        }
 
     def get_urls(self):  # pragma: no cover - admin hook
         urls = super().get_urls()

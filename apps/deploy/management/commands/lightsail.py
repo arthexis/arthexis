@@ -51,6 +51,21 @@ class Command(BaseCommand):
             help="Skip Lightsail create call and only fetch/register an existing instance.",
         )
         parser.add_argument(
+            "--refresh-credentials",
+            action="store_true",
+            help="Re-enter and save the selected AWS credentials before Lightsail operations.",
+        )
+        parser.add_argument(
+            "--access-key-id",
+            default="",
+            help="Optional AWS access key id used with --refresh-credentials.",
+        )
+        parser.add_argument(
+            "--secret-access-key",
+            default="",
+            help="Optional AWS secret access key used with --refresh-credentials.",
+        )
+        parser.add_argument(
             "--deploy-instance-name",
             default="main",
             help="Deploy instance label stored under the deploy server (default: main).",
@@ -97,6 +112,12 @@ class Command(BaseCommand):
         """Create/fetch Lightsail instance and wire deploy models."""
 
         credentials = self._resolve_credentials(str(options["credentials"]))
+        if options["refresh_credentials"]:
+            credentials = self._refresh_credentials(
+                credentials,
+                access_key_id=str(options.get("access_key_id") or "").strip(),
+                secret_access_key=str(options.get("secret_access_key") or "").strip(),
+            )
         region = str(options["region"]).strip()
         instance_name = str(options["instance_name"]).strip()
         deploy_instance_name = str(options["deploy_instance_name"]).strip()
@@ -300,6 +321,44 @@ class Command(BaseCommand):
                 f"Unable to create AWS credentials '{candidate}'. "
                 "The access key may already exist or values are invalid."
             ) from exc
+
+    def _refresh_credentials(
+        self,
+        credentials: AWSCredentials,
+        *,
+        access_key_id: str,
+        secret_access_key: str,
+    ) -> AWSCredentials:
+        """Update stored credentials using provided values or interactive prompts."""
+
+        provided_access = access_key_id.strip()
+        provided_secret = secret_access_key.strip()
+        if bool(provided_access) != bool(provided_secret):
+            raise CommandError("--access-key-id and --secret-access-key must be provided together.")
+
+        if provided_access and provided_secret:
+            new_access_key_id = provided_access
+            new_secret_access_key = provided_secret
+        else:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Refreshing AWS credentials for '{credentials.name}'. Enter replacement values."
+                )
+            )
+            new_access_key_id = self._prompt_required("AWS access key id")
+            new_secret_access_key = self._prompt_required("AWS secret access key", secret=True)
+
+        credentials.access_key_id = new_access_key_id
+        credentials.secret_access_key = new_secret_access_key
+        try:
+            credentials.save(update_fields=["access_key_id", "secret_access_key"])
+        except IntegrityError as exc:
+            raise CommandError(
+                f"Unable to update AWS credentials '{credentials.name}'. "
+                "The access key may already exist or values are invalid."
+            ) from exc
+        self.stdout.write(self.style.SUCCESS(f"Updated AWS credentials '{credentials.name}'"))
+        return credentials
 
     def _prompt_required(self, label: str, *, secret: bool = False) -> str:
         """Prompt for a required non-empty value, optionally hiding input."""
