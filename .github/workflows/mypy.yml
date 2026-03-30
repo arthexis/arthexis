@@ -14,6 +14,7 @@ x-mypy-paths: &mypy-paths
   - 'apps/repos/github.py'
   - 'apps/repos/services/github.py'
   - 'apps/repos/release_management.py'
+  - 'apps/repos/views/webhooks.py'
   - 'apps/core/services/health.py'
   - 'apps/core/services/health_checks.py'
   - 'apps/core/modeling/**'
