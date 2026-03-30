@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import pytest
+from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from apps.aws.models import AWSCredentials
 from apps.deploy.management.commands import lightsail as lightsail_command
 from apps.deploy.models import DeployInstance, DeployRun, DeployServer
+from apps.nodes.models import Node
 
 pytestmark = pytest.mark.django_db
 
@@ -106,6 +108,214 @@ def test_lightsail_command_creates_records(monkeypatch, capsys):
     assert DeployRun.objects.filter(
         instance=deploy_instance, action=DeployRun.Action.DEPLOY
     ).exists()
+
+
+def test_lightsail_registers_node_as_downstream_when_site_has_top_domain(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+    site = Site.objects.create(
+        domain="ops.example.com",
+        managed=True,
+        require_https=True,
+    )
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        lambda **kwargs: {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        },
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--region",
+        "us-east-1",
+        "--instance",
+        "ops-node-1",
+        "--skip-create",
+    )
+
+    node = Node.objects.get(hostname="ops-node-1")
+    assert node.current_relation == Node.Relation.DOWNSTREAM
+    assert node.base_site_id == site.id
+
+
+def test_lightsail_registers_node_as_peer_without_top_domain(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        lambda **kwargs: {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        },
+    )
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.Node._detect_managed_site",
+        lambda: (None, "", False),
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--region",
+        "us-east-1",
+        "--instance",
+        "ops-node-1",
+        "--skip-create",
+    )
+
+    node = Node.objects.get(hostname="ops-node-1")
+    assert node.current_relation == Node.Relation.PEER
+
+
+def test_lightsail_registers_node_with_relation_override(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        lambda **kwargs: {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        },
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--region",
+        "us-east-1",
+        "--instance",
+        "ops-node-1",
+        "--skip-create",
+        "--relation",
+        "UPSTREAM",
+    )
+
+    node = Node.objects.get(hostname="ops-node-1")
+    assert node.current_relation == Node.Relation.UPSTREAM
+
+
+def test_lightsail_registers_node_with_host_as_network_hostname(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        lambda **kwargs: {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        },
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--region",
+        "us-east-1",
+        "--instance",
+        "ops-node-1",
+        "--skip-create",
+    )
+
+    node = Node.objects.get(hostname="ops-node-1")
+    assert node.network_hostname == "18.1.2.3"
+
+
+def test_lightsail_clears_base_site_when_relation_changes_to_non_downstream(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+    site = Site.objects.create(
+        domain="ops.example.com",
+        managed=True,
+        require_https=True,
+    )
+    Node.objects.create(
+        hostname="ops-node-1",
+        public_endpoint="deploy-ops-node-1",
+        current_relation=Node.Relation.DOWNSTREAM,
+        base_site=site,
+        trusted=True,
+        port=8888,
+    )
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        lambda **kwargs: {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        },
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--region",
+        "us-east-1",
+        "--instance",
+        "ops-node-1",
+        "--skip-create",
+        "--relation",
+        "PEER",
+    )
+
+    node = Node.objects.get(public_endpoint="deploy-ops-node-1")
+    assert node.current_relation == Node.Relation.PEER
+    assert node.base_site_id is None
 
 
 @pytest.mark.parametrize(
