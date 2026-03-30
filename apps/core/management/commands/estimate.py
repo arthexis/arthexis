@@ -4,7 +4,7 @@ import json
 import subprocess
 from collections import defaultdict
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from django.conf import settings
@@ -98,7 +98,7 @@ class Command(BaseCommand):
                 file_dates[migration_path] = git_dates[relative]
                 continue
 
-            modified = datetime.fromtimestamp(migration_path.stat().st_mtime, tz=UTC)
+            modified = datetime.fromtimestamp(migration_path.stat().st_mtime, tz=timezone.utc)
             file_dates[migration_path] = modified
             self.stderr.write(
                 self.style.WARNING(

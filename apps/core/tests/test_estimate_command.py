@@ -1,7 +1,7 @@
 import io
 import json
 import subprocess
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -25,8 +25,8 @@ class EstimateCommandTests(SimpleTestCase):
             second.write_text("b" * 25, encoding="utf-8")
 
             file_dates = {
-                first: datetime(2024, 1, 1, tzinfo=UTC),
-                second: datetime(2024, 2, 1, tzinfo=UTC),
+                first: datetime(2024, 1, 1, tzinfo=timezone.utc),
+                second: datetime(2024, 2, 1, tzinfo=timezone.utc),
             }
 
             stdout = io.StringIO()
