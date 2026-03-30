@@ -97,7 +97,7 @@ def request_certbot_certificate(
     certificate_key_path: Path,
     challenge_type: str = "nginx",
     dns_credential=None,
-    dns_propagation_seconds: int = 120,
+    dns_propagation_seconds: int = 300,
     dns_use_sandbox: bool | None = None,
     force_renewal: bool = False,
     sudo: str = "sudo",

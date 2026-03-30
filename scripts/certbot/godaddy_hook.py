@@ -12,7 +12,26 @@ import sys
 import time
 from typing import Any
 
+import dns.exception
+import dns.resolver
 import requests
+
+
+DNS_POLL_INTERVAL_SECONDS = 5
+HOOK_LOG_PATH = "/logs/certbot-godaddy-hook.log"
+
+
+def _emit_log(message: str) -> None:
+    """Emit hook diagnostics to stdout and /logs when writable."""
+
+    print(message)
+    try:
+        with open(HOOK_LOG_PATH, "a", encoding="utf-8") as log_file:
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            log_file.write(f"{timestamp} {message}\n")
+    except OSError:
+        # Best-effort file logging so hook behavior never depends on filesystem perms.
+        pass
 
 
 def _required_env(name: str) -> str:
@@ -40,7 +59,9 @@ def _zone_and_name(fqdn: str, zone_override: str = "") -> tuple[str, str]:
         if value == override:
             return override, ""
         if not value.endswith(suffix):
-            raise RuntimeError(f"ACME domain {fqdn} does not match zone {override}.")
+            raise RuntimeError(
+                f"Configured GODADDY_ZONE={override} does not match ACME challenge domain {value}."
+            )
         return override, value[: -len(suffix)]
 
     labels = [part for part in value.split(".") if part]
@@ -48,6 +69,7 @@ def _zone_and_name(fqdn: str, zone_override: str = "") -> tuple[str, str]:
         raise RuntimeError(f"Invalid DNS name for ACME challenge: {fqdn}")
     domain = ".".join(labels[-2:])
     host = ".".join(labels[:-2])
+    _emit_log(f"GODADDY_ZONE not set; derived zone '{domain}' for challenge domain '{value}'.")
     return domain, host
 
 
@@ -76,6 +98,105 @@ def _godaddy_request(
     return requests.request(method, url, json=payload, headers=headers, timeout=30)
 
 
+def _fetch_existing_txt_values(zone: str, host: str) -> list[str]:
+    """Return existing GoDaddy TXT values for the ACME host."""
+
+    response = _godaddy_request("GET", f"/v1/domains/{zone}/records/TXT/{host or '@'}")
+    if response.status_code == 404:
+        return []
+    if response.status_code >= 400:
+        raise RuntimeError(
+            f"GoDaddy TXT lookup failed: {response.status_code} {response.text}"
+        )
+
+    payload = response.json()
+    if not isinstance(payload, list):
+        return []
+    return [str(item.get("data", "")).strip() for item in payload if isinstance(item, dict)]
+
+
+def _query_authoritative_txt_values(zone: str, challenge_domain: str) -> set[str]:
+    """Query authoritative DNS TXT values for *challenge_domain*."""
+
+    resolver = dns.resolver.Resolver(configure=True)
+    resolver.lifetime = 10
+    nameserver_answers = resolver.resolve(zone, "NS")
+    nameservers = [str(answer.target).rstrip(".") for answer in nameserver_answers]
+    if not nameservers:
+        raise RuntimeError(f"No authoritative nameservers found for zone {zone}.")
+
+    observed_values: set[str] = set()
+    errors: list[str] = []
+    for nameserver in nameservers:
+        try:
+            ns_ips = [str(answer) for answer in resolver.resolve(nameserver, "A")]
+        except dns.exception.DNSException as exc:
+            errors.append(f"{nameserver}: {exc}")
+            continue
+
+        try:
+            ns_ips.extend(str(answer) for answer in resolver.resolve(nameserver, "AAAA"))
+        except dns.resolver.NoAnswer:
+            pass
+        except dns.exception.DNSException as exc:
+            errors.append(f"{nameserver} (AAAA): {exc}")
+
+        for ns_ip in ns_ips:
+            ns_resolver = dns.resolver.Resolver(configure=False)
+            ns_resolver.nameservers = [ns_ip]
+            ns_resolver.lifetime = 5
+            try:
+                answers = ns_resolver.resolve(challenge_domain, "TXT")
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                continue
+            except dns.exception.DNSException as exc:
+                errors.append(f"{nameserver} ({ns_ip}): {exc}")
+                continue
+
+            for answer in answers:
+                text = b"".join(answer.strings).decode("utf-8").strip()
+                if text:
+                    observed_values.add(text)
+
+    if not observed_values and errors:
+        _emit_log("Authoritative DNS query errors: " + "; ".join(errors))
+
+    return observed_values
+
+
+def _wait_for_dns_txt_propagation(
+    *,
+    zone: str,
+    challenge_domain: str,
+    expected_value: str,
+    timeout_seconds: int,
+) -> None:
+    """Wait until authoritative DNS serves the expected TXT value."""
+
+    deadline = time.time() + max(0, timeout_seconds)
+    while True:
+        observed_values = _query_authoritative_txt_values(zone, challenge_domain)
+        if expected_value in observed_values:
+            _emit_log(
+                f"Observed expected TXT for {challenge_domain} at authoritative DNS."
+            )
+            return
+
+        if time.time() >= deadline:
+            values = sorted(observed_values) if observed_values else ["<none>"]
+            raise RuntimeError(
+                "DNS propagation timeout waiting for TXT validation value. "
+                f"Expected '{expected_value}' at {challenge_domain}; "
+                f"observed {values}."
+            )
+
+        _emit_log(
+            f"Waiting for TXT propagation at {challenge_domain}; "
+            f"observed {sorted(observed_values) if observed_values else ['<none>']}"
+        )
+        time.sleep(DNS_POLL_INTERVAL_SECONDS)
+
+
 def _upsert_txt_record() -> None:
     """Create or overwrite the ACME TXT record required for DNS-01 validation."""
 
@@ -87,6 +208,13 @@ def _upsert_txt_record() -> None:
         else f"_acme-challenge.{fqdn[2:]}"
     )
     zone, host = _zone_and_name(challenge_domain, _optional_env("GODADDY_ZONE"))
+
+    existing_values = _fetch_existing_txt_values(zone, host)
+    if existing_values:
+        _emit_log(
+            f"Replacing existing TXT records for {challenge_domain}: {existing_values}"
+        )
+
     payload = [{"data": validation, "ttl": 600}]
     response = _godaddy_request(
         "PUT", f"/v1/domains/{zone}/records/TXT/{host or '@'}", payload=payload
@@ -96,9 +224,14 @@ def _upsert_txt_record() -> None:
             f"GoDaddy auth hook failed: {response.status_code} {response.text}"
         )
 
-    wait_seconds = int(_optional_env("GODADDY_DNS_WAIT_SECONDS", "120"))
+    wait_seconds = int(_optional_env("GODADDY_DNS_WAIT_SECONDS", "300"))
     if wait_seconds > 0:
-        time.sleep(wait_seconds)
+        _wait_for_dns_txt_propagation(
+            zone=zone,
+            challenge_domain=challenge_domain,
+            expected_value=validation,
+            timeout_seconds=wait_seconds,
+        )
 
 
 def _cleanup_txt_record() -> None:
