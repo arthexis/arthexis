@@ -230,6 +230,45 @@ def test_lightsail_registers_node_with_relation_override(monkeypatch):
     assert node.current_relation == Node.Relation.UPSTREAM
 
 
+def test_lightsail_registers_node_with_long_instance_name(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+    instance_name = f"ops-{'a' * 51}"
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        lambda **kwargs: {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        },
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--region",
+        "us-east-1",
+        "--instance",
+        instance_name,
+        "--skip-create",
+    )
+
+    node = Node.objects.get(hostname=instance_name)
+    assert len(node.public_endpoint) <= Node._meta.get_field(
+        "public_endpoint"
+    ).max_length
+
+
 def test_lightsail_registers_node_with_host_as_network_hostname(monkeypatch):
     credentials = AWSCredentials.objects.create(
         name="primary",
