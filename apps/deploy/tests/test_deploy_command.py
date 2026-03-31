@@ -236,7 +236,12 @@ def test_lightsail_registers_node_with_long_instance_name(monkeypatch):
         access_key_id="AKIA_TEST",
         secret_access_key="secret",
     )
-    instance_name = f"ops-{'a' * 51}"
+    endpoint_max_length = Node._meta.get_field("public_endpoint").max_length
+    deploy_service_max_length = DeployInstance._meta.get_field("service_name").max_length
+    max_instance_name_chars = deploy_service_max_length - len("arthexis-")
+    overflow_chars = min(max_instance_name_chars - len("ops-"), endpoint_max_length + 10)
+    assert overflow_chars > endpoint_max_length
+    instance_name = f"ops-{'a' * overflow_chars}"
 
     monkeypatch.setattr(
         "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
@@ -264,9 +269,7 @@ def test_lightsail_registers_node_with_long_instance_name(monkeypatch):
     )
 
     node = Node.objects.get(hostname=instance_name)
-    assert len(node.public_endpoint) <= Node._meta.get_field(
-        "public_endpoint"
-    ).max_length
+    assert len(node.public_endpoint) <= endpoint_max_length
 
 
 def test_lightsail_registers_node_with_host_as_network_hostname(monkeypatch):
