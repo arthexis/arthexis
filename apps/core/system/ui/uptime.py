@@ -18,15 +18,13 @@ import subprocess
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 from datetime import timezone as datetime_timezone
-from typing import cast
 
 from django.utils import timezone
-from django.utils.functional import Promise
 from django.utils.timesince import timesince
 from django.utils.translation import gettext_lazy as _
 
 from ..filesystem import _suite_uptime_lock_info
-from .formatting import _format_datetime
+from .formatting import _as_str, _format_datetime
 from .services import (
     SerializedUptimeSegmentPayload,
     SuiteUptimeDetailsPayload,
@@ -37,12 +35,6 @@ from .services import (
 )
 
 _DAY_NAMES = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
-
-
-def _as_str(value: Promise | str) -> str:
-    """Narrow lazy translation values to ``str`` for typed payloads."""
-
-    return cast(str, value)
 
 
 def _system_boot_time(now: datetime | None = None) -> datetime | None:
@@ -132,7 +124,7 @@ def _suite_uptime_details() -> SuiteUptimeDetailsPayload:
 def _suite_uptime() -> str:
     """Return a human-readable uptime for the running suite when possible."""
 
-    return str(_suite_uptime_details().get("uptime", ""))
+    return _suite_uptime_details().get("uptime", "")
 
 
 def _suite_offline_period(now: datetime) -> tuple[datetime, datetime] | None:
@@ -414,9 +406,9 @@ def _build_uptime_report(*, now: datetime | None = None) -> UptimeReportPayload:
 
     suite_details = _suite_uptime_details()
     suite_info: UptimeReportSuitePayload = {
-        "uptime": str(suite_details.get("uptime", "")),
+        "uptime": suite_details.get("uptime", ""),
         "boot_time": suite_details.get("boot_time"),
-        "boot_time_label": str(suite_details.get("boot_time_label", "")),
+        "boot_time_label": suite_details.get("boot_time_label", ""),
         "available": bool(suite_details.get("available") or suite_details.get("uptime")),
     }
 

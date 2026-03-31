@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Literal, TypedDict, cast
 
 from django.conf import settings
-from django.utils.functional import Promise
 from django.utils.translation import gettext_lazy as _
 from typing_extensions import NotRequired
 
@@ -22,6 +21,7 @@ from apps.core.systemctl import _systemctl_command
 from apps.services.lifecycle import build_lifecycle_service_units
 
 from ..filesystem import _pid_file_running, _read_service_mode
+from .formatting import _as_str
 
 
 class ServiceUnitConfig(TypedDict):
@@ -131,13 +131,6 @@ class UptimeReportPayload(TypedDict):
     generated_at: datetime
     suite: UptimeReportSuitePayload
     windows: list[UptimeWindowPayload]
-
-
-def _as_str(value: Promise | str) -> str:
-    """Narrow lazy translation values to ``str`` for typed payloads."""
-
-    return cast(str, value)
-
 
 def _configured_service_units(base_dir: Path) -> list[ServiceUnitConfig]:
     """Return service units configured for this instance."""

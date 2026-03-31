@@ -16,25 +16,18 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import cast
 
 from django.conf import settings
-from django.utils.functional import Promise
 from django.utils.translation import gettext_lazy as _
 
 from apps.nginx.renderers import generate_primary_config
 from utils.service_probe import detect_runserver_port, probe_admin_login
 
 from ..filesystem import _configured_backend_port, _nginx_site_path, _resolve_nginx_mode
+from .formatting import _as_str
 from .services import NginxReportPayload
 
 logger = logging.getLogger(__name__)
-
-
-def _as_str(value: Promise | str) -> str:
-    """Narrow lazy translation values to ``str`` for typed report payloads."""
-
-    return cast(str, value)
 
 
 def _normalize_nginx_content(content: str) -> str:
