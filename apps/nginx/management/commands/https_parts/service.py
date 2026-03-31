@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import ipaddress
+
+import requests
 from django.contrib.sites.models import Site
 from django.core.management.base import CommandError
 from django.db import transaction
 
+from apps.dns.models import DNSProviderCredential
 from apps.nginx.management.commands.https_parts.certificate_flow import (
     _get_or_create_certificate,
     _provision_certificate,
+    _resolve_godaddy_credential,
 )
 from apps.nginx.management.commands.https_parts.config_apply import (
     _apply_config,
@@ -105,6 +110,7 @@ class HttpsProvisioningService:
         sudo = "" if options["no_sudo"] else "sudo"
         force_renewal = options["force_renewal"]
         godaddy_credential_key = (options.get("key") or "").strip() or None
+        static_ip = self._parse_public_ip((options.get("static_ip") or "").strip())
         warn_days = options["warn_days"]
 
         if warn_days < 0:
@@ -114,6 +120,8 @@ class HttpsProvisioningService:
             raise CommandError(
                 "--force-renewal is only supported for certbot/godaddy certificates."
             )
+        if static_ip and not use_godaddy:
+            raise CommandError("--static-ip is only supported with --godaddy.")
 
         if (
             not enable
@@ -181,6 +189,7 @@ class HttpsProvisioningService:
                     reload=reload,
                     force_renewal=force_renewal,
                     godaddy_credential_key=godaddy_credential_key,
+                    static_ip=static_ip,
                     warn_days=warn_days,
                     migrate_from_config=migration_source_config,
                 )
@@ -195,6 +204,7 @@ class HttpsProvisioningService:
                 reload=reload,
                 force_renewal=force_renewal,
                 godaddy_credential_key=godaddy_credential_key,
+                static_ip=static_ip,
                 warn_days=warn_days,
             )
             transaction.on_commit(update_local_nginx_scripts)
@@ -216,6 +226,7 @@ class HttpsProvisioningService:
         reload: bool,
         force_renewal: bool,
         godaddy_credential_key: str | None,
+        static_ip: str | None,
         warn_days: int,
         migrate_from_config: SiteConfiguration | None = None,
     ):
@@ -230,6 +241,7 @@ class HttpsProvisioningService:
             reload: Whether nginx should be reloaded after config changes.
             force_renewal: Whether certificate issuance should force renewal.
             godaddy_credential_key: Optional GoDaddy credential selector used for DNS-01 flows.
+            static_ip: Optional public IP published to GoDaddy for the domain.
             warn_days: Threshold in days to warn if certificate expiry is near.
             migrate_from_config: Optional source configuration to copy during migration.
 
@@ -275,7 +287,116 @@ class HttpsProvisioningService:
         config.refresh_from_db(fields=["protocol", "enabled"])
         self._ensure_managed_site(domain, require_https=True)
         _apply_config(self, config, reload=reload)
+        if use_godaddy and static_ip:
+            certbot_certificate = getattr(certificate, "_specific_certificate", None)
+            selected_credential = getattr(certbot_certificate, "dns_credential", None)
+            transaction.on_commit(
+                lambda: self._upsert_godaddy_site_record(
+                    domain=domain,
+                    static_ip=static_ip,
+                    key=godaddy_credential_key,
+                    credential=selected_credential,
+                    sandbox_override=sandbox_override,
+                )
+            )
         return certificate
+
+    def _parse_public_ip(self, value: str) -> str | None:
+        """Validate optional ``--static-ip`` value as a public-routable address."""
+
+        if not value:
+            return None
+        try:
+            parsed = ipaddress.ip_address(value)
+        except ValueError as exc:
+            raise CommandError(f"--static-ip must be a valid IPv4 or IPv6 address: {value}") from exc
+        if not parsed.is_global or parsed.is_multicast:
+            raise CommandError(f"--static-ip must be public-routable: {value}")
+        return value
+
+    def _upsert_godaddy_site_record(
+        self,
+        *,
+        domain: str,
+        static_ip: str,
+        key: str | None,
+        credential: DNSProviderCredential | None = None,
+        sandbox_override: bool | None = None,
+    ) -> None:
+        """Publish an A/AAAA record for *domain* through the selected GoDaddy credential."""
+
+        if credential is None:
+            credential = _resolve_godaddy_credential(key=key)
+        if credential is None:
+            if key:
+                raise CommandError(
+                    f"GoDaddy credential '{key}' was not found or is disabled. "
+                    "Configure it with './command.sh godaddy setup ...' and retry."
+                )
+            raise CommandError(
+                "No enabled GoDaddy credential was found. Configure one with './command.sh godaddy setup ...'."
+            )
+        if credential.provider != DNSProviderCredential.Provider.GODADDY:
+            raise CommandError("Selected DNS credential is not a GoDaddy credential.")
+
+        zone, host = self._zone_and_name(domain=domain, credential=credential)
+        record_type = "AAAA" if ipaddress.ip_address(static_ip).version == 6 else "A"
+        payload = [{"data": static_ip, "ttl": 600}]
+        if sandbox_override is True:
+            base_url = "https://api.ote-godaddy.com"
+        elif sandbox_override is False:
+            base_url = "https://api.godaddy.com"
+        else:
+            base_url = credential.get_base_url()
+        headers = {
+            "Authorization": credential.get_auth_header(),
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        customer_id = credential.get_customer_id()
+        if customer_id:
+            headers["X-Shopper-Id"] = customer_id
+        url = f"{base_url}/v1/domains/{zone}/records/{record_type}/{host or '@'}"
+
+        try:
+            response = requests.put(url, json=payload, headers=headers, timeout=30)
+        except requests.RequestException as exc:
+            raise CommandError(f"Failed to publish GoDaddy DNS record for {domain}: {exc}") from exc
+        if response.status_code >= 400:
+            raise CommandError(
+                "GoDaddy DNS record publish failed for "
+                f"{domain}: {response.status_code} {response.text}"
+            )
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Published GoDaddy {record_type} record for {domain} -> {static_ip}."
+            )
+        )
+
+    def _zone_and_name(
+        self,
+        *,
+        domain: str,
+        credential: DNSProviderCredential,
+    ) -> tuple[str, str]:
+        """Resolve GoDaddy zone + host tuple for a fully qualified domain."""
+
+        hostname = domain.rstrip(".").lower()
+        default_domain = credential.get_default_domain().rstrip(".").lower()
+        if default_domain:
+            if hostname == default_domain:
+                return default_domain, ""
+            suffix = f".{default_domain}"
+            if hostname.endswith(suffix):
+                return default_domain, hostname[: -len(suffix)]
+            raise CommandError(
+                f"Domain '{hostname}' does not match credential default domain '{default_domain}'."
+            )
+
+        raise CommandError(
+            "GoDaddy DNS credential default domain is required to publish a static DNS record safely."
+        )
 
     def _disable_https(self, domain: str, *, reload: bool) -> None:
         """Disable HTTPS on a site and apply the HTTP configuration."""
