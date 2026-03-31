@@ -360,7 +360,7 @@ def test_wait_for_public_recursive_txt_propagation_raises_timeout(monkeypatch):
     monkeypatch.setattr(
         MODULE,
         "_query_public_recursive_txt_values",
-        lambda *_args, **_kwargs: {"1.1.1.1": {"stale-value"}},
+        lambda *_args, **_kwargs: ({"1.1.1.1": {"stale-value"}}, set()),
     )
 
     with pytest.raises(TimeoutError, match="public recursive resolver caches"):
@@ -400,3 +400,31 @@ def test_cleanup_txt_record_removes_only_current_validation_value(monkeypatch):
             [{"data": "old", "ttl": 600}],
         )
     ]
+
+
+def test_cleanup_txt_record_requires_validation_env(monkeypatch):
+    monkeypatch.setenv("CERTBOT_DOMAIN", "example.com")
+    monkeypatch.setenv("GODADDY_ZONE", "example.com")
+    monkeypatch.delenv("CERTBOT_VALIDATION", raising=False)
+
+    with pytest.raises(RuntimeError, match="CERTBOT_VALIDATION"):
+        MODULE._cleanup_txt_record()
+
+
+def test_wait_for_public_recursive_txt_propagation_ignores_failed_resolvers(monkeypatch):
+    monkeypatch.setattr(MODULE.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(MODULE.time, "time", iter([0, 0]).__next__)
+    monkeypatch.setattr(
+        MODULE,
+        "_query_public_recursive_txt_values",
+        lambda *_args, **_kwargs: (
+            {"1.1.1.1": set(), "8.8.8.8": {"expected-value"}},
+            {"1.1.1.1"},
+        ),
+    )
+
+    MODULE._wait_for_public_recursive_txt_propagation(
+        challenge_domain="_acme-challenge.example.com",
+        expected_value="expected-value",
+        timeout_seconds=1,
+    )

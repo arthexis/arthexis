@@ -241,10 +241,13 @@ def _wait_for_dns_txt_propagation(
         time.sleep(DNS_POLL_INTERVAL_SECONDS)
 
 
-def _query_public_recursive_txt_values(challenge_domain: str) -> dict[str, set[str]]:
-    """Return TXT values observed by each configured public recursive resolver."""
+def _query_public_recursive_txt_values(
+    challenge_domain: str,
+) -> tuple[dict[str, set[str]], set[str]]:
+    """Return TXT values and DNS failures observed across public recursive resolvers."""
 
     observed: dict[str, set[str]] = {}
+    failed_resolvers: set[str] = set()
     for resolver_ip in PUBLIC_DNS_RESOLVERS:
         resolver = dns.resolver.Resolver(configure=False)
         resolver.nameservers = [resolver_ip]
@@ -253,20 +256,18 @@ def _query_public_recursive_txt_values(challenge_domain: str) -> dict[str, set[s
         try:
             answers = resolver.resolve(challenge_domain, "TXT")
         except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-            observed[resolver_ip] = values
-            continue
+            pass
         except dns.exception.DNSException as exc:
             _emit_log(f"Public resolver lookup failed for {resolver_ip}: {exc}")
-            observed[resolver_ip] = values
-            continue
-
-        for answer in answers:
-            text = b"".join(answer.strings).decode("utf-8").strip()
-            if text:
-                values.add(text)
+            failed_resolvers.add(resolver_ip)
+        else:
+            for answer in answers:
+                text = b"".join(answer.strings).decode("utf-8").strip()
+                if text:
+                    values.add(text)
         observed[resolver_ip] = values
 
-    return observed
+    return observed, failed_resolvers
 
 
 def _wait_for_public_recursive_txt_propagation(
@@ -279,16 +280,21 @@ def _wait_for_public_recursive_txt_propagation(
 
     deadline = time.time() + max(0, timeout_seconds)
     while True:
-        observed_values = _query_public_recursive_txt_values(challenge_domain)
+        observed_values, failed_resolvers = _query_public_recursive_txt_values(challenge_domain)
         missing_resolvers = sorted(
             resolver_ip
             for resolver_ip, values in observed_values.items()
-            if expected_value not in values
+            if resolver_ip not in failed_resolvers and expected_value not in values
         )
         observed_summary = {
             resolver_ip: sorted(values) if values else ["<none>"]
             for resolver_ip, values in sorted(observed_values.items())
         }
+        if failed_resolvers:
+            _emit_log(
+                "Ignoring failed public resolver lookups for propagation gate: "
+                + ", ".join(sorted(failed_resolvers))
+            )
         if not missing_resolvers:
             _emit_log(
                 f"Observed expected TXT for {challenge_domain} across public recursive resolvers."
@@ -363,16 +369,13 @@ def _cleanup_txt_record() -> None:
         else f"_acme-challenge.{fqdn[2:]}"
     )
     zone, host = _zone_and_name(challenge_domain, _optional_env("GODADDY_ZONE"))
-    validation = _optional_env("CERTBOT_VALIDATION")
-    if validation:
-        existing_values = _fetch_existing_txt_values(zone, host)
-        payload = [
-            {"data": value, "ttl": TXT_RECORD_TTL_SECONDS}
-            for value in existing_values
-            if value and value != validation
-        ]
-    else:
-        payload = []
+    validation = _required_env("CERTBOT_VALIDATION")
+    existing_values = _fetch_existing_txt_values(zone, host)
+    payload = [
+        {"data": value, "ttl": TXT_RECORD_TTL_SECONDS}
+        for value in existing_values
+        if value and value != validation
+    ]
     response = _godaddy_request(
         "PUT", f"/v1/domains/{zone}/records/TXT/{host or '@'}", payload=payload
     )
