@@ -186,6 +186,7 @@ def test_build_godaddy_certbot_command_preserves_env_and_hooks():
     assert "GODADDY_API_KEY" in command[1]
     assert "--manual-auth-hook" in command
     assert "--manual-cleanup-hook" in command
+    assert "--manual-public-ip-logging-ok" not in command
     assert any(item.endswith(" auth") for item in command)
     assert any(item.endswith(" cleanup") for item in command)
     assert env["GODADDY_API_KEY"] == "key"
