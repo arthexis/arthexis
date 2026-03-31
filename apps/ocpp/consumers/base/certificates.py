@@ -220,7 +220,7 @@ class CertificatesMixin:
                 "status_info": status_info,
             }
 
-        result = await database_sync_to_async(_persist_status)()
+        result = await database_sync_to_async(_persist_status, thread_sensitive=False)()
         status_value = result.get("status")
         store.add_log(
             self.store_key,

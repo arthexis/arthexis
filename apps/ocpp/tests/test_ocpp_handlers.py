@@ -1079,6 +1079,37 @@ async def test_get_certificate_status_rejects_malformed_hash_data():
 
 
 @pytest.mark.anyio
+async def test_get_certificate_status_uses_non_thread_sensitive_sync_wrapper(monkeypatch):
+    captured_thread_sensitive: list[bool] = []
+
+    def fake_database_sync_to_async(func, **kwargs):
+        captured_thread_sensitive.append(kwargs.get("thread_sensitive", True))
+
+        async def _runner(*args, **inner_kwargs):
+            return func(*args, **inner_kwargs)
+
+        return _runner
+
+    monkeypatch.setattr(
+        consumers_base.certificates,
+        "database_sync_to_async",
+        fake_database_sync_to_async,
+    )
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-NON-THREAD-SENSITIVE"
+    consumer.charger = None
+    consumer.aggregate_charger = None
+
+    result = await consumer._handle_get_certificate_status_action(
+        {"certificateHashData": {}}, "msg-thread-sensitive", "", ""
+    )
+
+    assert result["status"] == "Failed"
+    assert captured_thread_sensitive == [False]
+
+
+@pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_sign_certificate_validates_csr(monkeypatch):
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-3")
