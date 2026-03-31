@@ -420,7 +420,7 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         """Return a unique public endpoint slug for ``value``."""
 
         field = cls._meta.get_field("public_endpoint")
-        max_length = getattr(field, "max_length", None) or 50
+        max_length = field.max_length
         base_slug = slugify(value or "") or "node"
         if len(base_slug) > max_length:
             base_slug = base_slug[:max_length]
@@ -478,7 +478,11 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
 
         if self.mac_address:
             self.mac_address = self.mac_address.lower()
+        endpoint_field = self._meta.get_field("public_endpoint")
+        endpoint_max_length = endpoint_field.max_length
         endpoint_value = slugify(self.public_endpoint or "")
+        if len(endpoint_value) > endpoint_max_length:
+            endpoint_value = endpoint_value[:endpoint_max_length]
         if not endpoint_value:
             endpoint_value = self._generate_unique_public_endpoint(
                 self.hostname, exclude_pk=self.pk
