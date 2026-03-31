@@ -44,10 +44,10 @@ def test_wait_for_dns_txt_propagation_raises_timeout(monkeypatch):
     monkeypatch.setattr(
         MODULE,
         "_query_authoritative_txt_values",
-        lambda *_args, **_kwargs: ({"ns1.example.net": {"stale-value"}}, []),
+        lambda *_args, **_kwargs: ({"ns1.example.net": {"192.0.2.10": {"stale-value"}}}, []),
     )
 
-    with pytest.raises(RuntimeError, match="DNS propagation timeout"):
+    with pytest.raises(TimeoutError, match="DNS propagation timeout"):
         MODULE._wait_for_dns_txt_propagation(
             zone="example.com",
             challenge_domain="_acme-challenge.example.com",
@@ -97,7 +97,7 @@ def test_query_authoritative_txt_values_ignores_nxdomain(monkeypatch):
         "example.com", "_acme-challenge.example.com"
     )
 
-    assert observed_by_ns == {"ns1.example.net": set()}
+    assert observed_by_ns == {"ns1.example.net": {"192.0.2.10": set()}}
     assert errors == []
 
 
@@ -137,7 +137,7 @@ def test_query_authoritative_txt_values_does_not_repeat_a_lookup_when_aaaa_missi
         "example.com", "_acme-challenge.example.com"
     )
 
-    assert observed_by_ns == {"ns1.example.net": set()}
+    assert observed_by_ns == {"ns1.example.net": {"192.0.2.10": set()}}
     assert queries.count((False, "ns1.example.net", "A")) == 1
 
 
@@ -150,14 +150,40 @@ def test_wait_for_dns_txt_propagation_requires_all_authoritative_nameservers(mon
         "_query_authoritative_txt_values",
         lambda *_args, **_kwargs: (
             {
-                "ns1.example.net": {"expected-value"},
-                "ns2.example.net": {"stale-value"},
+                "ns1.example.net": {"192.0.2.10": {"expected-value"}},
+                "ns2.example.net": {"192.0.2.11": {"stale-value"}},
             },
             [],
         ),
     )
 
-    with pytest.raises(RuntimeError, match="missing nameservers"):
+    with pytest.raises(TimeoutError, match="missing nameservers"):
+        MODULE._wait_for_dns_txt_propagation(
+            zone="example.com",
+            challenge_domain="_acme-challenge.example.com",
+            expected_value="expected-value",
+            timeout_seconds=0,
+        )
+
+
+def test_wait_for_dns_txt_propagation_requires_expected_value_on_every_ns_ip(monkeypatch):
+    monkeypatch.setattr(MODULE.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(MODULE.time, "time", iter([0, 0]).__next__)
+    monkeypatch.setattr(
+        MODULE,
+        "_query_authoritative_txt_values",
+        lambda *_args, **_kwargs: (
+            {
+                "ns1.example.net": {
+                    "192.0.2.10": {"expected-value"},
+                    "2001:db8::10": {"stale-value"},
+                }
+            },
+            [],
+        ),
+    )
+
+    with pytest.raises(TimeoutError, match="missing nameservers"):
         MODULE._wait_for_dns_txt_propagation(
             zone="example.com",
             challenge_domain="_acme-challenge.example.com",
@@ -201,6 +227,61 @@ def test_query_authoritative_txt_values_uses_public_resolvers_for_ns_lookup(monk
     MODULE._query_authoritative_txt_values("example.com", "_acme-challenge.example.com")
 
     assert seen_public_nameservers == list(MODULE.PUBLIC_DNS_RESOLVERS)
+
+
+def test_query_authoritative_txt_values_queries_aaaa_when_a_has_noanswer(monkeypatch):
+    class Answer:
+        def __init__(self, value):
+            self.target = value
+
+        def __str__(self):
+            return self.target
+
+    class Resolver:
+        def __init__(self, configure=True):
+            self.configure = configure
+            self.nameservers = []
+            self.lifetime = 0
+
+        def resolve(self, name, rdtype):
+            if rdtype == "NS":
+                return [Answer("ns1.example.net.")]
+            if name == "ns1.example.net" and rdtype == "A":
+                raise MODULE.dns.resolver.NoAnswer
+            if name == "ns1.example.net" and rdtype == "AAAA":
+                return [Answer("2001:db8::10")]
+            if rdtype == "TXT":
+                raise MODULE.dns.resolver.NoAnswer
+            raise AssertionError(f"Unexpected query {name} {rdtype}")
+
+    monkeypatch.setattr(MODULE.dns.resolver, "Resolver", Resolver)
+
+    observed_by_ns, errors = MODULE._query_authoritative_txt_values(
+        "example.com", "_acme-challenge.example.com"
+    )
+
+    assert errors == []
+    assert observed_by_ns == {"ns1.example.net": {"2001:db8::10": set()}}
+
+
+def test_query_authoritative_txt_values_raises_dns_nameserver_error_when_ns_missing(
+    monkeypatch,
+):
+    class Resolver:
+        def __init__(self, configure=True):
+            self.configure = configure
+            self.nameservers = []
+            self.lifetime = 0
+
+        def resolve(self, name, rdtype):
+            if name == "example.com" and rdtype == "NS":
+                return []
+            raise AssertionError(f"Unexpected query {name} {rdtype}")
+
+    monkeypatch.setattr(MODULE.dns.resolver, "Resolver", Resolver)
+
+    with pytest.raises(MODULE.DNSNameserverError, match="No authoritative nameservers"):
+        MODULE._query_authoritative_txt_values("example.com", "_acme-challenge.example.com")
 
 
 def test_upsert_txt_record_replaces_existing_records(monkeypatch):
