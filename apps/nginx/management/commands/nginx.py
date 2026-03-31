@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ipaddress
+import socket
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
@@ -49,6 +51,14 @@ class ConfigureMixin:
         parser.add_argument("--remove", action="store_true", help="Remove nginx configuration instead of applying it")
         parser.add_argument("--no-reload", action="store_true", help="Skip nginx reload/restart after applying changes")
         parser.add_argument(
+            "--static-ip",
+            default=None,
+            help=(
+                "Override detected public address with a known static public IP. "
+                "Required when this host only has private/local interface addresses."
+            ),
+        )
+        parser.add_argument(
             "--sites-config",
             default=None,
             help="Optional override for the staged site configuration JSON.",
@@ -74,6 +84,16 @@ class ConfigureMixin:
             CommandError: Raised when nginx is unavailable or configuration
                 validation fails while applying the managed config.
         """
+
+        static_ip = self._parse_static_ip(str(options.get("static_ip") or "").strip())
+        if static_ip is None:
+            public_ips = self._detect_public_ips()
+            if not public_ips:
+                raise CommandError(
+                    "No public/static IP was detected on this host. "
+                    "Aborting nginx configuration. Provide --static-ip <PUBLIC_IP> "
+                    "or assign a public Elastic IP / Load Balancer endpoint first."
+                )
 
         config = SiteConfiguration.get_default()
 
@@ -108,6 +128,49 @@ class ConfigureMixin:
             self.stdout.write(f"Managed site definitions read from {Path(config.site_entries_path).resolve()}")
         if options["sites_destination"]:
             self.stdout.write(f"Managed sites written to {config.site_destination}")
+
+    def _parse_static_ip(self, value: str) -> str | None:
+        """Validate optional ``--static-ip`` input as a public IP address."""
+
+        if not value:
+            return None
+        try:
+            parsed = ipaddress.ip_address(value)
+        except ValueError as exc:
+            raise CommandError(f"--static-ip must be a valid IPv4 or IPv6 address: {value}") from exc
+        if parsed.is_private or parsed.is_loopback or parsed.is_link_local or parsed.is_multicast:
+            raise CommandError(f"--static-ip must be public-routable: {value}")
+        return value
+
+    def _detect_public_ips(self) -> list[str]:
+        """Return detected public interface IPs for this host."""
+
+        detected: set[str] = set()
+        candidates: set[str] = set()
+        hostname = socket.gethostname()
+
+        for lookup_name in (hostname, socket.getfqdn(), "localhost"):
+            if not lookup_name:
+                continue
+            try:
+                infos = socket.getaddrinfo(lookup_name, None, proto=socket.IPPROTO_TCP)
+            except socket.gaierror:
+                continue
+            for info in infos:
+                host = info[4][0]
+                if host:
+                    candidates.add(host)
+
+        for candidate in candidates:
+            try:
+                parsed = ipaddress.ip_address(candidate)
+            except ValueError:
+                continue
+            if parsed.is_private or parsed.is_loopback or parsed.is_link_local or parsed.is_multicast:
+                continue
+            detected.add(str(parsed))
+
+        return sorted(detected)
 
 
 class Command(ConfigureMixin, BaseCommand):
