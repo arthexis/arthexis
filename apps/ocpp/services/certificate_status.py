@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
@@ -262,8 +262,8 @@ def _iso_datetime_or_now(value: Any) -> str:
     if isinstance(value, str) and value.strip():
         return value.strip()
     if isinstance(value, datetime):
-        return value.astimezone(UTC).isoformat()
-    return datetime.now(tz=UTC).isoformat()
+        return value.astimezone(timezone.utc).isoformat()
+    return datetime.now(tz=timezone.utc).isoformat()
 
 
 def _validate_chain(certificate_chain: str) -> tuple[bool, str]:
