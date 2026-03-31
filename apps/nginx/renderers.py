@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 from apps.nginx.config_utils import (
-    default_certificate_domain_from_settings,
     default_reject_server,
     http_proxy_server,
     http_redirect_server,
@@ -35,6 +34,7 @@ HTTPS_IPV6_LISTENS = (
     "[::]:443 ssl",
     "[::]:8443 ssl",
 )
+PRIMARY_PUBLIC_SERVER_NAMES = "arthexis.com *.arthexis.com"
 
 
 def _build_server_names(domain: str, prefixes: list[str]) -> str:
@@ -122,8 +122,8 @@ def generate_primary_config(
         prefix_blocks.insert(0, websocket_map())
 
     if mode == "public":
-        http_names = http_server_names or "arthexis.com *.arthexis.com"
-        https_names = https_server_names or "arthexis.com *.arthexis.com"
+        http_names = http_server_names or PRIMARY_PUBLIC_SERVER_NAMES
+        https_names = https_server_names or PRIMARY_PUBLIC_SERVER_NAMES
         if https_enabled:
             http_block = http_redirect_server(http_names, listens=http_listens)
         else:
@@ -207,6 +207,8 @@ def generate_site_entries_content(
         external_websockets: Whether websocket support directives are enabled.
         proxy_target: Optional upstream hostname override.
         subdomain_prefixes: Optional managed-site subdomain prefixes.
+        excluded_domains: Optional set of domains to omit from managed-site rendering
+            (case-insensitive).
 
     Returns:
         The rendered nginx server blocks for managed sites.
@@ -321,7 +323,9 @@ def generate_unified_config(
     if site_config_path is not None:
         excluded_domains: set[str] = set()
         if mode.lower() == "public":
-            excluded_domains.add(default_certificate_domain_from_settings().lower())
+            excluded_domains.update(
+                domain.lower() for domain in PRIMARY_PUBLIC_SERVER_NAMES.split() if "*" not in domain
+            )
         managed_content = generate_site_entries_content(
             site_config_path,
             mode,

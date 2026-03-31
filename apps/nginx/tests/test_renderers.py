@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from django.test import override_settings
+
 from apps.nginx.renderers import generate_unified_config
 
 
@@ -23,6 +25,7 @@ def test_generate_unified_config_includes_managed_sites(tmp_path: Path):
     assert "Managed site for tenant.example.com" in content
 
 
+@override_settings(ALLOWED_HOSTS=["example.com"])
 def test_generate_unified_config_skips_primary_domain_from_managed_sites(tmp_path: Path):
     """Managed site entries should not duplicate the primary domain server blocks."""
 
@@ -40,3 +43,23 @@ def test_generate_unified_config_skips_primary_domain_from_managed_sites(tmp_pat
     )
 
     assert "Managed site for arthexis.com" not in content
+
+
+@override_settings(ALLOWED_HOSTS=["example.com"])
+def test_generate_unified_config_does_not_exclude_allowed_hosts_domain(tmp_path: Path):
+    """Managed site rendering should only exclude domains used by the primary block."""
+
+    staging = tmp_path / "sites.json"
+    staging.write_text(
+        '[{"domain": "example.com", "require_https": true}]',
+        encoding="utf-8",
+    )
+
+    content = generate_unified_config(
+        "public",
+        8080,
+        https_enabled=True,
+        site_config_path=staging,
+    )
+
+    assert "Managed site for example.com" in content
