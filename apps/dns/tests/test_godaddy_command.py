@@ -1,6 +1,7 @@
 """Tests for the GoDaddy credential management command."""
 
 from io import StringIO
+from types import SimpleNamespace
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -168,3 +169,122 @@ def test_godaddy_setup_reports_up_to_date_for_matching_encrypted_fields():
     )
 
     assert "is already up to date" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_godaddy_setup_prompts_customer_id_when_interactive_and_missing_flag(monkeypatch):
+    """Setup should prompt for customer ID when interactive and flag is omitted."""
+
+    DNSProviderCredential.objects.create(
+        api_key="interactive-key",
+        api_secret="interactive-secret",
+    )
+
+    monkeypatch.setattr("apps.dns.management.commands.godaddy.sys.stdin", SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr("builtins.input", lambda prompt: "prompted-customer")
+
+    call_command(
+        "godaddy",
+        "setup",
+        api_key="interactive-key",
+        api_secret="interactive-secret",
+        sandbox=True,
+    )
+
+    credential = DNSProviderCredential.objects.get(api_key="interactive-key")
+    assert credential.get_customer_id() == "prompted-customer"
+
+
+@pytest.mark.django_db
+def test_godaddy_setup_keeps_existing_customer_id_on_blank_interactive_input(monkeypatch):
+    """Setup should keep existing customer ID when interactive input is blank."""
+
+    DNSProviderCredential.objects.create(
+        api_key="interactive-existing-key",
+        api_secret="interactive-secret",
+        customer_id="existing-customer",
+    )
+
+    monkeypatch.setattr("apps.dns.management.commands.godaddy.sys.stdin", SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr("builtins.input", lambda prompt: "   ")
+
+    call_command(
+        "godaddy",
+        "setup",
+        api_key="interactive-existing-key",
+        api_secret="interactive-secret",
+        sandbox=True,
+    )
+
+    credential = DNSProviderCredential.objects.get(api_key="interactive-existing-key")
+    assert credential.get_customer_id() == "existing-customer"
+
+
+@pytest.mark.django_db
+def test_godaddy_verify_checks_selected_credential(monkeypatch):
+    """Verify should call GoDaddy API with selected enabled credential."""
+
+    DNSProviderCredential.objects.create(
+        api_key="verify-key",
+        api_secret="verify-secret",
+        default_domain="example.com",
+    )
+
+    captured: dict[str, object] = {}
+
+    def _fake_get(url, headers, timeout):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["timeout"] = timeout
+        return SimpleNamespace(status_code=200, text="ok")
+
+    monkeypatch.setattr("apps.dns.management.commands.godaddy.requests.get", _fake_get)
+    stdout = StringIO()
+    call_command("godaddy", "verify", key="verify-key", stdout=stdout)
+
+    assert captured["url"] == "https://api.godaddy.com/v1/domains/example.com"
+    assert str(captured["headers"]["Authorization"]).startswith("sso-key ")
+    assert "verified for example.com" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_godaddy_verify_uses_json_message_for_error(monkeypatch):
+    """Verify should surface concise API error details from JSON responses."""
+
+    DNSProviderCredential.objects.create(
+        api_key="verify-error-key",
+        api_secret="verify-error-secret",
+        default_domain="example.com",
+    )
+
+    monkeypatch.setattr(
+        "apps.dns.management.commands.godaddy.requests.get",
+        lambda url, headers, timeout: SimpleNamespace(
+            status_code=403,
+            text='{"code":"FORBIDDEN","message":"Invalid API key"}',
+            json=lambda: {"code": "FORBIDDEN", "message": "Invalid API key"},
+        ),
+    )
+
+    with pytest.raises(CommandError, match="403 Invalid API key"):
+        call_command("godaddy", "verify", key="verify-error-key")
+
+
+@pytest.mark.django_db
+def test_godaddy_verify_flag_alias_runs_verification(monkeypatch):
+    """--verify should behave as an alias for verify action."""
+
+    DNSProviderCredential.objects.create(
+        api_key="verify-flag-key",
+        api_secret="verify-flag-secret",
+        default_domain="example.com",
+    )
+
+    monkeypatch.setattr(
+        "apps.dns.management.commands.godaddy.requests.get",
+        lambda url, headers, timeout: SimpleNamespace(status_code=200, text="ok"),
+    )
+    stdout = StringIO()
+    call_command("godaddy", verify=True, stdout=stdout)
+
+    assert "verified for example.com" in stdout.getvalue()

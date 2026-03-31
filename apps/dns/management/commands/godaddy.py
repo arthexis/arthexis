@@ -4,6 +4,7 @@ import os
 import sys
 from getpass import getpass
 
+import requests
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
@@ -23,7 +24,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "action",
             nargs="?",
-            choices=("add", "remove", "list", "setup"),
+            choices=("add", "remove", "list", "setup", "verify"),
             default="list",
             help="Action to perform. Defaults to 'list'.",
         )
@@ -40,7 +41,16 @@ class Command(BaseCommand):
             "--api-secret-file",
             help="Path to a file containing the GoDaddy API secret.",
         )
-        parser.add_argument("--customer-id", default="", help="Optional GoDaddy customer ID.")
+        parser.add_argument("--customer-id", help="Optional GoDaddy customer ID.")
+        parser.add_argument(
+            "--verify",
+            action="store_true",
+            help="Verify GoDaddy credentials against GoDaddy API.",
+        )
+        parser.add_argument(
+            "--key",
+            help="Credential selector for verify action (credential ID or API key).",
+        )
         parser.add_argument(
             "--default-domain",
             default="",
@@ -61,6 +71,9 @@ class Command(BaseCommand):
         """Dispatch to the selected sub-command action."""
 
         action = options["action"]
+        if options.get("verify") and action == "list":
+            self._handle_verify(options)
+            return
         if action == "add":
             self._handle_add(options)
             return
@@ -69,6 +82,9 @@ class Command(BaseCommand):
             return
         if action == "setup":
             self._handle_setup(options)
+            return
+        if action == "verify":
+            self._handle_verify(options)
             return
         self._handle_list()
 
@@ -196,7 +212,9 @@ class Command(BaseCommand):
         )
         defaults = {
             "api_secret": api_secret,
-            "customer_id": str(options.get("customer_id") or "").strip(),
+            "customer_id": self._resolve_customer_id(
+                options, existing=credential, prompt=True
+            ),
             "default_domain": str(options.get("default_domain") or "").strip(),
             "use_sandbox": bool(options.get("sandbox")),
             "is_enabled": not bool(options.get("disabled")),
@@ -238,6 +256,107 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 f"GoDaddy credential #{credential.pk} for API key '{api_key}' is already up to date."
+            )
+        )
+
+    def _resolve_customer_id(
+        self,
+        options: dict[str, object],
+        *,
+        existing: DNSProviderCredential | None = None,
+        prompt: bool = False,
+    ) -> str:
+        """Resolve optional customer ID from CLI input or interactive prompt."""
+
+        customer_id_option = options.get("customer_id")
+        if customer_id_option is not None:
+            return str(customer_id_option).strip()
+        if prompt and sys.stdin.isatty():
+            current_customer_id = existing.get_customer_id() if existing else ""
+            if current_customer_id:
+                entered = input(
+                    "GoDaddy customer ID (optional, press Enter to keep current)"
+                    f" [{current_customer_id}]: "
+                ).strip()
+                return entered if entered else current_customer_id
+            return input("GoDaddy customer ID (optional): ").strip()
+        if existing is not None:
+            return existing.get_customer_id()
+        return ""
+
+    def _resolve_credential_selector(
+        self, options: dict[str, object]
+    ) -> DNSProviderCredential:
+        """Resolve selected GoDaddy credential for verify action."""
+
+        raw_key = str(options.get("key") or "").strip()
+        queryset = DNSProviderCredential.objects.filter(
+            provider=DNSProviderCredential.Provider.GODADDY,
+            is_enabled=True,
+        ).order_by("pk")
+        if not raw_key:
+            credential = queryset.first()
+            if credential is None:
+                raise CommandError(
+                    "No enabled GoDaddy credential was found. Configure one with './command.sh godaddy setup ...'."
+                )
+            return credential
+
+        credential = None
+        if raw_key.isdigit():
+            credential = queryset.filter(pk=int(raw_key)).first()
+        if credential is None:
+            credential = queryset.filter(api_key=raw_key).first()
+        if credential is None:
+            raise CommandError(
+                f"GoDaddy credential '{raw_key}' was not found or is disabled."
+            )
+        return credential
+
+    def _handle_verify(self, options: dict[str, object]) -> None:
+        """Verify selected GoDaddy credentials by calling GoDaddy API."""
+
+        credential = self._resolve_credential_selector(options)
+        domain = credential.get_default_domain()
+        base_url = credential.get_base_url()
+        if domain:
+            url = f"{base_url}/v1/domains/{domain}"
+        else:
+            url = f"{base_url}/v1/domains?limit=1"
+
+        headers = {
+            "Authorization": credential.get_auth_header(),
+            "Accept": "application/json",
+        }
+        customer_id = credential.get_customer_id()
+        if customer_id:
+            headers["X-Shopper-Id"] = customer_id
+
+        try:
+            response = requests.get(url, headers=headers, timeout=30)
+        except requests.RequestException as exc:
+            raise CommandError(f"GoDaddy credential verify failed: {exc}") from exc
+        if response.status_code >= 400:
+            error_msg = response.text
+            try:
+                payload = response.json()
+            except ValueError:
+                payload = None
+            if isinstance(payload, dict):
+                message = payload.get("message")
+                code = payload.get("code")
+                if isinstance(message, str) and message.strip():
+                    error_msg = message.strip()
+                elif isinstance(code, str) and code.strip():
+                    error_msg = code.strip()
+            raise CommandError(
+                "GoDaddy credential verify failed: "
+                f"{response.status_code} {error_msg[:200]}"
+            )
+        target = domain or "<domain-list>"
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"GoDaddy credential #{credential.pk} verified for {target}."
             )
         )
 
