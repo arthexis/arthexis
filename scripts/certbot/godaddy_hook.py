@@ -19,6 +19,11 @@ import requests
 
 DNS_POLL_INTERVAL_SECONDS = 5
 HOOK_LOG_PATH = "/logs/certbot-godaddy-hook.log"
+PUBLIC_DNS_RESOLVERS = ("1.1.1.1", "8.8.8.8", "9.9.9.9")
+
+
+class DNSNameserverError(RuntimeError):
+    """Raised when authoritative nameservers cannot be discovered for a zone."""
 
 
 def _emit_log(message: str) -> None:
@@ -115,24 +120,39 @@ def _fetch_existing_txt_values(zone: str, host: str) -> list[str]:
     return [str(item.get("data", "")).strip() for item in payload if isinstance(item, dict)]
 
 
-def _query_authoritative_txt_values(zone: str, challenge_domain: str) -> set[str]:
-    """Query authoritative DNS TXT values for *challenge_domain*."""
+def _public_recursive_resolver() -> dns.resolver.Resolver:
+    """Return a resolver pinned to public recursive DNS servers."""
 
-    resolver = dns.resolver.Resolver(configure=True)
+    resolver = dns.resolver.Resolver(configure=False)
+    resolver.nameservers = list(PUBLIC_DNS_RESOLVERS)
+    resolver.lifetime = 10
+    return resolver
+
+
+def _query_authoritative_txt_values(
+    zone: str, challenge_domain: str
+) -> tuple[dict[str, dict[str, set[str]]], list[str]]:
+    """Query each authoritative nameserver for TXT values at *challenge_domain*."""
+
+    resolver = _public_recursive_resolver()
     resolver.lifetime = 10
     nameserver_answers = resolver.resolve(zone, "NS")
     nameservers = [str(answer.target).rstrip(".") for answer in nameserver_answers]
     if not nameservers:
-        raise RuntimeError(f"No authoritative nameservers found for zone {zone}.")
+        raise DNSNameserverError(f"No authoritative nameservers found for zone {zone}.")
 
-    observed_values: set[str] = set()
+    observed_values_by_ns: dict[str, dict[str, set[str]]] = {
+        nameserver: {} for nameserver in nameservers
+    }
     errors: list[str] = []
     for nameserver in nameservers:
+        ns_ips: list[str] = []
         try:
-            ns_ips = [str(answer) for answer in resolver.resolve(nameserver, "A")]
+            ns_ips.extend(str(answer) for answer in resolver.resolve(nameserver, "A"))
+        except dns.resolver.NoAnswer:
+            pass
         except dns.exception.DNSException as exc:
-            errors.append(f"{nameserver}: {exc}")
-            continue
+            errors.append(f"{nameserver} (A): {exc}")
 
         try:
             ns_ips.extend(str(answer) for answer in resolver.resolve(nameserver, "AAAA"))
@@ -142,6 +162,7 @@ def _query_authoritative_txt_values(zone: str, challenge_domain: str) -> set[str
             errors.append(f"{nameserver} (AAAA): {exc}")
 
         for ns_ip in ns_ips:
+            observed_values_by_ns[nameserver].setdefault(ns_ip, set())
             ns_resolver = dns.resolver.Resolver(configure=False)
             ns_resolver.nameservers = [ns_ip]
             ns_resolver.lifetime = 5
@@ -156,12 +177,12 @@ def _query_authoritative_txt_values(zone: str, challenge_domain: str) -> set[str
             for answer in answers:
                 text = b"".join(answer.strings).decode("utf-8").strip()
                 if text:
-                    observed_values.add(text)
+                    observed_values_by_ns[nameserver][ns_ip].add(text)
 
-    if not observed_values and errors:
+    if errors:
         _emit_log("Authoritative DNS query errors: " + "; ".join(errors))
 
-    return observed_values
+    return observed_values_by_ns, errors
 
 
 def _wait_for_dns_txt_propagation(
@@ -173,26 +194,48 @@ def _wait_for_dns_txt_propagation(
 ) -> None:
     """Wait until authoritative DNS serves the expected TXT value."""
 
+    def _observed_summary(
+        observed_values_by_ns: dict[str, dict[str, set[str]]],
+    ) -> dict[str, dict[str, list[str]]]:
+        return {
+            nameserver: {
+                ns_ip: sorted(values) if values else ["<none>"]
+                for ns_ip, values in sorted(values_by_ip.items())
+            }
+            if values_by_ip
+            else {"<unresolved>": ["<none>"]}
+            for nameserver, values_by_ip in sorted(observed_values_by_ns.items())
+        }
+
     deadline = time.time() + max(0, timeout_seconds)
     while True:
-        observed_values = _query_authoritative_txt_values(zone, challenge_domain)
-        if expected_value in observed_values:
+        observed_values_by_ns, _errors = _query_authoritative_txt_values(
+            zone, challenge_domain
+        )
+        missing_nameservers = sorted(
+            nameserver
+            for nameserver, values_by_ip in observed_values_by_ns.items()
+            if not values_by_ip
+            or any(expected_value not in values for values in values_by_ip.values())
+        )
+        observed_summary = _observed_summary(observed_values_by_ns)
+        if not missing_nameservers:
             _emit_log(
-                f"Observed expected TXT for {challenge_domain} at authoritative DNS."
+                f"Observed expected TXT for {challenge_domain} at all authoritative nameservers."
             )
             return
 
         if time.time() >= deadline:
-            values = sorted(observed_values) if observed_values else ["<none>"]
-            raise RuntimeError(
+            raise TimeoutError(
                 "DNS propagation timeout waiting for TXT validation value. "
                 f"Expected '{expected_value}' at {challenge_domain}; "
-                f"observed {values}."
+                f"missing nameservers {missing_nameservers}; "
+                f"observed {observed_summary}."
             )
-
         _emit_log(
             f"Waiting for TXT propagation at {challenge_domain}; "
-            f"observed {sorted(observed_values) if observed_values else ['<none>']}"
+            f"missing nameservers {missing_nameservers}; "
+            f"observed {observed_summary}"
         )
         time.sleep(DNS_POLL_INTERVAL_SECONDS)
 
