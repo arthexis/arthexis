@@ -10,4 +10,14 @@ from .dispatch import CALL_ERROR_HANDLERS, dispatch_call_error
 from .firmware import *
 from .profiles import *
 from .reservation import *
-from .types import CallErrorContext, CallErrorHandler
+from .types import (
+    CallErrorContext,
+    CallErrorDetails,
+    CallErrorHandler,
+    CallErrorPayload,
+    CallMessagePayload,
+    CallMetadata,
+    CallResultPayload,
+    JsonPrimitive,
+    JsonValue,
+)

@@ -9,4 +9,4 @@ repos:
         # Keep this filter aligned with pyproject.toml [tool.mypy].files, which is the
         # source of truth for the rollout baseline. Migrations stay excluded via
         # pyproject.toml [tool.mypy].exclude and are intentionally omitted here.
-        files: '^(scripts/(generate_requirements|sort_pyproject_deps)\.py|apps/protocols/.*\.py|apps/repos/(github\.py|services/github\.py|release_management\.py|views/webhooks\.py)|apps/core/(services/health(_checks)?\.py|modeling/.*\.py|system_ui\.py))$'
+        files: '^(scripts/(generate_requirements|sort_pyproject_deps)\.py|apps/protocols/.*\.py|apps/repos/(github\.py|services/github\.py|release_management\.py|views/webhooks\.py)|apps/core/(services/health(_checks)?\.py|modeling/.*\.py|system_ui\.py)|apps/ocpp/(utils/(parsing|time)\.py|call_error_handlers/types\.py))$'

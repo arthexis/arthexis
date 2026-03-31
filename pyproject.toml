@@ -397,6 +397,9 @@ files = [
   "apps/core/services/health_checks.py",
   "apps/core/modeling",
   "apps/core/system_ui.py",
+  "apps/ocpp/utils/parsing.py",
+  "apps/ocpp/utils/time.py",
+  "apps/ocpp/call_error_handlers/types.py",
 ]
 exclude = [
   ".*/migrations/.*",

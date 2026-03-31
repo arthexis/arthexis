@@ -49,7 +49,7 @@ from .profiles import (
     handle_set_charging_profile_error,
 )
 from .reservation import handle_cancel_reservation_error, handle_reserve_now_error
-from .types import CallErrorContext, CallErrorHandler
+from .types import CallErrorContext, CallErrorDetails, CallErrorHandler, CallMetadata
 
 
 CALL_ERROR_HANDLERS: dict[str, CallErrorHandler] = MappingProxyType({
@@ -100,10 +100,10 @@ async def dispatch_call_error(
     consumer: CallErrorContext,
     action: str | None,
     message_id: str,
-    metadata: dict,
+    metadata: CallMetadata,
     error_code: str | None,
     description: str | None,
-    details: dict | None,
+    details: CallErrorDetails | None,
     log_key: str,
 ) -> bool:
     """Dispatch a call error to the action-specific handler."""

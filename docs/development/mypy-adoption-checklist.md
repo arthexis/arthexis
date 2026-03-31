@@ -15,6 +15,9 @@ The current MyPy-owned paths are recorded in `pyproject.toml` under `[tool.mypy]
 - `apps/core/services/health_checks.py`
 - `apps/core/modeling/`
 - `apps/core/system_ui.py`
+- `apps/ocpp/utils/parsing.py`
+- `apps/ocpp/utils/time.py`
+- `apps/ocpp/call_error_handlers/types.py`
 
 Django-aware checking is enabled through the `mypy_django_plugin.main` plugin with `config.settings` as the settings module. Use the same environment assumptions as `scripts/run_mypy.sh` when invoking MyPy directly:
 
@@ -100,6 +103,19 @@ Small follow-ups:
 - `apps/core/services/odoo_quote_report.py`
 
 Keep broader `apps/core/system/ui/` rollout tracked separately until translation and uptime helpers are typed cleanly.
+
+### `apps/ocpp/` phased expansion
+
+Backlog snapshot as of 2026-03-31 for the initial OCPP ownership slice:
+
+- scope now owned by MyPy: `apps/ocpp/utils/parsing.py`, `apps/ocpp/utils/time.py`, and `apps/ocpp/call_error_handlers/types.py`
+- explicit exclusions in this phase: Django ORM-heavy modules and channel-layer integrations
+
+Planned rollout sequence:
+
+1. utils
+2. handler type contracts and pure handler helpers
+3. consumer dispatch wiring once call/call-error protocol aliases are stable
 
 ## Regression tracking during rollout
 
