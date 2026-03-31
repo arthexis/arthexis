@@ -148,16 +148,16 @@ def request_certbot_certificate(
         raise CertbotError(str(exc)) from exc
     except RuntimeError as exc:  # pragma: no cover - thin wrapper
         error_message = str(exc)
-        if _is_live_directory_conflict_error(error_message, domain) and _repair_stale_live_directory(
-            domain=domain,
-            sudo=sudo,
-        ):
+        cause: RuntimeError = exc
+        if _is_live_directory_conflict_error(error_message, domain):
             try:
-                return _run_command(command, env=env)
-            except RuntimeError as retry_exc:
-                error_message = str(retry_exc)
+                if _repair_stale_live_directory(domain=domain, sudo=sudo):
+                    return _run_command(command, env=env)
+            except RuntimeError as repair_or_retry_exc:
+                error_message = str(repair_or_retry_exc)
+                cause = repair_or_retry_exc
         if _is_missing_certbot_error(error_message):
-            raise CertbotError(_build_missing_certbot_guidance(error_message)) from exc
+            raise CertbotError(_build_missing_certbot_guidance(error_message)) from cause
         if _is_challenge_failure_error(error_message):
             raise CertbotChallengeError(
                 _build_challenge_failure_guidance(
@@ -165,8 +165,8 @@ def request_certbot_certificate(
                     domain=domain,
                     challenge_type=challenge_type,
                 )
-            ) from exc
-        raise CertbotError(error_message) from exc
+            ) from cause
+        raise CertbotError(error_message) from cause
 
 
 def _is_live_directory_conflict_error(message: str, domain: str) -> bool:
@@ -178,8 +178,16 @@ def _is_live_directory_conflict_error(message: str, domain: str) -> bool:
 def _repair_stale_live_directory(*, domain: str, sudo: str) -> bool:
     """Delete stale certbot live directories that have no renewal config."""
 
-    live_directory = LETSENCRYPT_LIVE_PATH / domain
-    renewal_config = LETSENCRYPT_RENEWAL_PATH / f"{domain}.conf"
+    if not domain or not re.fullmatch(r"[A-Za-z0-9.-]+", domain):
+        return False
+
+    base_live = LETSENCRYPT_LIVE_PATH.resolve(strict=False)
+    base_renewal = LETSENCRYPT_RENEWAL_PATH.resolve(strict=False)
+    live_directory = (LETSENCRYPT_LIVE_PATH / domain).resolve(strict=False)
+    renewal_config = (LETSENCRYPT_RENEWAL_PATH / f"{domain}.conf").resolve(strict=False)
+
+    if live_directory.parent != base_live or renewal_config.parent != base_renewal:
+        return False
 
     if not _path_exists(live_directory, sudo=sudo):
         return False
@@ -194,11 +202,14 @@ def _path_exists(path: Path, *, sudo: str) -> bool:
     """Return True when *path* exists, using sudo when configured."""
 
     command = _with_sudo(["test", "-e", str(path)], sudo)
-    try:
-        _run_command(command)
-    except RuntimeError:
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
         return False
-    return True
+
+    stderr = result.stderr.strip()
+    raise RuntimeError(stderr or "Command failed: " + " ".join(command))
 
 
 def _is_missing_certbot_error(message: str) -> bool:

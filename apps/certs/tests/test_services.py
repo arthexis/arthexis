@@ -303,17 +303,17 @@ def test_request_certbot_certificate_repairs_stale_live_directory_and_retries(
 
     def fake_run(command: list[str], *, env=None):  # noqa: ARG001
         calls.append(command)
-        if command[:2] == ["test", "-e"] and command[-1] == "/etc/letsencrypt/live/example.com":
-            return ""
-        if command[:2] == ["test", "-e"] and command[-1] == "/etc/letsencrypt/renewal/example.com.conf":
-            raise RuntimeError("missing")
         if command[:2] == ["rm", "-rf"]:
             return ""
         if command[0] == "certbot" and len([c for c in calls if c and c[0] == "certbot"]) == 1:
             raise RuntimeError("live directory exists for example.com")
         return "ok"
 
+    def fake_path_exists(path, *, sudo):  # noqa: ARG001
+        return str(path) == "/etc/letsencrypt/live/example.com"
+
     monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(services, "_path_exists", fake_path_exists)
     monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
 
     result = services.request_certbot_certificate(
@@ -328,7 +328,8 @@ def test_request_certbot_certificate_repairs_stale_live_directory_and_retries(
     certbot_calls = [command for command in calls if command and command[0] == "certbot"]
     assert result == "ok"
     assert len(certbot_calls) == 2
-    assert ["rm", "-rf", "/etc/letsencrypt/live/example.com"] in calls
+    cleanup_cmd = ["rm", "-rf", "/etc/letsencrypt/live/example.com"]
+    assert calls.count(cleanup_cmd) == 1
 
 
 def test_request_certbot_certificate_live_directory_conflict_with_renewal_config_fails(
@@ -340,15 +341,18 @@ def test_request_certbot_certificate_live_directory_conflict_with_renewal_config
 
     def fake_run(command: list[str], *, env=None):  # noqa: ARG001
         calls.append(command)
-        if command[:2] == ["test", "-e"] and command[-1] == "/etc/letsencrypt/live/example.com":
-            return ""
-        if command[:2] == ["test", "-e"] and command[-1] == "/etc/letsencrypt/renewal/example.com.conf":
-            return ""
         if command[0] == "certbot":
             raise RuntimeError("live directory exists for example.com")
         raise AssertionError(f"Unexpected command: {command}")
 
+    def fake_path_exists(path, *, sudo):  # noqa: ARG001
+        return str(path) in {
+            "/etc/letsencrypt/live/example.com",
+            "/etc/letsencrypt/renewal/example.com.conf",
+        }
+
     monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(services, "_path_exists", fake_path_exists)
     monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
 
     with pytest.raises(services.CertbotError, match="live directory exists for example.com"):
