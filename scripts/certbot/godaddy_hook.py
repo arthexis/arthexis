@@ -20,6 +20,7 @@ import requests
 DNS_POLL_INTERVAL_SECONDS = 5
 HOOK_LOG_PATH = "/logs/certbot-godaddy-hook.log"
 PUBLIC_DNS_RESOLVERS = ("1.1.1.1", "8.8.8.8", "9.9.9.9")
+TXT_RECORD_TTL_SECONDS = 600
 
 
 class DNSNameserverError(RuntimeError):
@@ -240,6 +241,75 @@ def _wait_for_dns_txt_propagation(
         time.sleep(DNS_POLL_INTERVAL_SECONDS)
 
 
+def _query_public_recursive_txt_values(challenge_domain: str) -> dict[str, set[str]]:
+    """Return TXT values observed by each configured public recursive resolver."""
+
+    observed: dict[str, set[str]] = {}
+    for resolver_ip in PUBLIC_DNS_RESOLVERS:
+        resolver = dns.resolver.Resolver(configure=False)
+        resolver.nameservers = [resolver_ip]
+        resolver.lifetime = 10
+        values: set[str] = set()
+        try:
+            answers = resolver.resolve(challenge_domain, "TXT")
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+            observed[resolver_ip] = values
+            continue
+        except dns.exception.DNSException as exc:
+            _emit_log(f"Public resolver lookup failed for {resolver_ip}: {exc}")
+            observed[resolver_ip] = values
+            continue
+
+        for answer in answers:
+            text = b"".join(answer.strings).decode("utf-8").strip()
+            if text:
+                values.add(text)
+        observed[resolver_ip] = values
+
+    return observed
+
+
+def _wait_for_public_recursive_txt_propagation(
+    *,
+    challenge_domain: str,
+    expected_value: str,
+    timeout_seconds: int,
+) -> None:
+    """Wait until public recursive resolvers observe the expected TXT value."""
+
+    deadline = time.time() + max(0, timeout_seconds)
+    while True:
+        observed_values = _query_public_recursive_txt_values(challenge_domain)
+        missing_resolvers = sorted(
+            resolver_ip
+            for resolver_ip, values in observed_values.items()
+            if expected_value not in values
+        )
+        observed_summary = {
+            resolver_ip: sorted(values) if values else ["<none>"]
+            for resolver_ip, values in sorted(observed_values.items())
+        }
+        if not missing_resolvers:
+            _emit_log(
+                f"Observed expected TXT for {challenge_domain} across public recursive resolvers."
+            )
+            return
+
+        if time.time() >= deadline:
+            raise TimeoutError(
+                "DNS propagation timeout waiting for public recursive resolver caches. "
+                f"Expected '{expected_value}' at {challenge_domain}; "
+                f"missing resolvers {missing_resolvers}; "
+                f"observed {observed_summary}."
+            )
+        _emit_log(
+            f"Waiting for recursive DNS propagation at {challenge_domain}; "
+            f"missing resolvers {missing_resolvers}; "
+            f"observed {observed_summary}"
+        )
+        time.sleep(DNS_POLL_INTERVAL_SECONDS)
+
+
 def _upsert_txt_record() -> None:
     """Create or overwrite the ACME TXT record required for DNS-01 validation."""
 
@@ -258,7 +328,8 @@ def _upsert_txt_record() -> None:
             f"Replacing existing TXT records for {challenge_domain}: {existing_values}"
         )
 
-    payload = [{"data": validation, "ttl": 600}]
+    merged_values = sorted({*existing_values, validation})
+    payload = [{"data": value, "ttl": TXT_RECORD_TTL_SECONDS} for value in merged_values]
     response = _godaddy_request(
         "PUT", f"/v1/domains/{zone}/records/TXT/{host or '@'}", payload=payload
     )
@@ -275,6 +346,11 @@ def _upsert_txt_record() -> None:
             expected_value=validation,
             timeout_seconds=wait_seconds,
         )
+        _wait_for_public_recursive_txt_propagation(
+            challenge_domain=challenge_domain,
+            expected_value=validation,
+            timeout_seconds=wait_seconds,
+        )
 
 
 def _cleanup_txt_record() -> None:
@@ -287,8 +363,18 @@ def _cleanup_txt_record() -> None:
         else f"_acme-challenge.{fqdn[2:]}"
     )
     zone, host = _zone_and_name(challenge_domain, _optional_env("GODADDY_ZONE"))
+    validation = _optional_env("CERTBOT_VALIDATION")
+    if validation:
+        existing_values = _fetch_existing_txt_values(zone, host)
+        payload = [
+            {"data": value, "ttl": TXT_RECORD_TTL_SECONDS}
+            for value in existing_values
+            if value and value != validation
+        ]
+    else:
+        payload = []
     response = _godaddy_request(
-        "PUT", f"/v1/domains/{zone}/records/TXT/{host or '@'}", payload=[]
+        "PUT", f"/v1/domains/{zone}/records/TXT/{host or '@'}", payload=payload
     )
     if response.status_code >= 400:
         raise RuntimeError(
