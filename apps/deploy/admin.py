@@ -136,6 +136,18 @@ class DeployServerAdmin(EntityModelAdmin):
             )
         return credentials, created
 
+    def _validate_credentials_write_permission(self, request: HttpRequest, form: LightsailSetupForm) -> None:
+        credentials = form.cleaned_data.get("credentials")
+        access_key_id = str(form.cleaned_data.get("access_key_id") or "").strip()
+        secret_access_key = str(form.cleaned_data.get("secret_access_key") or "").strip()
+        if credentials is not None or not (access_key_id and secret_access_key):
+            return
+        permission_name = "aws.change_awscredentials"
+        if not AWSCredentials.objects.filter(access_key_id=access_key_id).exists():
+            permission_name = "aws.add_awscredentials"
+        if not request.user.has_perm(permission_name):
+            raise PermissionDenied
+
     def _prepare_instance_details(self, form: LightsailSetupForm, credentials: AWSCredentials | None):
         instance_name = form.cleaned_data["name"].strip()
         region = form.cleaned_data["region"].strip()
@@ -247,6 +259,7 @@ class DeployServerAdmin(EntityModelAdmin):
         }
 
         if request.method == "POST" and form.is_valid():
+            self._validate_credentials_write_permission(request, form)
             credentials, created_credentials = self._resolve_credentials(form)
             try:
                 details = self._prepare_instance_details(form, credentials)
