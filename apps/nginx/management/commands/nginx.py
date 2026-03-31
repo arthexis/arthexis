@@ -85,15 +85,18 @@ class ConfigureMixin:
                 validation fails while applying the managed config.
         """
 
-        static_ip = self._parse_static_ip(str(options.get("static_ip") or "").strip())
-        if static_ip is None:
-            public_ips = self._detect_public_ips()
-            if not public_ips:
-                raise CommandError(
-                    "No public/static IP was detected on this host. "
-                    "Aborting nginx configuration. Provide --static-ip <PUBLIC_IP> "
-                    "or assign a public Elastic IP / Load Balancer endpoint first."
-                )
+        if not options["remove"]:
+            # Validation-only precheck: ensure --static-ip is public-routable or
+            # we can detect at least one public interface address.
+            static_ip = self._parse_static_ip(str(options.get("static_ip") or "").strip())
+            if static_ip is None:
+                public_ips = self._detect_public_ips()
+                if not public_ips:
+                    raise CommandError(
+                        "No public/static IP was detected on this host. "
+                        "Aborting nginx configuration. Provide --static-ip <PUBLIC_IP> "
+                        "or assign a public Elastic IP / Load Balancer endpoint first."
+                    )
 
         config = SiteConfiguration.get_default()
 
@@ -135,21 +138,29 @@ class ConfigureMixin:
         if not value:
             return None
         try:
-            parsed = ipaddress.ip_address(value)
+            ipaddress.ip_address(value)
         except ValueError as exc:
             raise CommandError(f"--static-ip must be a valid IPv4 or IPv6 address: {value}") from exc
-        if parsed.is_private or parsed.is_loopback or parsed.is_link_local or parsed.is_multicast:
+        if not self._is_public_routable_ip(value):
             raise CommandError(f"--static-ip must be public-routable: {value}")
         return value
+
+    def _is_public_routable_ip(self, value: str) -> bool:
+        """Return whether ``value`` is a globally routable IPv4/IPv6 address."""
+
+        try:
+            parsed = ipaddress.ip_address(value)
+        except ValueError:
+            return False
+        return parsed.is_global and not parsed.is_multicast
 
     def _detect_public_ips(self) -> list[str]:
         """Return detected public interface IPs for this host."""
 
-        detected: set[str] = set()
         candidates: set[str] = set()
         hostname = socket.gethostname()
 
-        for lookup_name in (hostname, socket.getfqdn(), "localhost"):
+        for lookup_name in (hostname, socket.getfqdn()):
             if not lookup_name:
                 continue
             try:
@@ -161,16 +172,7 @@ class ConfigureMixin:
                 if host:
                     candidates.add(host)
 
-        for candidate in candidates:
-            try:
-                parsed = ipaddress.ip_address(candidate)
-            except ValueError:
-                continue
-            if parsed.is_private or parsed.is_loopback or parsed.is_link_local or parsed.is_multicast:
-                continue
-            detected.add(str(parsed))
-
-        return sorted(detected)
+        return sorted(candidate for candidate in candidates if self._is_public_routable_ip(candidate))
 
 
 class Command(ConfigureMixin, BaseCommand):
