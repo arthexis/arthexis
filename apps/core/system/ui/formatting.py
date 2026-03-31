@@ -9,9 +9,17 @@ localization cannot be applied.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import cast
 
 from django.utils import timezone
 from django.utils.formats import date_format
+from django.utils.functional import Promise
+
+
+def _as_str(value: Promise | str) -> str:
+    """Narrow lazy translation or formatting output to ``str`` for typed callers."""
+
+    return cast(str, value)
 
 
 def _format_timestamp(dt: datetime | None) -> str:
@@ -23,7 +31,7 @@ def _format_timestamp(dt: datetime | None) -> str:
         localized = timezone.localtime(dt)
     except Exception:
         localized = dt
-    return date_format(localized, "DATETIME_FORMAT")
+    return _as_str(date_format(localized, "DATETIME_FORMAT"))
 
 
 def _format_datetime(dt: datetime | None) -> str:
@@ -33,7 +41,7 @@ def _format_datetime(dt: datetime | None) -> str:
         return ""
     if timezone.is_aware(dt):
         dt = timezone.localtime(dt)
-    return date_format(dt, "Y-m-d H:i")
+    return _as_str(date_format(dt, "Y-m-d H:i"))
 
 
 def format_datetime(dt: datetime | None) -> str:

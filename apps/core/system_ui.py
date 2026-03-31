@@ -6,13 +6,13 @@ are consumed across commands, admin actions, and health checks.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
 
 from .system.ui import (
-    STARTUP_REPORT_DEFAULT_LIMIT,
     STARTUP_CLOCK_DRIFT_THRESHOLD,
+    STARTUP_REPORT_DEFAULT_LIMIT,
     SystemField,
     _build_system_fields,
     _gather_info,
@@ -20,7 +20,18 @@ from .system.ui import (
 )
 from .system.ui.formatting import _format_datetime, _format_timestamp
 from .system.ui.network_probe import _build_nginx_report
-from .system.ui.services import _build_services_report, _configured_service_units, _systemd_unit_status
+from .system.ui.services import (
+    NginxReportPayload,
+    ServiceReportPayload,
+    ServiceStatusPayload,
+    ServiceUnitConfig,
+    SuiteUptimeDetailsPayload,
+    UptimeReportPayload,
+    UptimeSegmentPayload,
+    _build_services_report,
+    _configured_service_units,
+    _systemd_unit_status,
+)
 from .system.ui.uptime import (
     _build_uptime_report,
     _build_uptime_segments,
@@ -31,13 +42,13 @@ from .system.ui.uptime import (
 )
 
 
-def build_nginx_report() -> dict[str, object]:
+def build_nginx_report() -> NginxReportPayload:
     """Return nginx expected-vs-actual report metadata."""
 
     return _build_nginx_report()
 
 
-def build_services_report() -> dict[str, object]:
+def build_services_report() -> ServiceReportPayload:
     """Return lifecycle services report metadata."""
 
     return _build_services_report()
@@ -49,13 +60,15 @@ def build_system_fields(info: dict[str, object]) -> list[SystemField]:
     return _build_system_fields(info)
 
 
-def build_uptime_report() -> dict[str, object]:
+def build_uptime_report() -> UptimeReportPayload:
     """Return a combined uptime report payload."""
 
     return _build_uptime_report()
 
 
-def build_uptime_segments(*, window_start: datetime, window_end: datetime, shutdown_periods: list[tuple[datetime, datetime]]) -> list[dict[str, object]]:
+def build_uptime_segments(
+    *, window_start: datetime, window_end: datetime, shutdown_periods: list[tuple[datetime, datetime]]
+) -> list[UptimeSegmentPayload]:
     """Build alternating online/offline segments in the reporting window."""
 
     return _build_uptime_segments(
@@ -65,7 +78,7 @@ def build_uptime_segments(*, window_start: datetime, window_end: datetime, shutd
     )
 
 
-def configured_service_units(base_dir: Path) -> list[dict[str, object]]:
+def configured_service_units(base_dir: Path) -> list[ServiceUnitConfig]:
     """Return configured lifecycle units for the current instance."""
 
     return _configured_service_units(base_dir)
@@ -107,7 +120,7 @@ def suite_offline_period(now: datetime) -> tuple[datetime, datetime] | None:
     return _suite_offline_period(now)
 
 
-def suite_uptime_details() -> dict[str, object]:
+def suite_uptime_details() -> SuiteUptimeDetailsPayload:
     """Return suite uptime metadata derived from boot/lock state."""
 
     return _suite_uptime_details()
@@ -119,7 +132,7 @@ def system_boot_time(now: datetime) -> datetime | None:
     return _system_boot_time(now)
 
 
-def systemd_unit_status(unit: str, command: list[str] | None = None) -> dict[str, object]:
+def systemd_unit_status(unit: str, command: list[str] | None = None) -> ServiceStatusPayload:
     """Return systemd active/enabled state for ``unit``."""
 
     return _systemd_unit_status(unit, command=command)

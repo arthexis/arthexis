@@ -14,18 +14,35 @@ Expected parsed log formats:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone as datetime_timezone
 import subprocess
-from typing import Iterable
+from collections.abc import Iterable
+from datetime import datetime, timedelta
+from datetime import timezone as datetime_timezone
+from typing import cast
 
 from django.utils import timezone
+from django.utils.functional import Promise
 from django.utils.timesince import timesince
 from django.utils.translation import gettext_lazy as _
 
 from ..filesystem import _suite_uptime_lock_info
 from .formatting import _format_datetime
+from .services import (
+    SerializedUptimeSegmentPayload,
+    SuiteUptimeDetailsPayload,
+    UptimeReportPayload,
+    UptimeReportSuitePayload,
+    UptimeSegmentPayload,
+    UptimeWindowPayload,
+)
 
 _DAY_NAMES = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+
+
+def _as_str(value: Promise | str) -> str:
+    """Narrow lazy translation values to ``str`` for typed payloads."""
+
+    return cast(str, value)
 
 
 def _system_boot_time(now: datetime | None = None) -> datetime | None:
@@ -52,42 +69,49 @@ def _system_boot_time(now: datetime | None = None) -> datetime | None:
     return boot_time
 
 
-def _suite_uptime_details() -> dict[str, object]:
+def _suite_uptime_details() -> SuiteUptimeDetailsPayload:
     """Return structured uptime information for the running suite if possible."""
 
     now = timezone.now()
     lock_info = _suite_uptime_lock_info(now=now)
     boot_time = _system_boot_time(now)
     lock_start = lock_info.get("started_at")
+    lock_started_at = lock_start if isinstance(lock_start, datetime) else None
 
-    if lock_start and boot_time and lock_start < boot_time:
+    if lock_started_at and boot_time and lock_started_at < boot_time:
         return {
             "available": False,
             "boot_time": boot_time,
             "boot_time_label": _format_datetime(boot_time),
-            "lock_started_at": lock_start,
+            "lock_started_at": lock_started_at,
         }
 
-    if lock_info.get("fresh") and isinstance(lock_start, datetime):
-        uptime_label = timesince(lock_start, now)
+    if lock_info.get("fresh") and lock_started_at:
+        uptime_label = timesince(lock_started_at, now)
         return {
             "uptime": uptime_label,
-            "boot_time": lock_start,
-            "boot_time_label": _format_datetime(lock_start),
+            "boot_time": lock_started_at,
+            "boot_time_label": _format_datetime(lock_started_at),
             "available": True,
         }
 
     if lock_info.get("exists"):
         if boot_time:
             uptime_label = timesince(boot_time, now)
-            return {
+            details: SuiteUptimeDetailsPayload = {
                 "uptime": uptime_label,
                 "boot_time": boot_time,
                 "boot_time_label": _format_datetime(boot_time),
-                "lock_started_at": lock_start,
                 "available": True,
             }
-        return {"available": False, "boot_time": boot_time}
+            if lock_started_at:
+                details["lock_started_at"] = lock_started_at
+            return details
+        return {
+            "available": False,
+            "boot_time": boot_time,
+            "boot_time_label": "",
+        }
 
     if boot_time:
         uptime_label = timesince(boot_time, now)
@@ -98,7 +122,11 @@ def _suite_uptime_details() -> dict[str, object]:
             "available": True,
         }
 
-    return {}
+    return {
+        "available": False,
+        "boot_time": None,
+        "boot_time_label": "",
+    }
 
 
 def _suite_uptime() -> str:
@@ -126,7 +154,7 @@ def suite_offline_period(now: datetime) -> tuple[datetime, datetime] | None:
     return _suite_offline_period(now)
 
 
-def _parse_last_history_line(line: str) -> dict[str, object] | None:
+def _parse_last_history_line(line: str) -> dict[str, datetime | str | None] | None:
     """Parse one ``last -x -F`` line into record metadata."""
 
     if not line or line.startswith("wtmp begins"):
@@ -182,12 +210,12 @@ def _load_shutdown_periods() -> tuple[list[tuple[datetime, datetime | None]], st
             timeout=2,
         )
     except FileNotFoundError:
-        return [], _("The `last` command is not available on this node.")
+        return [], _as_str(_("The `last` command is not available on this node."))
     except subprocess.TimeoutExpired:
-        return [], _("Timed out while reading uptime history from the system log.")
+        return [], _as_str(_("Timed out while reading uptime history from the system log."))
 
     if result.returncode not in (0, 1):
-        return [], _("Unable to read uptime history from the system log.")
+        return [], _as_str(_("Unable to read uptime history from the system log."))
 
     shutdown_periods: list[tuple[datetime, datetime | None]] = []
     for line in result.stdout.splitlines():
@@ -231,10 +259,10 @@ def _merge_shutdown_periods(periods: Iterable[tuple[datetime, datetime]]) -> lis
 
 def _build_uptime_segments(
     *, window_start: datetime, window_end: datetime, shutdown_periods: list[tuple[datetime, datetime]]
-) -> list[dict[str, object]]:
+) -> list[UptimeSegmentPayload]:
     """Build alternating up/down segments across a reporting window."""
 
-    segments: list[dict[str, object]] = []
+    segments: list[UptimeSegmentPayload] = []
     if window_end <= window_start:
         return segments
 
@@ -282,7 +310,7 @@ def _build_uptime_segments(
 
 def build_uptime_segments(
     *, window_start: datetime, window_end: datetime, shutdown_periods: list[tuple[datetime, datetime]]
-) -> list[dict[str, object]]:
+) -> list[UptimeSegmentPayload]:
     """Public wrapper for uptime segment generation."""
 
     return _build_uptime_segments(
@@ -292,8 +320,10 @@ def build_uptime_segments(
     )
 
 
-def _serialize_segments(segments: list[dict[str, object]], *, window_duration: float) -> list[dict[str, object]]:
-    serialized: list[dict[str, object]] = []
+def _serialize_segments(
+    segments: list[UptimeSegmentPayload], *, window_duration: float
+) -> list[SerializedUptimeSegmentPayload]:
+    serialized: list[SerializedUptimeSegmentPayload] = []
     for segment in segments:
         start = segment["start"]
         end = segment["end"]
@@ -321,7 +351,7 @@ def _serialize_segments(segments: list[dict[str, object]], *, window_duration: f
     return serialized
 
 
-def _build_uptime_report(*, now: datetime | None = None) -> dict[str, object]:
+def _build_uptime_report(*, now: datetime | None = None) -> UptimeReportPayload:
     """Build uptime report windows and suite uptime summary."""
 
     current_time = now or timezone.now()
@@ -338,12 +368,12 @@ def _build_uptime_report(*, now: datetime | None = None) -> dict[str, object]:
         shutdown_periods.append(offline_period)
 
     windows = [
-        (_("Last 24 hours"), current_time - timedelta(hours=24)),
-        (_("Last 7 days"), current_time - timedelta(days=7)),
-        (_("Last 30 days"), current_time - timedelta(days=30)),
+        (_as_str(_("Last 24 hours")), current_time - timedelta(hours=24)),
+        (_as_str(_("Last 7 days")), current_time - timedelta(days=7)),
+        (_as_str(_("Last 30 days")), current_time - timedelta(days=30)),
     ]
 
-    report_windows: list[dict[str, object]] = []
+    report_windows: list[UptimeWindowPayload] = []
     for label, start in windows:
         window_duration = (current_time - start).total_seconds()
         segments = _build_uptime_segments(
@@ -383,10 +413,10 @@ def _build_uptime_report(*, now: datetime | None = None) -> dict[str, object]:
         )
 
     suite_details = _suite_uptime_details()
-    suite_info = {
-        "uptime": suite_details.get("uptime", ""),
+    suite_info: UptimeReportSuitePayload = {
+        "uptime": str(suite_details.get("uptime", "")),
         "boot_time": suite_details.get("boot_time"),
-        "boot_time_label": suite_details.get("boot_time_label", ""),
+        "boot_time_label": str(suite_details.get("boot_time_label", "")),
         "available": bool(suite_details.get("available") or suite_details.get("uptime")),
     }
 

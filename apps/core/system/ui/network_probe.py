@@ -16,17 +16,25 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 
 from django.conf import settings
+from django.utils.functional import Promise
 from django.utils.translation import gettext_lazy as _
 
 from apps.nginx.renderers import generate_primary_config
-
 from utils.service_probe import detect_runserver_port, probe_admin_login
 
 from ..filesystem import _configured_backend_port, _nginx_site_path, _resolve_nginx_mode
+from .services import NginxReportPayload
 
 logger = logging.getLogger(__name__)
+
+
+def _as_str(value: Promise | str) -> str:
+    """Narrow lazy translation values to ``str`` for typed report payloads."""
+
+    return cast(str, value)
 
 
 def _normalize_nginx_content(content: str) -> str:
@@ -54,7 +62,7 @@ def _build_nginx_report(
     base_dir: Path | None = None,
     site_path: Path | None = None,
     external_websockets: bool | None = None,
-) -> dict[str, object]:
+) -> NginxReportPayload:
     """Return comparison data for the managed nginx configuration file."""
 
     resolved_base = Path(base_dir) if base_dir is not None else Path(settings.BASE_DIR)
@@ -83,7 +91,7 @@ def _build_nginx_report(
     try:
         raw_content = resolved_site_path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        actual_error = _("NGINX configuration file not found.")
+        actual_error = _as_str(_("NGINX configuration file not found."))
     except OSError as exc:  # pragma: no cover - unexpected filesystem error
         actual_error = str(exc)
     else:

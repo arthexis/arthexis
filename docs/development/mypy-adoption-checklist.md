@@ -15,6 +15,10 @@ The current MyPy-owned paths are recorded in `pyproject.toml` under `[tool.mypy]
 - `apps/core/services/health_checks.py`
 - `apps/core/modeling/`
 - `apps/core/system_ui.py`
+- `apps/core/system/ui/formatting.py`
+- `apps/core/system/ui/network_probe.py`
+- `apps/core/system/ui/services.py`
+- `apps/core/system/ui/uptime.py`
 
 Django-aware checking is enabled through the `mypy_django_plugin.main` plugin with `config.settings` as the settings module. Use the same environment assumptions as `scripts/run_mypy.sh` when invoking MyPy directly:
 
@@ -107,7 +111,7 @@ If a rollout candidate fails MyPy repeatedly across runs, keep it in the checkli
 
 Current tracked regressions:
 
-- `apps/core/system/ui/`: lazy translation return types and uptime payload shapes still fail Django-aware MyPy checks.
+- None currently tracked.
 
 When you hit a persistent failure:
 
