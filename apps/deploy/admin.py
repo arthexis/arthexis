@@ -121,32 +121,24 @@ class DeployServerAdmin(EntityModelAdmin):
     def _lightsail_setup_url(self):
         return reverse("admin:deploy_deployserver_lightsail_setup")
 
-    def _resolve_credentials(self, form: LightsailSetupForm) -> tuple[AWSCredentials | None, bool]:
+    def _resolve_credentials(self, request: HttpRequest, form: LightsailSetupForm) -> tuple[AWSCredentials | None, bool]:
         credentials = form.cleaned_data.get("credentials")
         access_key_id = str(form.cleaned_data.get("access_key_id") or "").strip()
         secret_access_key = str(form.cleaned_data.get("secret_access_key") or "").strip()
         created = False
         if credentials is None and access_key_id and secret_access_key:
-            credentials, created = AWSCredentials.objects.update_or_create(
-                access_key_id=access_key_id,
-                defaults={
-                    "name": str(form.cleaned_data.get("credential_label") or access_key_id).strip(),
-                    "secret_access_key": secret_access_key,
-                },
-            )
+            with transaction.atomic():
+                credentials, created = AWSCredentials.objects.update_or_create(
+                    access_key_id=access_key_id,
+                    defaults={
+                        "name": str(form.cleaned_data.get("credential_label") or access_key_id).strip(),
+                        "secret_access_key": secret_access_key,
+                    },
+                )
+                permission_name = "aws.add_awscredentials" if created else "aws.change_awscredentials"
+                if not request.user.has_perm(permission_name):
+                    raise PermissionDenied
         return credentials, created
-
-    def _validate_credentials_write_permission(self, request: HttpRequest, form: LightsailSetupForm) -> None:
-        credentials = form.cleaned_data.get("credentials")
-        access_key_id = str(form.cleaned_data.get("access_key_id") or "").strip()
-        secret_access_key = str(form.cleaned_data.get("secret_access_key") or "").strip()
-        if credentials is not None or not (access_key_id and secret_access_key):
-            return
-        permission_name = "aws.change_awscredentials"
-        if not AWSCredentials.objects.filter(access_key_id=access_key_id).exists():
-            permission_name = "aws.add_awscredentials"
-        if not request.user.has_perm(permission_name):
-            raise PermissionDenied
 
     def _prepare_instance_details(self, form: LightsailSetupForm, credentials: AWSCredentials | None):
         instance_name = form.cleaned_data["name"].strip()
@@ -259,8 +251,7 @@ class DeployServerAdmin(EntityModelAdmin):
         }
 
         if request.method == "POST" and form.is_valid():
-            self._validate_credentials_write_permission(request, form)
-            credentials, created_credentials = self._resolve_credentials(form)
+            credentials, created_credentials = self._resolve_credentials(request, form)
             try:
                 details = self._prepare_instance_details(form, credentials)
             except LightsailFetchError as exc:

@@ -111,3 +111,48 @@ def test_deploy_server_lightsail_setup_view_rejects_inline_credentials_without_a
 
     assert response.status_code == 403
     assert not AWSCredentials.objects.filter(access_key_id="AKIA_RESTRICTED").exists()
+
+
+def test_deploy_server_lightsail_setup_view_rejects_existing_inline_credentials_without_change_permission(
+    client, django_user_model
+):
+    existing_credentials = AWSCredentials.objects.create(
+        name="existing",
+        access_key_id="AKIA_RESTRICTED",
+        secret_access_key="secret-existing",
+    )
+    user = django_user_model.objects.create_user(username="add-only", password="pw", is_staff=True)
+    user.user_permissions.add(Permission.objects.get(codename="change_deployserver"))
+    user.user_permissions.add(Permission.objects.get(codename="add_awscredentials"))
+    client.force_login(user)
+
+    response = client.post(
+        reverse("admin:deploy_deployserver_lightsail_setup"),
+        {
+            "name": "porsche-abb-1",
+            "region": "us-east-1",
+            "credentials": "",
+            "credential_label": "updated",
+            "access_key_id": "AKIA_RESTRICTED",
+            "secret_access_key": "secret-updated",
+            "skip_create": "on",
+            "blueprint_id": "",
+            "bundle_id": "",
+            "key_pair_name": "",
+            "availability_zone": "",
+            "deploy_instance_name": "main",
+            "install_dir": "/srv/porsche-abb-1",
+            "service_name": "arthexis-porsche-abb-1",
+            "branch": "main",
+            "ocpp_port": "9000",
+            "ssh_user": "ubuntu",
+            "ssh_port": "22",
+            "admin_url": "",
+            "env_file": "",
+        },
+    )
+
+    assert response.status_code == 403
+    existing_credentials.refresh_from_db()
+    assert existing_credentials.name == "existing"
+    assert existing_credentials.secret_access_key == "secret-existing"
