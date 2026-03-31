@@ -44,7 +44,7 @@ def test_wait_for_dns_txt_propagation_raises_timeout(monkeypatch):
     monkeypatch.setattr(
         MODULE,
         "_query_authoritative_txt_values",
-        lambda *_args, **_kwargs: {"stale-value"},
+        lambda *_args, **_kwargs: ({"ns1.example.net": {"stale-value"}}, []),
     )
 
     with pytest.raises(RuntimeError, match="DNS propagation timeout"):
@@ -81,23 +81,24 @@ def test_query_authoritative_txt_values_ignores_nxdomain(monkeypatch):
             self.lifetime = 0
 
         def resolve(self, name, rdtype):
-            if self.configure and rdtype == "NS":
+            if rdtype == "NS":
                 return [Answer("ns1.example.net.")]
-            if self.configure and name == "ns1.example.net" and rdtype == "A":
+            if name == "ns1.example.net" and rdtype == "A":
                 return [Answer("192.0.2.10")]
-            if self.configure and name == "ns1.example.net" and rdtype == "AAAA":
+            if name == "ns1.example.net" and rdtype == "AAAA":
                 raise MODULE.dns.resolver.NoAnswer
-            if not self.configure and rdtype == "TXT":
+            if rdtype == "TXT":
                 raise MODULE.dns.resolver.NXDOMAIN
             raise AssertionError(f"Unexpected query {name} {rdtype}")
 
     monkeypatch.setattr(MODULE.dns.resolver, "Resolver", Resolver)
 
-    observed = MODULE._query_authoritative_txt_values(
+    observed_by_ns, errors = MODULE._query_authoritative_txt_values(
         "example.com", "_acme-challenge.example.com"
     )
 
-    assert observed == set()
+    assert observed_by_ns == {"ns1.example.net": set()}
+    assert errors == []
 
 
 def test_query_authoritative_txt_values_does_not_repeat_a_lookup_when_aaaa_missing(
@@ -120,24 +121,86 @@ def test_query_authoritative_txt_values_does_not_repeat_a_lookup_when_aaaa_missi
 
         def resolve(self, name, rdtype):
             queries.append((self.configure, name, rdtype))
-            if self.configure and rdtype == "NS":
+            if rdtype == "NS":
                 return [Answer("ns1.example.net.")]
-            if self.configure and name == "ns1.example.net" and rdtype == "A":
+            if name == "ns1.example.net" and rdtype == "A":
                 return [Answer("192.0.2.10")]
-            if self.configure and name == "ns1.example.net" and rdtype == "AAAA":
+            if name == "ns1.example.net" and rdtype == "AAAA":
                 raise MODULE.dns.resolver.NoAnswer
-            if not self.configure and rdtype == "TXT":
+            if rdtype == "TXT":
                 raise MODULE.dns.resolver.NXDOMAIN
             raise AssertionError(f"Unexpected query {name} {rdtype}")
 
     monkeypatch.setattr(MODULE.dns.resolver, "Resolver", Resolver)
 
-    observed = MODULE._query_authoritative_txt_values(
+    observed_by_ns, _errors = MODULE._query_authoritative_txt_values(
         "example.com", "_acme-challenge.example.com"
     )
 
-    assert observed == set()
-    assert queries.count((True, "ns1.example.net", "A")) == 1
+    assert observed_by_ns == {"ns1.example.net": set()}
+    assert queries.count((False, "ns1.example.net", "A")) == 1
+
+
+def test_wait_for_dns_txt_propagation_requires_all_authoritative_nameservers(monkeypatch):
+    monkeypatch.setattr(MODULE.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(MODULE.time, "time", iter([0, 0, 0]).__next__)
+
+    monkeypatch.setattr(
+        MODULE,
+        "_query_authoritative_txt_values",
+        lambda *_args, **_kwargs: (
+            {
+                "ns1.example.net": {"expected-value"},
+                "ns2.example.net": {"stale-value"},
+            },
+            [],
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="missing nameservers"):
+        MODULE._wait_for_dns_txt_propagation(
+            zone="example.com",
+            challenge_domain="_acme-challenge.example.com",
+            expected_value="expected-value",
+            timeout_seconds=0,
+        )
+
+
+def test_query_authoritative_txt_values_uses_public_resolvers_for_ns_lookup(monkeypatch):
+    class Answer:
+        def __init__(self, value):
+            self.target = value
+
+        def __str__(self):
+            return self.target
+
+    seen_public_nameservers: list[str] = []
+
+    class Resolver:
+        def __init__(self, configure=True):
+            self.configure = configure
+            self.nameservers = []
+            self.lifetime = 0
+
+        def resolve(self, name, rdtype):
+            if name == "example.com" and rdtype == "NS":
+                if not self.nameservers:
+                    raise AssertionError("Expected explicit public nameservers for NS lookup.")
+                seen_public_nameservers.extend(self.nameservers)
+                return [Answer("ns1.example.net.")]
+            if name == "ns1.example.net" and rdtype == "A":
+                return [Answer("192.0.2.10")]
+            if name == "ns1.example.net" and rdtype == "AAAA":
+                raise MODULE.dns.resolver.NoAnswer
+            if rdtype == "TXT":
+                raise MODULE.dns.resolver.NXDOMAIN
+            raise AssertionError(f"Unexpected query {name} {rdtype}")
+
+    monkeypatch.setattr(MODULE.dns.resolver, "Resolver", Resolver)
+
+    MODULE._query_authoritative_txt_values("example.com", "_acme-challenge.example.com")
+
+    assert seen_public_nameservers == list(MODULE.PUBLIC_DNS_RESOLVERS)
 
 
 def test_upsert_txt_record_replaces_existing_records(monkeypatch):

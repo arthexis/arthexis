@@ -19,6 +19,7 @@ import requests
 
 DNS_POLL_INTERVAL_SECONDS = 5
 HOOK_LOG_PATH = "/logs/certbot-godaddy-hook.log"
+PUBLIC_DNS_RESOLVERS = ("1.1.1.1", "8.8.8.8", "9.9.9.9")
 
 
 def _emit_log(message: str) -> None:
@@ -115,17 +116,28 @@ def _fetch_existing_txt_values(zone: str, host: str) -> list[str]:
     return [str(item.get("data", "")).strip() for item in payload if isinstance(item, dict)]
 
 
-def _query_authoritative_txt_values(zone: str, challenge_domain: str) -> set[str]:
-    """Query authoritative DNS TXT values for *challenge_domain*."""
+def _public_recursive_resolver() -> dns.resolver.Resolver:
+    """Return a resolver pinned to public recursive DNS servers."""
 
-    resolver = dns.resolver.Resolver(configure=True)
+    resolver = dns.resolver.Resolver(configure=False)
+    resolver.nameservers = list(PUBLIC_DNS_RESOLVERS)
+    resolver.lifetime = 10
+    return resolver
+
+
+def _query_authoritative_txt_values(
+    zone: str, challenge_domain: str
+) -> tuple[dict[str, set[str]], list[str]]:
+    """Query each authoritative nameserver for TXT values at *challenge_domain*."""
+
+    resolver = _public_recursive_resolver()
     resolver.lifetime = 10
     nameserver_answers = resolver.resolve(zone, "NS")
     nameservers = [str(answer.target).rstrip(".") for answer in nameserver_answers]
     if not nameservers:
         raise RuntimeError(f"No authoritative nameservers found for zone {zone}.")
 
-    observed_values: set[str] = set()
+    observed_values_by_ns: dict[str, set[str]] = {nameserver: set() for nameserver in nameservers}
     errors: list[str] = []
     for nameserver in nameservers:
         try:
@@ -156,12 +168,12 @@ def _query_authoritative_txt_values(zone: str, challenge_domain: str) -> set[str
             for answer in answers:
                 text = b"".join(answer.strings).decode("utf-8").strip()
                 if text:
-                    observed_values.add(text)
+                    observed_values_by_ns[nameserver].add(text)
 
-    if not observed_values and errors:
+    if errors:
         _emit_log("Authoritative DNS query errors: " + "; ".join(errors))
 
-    return observed_values
+    return observed_values_by_ns, errors
 
 
 def _wait_for_dns_txt_propagation(
@@ -175,24 +187,40 @@ def _wait_for_dns_txt_propagation(
 
     deadline = time.time() + max(0, timeout_seconds)
     while True:
-        observed_values = _query_authoritative_txt_values(zone, challenge_domain)
-        if expected_value in observed_values:
+        observed_values_by_ns, _errors = _query_authoritative_txt_values(
+            zone, challenge_domain
+        )
+        missing_nameservers = sorted(
+            nameserver
+            for nameserver, values in observed_values_by_ns.items()
+            if expected_value not in values
+        )
+        if not missing_nameservers:
             _emit_log(
-                f"Observed expected TXT for {challenge_domain} at authoritative DNS."
+                f"Observed expected TXT for {challenge_domain} at all authoritative nameservers."
             )
             return
 
         if time.time() >= deadline:
-            values = sorted(observed_values) if observed_values else ["<none>"]
+            observed_summary = {
+                nameserver: sorted(values) if values else ["<none>"]
+                for nameserver, values in sorted(observed_values_by_ns.items())
+            }
             raise RuntimeError(
                 "DNS propagation timeout waiting for TXT validation value. "
                 f"Expected '{expected_value}' at {challenge_domain}; "
-                f"observed {values}."
+                f"missing nameservers {missing_nameservers}; "
+                f"observed {observed_summary}."
             )
 
+        observed_summary = {
+            nameserver: sorted(values) if values else ["<none>"]
+            for nameserver, values in sorted(observed_values_by_ns.items())
+        }
         _emit_log(
             f"Waiting for TXT propagation at {challenge_domain}; "
-            f"observed {sorted(observed_values) if observed_values else ['<none>']}"
+            f"missing nameservers {missing_nameservers}; "
+            f"observed {observed_summary}"
         )
         time.sleep(DNS_POLL_INTERVAL_SECONDS)
 
