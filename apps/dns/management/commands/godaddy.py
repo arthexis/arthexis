@@ -275,10 +275,10 @@ class Command(BaseCommand):
             current_customer_id = existing.get_customer_id() if existing else ""
             if current_customer_id:
                 entered = input(
-                    "GoDaddy customer ID (optional, leave blank to clear)"
+                    "GoDaddy customer ID (optional, press Enter to keep current)"
                     f" [{current_customer_id}]: "
                 ).strip()
-                return entered
+                return entered if entered else current_customer_id
             return input("GoDaddy customer ID (optional): ").strip()
         if existing is not None:
             return existing.get_customer_id()
@@ -337,9 +337,21 @@ class Command(BaseCommand):
         except requests.RequestException as exc:
             raise CommandError(f"GoDaddy credential verify failed: {exc}") from exc
         if response.status_code >= 400:
+            error_msg = response.text
+            try:
+                payload = response.json()
+            except ValueError:
+                payload = None
+            if isinstance(payload, dict):
+                message = payload.get("message")
+                code = payload.get("code")
+                if isinstance(message, str) and message.strip():
+                    error_msg = message.strip()
+                elif isinstance(code, str) and code.strip():
+                    error_msg = code.strip()
             raise CommandError(
                 "GoDaddy credential verify failed: "
-                f"{response.status_code} {response.text}"
+                f"{response.status_code} {error_msg[:200]}"
             )
         target = domain or "<domain-list>"
         self.stdout.write(
