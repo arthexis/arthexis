@@ -53,6 +53,7 @@ class Command(ConfigureMixin, BaseCommand):
             ("ip6", False),
             ("remove", False),
             ("no_reload", False),
+            ("static_ip", True),
             ("sites_config", True),
             ("sites_destination", True),
         )
