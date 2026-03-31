@@ -393,9 +393,13 @@ files = [
   "apps/repos/services/github.py",
   "apps/repos/release_management.py",
   "apps/repos/views/webhooks.py",
+  "apps/core/modeling",
   "apps/core/services/health.py",
   "apps/core/services/health_checks.py",
-  "apps/core/modeling",
+  "apps/core/system/ui/formatting.py",
+  "apps/core/system/ui/network_probe.py",
+  "apps/core/system/ui/services.py",
+  "apps/core/system/ui/uptime.py",
   "apps/core/system_ui.py",
 ]
 exclude = [
