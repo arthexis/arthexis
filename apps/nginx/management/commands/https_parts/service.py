@@ -285,14 +285,20 @@ class HttpsProvisioningService:
             protocol="https", enabled=True
         )
         config.refresh_from_db(fields=["protocol", "enabled"])
-        if use_godaddy and static_ip:
-            self._upsert_godaddy_site_record(
-                domain=domain,
-                static_ip=static_ip,
-                key=godaddy_credential_key,
-            )
         self._ensure_managed_site(domain, require_https=True)
         _apply_config(self, config, reload=reload)
+        if use_godaddy and static_ip:
+            certbot_certificate = getattr(certificate, "_specific_certificate", None)
+            selected_credential = getattr(certbot_certificate, "dns_credential", None)
+            transaction.on_commit(
+                lambda: self._upsert_godaddy_site_record(
+                    domain=domain,
+                    static_ip=static_ip,
+                    key=godaddy_credential_key,
+                    credential=selected_credential,
+                    sandbox_override=sandbox_override,
+                )
+            )
         return certificate
 
     def _parse_public_ip(self, value: str) -> str | None:
@@ -314,10 +320,13 @@ class HttpsProvisioningService:
         domain: str,
         static_ip: str,
         key: str | None,
+        credential: DNSProviderCredential | None = None,
+        sandbox_override: bool | None = None,
     ) -> None:
         """Publish an A/AAAA record for *domain* through the selected GoDaddy credential."""
 
-        credential = _resolve_godaddy_credential(key=key)
+        if credential is None:
+            credential = _resolve_godaddy_credential(key=key)
         if credential is None:
             if key:
                 raise CommandError(
@@ -333,7 +342,12 @@ class HttpsProvisioningService:
         zone, host = self._zone_and_name(domain=domain, credential=credential)
         record_type = "AAAA" if ipaddress.ip_address(static_ip).version == 6 else "A"
         payload = [{"data": static_ip, "ttl": 600}]
-        base_url = credential.get_base_url()
+        if sandbox_override is True:
+            base_url = "https://api.ote-godaddy.com"
+        elif sandbox_override is False:
+            base_url = "https://api.godaddy.com"
+        else:
+            base_url = credential.get_base_url()
         headers = {
             "Authorization": credential.get_auth_header(),
             "Accept": "application/json",
@@ -368,8 +382,8 @@ class HttpsProvisioningService:
     ) -> tuple[str, str]:
         """Resolve GoDaddy zone + host tuple for a fully qualified domain."""
 
-        hostname = domain.rstrip(".")
-        default_domain = credential.get_default_domain().rstrip(".")
+        hostname = domain.rstrip(".").lower()
+        default_domain = credential.get_default_domain().rstrip(".").lower()
         if default_domain:
             if hostname == default_domain:
                 return default_domain, ""
@@ -380,12 +394,9 @@ class HttpsProvisioningService:
                 f"Domain '{hostname}' does not match credential default domain '{default_domain}'."
             )
 
-        labels = [segment for segment in hostname.split(".") if segment]
-        if len(labels) < 2:
-            raise CommandError(f"Unable to derive GoDaddy zone from domain '{hostname}'.")
-        zone = ".".join(labels[-2:])
-        host = ".".join(labels[:-2])
-        return zone, host
+        raise CommandError(
+            "GoDaddy DNS credential default domain is required to publish a static DNS record safely."
+        )
 
     def _disable_https(self, domain: str, *, reload: bool) -> None:
         """Disable HTTPS on a site and apply the HTTP configuration."""
