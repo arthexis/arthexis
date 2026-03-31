@@ -14,6 +14,8 @@ from pathlib import Path
 
 
 HTTP01_WEBROOT_PATH = Path("/var/www/arthexis")
+LETSENCRYPT_LIVE_PATH = Path("/etc/letsencrypt/live")
+LETSENCRYPT_RENEWAL_PATH = Path("/etc/letsencrypt/renewal")
 
 
 class CertbotError(RuntimeError):
@@ -146,6 +148,14 @@ def request_certbot_certificate(
         raise CertbotError(str(exc)) from exc
     except RuntimeError as exc:  # pragma: no cover - thin wrapper
         error_message = str(exc)
+        if _is_live_directory_conflict_error(error_message, domain) and _repair_stale_live_directory(
+            domain=domain,
+            sudo=sudo,
+        ):
+            try:
+                return _run_command(command, env=env)
+            except RuntimeError as retry_exc:
+                error_message = str(retry_exc)
         if _is_missing_certbot_error(error_message):
             raise CertbotError(_build_missing_certbot_guidance(error_message)) from exc
         if _is_challenge_failure_error(error_message):
@@ -156,7 +166,39 @@ def request_certbot_certificate(
                     challenge_type=challenge_type,
                 )
             ) from exc
-        raise CertbotError(str(exc)) from exc
+        raise CertbotError(error_message) from exc
+
+
+def _is_live_directory_conflict_error(message: str, domain: str) -> bool:
+    """Return True when certbot reports an existing live-directory conflict."""
+
+    return f"live directory exists for {domain}".lower() in message.lower()
+
+
+def _repair_stale_live_directory(*, domain: str, sudo: str) -> bool:
+    """Delete stale certbot live directories that have no renewal config."""
+
+    live_directory = LETSENCRYPT_LIVE_PATH / domain
+    renewal_config = LETSENCRYPT_RENEWAL_PATH / f"{domain}.conf"
+
+    if not _path_exists(live_directory, sudo=sudo):
+        return False
+    if _path_exists(renewal_config, sudo=sudo):
+        return False
+
+    _run_command(_with_sudo(["rm", "-rf", str(live_directory)], sudo))
+    return True
+
+
+def _path_exists(path: Path, *, sudo: str) -> bool:
+    """Return True when *path* exists, using sudo when configured."""
+
+    command = _with_sudo(["test", "-e", str(path)], sudo)
+    try:
+        _run_command(command)
+    except RuntimeError:
+        return False
+    return True
 
 
 def _is_missing_certbot_error(message: str) -> bool:

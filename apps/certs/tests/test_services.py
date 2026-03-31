@@ -293,6 +293,76 @@ def test_request_certbot_certificate_challenge_failure_raises_specific_exception
     assert str(tmp_path / "acme-webroot") in message
     assert "/var/log/letsencrypt/letsencrypt.log" in message
 
+
+def test_request_certbot_certificate_repairs_stale_live_directory_and_retries(
+    monkeypatch, tmp_path
+):
+    """Live directory conflicts without renewal config should trigger one cleanup retry."""
+
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+        calls.append(command)
+        if command[:2] == ["test", "-e"] and command[-1] == "/etc/letsencrypt/live/example.com":
+            return ""
+        if command[:2] == ["test", "-e"] and command[-1] == "/etc/letsencrypt/renewal/example.com.conf":
+            raise RuntimeError("missing")
+        if command[:2] == ["rm", "-rf"]:
+            return ""
+        if command[0] == "certbot" and len([c for c in calls if c and c[0] == "certbot"]) == 1:
+            raise RuntimeError("live directory exists for example.com")
+        return "ok"
+
+    monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
+
+    result = services.request_certbot_certificate(
+        domain="example.com",
+        email="ops@example.com",
+        certificate_path=tmp_path / "fullchain.pem",
+        certificate_key_path=tmp_path / "privkey.pem",
+        challenge_type="nginx",
+        sudo="",
+    )
+
+    certbot_calls = [command for command in calls if command and command[0] == "certbot"]
+    assert result == "ok"
+    assert len(certbot_calls) == 2
+    assert ["rm", "-rf", "/etc/letsencrypt/live/example.com"] in calls
+
+
+def test_request_certbot_certificate_live_directory_conflict_with_renewal_config_fails(
+    monkeypatch, tmp_path
+):
+    """Live directory conflicts with renewal config must not delete existing certbot state."""
+
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
+        calls.append(command)
+        if command[:2] == ["test", "-e"] and command[-1] == "/etc/letsencrypt/live/example.com":
+            return ""
+        if command[:2] == ["test", "-e"] and command[-1] == "/etc/letsencrypt/renewal/example.com.conf":
+            return ""
+        if command[0] == "certbot":
+            raise RuntimeError("live directory exists for example.com")
+        raise AssertionError(f"Unexpected command: {command}")
+
+    monkeypatch.setattr(services, "_run_command", fake_run)
+    monkeypatch.setattr(services, "HTTP01_WEBROOT_PATH", tmp_path / "acme-webroot")
+
+    with pytest.raises(services.CertbotError, match="live directory exists for example.com"):
+        services.request_certbot_certificate(
+            domain="example.com",
+            email="ops@example.com",
+            certificate_path=tmp_path / "fullchain.pem",
+            certificate_key_path=tmp_path / "privkey.pem",
+            challenge_type="nginx",
+            sudo="",
+        )
+
+    assert ["rm", "-rf", "/etc/letsencrypt/live/example.com"] not in calls
+
 def test_verify_certificate_handles_permission_error():
     """Permission errors while probing certificate paths should not crash verification."""
 
