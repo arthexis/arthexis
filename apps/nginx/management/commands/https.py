@@ -128,6 +128,14 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--static-ip",
+            metavar="PUBLIC_IP",
+            help=(
+                "Optional public IP to publish to GoDaddy DNS when using --godaddy. "
+                "Publishes A/AAAA for the requested domain after HTTPS enable succeeds."
+            ),
+        )
+        parser.add_argument(
             "--warn-days",
             type=int,
             default=14,
