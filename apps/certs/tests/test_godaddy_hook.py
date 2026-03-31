@@ -428,3 +428,22 @@ def test_wait_for_public_recursive_txt_propagation_ignores_failed_resolvers(monk
         expected_value="expected-value",
         timeout_seconds=1,
     )
+
+
+def test_wait_for_public_recursive_txt_propagation_times_out_when_all_resolvers_fail(
+    monkeypatch,
+):
+    monkeypatch.setattr(MODULE.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(MODULE.time, "time", iter([0, 1]).__next__)
+    monkeypatch.setattr(
+        MODULE,
+        "_query_public_recursive_txt_values",
+        lambda *_args, **_kwargs: ({}, set(MODULE.PUBLIC_DNS_RESOLVERS)),
+    )
+
+    with pytest.raises(TimeoutError, match="All configured public resolvers failed"):
+        MODULE._wait_for_public_recursive_txt_propagation(
+            challenge_domain="_acme-challenge.example.com",
+            expected_value="expected-value",
+            timeout_seconds=1,
+        )

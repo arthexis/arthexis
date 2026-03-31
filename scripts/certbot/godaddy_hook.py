@@ -281,10 +281,27 @@ def _wait_for_public_recursive_txt_propagation(
     deadline = time.time() + max(0, timeout_seconds)
     while True:
         observed_values, failed_resolvers = _query_public_recursive_txt_values(challenge_domain)
+        successful_resolvers = [
+            resolver_ip
+            for resolver_ip in observed_values
+            if resolver_ip not in failed_resolvers
+        ]
+        if not successful_resolvers:
+            if time.time() >= deadline:
+                raise TimeoutError(
+                    "DNS propagation timeout waiting for public recursive resolver caches. "
+                    f"All configured public resolvers failed for {challenge_domain}."
+                )
+            _emit_log(
+                f"All public recursive resolvers failed for {challenge_domain}; retrying."
+            )
+            time.sleep(DNS_POLL_INTERVAL_SECONDS)
+            continue
+
         missing_resolvers = sorted(
             resolver_ip
-            for resolver_ip, values in observed_values.items()
-            if resolver_ip not in failed_resolvers and expected_value not in values
+            for resolver_ip in successful_resolvers
+            if expected_value not in observed_values.get(resolver_ip, set())
         )
         observed_summary = {
             resolver_ip: sorted(values) if values else ["<none>"]
@@ -331,7 +348,8 @@ def _upsert_txt_record() -> None:
     existing_values = _fetch_existing_txt_values(zone, host)
     if existing_values:
         _emit_log(
-            f"Replacing existing TXT records for {challenge_domain}: {existing_values}"
+            "Merging ACME TXT value into existing TXT records for "
+            f"{challenge_domain}: {existing_values}"
         )
 
     merged_values = sorted({*existing_values, validation})
