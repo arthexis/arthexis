@@ -182,9 +182,6 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
     relay_by_node: dict[int, list[NodeRelayConfig]] = {}
     for relay in relay_qs:
         relay_by_node.setdefault(relay.node_id, []).append(relay)
-    for relay_list in relay_by_node.values():
-        relay_list.sort(key=lambda item: (item.priority, item.id))
-
     ads_by_node: dict[int, list[dict]] = {}
     for advertisement in ads_qs:
         ads_by_node.setdefault(advertisement.node_id, []).append(
@@ -205,7 +202,8 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
                 "path": "direct",
             }
         ]
-        for index, candidate in enumerate(endpoint.candidate_endpoints):
+        raw_candidates = endpoint.candidate_endpoints if isinstance(endpoint.candidate_endpoints, list) else []
+        for index, candidate in enumerate(raw_candidates):
             if not isinstance(candidate, str) or not candidate.strip():
                 continue
             direct_candidates.append(
@@ -227,10 +225,8 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
                     "config": relay.config,
                 }
             )
-        all_candidates = sorted(
-            direct_candidates + relay_candidates,
-            key=lambda candidate: (candidate["priority"], candidate["endpoint"]),
-        )
+        relay_candidates.sort(key=lambda candidate: (candidate["priority"], candidate["endpoint"]))
+        all_candidates = direct_candidates + relay_candidates
         row = {
             "node_id": endpoint.node_id,
             "endpoint": endpoint.endpoint,
