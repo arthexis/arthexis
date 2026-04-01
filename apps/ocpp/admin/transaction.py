@@ -42,6 +42,7 @@ class TransactionAdmin(EntityModelAdmin):
         "stop_time",
         "kw",
         "recent_events",
+        "drilldown_links",
     )
     readonly_fields = ("kw", "received_start_time", "received_stop_time")
     list_filter = ("charger", "account")
@@ -65,6 +66,22 @@ class TransactionAdmin(EntityModelAdmin):
         return format_html('<a href="{}?charger__id__exact={}">{} since session start</a>', url, obj.charger_id, total)
 
     recent_events.short_description = "Recent events"
+
+    def drilldown_links(self, obj):
+        if not obj.charger_id:
+            return "-"
+        security_url = reverse("admin:ocpp_securityevent_changelist")
+        ops_url = reverse("admin:ocpp_controloperationevent_changelist")
+        return format_html(
+            '<a href="{}?charger__id__exact={}">security</a> · '
+            '<a href="{}?charger__id__exact={}">control ops</a>',
+            security_url,
+            obj.charger_id,
+            ops_url,
+            obj.charger_id,
+        )
+
+    drilldown_links.short_description = "Drill-down"
     def get_urls(self):
         urls = super().get_urls()
         custom = [

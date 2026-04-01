@@ -76,4 +76,91 @@
     </div>
   </div>
 </div>
+{% if ops_health_overview %}
+<fieldset class="module aligned" style="margin-top: 1.5rem;">
+  <h2>{% trans "Operations & health overview" %}</h2>
+  <div class="form-row">
+    <div>
+      <strong>{% trans "Credential posture" %}:</strong> {{ ops_credential_status }}
+    </div>
+  </div>
+  <div class="form-row">
+    <div>
+      <strong>{% trans "Active session" %}:</strong>
+      {% if ops_health_overview.active_session %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}
+      &nbsp;|&nbsp;
+      <strong>{% trans "Availability" %}:</strong> {{ ops_health_overview.availability_state }}
+      &nbsp;|&nbsp;
+      <strong>{% trans "Last online" %}:</strong> {{ ops_health_overview.last_online_at|default:"-" }}
+    </div>
+  </div>
+  <div class="form-row">
+    <div>
+      <strong>{% trans "Last 24h" %}:</strong>
+      {% trans "Rejected sessions" %}: {{ ops_health_overview.rejected_sessions_24h }},
+      {% trans "Failed control ops" %}: {{ ops_health_overview.failed_ops_24h }},
+      {% trans "Security events" %}: {{ ops_health_overview.security_events_24h }}
+    </div>
+  </div>
+</fieldset>
+
+<fieldset class="module aligned" style="margin-top: 1rem;">
+  <h2>{% trans "Recent critical control operations" %}</h2>
+  {% if recent_control_operations_for_admin %}
+  <table>
+    <thead>
+      <tr>
+        <th>{% trans "When" %}</th>
+        <th>{% trans "Action" %}</th>
+        <th>{% trans "Status" %}</th>
+        <th>{% trans "Actor" %}</th>
+        <th>{% trans "Detail" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for event in recent_control_operations_for_admin %}
+      <tr>
+        <td>{{ event.created_at }}</td>
+        <td>{{ event.action }}</td>
+        <td>{{ event.get_status_display }}</td>
+        <td>{{ event.actor|default:"-" }}</td>
+        <td>{{ event.detail|default:"-" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>{% trans "No control operations recorded yet." %}</p>
+  {% endif %}
+</fieldset>
+
+<fieldset class="module aligned" style="margin-top: 1rem;">
+  <h2>{% trans "Recent sessions and failures" %}</h2>
+  <h3>{% trans "Sessions" %}</h3>
+  {% if recent_transactions_for_admin %}
+  <ul>
+    {% for session in recent_transactions_for_admin %}
+    <li>
+      {{ session.start_time }} →
+      {% if session.stop_time %}{{ session.stop_time }}{% else %}{% trans "open" %}{% endif %}
+      ({{ session.get_authorization_status_display }})
+      {% if session.authorization_reason %}- {{ session.authorization_reason }}{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>{% trans "No sessions recorded yet." %}</p>
+  {% endif %}
+  <h3>{% trans "Security and event failures" %}</h3>
+  {% if recent_security_events_for_admin %}
+  <ul>
+    {% for sec in recent_security_events_for_admin %}
+    <li>{{ sec.event_timestamp }} — {{ sec.event_type }}{% if sec.trigger %} ({{ sec.trigger }}){% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>{% trans "No security/failure events recorded yet." %}</p>
+  {% endif %}
+</fieldset>
+{% endif %}
 {% endblock %}

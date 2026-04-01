@@ -1,5 +1,6 @@
 from datetime import datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from urllib.parse import urlencode
 
 from django.contrib import admin, messages
 from django.contrib.admin.utils import quote
@@ -32,6 +33,7 @@ class ChargerAdmin(
     OwnableAdminMixin,
     EntityModelAdmin,
 ):
+    change_form_template = "admin/ocpp/charger/change_form.html"
     _REMOTE_DATETIME_FIELDS = {
         "availability_state_updated_at",
         "availability_requested_at",
@@ -195,9 +197,11 @@ class ChargerAdmin(
         "display_name_with_fallback",
         "charging_station_display_name",
         "connector_number",
+        "connection_health",
         "local_indicator",
         "authorization_policy_display",
         "credentials_health",
+        "action_history_link",
         "public_display",
         "forwarding_ready",
         "last_heartbeat_display",
@@ -240,7 +244,31 @@ class ChargerAdmin(
             indicators.append("Remote enabled")
         if obj.node_origin_id and not obj.is_local:
             indicators.append("Remote origin")
+        if obj.export_transactions:
+            indicators.append("Forward export")
         return ", ".join(indicators) if indicators else "Default"
+
+    @admin.display(description="Connection/session")
+    def connection_health(self, obj):
+        bits = []
+        if self._has_active_session(obj):
+            bits.append("Active session")
+        else:
+            bits.append("No active session")
+        state = self._charger_availability_state(obj)
+        if state:
+            bits.append(f"Avail: {state}")
+        if obj.last_online_at:
+            bits.append("Online tracked")
+        else:
+            bits.append("No online signal")
+        return " · ".join(bits)
+
+    @admin.display(description="Ops history")
+    def action_history_link(self, obj):
+        base_url = reverse("admin:ocpp_controloperationevent_changelist")
+        query = urlencode({"charger__id__exact": obj.pk})
+        return format_html('<a href="{}?{}">view</a>', base_url, query)
 
     @admin.display(description="Recent issues")
     def recent_failures_link(self, obj):
@@ -264,6 +292,72 @@ class ChargerAdmin(
             return "-"
         url = reverse("admin:ocpp_controloperationevent_changelist")
         return format_html('<a href="{}?charger__id__exact={}">{} in last 48h</a>', url, obj.pk, total)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        charger = self.get_object(request, object_id)
+        if charger:
+            extra_context.update(self._operations_health_context(charger))
+        return super().change_view(
+            request,
+            object_id,
+            form_url=form_url,
+            extra_context=extra_context,
+        )
+
+    def _operations_health_context(self, charger: Charger):
+        recent_transactions = list(
+            Transaction.objects.filter(charger=charger)
+            .order_by("-start_time")[:8]
+            .only(
+                "pk",
+                "start_time",
+                "stop_time",
+                "authorization_status",
+                "authorization_reason",
+            )
+        )
+        recent_security_events = list(
+            SecurityEvent.objects.filter(charger=charger)
+            .order_by("-event_timestamp")[:8]
+            .only("pk", "event_type", "event_timestamp", "trigger")
+        )
+        recent_control_operations = list(
+            ControlOperationEvent.objects.filter(charger=charger)
+            .select_related("actor")
+            .order_by("-created_at")[:10]
+            .only("pk", "created_at", "action", "status", "detail", "actor__username")
+        )
+        now = timezone.now()
+        lookback_start = now - timedelta(hours=24)
+        rejected_count = Transaction.objects.filter(
+            charger=charger,
+            authorization_status=Transaction.AuthorizationStatus.REJECTED,
+            start_time__gte=lookback_start,
+        ).count()
+        failed_ops_count = ControlOperationEvent.objects.filter(
+            charger=charger,
+            status=ControlOperationEvent.Status.FAILED,
+            created_at__gte=lookback_start,
+        ).count()
+        security_count = SecurityEvent.objects.filter(
+            charger=charger,
+            event_timestamp__gte=lookback_start,
+        ).count()
+        return {
+            "ops_health_overview": {
+                "active_session": self._has_active_session(charger),
+                "availability_state": self._charger_availability_state(charger) or "-",
+                "last_online_at": charger.last_online_at,
+                "rejected_sessions_24h": rejected_count,
+                "failed_ops_24h": failed_ops_count,
+                "security_events_24h": security_count,
+            },
+            "ops_credential_status": self.credentials_health(charger),
+            "recent_transactions_for_admin": recent_transactions,
+            "recent_security_events_for_admin": recent_security_events,
+            "recent_control_operations_for_admin": recent_control_operations,
+        }
 
     def get_queryset(self, request):
         """Hide station root rows on the changelist while keeping detail URLs reachable."""
