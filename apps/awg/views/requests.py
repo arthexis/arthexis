@@ -8,6 +8,7 @@ from collections.abc import MutableMapping
 from dataclasses import dataclass
 from typing import Iterable, Literal, Optional, Union
 
+from django.core.exceptions import FieldDoesNotExist
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.translation import gettext as _, gettext_lazy as _lazy
@@ -251,6 +252,10 @@ def find_conduit(awg: Union[str, int], cables: int, *, conduit: str = "emt"):
 
     awg = AWG(awg)
     field = _fill_field(awg)
+    try:
+        ConduitFill._meta.get_field(field)
+    except FieldDoesNotExist:
+        return {"size_inch": "n/a"}
     qs = (
         ConduitFill.objects.filter(conduit__iexact=conduit)
         .exclude(**{field: None})
@@ -368,8 +373,8 @@ def _parse_awg_parameters(
 def _validate_awg_parameters(params: _AwgParameters) -> None:
     """Ensure ``params`` satisfies business constraints for the calculator."""
 
-    assert params.amps >= 10, _(
-        "Minimum load for this calculator is 15 Amps.  Yours: amps=%(amps)s."
+    assert params.amps >= 1, _(
+        "Minimum load for this calculator is 1 Amp. Yours: amps=%(amps)s."
     ) % {"amps": params.amps}
     assert (
         (params.amps <= 546) if params.material == "cu" else (params.amps <= 430)
@@ -377,8 +382,8 @@ def _validate_awg_parameters(params: _AwgParameters) -> None:
         "Max. load allowed is 546 A (cu) or 430 A (al). Yours: amps=%(amps)s material=%(material)s"
     ) % {"amps": params.amps, "material": params.material}
     assert params.meters >= 1, _("Consider at least 1 meter of cable.")
-    assert 110 <= params.volts <= 460, _(
-        "Volt range supported must be between 110-460. Yours: volts=%(volts)s"
+    assert 12 <= params.volts <= 460, _(
+        "Volt range supported must be between 12-460. Yours: volts=%(volts)s"
     ) % {"volts": params.volts}
     assert params.material in ("cu", "al"), _(
         "Material must be 'cu' (copper) or 'al' (aluminum)."

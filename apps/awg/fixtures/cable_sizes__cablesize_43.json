@@ -1,0 +1,20 @@
+[
+  {
+    "model": "awg.cablesize",
+    "fields": {
+      "awg_size": "16",
+      "material": "cu",
+      "dia_in": 0.0508,
+      "dia_mm": 1.291,
+      "area_kcmil": 2.58,
+      "area_mm2": 1.31,
+      "k_ohm_km": 13.174,
+      "k_ohm_kft": 4.0155,
+      "amps_60c": 10,
+      "amps_75c": 15,
+      "amps_90c": 18,
+      "line_num": 1,
+      "is_seed_data": true
+    }
+  }
+]
