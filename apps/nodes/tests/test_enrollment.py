@@ -11,7 +11,7 @@ from apps.nodes.admin.actions import (
     revoke_mesh_enrollment,
 )
 from apps.nodes.models import Node, NodeEnrollment, NodeEnrollmentEvent
-from apps.nodes.services.enrollment import issue_enrollment_token
+from apps.nodes.services.enrollment import approve_enrollment, issue_enrollment_token, submit_public_key
 from apps.nodes.views.registration.handlers import submit_enrollment_public_key
 
 
@@ -106,3 +106,44 @@ def test_reissue_enrollment_token_revokes_prior_active_tokens():
     assert previous_enrollment.status == NodeEnrollment.Status.REVOKED
     assert previous_enrollment.revoked_at is not None
     assert latest_enrollment.status == NodeEnrollment.Status.ISSUED
+
+
+@pytest.mark.django_db
+def test_submit_enrollment_public_key_rejects_missing_site_for_scoped_token():
+    site = Site.objects.create(domain="mesh-2.example.com", name="Mesh 2")
+    node = Node.objects.create(
+        hostname="node-d",
+        mac_address="aa:bb:cc:dd:ee:69",
+        address="198.51.100.69",
+        port=8888,
+        public_endpoint="node-d",
+        base_site=site,
+    )
+    _, token = issue_enrollment_token(node=node, site=site)
+
+    enrollment, error = submit_public_key(
+        node=node,
+        token=token,
+        public_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCsite",
+        site=None,
+    )
+
+    assert enrollment is None
+    assert error == "Enrollment token does not match target site"
+
+
+@pytest.mark.django_db
+def test_approve_enrollment_does_not_activate_issued_without_public_key():
+    node = Node.objects.create(
+        hostname="node-e",
+        mac_address="aa:bb:cc:dd:ee:70",
+        address="198.51.100.70",
+        port=8888,
+        public_endpoint="node-e",
+    )
+    enrollment, _ = issue_enrollment_token(node=node)
+
+    approve_enrollment(node=node)
+
+    enrollment.refresh_from_db()
+    assert enrollment.status == NodeEnrollment.Status.ISSUED

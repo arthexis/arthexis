@@ -19,6 +19,7 @@ def _record_event(*, node: Node, enrollment: NodeEnrollment | None, action: str,
     )
 
 
+@transaction.atomic
 def issue_enrollment_token(*, node: Node, actor=None, site: Site | None = None, reissue: bool = False):
     current_state = node.mesh_enrollment_state
     node.mesh_enrollment_state = Node.MeshEnrollmentState.PENDING
@@ -68,9 +69,10 @@ def submit_public_key(*, node: Node, token: str, public_key: str, site: Site | N
             return None, "Enrollment token expired"
         if enrollment.used_at is not None:
             return None, "Enrollment token already used"
-        if enrollment.site_id and site and enrollment.site_id != site.id:
+        if enrollment.site_id and (not site or enrollment.site_id != site.id):
             return None, "Enrollment token does not match target site"
 
+        current_state = node.mesh_enrollment_state
         old_key = node.public_key or ""
         node.public_key = public_key
         node.mesh_enrollment_state = Node.MeshEnrollmentState.PENDING
@@ -83,19 +85,20 @@ def submit_public_key(*, node: Node, token: str, public_key: str, site: Site | N
         node=node,
         enrollment=enrollment,
         action=(NodeEnrollmentEvent.Action.KEY_ROTATED if old_key and old_key != public_key else NodeEnrollmentEvent.Action.PUBLIC_KEY_SUBMITTED),
-        from_state=Node.MeshEnrollmentState.UNENROLLED if not old_key else Node.MeshEnrollmentState.ENROLLED,
+        from_state=current_state,
         to_state=node.mesh_enrollment_state,
         details={"site_id": site.id if site else enrollment.site_id},
     )
     return enrollment, ""
 
 
+@transaction.atomic
 def approve_enrollment(*, node: Node, actor=None):
     current_state = node.mesh_enrollment_state
     node.mesh_enrollment_state = Node.MeshEnrollmentState.ENROLLED
     node.save(update_fields=["mesh_enrollment_state"])
 
-    enrollment = node.enrollments.exclude(status=NodeEnrollment.Status.REVOKED).order_by("-created_at").first()
+    enrollment = node.enrollments.filter(status=NodeEnrollment.Status.PUBLIC_KEY_SUBMITTED).order_by("-created_at").first()
     if enrollment:
         enrollment.status = NodeEnrollment.Status.ACTIVE
         enrollment.save(update_fields=["status", "updated_at"])
@@ -109,6 +112,7 @@ def approve_enrollment(*, node: Node, actor=None):
     )
 
 
+@transaction.atomic
 def revoke_enrollment(*, node: Node, actor=None, reason: str = ""):
     current_state = node.mesh_enrollment_state
     node.mesh_enrollment_state = Node.MeshEnrollmentState.UNENROLLED
