@@ -7,6 +7,13 @@ from django.utils import timezone
 from apps.nodes.models import Node, NodeEnrollment, NodeEnrollmentEvent
 
 
+def _normalize_scope(scope: str) -> str:
+    normalized_scope = scope.strip()
+    if normalized_scope not in NodeEnrollment.ALLOWED_SCOPES:
+        raise ValueError(f"Unsupported enrollment scope: {scope!r}")
+    return normalized_scope
+
+
 def _record_event(*, node: Node, enrollment: NodeEnrollment | None, action: str, actor=None, from_state: str = "", to_state: str = "", details: dict | None = None):
     NodeEnrollmentEvent.objects.create(
         node=node,
@@ -20,7 +27,15 @@ def _record_event(*, node: Node, enrollment: NodeEnrollment | None, action: str,
 
 
 @transaction.atomic
-def issue_enrollment_token(*, node: Node, actor=None, site: Site | None = None, reissue: bool = False):
+def issue_enrollment_token(
+    *,
+    node: Node,
+    actor=None,
+    site: Site | None = None,
+    reissue: bool = False,
+    scope: str = "mesh:read",
+):
+    normalized_scope = _normalize_scope(scope)
     current_state = node.mesh_enrollment_state
     node.mesh_enrollment_state = Node.MeshEnrollmentState.PENDING
     node.save(update_fields=["mesh_enrollment_state"])
@@ -37,7 +52,12 @@ def issue_enrollment_token(*, node: Node, actor=None, site: Site | None = None, 
             updated_at=now,
         )
 
-    enrollment, token = NodeEnrollment.issue(node=node, site=site or node.base_site, issued_by=actor)
+    enrollment, token = NodeEnrollment.issue(
+        node=node,
+        site=site or node.base_site,
+        issued_by=actor,
+        scope=normalized_scope,
+    )
     _record_event(
         node=node,
         enrollment=enrollment,
@@ -45,7 +65,7 @@ def issue_enrollment_token(*, node: Node, actor=None, site: Site | None = None, 
         actor=actor,
         from_state=current_state,
         to_state=node.mesh_enrollment_state,
-        details={"site_id": enrollment.site_id, "token_hint": enrollment.token_hint},
+        details={"site_id": enrollment.site_id, "token_hint": enrollment.token_hint, "scope": enrollment.scope},
     )
     return enrollment, token
 

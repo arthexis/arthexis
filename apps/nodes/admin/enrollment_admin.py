@@ -12,20 +12,25 @@ class NodeEnrollmentAdmin(admin.ModelAdmin):
         "token_hint",
         "expires_at",
         "used_at",
+        "last_authenticated_at",
+        "last_auth_error_code",
         "revoked_at",
         "created_at",
     )
-    list_filter = ("status", "site")
-    search_fields = ("node__hostname", "node__mac_address", "token_hint")
+    list_filter = ("status", "scope", "site")
+    search_fields = ("node__hostname", "node__mac_address", "token_hint", "scope")
     readonly_fields = (
         "node",
         "site",
         "issued_by",
+        "scope",
         "token_hash",
         "token_hint",
         "status",
         "expires_at",
         "used_at",
+        "last_authenticated_at",
+        "last_auth_error_code",
         "revoked_at",
         "created_at",
         "updated_at",

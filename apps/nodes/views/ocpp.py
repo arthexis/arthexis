@@ -14,6 +14,9 @@ from apps.ocpp import store
 from apps.ocpp.models import Charger
 from apps.ocpp.network import _parse_remote_datetime
 
+from apps.netmesh.api.auth import authenticate_enrollment
+from utils.api_errors import json_api_error
+
 from ..models import Node
 from .network import _clean_requester_hint, _load_signed_node
 
@@ -600,34 +603,55 @@ def network_charger_action(request):
     """Execute remote admin actions on behalf of trusted nodes."""
 
     if request.method != "POST":
-        return JsonResponse({"detail": "POST required"}, status=405)
+        return json_api_error(status=405, code="method_not_allowed", message="POST required")
 
     try:
         body = json.loads(request.body.decode() or "{}")
     except json.JSONDecodeError:
-        return JsonResponse({"detail": "invalid json"}, status=400)
+        return json_api_error(status=400, code="invalid_json", message="invalid json")
 
+    authorization = request.META.get("HTTP_AUTHORIZATION", "")
     requester = body.get("requester")
-    if not requester:
-        return JsonResponse({"detail": "requester required"}, status=400)
-
-    requester_mac = _clean_requester_hint(body.get("requester_mac"))
-    requester_public_key = _clean_requester_hint(
-        body.get("requester_public_key"), strip=False
-    )
-
-    node, error_response = _load_signed_node(
+    token_principal, token_error = authenticate_enrollment(
         request,
-        requester,
-        mac_address=requester_mac,
-        public_key=requester_public_key,
+        required_scope="ocpp:control",
     )
-    if error_response is not None:
-        return error_response
+
+    node = None
+    if token_principal is not None:
+        node = token_principal.node
+        requester = requester or str(node.uuid)
+    else:
+        if not requester:
+            if token_error is not None and authorization.startswith("Bearer "):
+                status, code, message = token_error
+                return json_api_error(status=status, code=code, message=message)
+            return json_api_error(
+                status=400,
+                code="requester_required",
+                message="requester required",
+            )
+
+        requester_mac = _clean_requester_hint(body.get("requester_mac"))
+        requester_public_key = _clean_requester_hint(
+            body.get("requester_public_key"), strip=False
+        )
+
+        node, error_response = _load_signed_node(
+            request,
+            requester,
+            mac_address=requester_mac,
+            public_key=requester_public_key,
+        )
+        if error_response is not None:
+            if token_error is not None and authorization.startswith("Bearer "):
+                status, code, message = token_error
+                return json_api_error(status=status, code=code, message=message)
+            return error_response
 
     serial = Charger.normalize_serial(body.get("charger_id"))
     if not serial or Charger.is_placeholder_serial(serial):
-        return JsonResponse({"detail": "invalid charger"}, status=400)
+        return json_api_error(status=400, code="charger_invalid", message="invalid charger")
 
     connector = body.get("connector_id")
     if connector in ("", None):
@@ -638,32 +662,30 @@ def network_charger_action(request):
         try:
             connector_value = int(str(connector))
         except (TypeError, ValueError):
-            return JsonResponse({"detail": "invalid connector"}, status=400)
+            return json_api_error(status=400, code="connector_invalid", message="invalid connector")
 
     charger = Charger.objects.filter(
         charger_id=serial, connector_id=connector_value
     ).first()
     if not charger:
-        return JsonResponse({"detail": "charger not found"}, status=404)
+        return json_api_error(status=404, code="charger_not_found", message="charger not found")
 
     if not charger.allow_remote:
-        return JsonResponse({"detail": "remote actions disabled"}, status=403)
+        return json_api_error(status=403, code="remote_actions_disabled", message="remote actions disabled")
 
     if not _require_local_origin(charger):
-        return JsonResponse({"detail": "charger is not managed by this node"}, status=403)
+        return json_api_error(status=403, code="charger_not_local", message="charger is not managed by this node")
 
     authorized_node_ids = {
         pk for pk in (charger.manager_node_id, charger.node_origin_id) if pk
     }
     if authorized_node_ids and node and node.pk not in authorized_node_ids:
-        return JsonResponse(
-            {"detail": "requester does not manage this charger"}, status=403
-        )
+        return json_api_error(status=403, code="requester_not_manager", message="requester does not manage this charger")
 
     action = body.get("action")
     handler = REMOTE_ACTIONS.get(action or "")
     if handler is None:
-        return JsonResponse({"detail": "unsupported action"}, status=400)
+        return json_api_error(status=400, code="action_unsupported", message="unsupported action")
 
     if action == "request-diagnostics":
         success, message, updates = handler(charger, body, request=request)
