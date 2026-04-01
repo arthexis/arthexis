@@ -79,3 +79,29 @@ def test_debug_toolbar_bootstrap_skips_install_when_module_exists() -> None:
 
     assert result.returncode == 0
     assert "pip-called" not in result.stdout
+
+
+def test_debug_toolbar_bootstrap_does_not_fail_when_install_errors() -> None:
+    """Ensure pip install failures only emit a warning and keep startup alive."""
+
+    result = _run_shell(
+        """
+        set -e
+        source scripts/helpers/debug_toolbar.sh
+
+        python() {
+            if [ "$1" = "-m" ] && [ "$2" = "pip" ] && [ "$3" = "install" ]; then
+                return 2
+            fi
+            return 1
+        }
+
+        export ARTHEXIS_DEBUG_TOOLBAR_REQUIREMENT='django-debug-toolbar==6.2.0'
+        arthexis_ensure_debug_toolbar_installed python
+        echo "still-running"
+        """
+    )
+
+    assert result.returncode == 0
+    assert "still-running" in result.stdout
+    assert "Warning: Failed to install django-debug-toolbar==6.2.0." in result.stderr

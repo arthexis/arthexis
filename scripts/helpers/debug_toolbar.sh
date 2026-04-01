@@ -15,5 +15,7 @@ PY
   fi
 
   echo "Debug mode requested; installing ${requirement} so the Django Debug Toolbar is available..."
-  "$python_bin" -m pip install "$requirement"
+  if ! "$python_bin" -m pip install "$requirement"; then
+    echo "Warning: Failed to install ${requirement}. Continuing without Django Debug Toolbar." >&2
+  fi
 }
