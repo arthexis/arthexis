@@ -1,10 +1,11 @@
 """Admin configuration for operation screen management."""
 
 from django.contrib import admin
-from django.http import Http404, HttpResponseRedirect
+from django.http import Http404
 from django.urls import path, reverse
 from django.utils.html import format_html
-from django.utils.http import url_has_allowed_host_and_scheme
+
+from .redirects import safe_host_redirect
 
 from .models import (
     OperationExecution,
@@ -65,15 +66,8 @@ class OperationScreenAdmin(admin.ModelAdmin):
         operation = OperationScreen.objects.filter(pk=operation_id).first()
         if operation is None:
             raise Http404("Operation not found")
-        safe_start_url = operation.start_url
-        if not url_has_allowed_host_and_scheme(
-            url=safe_start_url,
-            allowed_hosts={request.get_host()},
-            require_https=request.is_secure(),
-        ):
-            safe_start_url = reverse("admin:index")
         request.session["ops_active_operation_id"] = operation.id
-        return HttpResponseRedirect(safe_start_url)
+        return safe_host_redirect(request, operation.start_url)
 
 
 @admin.register(OperationExecution)
