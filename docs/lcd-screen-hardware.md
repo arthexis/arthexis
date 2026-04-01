@@ -8,7 +8,7 @@ force a specific driver or timing calibration when needed.
 All LCD utility commands now run through the unified entrypoint:
 
 ```bash
-python manage.py lcd <action>
+.venv/bin/python manage.py lcd <action>
 ```
 
 Supported actions include `debug`, `replay`, `write`, `animate`, `plan`, and
@@ -43,7 +43,7 @@ save timing overrides to `.locks/lcd-timings`. These values adjust the enable
 pulse and command delays for PCF8574-based controllers.
 
 ```bash
-python manage.py lcd calibrate
+.venv/bin/python manage.py lcd calibrate
 ```
 
 The resulting lock file is read on startup by the LCD driver so the service
@@ -54,7 +54,7 @@ keeps using your tuned settings.
 You can validate the LCD wiring and service state from the command line:
 
 ```bash
-python manage.py check_lcd_service
+.venv/bin/python manage.py check_lcd_service
 ```
 
 The command reports lock-file status, checks the systemd unit (when available),
