@@ -61,6 +61,54 @@ class RFIDAuthAuditSuiteTests(TestCase):
         self.assertIsNone(attempt.account_id)
         self.assertEqual(user.pk, response.json()["id"])
 
+    def test_rfid_login_accepts_mobile_nfc_serial_format(self) -> None:
+        """Regression: colon-delimited NFC serials should authenticate like RFID scans."""
+
+        self._set_audit_feature(enabled=True)
+        user_model = get_user_model()
+        tag = RFID.objects.create(rfid="A1B2C3D4", allowed=True)
+        user = user_model.objects.create_user(
+            username="rfid_mobile_user",
+            password="password123",
+            login_rfid=tag,
+        )
+
+        response = self.client.post(
+            reverse("rfid-login"),
+            data='{"rfid":"a1:b2:c3:d4"}',
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        attempt = RFIDAttempt.objects.get(source=RFIDAttempt.Source.AUTH, label=tag)
+        self.assertEqual(attempt.rfid, "A1B2C3D4")
+        self.assertTrue(attempt.authenticated)
+        self.assertEqual(user.pk, response.json()["id"])
+
+    def test_rfid_login_preserves_non_hex_identifier_values(self) -> None:
+        """Regression: non-hex RFID values should not be altered during login parsing."""
+
+        self._set_audit_feature(enabled=True)
+        user_model = get_user_model()
+        tag = RFID.objects.create(rfid="OPEN-001", allowed=True)
+        user = user_model.objects.create_user(
+            username="rfid_non_hex_user",
+            password="password123",
+            login_rfid=tag,
+        )
+
+        response = self.client.post(
+            reverse("rfid-login"),
+            data='{"rfid":"open-001"}',
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        attempt = RFIDAttempt.objects.get(source=RFIDAttempt.Source.AUTH, label=tag)
+        self.assertEqual(attempt.rfid, "OPEN-001")
+        self.assertTrue(attempt.authenticated)
+        self.assertEqual(user.pk, response.json()["id"])
+
     def test_rfid_login_records_rejected_reason_for_blocked_tag(self) -> None:
         """Regression: blocked RFID tags should emit a rejected auth attempt reason."""
 

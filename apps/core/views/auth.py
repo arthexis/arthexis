@@ -11,6 +11,15 @@ from django.views.decorators.csrf import csrf_exempt
 from config.request_utils import is_https_request
 
 
+def _normalize_rfid_login_value(value: object) -> str:
+    """Return an RFID login token normalized for authentication checks."""
+
+    raw_value = str(value or "").strip().upper()
+    if not raw_value:
+        return ""
+    return raw_value.replace(":", "")
+
+
 @csrf_exempt
 def rfid_login(request):
     """Authenticate a user using an RFID."""
@@ -23,7 +32,7 @@ def rfid_login(request):
     except json.JSONDecodeError:
         data = request.POST
 
-    rfid = data.get("rfid")
+    rfid = _normalize_rfid_login_value(data.get("rfid"))
     if not rfid:
         return JsonResponse({"detail": "rfid required"}, status=400)
 
