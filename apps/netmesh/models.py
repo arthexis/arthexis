@@ -193,6 +193,12 @@ class NodeEndpoint(Entity):
         related_name="netmesh_endpoints",
     )
     endpoint = models.CharField(max_length=255)
+    candidate_endpoints = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("Additional direct endpoints agents should try for this node."),
+    )
+    endpoint_priority = models.PositiveSmallIntegerField(default=100)
     nat_type = models.CharField(
         max_length=16,
         choices=NatType.choices,
@@ -200,6 +206,9 @@ class NodeEndpoint(Entity):
     )
     discovered_at = models.DateTimeField(auto_now_add=True)
     last_seen = models.DateTimeField(null=True, blank=True)
+    last_successful_direct_at = models.DateTimeField(null=True, blank=True)
+    relay_required = models.BooleanField(default=False)
+    relay_reason = models.CharField(max_length=255, blank=True)
 
     class Meta(Entity.Meta):
         ordering = ["node__hostname", "-last_seen", "pk"]
@@ -207,6 +216,49 @@ class NodeEndpoint(Entity):
             models.UniqueConstraint(
                 fields=["node", "endpoint"],
                 name="netmesh_node_endpoint_unique",
+            ),
+        ]
+
+
+class RelayRegion(Entity):
+    """Defines relay region metadata for DERP-like relay coordination."""
+
+    code = models.SlugField(max_length=32, unique=True)
+    name = models.CharField(max_length=100)
+    relay_endpoint = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+
+    class Meta(Entity.Meta):
+        ordering = ["code", "pk"]
+
+    def __str__(self) -> str:  # pragma: no cover - admin display helper
+        return f"{self.code} ({self.name})"
+
+
+class NodeRelayConfig(Entity):
+    """Stores node-specific relay preferences and fallback endpoint configuration."""
+
+    node = models.ForeignKey(
+        "nodes.Node",
+        on_delete=models.CASCADE,
+        related_name="netmesh_relay_configs",
+    )
+    region = models.ForeignKey(
+        RelayRegion,
+        on_delete=models.CASCADE,
+        related_name="node_configs",
+    )
+    relay_endpoint = models.CharField(max_length=255, blank=True)
+    config = models.JSONField(default=dict, blank=True)
+    priority = models.PositiveSmallIntegerField(default=1000)
+    is_enabled = models.BooleanField(default=True)
+
+    class Meta(Entity.Meta):
+        ordering = ["node__hostname", "priority", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["node", "region"],
+                name="netmesh_node_relay_region_unique",
             ),
         ]
 

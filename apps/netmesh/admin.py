@@ -3,11 +3,32 @@ from django.contrib import admin
 from apps.locals.user_data import EntityModelAdmin
 from apps.netmesh.models import (
     MeshMembership,
+    NodeRelayConfig,
     NodeEndpoint,
     NodeKeyMaterial,
     PeerPolicy,
+    RelayRegion,
     ServiceAdvertisement,
 )
+
+
+class DirectConnectivityFilter(admin.SimpleListFilter):
+    title = "direct connectivity"
+    parameter_name = "direct_connectivity"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("relay_only", "Relay-only"),
+            ("failing_direct", "Failing direct"),
+        )
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == "relay_only":
+            return queryset.filter(relay_required=True)
+        if value == "failing_direct":
+            return queryset.filter(last_successful_direct_at__isnull=True)
+        return queryset
 
 
 @admin.register(MeshMembership)
@@ -47,9 +68,31 @@ class PeerPolicyAdmin(EntityModelAdmin):
 
 @admin.register(NodeEndpoint)
 class NodeEndpointAdmin(EntityModelAdmin):
-    list_display = ("node", "endpoint", "nat_type", "last_seen")
-    list_filter = ("nat_type",)
+    list_display = (
+        "node",
+        "endpoint",
+        "endpoint_priority",
+        "nat_type",
+        "relay_required",
+        "last_successful_direct_at",
+        "last_seen",
+    )
+    list_filter = ("nat_type", "relay_required", DirectConnectivityFilter)
     search_fields = ("node__hostname", "endpoint")
+
+
+@admin.register(RelayRegion)
+class RelayRegionAdmin(EntityModelAdmin):
+    list_display = ("code", "name", "relay_endpoint", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("code", "name", "relay_endpoint")
+
+
+@admin.register(NodeRelayConfig)
+class NodeRelayConfigAdmin(EntityModelAdmin):
+    list_display = ("node", "region", "priority", "is_enabled")
+    list_filter = ("is_enabled", "region")
+    search_fields = ("node__hostname", "region__code", "relay_endpoint")
 
 
 @admin.register(ServiceAdvertisement)

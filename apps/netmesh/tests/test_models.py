@@ -2,7 +2,14 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
-from apps.netmesh.models import MeshMembership, NodeKeyMaterial, PeerPolicy, ServiceAdvertisement
+from apps.netmesh.models import (
+    MeshMembership,
+    NodeKeyMaterial,
+    NodeRelayConfig,
+    PeerPolicy,
+    RelayRegion,
+    ServiceAdvertisement,
+)
 from apps.nodes.models import Node, NodeRole
 
 
@@ -82,3 +89,18 @@ def test_service_advertisement_port_range_validation():
 
     with pytest.raises(ValidationError):
         out_of_range_port.full_clean()
+
+
+@pytest.mark.django_db
+def test_node_relay_config_unique_per_region():
+    node = Node.objects.create(hostname="mesh-relay-node")
+    region = RelayRegion.objects.create(
+        code="usw2",
+        name="US West",
+        relay_endpoint="wss://relay-usw2.example/mesh",
+    )
+    NodeRelayConfig.objects.create(node=node, region=region)
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            NodeRelayConfig.objects.create(node=node, region=region)

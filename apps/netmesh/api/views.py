@@ -11,7 +11,14 @@ from django.utils.http import http_date
 from django.views.decorators.http import require_GET
 
 from apps.netmesh.api.auth import authenticate_enrollment
-from apps.netmesh.models import MeshMembership, NodeEndpoint, NodeKeyMaterial, PeerPolicy, ServiceAdvertisement
+from apps.netmesh.models import (
+    MeshMembership,
+    NodeEndpoint,
+    NodeKeyMaterial,
+    NodeRelayConfig,
+    PeerPolicy,
+    ServiceAdvertisement,
+)
 
 
 def _node_role_profile_name(node) -> str:
@@ -168,7 +175,16 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
     peer_ids = _peer_ids_from_policies(policies=policies, filters=filters)
     peer_ids = [peer_id for peer_id in peer_ids if peer_id != principal.node.id]
     endpoints_qs = list(NodeEndpoint.objects.filter(node_id__in=peer_ids).select_related("node", "node__role"))
+    relay_qs = list(
+        NodeRelayConfig.objects.filter(node_id__in=peer_ids, is_enabled=True).select_related("region")
+    )
     ads_qs = ServiceAdvertisement.objects.filter(node_id__in=peer_ids)
+    relay_by_node: dict[int, list[NodeRelayConfig]] = {}
+    for relay in relay_qs:
+        relay_by_node.setdefault(relay.node_id, []).append(relay)
+    for relay_list in relay_by_node.values():
+        relay_list.sort(key=lambda item: (item.priority, item.id))
+
     ads_by_node: dict[int, list[dict]] = {}
     for advertisement in ads_qs:
         ads_by_node.setdefault(advertisement.node_id, []).append(
@@ -182,10 +198,51 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
     profile = _node_role_profile_name(principal.node)
     endpoints = []
     for endpoint in endpoints_qs:
+        direct_candidates = [
+            {
+                "endpoint": endpoint.endpoint,
+                "priority": endpoint.endpoint_priority,
+                "path": "direct",
+            }
+        ]
+        for index, candidate in enumerate(endpoint.candidate_endpoints):
+            if not isinstance(candidate, str) or not candidate.strip():
+                continue
+            direct_candidates.append(
+                {
+                    "endpoint": candidate.strip(),
+                    "priority": endpoint.endpoint_priority + index + 1,
+                    "path": "direct",
+                }
+            )
+
+        relay_candidates = []
+        for relay in relay_by_node.get(endpoint.node_id, []):
+            relay_candidates.append(
+                {
+                    "endpoint": relay.relay_endpoint or relay.region.relay_endpoint,
+                    "priority": relay.priority,
+                    "path": "relay",
+                    "region": relay.region.code,
+                    "config": relay.config,
+                }
+            )
+        all_candidates = sorted(
+            direct_candidates + relay_candidates,
+            key=lambda candidate: (candidate["priority"], candidate["endpoint"]),
+        )
         row = {
             "node_id": endpoint.node_id,
             "endpoint": endpoint.endpoint,
+            "candidate_endpoints": [candidate["endpoint"] for candidate in direct_candidates[1:]],
+            "endpoint_priority": endpoint.endpoint_priority,
             "last_seen": endpoint.last_seen.isoformat() if endpoint.last_seen else None,
+            "last_successful_direct_at": (
+                endpoint.last_successful_direct_at.isoformat() if endpoint.last_successful_direct_at else None
+            ),
+            "relay_required": endpoint.relay_required,
+            "relay_reason": endpoint.relay_reason,
+            "connection_candidates": all_candidates,
         }
         if profile == "gateway":
             row["nat_type"] = endpoint.nat_type
