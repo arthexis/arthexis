@@ -74,6 +74,7 @@ ROUTE_PROVIDERS = [
     "apps.links.routes",
     "apps.logbook.routes",
     "apps.meta.routes",
+    "apps.netmesh.routes",
     "apps.nodes.routes",
     "apps.ocpp.routes",
     "apps.odoo.routes",
