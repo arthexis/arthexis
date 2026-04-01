@@ -9,8 +9,11 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$BASE_DIR/scripts/helpers/logging.sh"
 arthexis_load_env_file "$BASE_DIR"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
-arthexis_secure_log_file "$LOG_DIR" "$0" LOG_FILE || exit 1
-exec > >(tee "$LOG_FILE") 2>&1
+LOG_FILE="$LOG_DIR/command.log"
+touch "$LOG_FILE"
+chmod 600 "$LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "$(date -Iseconds) command.sh invocation: $*"
 cd "$BASE_DIR"
 
 # Ensure virtual environment is available
