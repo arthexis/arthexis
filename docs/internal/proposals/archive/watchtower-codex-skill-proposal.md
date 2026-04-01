@@ -112,4 +112,4 @@ Always include:
 
 ## Alignment with existing playbook
 
-The skill directly operationalizes the attack families and resilience scorecard documented in the [Watchtower internet attack simulation playbook](./watchtower-attack-simulation.md), so both human-led and Codex-led drills follow the same control objectives.
+The skill directly operationalizes the attack families and resilience scorecard documented in the [Watchtower internet attack simulation playbook](../../../development/watchtower-attack-simulation.md), so both human-led and Codex-led drills follow the same control objectives.
