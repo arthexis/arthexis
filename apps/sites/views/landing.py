@@ -297,16 +297,23 @@ def changelog_report_data(request):
         page_number = int(request.GET.get("page", "1"))
     except ValueError:
         return JsonResponse({"error": _("Invalid page number.")}, status=400)
+    if page_number < 1:
+        return JsonResponse({"error": _("Invalid page number.")}, status=400)
 
     try:
         offset = int(request.GET.get("offset", "0"))
     except ValueError:
         return JsonResponse({"error": _("Invalid offset.")}, status=400)
+    if offset < 0:
+        return JsonResponse({"error": _("Invalid offset.")}, status=400)
 
     try:
         page_data = changelog.get_page(page_number, per_page=1, offset=offset)
-    except changelog.ChangelogError as exc:
-        return JsonResponse({"error": str(exc)}, status=500)
+    except changelog.ChangelogError:
+        logger.exception(
+            "Failed to load public changelog page %s (offset %s)", page_number, offset
+        )
+        return JsonResponse({"error": _("Unable to load additional updates.")}, status=500)
 
     if not page_data.sections:
         return JsonResponse({"html": "", "has_more": False, "next_page": None})

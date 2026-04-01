@@ -310,10 +310,10 @@ def net_message_pull(request):
 
     local = Node.get_local()
     if not local:
-        return JsonResponse({"detail": "local node unavailable"}, status=424)
+        return JsonResponse({"detail": "local node unavailable"}, status=500)
     private_key = local.get_private_key()
     if not private_key:
-        return JsonResponse({"detail": "signing unavailable"}, status=424)
+        return JsonResponse({"detail": "signing unavailable"}, status=500)
 
     entries = (
         PendingNetMessage.objects.select_related(
