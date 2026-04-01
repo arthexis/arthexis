@@ -13,6 +13,10 @@ nav:
       - CP Statuses and Transitions: ocpp_cp_statuses.md
       - OCPP 1.6 Compliance Review: ocpp16_compliance_review.md
       - OCPP Connection Status: ocpp_connection_status.md
+  - Proposals:
+      - Multi-Dimensional Modeling System Proposal: proposals/modeling-system-proposal.md
+      - EVCS Simulator v2 Proposal: proposals/evcs-simulator-v2-proposal.md
+      - Watchtower Codex Skill Proposal: proposals/watchtower-codex-skill-proposal.md
   - Reference:
       - Energy Transactions Ledger: energy-transactions-ledger.md
       - Runserver Log Duplication: runserver-log-duplication.md

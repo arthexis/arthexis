@@ -160,4 +160,4 @@ A Watchtower node is "basic-attack resilient" only if all four categories pass f
 
 ## Codex automation
 
-For an agent-driven implementation of this playbook, see the companion skill proposal in [`watchtower-codex-skill-proposal.md`](./watchtower-codex-skill-proposal.md).
+For an agent-driven implementation of this playbook, see the companion skill proposal in [`watchtower-codex-skill-proposal.md`](../proposals/watchtower-codex-skill-proposal.md).

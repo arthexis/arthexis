@@ -1,3 +1,7 @@
+> **Status:** Proposal — not current implementation.
+>
+> **Authoritative architecture references:** [Repository README](../../README.md), [Documentation index](../index.md), and concrete app/service docs in this site (for example, [Startup Sequence](../startup-sequence.md), [Logging Domain](../logging-domain.md), and [OCPP User Manual](../development/ocpp-user-manual.md)).
+
 # Proposal: Multi-Dimensional Modeling System for Arthexis Suite
 
 ## Executive summary
