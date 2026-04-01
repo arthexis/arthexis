@@ -17,7 +17,7 @@ printing new logs.
 To avoid the duplication, disable the autoreloader when debugging:
 
 ```powershell
-python manage.py runserver --noreload
+.venv\Scripts\python.exe manage.py runserver --noreload
 ```
 
 You can also set `DJANGO_SUPPRESS_MIGRATION_CHECK=1` if you only want to
@@ -33,15 +33,15 @@ once, run it *before* `runserver` starts or gate it to the child process:
   the expensive checks **once**, then skip them in the subsequent server start:
 
   ```powershell
-  python manage.py migrate --check
+  .venv\Scripts\python.exe manage.py migrate --check
   $env:DJANGO_SUPPRESS_MIGRATION_CHECK = "1"
-  python manage.py runserver
+  .venv\Scripts\python.exe manage.py runserver
   ```
 
   ```bash
-  python manage.py migrate --check
+  .venv/bin/python manage.py migrate --check
   export DJANGO_SUPPRESS_MIGRATION_CHECK=1
-  python manage.py runserver
+  .venv/bin/python manage.py runserver
   ```
 
   The first command ensures migrations are verified a single time; the
