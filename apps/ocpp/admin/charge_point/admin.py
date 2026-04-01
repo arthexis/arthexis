@@ -16,7 +16,7 @@ from apps.energy.models import EnergyTariff
 from apps.locals.user_data import EntityModelAdmin
 
 from ... import store
-from ...models import Charger
+from ...models import Charger, ControlOperationEvent, SecurityEvent, Transaction
 from ...status_resets import clear_stale_cached_statuses
 from .actions import ChargerAdminActionsMixin
 from .helpers import charger_status_state
@@ -197,6 +197,7 @@ class ChargerAdmin(
         "connector_number",
         "local_indicator",
         "authorization_policy_display",
+        "credentials_health",
         "public_display",
         "forwarding_ready",
         "last_heartbeat_display",
@@ -205,6 +206,7 @@ class ChargerAdmin(
         "page_link",
         "log_link",
         "status_link",
+        "recent_failures_link",
     )
     list_filter = ("export_transactions",)
     search_fields = ("charger_id", "connector_id", "location__name")
@@ -228,6 +230,40 @@ class ChargerAdmin(
         "view_charge_point_dashboard",
         "delete_selected",
     ]
+
+    @admin.display(description="Token/Credential")
+    def credentials_health(self, obj):
+        indicators = []
+        if obj.ws_auth_user_id or obj.ws_auth_group_id:
+            indicators.append("WS auth")
+        if obj.allow_remote:
+            indicators.append("Remote enabled")
+        if obj.node_origin_id and not obj.is_local:
+            indicators.append("Remote origin")
+        return ", ".join(indicators) if indicators else "Default"
+
+    @admin.display(description="Recent issues")
+    def recent_failures_link(self, obj):
+        window_start = timezone.now() - timedelta(days=2)
+        failed_ops = ControlOperationEvent.objects.filter(
+            charger=obj,
+            status=ControlOperationEvent.Status.FAILED,
+            created_at__gte=window_start,
+        ).count()
+        rejected_sessions = Transaction.objects.filter(
+            charger=obj,
+            authorization_status=Transaction.AuthorizationStatus.REJECTED,
+            start_time__gte=window_start,
+        ).count()
+        security_events = SecurityEvent.objects.filter(
+            charger=obj,
+            event_timestamp__gte=window_start,
+        ).count()
+        total = failed_ops + rejected_sessions + security_events
+        if not total:
+            return "-"
+        url = reverse("admin:ocpp_controloperationevent_changelist")
+        return format_html('<a href="{}?charger__id__exact={}">{} in last 48h</a>', url, obj.pk, total)
 
     def get_queryset(self, request):
         """Hide station root rows on the changelist while keeping detail URLs reachable."""
