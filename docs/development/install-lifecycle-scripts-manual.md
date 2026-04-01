@@ -104,6 +104,24 @@ For background operation, install the suite as a Windows service with `service.b
 service.bat install --name arthexis --port 8888
 ```
 
+### 2.5 Linux: `configure.sh`
+
+`configure.sh` updates locks and runtime toggles without running a full reinstall. It now supports install/upgrade channel aliases plus direct feature operations.
+
+| Flag | Purpose |
+| --- | --- |
+| `--latest` / `--unstable` | Enables auto-upgrade using the latest channel. |
+| `--stable` / `--regular` / `--normal` | Enables auto-upgrade using the stable/regular channel. |
+| `--fixed` / `--no-auto-upgrade` | Disables auto-upgrade and removes `.locks/auto_upgrade.lck`. |
+| `--celery` / `--no-celery` | Toggles `.locks/celery.lck` and removes systemd Celery units when disabled. |
+| `--lcd-screen` / `--no-lcd-screen` | Toggles LCD lock state and removes `lcd-<service>` unit when disabled. |
+| `--rfid-service` / `--no-rfid-service` | Toggles RFID lock state and matching systemd unit when a service is configured. |
+| `--camera-service` / `--no-camera-service` | Toggles camera lock state and matching systemd unit when a service is configured. |
+| `--feature <slug> [--kind suite|node] [--enabled|--disabled]` | Reads or toggles a suite/node feature through `manage.py feature`. |
+| `--feature-param <feature>:<key>=<value>` | Sets one suite feature metadata parameter (`metadata.parameters`). |
+| `--check` | Prints current role/port/auto-upgrade/debug state. |
+| `--repair [--failover ROLE]` | Rebuilds role-driven locks from stored role metadata. |
+
 ## 3. Upgrades
 
 ### 3.1 Linux: `upgrade.sh`

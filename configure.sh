@@ -25,6 +25,7 @@ ENABLE_CELERY=false
 ENABLE_LCD_SCREEN=false
 ENABLE_CONTROL=false
 ENABLE_RFID_SERVICE=false
+ENABLE_CAMERA_SERVICE=false
 REQUIRES_REDIS=false
 UPGRADE_CHANNEL=""
 CHECK=false
@@ -36,11 +37,18 @@ SKIP_SERVICE_RESTART=false
 REPAIR_AUTO_UPGRADE_CHANNEL=""
 FAILOVER_ROLE=""
 RFID_SERVICE_MODE=""
+CAMERA_SERVICE_MODE=""
+CELERY_MODE=""
+LCD_SCREEN_MODE=""
+FEATURE_SLUG=""
+FEATURE_KIND=""
+FEATURE_MODE=""
+FEATURE_PARAM_SPEC=""
 
 LOCK_DIR="$BASE_DIR/.locks"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--rfid-service|--no-rfid-service] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--stable|--regular|--normal|--unstable] [--fixed] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--celery|--no-celery] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--feature SLUG [--kind suite|node] [--enabled|--disabled]] [--feature-param FEATURE:KEY=VALUE] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]" >&2
     exit 1
 }
 
@@ -75,6 +83,100 @@ apply_rfid_service_setting() {
         fi
         echo "RFID scanner service disabled."
     fi
+}
+
+apply_camera_service_setting() {
+    local mode="$1"
+    local lock_dir="$2"
+    local base_dir="$3"
+    local service_name="$4"
+
+    if [ -z "$mode" ]; then
+        return 0
+    fi
+
+    mkdir -p "$lock_dir"
+    if [ "$mode" = "enable" ]; then
+        touch "$lock_dir/$ARTHEXIS_CAMERA_SERVICE_LOCK"
+        if [ -n "$service_name" ] && arthexis_using_systemd_mode "$lock_dir"; then
+            arthexis_install_camera_service_unit "$base_dir" "$lock_dir" "$service_name"
+            arthexis_start_systemd_unit_if_present "camera-${service_name}.service"
+        fi
+        echo "Camera service enabled."
+    else
+        rm -f "$lock_dir/$ARTHEXIS_CAMERA_SERVICE_LOCK"
+        if [ -n "$service_name" ]; then
+            arthexis_remove_systemd_unit_if_present "$lock_dir" "camera-${service_name}.service"
+        fi
+        echo "Camera service disabled."
+    fi
+}
+
+run_feature_toggle() {
+    local slug="$1"
+    local kind="$2"
+    local mode="$3"
+    local python_bin=""
+    local -a args=("$BASE_DIR/manage.py" "feature" "$slug")
+
+    if [ -x "$BASE_DIR/.venv/bin/python" ]; then
+        python_bin="$BASE_DIR/.venv/bin/python"
+    elif command -v python3 >/dev/null 2>&1; then
+        python_bin="$(command -v python3)"
+    else
+        echo "Python 3 is required to toggle features." >&2
+        exit 1
+    fi
+
+    if [ -n "$kind" ]; then
+        args+=("--kind" "$kind")
+    fi
+    if [ "$mode" = "enable" ]; then
+        args+=("--enabled")
+    elif [ "$mode" = "disable" ]; then
+        args+=("--disabled")
+    fi
+
+    "$python_bin" "${args[@]}"
+}
+
+run_feature_param_set() {
+    local feature="$1"
+    local key="$2"
+    local value="$3"
+    local python_bin=""
+
+    if [ -x "$BASE_DIR/.venv/bin/python" ]; then
+        python_bin="$BASE_DIR/.venv/bin/python"
+    elif command -v python3 >/dev/null 2>&1; then
+        python_bin="$(command -v python3)"
+    else
+        echo "Python 3 is required to set suite feature parameters." >&2
+        exit 1
+    fi
+
+    FEATURE_PARAM_SLUG="$feature" FEATURE_PARAM_KEY="$key" FEATURE_PARAM_VALUE="$value" \
+        "$python_bin" "$BASE_DIR/manage.py" shell <<'PYCODE'
+import os
+from django.core.management.base import CommandError
+from apps.features.models import Feature
+
+slug = os.environ["FEATURE_PARAM_SLUG"]
+key = os.environ["FEATURE_PARAM_KEY"]
+value = os.environ["FEATURE_PARAM_VALUE"]
+
+feature = Feature.objects.filter(slug=slug).first()
+if feature is None:
+    raise CommandError(f"Unknown suite feature: {slug}")
+
+metadata = dict(feature.metadata or {})
+parameters = dict(metadata.get("parameters") or {})
+parameters[key] = value
+metadata["parameters"] = parameters
+feature.metadata = metadata
+feature.save(update_fields=["metadata", "updated_at"])
+print(f"- {slug} parameter {key} set to '{value}'")
+PYCODE
 }
 
 reset_role_features() {
@@ -313,8 +415,20 @@ while [[ $# -gt 0 ]]; do
             set_upgrade_channel "stable"
             shift
             ;;
-        --regular)
+        --regular|--normal)
             set_upgrade_channel "version"
+            shift
+            ;;
+        --unstable)
+            set_upgrade_channel "latest"
+            shift
+            ;;
+        --fixed)
+            if [ "$AUTO_UPGRADE_MODE" = "enable" ]; then
+                echo "Cannot combine --fixed with --auto-upgrade or channel flags" >&2
+                usage
+            fi
+            AUTO_UPGRADE_MODE="disable"
             shift
             ;;
         --port)
@@ -374,6 +488,93 @@ while [[ $# -gt 0 ]]; do
             RFID_SERVICE_MODE="disable"
             shift
             ;;
+        --camera-service)
+            if [ "$CAMERA_SERVICE_MODE" = "disable" ]; then
+                echo "Cannot combine --camera-service with --no-camera-service" >&2
+                usage
+            fi
+            CAMERA_SERVICE_MODE="enable"
+            shift
+            ;;
+        --no-camera-service)
+            if [ "$CAMERA_SERVICE_MODE" = "enable" ]; then
+                echo "Cannot combine --camera-service with --no-camera-service" >&2
+                usage
+            fi
+            CAMERA_SERVICE_MODE="disable"
+            shift
+            ;;
+        --celery)
+            if [ "$CELERY_MODE" = "disable" ]; then
+                echo "Cannot combine --celery with --no-celery" >&2
+                usage
+            fi
+            CELERY_MODE="enable"
+            shift
+            ;;
+        --no-celery)
+            if [ "$CELERY_MODE" = "enable" ]; then
+                echo "Cannot combine --celery with --no-celery" >&2
+                usage
+            fi
+            CELERY_MODE="disable"
+            shift
+            ;;
+        --lcd-screen)
+            if [ "$LCD_SCREEN_MODE" = "disable" ]; then
+                echo "Cannot combine --lcd-screen with --no-lcd-screen" >&2
+                usage
+            fi
+            LCD_SCREEN_MODE="enable"
+            shift
+            ;;
+        --no-lcd-screen)
+            if [ "$LCD_SCREEN_MODE" = "enable" ]; then
+                echo "Cannot combine --lcd-screen with --no-lcd-screen" >&2
+                usage
+            fi
+            LCD_SCREEN_MODE="disable"
+            shift
+            ;;
+        --feature)
+            [ -z "$2" ] && usage
+            FEATURE_SLUG="$2"
+            shift 2
+            ;;
+        --kind)
+            [ -z "$2" ] && usage
+            case "$2" in
+                suite|node)
+                    FEATURE_KIND="$2"
+                    ;;
+                *)
+                    echo "--kind must be one of: suite, node" >&2
+                    usage
+                    ;;
+            esac
+            shift 2
+            ;;
+        --enabled)
+            if [ "$FEATURE_MODE" = "disable" ]; then
+                echo "Cannot combine --enabled with --disabled" >&2
+                usage
+            fi
+            FEATURE_MODE="enable"
+            shift
+            ;;
+        --disabled)
+            if [ "$FEATURE_MODE" = "enable" ]; then
+                echo "Cannot combine --enabled with --disabled" >&2
+                usage
+            fi
+            FEATURE_MODE="disable"
+            shift
+            ;;
+        --feature-param)
+            [ -z "$2" ] && usage
+            FEATURE_PARAM_SPEC="$2"
+            shift 2
+            ;;
         --satellite)
             NODE_ROLE="Satellite"
             ENABLE_CELERY=true
@@ -419,6 +620,16 @@ if [ -n "$UPGRADE_CHANNEL" ] && [ -z "$AUTO_UPGRADE_MODE" ]; then
     AUTO_UPGRADE_MODE="enable"
 fi
 
+if [ -n "$FEATURE_MODE" ] && [ -z "$FEATURE_SLUG" ]; then
+    echo "--enabled/--disabled requires --feature" >&2
+    usage
+fi
+
+if [ -n "$FEATURE_KIND" ] && [ -z "$FEATURE_SLUG" ]; then
+    echo "--kind requires --feature" >&2
+    usage
+fi
+
 if [ -z "$PORT" ]; then
     PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
 fi
@@ -431,7 +642,9 @@ fi
 if [ "$REPAIR" = true ]; then
     if [ "$CHECK" = true ] || [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || \
        [ -n "$AUTO_UPGRADE_MODE" ] || [ -n "$DEBUG_MODE" ] || [ -n "$UPGRADE_CHANNEL" ] || \
-       [ -n "$RFID_SERVICE_MODE" ]; then
+       [ -n "$RFID_SERVICE_MODE" ] || [ -n "$CAMERA_SERVICE_MODE" ] || [ -n "$CELERY_MODE" ] || \
+       [ -n "$LCD_SCREEN_MODE" ] || [ -n "$FEATURE_SLUG" ] || [ -n "$FEATURE_MODE" ] || \
+       [ -n "$FEATURE_KIND" ] || [ -n "$FEATURE_PARAM_SPEC" ]; then
         echo "--repair cannot be combined with other options" >&2
         usage
     fi
@@ -490,7 +703,10 @@ fi
 
 if [ "$CHECK" = true ]; then
     if [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || [ -n "$AUTO_UPGRADE_MODE" ] || \
-       [ -n "$DEBUG_MODE" ] || [ -n "$UPGRADE_CHANNEL" ] || [ -n "$RFID_SERVICE_MODE" ]; then
+       [ -n "$DEBUG_MODE" ] || [ -n "$UPGRADE_CHANNEL" ] || [ -n "$RFID_SERVICE_MODE" ] || \
+       [ -n "$CAMERA_SERVICE_MODE" ] || [ -n "$CELERY_MODE" ] || [ -n "$LCD_SCREEN_MODE" ] || \
+       [ -n "$FEATURE_SLUG" ] || [ -n "$FEATURE_MODE" ] || [ -n "$FEATURE_KIND" ] || \
+       [ -n "$FEATURE_PARAM_SPEC" ]; then
         echo "--check cannot be combined with other options" >&2
         usage
     fi
@@ -557,6 +773,66 @@ if [ -n "$RFID_SERVICE_MODE" ] && [ -z "$NODE_ROLE" ]; then
         SERVICE=$(cat "$LOCK_DIR/service.lck")
     fi
     apply_rfid_service_setting "$RFID_SERVICE_MODE" "$LOCK_DIR" "$BASE_DIR" "$SERVICE"
+fi
+
+if [ -n "$CAMERA_SERVICE_MODE" ] && [ -z "$NODE_ROLE" ]; then
+    ACTION_PERFORMED=true
+    if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
+        SERVICE=$(cat "$LOCK_DIR/service.lck")
+    fi
+    apply_camera_service_setting "$CAMERA_SERVICE_MODE" "$LOCK_DIR" "$BASE_DIR" "$SERVICE"
+fi
+
+if [ -n "$CELERY_MODE" ] && [ -z "$NODE_ROLE" ]; then
+    ACTION_PERFORMED=true
+    mkdir -p "$LOCK_DIR"
+    if [ "$CELERY_MODE" = "enable" ]; then
+        touch "$LOCK_DIR/celery.lck"
+        echo "Celery support enabled."
+    else
+        rm -f "$LOCK_DIR/celery.lck"
+        if [ -n "$SERVICE" ] && arthexis_using_systemd_mode "$LOCK_DIR"; then
+            arthexis_remove_celery_unit_stack "$LOCK_DIR" "$SERVICE"
+        fi
+        echo "Celery support disabled."
+    fi
+fi
+
+if [ -n "$LCD_SCREEN_MODE" ] && [ -z "$NODE_ROLE" ]; then
+    ACTION_PERFORMED=true
+    mkdir -p "$LOCK_DIR"
+    if [ "$LCD_SCREEN_MODE" = "enable" ]; then
+        arthexis_enable_lcd_feature_flag "$LOCK_DIR"
+        echo "LCD screen support enabled."
+    else
+        arthexis_disable_lcd_feature_flag "$LOCK_DIR"
+        if [ -n "$SERVICE" ] && arthexis_using_systemd_mode "$LOCK_DIR"; then
+            arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "lcd-${SERVICE}.service"
+        fi
+        echo "LCD screen support disabled."
+    fi
+fi
+
+if [ -n "$FEATURE_SLUG" ] && [ -z "$NODE_ROLE" ]; then
+    ACTION_PERFORMED=true
+    run_feature_toggle "$FEATURE_SLUG" "$FEATURE_KIND" "$FEATURE_MODE"
+fi
+
+if [ -n "$FEATURE_PARAM_SPEC" ] && [ -z "$NODE_ROLE" ]; then
+    ACTION_PERFORMED=true
+    if [[ "$FEATURE_PARAM_SPEC" != *:*"="* ]]; then
+        echo "--feature-param expects FEATURE:KEY=VALUE" >&2
+        usage
+    fi
+    feature_part="${FEATURE_PARAM_SPEC%%:*}"
+    key_value_part="${FEATURE_PARAM_SPEC#*:}"
+    feature_key="${key_value_part%%=*}"
+    feature_value="${key_value_part#*=}"
+    if [ -z "$feature_part" ] || [ -z "$feature_key" ]; then
+        echo "--feature-param expects FEATURE:KEY=VALUE" >&2
+        usage
+    fi
+    run_feature_param_set "$feature_part" "$feature_key" "$feature_value"
 fi
 
 if [ -n "$AUTO_UPGRADE_MODE" ] && [ -z "$NODE_ROLE" ]; then
@@ -633,8 +909,24 @@ EXISTING_RFID_SERVICE=false
 if [ -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK" ]; then
     EXISTING_RFID_SERVICE=true
 fi
+EXISTING_CAMERA_SERVICE=false
+if [ -f "$LOCK_DIR/$ARTHEXIS_CAMERA_SERVICE_LOCK" ]; then
+    EXISTING_CAMERA_SERVICE=true
+fi
 
-for lock_name in celery.lck lcd_screen.lck control.lck role.lck service.lck "$ARTHEXIS_RFID_SERVICE_LOCK"; do
+if [ "$CELERY_MODE" = "enable" ]; then
+    ENABLE_CELERY=true
+elif [ "$CELERY_MODE" = "disable" ]; then
+    ENABLE_CELERY=false
+fi
+
+if [ "$LCD_SCREEN_MODE" = "enable" ]; then
+    ENABLE_LCD_SCREEN=true
+elif [ "$LCD_SCREEN_MODE" = "disable" ]; then
+    ENABLE_LCD_SCREEN=false
+fi
+
+for lock_name in celery.lck lcd_screen.lck control.lck role.lck service.lck "$ARTHEXIS_RFID_SERVICE_LOCK" "$ARTHEXIS_CAMERA_SERVICE_LOCK"; do
     rm -f "$LOCK_DIR/$lock_name"
 done
 rm -f "$BASE_DIR"/*.role "$BASE_DIR"/.*.role 2>/dev/null || true
@@ -658,6 +950,16 @@ fi
 if [ "$ENABLE_RFID_SERVICE" = true ]; then
     touch "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK"
 fi
+if [ "$CAMERA_SERVICE_MODE" = "enable" ]; then
+    ENABLE_CAMERA_SERVICE=true
+elif [ "$CAMERA_SERVICE_MODE" = "disable" ]; then
+    ENABLE_CAMERA_SERVICE=false
+else
+    ENABLE_CAMERA_SERVICE="$EXISTING_CAMERA_SERVICE"
+fi
+if [ "$ENABLE_CAMERA_SERVICE" = true ]; then
+    touch "$LOCK_DIR/$ARTHEXIS_CAMERA_SERVICE_LOCK"
+fi
 
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
@@ -670,6 +972,11 @@ if [ -n "$SERVICE" ] && arthexis_using_systemd_mode "$LOCK_DIR"; then
         arthexis_install_rfid_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE"
     else
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "rfid-${SERVICE}.service"
+    fi
+    if [ "$ENABLE_CAMERA_SERVICE" = true ]; then
+        arthexis_install_camera_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE"
+    else
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "camera-${SERVICE}.service"
     fi
 fi
 
@@ -706,6 +1013,9 @@ if [ "$SERVICE_ACTIVE" = true ]; then
     fi
     if [ "$ENABLE_RFID_SERVICE" = true ]; then
         arthexis_start_systemd_unit_if_present "rfid-$SERVICE.service"
+    fi
+    if [ "$ENABLE_CAMERA_SERVICE" = true ]; then
+        arthexis_start_systemd_unit_if_present "camera-$SERVICE.service"
     fi
 fi
 
