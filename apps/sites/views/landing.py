@@ -306,7 +306,7 @@ def changelog_report_data(request):
     try:
         page_data = changelog.get_page(page_number, per_page=1, offset=offset)
     except changelog.ChangelogError as exc:
-        return JsonResponse({"error": str(exc)}, status=503)
+        return JsonResponse({"error": str(exc)}, status=500)
 
     if not page_data.sections:
         return JsonResponse({"html": "", "has_more": False, "next_page": None})

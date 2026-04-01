@@ -89,7 +89,7 @@ def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
         data=json.dumps({"from": "+15551234", "message": "Hello"}),
         content_type="application/json",
     )
-    assert disabled.status_code == 503
+    assert disabled.status_code == 404
 
 
 def test_whatsapp_webhook_post_payload_validation(client, settings):

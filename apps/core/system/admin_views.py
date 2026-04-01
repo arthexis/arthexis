@@ -489,7 +489,7 @@ def _system_changelog_report_data_view(request):
             "Failed to load changelog page %s (offset %s)", page_number, offset
         )
         return JsonResponse(
-            {"error": _("Unable to load additional changes.")}, status=503
+            {"error": _("Unable to load additional changes.")}, status=500
         )
 
     if not page_data.sections:

@@ -901,7 +901,7 @@ def whatsapp_webhook(request):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
     if not getattr(settings, "PAGES_WHATSAPP_ENABLED", False):
-        return HttpResponse(status=503)
+        return HttpResponse(status=404)
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
     except json.JSONDecodeError:

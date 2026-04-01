@@ -28,7 +28,7 @@ def stream_detail(request, slug):
 def _build_mjpeg_stream_response(stream: MjpegStream):
     if not frame_cache_url():
         logger.warning("Camera service unavailable for stream %s", stream.slug)
-        return HttpResponse("Camera service unavailable.", status=503)
+        return HttpResponse("Camera service unavailable.", status=502)
 
     cached = get_frame(stream)
     if cached:
@@ -45,7 +45,7 @@ def _build_mjpeg_stream_response(stream: MjpegStream):
             stream.slug,
             status_payload.get("last_error"),
         )
-    return HttpResponse("Camera service unavailable.", status=503)
+    return HttpResponse("Camera service unavailable.", status=502)
 
 
 def mjpeg_stream(request, slug):
@@ -116,7 +116,7 @@ def _format_timestamp(value):
 def _build_mjpeg_probe_response(stream: MjpegStream):
     if not frame_cache_url():
         logger.warning("Camera service unavailable for probe %s", stream.slug)
-        return HttpResponse("Camera service unavailable.", status=503)
+        return HttpResponse("Camera service unavailable.", status=502)
 
     cached = get_frame(stream)
     if cached:
@@ -124,7 +124,7 @@ def _build_mjpeg_probe_response(stream: MjpegStream):
             stream.store_frame_bytes(cached.frame_bytes, update_thumbnail=True)
         except Exception:
             logger.exception("Unable to store cached MJPEG frame for %s", stream.slug)
-            return HttpResponse("Unable to store frame.", status=503)
+            return HttpResponse("Unable to store frame.", status=500)
         return HttpResponse(status=204)
     logger.info("No cached frames available for probe %s", stream.slug)
     status_payload = get_status(stream)
@@ -134,7 +134,7 @@ def _build_mjpeg_probe_response(stream: MjpegStream):
             stream.slug,
             status_payload.get("last_error"),
         )
-    return HttpResponse("Camera service unavailable.", status=503)
+    return HttpResponse("Camera service unavailable.", status=502)
 
 
 def camera_gallery(request):
