@@ -124,7 +124,7 @@ class HttpsProvisioningService:
 
         if use_local and force_renewal:
             raise CommandError(
-                "--force-renewal is only supported for certbot/godaddy certificates."
+                "--force-renewal is only supported for certbot certificates."
             )
 
         if (
