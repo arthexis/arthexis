@@ -69,6 +69,7 @@
     disconnected: '{% trans "Scanner disconnected. Reconnect to continue." %}',
     unsupported: '{% trans "This browser does not support direct scanner connections." %}',
     nfcUnsupported: '{% trans "This browser does not support mobile NFC scanning." %}',
+    nfcUnavailable: '{% trans "Unable to start NFC scanning. Tap Connect and allow NFC access." %}',
     authenticating: '{% trans "Authenticating…" %}',
     success: '{% trans "Authentication successful. Redirecting…" %}',
     failure: '{% trans "Login failed. Scan again or try another card." %}',
@@ -129,8 +130,8 @@
       return defaultPath;
     }
     try{
-      const candidateUrl = new URL(url, window.location.origin);
-      if(candidateUrl.origin === window.location.origin){
+      const candidateUrl = new URL(url, globalThis.location.origin);
+      if(candidateUrl.origin === globalThis.location.origin){
         return candidateUrl.pathname + candidateUrl.search + candidateUrl.hash;
       }
     } catch(error){
@@ -187,7 +188,7 @@
       }
       setStatus(text.success, 'success');
       const target = data && data.redirect ? data.redirect : redirectTarget;
-      window.location.href = getSafeRedirect(target);
+      globalThis.location.href = getSafeRedirect(target);
     } catch(err){
       const message = err && err.message ? err.message : text.failure;
       setStatus(message, 'error');
@@ -219,13 +220,9 @@
 
   function clearRemoteTimer(){
     if(remotePollTimer !== null){
-      window.clearTimeout(remotePollTimer);
+      globalThis.clearTimeout(remotePollTimer);
       remotePollTimer = null;
     }
-  }
-
-  function sanitizeNfcSerial(value){
-    return sanitize((value || '').replace(/:/g, ''));
   }
 
   function scheduleRemotePoll(){
@@ -233,7 +230,7 @@
     if(!scanUrl){
       return;
     }
-    remotePollTimer = window.setTimeout(pollRemoteScanner, pollDelay);
+    remotePollTimer = globalThis.setTimeout(pollRemoteScanner, pollDelay);
   }
 
   async function pollRemoteScanner(){
@@ -246,7 +243,7 @@
       return;
     }
     try{
-      const url = new URL(scanUrl, window.location.origin);
+      const url = new URL(scanUrl, globalThis.location.origin);
       if(lastAttemptId){
         url.searchParams.set('after', lastAttemptId);
       }
@@ -373,20 +370,19 @@
   }
 
   async function startMobileNfcScanning(){
-    if(!('NDEFReader' in window)){
+    if(!('NDEFReader' in globalThis)){
       return;
     }
     if(ndefReader){
       return;
     }
     try{
-      ndefReader = new window.NDEFReader();
+      ndefReader = new globalThis.NDEFReader();
       await ndefReader.scan();
       setStatus(text.nfcReady, 'info');
       ndefReader.addEventListener('reading', (event) => {
-        const serial = sanitizeNfcSerial(event.serialNumber || '');
-        if(serial){
-          handleScan(serial);
+        if(event.serialNumber){
+          handleScan(event.serialNumber);
         }
       });
       ndefReader.addEventListener('readingerror', () => {
@@ -394,23 +390,34 @@
           setStatus(text.failure, 'error');
         }
       });
-    } catch(_error){
+    } catch(error){
       if(!loggingIn){
-        setStatus(text.nfcUnsupported, 'info');
+        if(error && error.name === 'NotAllowedError'){
+          setStatus(text.nfcUnavailable, 'info');
+        } else {
+          setStatus(text.failure, 'error');
+        }
       }
       ndefReader = null;
     }
   }
 
   if(connectBtn){
-    if(!('serial' in navigator)){
+    const supportsSerial = 'serial' in navigator;
+    const supportsNfc = 'NDEFReader' in globalThis;
+    if(!supportsSerial && !supportsNfc){
       connectBtn.disabled = true;
       connectBtn.classList.add('disabled');
-      setStatus(text.unsupported, 'error');
+      setStatus(text.nfcUnsupported, 'error');
     } else {
       connectBtn.addEventListener('click', (event) => {
         event.preventDefault();
-        connectScanner();
+        if(supportsSerial){
+          connectScanner();
+        }
+        if(supportsNfc){
+          startMobileNfcScanning();
+        }
       });
       if(navigator.serial && navigator.serial.addEventListener){
         navigator.serial.addEventListener('disconnect', () => {
@@ -444,12 +451,7 @@
   if(scanUrl){
     pollRemoteScanner();
   }
-
-  if('NDEFReader' in window){
-    startMobileNfcScanning();
-  }
-
-  window.addEventListener('beforeunload', () => {
+  globalThis.addEventListener('beforeunload', () => {
     if(reader){
       try { reader.cancel(); } catch(_err) { /* ignore */ }
     }
