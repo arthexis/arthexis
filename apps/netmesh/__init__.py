@@ -1,1 +1,1 @@
-default_app_config = "apps.netmesh.apps.NetmeshConfig"
+"""Netmesh application for managing mesh network membership and policies."""
