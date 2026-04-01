@@ -1,7 +1,15 @@
 import pytest
 from django.contrib.sites.models import Site
 
-from apps.netmesh.models import MeshMembership, NodeEndpoint, NodeKeyMaterial, PeerPolicy, ServiceAdvertisement
+from apps.netmesh.models import (
+    MeshMembership,
+    NodeEndpoint,
+    NodeKeyMaterial,
+    NodeRelayConfig,
+    PeerPolicy,
+    RelayRegion,
+    ServiceAdvertisement,
+)
 from apps.nodes.models import Node, NodeEnrollment, NodeRole
 from apps.nodes.services.enrollment import issue_enrollment_token
 
@@ -50,8 +58,26 @@ def test_netmesh_api_returns_scoped_payloads_and_etag(client):
         allowed_services=["should-not-leak"],
     )
 
-    NodeEndpoint.objects.create(node=peer_allowed, endpoint="wss://peer-allowed.example/ws", nat_type=NodeEndpoint.NatType.OPEN)
+    NodeEndpoint.objects.create(
+        node=peer_allowed,
+        endpoint="wss://peer-allowed.example/ws",
+        nat_type=NodeEndpoint.NatType.OPEN,
+        candidate_endpoints=["https://peer-allowed.example/direct"],
+        endpoint_priority=10,
+    )
     NodeEndpoint.objects.create(node=peer_other_site, endpoint="wss://peer-site-b.example/ws", nat_type=NodeEndpoint.NatType.OPEN)
+    relay_region = RelayRegion.objects.create(
+        code="use1",
+        name="US East",
+        relay_endpoint="wss://relay-use1.example/mesh",
+    )
+    NodeRelayConfig.objects.create(
+        node=peer_allowed,
+        region=relay_region,
+        relay_endpoint="wss://relay-override.example/mesh",
+        priority=1000,
+        config={"token_hint": "relay-token"},
+    )
     ServiceAdvertisement.objects.create(node=peer_allowed, service_name="ocpp", port=443, protocol=ServiceAdvertisement.Protocol.HTTPS)
     NodeKeyMaterial.objects.create(node=caller, public_key="caller-public-key", revoked=False)
 
@@ -72,8 +98,14 @@ def test_netmesh_api_returns_scoped_payloads_and_etag(client):
     endpoints_json = endpoints.json()
     assert endpoints.status_code == 200
     assert len(endpoints_json["endpoints"]) == 1
-    assert endpoints_json["endpoints"][0]["endpoint"] == "wss://peer-allowed.example/ws"
-    assert endpoints_json["endpoints"][0]["services"] == [
+    endpoint_payload = endpoints_json["endpoints"][0]
+    assert endpoint_payload["endpoint"] == "wss://peer-allowed.example/ws"
+    assert endpoint_payload["candidate_endpoints"] == ["https://peer-allowed.example/direct"]
+    assert endpoint_payload["endpoint_priority"] == 10
+    assert endpoint_payload["connection_candidates"][0]["path"] == "direct"
+    assert endpoint_payload["connection_candidates"][-1]["path"] == "relay"
+    assert endpoint_payload["connection_candidates"][-1]["region"] == "use1"
+    assert endpoint_payload["services"] == [
         {"service": "ocpp", "port": 443, "protocol": "https"}
     ]
 
@@ -120,6 +152,7 @@ def test_charger_profile_gets_minimal_peer_endpoint_fields(client):
     assert response.status_code == 200
     payload = response.json()["endpoints"][0]
     assert payload["endpoint"] == "udp://10.0.0.5:3040"
+    assert payload["connection_candidates"][0]["path"] == "direct"
     assert "nat_type" not in payload
     assert "services" not in payload
 
@@ -183,3 +216,92 @@ def test_peer_endpoints_are_filtered_by_peer_policy(client):
 
     assert response.status_code == 200
     assert [item["endpoint"] for item in response.json()["endpoints"]] == ["wss://allowed/ws"]
+
+
+@pytest.mark.django_db
+def test_peer_endpoints_keep_direct_candidates_before_relays(client):
+    gateway_role = NodeRole.objects.create(name="Gateway")
+    service_role = NodeRole.objects.create(name="Service")
+    caller = Node.objects.create(hostname="caller-node", role=gateway_role)
+    peer = Node.objects.create(hostname="service-peer", role=service_role)
+
+    enrollment, token = issue_enrollment_token(node=caller)
+    enrollment.status = NodeEnrollment.Status.ACTIVE
+    enrollment.save(update_fields=["status", "updated_at"])
+    caller.mesh_enrollment_state = Node.MeshEnrollmentState.ENROLLED
+    caller.save(update_fields=["mesh_enrollment_state"])
+
+    MeshMembership.objects.create(node=caller, tenant="tenant-order", is_enabled=True)
+    MeshMembership.objects.create(node=peer, tenant="tenant-order", is_enabled=True)
+    PeerPolicy.objects.create(
+        tenant="tenant-order",
+        source_node=caller,
+        destination_node=peer,
+        allowed_services=["ocpp"],
+    )
+    NodeEndpoint.objects.create(
+        node=peer,
+        endpoint="wss://peer/ws",
+        nat_type=NodeEndpoint.NatType.OPEN,
+        candidate_endpoints=["wss://peer/direct-2"],
+        endpoint_priority=100,
+    )
+    relay_region = RelayRegion.objects.create(
+        code="use1",
+        name="US East",
+        relay_endpoint="wss://relay-use1/mesh",
+    )
+    NodeRelayConfig.objects.create(
+        node=peer,
+        region=relay_region,
+        relay_endpoint="wss://relay-override/mesh",
+        priority=1,
+    )
+
+    response = client.get("/api/netmesh/peer-endpoints/", HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    assert response.status_code == 200
+    candidates = response.json()["endpoints"][0]["connection_candidates"]
+    assert [candidate["path"] for candidate in candidates] == ["direct", "direct", "relay"]
+
+
+@pytest.mark.django_db
+def test_peer_endpoints_ignore_non_list_candidate_endpoints(client):
+    gateway_role = NodeRole.objects.create(name="Gateway")
+    service_role = NodeRole.objects.create(name="Service")
+    caller = Node.objects.create(hostname="caller-node", role=gateway_role)
+    peer = Node.objects.create(hostname="service-peer", role=service_role)
+
+    enrollment, token = issue_enrollment_token(node=caller)
+    enrollment.status = NodeEnrollment.Status.ACTIVE
+    enrollment.save(update_fields=["status", "updated_at"])
+    caller.mesh_enrollment_state = Node.MeshEnrollmentState.ENROLLED
+    caller.save(update_fields=["mesh_enrollment_state"])
+
+    MeshMembership.objects.create(node=caller, tenant="tenant-candidates", is_enabled=True)
+    MeshMembership.objects.create(node=peer, tenant="tenant-candidates", is_enabled=True)
+    PeerPolicy.objects.create(
+        tenant="tenant-candidates",
+        source_node=caller,
+        destination_node=peer,
+        allowed_services=["ocpp"],
+    )
+    NodeEndpoint.objects.create(
+        node=peer,
+        endpoint="wss://peer/ws",
+        candidate_endpoints={"invalid": "shape"},
+        nat_type=NodeEndpoint.NatType.OPEN,
+    )
+
+    response = client.get("/api/netmesh/peer-endpoints/", HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    assert response.status_code == 200
+    payload = response.json()["endpoints"][0]
+    assert payload["candidate_endpoints"] == []
+    assert payload["connection_candidates"] == [
+        {
+            "endpoint": "wss://peer/ws",
+            "path": "direct",
+            "priority": 100,
+        }
+    ]
