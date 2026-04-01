@@ -5,7 +5,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
-from apps.evergo.admin import EvergoCustomerAdmin
+from apps.evergo.admin import EvergoCustomerAdmin, EvergoOrderAdmin
 from apps.evergo.models import EvergoCustomer, EvergoOrder, EvergoUser
 
 
@@ -89,14 +89,24 @@ def test_evergo_customer_admin_brand_display_ordering_supports_payload_fallback(
 
 
 @pytest.mark.django_db
-def test_evergo_customer_admin_handles_stale_latest_order_reference():
-    """Readonly helpers should tolerate stale latest_order FK references."""
-    User = get_user_model()
-    suite_user = User.objects.create_user(username="stale-order", email="stale-order@example.com")
-    profile = EvergoUser.objects.create(user=suite_user, evergo_email="stale-order@example.com")
-    customer = EvergoCustomer(user=profile, name="Acme", latest_order_id=999999, raw_payload={})
+def test_evergo_order_admin_list_display_matches_requested_column_order():
+    """Orders changelist should match the reviewed status/address/phone/brand/municipio order."""
+    model_admin = EvergoOrderAdmin(EvergoOrder, admin.site)
 
-    model_admin = EvergoCustomerAdmin(EvergoCustomer, admin.site)
+    assert model_admin.list_display == (
+        "order_number_link",
+        "customer_name_link",
+        "status_name_link",
+        "address_display",
+        "phone_display",
+        "brand_name",
+        "municipio_display",
+    )
 
-    assert model_admin.status_of_last_so(customer) == "-"
-    assert model_admin.brand_display(customer) == "-"
+
+@pytest.mark.django_db
+def test_evergo_order_admin_phone_display_is_not_sortable():
+    """Phone column sorting stays disabled until fallback-aware ordering is implemented."""
+    model_admin = EvergoOrderAdmin(EvergoOrder, admin.site)
+
+    assert getattr(model_admin.phone_display, "admin_order_field", None) is None

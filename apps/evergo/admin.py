@@ -490,10 +490,10 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
         "order_number_link",
         "customer_name_link",
         "status_name_link",
+        "address_display",
+        "phone_display",
         "brand_name",
-        "assigned_engineer_name_cleaved",
-        "validation_state_check",
-        "refreshed_at",
+        "municipio_display",
     )
     list_display_links = ("order_number_link",)
     list_filter = (
@@ -590,6 +590,21 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
     def brand_name(self, obj):
         """Display the synced site name as brand column in list view."""
         return obj.site_name
+
+    @admin.display(description="Address", ordering="address_street")
+    def address_display(self, obj):
+        """Display the primary street address in changelist rows."""
+        return obj.address_street or "-"
+
+    @admin.display(description="Municipio", ordering="address_municipality")
+    def municipio_display(self, obj):
+        """Display municipality value in changelist rows."""
+        return obj.address_municipality or "-"
+
+    @admin.display(description="Phone")
+    def phone_display(self, obj):
+        """Display primary phone, falling back to secondary when needed."""
+        return obj.phone_primary or obj.phone_secondary or "-"
 
     @admin.display(description="Order Number", ordering="order_number")
     def order_number_link(self, obj):
