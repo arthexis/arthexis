@@ -601,7 +601,7 @@ class EvergoOrderAdmin(SaveBeforeChangeAction, DjangoObjectActions, admin.ModelA
         """Display municipality value in changelist rows."""
         return obj.address_municipality or "-"
 
-    @admin.display(description="Phone", ordering="phone_primary")
+    @admin.display(description="Phone")
     def phone_display(self, obj):
         """Display primary phone, falling back to secondary when needed."""
         return obj.phone_primary or obj.phone_secondary or "-"

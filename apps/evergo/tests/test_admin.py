@@ -102,3 +102,11 @@ def test_evergo_order_admin_list_display_matches_requested_column_order():
         "brand_name",
         "municipio_display",
     )
+
+
+@pytest.mark.django_db
+def test_evergo_order_admin_phone_display_is_not_sortable():
+    """Phone column sorting stays disabled until fallback-aware ordering is implemented."""
+    model_admin = EvergoOrderAdmin(EvergoOrder, admin.site)
+
+    assert getattr(model_admin.phone_display, "admin_order_field", None) is None
