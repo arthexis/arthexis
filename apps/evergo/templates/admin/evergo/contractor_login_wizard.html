@@ -1,6 +1,64 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .evergo-login-wizard {
+      max-width: 920px;
+    }
+
+    .evergo-login-wizard .wizard-intro {
+      margin-bottom: 1.25rem;
+      padding: 1rem 1.2rem;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--body-bg) 82%, var(--primary) 18%);
+    }
+
+    .evergo-login-wizard .wizard-intro p {
+      margin: 0;
+      line-height: 1.55;
+    }
+
+    .evergo-login-wizard .wizard-results ul {
+      margin: 0;
+      padding-left: 1.1rem;
+    }
+
+    .evergo-login-wizard fieldset.module.aligned {
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      padding: 0.9rem 1rem 0.4rem;
+      background: color-mix(in srgb, var(--body-bg) 88%, var(--primary) 12%);
+    }
+
+    .evergo-login-wizard .form-row {
+      margin-bottom: 0.45rem;
+      padding-bottom: 0.55rem;
+      border-bottom: 1px dashed color-mix(in srgb, var(--border-color) 75%, transparent);
+    }
+
+    .evergo-login-wizard .form-row:last-child {
+      border-bottom: 0;
+      margin-bottom: 0;
+      padding-bottom: 0.15rem;
+    }
+
+    .evergo-login-wizard .form-row .help {
+      margin-top: 0.25rem;
+      color: var(--body-quiet-color);
+    }
+
+    .evergo-login-wizard .submit-row {
+      margin-top: 1rem;
+      border-radius: 10px;
+      padding: 0.8rem;
+      border: 1px solid var(--border-color);
+    }
+  </style>
+{% endblock %}
+
 {% block breadcrumbs %}
   <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
@@ -14,8 +72,8 @@
 {% endblock %}
 
 {% block content %}
-  <div id="content-main">
-    <div class="module aligned">
+  <div id="content-main" class="evergo-login-wizard">
+    <div class="module aligned wizard-intro">
       <h1>{{ title }}</h1>
       <p>
         {% blocktranslate %}
@@ -25,7 +83,7 @@
     </div>
 
     {% if setup_results %}
-      <div class="module aligned">
+      <div class="module aligned wizard-results">
         <h2>{% translate "Setup results" %}</h2>
         <ul>
           <li>
