@@ -408,7 +408,9 @@
     if(!supportsSerial && !supportsNfc){
       connectBtn.disabled = true;
       connectBtn.classList.add('disabled');
-      setStatus(text.nfcUnsupported, 'error');
+      setStatus(text.unsupported, 'error');
+    } else if(supportsSerial && !supportsNfc){
+      setStatus(text.nfcUnsupported, 'info');
     } else {
       connectBtn.addEventListener('click', (event) => {
         event.preventDefault();

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 
 from django.contrib.auth import REDIRECT_FIELD_NAME, authenticate, login
 from django.http import JsonResponse
@@ -18,7 +17,7 @@ def _normalize_rfid_login_value(value: object) -> str:
     raw_value = str(value or "").strip().upper()
     if not raw_value:
         return ""
-    return re.sub(r"[^0-9A-F]", "", raw_value)
+    return raw_value.replace(":", "")
 
 
 @csrf_exempt
