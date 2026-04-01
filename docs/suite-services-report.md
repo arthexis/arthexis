@@ -23,3 +23,4 @@ The Suite Services Report (Admin → System → Suite Services Report) summarize
 - [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
 - [LCD Screen Hardware](lcd-screen-hardware.md)
 - [Auto-Upgrade Flow](auto-upgrade.md)
+- [LLM LCD log summary (optional feature)](feature/llm-summary.md)
