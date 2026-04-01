@@ -29,12 +29,15 @@ class NodeEnrollment(models.Model):
     )
     token_hash = models.CharField(max_length=64, unique=True)
     token_hint = models.CharField(max_length=8)
+    scope = models.CharField(max_length=64, default="mesh:read")
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.ISSUED)
     expires_at = models.DateTimeField()
     used_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    last_authenticated_at = models.DateTimeField(null=True, blank=True)
+    last_auth_error_code = models.CharField(max_length=64, blank=True, default="")
 
     class Meta:
         ordering = ["-created_at"]
@@ -43,9 +46,19 @@ class NodeEnrollment(models.Model):
     def hash_token(token: str) -> str:
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
+    TOKEN_PREFIX = "nmt1_"
+
     @classmethod
-    def issue(cls, *, node, site=None, issued_by=None, ttl: timedelta = timedelta(hours=1)):
-        token = secrets.token_urlsafe(24)
+    def issue(
+        cls,
+        *,
+        node,
+        site=None,
+        issued_by=None,
+        ttl: timedelta = timedelta(hours=1),
+        scope: str = "mesh:read",
+    ):
+        token = f"{cls.TOKEN_PREFIX}{secrets.token_urlsafe(24)}"
         enrollment = cls.objects.create(
             node=node,
             site=site,
@@ -53,6 +66,7 @@ class NodeEnrollment(models.Model):
             token_hash=cls.hash_token(token),
             token_hint=token[-6:],
             expires_at=timezone.now() + ttl,
+            scope=scope,
         )
         return enrollment, token
 

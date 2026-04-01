@@ -11,6 +11,7 @@ from django.utils.http import http_date
 from django.views.decorators.http import require_GET
 
 from apps.netmesh.api.auth import authenticate_enrollment
+from utils.api_errors import json_api_error
 from apps.netmesh.models import (
     MeshMembership,
     NodeEndpoint,
@@ -90,13 +91,18 @@ def _peer_ids_from_policies(*, policies, filters):
 
 
 def _membership_or_auth_error(request: HttpRequest):
-    principal, error = authenticate_enrollment(request)
+    principal, error = authenticate_enrollment(request, required_scope="mesh:read")
     if principal is None:
-        return None, JsonResponse({"detail": error}, status=401)
+        status, code, message = error
+        return None, json_api_error(status=status, code=code, message=message)
 
     scope_membership = _scope_for_caller(node=principal.node, site_id=principal.site_id)
     if scope_membership is None:
-        return None, JsonResponse({"detail": "caller has no active mesh membership"}, status=403)
+        return None, json_api_error(
+            status=403,
+            code="mesh_membership_missing",
+            message="caller has no active mesh membership",
+        )
 
     return (principal, scope_membership), None
 

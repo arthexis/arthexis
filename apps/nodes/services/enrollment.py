@@ -20,7 +20,14 @@ def _record_event(*, node: Node, enrollment: NodeEnrollment | None, action: str,
 
 
 @transaction.atomic
-def issue_enrollment_token(*, node: Node, actor=None, site: Site | None = None, reissue: bool = False):
+def issue_enrollment_token(
+    *,
+    node: Node,
+    actor=None,
+    site: Site | None = None,
+    reissue: bool = False,
+    scope: str = "mesh:read",
+):
     current_state = node.mesh_enrollment_state
     node.mesh_enrollment_state = Node.MeshEnrollmentState.PENDING
     node.save(update_fields=["mesh_enrollment_state"])
@@ -37,7 +44,12 @@ def issue_enrollment_token(*, node: Node, actor=None, site: Site | None = None, 
             updated_at=now,
         )
 
-    enrollment, token = NodeEnrollment.issue(node=node, site=site or node.base_site, issued_by=actor)
+    enrollment, token = NodeEnrollment.issue(
+        node=node,
+        site=site or node.base_site,
+        issued_by=actor,
+        scope=scope,
+    )
     _record_event(
         node=node,
         enrollment=enrollment,
@@ -45,7 +57,7 @@ def issue_enrollment_token(*, node: Node, actor=None, site: Site | None = None, 
         actor=actor,
         from_state=current_state,
         to_state=node.mesh_enrollment_state,
-        details={"site_id": enrollment.site_id, "token_hint": enrollment.token_hint},
+        details={"site_id": enrollment.site_id, "token_hint": enrollment.token_hint, "scope": enrollment.scope},
     )
     return enrollment, token
 
