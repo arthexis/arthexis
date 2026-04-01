@@ -1,7 +1,14 @@
-"""Models for configuring API entry points and resource methods."""
+"""Models for API explorer entries and self-service service tokens."""
 
+import hashlib
+import secrets
+from datetime import timedelta
+
+from django.conf import settings
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 
 class APIExplorerManager(models.Manager):
@@ -95,3 +102,158 @@ class ResourceMethod(models.Model):
                 setattr(self, field_name, dict())
             elif not isinstance(payload, (dict, list)):
                 raise ValidationError({field_name: "Structure must be a JSON object or array."})
+
+
+class ServiceToken(models.Model):
+    """Scoped service token with lifecycle metadata and expiry policy enforcement."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        REPLACED = "replaced", "Replaced"
+        REVOKED = "revoked", "Revoked"
+
+    MAX_EXPIRY_DAYS = 90
+
+    name = models.CharField(max_length=120)
+    token_prefix = models.CharField(max_length=24, db_index=True)
+    secret_hash = models.CharField(max_length=255)
+    scopes = models.JSONField(default=list, blank=True)
+    expires_at = models.DateTimeField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="issued_service_tokens",
+    )
+    rotated_from = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="rotated_to",
+    )
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_reason = models.CharField(max_length=300, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = "Service Token"
+        verbose_name_plural = "Service Tokens"
+        permissions = [
+            ("manage_service_tokens", "Can manage service token lifecycle"),
+            ("reveal_service_token_secret", "Can reveal newly created service token secrets"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.token_prefix})"
+
+    @classmethod
+    def issue(
+        cls,
+        *,
+        actor,
+        name: str,
+        scopes: list[str],
+        expires_at,
+        rotated_from=None,
+    ) -> tuple["ServiceToken", str]:
+        raw_secret = f"atk_{secrets.token_urlsafe(30)}"
+        secret_hash = make_password(raw_secret)
+        token_prefix = raw_secret[:16]
+        token = cls.objects.create(
+            name=name.strip(),
+            token_prefix=token_prefix,
+            secret_hash=secret_hash,
+            scopes=sorted({scope.strip() for scope in scopes if scope and scope.strip()}),
+            expires_at=expires_at,
+            created_by=actor,
+            rotated_from=rotated_from,
+        )
+        ServiceTokenEvent.record(
+            token=token,
+            event_type=ServiceTokenEvent.EventType.CREATED,
+            actor=actor,
+            details={
+                "expires_at": expires_at.isoformat(),
+                "scope_count": len(token.scopes),
+                "rotated_from_id": rotated_from.pk if rotated_from else None,
+            },
+        )
+        return token, raw_secret
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() >= self.expires_at
+
+    def clean(self) -> None:
+        super().clean()
+        errors = {}
+        if not isinstance(self.scopes, list) or any(not isinstance(item, str) for item in self.scopes):
+            errors["scopes"] = "Scopes must be a list of strings."
+        if self.expires_at:
+            now = timezone.now()
+            maximum_expiry = now + timedelta(days=self.MAX_EXPIRY_DAYS)
+            if self.expires_at <= now:
+                errors["expires_at"] = "Expiry must be in the future."
+            elif self.expires_at > maximum_expiry:
+                errors["expires_at"] = (
+                    f"Expiry exceeds policy limit of {self.MAX_EXPIRY_DAYS} days."
+                )
+        if errors:
+            raise ValidationError(errors)
+
+    def check_secret(self, raw_secret: str) -> bool:
+        return check_password(raw_secret, self.secret_hash)
+
+    def revoke(self, *, actor, reason: str, impact_note: str = "") -> None:
+        self.status = self.Status.REVOKED
+        self.revoked_at = timezone.now()
+        self.revoked_reason = reason.strip()
+        self.save(update_fields=["status", "revoked_at", "revoked_reason", "updated_at"])
+        ServiceTokenEvent.record(
+            token=self,
+            event_type=ServiceTokenEvent.EventType.REVOKED,
+            actor=actor,
+            details={"reason": reason, "impact_note": impact_note},
+        )
+
+
+class ServiceTokenEvent(models.Model):
+    """Audit stream for service token lifecycle and reveal actions."""
+
+    class EventType(models.TextChoices):
+        CREATED = "created", "Created"
+        REVEALED = "revealed", "Secret Revealed"
+        REVOKED = "revoked", "Revoked"
+        ROTATED = "rotated", "Rotated"
+
+    token = models.ForeignKey(ServiceToken, on_delete=models.CASCADE, related_name="events")
+    event_type = models.CharField(max_length=24, choices=EventType.choices)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="service_token_events",
+    )
+    details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = "Service Token Event"
+        verbose_name_plural = "Service Token Events"
+
+    def __str__(self) -> str:
+        actor = getattr(self.actor, "username", "system")
+        return f"{self.token_id}:{self.event_type}:{actor}"
+
+    @classmethod
+    def record(cls, *, token: ServiceToken, event_type: str, actor, details: dict | None = None):
+        payload = details or {}
+        payload.setdefault("audit_fingerprint", hashlib.sha256(
+            f"{token.pk}:{event_type}:{timezone.now().isoformat()}".encode()
+        ).hexdigest()[:16])
+        return cls.objects.create(token=token, event_type=event_type, actor=actor, details=payload)
