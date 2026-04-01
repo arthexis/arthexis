@@ -11,6 +11,7 @@ from django.test import RequestFactory
 import pytest
 
 from apps.nodes.models import Node, NodeRole
+from apps.nodes.services.enrollment import issue_enrollment_token
 from apps.nodes.services import registration
 from apps.nodes.views import node_info, register_node
 
@@ -168,6 +169,59 @@ def test_register_node_updates_base_site_for_existing_node(admin_user):
     assert response.status_code == 200
     node.refresh_from_db()
     assert node.base_site_id == site.id
+
+
+@pytest.mark.django_db
+def test_register_node_rejects_invalid_enrollment_token_without_creating_node(admin_user):
+    payload = {
+        "hostname": "mesh-invalid-token",
+        "mac_address": "aa:bb:cc:dd:ee:45",
+        "address": "198.51.100.45",
+        "port": 8888,
+        "public_key": "ssh-rsa AAAAB3Nza-invalid",
+        "enrollment_token": "invalid-token",
+    }
+
+    factory = RequestFactory()
+    request = _build_request(factory, payload)
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    response = register_node(request)
+
+    assert response.status_code == 400
+    assert not Node.objects.filter(mac_address=payload["mac_address"]).exists()
+
+
+@pytest.mark.django_db
+def test_register_node_accepts_valid_enrollment_token_for_existing_node(admin_user):
+    node = Node.objects.create(
+        hostname="mesh-existing-token",
+        mac_address="aa:bb:cc:dd:ee:46",
+        address="198.51.100.46",
+        port=8888,
+        public_endpoint="mesh-existing-token",
+    )
+    _, token = issue_enrollment_token(node=node)
+    payload = {
+        "hostname": node.hostname,
+        "mac_address": node.mac_address,
+        "address": node.address,
+        "port": node.port,
+        "public_key": "ssh-rsa AAAAB3Nza-valid",
+        "enrollment_token": token,
+    }
+
+    factory = RequestFactory()
+    request = _build_request(factory, payload)
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    response = register_node(request)
+
+    node.refresh_from_db()
+    assert response.status_code == 200
+    assert node.public_key == payload["public_key"]
 
 
 @pytest.mark.django_db

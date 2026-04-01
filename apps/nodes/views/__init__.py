@@ -14,6 +14,7 @@ from .registration import (
     register_node,
     register_visitor_proxy,
     register_visitor_telemetry,
+    submit_enrollment_public_key,
 )
 from .screenshots import capture
 from .migration_status import deferred_migration_status
@@ -34,4 +35,5 @@ __all__ = [
     "register_node",
     "register_visitor_proxy",
     "register_visitor_telemetry",
+    "submit_enrollment_public_key",
 ]

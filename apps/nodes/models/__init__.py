@@ -1,5 +1,6 @@
 from apps.credentials.models import SSHAccount, ssh_key_upload_path
 
+from .enrollment import NodeEnrollment, NodeEnrollmentEvent
 from .features import (
     NodeFeature,
     NodeFeatureAssignment,
@@ -20,6 +21,8 @@ from .utils import ROLE_RENAMES, _format_upgrade_body, _upgrade_in_progress
 __all__ = [
     "NetMessage",
     "MeshNodeModel",
+    "NodeEnrollment",
+    "NodeEnrollmentEvent",
     "Node",
     "NodeFeature",
     "NodeFeatureAssignment",

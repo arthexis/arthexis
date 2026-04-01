@@ -49,12 +49,15 @@ from config.request_utils import is_https_request
 
 from ..models import Node, NodeRole, _format_upgrade_body
 from .actions import (
+    approve_mesh_enrollment,
     create_charge_point_forwarder,
     discover_local_node,
     download_evcs_firmware,
     export_rfids_to_selected,
     import_rfids_from_selected,
     register_visitor,
+    reissue_mesh_enrollment_token,
+    revoke_mesh_enrollment,
     send_net_message,
     take_screenshots,
     update_selected_nodes,
@@ -163,6 +166,9 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         discover_local_node,
         update_selected_nodes,
         register_visitor,
+        approve_mesh_enrollment,
+        revoke_mesh_enrollment,
+        reissue_mesh_enrollment_token,
         take_screenshots,
         download_evcs_firmware,
         create_charge_point_forwarder,

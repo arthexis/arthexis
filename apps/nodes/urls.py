@@ -7,6 +7,11 @@ urlpatterns = [
     path("list/", views.node_list, name="node-list"),
     path("register/", views.register_node, name="register-node"),
     path(
+        "register/enrollment-public-key/",
+        views.submit_enrollment_public_key,
+        name="register-enrollment-public-key",
+    ),
+    path(
         "register/proxy/",
         views.register_visitor_proxy,
         name="register-visitor-proxy",

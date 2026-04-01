@@ -19,6 +19,7 @@ from apps.core.system_ui import systemd_unit_status
 from apps.ocpp.models import CPForwarder, Charger
 
 from ..models import NetMessage, Node
+from ..services.enrollment import approve_enrollment, issue_enrollment_token, revoke_enrollment
 from .forms import DownloadFirmwareForm, SendNetMessageForm
 
 
@@ -43,6 +44,63 @@ def discover_node_features(modeladmin, request, queryset):
 
 discover_node_features.requires_queryset = False
 discover_node_features.is_discover_action = True
+
+
+@admin.action(description=_("Approve mesh enrollment"))
+def approve_mesh_enrollment(modeladmin, request, queryset):
+    updated = 0
+    for node in queryset:
+        approve_enrollment(node=node, actor=request.user)
+        updated += 1
+    if updated:
+        modeladmin.message_user(
+            request,
+            ngettext(
+                "Approved %(count)d enrollment.",
+                "Approved %(count)d enrollments.",
+                updated,
+            )
+            % {"count": updated},
+            messages.SUCCESS,
+        )
+
+
+@admin.action(description=_("Revoke mesh enrollment"))
+def revoke_mesh_enrollment(modeladmin, request, queryset):
+    updated = 0
+    for node in queryset:
+        revoke_enrollment(node=node, actor=request.user, reason="admin action")
+        updated += 1
+    if updated:
+        modeladmin.message_user(
+            request,
+            ngettext(
+                "Revoked %(count)d enrollment.",
+                "Revoked %(count)d enrollments.",
+                updated,
+            )
+            % {"count": updated},
+            messages.SUCCESS,
+        )
+
+
+@admin.action(description=_("Reissue enrollment token"))
+def reissue_mesh_enrollment_token(modeladmin, request, queryset):
+    issued = []
+    for node in queryset:
+        enrollment, token = issue_enrollment_token(
+            node=node,
+            actor=request.user,
+            site=node.base_site,
+            reissue=True,
+        )
+        issued.append(f"{node.hostname}: {token} (expires {enrollment.expires_at:%Y-%m-%d %H:%M:%SZ})")
+    if issued:
+        modeladmin.message_user(
+            request,
+            "\n".join(issued),
+            messages.WARNING,
+        )
 
 
 @admin.action(description=_("Update selected nodes"))
