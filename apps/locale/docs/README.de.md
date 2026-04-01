@@ -130,6 +130,7 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
 | Stable | Wöchentlich (Donnerstag vor 5:00 Uhr) | Folgt Release-Revisionen mit automatischen Wochenprüfungen. | `--stable` |
 | Latest | Täglich (zur selben Stunde) | Folgt den neuesten Mainline-Revisionen mit täglichen Prüfungen. | `--latest` / `-l` oder `--unstable` |
 | Manual | Keine (nur manuelle Upgrades) | Deaktiviert die automatische Upgrade-Schleife für volle Betreiberkontrolle. Dieses Verhalten ist der Standard, wenn kein Kanal angegeben wird. | _Upgrades bei Bedarf ohne Kanal-Flag ausführen._ |
+
 - Folge dem [Installations- und Administrationshandbuch](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
 - Nimm Ladepunkte mit dem [EVCS-Konnektivitäts- und Wartungs-Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/evcs-connectivity-maintenance.md) in Betrieb und halte sie instand.
 - Konfiguriere Zahlungs-Gateways mit dem [Payment Processors Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/payment-processors.md).
@@ -149,11 +150,6 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
 Die Arthexis-Konstellation befindet sich weiterhin in sehr aktiver Entwicklung und erhält täglich neue Funktionen.
 
 Wenn du unsere Suite für deine Energieprojekte einsetzen möchtest, erreichst du uns unter [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) oder über unsere [Webseite](https://www.gelectriic.com/) für professionelle Dienstleistungen und kommerziellen Support.
-
-## Über mich
-
-> "Wie bitte, du willst auch etwas über mich wissen? Nun, ich mag es, Software zu entwickeln, Pen-&-Paper-Rollenspiele, lange Spaziergänge am Strand und eine vierte geheime Sache."
-> --Arthexis
 
 ## Lizenz und Förderung
 
