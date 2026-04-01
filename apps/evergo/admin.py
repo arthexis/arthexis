@@ -925,10 +925,10 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     list_select_related = ("latest_order",)
 
     list_display = (
-        "name",
         "latest_so_link",
-        "status_of_last_so",
+        "name",
         "address_display",
+        "brand_display",
         "phone_number_display",
     )
     list_filter = (
@@ -987,6 +987,19 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
             reverse("evergo:order-tracking-public", kwargs={"order_id": latest_order.remote_id}),
             latest_order.status_name,
         )
+
+
+    @admin.display(description=_("Brand"), ordering="latest_order__site_name")
+    def brand_display(self, obj):
+        """Return charger/site brand inferred from the linked latest order payload."""
+        latest_order = obj.latest_order
+        if latest_order and latest_order.site_name:
+            return latest_order.site_name
+
+        install_payload = obj.raw_payload.get("orden_instalacion") if isinstance(obj.raw_payload, dict) else {}
+        if not isinstance(install_payload, dict):
+            return "-"
+        return str(install_payload.get("marca_cargador") or "").strip() or "-"
 
     @admin.display(description=_("Phone number"))
     def phone_number_display(self, obj):
