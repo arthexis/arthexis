@@ -130,6 +130,7 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
 | Stable | Settimanale (giovedì prima delle 5:00) | Segue le revisioni di rilascio con controlli automatici settimanali. | `--stable` |
 | Latest | Giornaliera (alla stessa ora) | Segue le revisioni più recenti della linea principale con controlli quotidiani. | `--latest` / `-l` o `--unstable` |
 | Manual | Nessuna (solo aggiornamenti manuali) | Disattiva il ciclo di aggiornamento automatico per il pieno controllo operativo. Questo è il comportamento predefinito se non specifichi un canale. | _Esegui gli upgrade su richiesta senza specificare un canale._ |
+
 - Segui la [Guida all'installazione e all'amministrazione](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) per attività di deployment, ciclo di vita e runbook operativi.
 - Esegui onboarding e manutenzione dei caricabatterie con il [Cookbook Connettività e Manutenzione EVCS](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/evcs-connectivity-maintenance.md).
 - Configura i gateway di pagamento con il [Cookbook dei processori di pagamento](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/payment-processors.md).
@@ -149,11 +150,6 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
 Costellazione Arthexis è ancora in fase di sviluppo molto attivo e ogni giorno vengono aggiunte nuove funzionalità.
 
 Se decidi di utilizzare la nostra suite per i tuoi progetti energetici, puoi contattarci all'indirizzo [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) o visitare la nostra [pagina web](https://www.gelectriic.com/) per servizi professionali e supporto commerciale.
-
-## Chi sono
-
-> "Cosa? Vuoi sapere qualcosa anche su di me? Beh, mi piace sviluppare software, i giochi di ruolo, lunghe passeggiate sulla spiaggia e una quarta cosa segreta."
-> --Arthexis
 
 ## Licenza e sponsorizzazione
 

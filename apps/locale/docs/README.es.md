@@ -130,6 +130,7 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
 | Estable | Semanal (jueves antes de las 5:00 AM) | Sigue revisiones de lanzamientos con verificaciones automáticas semanales. | `--stable` |
 | Latest | Diario (a la misma hora) | Sigue las revisiones más recientes de la línea principal con verificaciones diarias. | `--latest` / `-l` o `--unstable` |
 | Manual | Ninguna (solo actualizaciones manuales) | Desactiva el bucle de actualización automática para control total del operador. Este es el comportamiento predeterminado si no se indica canal. | _Ejecuta upgrades bajo demanda sin indicar un canal._ |
+
 - Sigue la [Guía de instalación y administración](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) para tareas de despliegue, ciclo de vida y runbooks operativos.
 - Integra y da mantenimiento a los cargadores con el [Cookbook de conectividad y mantenimiento EVCS](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/evcs-connectivity-maintenance.md).
 - Configura pasarelas de pago con el [Cookbook de procesadores de pago](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/payment-processors.md).
@@ -149,11 +150,6 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
 Constelación Arthexis sigue en desarrollo muy activo y se agregan nuevas funciones cada día.
 
 Si decides usar nuestra suite para tus proyectos de energía, puedes contactarnos en [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) o visitar nuestro [sitio web](https://www.gelectriic.com/) para servicios profesionales y soporte comercial.
-
-## Sobre mí
-
-> "¿Qué? ¿También quieres saber sobre mí? Bueno, disfruto el desarrollo de software, los juegos de rol, largas caminatas por la playa y una cuarta cosa secreta."
-> --Arthexis
 
 ## Licencia y patrocinio
 
