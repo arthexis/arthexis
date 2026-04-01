@@ -17,6 +17,8 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
 - [LCD Screen Hardware](lcd-screen-hardware.md)
 - [Migration Branch Guards](development/migration-branch-guards.md)
+- [Endpoint Documentation Inventory](integrations/endpoint-inventory.md)
+- [Endpoint Documentation Completeness Checklist](integrations/documentation-completeness-checklist.md)
 - [OCPP 1.6 Compliance Review](ocpp16_compliance_review.md)
 - [Ops Command Wrapper](operations/operational-commands.md)
 - [Reinstall + Data Import Runbook (1.0+)](operations/reinstall-data-import-runbook.md)
@@ -24,4 +26,3 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [Suite Services Report](suite-services-report.md)
 - [USB Camera Power-Off](usb-camera-power-off.md)
 - [Watchtower Attack Simulation Playbook](development/watchtower-attack-simulation.md)
-
