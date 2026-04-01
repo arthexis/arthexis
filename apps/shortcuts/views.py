@@ -15,6 +15,8 @@ from .constants import SHORTCUT_MANAGEMENT_FEATURE_SLUG
 from .models import Shortcut
 from .runtime import ShortcutExecutionError, execute_client_shortcut
 
+GENERIC_SHORTCUT_EXECUTION_ERROR = "Shortcut execution failed."
+
 
 @login_required
 @require_GET
@@ -72,8 +74,8 @@ def execute_client_shortcut_view(request: HttpRequest, shortcut_id: int) -> Json
     except ValidationError as exc:
         message = exc.message if hasattr(exc, "message") else "; ".join(exc.messages) or "Invalid shortcut configuration."
         return JsonResponse({"detail": message}, status=400)
-    except ShortcutExecutionError as exc:
-        return JsonResponse({"detail": str(exc)}, status=422)
+    except ShortcutExecutionError:
+        return JsonResponse({"detail": GENERIC_SHORTCUT_EXECUTION_ERROR}, status=422)
 
     return JsonResponse(
         {
