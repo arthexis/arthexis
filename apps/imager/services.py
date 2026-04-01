@@ -12,9 +12,9 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from urllib.error import URLError
-from urllib.parse import ParseResult, unquote, urlparse
-from urllib.request import urlopen
+from urllib.error import HTTPError, URLError
+from urllib.parse import ParseResult, unquote, urljoin, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from django.conf import settings
 from django.db import transaction
@@ -125,6 +125,41 @@ def _normalize_local_source_path(base_image_uri: str, parsed_uri: ParseResult) -
     return Path(decoded_path)
 
 
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Prevent urllib from auto-following redirects so redirect targets can be validated."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
+        return None
+
+
+def _download_remote_base_image(base_image_uri: str, destination: Path) -> None:
+    """Download a remote base image while validating redirect targets."""
+
+    opener = build_opener(_NoRedirectHandler())
+    current_url = base_image_uri
+
+    for _ in range(10):
+        _validate_remote_base_image_url(current_url)
+
+        request = Request(current_url)
+        with opener.open(request) as response:
+            status_code = response.getcode()
+            if status_code in {301, 302, 303, 307, 308}:
+                redirect_location = response.headers.get("Location")
+                if not redirect_location:
+                    raise ImagerBuildError(
+                        f"Remote base image URL '{current_url}' returned a redirect without a Location header."
+                    )
+                current_url = urljoin(current_url, redirect_location)
+                continue
+
+            with destination.open("wb") as output_handle:
+                shutil.copyfileobj(response, output_handle)
+            return
+
+    raise ImagerBuildError(f"Remote base image URL '{base_image_uri}' exceeded redirect limit.")
+
+
 def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
     """Resolve local/file/http(s) base image inputs to a local filesystem path."""
 
@@ -139,14 +174,11 @@ def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
     if parsed.scheme not in {"http", "https"}:
         raise ImagerBuildError("Only file, http, and https base image URIs are supported.")
 
-    _validate_remote_base_image_url(base_image_uri)
-
     destination_name = Path(unquote(parsed.path)).name or "base-image.img"
     destination = workspace / destination_name
     try:
-        with urlopen(base_image_uri) as response, destination.open("wb") as output_handle:
-            shutil.copyfileobj(response, output_handle)
-    except URLError as exc:
+        _download_remote_base_image(base_image_uri, destination)
+    except (HTTPError, URLError) as exc:
         reason = getattr(exc, "reason", str(exc))
         raise ImagerBuildError(f"Could not download base image: {reason}") from exc
     return destination
@@ -185,6 +217,9 @@ def _validate_remote_base_image_url(base_image_uri: str) -> None:
             f"Remote base image host '{host}' is not in IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS."
         )
 
+    if allowed_hosts and host in allowed_hosts:
+        return
+
     if not getattr(settings, "IMAGER_BLOCK_PRIVATE_REMOTE_IMAGE_HOSTS", True):
         return
 
@@ -204,8 +239,8 @@ def _validate_remote_base_image_url(base_image_uri: str) -> None:
 
     try:
         addrinfos = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
-    except socket.gaierror as exc:
-        raise ImagerBuildError(f"Could not resolve remote base image host '{host}': {exc}") from exc
+    except socket.gaierror:
+        return
 
     for family, _, _, _, sockaddr in addrinfos:
         if family == socket.AF_INET:
