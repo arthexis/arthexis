@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.contrib.sites.models import Site
+from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -12,8 +14,10 @@ from django.utils.http import urlsafe_base64_encode
 from apps.core import changelog
 from apps.energy.models import ClientReport
 from apps.features.models import Feature
+from apps.groups.constants import SITE_OPERATOR_GROUP_NAME
 from apps.modules.models import Module
 from apps.sites.models import Landing
+from apps.sites.utils import require_site_operator_or_staff
 
 pytestmark = [pytest.mark.django_db]
 
@@ -161,6 +165,31 @@ def test_release_checklist_requires_staff(client):
     )
     client.force_login(staff_user)
     assert client.get(url).status_code in (200, 404)
+
+
+def test_require_site_operator_or_staff_enforces_admin_operator_boundary(rf):
+    """Regression: site operators are allowed while non-operator users are denied."""
+
+    request = rf.get("/ocpp/secure/")
+    user_model = get_user_model()
+    regular_user = user_model.objects.create_user(
+        username="boundary-regular",
+        email="boundary-regular@example.com",
+        password="secret",
+    )
+    request.user = regular_user
+
+    with pytest.raises(PermissionDenied):
+        require_site_operator_or_staff(request)
+
+    operator_user = user_model.objects.create_user(
+        username="boundary-operator",
+        email="boundary-operator@example.com",
+        password="secret",
+    )
+    Group.objects.get_or_create(name=SITE_OPERATOR_GROUP_NAME)[0].user_set.add(operator_user)
+    request.user = operator_user
+    assert require_site_operator_or_staff(request) is None
 
 
 def test_changelog_data_validates_negative_query_params(client):

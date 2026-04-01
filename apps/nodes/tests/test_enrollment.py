@@ -133,6 +133,40 @@ def test_submit_enrollment_public_key_rejects_missing_site_for_scoped_token():
 
 
 @pytest.mark.django_db
+def test_submit_enrollment_public_key_rejects_duplicate_submission_regression():
+    """Regression: repeated token submissions should be idempotent after first success."""
+
+    node = Node.objects.create(
+        hostname="node-duplicate-submit",
+        mac_address="aa:bb:cc:dd:ee:72",
+        address="198.51.100.72",
+        port=8888,
+        public_endpoint="node-duplicate-submit",
+    )
+    enrollment, token = issue_enrollment_token(node=node)
+
+    first_enrollment, first_error = submit_public_key(
+        node=node,
+        token=token,
+        public_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCfirst",
+    )
+    duplicate_enrollment, duplicate_error = submit_public_key(
+        node=node,
+        token=token,
+        public_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCsecond",
+    )
+
+    enrollment.refresh_from_db()
+    node.refresh_from_db()
+    assert first_enrollment is not None
+    assert first_error == ""
+    assert duplicate_enrollment is None
+    assert duplicate_error == "Enrollment token already used"
+    assert enrollment.status == NodeEnrollment.Status.PUBLIC_KEY_SUBMITTED
+    assert node.public_key == "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCfirst"
+
+
+@pytest.mark.django_db
 def test_approve_enrollment_does_not_activate_issued_without_public_key():
     node = Node.objects.create(
         hostname="node-e",
