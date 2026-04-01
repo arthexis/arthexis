@@ -5,7 +5,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
-from apps.evergo.admin import EvergoCustomerAdmin
+from apps.evergo.admin import EvergoCustomerAdmin, EvergoOrderAdmin
 from apps.evergo.models import EvergoCustomer, EvergoOrder, EvergoUser
 
 
@@ -86,3 +86,19 @@ def test_evergo_customer_admin_brand_display_ordering_supports_payload_fallback(
 
     assert model_admin.brand_display.admin_order_field == "brand_sort_value"
     assert ordered_names == ["From payload", "From order"]
+
+
+@pytest.mark.django_db
+def test_evergo_order_admin_list_display_matches_requested_column_order():
+    """Orders changelist should match the reviewed status/address/phone/brand/municipio order."""
+    model_admin = EvergoOrderAdmin(EvergoOrder, admin.site)
+
+    assert model_admin.list_display == (
+        "order_number_link",
+        "customer_name_link",
+        "status_name_link",
+        "address_display",
+        "phone_display",
+        "brand_name",
+        "municipio_display",
+    )
