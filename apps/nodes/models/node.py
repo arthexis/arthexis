@@ -89,6 +89,12 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         PEER = "PEER", "Peer"
         SELF = "SELF", "Self"
 
+    class MeshEnrollmentState(models.TextChoices):
+        UNENROLLED = "UNENROLLED", "Unenrolled"
+        PENDING = "PENDING", "Pending"
+        ENROLLED = "ENROLLED", "Enrolled"
+        FAILED = "FAILED", "Failed"
+
     hostname = models.CharField(max_length=100)
     base_site = models.ForeignKey(
         Site,
@@ -140,6 +146,14 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
     base_path = models.CharField(max_length=255, blank=True)
     installed_version = models.CharField(max_length=20, blank=True)
     installed_revision = models.CharField(max_length=40, blank=True)
+    mesh_enrollment_state = models.CharField(
+        max_length=20,
+        choices=MeshEnrollmentState.choices,
+        default=MeshEnrollmentState.UNENROLLED,
+    )
+    mesh_key_fingerprint_metadata = models.JSONField(default=dict, blank=True)
+    last_mesh_heartbeat = models.DateTimeField(null=True, blank=True)
+    mesh_capability_flags = models.JSONField(default=list, blank=True)
     upgrade_canaries = models.ManyToManyField(
         "self",
         blank=True,

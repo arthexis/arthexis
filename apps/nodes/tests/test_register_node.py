@@ -169,6 +169,65 @@ def test_register_node_updates_base_site_for_existing_node(admin_user):
     node.refresh_from_db()
     assert node.base_site_id == site.id
 
+
+@pytest.mark.django_db
+def test_register_node_updates_mesh_identity_fields(admin_user):
+    node = Node.objects.create(
+        hostname="mesh-existing",
+        mac_address="aa:bb:cc:dd:ef:01",
+        address="198.51.100.41",
+        port=8888,
+        public_endpoint="mesh-existing",
+    )
+    payload = {
+        "hostname": node.hostname,
+        "mac_address": node.mac_address,
+        "address": node.address,
+        "port": node.port,
+        "mesh_enrollment_state": Node.MeshEnrollmentState.ENROLLED,
+        "mesh_key_fingerprint_metadata": {"algorithm": "sha256", "fingerprint": "abc123"},
+        "last_mesh_heartbeat": "2026-03-31T12:34:56Z",
+        "mesh_capability_flags": ["routing", "store-and-forward"],
+    }
+
+    factory = RequestFactory()
+    request = _build_request(factory, payload)
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    response = register_node(request)
+
+    assert response.status_code == 200
+    node.refresh_from_db()
+    assert node.mesh_enrollment_state == Node.MeshEnrollmentState.ENROLLED
+    assert node.mesh_key_fingerprint_metadata == payload["mesh_key_fingerprint_metadata"]
+    assert node.last_mesh_heartbeat is not None
+    assert node.mesh_capability_flags == sorted(payload["mesh_capability_flags"])
+
+
+@pytest.mark.django_db
+def test_node_info_includes_mesh_identity_fields():
+    node = Node.objects.create(
+        hostname="mesh-local",
+        mac_address="aa:bb:cc:dd:ef:02",
+        address="198.51.100.42",
+        port=8888,
+        public_endpoint="mesh-local",
+        current_relation=Node.Relation.SELF,
+        mesh_enrollment_state=Node.MeshEnrollmentState.PENDING,
+        mesh_key_fingerprint_metadata={"algorithm": "sha256"},
+        mesh_capability_flags=["routing"],
+    )
+
+    request = RequestFactory().get("/nodes/info/")
+    response = node_info(request)
+
+    assert response.status_code == 200
+    data = json.loads(response.content.decode())
+    assert data["mesh_enrollment_state"] == node.mesh_enrollment_state
+    assert data["mesh_key_fingerprint_metadata"] == node.mesh_key_fingerprint_metadata
+    assert data["mesh_capability_flags"] == node.mesh_capability_flags
+
 @pytest.mark.django_db
 def test_register_current_logs_to_local_logger(settings, caplog):
     settings.LOG_DIR = settings.BASE_DIR / "logs"

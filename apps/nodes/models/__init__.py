@@ -8,6 +8,7 @@ from .features import (
     NodeFeatureMixin,
 )
 from .migration_checkpoint import NodeMigrationCheckpoint
+from .mesh import MeshNodeModel
 from .net_message import NetMessage, PendingNetMessage
 from .node import Node, User, node_information_updated
 from .platform import Platform
@@ -18,6 +19,7 @@ from .utils import ROLE_RENAMES, _format_upgrade_body, _upgrade_in_progress
 
 __all__ = [
     "NetMessage",
+    "MeshNodeModel",
     "Node",
     "NodeFeature",
     "NodeFeatureAssignment",
