@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n static admin_extras staff_tasks tz widgets %}
+{% load i18n static admin_extras staff_tasks tz %}
 
 {% block extrastyle %}
   {{ block.super }}
@@ -38,6 +38,9 @@
     {% endif %}
   </div>
   <div class="admin-home-actions">
+    <a class="button" href="{% url 'admin:features_feature_changelist' %}">
+      {% translate "Features" %}
+    </a>
     {% admin_staff_tasks as staff_tasks %}
     {% for task in staff_tasks %}
       <a class="button" href="{{ task.url }}">{{ task.label }}</a>
@@ -54,26 +57,6 @@
     <div id="content-main" class="dashboard-main">
     {% include "admin/dashboard_app_list.html" with app_list=app_list enable_app_visibility_controls=True %}
     </div>
-    {% if app_list %}
-    <div class="dashboard-side" id="recent-boxes">
-      <div
-        id="admin-dashboard-widgets"
-        hx-get="{% url 'widgets:zone' 'sidebar' %}"
-        hx-trigger="load"
-        hx-swap="innerHTML"
-      >
-        <p>{% translate "Loading widgets..." %}</p>
-        <noscript>
-          {% render_widgets 'sidebar' %}
-        </noscript>
-      </div>
-      <p>
-        <a href="{% url 'admin:widgets_widget_changelist' %}">
-          {% translate "Configure Widgets" %}
-        </a>
-      </p>
-  </div>
-    {% endif %}
 </div>
 {% endblock %}
 

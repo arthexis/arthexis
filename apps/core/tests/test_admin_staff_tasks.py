@@ -90,3 +90,13 @@ class AdminStaffTasksTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Task Panels")
         self.assertContains(response, reverse("admin:system"))
+
+    def test_admin_home_shows_features_action_button(self):
+        """Admin home should expose a top action button linking to Suite Features."""
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("admin:features_feature_changelist"))
+        self.assertContains(response, "Features")
+        self.assertNotContains(response, 'id="admin-dashboard-widgets"')
