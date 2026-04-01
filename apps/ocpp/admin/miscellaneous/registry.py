@@ -30,6 +30,7 @@ from ...models import (
     CustomerInformationChunk,
     DisplayMessageNotification,
     DisplayMessage,
+    ControlOperationEvent,
 )
 
 
@@ -63,6 +64,7 @@ for _model in (
     CustomerInformationChunk,
     DisplayMessageNotification,
     DisplayMessage,
+    ControlOperationEvent,
 ):
     try:
         admin.site.unregister(_model)

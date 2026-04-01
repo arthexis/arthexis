@@ -1,10 +1,12 @@
 from ..common_imports import *
 from ..cp_forwarder import CPForwarderForm
+from ..control_operation import ControlOperationEventAdmin
 from ...models import (
     CustomerInformationRequest,
     CustomerInformationChunk,
     DisplayMessageNotification,
     DisplayMessage,
+    ControlOperationEvent,
 )
 
 import logging
@@ -1583,3 +1585,8 @@ class StationModelAdmin(EntityModelAdmin):
 
     def view_in_site(self, request):
         return HttpResponseRedirect(reverse("ocpp:supported-chargers"))
+
+
+@admin.register(ControlOperationEvent)
+class ControlOperationEventAdminView(ControlOperationEventAdmin):
+    pass

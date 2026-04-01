@@ -41,6 +41,7 @@ class TransactionAdmin(EntityModelAdmin):
         "start_time",
         "stop_time",
         "kw",
+        "recent_events",
     )
     readonly_fields = ("kw", "received_start_time", "received_stop_time")
     list_filter = ("charger", "account")
@@ -53,6 +54,17 @@ class TransactionAdmin(EntityModelAdmin):
     connector_number.short_description = "#"
     connector_number.admin_order_field = "connector_id"
 
+
+    def recent_events(self, obj):
+        security_count = SecurityEvent.objects.filter(charger=obj.charger, event_timestamp__gte=obj.start_time).count()
+        failed_ops = ControlOperationEvent.objects.filter(charger=obj.charger, status=ControlOperationEvent.Status.FAILED, created_at__gte=obj.start_time).count()
+        total = security_count + failed_ops
+        if not total:
+            return "-"
+        url = reverse("admin:ocpp_securityevent_changelist")
+        return format_html('<a href="{}?charger__id__exact={}">{} since session start</a>', url, obj.charger_id, total)
+
+    recent_events.short_description = "Recent events"
     def get_urls(self):
         urls = super().get_urls()
         custom = [
