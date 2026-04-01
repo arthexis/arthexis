@@ -6,6 +6,7 @@ import hashlib
 import json
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.db.models import Q
 from django.utils.http import http_date
 from django.views.decorators.http import require_GET
 
@@ -55,6 +56,32 @@ def _json_with_etag(request: HttpRequest, payload: dict) -> HttpResponse:
     return response
 
 
+def _policies_for_caller(*, principal, filters):
+    source_role = getattr(principal.node, "role", None)
+    policy_filter = Q(source_node=principal.node)
+    if source_role:
+        policy_filter |= Q(source_group=source_role)
+    return PeerPolicy.objects.filter(**filters).filter(policy_filter)
+
+
+def _peer_ids_from_policies(*, policies, filters):
+    destination_node_ids = set(
+        policies.filter(destination_node__isnull=False).values_list("destination_node_id", flat=True).distinct(),
+    )
+    destination_group_ids = list(
+        policies.filter(destination_group__isnull=False).values_list("destination_group_id", flat=True).distinct(),
+    )
+    if destination_group_ids:
+        destination_node_ids.update(
+            MeshMembership.objects.filter(
+                **filters,
+                is_enabled=True,
+                node__role_id__in=destination_group_ids,
+            ).values_list("node_id", flat=True),
+        )
+    return sorted(destination_node_ids)
+
+
 def _membership_or_auth_error(request: HttpRequest):
     principal, error = authenticate_enrollment(request)
     if principal is None:
@@ -97,21 +124,8 @@ def permitted_peers(request: HttpRequest) -> HttpResponse:
 
     principal, membership = resolved
     filters = _scope_filters(membership=membership)
-
-    source_role = getattr(principal.node, "role", None)
-    policies = PeerPolicy.objects.filter(**filters).filter(
-        source_node=principal.node,
-    )
-    if source_role:
-        policies = policies | PeerPolicy.objects.filter(**filters).filter(source_group=source_role)
-
-    destination_node_ids = sorted(
-        {
-            policy.destination_node_id
-            for policy in policies.select_related("destination_node", "destination_group")
-            if policy.destination_node_id
-        }
-    )
+    policies = _policies_for_caller(principal=principal, filters=filters)
+    destination_node_ids = _peer_ids_from_policies(policies=policies, filters=filters)
 
     peer_memberships = (
         MeshMembership.objects.select_related("node", "node__role")
@@ -150,11 +164,10 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
 
     principal, membership = resolved
     filters = _scope_filters(membership=membership)
-
-    peer_ids = list(
-        MeshMembership.objects.filter(**filters, is_enabled=True).exclude(node=principal.node).values_list("node_id", flat=True)
-    )
-    endpoints_qs = NodeEndpoint.objects.filter(node_id__in=peer_ids).select_related("node", "node__role")
+    policies = _policies_for_caller(principal=principal, filters=filters)
+    peer_ids = _peer_ids_from_policies(policies=policies, filters=filters)
+    peer_ids = [peer_id for peer_id in peer_ids if peer_id != principal.node.id]
+    endpoints_qs = list(NodeEndpoint.objects.filter(node_id__in=peer_ids).select_related("node", "node__role"))
     ads_qs = ServiceAdvertisement.objects.filter(node_id__in=peer_ids)
     ads_by_node: dict[int, list[dict]] = {}
     for advertisement in ads_qs:
@@ -193,14 +206,12 @@ def acl_policy(request: HttpRequest) -> HttpResponse:
 
     principal, membership = resolved
     filters = _scope_filters(membership=membership)
-    source_role = getattr(principal.node, "role", None)
-    policies = PeerPolicy.objects.filter(**filters).filter(source_node=principal.node)
-    if source_role:
-        policies = policies | PeerPolicy.objects.filter(**filters).filter(source_group=source_role)
+    policies = _policies_for_caller(principal=principal, filters=filters)
+    policies_list = list(policies.select_related("destination_node", "destination_group"))
 
     profile = _node_role_profile_name(principal.node)
     acl_rows = []
-    for policy in policies.select_related("destination_node", "destination_group"):
+    for policy in policies_list:
         row = {
             "policy_id": policy.id,
             "allowed_services": policy.allowed_services,
@@ -215,7 +226,7 @@ def acl_policy(request: HttpRequest) -> HttpResponse:
             row["site_id"] = policy.site_id
         acl_rows.append(row)
 
-    version = max([membership.id] + [policy.id for policy in policies])
+    version = max([membership.id] + [policy.id for policy in policies_list])
     payload = {"version": version, "acl": acl_rows}
     return _json_with_etag(request, payload)
 

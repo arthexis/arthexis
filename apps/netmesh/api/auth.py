@@ -58,8 +58,6 @@ def authenticate_enrollment(request: HttpRequest) -> tuple[EnrollmentPrincipal |
         return None, "enrollment token revoked"
 
     if enrollment.is_expired:
-        enrollment.status = NodeEnrollment.Status.EXPIRED
-        enrollment.save(update_fields=["status", "updated_at"])
         return None, "enrollment token expired"
 
     if enrollment.node.mesh_enrollment_state != enrollment.node.MeshEnrollmentState.ENROLLED:
