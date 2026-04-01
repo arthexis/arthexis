@@ -98,12 +98,9 @@ class HttpsProvisioningService:
         certbot_domain = _parse_site_domain(certbot_domain) if certbot_domain else None
         godaddy_domain = _parse_site_domain(godaddy_domain) if godaddy_domain else None
         use_local = options["local"] or not (certbot_domain or godaddy_domain)
-        use_godaddy = bool(godaddy_domain)
         reload = not options["no_reload"]
         sudo = "" if options["no_sudo"] else "sudo"
         force_renewal = options["force_renewal"]
-        godaddy_credential_key = (options.get("key") or "").strip()
-        static_ip = (options.get("static_ip") or "").strip()
         warn_days = options["warn_days"]
 
         if godaddy_domain:
@@ -111,9 +108,14 @@ class HttpsProvisioningService:
                 "Automated GoDaddy DNS setup was removed. Configure DNS records manually, "
                 "then run HTTPS enable with --certbot DOMAIN (or --site HOST_OR_URL) to keep nginx managed config."
             )
-        if options.get("sandbox") or options.get("no_sandbox") or godaddy_credential_key or static_ip:
+        if options.get("sandbox") or options.get("no_sandbox"):
             raise CommandError(
-                "--sandbox/--no-sandbox/--key/--static-ip are no longer supported. "
+                "--sandbox/--no-sandbox are no longer supported. "
+                "Use manual DNS configuration, then run HTTPS with --certbot or --site."
+            )
+        if (options.get("key") or "").strip() or (options.get("static_ip") or "").strip():
+            raise CommandError(
+                "--key/--static-ip are no longer supported. "
                 "Use manual DNS configuration, then run HTTPS with --certbot or --site."
             )
 
@@ -185,7 +187,6 @@ class HttpsProvisioningService:
                 certificate = self._enable_https(
                     domain,
                     use_local=use_local,
-                    use_godaddy=use_godaddy,
                     sudo=sudo,
                     reload=reload,
                     force_renewal=force_renewal,
@@ -197,7 +198,6 @@ class HttpsProvisioningService:
             certificate = self._enable_https(
                 domain,
                 use_local=use_local,
-                use_godaddy=use_godaddy,
                 sudo=sudo,
                 reload=reload,
                 force_renewal=force_renewal,
@@ -216,7 +216,6 @@ class HttpsProvisioningService:
         domain: str,
         *,
         use_local: bool,
-        use_godaddy: bool,
         sudo: str,
         reload: bool,
         force_renewal: bool,
@@ -228,7 +227,6 @@ class HttpsProvisioningService:
         Parameters:
             domain: Destination hostname being enabled for HTTPS.
             use_local: Whether to issue a local/self-signed certificate flow.
-            use_godaddy: Whether the certbot flow should use GoDaddy DNS challenge.
             sudo: Prefix used for shell commands requiring privileged access.
             reload: Whether nginx should be reloaded after config changes.
             force_renewal: Whether certificate issuance should force renewal.
@@ -249,7 +247,6 @@ class HttpsProvisioningService:
             domain,
             config,
             use_local=use_local,
-            use_godaddy=use_godaddy,
         )
 
         if config.certificate_id != certificate.id:
@@ -262,7 +259,6 @@ class HttpsProvisioningService:
             config=config,
             certificate=certificate,
             use_local=use_local,
-            use_godaddy=use_godaddy,
             sudo=sudo,
             reload=reload,
             force_renewal=force_renewal,

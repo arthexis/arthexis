@@ -111,7 +111,12 @@ def _warn_if_certificate_paths_changed(
     )
 
 
-def _get_or_create_certificate(domain: str, config: SiteConfiguration, *, use_local: bool, use_godaddy: bool):
+def _get_or_create_certificate(
+    domain: str,
+    config: SiteConfiguration,
+    *,
+    use_local: bool,
+):
     """Create or update certificate records used by HTTPS provisioning."""
 
     slug = slugify(domain)
@@ -128,18 +133,13 @@ def _get_or_create_certificate(domain: str, config: SiteConfiguration, *, use_lo
         )
         return certificate
 
-    challenge_type = (
-        CertbotCertificate.ChallengeType.GODADDY
-        if use_godaddy
-        else CertbotCertificate.ChallengeType.NGINX
-    )
     certificate, created = CertbotCertificate.objects.get_or_create(
         name=f"{config.name or 'nginx-site'}-{slug}-certbot",
         defaults={
             "domain": domain,
             "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
             "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
-            "challenge_type": challenge_type,
+            "challenge_type": CertbotCertificate.ChallengeType.NGINX,
         },
     )
 
@@ -148,8 +148,8 @@ def _get_or_create_certificate(domain: str, config: SiteConfiguration, *, use_lo
         if certificate.domain != domain:
             certificate.domain = domain
             updated_fields.append("domain")
-        if certificate.challenge_type != challenge_type:
-            certificate.challenge_type = challenge_type
+        if certificate.challenge_type != CertbotCertificate.ChallengeType.NGINX:
+            certificate.challenge_type = CertbotCertificate.ChallengeType.NGINX
             updated_fields.append("challenge_type")
         if not certificate.certificate_path:
             certificate.certificate_path = f"/etc/letsencrypt/live/{domain}/fullchain.pem"
@@ -170,7 +170,6 @@ def _provision_certificate(
     config: SiteConfiguration,
     certificate,
     use_local: bool,
-    use_godaddy: bool,
     sudo: str,
     reload: bool,
     force_renewal: bool,
@@ -195,13 +194,8 @@ def _provision_certificate(
         previous_certificate_key_path = certificate.certificate_key_path
 
     try:
-        if not use_godaddy:
-            http01_bootstrapped = True
-            _prepare_http01_challenge_site(service, domain, reload=reload)
-        if use_godaddy:
-            raise CommandError(
-                "GoDaddy DNS automation is no longer supported. Configure DNS manually and use --certbot."
-            )
+        http01_bootstrapped = True
+        _prepare_http01_challenge_site(service, domain, reload=reload)
         certificate.provision(
             sudo=sudo,
             dns_use_sandbox=None,

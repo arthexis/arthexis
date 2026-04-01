@@ -55,3 +55,12 @@ def test_handle_rejects_godaddy_auxiliary_flags():
     options["key"] = "legacy-credential"
     with pytest.raises(CommandError, match="no longer supported"):
         service.handle(options)
+
+
+@pytest.mark.django_db
+def test_handle_rejects_static_ip_flag():
+    service = _service()
+    options = _base_options()
+    options["static_ip"] = "203.0.113.10"
+    with pytest.raises(CommandError, match="no longer supported"):
+        service.handle(options)
