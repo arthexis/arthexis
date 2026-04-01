@@ -2,6 +2,7 @@ import logging
 import mimetypes
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.core.cache import cache
@@ -247,7 +248,13 @@ def _extract_document_blurb(path: Path, *, max_length: int = 220) -> str:
     return f"{summary[:cut_off].rstrip()}…"
 
 
-def _build_library_item(path: Path, root: Path, route_name: str) -> dict[str, str]:
+def _build_library_item(
+    path: Path,
+    root: Path,
+    route_name: str,
+    *,
+    label: str | None = None,
+) -> dict[str, str]:
     """Build a single document-library item with URL and blurb metadata."""
 
     relative = path.relative_to(root).as_posix()
@@ -260,13 +267,92 @@ def _build_library_item(path: Path, root: Path, route_name: str) -> dict[str, st
         logger.warning("Unable to reverse %r for %s", route_name, relative)
         url = ""
     return {
-        "label": relative,
+        "label": label or relative,
         "url": url,
         "description": description,
+        "kind": "document",
     }
 
 
-def _collect_document_library(root_base: Path) -> list[dict[str, object]]:
+def _normalize_library_prefix(prefix: str | None) -> str:
+    """Normalize an incoming library folder prefix."""
+
+    if not prefix:
+        return ""
+    normalized = prefix.replace("\\", "/").strip("/")
+    if not normalized:
+        return ""
+    parts = [part for part in normalized.split("/") if part not in {"", ".", ".."}]
+    return "/".join(parts)
+
+
+def _build_library_query_url(parameter: str, prefix: str) -> str:
+    query = urlencode({parameter: prefix}) if prefix else ""
+    return f"{reverse('docs:docs-library')}?{query}" if query else reverse("docs:docs-library")
+
+
+def _build_library_section(
+    files: list[Path],
+    *,
+    root: Path,
+    route_name: str,
+    title: str,
+    prefix: str,
+    parameter: str,
+) -> dict[str, object]:
+    """Build a section index scoped to one folder level."""
+
+    folders: set[str] = set()
+    items: list[dict[str, str]] = []
+
+    for path in files:
+        relative = path.relative_to(root).as_posix()
+        if prefix:
+            if relative == prefix:
+                items.append(_build_library_item(path, root, route_name, label=Path(relative).name))
+                continue
+            if not relative.startswith(f"{prefix}/"):
+                continue
+            scoped_relative = relative.removeprefix(f"{prefix}/")
+        else:
+            scoped_relative = relative
+
+        if "/" in scoped_relative:
+            folders.add(scoped_relative.split("/", 1)[0])
+            continue
+        items.append(_build_library_item(path, root, route_name, label=Path(relative).name))
+
+    folder_items = [
+        {
+            "kind": "folder",
+            "label": f"{folder}/",
+            "url": _build_library_query_url(
+                parameter,
+                f"{prefix}/{folder}" if prefix else folder,
+            ),
+            "description": f"Browse documents in {folder}.",
+        }
+        for folder in sorted(folders)
+    ]
+    folder_items.extend(item for item in items if item["url"])
+
+    section: dict[str, object] = {
+        "title": title,
+        "items": folder_items,
+    }
+    if prefix:
+        parent_prefix = prefix.rsplit("/", 1)[0] if "/" in prefix else ""
+        section["current_prefix"] = prefix
+        section["parent_url"] = _build_library_query_url(parameter, parent_prefix)
+    return section
+
+
+def _collect_document_library(
+    root_base: Path,
+    *,
+    docs_prefix: str = "",
+    apps_docs_prefix: str = "",
+) -> list[dict[str, object]]:
     """Build a library index for docs and apps/docs content."""
 
     docs_root = root_base / "docs"
@@ -275,33 +361,54 @@ def _collect_document_library(root_base: Path) -> list[dict[str, object]]:
 
     docs_files = _iter_document_paths(docs_root)
     if docs_files:
-        items = [
-            item
-            for path in docs_files
-            if (item := _build_library_item(path, docs_root, "docs:docs-document"))["url"]
-        ]
-        sections.append({"title": "Documentation", "items": items})
+        sections.append(
+            _build_library_section(
+                docs_files,
+                root=docs_root,
+                route_name="docs:docs-document",
+                title="Documentation",
+                prefix=_normalize_library_prefix(docs_prefix),
+                parameter="docs_path",
+            )
+        )
 
     apps_docs_files = _iter_document_paths(apps_docs_root)
     if apps_docs_files:
-        items = [
-            item
-            for path in apps_docs_files
-            if (item := _build_library_item(path, apps_docs_root, "docs:apps-docs-document"))["url"]
-        ]
-        sections.append({"title": "Application Docs", "items": items})
+        sections.append(
+            _build_library_section(
+                apps_docs_files,
+                root=apps_docs_root,
+                route_name="docs:apps-docs-document",
+                title="Application Docs",
+                prefix=_normalize_library_prefix(apps_docs_prefix),
+                parameter="apps_docs_path",
+            )
+        )
 
     return sections
 
 
-def _get_cached_document_library(root_base: Path) -> list[dict[str, object]]:
+def _get_cached_document_library(
+    root_base: Path,
+    *,
+    docs_prefix: str = "",
+    apps_docs_prefix: str = "",
+) -> list[dict[str, object]]:
     """Return a cached library index to avoid repeated filesystem scans."""
 
-    sections = cache.get(DOCUMENT_LIBRARY_CACHE_KEY)
+    cache_key = (
+        f"{DOCUMENT_LIBRARY_CACHE_KEY}:{_normalize_library_prefix(docs_prefix)}:"
+        f"{_normalize_library_prefix(apps_docs_prefix)}"
+    )
+    sections = cache.get(cache_key)
     if sections is not None:
         return sections
-    sections = _collect_document_library(root_base)
-    cache.set(DOCUMENT_LIBRARY_CACHE_KEY, sections, timeout=DOCUMENT_LIBRARY_CACHE_TIMEOUT)
+    sections = _collect_document_library(
+        root_base,
+        docs_prefix=docs_prefix,
+        apps_docs_prefix=apps_docs_prefix,
+    )
+    cache.set(cache_key, sections, timeout=DOCUMENT_LIBRARY_CACHE_TIMEOUT)
     return sections
 
 
@@ -314,8 +421,14 @@ def _render_document_library(
     """Render the docs library page for both standard and fallback flows."""
 
     root_base = Path(settings.BASE_DIR).resolve()
+    docs_prefix = request.GET.get("docs_path", "")
+    apps_docs_prefix = request.GET.get("apps_docs_path", "")
     context = {
-        "sections": _get_cached_document_library(root_base),
+        "sections": _get_cached_document_library(
+            root_base,
+            docs_prefix=docs_prefix,
+            apps_docs_prefix=apps_docs_prefix,
+        ),
         "page_url": request.build_absolute_uri(),
         "title": "Developer Documents",
     }
