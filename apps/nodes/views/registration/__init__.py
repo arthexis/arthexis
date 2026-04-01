@@ -5,7 +5,14 @@ import socket
 
 from .auth import _authenticate_basic_credentials, _enforce_authentication, _verify_signature
 from .cors import add_cors_headers as _add_cors_headers
-from .handlers import node_info, node_list, register_node, register_visitor_proxy, register_visitor_telemetry
+from .handlers import (
+    node_info,
+    node_list,
+    register_node,
+    register_visitor_proxy,
+    register_visitor_telemetry,
+    submit_enrollment_public_key,
+)
 from .network_utils import _get_route_address
 from .network import (
     _get_host_domain,
@@ -54,4 +61,5 @@ __all__ = [
     "register_node",
     "register_visitor_proxy",
     "register_visitor_telemetry",
+    "submit_enrollment_public_key",
 ]

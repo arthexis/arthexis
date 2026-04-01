@@ -43,6 +43,7 @@ class NodeRegistrationPayload:
     public_key: str | None
     token: str | None
     signature: str | None
+    enrollment_token: str | None
     installed_version: object | None
     installed_revision: object | None
     mesh_enrollment_state: Node.MeshEnrollmentState | None
@@ -170,6 +171,7 @@ def build_payload(data) -> NodeRegistrationPayload:
         public_key=data.get("public_key"),
         token=data.get("token"),
         signature=data.get("signature"),
+        enrollment_token=data.get("enrollment_token"),
         installed_version=data.get("installed_version"),
         installed_revision=data.get("installed_revision"),
         mesh_enrollment_state=(

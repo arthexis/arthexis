@@ -23,6 +23,7 @@ from utils.api import api_login_required
 
 from apps.nodes.logging import get_register_visitor_logger
 from apps.nodes.models import Node, NodeRole, node_information_updated
+from apps.nodes.services.enrollment import submit_public_key
 
 from .auth import (
     _enforce_authentication,
@@ -450,6 +451,30 @@ def register_node(request):
         defaults["current_relation"] = payload.relation_value
 
     node, created = Node.objects.get_or_create(mac_address=mac_address, defaults=defaults)
+    if payload.enrollment_token and payload.public_key:
+        enrollment_site = (
+            Site.objects.filter(domain__iexact=payload.base_site_domain).first()
+            if payload.base_site_domain
+            else node.base_site
+        )
+        _, enrollment_error = submit_public_key(
+            node=node,
+            token=payload.enrollment_token,
+            public_key=payload.public_key,
+            site=enrollment_site,
+        )
+        if enrollment_error:
+            _log_registration_event(
+                "failed",
+                payload,
+                request,
+                detail=enrollment_error,
+                level=logging.WARNING,
+            )
+            return add_cors_headers(
+                request,
+                JsonResponse({"detail": enrollment_error}, status=400),
+            )
     if not created:
         response = _update_existing_node(
             node,
@@ -480,6 +505,49 @@ def register_node(request):
     response = JsonResponse({"id": node.id, "uuid": str(node.uuid)})
     _log_registration_event("succeeded", payload, request, detail=f"created node {node.id}")
     return add_cors_headers(request, response)
+
+
+@csrf_exempt
+@require_POST
+def submit_enrollment_public_key(request):
+    """Accept one-time enrollment token and node public key submission."""
+
+    dto = parse_registration_request(request)
+    payload = dto.payload
+    mac_address = (payload.mac_address or "").strip().lower()
+    if not mac_address or not payload.enrollment_token or not payload.public_key:
+        return JsonResponse(
+            {
+                "detail": (
+                    "mac_address, enrollment_token, and public_key are required"
+                )
+            },
+            status=400,
+        )
+
+    node = Node.objects.filter(mac_address=mac_address).first()
+    if not node:
+        return JsonResponse({"detail": "unknown node"}, status=404)
+
+    site = (
+        Site.objects.filter(domain__iexact=payload.base_site_domain).first()
+        if payload.base_site_domain
+        else node.base_site
+    )
+    _, error = submit_public_key(
+        node=node,
+        token=payload.enrollment_token,
+        public_key=payload.public_key,
+        site=site,
+    )
+    if error:
+        return JsonResponse({"detail": error}, status=400)
+    return JsonResponse(
+        {
+            "detail": "public key accepted; enrollment pending approval",
+            "mesh_enrollment_state": node.mesh_enrollment_state,
+        }
+    )
 
 
 def _build_registration_payload(info: Mapping[str, object] | None, relation: str | None):
