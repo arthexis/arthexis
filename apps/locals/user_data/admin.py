@@ -202,15 +202,7 @@ class ImportExportAdminMixin:
     @staticmethod
     def _ordered_unique_names(names):
         """Return names preserving the first-seen order and removing duplicates."""
-
-        ordered_names = []
-        seen_names = set()
-        for name in names:
-            if name in seen_names:
-                continue
-            seen_names.add(name)
-            ordered_names.append(name)
-        return ordered_names
+        return list(dict.fromkeys(names))
 
     def _selected_queryset(self, request, queryset):
         """Return queryset filtered to selected primary keys when requested.
@@ -266,12 +258,13 @@ class ImportExportAdminMixin:
             )
             if ordered_column_names:
                 selected_name_set = set(selected_export_column_names)
+                ordered_name_set = set(ordered_column_names)
                 selected_export_column_names = [
                     name for name in ordered_column_names if name in selected_name_set
                 ] + [
                     name
                     for name in selected_export_column_names
-                    if name not in ordered_column_names
+                    if name not in ordered_name_set
                 ]
             export_fields = [
                 export_field_by_name[name]

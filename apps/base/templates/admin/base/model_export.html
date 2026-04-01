@@ -173,12 +173,12 @@
           if (button.classList.contains("export-column-move-up")) {
             var previous = item.previousElementSibling;
             if (previous) {
-              list.insertBefore(item, previous);
+              previous.before(item);
             }
           } else if (button.classList.contains("export-column-move-down")) {
             var next = item.nextElementSibling;
             if (next) {
-              list.insertBefore(next, item);
+              item.after(next);
             }
           }
           syncColumnOrderInput();

@@ -242,7 +242,6 @@ class ExportColumnOrderTests(TestCase):
             is_staff=True,
             is_superuser=True,
         )
-        self.client.force_login(self.user)
         self.factory = RequestFactory()
 
     def test_csv_export_respects_posted_column_order(self):
