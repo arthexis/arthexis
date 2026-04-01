@@ -1,7 +1,6 @@
 """Redirect helpers for ops views and admin actions."""
 
-from django.http import HttpRequest
-from django.shortcuts import redirect
+from django.http import HttpRequest, HttpResponseRedirect
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
@@ -16,4 +15,4 @@ def safe_host_redirect(request: HttpRequest, url: str, *, fallback: str = "admin
         require_https=request.is_secure(),
     ):
         target = reverse(fallback)
-    return redirect(target)
+    return HttpResponseRedirect(target)

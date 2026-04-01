@@ -39,3 +39,28 @@ class OpsRedirectTests(TestCase):
         )
 
         self.assertRedirects(response, reverse("admin:index"))
+
+    def test_clear_active_operation_allows_relative_next_url_without_slash(self):
+        response = self.client.get(
+            reverse("ops:clear-active"),
+            {"next": "foo"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "foo")
+
+    def test_start_operation_view_allows_relative_start_url_without_slash(self):
+        operation = OperationScreen.objects.create(
+            title="Relative",
+            slug="relative",
+            description="Relative start URL",
+            start_url="foo",
+            is_active=True,
+        )
+
+        response = self.client.get(
+            reverse("admin:ops_operationscreen_start", args=[operation.pk])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "foo")
