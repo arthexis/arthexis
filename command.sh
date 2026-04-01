@@ -10,10 +10,21 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 arthexis_load_env_file "$BASE_DIR"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/command.log"
-touch "$LOG_FILE"
+if [ -L "$LOG_FILE" ]; then
+  echo "Refusing to write to symlinked log file: $LOG_FILE" >&2
+  exit 1
+fi
+
+if [ ! -e "$LOG_FILE" ]; then
+  umask 077
+  : > "$LOG_FILE"
+fi
+
 chmod 600 "$LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
-echo "$(date -Iseconds) command.sh invocation: $*"
+printf "%s command.sh invocation:" "$(date -Iseconds)"
+printf " %q" "$@"
+echo
 cd "$BASE_DIR"
 
 # Ensure virtual environment is available
