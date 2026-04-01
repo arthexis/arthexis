@@ -10,15 +10,19 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from urllib.error import URLError
 from urllib.parse import ParseResult, unquote, urlparse
 from urllib.request import urlopen
 
+from django.conf import settings
 from django.db import transaction
 
 from apps.imager.models import RaspberryPiImageArtifact
 
 TARGET_RPI4B = "rpi-4b"
+DEFAULT_REMOTE_DOWNLOAD_TIMEOUT_SECONDS = 30
+REMOTE_DOWNLOAD_CHUNK_SIZE_BYTES = 64 * 1024
 
 BOOTSTRAP_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
@@ -138,11 +142,61 @@ def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
 
     destination_name = Path(unquote(parsed.path)).name or "base-image.img"
     destination = workspace / destination_name
+    timeout_seconds = int(
+        getattr(
+            settings,
+            "IMAGER_REMOTE_DOWNLOAD_TIMEOUT_SECONDS",
+            DEFAULT_REMOTE_DOWNLOAD_TIMEOUT_SECONDS,
+        )
+    )
+    max_bytes = int(
+        getattr(
+            settings,
+            "IMAGER_REMOTE_IMAGE_MAX_BYTES",
+            2 * 1024 * 1024 * 1024,
+        )
+    )
+
+    if max_bytes <= 0:
+        raise ImagerBuildError("Configured IMAGER_REMOTE_IMAGE_MAX_BYTES must be greater than zero.")
+
+    def _coerce_content_length(raw_value: Any) -> int | None:
+        try:
+            if raw_value is None:
+                return None
+            return int(raw_value)
+        except (TypeError, ValueError):
+            return None
+
     try:
-        with urlopen(base_image_uri) as response, destination.open("wb") as output_handle:
-            shutil.copyfileobj(response, output_handle)
+        with urlopen(base_image_uri, timeout=timeout_seconds) as response, destination.open("wb") as output_handle:
+            content_length = _coerce_content_length(response.headers.get("Content-Length"))
+            if content_length is not None and content_length > max_bytes:
+                raise ImagerBuildError(
+                    "Could not download base image: remote payload is "
+                    f"{content_length} bytes, exceeding IMAGER_REMOTE_IMAGE_MAX_BYTES={max_bytes} bytes."
+                )
+
+            total_bytes = 0
+            while True:
+                chunk = response.read(REMOTE_DOWNLOAD_CHUNK_SIZE_BYTES)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > max_bytes:
+                    raise ImagerBuildError(
+                        "Could not download base image: streamed payload exceeded "
+                        f"IMAGER_REMOTE_IMAGE_MAX_BYTES={max_bytes} bytes "
+                        f"after reading {total_bytes} bytes."
+                    )
+                output_handle.write(chunk)
     except URLError as exc:
         reason = getattr(exc, "reason", str(exc))
+        if isinstance(reason, TimeoutError):
+            raise ImagerBuildError(
+                "Could not download base image: timed out after "
+                f"{timeout_seconds} seconds (IMAGER_REMOTE_DOWNLOAD_TIMEOUT_SECONDS)."
+            ) from exc
         raise ImagerBuildError(f"Could not download base image: {reason}") from exc
     return destination
 

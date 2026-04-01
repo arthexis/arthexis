@@ -1,15 +1,31 @@
 """Regression tests for Raspberry Pi imager workflows."""
 
-from contextlib import nullcontext
 from io import BytesIO, StringIO
 from pathlib import Path
+from urllib.error import URLError
 from unittest.mock import patch
 
 import pytest
 from django.core.management import call_command
+from django.test import override_settings
 
 from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.services import ImagerBuildError, TARGET_RPI4B, build_rpi4b_image
+
+
+class _FakeHTTPResponse:
+    def __init__(self, payload: bytes, *, headers: dict[str, str] | None = None) -> None:
+        self._payload = BytesIO(payload)
+        self.headers = headers or {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self, size: int = -1) -> bytes:
+        return self._payload.read(size)
 
 
 @pytest.mark.django_db
@@ -117,7 +133,7 @@ def test_build_rpi4b_image_downloads_percent_encoded_http_source(mock_urlopen, t
     """Regression: encoded HTTP paths should download and produce a valid artifact."""
 
     source_bytes = b"http-image"
-    mock_urlopen.return_value = nullcontext(BytesIO(source_bytes))
+    mock_urlopen.return_value = _FakeHTTPResponse(source_bytes)
 
     with patch("apps.imager.services._customize_image"):
         result = build_rpi4b_image(
@@ -131,6 +147,69 @@ def test_build_rpi4b_image_downloads_percent_encoded_http_source(mock_urlopen, t
 
     assert result.output_path.exists()
     assert result.output_path.read_bytes() == source_bytes
+
+
+@pytest.mark.django_db
+@override_settings(IMAGER_REMOTE_DOWNLOAD_TIMEOUT_SECONDS=9)
+@patch("apps.imager.services.urlopen")
+def test_build_rpi4b_image_surfaces_remote_download_timeout(mock_urlopen, tmp_path: Path) -> None:
+    """Regression: timeout errors should include configured timeout context."""
+
+    mock_urlopen.side_effect = URLError(TimeoutError("timed out"))
+
+    with pytest.raises(ImagerBuildError, match=r"timed out after 9 seconds"):
+        build_rpi4b_image(
+            name="httptimeout",
+            base_image_uri="https://example.com/Raspberry%20Pi%20OS.img",
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+        )
+
+
+@pytest.mark.django_db
+@override_settings(IMAGER_REMOTE_IMAGE_MAX_BYTES=4)
+@patch("apps.imager.services.urlopen")
+def test_build_rpi4b_image_fails_early_when_content_length_exceeds_max(mock_urlopen, tmp_path: Path) -> None:
+    """Regression: oversized Content-Length should fail before streaming."""
+
+    mock_urlopen.return_value = _FakeHTTPResponse(b"abcdef", headers={"Content-Length": "6"})
+
+    with pytest.raises(
+        ImagerBuildError,
+        match=r"remote payload is 6 bytes, exceeding IMAGER_REMOTE_IMAGE_MAX_BYTES=4 bytes",
+    ):
+        build_rpi4b_image(
+            name="httptoolarge-head",
+            base_image_uri="https://example.com/base.img",
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+        )
+
+
+@pytest.mark.django_db
+@override_settings(IMAGER_REMOTE_IMAGE_MAX_BYTES=4)
+@patch("apps.imager.services.urlopen")
+def test_build_rpi4b_image_fails_when_streamed_payload_exceeds_max(mock_urlopen, tmp_path: Path) -> None:
+    """Regression: chunked stream should fail once downloaded bytes exceed max."""
+
+    mock_urlopen.return_value = _FakeHTTPResponse(b"abcde")
+
+    with pytest.raises(
+        ImagerBuildError,
+        match=r"streamed payload exceeded IMAGER_REMOTE_IMAGE_MAX_BYTES=4 bytes after reading 5 bytes",
+    ):
+        build_rpi4b_image(
+            name="httptoolarge-stream",
+            base_image_uri="https://example.com/base.img",
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+        )
 
 
 @pytest.mark.django_db
