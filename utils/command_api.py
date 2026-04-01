@@ -69,7 +69,6 @@ SUPPORTED_OPERATIONAL_COMMANDS: tuple[str, ...] = (
     "prototype",
     "purge_net_messages",
     "purge_nodes",
-    "rebrand",
     "reconcile_node_features_services",
     "record",
     "redis",
