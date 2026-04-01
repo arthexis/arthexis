@@ -65,7 +65,6 @@ For advanced admin workflows and any non-allowlisted Django command, run `manage
 - `prototype`
 - `purge_net_messages`
 - `purge_nodes`
-- `rebrand`
 - `reconcile_node_features_services`
 - `record`
 - `redis`
