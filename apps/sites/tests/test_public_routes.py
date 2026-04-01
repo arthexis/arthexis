@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
+from apps.core import changelog
 from apps.energy.models import ClientReport
 from apps.features.models import Feature
 from apps.modules.models import Module
@@ -89,7 +90,7 @@ def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
         data=json.dumps({"from": "+15551234", "message": "Hello"}),
         content_type="application/json",
     )
-    assert disabled.status_code == 503
+    assert disabled.status_code == 404
 
 
 def test_whatsapp_webhook_post_payload_validation(client, settings):
@@ -160,3 +161,24 @@ def test_release_checklist_requires_staff(client):
     )
     client.force_login(staff_user)
     assert client.get(url).status_code in (200, 404)
+
+
+def test_changelog_data_validates_negative_query_params(client):
+    url = reverse("pages:changelog-data")
+
+    assert client.get(url, {"page": "0"}).status_code == 400
+    assert client.get(url, {"offset": "-1"}).status_code == 400
+
+
+def test_changelog_data_hides_internal_exception_messages(client, monkeypatch):
+    url = reverse("pages:changelog-data")
+
+    def raise_error(*args, **kwargs):
+        raise changelog.ChangelogError("sensitive details")
+
+    monkeypatch.setattr(changelog, "get_page", raise_error)
+
+    response = client.get(url, {"page": "1", "offset": "0"})
+
+    assert response.status_code == 500
+    assert response.json() == {"error": "Unable to load additional updates."}
