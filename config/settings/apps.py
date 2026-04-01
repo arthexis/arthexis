@@ -66,6 +66,7 @@ PROJECT_LOCAL_APPS = [
     "apps.meta",
     "apps.modules",
     "apps.nginx",
+    "apps.netmesh",
     "apps.nmcli",
     "apps.nodes",
     "apps.ocpp",
