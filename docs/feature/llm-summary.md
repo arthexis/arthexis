@@ -1,5 +1,7 @@
 # LLM LCD log summary
 
+Scope: this document describes an optional feature pair (`llm-summary-suite` + `llm-summary` node assignment), not suite-wide architecture.
+
 The `summary` domain ships a local in-process workflow that produces extremely sparse LCD summaries for recent system logs. Runtime execution is gated by the **LLM Summary Suite** feature (`llm-summary-suite`) and connected to the **LLM Summary** node feature (`llm-summary`), which is only assigned by default to Control nodes.
 
 ## How it works

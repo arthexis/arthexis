@@ -13,12 +13,14 @@ nav:
       - CP Statuses and Transitions: ocpp_cp_statuses.md
       - OCPP 1.6 Compliance Review: ocpp16_compliance_review.md
       - OCPP Connection Status: ocpp_connection_status.md
+  - Optional Features:
+      - Feature Overview: feature/index.md
+      - LLM LCD Log Summary: feature/llm-summary.md
   - Reference:
       - Energy Transactions Ledger: energy-transactions-ledger.md
       - Runserver Log Duplication: runserver-log-duplication.md
       - LCD Screen Hardware: lcd-screen-hardware.md
       - DS3231 RTC Wiring: ds3231-rtc-wiring.md
-      - LLM LCD Log Summary: llm-summary.md
   - Development:
       - CI Troubleshooting: development/ci-troubleshooting.md
       - CodeQL Configuration: development/codeql.md

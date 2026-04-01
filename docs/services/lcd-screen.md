@@ -31,3 +31,4 @@ The LCD screen service drives a 16x2 I²C display on Control nodes, showing upti
 ## Notes
 - Control presets enable the LCD lock automatically.
 - The Suite Services Report lists the LCD row even when the lock is missing so operators can enable it later.
+- Optional feature reference: [LLM LCD log summary](../feature/llm-summary.md).
