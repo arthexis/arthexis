@@ -1,9 +1,17 @@
-# Cookbook audit
+# Cookbook maintenance notes
 
-Broken links in the cookbooks have been repaired to match the current `apps/` layout:
+This page replaces the old one-time cookbook audit.
 
-- **Favorites** now points to `apps/sites/templates/...` and `apps/locals/admin.py`. 
-- **Node features** references `apps/nodes/admin.py`, `apps/nodes/feature_checks.py`, and `apps/nodes/models.py`. 
-- **User data** links to `apps/locals/user_data/views.py` and the updated template locations. 
+Arthexis documentation is now maintained continuously instead of relying on a
+single "outdated review" snapshot. When you update or add a cookbook:
 
-No cookbooks require deletion at this time.
+- Verify file and module references still match the current `apps/` layout.
+- Prefer linking to stable app entry points (`admin.py`, `models.py`, service
+  modules, and user-facing routes) over implementation details that move often.
+- Remove cookbook sections that describe retired behavior, and document the
+  replacement workflow in the same change.
+- Keep examples aligned with current management-command entrypoints and project
+  conventions.
+
+If a cookbook becomes obsolete and has no replacement path, delete it rather
+than keeping stale instructions in the published library.

@@ -7,21 +7,21 @@
 Run individual targets:
 
 ```bash
-python manage.py health --target core.time
-python manage.py health --target ocpp.forwarders
+.venv/bin/python manage.py health --target core.time
+.venv/bin/python manage.py health --target ocpp.forwarders
 ```
 
 Run grouped checks:
 
 ```bash
-python manage.py health --group core
-python manage.py health --all
+.venv/bin/python manage.py health --group core
+.venv/bin/python manage.py health --all
 ```
 
 List available checks:
 
 ```bash
-python manage.py health --list-targets
+.venv/bin/python manage.py health --list-targets
 ```
 
 ## Exit codes
@@ -37,6 +37,7 @@ python manage.py health --list-targets
 - Reusable implementations live in service modules:
   - `apps/<app_label>/services/health_checks.py`
 - Legacy `check_*` compatibility wrappers were removed; invoke `manage.py health` targets directly.
+- Group execution only includes targets marked `grouped=yes` in `--list-targets` output.
 
 ## Current inventory
 
