@@ -65,6 +65,7 @@ PROJECT_LOCAL_APPS = [
     "apps.media",
     "apps.meta",
     "apps.modules",
+    "apps.netmesh",
     "apps.nginx",
     "apps.nmcli",
     "apps.nodes",
