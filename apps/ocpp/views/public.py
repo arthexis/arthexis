@@ -511,6 +511,7 @@ def charger_status_chart(request, cid, connector=None):
         Http404: Propagated when the charger cannot be found.
     """
 
+    not_found_detail = {"detail": _("Not found.")}
     session_id = request.GET.get("session") or None
     try:
         payload = build_charger_chart_payload(
@@ -520,9 +521,16 @@ def charger_status_chart(request, cid, connector=None):
             session_id=session_id,
         )
     except ChargerAccessDeniedError as exc:
-        return JsonResponse({"detail": str(exc)}, status=404)
+        logger.warning("Denied charger status chart access for cid=%s: %s", cid, exc)
+        return JsonResponse(not_found_detail, status=404)
     except Transaction.DoesNotExist as exc:
-        return JsonResponse({"detail": str(exc)}, status=404)
+        logger.info(
+            "Missing transaction for charger status chart cid=%s session=%s: %s",
+            cid,
+            session_id,
+            exc,
+        )
+        return JsonResponse(not_found_detail, status=404)
     return JsonResponse(payload)
 
 

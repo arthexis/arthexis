@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
@@ -14,6 +15,9 @@ from apps.features.utils import is_suite_feature_enabled
 from .constants import SHORTCUT_MANAGEMENT_FEATURE_SLUG
 from .models import Shortcut
 from .runtime import ShortcutExecutionError, execute_client_shortcut
+
+logger = logging.getLogger(__name__)
+GENERIC_SHORTCUT_EXECUTION_ERROR = "Shortcut execution failed."
 
 
 @login_required
@@ -72,8 +76,9 @@ def execute_client_shortcut_view(request: HttpRequest, shortcut_id: int) -> Json
     except ValidationError as exc:
         message = exc.message if hasattr(exc, "message") else "; ".join(exc.messages) or "Invalid shortcut configuration."
         return JsonResponse({"detail": message}, status=400)
-    except ShortcutExecutionError as exc:
-        return JsonResponse({"detail": str(exc)}, status=422)
+    except ShortcutExecutionError:
+        logger.exception("Client shortcut execution failed for shortcut_id=%s", shortcut_id)
+        return JsonResponse({"detail": GENERIC_SHORTCUT_EXECUTION_ERROR}, status=422)
 
     return JsonResponse(
         {

@@ -90,3 +90,21 @@ def test_charger_status_chart_endpoint_returns_chart_data(client):
     datasets = payload["datasets"]
     assert len(datasets) == 1
     assert datasets[0]["connector_id"] == 1
+
+
+@pytest.mark.django_db
+def test_charger_status_chart_endpoint_hides_missing_transaction_details(client):
+    """Endpoint should not expose exception text when session transaction is missing."""
+
+    get_user_model().objects.create_user(username="chart-client-2", password="secret")
+    Charger.objects.create(charger_id="GQL-CP-3", connector_id=1)
+
+    assert client.login(username="chart-client-2", password="secret")
+
+    response = client.get(
+        reverse("ocpp:charger-status-chart-connector", args=["GQL-CP-3", "1"]),
+        {"session": "999999"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Not found."}

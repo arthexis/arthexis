@@ -15,7 +15,7 @@ if not django_apps.is_installed("apps.shortcuts"):
 from apps.features.models import Feature
 from apps.shortcuts.constants import SHORTCUT_MANAGEMENT_FEATURE_SLUG
 from apps.shortcuts.models import ClipboardPattern, Shortcut, ShortcutTargetKind
-from apps.shortcuts.runtime import execute_server_shortcut
+from apps.shortcuts.runtime import ShortcutExecutionError, execute_server_shortcut
 
 
 @pytest.mark.django_db
@@ -123,3 +123,38 @@ def test_server_shortcut_executes_typed_target() -> None:
 
     assert execution.target_identifier == "text.prepend_prefix"
     assert execution.action_result.value == "run:CTRL+ALT+S"
+
+
+@pytest.mark.django_db
+def test_client_shortcut_hides_internal_execution_errors(client, monkeypatch) -> None:
+    """Client endpoint should return a generic error for runtime execution failures."""
+
+    Feature.objects.update_or_create(
+        slug=SHORTCUT_MANAGEMENT_FEATURE_SLUG,
+        defaults={"display": "Shortcut Management", "is_enabled": True},
+    )
+    user = get_user_model().objects.create_user(username="shortcut-error-user", password="password", is_staff=True)
+    client.force_login(user)
+    shortcut = Shortcut.objects.create(
+        display="Broken shortcut",
+        key_combo="CTRL+SHIFT+E",
+        kind=Shortcut.Kind.CLIENT,
+        target_kind=ShortcutTargetKind.ACTION,
+        target_identifier="clipboard.echo",
+        target_payload={},
+        is_active=True,
+    )
+
+    def _raise_execution_error(*args, **kwargs):
+        raise ShortcutExecutionError("Unsupported shortcut action: leaked-internal-detail")
+
+    monkeypatch.setattr("apps.shortcuts.views.execute_client_shortcut", _raise_execution_error)
+
+    response = client.post(
+        reverse("shortcuts:client-execute", args=[shortcut.pk]),
+        data=json.dumps({"clipboard": "ABC"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Shortcut execution failed."
