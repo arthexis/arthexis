@@ -11,9 +11,9 @@
     .evergo-login-wizard .wizard-intro {
       margin-bottom: 1.25rem;
       padding: 1rem 1.2rem;
-      border: 1px solid var(--hairline-color, #2f4158);
+      border: 1px solid var(--border-color);
       border-radius: 10px;
-      background: color-mix(in srgb, var(--darkened-bg, #0e1f30) 82%, #1f7da8 18%);
+      background: color-mix(in srgb, var(--body-bg) 82%, var(--primary) 18%);
     }
 
     .evergo-login-wizard .wizard-intro p {
@@ -28,15 +28,15 @@
 
     .evergo-login-wizard fieldset.module.aligned {
       border-radius: 10px;
-      border: 1px solid var(--hairline-color, #2f4158);
+      border: 1px solid var(--border-color);
       padding: 0.9rem 1rem 0.4rem;
-      background: color-mix(in srgb, var(--body-bg, #0b1118) 88%, #1f7da8 12%);
+      background: color-mix(in srgb, var(--body-bg) 88%, var(--primary) 12%);
     }
 
     .evergo-login-wizard .form-row {
       margin-bottom: 0.45rem;
       padding-bottom: 0.55rem;
-      border-bottom: 1px dashed color-mix(in srgb, var(--hairline-color, #2f4158) 75%, transparent);
+      border-bottom: 1px dashed color-mix(in srgb, var(--border-color) 75%, transparent);
     }
 
     .evergo-login-wizard .form-row:last-child {
@@ -47,14 +47,14 @@
 
     .evergo-login-wizard .form-row .help {
       margin-top: 0.25rem;
-      opacity: 0.9;
+      color: var(--body-quiet-color);
     }
 
     .evergo-login-wizard .submit-row {
       margin-top: 1rem;
       border-radius: 10px;
       padding: 0.8rem;
-      border: 1px solid var(--hairline-color, #2f4158);
+      border: 1px solid var(--border-color);
     }
   </style>
 {% endblock %}
