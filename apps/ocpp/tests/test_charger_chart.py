@@ -107,4 +107,4 @@ def test_charger_status_chart_endpoint_hides_missing_transaction_details(client)
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Not found."
+    assert response.json() == {"detail": "Not found."}
