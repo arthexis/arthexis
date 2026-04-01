@@ -1,37 +1,27 @@
-import json
-from pathlib import Path
+import pytest
+from django.core.management import call_command
+
+from apps.app.models import Application
+from apps.modules.models import Module
+from apps.nodes.models import NodeRole
+from apps.sites.models import Landing
 
 
-def test_terminal_modules_fixture_includes_docs_module_pill():
-    fixture_path = (
-        Path(__file__).resolve().parent.parent
-        / "fixtures"
-        / "default__modules_terminal.json"
+@pytest.mark.django_db
+def test_terminal_modules_fixture_includes_docs_module() -> None:
+    for app_name in ["awg", "docs", "ocpp", "shop"]:
+        Application.objects.get_or_create(name=app_name)
+    NodeRole.objects.get_or_create(name="Terminal")
+
+    call_command(
+        "loaddata",
+        "apps/sites/fixtures/default__modules_terminal.json",
+        verbosity=0,
     )
-    entries = json.loads(fixture_path.read_text(encoding="utf-8"))
 
-    docs_module = next(
-        (
-            entry
-            for entry in entries
-            if entry.get("model") == "modules.module"
-            and entry.get("fields", {}).get("path") == "/docs/"
-        ),
-        None,
-    )
+    docs_module = Module.objects.get(path="/docs/")
+    assert docs_module.application.name == "docs"
+    assert docs_module.roles.filter(name="Terminal").exists()
 
-    assert docs_module is not None
-    assert docs_module["fields"]["application"] == ["docs"]
-    assert docs_module["fields"]["roles"] == [["Terminal"]]
-
-    docs_landing = next(
-        (
-            entry
-            for entry in entries
-            if entry.get("model") == "pages.landing"
-            and entry.get("fields", {}).get("module") == ["/docs/"]
-        ),
-        None,
-    )
-    assert docs_landing is not None
-    assert docs_landing["fields"]["path"] == "/docs/library/"
+    docs_landing = Landing.objects.get(module=docs_module, path="/docs/library/")
+    assert docs_landing.label == "Developer Documents"
