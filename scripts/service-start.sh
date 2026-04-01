@@ -14,6 +14,8 @@ export TZ="${TZ:-America/Monterrey}"
 . "$BASE_DIR/scripts/helpers/staticfiles.sh"
 # shellcheck source=scripts/helpers/suite-uptime-lock.sh
 . "$BASE_DIR/scripts/helpers/suite-uptime-lock.sh"
+# shellcheck source=scripts/helpers/debug_toolbar.sh
+. "$BASE_DIR/scripts/helpers/debug_toolbar.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 ERROR_LOG="$LOG_DIR/error.log"
@@ -300,6 +302,7 @@ fi
 
 if [ "$DEBUG_MODE" = true ]; then
   export DEBUG=1
+  arthexis_ensure_debug_toolbar_installed "python"
 fi
 
 if [ "$FOLLOW_LOGS" = true ]; then
