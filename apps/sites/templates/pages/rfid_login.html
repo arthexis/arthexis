@@ -64,8 +64,11 @@
     ready: '{% trans "Ready to scan. Hold your RFID card near the reader." %}',
     connectPrompt: '{% trans "Select an RFID reader to connect." %}',
     connected: '{% trans "Scanner connected. Awaiting RFID…" %}',
+    nfcReady: '{% trans "NFC ready. Tap your phone on a card to sign in." %}',
+    nfcDisconnected: '{% trans "NFC scanning stopped." %}',
     disconnected: '{% trans "Scanner disconnected. Reconnect to continue." %}',
     unsupported: '{% trans "This browser does not support direct scanner connections." %}',
+    nfcUnsupported: '{% trans "This browser does not support mobile NFC scanning." %}',
     authenticating: '{% trans "Authenticating…" %}',
     success: '{% trans "Authentication successful. Redirecting…" %}',
     failure: '{% trans "Login failed. Scan again or try another card." %}',
@@ -81,6 +84,7 @@
   let reader = null;
   let remotePollTimer = null;
   let remoteConnected = false;
+  let ndefReader = null;
 
   function setStatus(message, variant){
     const box = statusBox;
@@ -218,6 +222,10 @@
       window.clearTimeout(remotePollTimer);
       remotePollTimer = null;
     }
+  }
+
+  function sanitizeNfcSerial(value){
+    return sanitize((value || '').replace(/:/g, ''));
   }
 
   function scheduleRemotePoll(){
@@ -364,6 +372,36 @@
     }
   }
 
+  async function startMobileNfcScanning(){
+    if(!('NDEFReader' in window)){
+      return;
+    }
+    if(ndefReader){
+      return;
+    }
+    try{
+      ndefReader = new window.NDEFReader();
+      await ndefReader.scan();
+      setStatus(text.nfcReady, 'info');
+      ndefReader.addEventListener('reading', (event) => {
+        const serial = sanitizeNfcSerial(event.serialNumber || '');
+        if(serial){
+          handleScan(serial);
+        }
+      });
+      ndefReader.addEventListener('readingerror', () => {
+        if(!loggingIn){
+          setStatus(text.failure, 'error');
+        }
+      });
+    } catch(_error){
+      if(!loggingIn){
+        setStatus(text.nfcUnsupported, 'info');
+      }
+      ndefReader = null;
+    }
+  }
+
   if(connectBtn){
     if(!('serial' in navigator)){
       connectBtn.disabled = true;
@@ -405,6 +443,10 @@
 
   if(scanUrl){
     pollRemoteScanner();
+  }
+
+  if('NDEFReader' in window){
+    startMobileNfcScanning();
   }
 
   window.addEventListener('beforeunload', () => {
