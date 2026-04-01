@@ -147,3 +147,17 @@ def test_approve_enrollment_does_not_activate_issued_without_public_key():
 
     enrollment.refresh_from_db()
     assert enrollment.status == NodeEnrollment.Status.ISSUED
+
+
+@pytest.mark.django_db
+def test_issue_enrollment_token_rejects_unknown_scope():
+    node = Node.objects.create(
+        hostname="node-f",
+        mac_address="aa:bb:cc:dd:ee:71",
+        address="198.51.100.71",
+        port=8888,
+        public_endpoint="node-f",
+    )
+
+    with pytest.raises(ValueError, match="Unsupported enrollment scope"):
+        issue_enrollment_token(node=node, scope=" mesh:write ")

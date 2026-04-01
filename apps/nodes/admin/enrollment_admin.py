@@ -24,6 +24,7 @@ class NodeEnrollmentAdmin(admin.ModelAdmin):
         "site",
         "issued_by",
         "scope",
+        "token_hash",
         "token_hint",
         "status",
         "expires_at",

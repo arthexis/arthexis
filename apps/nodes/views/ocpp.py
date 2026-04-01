@@ -610,6 +610,7 @@ def network_charger_action(request):
     except json.JSONDecodeError:
         return json_api_error(status=400, code="invalid_json", message="invalid json")
 
+    authorization = request.META.get("HTTP_AUTHORIZATION", "")
     requester = body.get("requester")
     token_principal, token_error = authenticate_enrollment(
         request,
@@ -622,7 +623,7 @@ def network_charger_action(request):
         requester = requester or str(node.uuid)
     else:
         if not requester:
-            if token_error is not None and request.META.get("HTTP_AUTHORIZATION", "").startswith("Bearer "):
+            if token_error is not None and authorization.startswith("Bearer "):
                 status, code, message = token_error
                 return json_api_error(status=status, code=code, message=message)
             return json_api_error(
@@ -643,7 +644,7 @@ def network_charger_action(request):
             public_key=requester_public_key,
         )
         if error_response is not None:
-            if token_error is not None:
+            if token_error is not None and authorization.startswith("Bearer "):
                 status, code, message = token_error
                 return json_api_error(status=status, code=code, message=message)
             return error_response

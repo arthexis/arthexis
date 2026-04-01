@@ -326,6 +326,8 @@ def test_netmesh_token_lifecycle_errors_are_stable(client):
     wrong_scope_enrollment, wrong_scope_token = issue_enrollment_token(node=node, scope="ocpp:control")
     wrong_scope_enrollment.status = NodeEnrollment.Status.ACTIVE
     wrong_scope_enrollment.save(update_fields=["status", "updated_at"])
+    node.mesh_enrollment_state = Node.MeshEnrollmentState.ENROLLED
+    node.save(update_fields=["mesh_enrollment_state"])
     wrong_scope = client.get("/api/netmesh/caller/", HTTP_AUTHORIZATION=f"Bearer {wrong_scope_token}")
     assert wrong_scope.status_code == 403
     assert wrong_scope.json()["error"]["code"] == "enrollment_scope_insufficient"

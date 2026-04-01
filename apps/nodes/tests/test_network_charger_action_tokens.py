@@ -4,8 +4,8 @@ import pytest
 
 from apps.nodes.models import Node, NodeEnrollment, NodeRole
 from apps.nodes.services.enrollment import issue_enrollment_token
-from apps.ocpp.models import Charger
 from apps.nodes.views import ocpp as ocpp_views
+from apps.ocpp.models import Charger
 
 
 @pytest.mark.django_db
@@ -38,6 +38,7 @@ def test_network_charger_action_accepts_ocpp_control_enrollment_token(client, mo
 def test_network_charger_action_rejects_insufficient_scope_token(client):
     role = NodeRole.objects.create(name="Gateway")
     node = Node.objects.create(hostname="mesh-node", role=role)
+    Charger.objects.create(charger_id="CP-1", manager_node=node, allow_remote=True)
 
     enrollment, token = issue_enrollment_token(node=node, scope="mesh:read")
     enrollment.status = NodeEnrollment.Status.ACTIVE

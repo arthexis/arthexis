@@ -11,7 +11,6 @@ from django.utils.http import http_date
 from django.views.decorators.http import require_GET
 
 from apps.netmesh.api.auth import authenticate_enrollment
-from utils.api_errors import json_api_error
 from apps.netmesh.models import (
     MeshMembership,
     NodeEndpoint,
@@ -20,6 +19,7 @@ from apps.netmesh.models import (
     PeerPolicy,
     ServiceAdvertisement,
 )
+from utils.api_errors import json_api_error
 
 
 def _node_role_profile_name(node) -> str:

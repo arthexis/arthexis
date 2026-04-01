@@ -11,6 +11,7 @@ from django.utils import timezone
 
 
 class NodeEnrollment(models.Model):
+    ALLOWED_SCOPES = frozenset({"mesh:read", "ocpp:control"})
     class Status(models.TextChoices):
         ISSUED = "ISSUED", "Issued"
         PUBLIC_KEY_SUBMITTED = "PUBLIC_KEY_SUBMITTED", "Public key submitted"
@@ -58,6 +59,10 @@ class NodeEnrollment(models.Model):
         ttl: timedelta = timedelta(hours=1),
         scope: str = "mesh:read",
     ):
+        normalized_scope = scope.strip()
+        if normalized_scope not in cls.ALLOWED_SCOPES:
+            raise ValueError(f"Unsupported enrollment scope: {scope!r}")
+
         token = f"{cls.TOKEN_PREFIX}{secrets.token_urlsafe(24)}"
         enrollment = cls.objects.create(
             node=node,
@@ -66,7 +71,7 @@ class NodeEnrollment(models.Model):
             token_hash=cls.hash_token(token),
             token_hint=token[-6:],
             expires_at=timezone.now() + ttl,
-            scope=scope,
+            scope=normalized_scope,
         )
         return enrollment, token
 

@@ -49,7 +49,7 @@ def authenticate_enrollment(
     request: HttpRequest,
     *,
     required_scope: str,
-) -> tuple[EnrollmentPrincipal | None, tuple[int, str, str]]:
+) -> tuple[EnrollmentPrincipal | None, tuple[int, str, str] | None]:
     """Resolve a valid enrollment principal for a node-bound API request."""
 
     token = _extract_enrollment_token(request)
@@ -65,11 +65,6 @@ def authenticate_enrollment(
     )
     if enrollment is None:
         return None, (401, "enrollment_token_invalid", "invalid enrollment token")
-
-    if enrollment.scope != required_scope:
-        enrollment.last_auth_error_code = "enrollment_scope_insufficient"
-        enrollment.save(update_fields=["last_auth_error_code", "updated_at"])
-        return None, (403, "enrollment_scope_insufficient", "enrollment token has insufficient scope")
 
     if enrollment.revoked_at is not None or enrollment.status == NodeEnrollment.Status.REVOKED:
         enrollment.last_auth_error_code = "enrollment_token_revoked"
@@ -93,6 +88,11 @@ def authenticate_enrollment(
         enrollment.last_auth_error_code = "node_not_enrolled"
         enrollment.save(update_fields=["last_auth_error_code", "updated_at"])
         return None, (403, "node_not_enrolled", "node is not enrolled")
+
+    if enrollment.scope != required_scope:
+        enrollment.last_auth_error_code = "enrollment_scope_insufficient"
+        enrollment.save(update_fields=["last_auth_error_code", "updated_at"])
+        return None, (403, "enrollment_scope_insufficient", "enrollment token has insufficient scope")
 
     enrollment.last_authenticated_at = timezone.now()
     enrollment.last_auth_error_code = ""
