@@ -39,12 +39,37 @@ jobs:
           clean: false
 
       - name: Submit dependency snapshot (attempt 1)
+        id: submit_snapshot_attempt_1
+        continue-on-error: true
         uses: advanced-security/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
         with:
           detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
 
+      - name: Backoff before retry
+        if: steps.submit_snapshot_attempt_1.outcome == 'failure'
+        run: sleep 20
+
       - name: Submit dependency snapshot (attempt 2)
-        if: failure()
+        id: submit_snapshot_attempt_2
+        if: steps.submit_snapshot_attempt_1.outcome == 'failure'
+        continue-on-error: true
         uses: advanced-security/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
         with:
           detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
+
+      - name: Backoff before final retry
+        if: steps.submit_snapshot_attempt_2.outcome == 'failure'
+        run: sleep 45
+
+      - name: Submit dependency snapshot (attempt 3)
+        id: submit_snapshot_attempt_3
+        if: steps.submit_snapshot_attempt_2.outcome == 'failure'
+        continue-on-error: true
+        uses: advanced-security/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
+        with:
+          detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
+
+      - name: Report non-blocking submission failure
+        if: steps.submit_snapshot_attempt_3.outcome == 'failure'
+        run: |
+          echo "::warning title=Dependency submission failed after retries::GitHub dependency snapshot submission appears to be temporarily unavailable; continuing without blocking this workflow."
