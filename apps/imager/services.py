@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import re
 import shlex
 import shutil
+import socket
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from urllib.error import URLError
-from urllib.parse import ParseResult, unquote, urlparse
-from urllib.request import urlopen
+from urllib.error import HTTPError, URLError
+from urllib.parse import ParseResult, unquote, urljoin, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from django.conf import settings
 from django.db import transaction
 
 from apps.imager.models import RaspberryPiImageArtifact
@@ -122,6 +125,41 @@ def _normalize_local_source_path(base_image_uri: str, parsed_uri: ParseResult) -
     return Path(decoded_path)
 
 
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Prevent urllib from auto-following redirects so redirect targets can be validated."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
+        return None
+
+
+def _download_remote_base_image(base_image_uri: str, destination: Path) -> None:
+    """Download a remote base image while validating redirect targets."""
+
+    opener = build_opener(_NoRedirectHandler())
+    current_url = base_image_uri
+
+    for _ in range(10):
+        _validate_remote_base_image_url(current_url)
+
+        request = Request(current_url)
+        with opener.open(request) as response:
+            status_code = response.getcode()
+            if status_code in {301, 302, 303, 307, 308}:
+                redirect_location = response.headers.get("Location")
+                if not redirect_location:
+                    raise ImagerBuildError(
+                        f"Remote base image URL '{current_url}' returned a redirect without a Location header."
+                    )
+                current_url = urljoin(current_url, redirect_location)
+                continue
+
+            with destination.open("wb") as output_handle:
+                shutil.copyfileobj(response, output_handle)
+            return
+
+    raise ImagerBuildError(f"Remote base image URL '{base_image_uri}' exceeded redirect limit.")
+
+
 def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
     """Resolve local/file/http(s) base image inputs to a local filesystem path."""
 
@@ -139,12 +177,83 @@ def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
     destination_name = Path(unquote(parsed.path)).name or "base-image.img"
     destination = workspace / destination_name
     try:
-        with urlopen(base_image_uri) as response, destination.open("wb") as output_handle:
-            shutil.copyfileobj(response, output_handle)
-    except URLError as exc:
+        _download_remote_base_image(base_image_uri, destination)
+    except (HTTPError, URLError) as exc:
         reason = getattr(exc, "reason", str(exc))
         raise ImagerBuildError(f"Could not download base image: {reason}") from exc
     return destination
+
+
+def _is_disallowed_remote_host_address(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    """Return True when an IP address points to non-public network space."""
+
+    return any(
+        (
+            address.is_loopback,
+            address.is_link_local,
+            address.is_multicast,
+            address.is_private,
+            address.is_reserved,
+            address.is_unspecified,
+        )
+    )
+
+
+def _validate_remote_base_image_url(base_image_uri: str) -> None:
+    """Validate remote image URL host policy prior to fetching."""
+
+    parsed = urlparse(base_image_uri)
+    host = parsed.hostname
+    if not host:
+        raise ImagerBuildError(
+            "Base image URL is missing a host. Provide a public hostname or configure IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS."
+        )
+
+    allowed_hosts = set(getattr(settings, "IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS", ()))
+    if allowed_hosts and host not in allowed_hosts:
+        raise ImagerBuildError(
+            f"Remote base image host '{host}' is not in IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS."
+        )
+
+    if allowed_hosts and host in allowed_hosts:
+        return
+
+    if not getattr(settings, "IMAGER_BLOCK_PRIVATE_REMOTE_IMAGE_HOSTS", True):
+        return
+
+    try:
+        host_ip = ipaddress.ip_address(host)
+    except ValueError:
+        host_ip = None
+
+    if host_ip and _is_disallowed_remote_host_address(host_ip):
+        raise ImagerBuildError(
+            f"Remote base image host '{host}' resolves to a blocked non-public address. "
+            "Adjust IMAGER_BLOCK_PRIVATE_REMOTE_IMAGE_HOSTS or IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS only if this is intentional."
+        )
+
+    if host_ip:
+        return
+
+    try:
+        addrinfos = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return
+
+    for family, _, _, _, sockaddr in addrinfos:
+        if family == socket.AF_INET:
+            address = ipaddress.ip_address(sockaddr[0])
+        elif family == socket.AF_INET6:
+            address = ipaddress.ip_address(sockaddr[0])
+        else:
+            continue
+        if _is_disallowed_remote_host_address(address):
+            raise ImagerBuildError(
+                f"Remote base image host '{host}' resolves to blocked non-public address '{address}'. "
+                "Adjust IMAGER_BLOCK_PRIVATE_REMOTE_IMAGE_HOSTS or IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS only if this is intentional."
+            )
 
 
 def _guestfish_write(image_path: Path, local_path: Path, remote_path: str, chmod_mode: str | None = None) -> None:
