@@ -1,9 +1,7 @@
 # Cookbook maintenance notes
 
-This page replaces the old one-time cookbook audit.
-
-Arthexis documentation is now maintained continuously instead of relying on a
-single "outdated review" snapshot. When you update or add a cookbook:
+Arthexis documentation is maintained continuously. When you update or add a
+cookbook:
 
 - Verify file and module references still match the current `apps/` layout.
 - Prefer linking to stable app entry points (`admin.py`, `models.py`, service

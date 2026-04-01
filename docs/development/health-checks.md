@@ -37,7 +37,7 @@ List available checks:
 - Reusable implementations live in service modules:
   - `apps/<app_label>/services/health_checks.py`
 - Legacy `check_*` compatibility wrappers were removed; invoke `manage.py health` targets directly.
-- Group execution only includes targets marked `grouped=yes` in `--list-targets` output.
+- Group execution only includes targets marked `grouped=yes` in `--list-targets` output (controlled by `include_in_group` in `HealthCheckDefinition`).
 
 ## Current inventory
 
