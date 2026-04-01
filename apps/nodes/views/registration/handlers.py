@@ -82,6 +82,10 @@ def node_list(request):
             "features": list(node.features.values_list("slug", flat=True)),
             "installed_version": node.installed_version,
             "installed_revision": node.installed_revision,
+            "mesh_enrollment_state": node.mesh_enrollment_state,
+            "mesh_key_fingerprint_metadata": node.mesh_key_fingerprint_metadata,
+            "last_mesh_heartbeat": node.last_mesh_heartbeat,
+            "mesh_capability_flags": node.mesh_capability_flags,
         }
         for node in Node.objects.prefetch_related("features")
     ]
@@ -154,6 +158,10 @@ def node_info(request):
         "contact_hosts": node.get_remote_host_candidates(),
         "installed_version": node.installed_version,
         "installed_revision": node.installed_revision,
+        "mesh_enrollment_state": node.mesh_enrollment_state,
+        "mesh_key_fingerprint_metadata": node.mesh_key_fingerprint_metadata,
+        "last_mesh_heartbeat": node.last_mesh_heartbeat,
+        "mesh_capability_flags": node.mesh_capability_flags,
         "base_site_domain": base_domain,
         "base_site_requires_https": base_site_requires_https,
         "request_is_https": is_https_request(request),
@@ -308,6 +316,30 @@ def _update_existing_node(node: Node, *, payload: NodeRegistrationPayload, addre
         node.installed_revision = str(payload.installed_revision)[:40]
         if "installed_revision" not in update_fields:
             update_fields.append("installed_revision")
+    if (
+        payload.mesh_enrollment_state is not None
+        and node.mesh_enrollment_state != payload.mesh_enrollment_state
+    ):
+        node.mesh_enrollment_state = payload.mesh_enrollment_state
+        update_fields.append("mesh_enrollment_state")
+    if (
+        payload.mesh_key_fingerprint_metadata
+        and node.mesh_key_fingerprint_metadata != payload.mesh_key_fingerprint_metadata
+    ):
+        node.mesh_key_fingerprint_metadata = payload.mesh_key_fingerprint_metadata
+        update_fields.append("mesh_key_fingerprint_metadata")
+    if (
+        payload.last_mesh_heartbeat is not None
+        and node.last_mesh_heartbeat != payload.last_mesh_heartbeat
+    ):
+        node.last_mesh_heartbeat = payload.last_mesh_heartbeat
+        update_fields.append("last_mesh_heartbeat")
+    if (
+        payload.mesh_capability_flags
+        and node.mesh_capability_flags != payload.mesh_capability_flags
+    ):
+        node.mesh_capability_flags = payload.mesh_capability_flags
+        update_fields.append("mesh_capability_flags")
     if payload.relation_value is not None and node.current_relation != payload.relation_value:
         node.current_relation = payload.relation_value
         update_fields.append("current_relation")
@@ -406,6 +438,14 @@ def register_node(request):
         defaults["installed_version"] = str(payload.installed_version)[:20]
     if payload.installed_revision is not None:
         defaults["installed_revision"] = str(payload.installed_revision)[:40]
+    if payload.mesh_enrollment_state is not None:
+        defaults["mesh_enrollment_state"] = payload.mesh_enrollment_state
+    if payload.mesh_key_fingerprint_metadata:
+        defaults["mesh_key_fingerprint_metadata"] = payload.mesh_key_fingerprint_metadata
+    if payload.last_mesh_heartbeat is not None:
+        defaults["last_mesh_heartbeat"] = payload.last_mesh_heartbeat
+    if payload.mesh_capability_flags:
+        defaults["mesh_capability_flags"] = payload.mesh_capability_flags
     if payload.relation_value is not None:
         defaults["current_relation"] = payload.relation_value
 
@@ -462,6 +502,14 @@ def _build_registration_payload(info: Mapping[str, object] | None, relation: str
     relation_value = relation or (info.get("current_relation") if info else None)
     if relation_value:
         payload["current_relation"] = relation_value
+    for key in (
+        "mesh_enrollment_state",
+        "mesh_key_fingerprint_metadata",
+        "last_mesh_heartbeat",
+        "mesh_capability_flags",
+    ):
+        if info and key in info:
+            payload[key] = info[key]
     if info:
         role_value = ""
         for candidate in (info.get("role"), info.get("role_name")):

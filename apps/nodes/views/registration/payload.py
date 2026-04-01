@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from django.utils.dateparse import parse_datetime
+
 from django.http import JsonResponse
 
 from apps.nodes.models import Node
@@ -43,6 +45,10 @@ class NodeRegistrationPayload:
     signature: str | None
     installed_version: object | None
     installed_revision: object | None
+    mesh_enrollment_state: Node.MeshEnrollmentState | None
+    mesh_key_fingerprint_metadata: dict[str, object]
+    last_mesh_heartbeat: object | None
+    mesh_capability_flags: list[str]
     relation_value: Node.Relation | None
     trusted_requested: object
     role_name: str
@@ -112,10 +118,42 @@ def _extract_ipv4_candidates(data) -> list[str]:
     return Node.sanitize_ipv4_addresses(raw_ipv4)
 
 
+def _extract_mesh_capability_flags(data) -> list[str]:
+    raw_value = data.get("mesh_capability_flags")
+    if isinstance(raw_value, str):
+        values = [item.strip() for item in raw_value.split(",")]
+    elif isinstance(raw_value, (list, tuple, set)):
+        values = [str(item).strip() for item in raw_value]
+    else:
+        return []
+    return sorted({value for value in values if value})
+
+
+def _extract_mesh_key_fingerprint_metadata(data) -> dict[str, object]:
+    raw_value = data.get("mesh_key_fingerprint_metadata")
+    if isinstance(raw_value, dict):
+        return raw_value
+    return {}
+
+
+def _extract_mesh_last_heartbeat(data):
+    raw_value = data.get("last_mesh_heartbeat")
+    if raw_value in ("", None):
+        return None
+    if hasattr(raw_value, "isoformat"):
+        return raw_value
+    if isinstance(raw_value, str):
+        parsed = parse_datetime(raw_value.strip())
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def build_payload(data) -> NodeRegistrationPayload:
     """Build typed registration payload from raw form or JSON input."""
 
     raw_relation = data.get("current_relation")
+    raw_mesh_state = data.get("mesh_enrollment_state")
     relation_present = (
         hasattr(data, "getlist") and "current_relation" in data
     ) or ("current_relation" in data)
@@ -134,6 +172,14 @@ def build_payload(data) -> NodeRegistrationPayload:
         signature=data.get("signature"),
         installed_version=data.get("installed_version"),
         installed_revision=data.get("installed_revision"),
+        mesh_enrollment_state=(
+            Node.MeshEnrollmentState(raw_mesh_state)
+            if raw_mesh_state in Node.MeshEnrollmentState.values
+            else None
+        ),
+        mesh_key_fingerprint_metadata=_extract_mesh_key_fingerprint_metadata(data),
+        last_mesh_heartbeat=_extract_mesh_last_heartbeat(data),
+        mesh_capability_flags=_extract_mesh_capability_flags(data),
         relation_value=Node.normalize_relation(raw_relation) if relation_present else None,
         trusted_requested=data.get("trusted"),
         role_name=str(data.get("role") or data.get("role_name") or "").strip(),

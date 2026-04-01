@@ -87,6 +87,8 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "role",
         "relation",
         "trusted",
+        "mesh_state",
+        "last_mesh_heartbeat",
         "version_display",
         "last_updated",
         "visit_link",
@@ -137,6 +139,17 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                     "installed_version",
                     "installed_revision",
                 )
+            },
+        ),
+        (
+            _("Mesh identity"),
+            {
+                "fields": (
+                    "mesh_enrollment_state",
+                    "mesh_key_fingerprint_metadata",
+                    "last_mesh_heartbeat",
+                    "mesh_capability_flags",
+                ),
             },
         ),
         (
@@ -206,6 +219,10 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             getattr(obj, "installed_revision", ""),
         )
         return display or "—"
+
+    @admin.display(description=_("Mesh state"), ordering="mesh_enrollment_state")
+    def mesh_state(self, obj):
+        return obj.get_mesh_enrollment_state_display()
 
     @admin.display(description=_("IP Address"), ordering="address")
     def primary_ip(self, obj):
