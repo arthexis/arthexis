@@ -16,13 +16,27 @@
       {% if sections %}
         {% for section in sections %}
           <h2>{{ section.title }}</h2>
+          {% if section.current_prefix %}
+            <p class="mb-2">
+              <span class="text-muted">{% trans "Folder" %}:</span>
+              <code>{{ section.current_prefix }}/</code>
+              ·
+              <a href="{{ section.parent_url }}">{% trans "Up one level" %}</a>
+            </p>
+          {% endif %}
           <div class="row row-cols-1 row-cols-lg-2 g-3 mb-4">
             {% for item in section.items %}
               <div class="col">
                 <div class="card h-100 shadow-sm">
                   <div class="card-body">
                     <h3 class="h5 mb-2"><a href="{{ item.url }}">{{ item.label }}</a></h3>
-                    <p class="mb-0 text-muted">{{ item.description }}</p>
+                    <p class="mb-0 text-muted">
+                      {% if item.kind == "folder" %}
+                        {% trans "Folder" %} · {{ item.description }}
+                      {% else %}
+                        {{ item.description }}
+                      {% endif %}
+                    </p>
                   </div>
                 </div>
               </div>
