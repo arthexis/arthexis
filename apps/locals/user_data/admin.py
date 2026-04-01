@@ -199,6 +199,11 @@ class ImportExportAdminMixin:
             )
         return response
 
+    @staticmethod
+    def _ordered_unique_names(names):
+        """Return names preserving the first-seen order and removing duplicates."""
+        return list(dict.fromkeys(names))
+
     def _selected_queryset(self, request, queryset):
         """Return queryset filtered to selected primary keys when requested.
 
@@ -244,6 +249,23 @@ class ImportExportAdminMixin:
             if not selected_export_column_names:
                 return HttpResponseBadRequest(_("Select at least one column to export."))
             export_field_by_name = {field.name: field for field in export_fields}
+            selected_export_column_names = self._ordered_unique_names(
+                selected_export_column_names
+            )
+            raw_column_order = request.POST.get("export_column_order", "")
+            ordered_column_names = self._ordered_unique_names(
+                [name for name in raw_column_order.split(",") if name]
+            )
+            if ordered_column_names:
+                selected_name_set = set(selected_export_column_names)
+                ordered_name_set = set(ordered_column_names)
+                selected_export_column_names = [
+                    name for name in ordered_column_names if name in selected_name_set
+                ] + [
+                    name
+                    for name in selected_export_column_names
+                    if name not in ordered_name_set
+                ]
             export_fields = [
                 export_field_by_name[name]
                 for name in selected_export_column_names

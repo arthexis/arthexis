@@ -79,9 +79,10 @@
         </div>
         <div class="form-row">
           <label>{% trans "Columns to export" %}</label>
+          <input type="hidden" name="export_column_order" id="id_export_column_order" />
           <ul class="export-columns-list">
             {% for column in export_columns %}
-              <li>
+              <li data-export-column-name="{{ column.name }}">
                 <label class="export-column-option{% if column.is_import_identifier %} import-identifier{% endif %}">
                   <input type="checkbox" name="export_columns" value="{{ column.name }}" {% if column.selected %}checked{% endif %} />
                   <span>
@@ -91,6 +92,14 @@
                     {% endif %}
                   </span>
                 </label>
+                <span class="export-column-move-controls">
+                  <button type="button" class="button export-column-move-up" aria-label="{% trans 'Move column up' %}">
+                    ↑
+                  </button>
+                  <button type="button" class="button export-column-move-down" aria-label="{% trans 'Move column down' %}">
+                    ↓
+                  </button>
+                </span>
               </li>
             {% endfor %}
           </ul>
@@ -132,9 +141,55 @@
         window.location.href = currentUrl.toString();
       }
 
+      function syncColumnOrderInput() {
+        var orderInput = document.getElementById("id_export_column_order");
+        if (!orderInput) {
+          return;
+        }
+        var names = Array.from(
+          document.querySelectorAll(
+            ".export-columns-list li[data-export-column-name]"
+          )
+        ).map(function (item) {
+          return item.dataset.exportColumnName;
+        });
+        orderInput.value = names.join(",");
+      }
+
+      function wireColumnOrderControls() {
+        var list = document.querySelector(".export-columns-list");
+        if (!list) {
+          return;
+        }
+        list.addEventListener("click", function (event) {
+          var button = event.target.closest("button");
+          if (!button) {
+            return;
+          }
+          var item = button.closest("li[data-export-column-name]");
+          if (!item) {
+            return;
+          }
+          if (button.classList.contains("export-column-move-up")) {
+            var previous = item.previousElementSibling;
+            if (previous) {
+              previous.before(item);
+            }
+          } else if (button.classList.contains("export-column-move-down")) {
+            var next = item.nextElementSibling;
+            if (next) {
+              item.after(next);
+            }
+          }
+          syncColumnOrderInput();
+        });
+        syncColumnOrderInput();
+      }
+
       document
         .getElementById("id_export_scope_selected")
         ?.addEventListener("change", syncExportScopeParams);
+      wireColumnOrderControls();
     })();
   </script>
 {% endblock %}

@@ -1,3 +1,7 @@
+import csv
+import io
+from unittest import mock
+
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -7,7 +11,6 @@ from django.db import IntegrityError
 from django.test import RequestFactory
 from django.test import TestCase
 from django.urls import reverse
-from unittest import mock
 
 from apps.locals.models import Favorite
 from apps.locals.user_data import EntityModelAdmin
@@ -226,3 +229,43 @@ class ActionChoicesDeduplicationTests(TestCase):
                 ("recover_selected", "Recover selected entries"),
             ],
         )
+
+
+class ExportColumnOrderTests(TestCase):
+    """Regression tests for custom export column ordering."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="exportadmin",
+            email="exportadmin@example.com",
+            password="password",
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.factory = RequestFactory()
+
+    def test_csv_export_respects_posted_column_order(self):
+        """CSV export should follow the explicit order selected in the UI."""
+
+        favorite = Favorite.objects.create(
+            user=self.user,
+            content_type=ContentType.objects.get_for_model(Favorite),
+            custom_label="Alpha",
+            priority=7,
+        )
+        request = self.factory.post(
+            "/admin/locals/favorite/export/",
+            data={
+                "format": "csv",
+                "export_columns": ["custom_label", "priority"],
+                "export_column_order": "priority,custom_label,user,content_type",
+            },
+        )
+        request.user = self.user
+        response = EntityModelAdmin(Favorite, admin.site).export_view(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv")
+        rows = list(csv.reader(io.StringIO(response.content.decode("utf-8"))))
+        self.assertEqual(rows[0], ["priority", "custom_label"])
+        self.assertEqual(rows[1], ["7", "Alpha"])
