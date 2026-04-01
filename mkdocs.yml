@@ -29,6 +29,9 @@ nav:
       - Release Package Options: development/release-package-options.md
       - Admin UI Framework: development/admin-ui-framework.md
       - Dependency Management: development/dependency-management.md
+      - Testing:
+          - Marker Governance Policy: development/critical-demotion-candidates-2026-03-01.md
+          - Marker Ledger Archive: development/testing/archive/index.md
   - Performance:
       - Public Charger Optimizations: performance/public_charger_optimizations.md
   - Legal:
