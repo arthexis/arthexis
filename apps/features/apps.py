@@ -6,6 +6,3 @@ class FeaturesConfig(AppConfig):
     name = "apps.features"
     label = "features"
     verbose_name = "Suite Features"
-
-    def ready(self):  # pragma: no cover - import for side effects
-        from . import widgets  # noqa: F401
