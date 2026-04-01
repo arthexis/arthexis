@@ -21,7 +21,10 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [Ops Command Wrapper](operations/operational-commands.md)
 - [Reinstall + Data Import Runbook (1.0+)](operations/reinstall-data-import-runbook.md)
 - [Recipes decommission path](recipes.md)
-- [Standalone Desktop Implementation Plan](development/standalone-desktop-implementation.md)
 - [Suite Services Report](suite-services-report.md)
 - [USB Camera Power-Off](usb-camera-power-off.md)
 - [Watchtower Attack Simulation Playbook](development/watchtower-attack-simulation.md)
+
+## Proposals / Future Work
+
+- [Standalone Desktop Implementation Plan](development/standalone-desktop-implementation.md)
