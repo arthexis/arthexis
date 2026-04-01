@@ -90,6 +90,48 @@ def test_netmesh_api_returns_scoped_payloads_and_etag(client):
 
     etag_response = client.get("/api/netmesh/peers/", HTTP_IF_NONE_MATCH=peers["ETag"], **headers)
     assert etag_response.status_code == 304
+    wildcard_etag_response = client.get("/api/netmesh/peers/", HTTP_IF_NONE_MATCH="*", **headers)
+    assert wildcard_etag_response.status_code == 304
+
+
+@pytest.mark.django_db
+def test_group_destination_policy_is_included_in_peers_and_endpoints(client):
+    gateway_role = NodeRole.objects.create(name="Gateway")
+    charger_role = NodeRole.objects.create(name="Charger")
+    service_role = NodeRole.objects.create(name="Service")
+
+    caller = Node.objects.create(hostname="caller-gw", role=gateway_role)
+    group_peer = Node.objects.create(hostname="group-peer", role=charger_role, public_endpoint="group-peer")
+    blocked_peer = Node.objects.create(hostname="blocked-peer", role=service_role, public_endpoint="blocked-peer")
+
+    enrollment, token = issue_enrollment_token(node=caller)
+    enrollment.status = NodeEnrollment.Status.ACTIVE
+    enrollment.save(update_fields=["status", "updated_at"])
+    caller.mesh_enrollment_state = Node.MeshEnrollmentState.ENROLLED
+    caller.save(update_fields=["mesh_enrollment_state"])
+
+    MeshMembership.objects.create(node=caller, tenant="tenant-a", is_enabled=True)
+    MeshMembership.objects.create(node=group_peer, tenant="tenant-a", is_enabled=True)
+    MeshMembership.objects.create(node=blocked_peer, tenant="tenant-a", is_enabled=True)
+
+    PeerPolicy.objects.create(
+        tenant="tenant-a",
+        source_node=caller,
+        destination_group=charger_role,
+        allowed_services=["telemetry"],
+    )
+
+    NodeEndpoint.objects.create(node=group_peer, endpoint="wss://group-peer.example/ws", nat_type=NodeEndpoint.NatType.OPEN)
+    NodeEndpoint.objects.create(node=blocked_peer, endpoint="wss://blocked-peer.example/ws", nat_type=NodeEndpoint.NatType.OPEN)
+
+    headers = {"HTTP_AUTHORIZATION": f"Bearer {token}"}
+    peers = client.get("/api/netmesh/peers/", **headers)
+    endpoints = client.get("/api/netmesh/peer-endpoints/", **headers)
+
+    assert peers.status_code == 200
+    assert [item["hostname"] for item in peers.json()["peers"]] == ["group-peer"]
+    assert endpoints.status_code == 200
+    assert [item["endpoint"] for item in endpoints.json()["endpoints"]] == ["wss://group-peer.example/ws"]
 
 
 @pytest.mark.django_db
