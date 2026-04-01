@@ -65,7 +65,6 @@ class AdminStaffTasksTests(TestCase):
         messages = list(response.context["messages"])
         self.assertTrue(any("do not have access" in str(message) for message in messages))
 
-
     def test_task_panel_registry_contains_system_route(self):
         """System view should be registered in task-panel route metadata."""
 
@@ -99,4 +98,22 @@ class AdminStaffTasksTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, reverse("admin:features_feature_changelist"))
         self.assertContains(response, "Features")
-        self.assertNotContains(response, 'id="admin-dashboard-widgets"')
+        self.assertContains(response, 'id="admin-dashboard-widgets"')
+
+    def test_admin_home_hides_features_action_without_permission(self):
+        """Admin home should hide the Features action for users lacking view permission."""
+
+        user_model = get_user_model()
+        limited_staff = user_model.objects.create_user(
+            username="limitedstaff",
+            email="limitedstaff@example.com",
+            password="admin123",
+            is_staff=True,
+        )
+        self.client.force_login(limited_staff)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, reverse("admin:features_feature_changelist"))
+        self.assertNotContains(response, "Features")
