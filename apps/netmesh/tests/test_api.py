@@ -135,6 +135,48 @@ def test_group_destination_policy_is_included_in_peers_and_endpoints(client):
 
 
 @pytest.mark.django_db
+def test_peer_endpoints_excludes_policy_nodes_without_active_scoped_membership(client):
+    gateway_role = NodeRole.objects.create(name="Gateway")
+    service_role = NodeRole.objects.create(name="Service")
+    site_a = Site.objects.create(domain="tenant-a.example", name="Tenant A")
+    site_b = Site.objects.create(domain="tenant-b.example", name="Tenant B")
+
+    caller = Node.objects.create(hostname="caller-gw", role=gateway_role)
+    in_scope_peer = Node.objects.create(hostname="in-scope-peer", role=service_role)
+    disabled_peer = Node.objects.create(hostname="disabled-peer", role=service_role)
+    other_site_peer = Node.objects.create(hostname="other-site-peer", role=service_role)
+
+    enrollment, token = issue_enrollment_token(node=caller, site=site_a)
+    enrollment.status = NodeEnrollment.Status.ACTIVE
+    enrollment.save(update_fields=["status", "updated_at"])
+    caller.mesh_enrollment_state = Node.MeshEnrollmentState.ENROLLED
+    caller.save(update_fields=["mesh_enrollment_state"])
+
+    MeshMembership.objects.create(node=caller, tenant="tenant-a", site=site_a, is_enabled=True)
+    MeshMembership.objects.create(node=in_scope_peer, tenant="tenant-a", site=site_a, is_enabled=True)
+    MeshMembership.objects.create(node=disabled_peer, tenant="tenant-a", site=site_a, is_enabled=False)
+    MeshMembership.objects.create(node=other_site_peer, tenant="tenant-a", site=site_b, is_enabled=True)
+
+    for peer in (in_scope_peer, disabled_peer, other_site_peer):
+        PeerPolicy.objects.create(
+            tenant="tenant-a",
+            site=site_a,
+            source_node=caller,
+            destination_node=peer,
+            allowed_services=["telemetry"],
+        )
+
+    NodeEndpoint.objects.create(node=in_scope_peer, endpoint="wss://in-scope.example/ws", nat_type=NodeEndpoint.NatType.OPEN)
+    NodeEndpoint.objects.create(node=disabled_peer, endpoint="wss://disabled.example/ws", nat_type=NodeEndpoint.NatType.OPEN)
+    NodeEndpoint.objects.create(node=other_site_peer, endpoint="wss://other-site.example/ws", nat_type=NodeEndpoint.NatType.OPEN)
+
+    response = client.get("/api/netmesh/peer-endpoints/", HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    assert response.status_code == 200
+    assert [item["endpoint"] for item in response.json()["endpoints"]] == ["wss://in-scope.example/ws"]
+
+
+@pytest.mark.django_db
 def test_charger_profile_gets_minimal_peer_endpoint_fields(client):
     charger_role = NodeRole.objects.create(name="Charger")
     service_role = NodeRole.objects.create(name="Service")

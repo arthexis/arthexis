@@ -80,7 +80,9 @@ def _policies_for_caller(*, principal, membership):
 
 def _destination_node_ids(*, policies, membership, principal) -> list[int]:
     destination_node_ids = set(
-        policies.filter(destination_node__isnull=False).values_list("destination_node_id", flat=True)
+        policies.filter(destination_node__isnull=False)
+        .order_by()
+        .values_list("destination_node_id", flat=True)
     )
 
     destination_group_ids = list(
@@ -91,7 +93,7 @@ def _destination_node_ids(*, policies, membership, principal) -> list[int]:
             **_scope_filters(membership=membership),
             is_enabled=True,
             node__role_id__in=destination_group_ids,
-        ).exclude(node=principal.node).values_list("node_id", flat=True)
+        ).exclude(node=principal.node).order_by().values_list("node_id", flat=True)
         destination_node_ids.update(group_member_ids)
 
     return sorted(destination_node_ids)
@@ -170,10 +172,20 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
 
     principal, membership = resolved
     policies = _policies_for_caller(principal=principal, membership=membership)
-    peer_ids = _destination_node_ids(
+    policy_peer_ids = _destination_node_ids(
         policies=policies,
         membership=membership,
         principal=principal,
+    )
+    peer_ids = list(
+        MeshMembership.objects.filter(
+            **_scope_filters(membership=membership),
+            is_enabled=True,
+            node_id__in=policy_peer_ids,
+        )
+        .exclude(node=principal.node)
+        .order_by()
+        .values_list("node_id", flat=True)
     )
     endpoints_qs = list(NodeEndpoint.objects.filter(node_id__in=peer_ids).select_related("node", "node__role"))
     ads_qs = ServiceAdvertisement.objects.filter(node_id__in=peer_ids)
