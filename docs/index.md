@@ -25,6 +25,3 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [USB Camera Power-Off](usb-camera-power-off.md)
 - [Watchtower Attack Simulation Playbook](development/watchtower-attack-simulation.md)
 
-## Proposals / Future Work
-
-- [Standalone Desktop Implementation Plan](development/standalone-desktop-implementation.md)
