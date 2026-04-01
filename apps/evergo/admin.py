@@ -7,6 +7,7 @@ from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Prefetch, Q
+from django.db.models.functions import Coalesce
 from django.utils.html import format_html
 from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
@@ -925,10 +926,10 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     list_select_related = ("latest_order",)
 
     list_display = (
-        "name",
         "latest_so_link",
-        "status_of_last_so",
+        "name",
         "address_display",
+        "brand_display",
         "phone_number_display",
     )
     list_filter = (
@@ -946,7 +947,9 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
 
     def get_queryset(self, request):
         """Limit customer rows to the signed-in owner unless user is superuser."""
-        queryset = super().get_queryset(request)
+        queryset = super().get_queryset(request).annotate(
+            brand_sort_value=Coalesce("latest_order__site_name", "raw_payload__orden_instalacion__marca_cargador")
+        )
         selected_ids = _parse_selected_ids_query_param(request)
         if selected_ids:
             queryset = queryset.filter(pk__in=selected_ids)
@@ -987,6 +990,18 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
             reverse("evergo:order-tracking-public", kwargs={"order_id": latest_order.remote_id}),
             latest_order.status_name,
         )
+
+    @admin.display(description=_("Brand"), ordering="brand_sort_value")
+    def brand_display(self, obj):
+        """Return charger/site brand inferred from the linked latest order payload."""
+        latest_order = obj.latest_order
+        if latest_order and latest_order.site_name:
+            return latest_order.site_name
+
+        install_payload = obj.raw_payload.get("orden_instalacion") if isinstance(obj.raw_payload, dict) else {}
+        if not isinstance(install_payload, dict):
+            return "-"
+        return str(install_payload.get("marca_cargador") or "").strip() or "-"
 
     @admin.display(description=_("Phone number"))
     def phone_number_display(self, obj):
