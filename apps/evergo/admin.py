@@ -945,6 +945,14 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     inlines = (EvergoArtifactInline,)
     view_on_site = True
 
+    @staticmethod
+    def _get_latest_order(obj: EvergoCustomer) -> EvergoOrder | None:
+        """Return linked latest order and tolerate stale/deleted FK references."""
+        try:
+            return obj.latest_order
+        except EvergoOrder.DoesNotExist:
+            return None
+
     def get_queryset(self, request):
         """Limit customer rows to the signed-in owner unless user is superuser."""
         queryset = super().get_queryset(request).annotate(
@@ -980,7 +988,7 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     @admin.display(description=_("Status of Last SO"))
     def status_of_last_so(self, obj):
         """Return the latest order status label for the customer."""
-        latest_order = obj.latest_order
+        latest_order = self._get_latest_order(obj)
         if not (latest_order and latest_order.status_name):
             return "-"
         if not latest_order.remote_id:
@@ -994,7 +1002,7 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     @admin.display(description=_("Brand"), ordering="brand_sort_value")
     def brand_display(self, obj):
         """Return charger/site brand inferred from the linked latest order payload."""
-        latest_order = obj.latest_order
+        latest_order = self._get_latest_order(obj)
         if latest_order and latest_order.site_name:
             return latest_order.site_name
 

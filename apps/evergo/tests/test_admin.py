@@ -86,3 +86,17 @@ def test_evergo_customer_admin_brand_display_ordering_supports_payload_fallback(
 
     assert model_admin.brand_display.admin_order_field == "brand_sort_value"
     assert ordered_names == ["From payload", "From order"]
+
+
+@pytest.mark.django_db
+def test_evergo_customer_admin_handles_stale_latest_order_reference():
+    """Readonly helpers should tolerate stale latest_order FK references."""
+    User = get_user_model()
+    suite_user = User.objects.create_user(username="stale-order", email="stale-order@example.com")
+    profile = EvergoUser.objects.create(user=suite_user, evergo_email="stale-order@example.com")
+    customer = EvergoCustomer(user=profile, name="Acme", latest_order_id=999999, raw_payload={})
+
+    model_admin = EvergoCustomerAdmin(EvergoCustomer, admin.site)
+
+    assert model_admin.status_of_last_so(customer) == "-"
+    assert model_admin.brand_display(customer) == "-"
