@@ -108,6 +108,18 @@ class PeerPolicy(Entity):
         null=True,
         blank=True,
     )
+    source_station = models.ForeignKey(
+        "ocpp.Charger",
+        on_delete=models.CASCADE,
+        related_name="netmesh_source_policies",
+        null=True,
+        blank=True,
+    )
+    source_tags = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("Node tags (mesh capability flags) that must be present on the source."),
+    )
     destination_node = models.ForeignKey(
         "nodes.Node",
         on_delete=models.CASCADE,
@@ -122,10 +134,27 @@ class PeerPolicy(Entity):
         null=True,
         blank=True,
     )
+    destination_station = models.ForeignKey(
+        "ocpp.Charger",
+        on_delete=models.CASCADE,
+        related_name="netmesh_destination_policies",
+        null=True,
+        blank=True,
+    )
+    destination_tags = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("Node tags (mesh capability flags) that must be present on the destination."),
+    )
     allowed_services = models.JSONField(
         default=list,
         blank=True,
         help_text=_("List of allowed service identifiers or protocol names."),
+    )
+    denied_services = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("List of denied service identifiers or protocol names."),
     )
 
     class Meta(Entity.Meta):
@@ -136,43 +165,96 @@ class PeerPolicy(Entity):
                 name="netmesh_policy_scope_src_idx",
             ),
         ]
-        constraints = [
-            models.CheckConstraint(
-                condition=(
-                    (Q(source_node__isnull=False) & Q(source_group__isnull=True))
-                    | (Q(source_node__isnull=True) & Q(source_group__isnull=False))
-                ),
-                name="netmesh_policy_source_selector_xor",
-            ),
-            models.CheckConstraint(
-                condition=(
-                    (Q(destination_node__isnull=False) & Q(destination_group__isnull=True))
-                    | (Q(destination_node__isnull=True) & Q(destination_group__isnull=False))
-                ),
-                name="netmesh_policy_destination_selector_xor",
-            ),
-        ]
+        constraints = []
+
+    @staticmethod
+    def _normalize_services(services) -> list[str]:
+        if not isinstance(services, list):
+            return []
+        normalized: list[str] = []
+        for item in services:
+            if not isinstance(item, str):
+                continue
+            value = item.strip().lower()
+            if value and value not in normalized:
+                normalized.append(value)
+        return normalized
+
+    def normalized_allowed_services(self) -> list[str]:
+        return self._normalize_services(self.allowed_services)
+
+    def normalized_denied_services(self) -> list[str]:
+        return self._normalize_services(self.denied_services)
 
     def clean(self):
         super().clean()
         errors: dict[str, list[str]] = {}
-        if not self.source_node_id and not self.source_group_id:
+        source_selectors = [bool(self.source_node_id), bool(self.source_group_id), bool(self.source_station_id)]
+        source_tags = self._normalize_services(self.source_tags)
+        if not any(source_selectors) and not source_tags:
             errors.setdefault("source_node", []).append(
-                _("Choose a source node or source group."),
+                _("Choose a source node, source group, source station, or source tag selector."),
             )
-        elif self.source_node_id and self.source_group_id:
+        elif sum(source_selectors) > 1:
             errors.setdefault("source_node", []).append(
-                _("Provide either a source node or a source group, not both."),
+                _("Provide at most one source entity selector: node, group, or station."),
             )
 
-        if not self.destination_node_id and not self.destination_group_id:
+        destination_selectors = [
+            bool(self.destination_node_id),
+            bool(self.destination_group_id),
+            bool(self.destination_station_id),
+        ]
+        destination_tags = self._normalize_services(self.destination_tags)
+        if not any(destination_selectors) and not destination_tags:
             errors.setdefault("destination_node", []).append(
-                _("Choose a destination node or destination group."),
+                _("Choose a destination node, destination group, destination station, or destination tag selector."),
             )
-        elif self.destination_node_id and self.destination_group_id:
+        elif sum(destination_selectors) > 1:
             errors.setdefault("destination_node", []).append(
-                _("Provide either a destination node or destination group, not both."),
+                _("Provide at most one destination entity selector: node, group, or station."),
             )
+
+        allowed_services = self.normalized_allowed_services()
+        denied_services = self.normalized_denied_services()
+        overlap = sorted(set(allowed_services).intersection(denied_services))
+        if overlap:
+            errors.setdefault("denied_services", []).append(
+                _("Services cannot be allowed and denied in the same policy: %(services)s.")
+                % {"services": ", ".join(overlap)}
+            )
+
+        conflicting = (
+            PeerPolicy.objects.filter(
+                tenant=self.tenant,
+                site_id=self.site_id,
+                source_node_id=self.source_node_id,
+                source_group_id=self.source_group_id,
+                source_station_id=self.source_station_id,
+                source_tags=source_tags,
+                destination_node_id=self.destination_node_id,
+                destination_group_id=self.destination_group_id,
+                destination_station_id=self.destination_station_id,
+                destination_tags=destination_tags,
+            )
+            .exclude(pk=self.pk)
+            .only("id", "allowed_services", "denied_services")
+        )
+        for policy in conflicting:
+            policy_allowed = set(policy.normalized_allowed_services())
+            policy_denied = set(policy.normalized_denied_services())
+            ambiguity = sorted((set(allowed_services) & policy_denied) | (set(denied_services) & policy_allowed))
+            if ambiguity:
+                errors.setdefault("allowed_services", []).append(
+                    _("Conflicting allow/deny services already exist for this selector set: %(services)s.")
+                    % {"services": ", ".join(ambiguity)}
+                )
+                break
+
+        self.source_tags = source_tags
+        self.destination_tags = destination_tags
+        self.allowed_services = allowed_services
+        self.denied_services = denied_services
 
         if errors:
             raise ValidationError(errors)
