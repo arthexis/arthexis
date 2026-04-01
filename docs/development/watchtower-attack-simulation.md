@@ -157,7 +157,3 @@ A Watchtower node is "basic-attack resilient" only if all four categories pass f
 - Run lightweight simulations weekly (recon + brute-force + small flood).
 - Run full suite monthly or before every release.
 - Treat any failed check as a release blocker for internet-exposed Watchtower roles.
-
-## Codex automation
-
-For an agent-driven implementation of this playbook, see the companion skill proposal in [`watchtower-codex-skill-proposal.md`](./watchtower-codex-skill-proposal.md).
