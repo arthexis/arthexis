@@ -31,7 +31,7 @@ Arthexis should be extended as an integration pivot (apps + models + migrations)
 #### `GET /ocpp/chargers/`
 - **Expected caller**: authenticated admin/operator browser session.
 - **AuthN/AuthZ**:
-  - Requires authenticated Django user (`api_login_required`), returns `401` with `{"detail": "authentication required"}` otherwise.
+  - Requires an authenticated Django user (`api_login_required`), returns `401` with `{"detail": "authentication required"}` otherwise.
   - Visibility scoped by charger access helpers.
 - **Example success**:
 ```json
@@ -122,7 +122,7 @@ Arthexis should be extended as an integration pivot (apps + models + migrations)
   - Session expiry follows Django session backend settings.
 - **Idempotency/retry**:
   - **Not idempotent** for state-changing actions (start/stop/reset/profile changes).
-  - Caller should retry only on transport-level failures/timeouts with external dedupe keys (for OCPP 2.x, prefer stable `remoteStartId` to avoid duplicate intents).
+  - Caller should retry only on transport-level failures/timeouts with external dedupe keys (`remoteStartId` is an OCPP 2.x strategy; for OCPP 1.6 `RemoteStartTransaction`, rely on transport-layer idempotency and/or a custom dedupe key because no standard `remoteStartId` field exists).
 - **Business models + migrations**:
   - Models: `Charger`, `Transaction`, `ChargingProfile`, `ProtocolCall`, plus store-backed pending call metadata.
   - Migrations: `apps/ocpp/migrations/`, `apps/protocols/migrations/`.
@@ -338,10 +338,10 @@ Arthexis should be extended as an integration pivot (apps + models + migrations)
 ```
 - **Error examples**:
 ```json
-Invalid JSON payload.
+{"detail": "Invalid JSON payload."}
 ```
 ```json
-Missing WhatsApp sender or message body.
+{"detail": "Missing WhatsApp sender or message body."}
 ```
 - **Idempotency/retry**:
   - Not strictly idempotent; retries can duplicate messages.

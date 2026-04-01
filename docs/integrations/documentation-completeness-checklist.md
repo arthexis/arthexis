@@ -11,7 +11,7 @@ Use this page to track endpoint-documentation status across the Arthexis suite.
 
 | App | Endpoint group | Status | Notes |
 |---|---|---|---|
-| `apps.ocpp` | `/ocpp/chargers/`, `/ocpp/chargers/<cid>/`, `/ocpp/chargers/<cid>/action/`, connector action variant | Complete | Primary charging control and state APIs documented in inventory page. |
+| `apps.ocpp` | `/ocpp/chargers/`, `/ocpp/chargers/<cid>/`, `/ocpp/chargers/<cid>/action/` (plus connector-scoped action endpoint variant, e.g. `/ocpp/chargers/<cid>/connector/<connector>/action/`) | Complete | Primary charging control and state APIs documented in inventory page. |
 | `apps.ocpp` | OCPP CSMS WebSocket catch-all (`/<...>/<cid>/`) | Complete | Auth + retry/idempotency behavior documented. |
 | `apps.ocpp` | Firmware download + public status/log/chart/session pages | In progress | Needs per-endpoint error payload and auth matrix expansion. |
 | `apps.nodes` | `/nodes/info/`, `/nodes/register/`, `/nodes/register/enrollment-public-key/` | Complete | Enrollment and registration contracts documented. |
