@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from getpass import getpass
 from pathlib import Path
 import sys
 
@@ -16,7 +15,6 @@ from apps.certs.services import (
     CertbotError,
     ensure_certbot_available,
 )
-from apps.dns.models import DNSProviderCredential
 from apps.nginx.config_utils import slugify
 from apps.nginx.management.commands.https_parts.config_apply import _apply_config, _get_or_create_config
 from apps.nginx.management.commands.https_parts.constants import (
@@ -113,7 +111,12 @@ def _warn_if_certificate_paths_changed(
     )
 
 
-def _get_or_create_certificate(domain: str, config: SiteConfiguration, *, use_local: bool, use_godaddy: bool):
+def _get_or_create_certificate(
+    domain: str,
+    config: SiteConfiguration,
+    *,
+    use_local: bool,
+):
     """Create or update certificate records used by HTTPS provisioning."""
 
     slug = slugify(domain)
@@ -130,18 +133,13 @@ def _get_or_create_certificate(domain: str, config: SiteConfiguration, *, use_lo
         )
         return certificate
 
-    challenge_type = (
-        CertbotCertificate.ChallengeType.GODADDY
-        if use_godaddy
-        else CertbotCertificate.ChallengeType.NGINX
-    )
     certificate, created = CertbotCertificate.objects.get_or_create(
         name=f"{config.name or 'nginx-site'}-{slug}-certbot",
         defaults={
             "domain": domain,
             "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
             "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
-            "challenge_type": challenge_type,
+            "challenge_type": CertbotCertificate.ChallengeType.NGINX,
         },
     )
 
@@ -150,8 +148,8 @@ def _get_or_create_certificate(domain: str, config: SiteConfiguration, *, use_lo
         if certificate.domain != domain:
             certificate.domain = domain
             updated_fields.append("domain")
-        if certificate.challenge_type != challenge_type:
-            certificate.challenge_type = challenge_type
+        if certificate.challenge_type != CertbotCertificate.ChallengeType.NGINX:
+            certificate.challenge_type = CertbotCertificate.ChallengeType.NGINX
             updated_fields.append("challenge_type")
         if not certificate.certificate_path:
             certificate.certificate_path = f"/etc/letsencrypt/live/{domain}/fullchain.pem"
@@ -165,110 +163,6 @@ def _get_or_create_certificate(domain: str, config: SiteConfiguration, *, use_lo
     return certificate
 
 
-def _validate_godaddy_setup(
-    service,
-    certificate,
-    *,
-    key: str | None = None,
-) -> None:
-    """Validate GoDaddy DNS challenge prerequisites before provisioning."""
-
-    if not isinstance(certificate._specific_certificate, CertbotCertificate):
-        return
-    certbot = certificate._specific_certificate
-    if certbot.challenge_type != CertbotCertificate.ChallengeType.GODADDY:
-        return
-
-    credential = certbot.dns_credential
-    if key:
-        credential = _resolve_godaddy_credential(key=key)
-        if credential is None:
-            raise CommandError(
-                f"GoDaddy credential '{key}' was not found or is disabled. "
-                "Configure it with './command.sh godaddy setup ...' and retry."
-            )
-    elif not (
-        credential
-        and credential.is_enabled
-        and credential.provider == DNSProviderCredential.Provider.GODADDY
-    ):
-        credential = _resolve_godaddy_credential(key=None)
-        if credential is None:
-            credential = _prompt_for_godaddy_credential(service, certbot.domain)
-        if credential is None:
-            raise CommandError(
-                "GoDaddy DNS validation requires credentials. Re-run with an interactive terminal or configure DNS > DNS Credentials in admin."
-            )
-    certbot.dns_credential = credential
-    certbot.save(update_fields=["dns_credential", "updated_at"])
-    service.stdout.write(
-        "Using GoDaddy credential '%s'. Ensure certbot and Python requests are available to run DNS hooks."
-        % credential
-    )
-
-
-def _resolve_godaddy_credential(*, key: str | None = None) -> DNSProviderCredential | None:
-    """Resolve an enabled GoDaddy credential by selector or default ordering."""
-
-    queryset = DNSProviderCredential.objects.filter(
-        provider=DNSProviderCredential.Provider.GODADDY,
-        is_enabled=True,
-    ).order_by("pk")
-    if not key:
-        return queryset.first()
-
-    if key.isdigit():
-        credential = queryset.filter(pk=int(key)).first()
-        if credential:
-            return credential
-
-    for credential in queryset:
-        if (credential.resolve_sigils("api_key") or "").strip() == key:
-            return credential
-    return None
-
-
-def _prompt_for_godaddy_credential(service, domain: str) -> DNSProviderCredential | None:
-    """Prompt for GoDaddy credentials and persist them for DNS-01 validation."""
-
-    if not sys.stdin.isatty():
-        service.stdout.write("No enabled GoDaddy DNS credential was found.")
-        service.stdout.write(
-            "Create one in admin (DNS > DNS Credentials) or re-run this command in an interactive terminal to enter credentials now."
-        )
-        return None
-
-    service.stdout.write("No enabled GoDaddy DNS credential was found.")
-    service.stdout.write("Create API credentials in GoDaddy: Developer Portal -> API Keys -> Create New Key.")
-    service.stdout.write("Docs: https://developer.godaddy.com/keys")
-    should_continue = input("Enter credentials now and save to DNS Credentials? [y/N]: ").strip().lower()
-    if should_continue not in {"y", "yes"}:
-        return None
-
-    api_key = getpass("GoDaddy API key: ").strip()
-    api_secret = getpass("GoDaddy API secret: ").strip()
-    customer_id = input("GoDaddy customer ID (optional): ").strip()
-    use_sandbox = input("Use GoDaddy OTE sandbox environment? [y/N]: ").strip().lower()
-
-    if not api_key or not api_secret:
-        service.stdout.write("API key and secret are required to save credentials.")
-        return None
-
-    credential = DNSProviderCredential.objects.create(
-        provider=DNSProviderCredential.Provider.GODADDY,
-        api_key=api_key,
-        api_secret=api_secret,
-        customer_id=customer_id,
-        default_domain=domain,
-        use_sandbox=use_sandbox in {"y", "yes"},
-        is_enabled=True,
-    )
-    service.stdout.write(
-        service.style.SUCCESS("Saved GoDaddy DNS credential for automated DNS validation.")
-    )
-    return credential
-
-
 def _provision_certificate(
     service,
     *,
@@ -276,12 +170,9 @@ def _provision_certificate(
     config: SiteConfiguration,
     certificate,
     use_local: bool,
-    use_godaddy: bool,
-    sandbox_override: bool | None,
     sudo: str,
     reload: bool,
     force_renewal: bool,
-    godaddy_credential_key: str | None,
 ) -> None:
     """Provision local or certbot certificates and handle recovery/warnings."""
 
@@ -303,18 +194,11 @@ def _provision_certificate(
         previous_certificate_key_path = certificate.certificate_key_path
 
     try:
-        if not use_godaddy:
-            http01_bootstrapped = True
-            _prepare_http01_challenge_site(service, domain, reload=reload)
-        if use_godaddy:
-            _validate_godaddy_setup(
-                service,
-                certificate,
-                key=godaddy_credential_key,
-            )
+        http01_bootstrapped = True
+        _prepare_http01_challenge_site(service, domain, reload=reload)
         certificate.provision(
             sudo=sudo,
-            dns_use_sandbox=sandbox_override,
+            dns_use_sandbox=None,
             force_renewal=force_renewal,
         )
     except Exception as exc:  # noqa: BLE001

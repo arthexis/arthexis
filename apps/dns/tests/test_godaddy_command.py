@@ -96,128 +96,16 @@ def test_godaddy_remove_errors_when_credential_not_found():
 
 
 @pytest.mark.django_db
-def test_godaddy_setup_creates_credential_without_owner():
-    """Setup should persist key/secret so HTTPS DNS-01 can reuse them later."""
+def test_godaddy_setup_reports_manual_dns_instructions():
+    """Setup should direct operators to manual DNS configuration."""
 
-    stdout = StringIO()
-    call_command(
-        "godaddy",
-        "setup",
-        api_key="stored-key",
-        api_secret="stored-secret",
-        default_domain="example.com",
-        sandbox=True,
-        stdout=stdout,
-    )
-
-    credential = DNSProviderCredential.objects.get()
-    assert credential.resolve_sigils("api_key") == "stored-key"
-    assert credential.resolve_sigils("api_secret") == "stored-secret"
-    assert credential.get_default_domain() == "example.com"
-    assert "Configured GoDaddy credential" in stdout.getvalue()
-
-
-@pytest.mark.django_db
-def test_godaddy_setup_updates_existing_credential():
-    """Setup should update the existing credential when API key already exists."""
-
-    credential = DNSProviderCredential.objects.create(
-        api_key="shared-key",
-        api_secret="old-secret",
-        customer_id="old-customer",
-    )
-
-    stdout = StringIO()
-    call_command(
-        "godaddy",
-        "setup",
-        api_key="shared-key",
-        api_secret="new-secret",
-        customer_id="new-customer",
-        sandbox=True,
-        stdout=stdout,
-    )
-
-    credential.refresh_from_db()
-    assert credential.resolve_sigils("api_secret") == "new-secret"
-    assert credential.get_customer_id() == "new-customer"
-    assert "Updated GoDaddy credential" in stdout.getvalue()
-
-
-@pytest.mark.django_db
-def test_godaddy_setup_reports_up_to_date_for_matching_encrypted_fields():
-    """Setup should not rewrite encrypted fields when values are unchanged."""
-
-    DNSProviderCredential.objects.create(
-        api_key="stable-key",
-        api_secret="stable-secret",
-        customer_id="stable-customer",
-        default_domain="stable.example.com",
-        use_sandbox=True,
-    )
-
-    stdout = StringIO()
-    call_command(
-        "godaddy",
-        "setup",
-        api_key="stable-key",
-        api_secret="stable-secret",
-        customer_id="stable-customer",
-        default_domain="stable.example.com",
-        sandbox=True,
-        stdout=stdout,
-    )
-
-    assert "is already up to date" in stdout.getvalue()
-
-
-@pytest.mark.django_db
-def test_godaddy_setup_prompts_customer_id_when_interactive_and_missing_flag(monkeypatch):
-    """Setup should prompt for customer ID when interactive and flag is omitted."""
-
-    DNSProviderCredential.objects.create(
-        api_key="interactive-key",
-        api_secret="interactive-secret",
-    )
-
-    monkeypatch.setattr("apps.dns.management.commands.godaddy.sys.stdin", SimpleNamespace(isatty=lambda: True))
-    monkeypatch.setattr("builtins.input", lambda prompt: "prompted-customer")
-
-    call_command(
-        "godaddy",
-        "setup",
-        api_key="interactive-key",
-        api_secret="interactive-secret",
-        sandbox=True,
-    )
-
-    credential = DNSProviderCredential.objects.get(api_key="interactive-key")
-    assert credential.get_customer_id() == "prompted-customer"
-
-
-@pytest.mark.django_db
-def test_godaddy_setup_keeps_existing_customer_id_on_blank_interactive_input(monkeypatch):
-    """Setup should keep existing customer ID when interactive input is blank."""
-
-    DNSProviderCredential.objects.create(
-        api_key="interactive-existing-key",
-        api_secret="interactive-secret",
-        customer_id="existing-customer",
-    )
-
-    monkeypatch.setattr("apps.dns.management.commands.godaddy.sys.stdin", SimpleNamespace(isatty=lambda: True))
-    monkeypatch.setattr("builtins.input", lambda prompt: "   ")
-
-    call_command(
-        "godaddy",
-        "setup",
-        api_key="interactive-existing-key",
-        api_secret="interactive-secret",
-        sandbox=True,
-    )
-
-    credential = DNSProviderCredential.objects.get(api_key="interactive-existing-key")
-    assert credential.get_customer_id() == "existing-customer"
+    with pytest.raises(CommandError, match="Automated GoDaddy DNS setup was removed"):
+        call_command(
+            "godaddy",
+            "setup",
+            api_key="stored-key",
+            api_secret="stored-secret",
+        )
 
 
 @pytest.mark.django_db

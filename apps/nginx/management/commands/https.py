@@ -28,7 +28,6 @@ class Command(BaseCommand):
             ``--renew``, or ``--validate`` is explicit per invocation.
             ``cert_group`` enforces one certificate-source selector among
             ``--local``, ``--certbot``, and ``--godaddy``.
-            ``sandbox_group`` controls GoDaddy DNS API environment overrides.
             The positional ``domain`` argument is a backward-compatible shortcut
             treated like a public-domain selector when explicit selectors are
             omitted; explicit ``--certbot``, ``--godaddy``, and ``--site`` take
@@ -72,19 +71,7 @@ class Command(BaseCommand):
         cert_group.add_argument(
             "--godaddy",
             metavar="DOMAIN",
-            help="Use certbot DNS-01 with GoDaddy for the specified domain.",
-        )
-
-        sandbox_group = parser.add_mutually_exclusive_group()
-        sandbox_group.add_argument(
-            "--sandbox",
-            action="store_true",
-            help="Force GoDaddy DNS requests to use the OTE sandbox API for this run.",
-        )
-        sandbox_group.add_argument(
-            "--no-sandbox",
-            action="store_true",
-            help="Force GoDaddy DNS requests to use the production API for this run.",
+            help="Deprecated: use manual DNS setup for this domain and run --certbot/--site.",
         )
 
         parser.add_argument(
@@ -121,19 +108,12 @@ class Command(BaseCommand):
         parser.add_argument(
             "--key",
             metavar="CREDENTIAL",
-            help=(
-                "GoDaddy credential selector for DNS-01 runs. "
-                "Accepts a credential ID or an exact stored GoDaddy API key. "
-                "When omitted, HTTPS uses the first enabled GoDaddy credential ordered by ID."
-            ),
+            help="Deprecated: automated GoDaddy DNS credential usage has been removed.",
         )
         parser.add_argument(
             "--static-ip",
             metavar="PUBLIC_IP",
-            help=(
-                "Optional public IP to publish to GoDaddy DNS when using --godaddy. "
-                "Publishes A/AAAA for the requested domain after HTTPS enable succeeds."
-            ),
+            help="Deprecated: publish DNS records manually at your DNS provider.",
         )
         parser.add_argument(
             "--warn-days",
