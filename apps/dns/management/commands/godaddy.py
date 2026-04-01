@@ -16,7 +16,6 @@ class Command(BaseCommand):
     """Manage GoDaddy DNS credentials from the CLI."""
 
     help = "Add, remove, or list GoDaddy DNS credentials."
-    SIGIL_FIELDS = frozenset({"api_secret", "customer_id", "default_domain"})
 
     def add_arguments(self, parser):
         """Register command-line arguments."""
@@ -196,93 +195,12 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Removed GoDaddy credential #{credential_id}."))
 
     def _handle_setup(self, options: dict[str, object]) -> None:
-        """Create or update a GoDaddy DNS credential from key/secret input."""
+        """Document manual DNS setup steps instead of auto-configuring credentials."""
 
-        api_key, api_secret = self._resolve_api_credentials(options)
-        username = str(options.get("user") or "").strip()
-        user = self._resolve_user(username) if username else None
-
-        credential = (
-            DNSProviderCredential.objects.filter(
-                provider=DNSProviderCredential.Provider.GODADDY,
-                api_key=api_key,
-            )
-            .order_by("pk")
-            .first()
+        raise CommandError(
+            "Automated GoDaddy DNS setup was removed. Configure DNS records manually in GoDaddy DNS Manager, "
+            "then use './command.sh nginx_configure' (or HTTPS enable with --certbot/--site) to apply nginx config."
         )
-        defaults = {
-            "api_secret": api_secret,
-            "customer_id": self._resolve_customer_id(
-                options, existing=credential, prompt=True
-            ),
-            "default_domain": str(options.get("default_domain") or "").strip(),
-            "use_sandbox": bool(options.get("sandbox")),
-            "is_enabled": not bool(options.get("disabled")),
-        }
-        if user is not None:
-            defaults["user"] = user
-
-        if credential is None:
-            credential = DNSProviderCredential.objects.create(
-                provider=DNSProviderCredential.Provider.GODADDY,
-                api_key=api_key,
-                **defaults,
-            )
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Configured GoDaddy credential #{credential.pk} for API key '{api_key}'."
-                )
-            )
-            return
-
-        updated_fields: list[str] = []
-        for field, value in defaults.items():
-            current_value = (
-                credential.resolve_sigils(field)
-                if field in self.SIGIL_FIELDS
-                else getattr(credential, field)
-            )
-            if current_value != value:
-                setattr(credential, field, value)
-                updated_fields.append(field)
-        if updated_fields:
-            credential.save(update_fields=updated_fields)
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Updated GoDaddy credential #{credential.pk} for API key '{api_key}'."
-                )
-            )
-            return
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"GoDaddy credential #{credential.pk} for API key '{api_key}' is already up to date."
-            )
-        )
-
-    def _resolve_customer_id(
-        self,
-        options: dict[str, object],
-        *,
-        existing: DNSProviderCredential | None = None,
-        prompt: bool = False,
-    ) -> str:
-        """Resolve optional customer ID from CLI input or interactive prompt."""
-
-        customer_id_option = options.get("customer_id")
-        if customer_id_option is not None:
-            return str(customer_id_option).strip()
-        if prompt and sys.stdin.isatty():
-            current_customer_id = existing.get_customer_id() if existing else ""
-            if current_customer_id:
-                entered = input(
-                    "GoDaddy customer ID (optional, press Enter to keep current)"
-                    f" [{current_customer_id}]: "
-                ).strip()
-                return entered if entered else current_customer_id
-            return input("GoDaddy customer ID (optional): ").strip()
-        if existing is not None:
-            return existing.get_customer_id()
-        return ""
 
     def _resolve_credential_selector(
         self, options: dict[str, object]
@@ -298,7 +216,7 @@ class Command(BaseCommand):
             credential = queryset.first()
             if credential is None:
                 raise CommandError(
-                    "No enabled GoDaddy credential was found. Configure one with './command.sh godaddy setup ...'."
+                    "No enabled GoDaddy credential was found. Configure one with './command.sh godaddy add ...'."
                 )
             return credential
 
