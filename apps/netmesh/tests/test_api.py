@@ -206,3 +206,64 @@ def test_charger_profile_gets_minimal_peer_endpoint_fields(client):
     assert payload["endpoint"] == "udp://10.0.0.5:3040"
     assert "nat_type" not in payload
     assert "services" not in payload
+
+
+@pytest.mark.django_db
+def test_permitted_peers_includes_group_destination_matches(client):
+    gateway_role = NodeRole.objects.create(name="Gateway")
+    service_role = NodeRole.objects.create(name="Service")
+    caller = Node.objects.create(hostname="caller-gateway", role=gateway_role)
+    group_peer = Node.objects.create(hostname="group-peer", role=service_role, public_endpoint="wss://group-peer/ws")
+
+    enrollment, token = issue_enrollment_token(node=caller)
+    enrollment.status = NodeEnrollment.Status.ACTIVE
+    enrollment.save(update_fields=["status", "updated_at"])
+    caller.mesh_enrollment_state = Node.MeshEnrollmentState.ENROLLED
+    caller.save(update_fields=["mesh_enrollment_state"])
+
+    MeshMembership.objects.create(node=caller, tenant="tenant-group", is_enabled=True)
+    MeshMembership.objects.create(node=group_peer, tenant="tenant-group", is_enabled=True)
+    PeerPolicy.objects.create(
+        tenant="tenant-group",
+        source_node=caller,
+        destination_group=service_role,
+        allowed_services=["ocpp"],
+    )
+
+    response = client.get("/api/netmesh/peers/", HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    assert response.status_code == 200
+    assert [item["hostname"] for item in response.json()["peers"]] == ["group-peer"]
+
+
+@pytest.mark.django_db
+def test_peer_endpoints_are_filtered_by_peer_policy(client):
+    gateway_role = NodeRole.objects.create(name="Gateway")
+    service_role = NodeRole.objects.create(name="Service")
+    caller = Node.objects.create(hostname="caller-node", role=gateway_role)
+    allowed_peer = Node.objects.create(hostname="allowed-peer", role=service_role)
+    blocked_peer = Node.objects.create(hostname="blocked-peer", role=service_role)
+
+    enrollment, token = issue_enrollment_token(node=caller)
+    enrollment.status = NodeEnrollment.Status.ACTIVE
+    enrollment.save(update_fields=["status", "updated_at"])
+    caller.mesh_enrollment_state = Node.MeshEnrollmentState.ENROLLED
+    caller.save(update_fields=["mesh_enrollment_state"])
+
+    MeshMembership.objects.create(node=caller, tenant="tenant-filter", is_enabled=True)
+    MeshMembership.objects.create(node=allowed_peer, tenant="tenant-filter", is_enabled=True)
+    MeshMembership.objects.create(node=blocked_peer, tenant="tenant-filter", is_enabled=True)
+    PeerPolicy.objects.create(
+        tenant="tenant-filter",
+        source_node=caller,
+        destination_node=allowed_peer,
+        allowed_services=["telemetry"],
+    )
+
+    NodeEndpoint.objects.create(node=allowed_peer, endpoint="wss://allowed/ws", nat_type=NodeEndpoint.NatType.OPEN)
+    NodeEndpoint.objects.create(node=blocked_peer, endpoint="wss://blocked/ws", nat_type=NodeEndpoint.NatType.OPEN)
+
+    response = client.get("/api/netmesh/peer-endpoints/", HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    assert response.status_code == 200
+    assert [item["endpoint"] for item in response.json()["endpoints"]] == ["wss://allowed/ws"]

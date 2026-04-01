@@ -6,6 +6,7 @@ import hashlib
 import json
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.db.models import Q
 from django.utils.http import http_date
 from django.views.decorators.http import require_GET
 
@@ -55,6 +56,32 @@ def _json_with_etag(request: HttpRequest, payload: dict) -> HttpResponse:
     response = JsonResponse(payload)
     response.headers["ETag"] = etag
     return response
+
+
+def _policies_for_caller(*, principal, filters):
+    source_role = getattr(principal.node, "role", None)
+    policy_filter = Q(source_node=principal.node)
+    if source_role:
+        policy_filter |= Q(source_group=source_role)
+    return PeerPolicy.objects.filter(**filters).filter(policy_filter)
+
+
+def _peer_ids_from_policies(*, policies, filters):
+    destination_node_ids = set(
+        policies.filter(destination_node__isnull=False).values_list("destination_node_id", flat=True).distinct(),
+    )
+    destination_group_ids = list(
+        policies.filter(destination_group__isnull=False).values_list("destination_group_id", flat=True).distinct(),
+    )
+    if destination_group_ids:
+        destination_node_ids.update(
+            MeshMembership.objects.filter(
+                **filters,
+                is_enabled=True,
+                node__role_id__in=destination_group_ids,
+            ).values_list("node_id", flat=True),
+        )
+    return sorted(destination_node_ids)
 
 
 def _membership_or_auth_error(request: HttpRequest):
