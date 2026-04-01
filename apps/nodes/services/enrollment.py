@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.contrib.sites.models import Site
+from django.db import transaction
 from django.utils import timezone
 
 from apps.nodes.models import Node, NodeEnrollment, NodeEnrollmentEvent
@@ -23,6 +24,18 @@ def issue_enrollment_token(*, node: Node, actor=None, site: Site | None = None, 
     node.mesh_enrollment_state = Node.MeshEnrollmentState.PENDING
     node.save(update_fields=["mesh_enrollment_state"])
 
+    if reissue:
+        now = timezone.now()
+        node.enrollments.exclude(status=NodeEnrollment.Status.REVOKED).filter(
+            revoked_at__isnull=True,
+            used_at__isnull=True,
+            expires_at__gt=now,
+        ).update(
+            status=NodeEnrollment.Status.REVOKED,
+            revoked_at=now,
+            updated_at=now,
+        )
+
     enrollment, token = NodeEnrollment.issue(node=node, site=site or node.base_site, issued_by=actor)
     _record_event(
         node=node,
@@ -38,28 +51,34 @@ def issue_enrollment_token(*, node: Node, actor=None, site: Site | None = None, 
 
 def submit_public_key(*, node: Node, token: str, public_key: str, site: Site | None = None):
     token_hash = NodeEnrollment.hash_token(token)
-    enrollment = NodeEnrollment.objects.filter(node=node, token_hash=token_hash).order_by("-created_at").first()
-    if enrollment is None:
-        return None, "Invalid enrollment token"
-    if enrollment.status == NodeEnrollment.Status.REVOKED or enrollment.revoked_at:
-        return None, "Enrollment token revoked"
-    if enrollment.is_expired:
-        enrollment.status = NodeEnrollment.Status.EXPIRED
-        enrollment.save(update_fields=["status", "updated_at"])
-        return None, "Enrollment token expired"
-    if enrollment.used_at is not None:
-        return None, "Enrollment token already used"
-    if enrollment.site_id and site and enrollment.site_id != site.id:
-        return None, "Enrollment token does not match target site"
+    with transaction.atomic():
+        enrollment = (
+            NodeEnrollment.objects.select_for_update()
+            .filter(node=node, token_hash=token_hash)
+            .order_by("-created_at")
+            .first()
+        )
+        if enrollment is None:
+            return None, "Invalid enrollment token"
+        if enrollment.status == NodeEnrollment.Status.REVOKED or enrollment.revoked_at:
+            return None, "Enrollment token revoked"
+        if enrollment.is_expired:
+            enrollment.status = NodeEnrollment.Status.EXPIRED
+            enrollment.save(update_fields=["status", "updated_at"])
+            return None, "Enrollment token expired"
+        if enrollment.used_at is not None:
+            return None, "Enrollment token already used"
+        if enrollment.site_id and site and enrollment.site_id != site.id:
+            return None, "Enrollment token does not match target site"
 
-    old_key = node.public_key or ""
-    node.public_key = public_key
-    node.mesh_enrollment_state = Node.MeshEnrollmentState.PENDING
-    node.save(update_fields=["public_key", "mesh_enrollment_state"])
+        old_key = node.public_key or ""
+        node.public_key = public_key
+        node.mesh_enrollment_state = Node.MeshEnrollmentState.PENDING
+        node.save(update_fields=["public_key", "mesh_enrollment_state"])
 
-    enrollment.status = NodeEnrollment.Status.PUBLIC_KEY_SUBMITTED
-    enrollment.used_at = timezone.now()
-    enrollment.save(update_fields=["status", "used_at", "updated_at"])
+        enrollment.status = NodeEnrollment.Status.PUBLIC_KEY_SUBMITTED
+        enrollment.used_at = timezone.now()
+        enrollment.save(update_fields=["status", "used_at", "updated_at"])
     _record_event(
         node=node,
         enrollment=enrollment,

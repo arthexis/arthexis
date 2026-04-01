@@ -418,6 +418,40 @@ def register_node(request):
     trusted_allowed = bool(payload.trusted_requested) and (verified or request.user.is_authenticated)
     desired_role = _resolve_role(payload.role_name, can_assign=verified or request.user.is_authenticated)
     base_site = Site.objects.filter(domain__iexact=payload.base_site_domain).first() if payload.base_site_domain else None
+    existing_node = Node.objects.filter(mac_address=mac_address).first()
+
+    if payload.enrollment_token and payload.public_key:
+        if existing_node is None:
+            _log_registration_event(
+                "failed",
+                payload,
+                request,
+                detail="Invalid enrollment token",
+                level=logging.WARNING,
+            )
+            return add_cors_headers(
+                request,
+                JsonResponse({"detail": "Invalid enrollment token"}, status=400),
+            )
+        enrollment_site = base_site or existing_node.base_site
+        _, enrollment_error = submit_public_key(
+            node=existing_node,
+            token=payload.enrollment_token,
+            public_key=payload.public_key,
+            site=enrollment_site,
+        )
+        if enrollment_error:
+            _log_registration_event(
+                "failed",
+                payload,
+                request,
+                detail=enrollment_error,
+                level=logging.WARNING,
+            )
+            return add_cors_headers(
+                request,
+                JsonResponse({"detail": enrollment_error}, status=400),
+            )
 
     defaults = {
         "hostname": payload.hostname,
@@ -451,30 +485,6 @@ def register_node(request):
         defaults["current_relation"] = payload.relation_value
 
     node, created = Node.objects.get_or_create(mac_address=mac_address, defaults=defaults)
-    if payload.enrollment_token and payload.public_key:
-        enrollment_site = (
-            Site.objects.filter(domain__iexact=payload.base_site_domain).first()
-            if payload.base_site_domain
-            else node.base_site
-        )
-        _, enrollment_error = submit_public_key(
-            node=node,
-            token=payload.enrollment_token,
-            public_key=payload.public_key,
-            site=enrollment_site,
-        )
-        if enrollment_error:
-            _log_registration_event(
-                "failed",
-                payload,
-                request,
-                detail=enrollment_error,
-                level=logging.WARNING,
-            )
-            return add_cors_headers(
-                request,
-                JsonResponse({"detail": enrollment_error}, status=400),
-            )
     if not created:
         response = _update_existing_node(
             node,

@@ -86,3 +86,23 @@ def test_admin_actions_emit_enrollment_transitions():
     assert NodeEnrollmentEvent.Action.TOKEN_REISSUED in actions
     assert NodeEnrollmentEvent.Action.APPROVED in actions
     assert NodeEnrollmentEvent.Action.REVOKED in actions
+
+
+@pytest.mark.django_db
+def test_reissue_enrollment_token_revokes_prior_active_tokens():
+    node = Node.objects.create(
+        hostname="node-c",
+        mac_address="aa:bb:cc:dd:ee:68",
+        address="198.51.100.68",
+        port=8888,
+        public_endpoint="node-c",
+    )
+
+    previous_enrollment, _ = issue_enrollment_token(node=node)
+    latest_enrollment, _ = issue_enrollment_token(node=node, reissue=True)
+
+    previous_enrollment.refresh_from_db()
+    latest_enrollment.refresh_from_db()
+    assert previous_enrollment.status == NodeEnrollment.Status.REVOKED
+    assert previous_enrollment.revoked_at is not None
+    assert latest_enrollment.status == NodeEnrollment.Status.ISSUED
