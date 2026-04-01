@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import re
 import shlex
 import shutil
+import socket
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +16,7 @@ from urllib.error import URLError
 from urllib.parse import ParseResult, unquote, urlparse
 from urllib.request import urlopen
 
+from django.conf import settings
 from django.db import transaction
 
 from apps.imager.models import RaspberryPiImageArtifact
@@ -136,6 +139,8 @@ def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
     if parsed.scheme not in {"http", "https"}:
         raise ImagerBuildError("Only file, http, and https base image URIs are supported.")
 
+    _validate_remote_base_image_url(base_image_uri)
+
     destination_name = Path(unquote(parsed.path)).name or "base-image.img"
     destination = workspace / destination_name
     try:
@@ -145,6 +150,75 @@ def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
         reason = getattr(exc, "reason", str(exc))
         raise ImagerBuildError(f"Could not download base image: {reason}") from exc
     return destination
+
+
+def _is_disallowed_remote_host_address(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    """Return True when an IP address points to non-public network space."""
+
+    return any(
+        (
+            address.is_loopback,
+            address.is_link_local,
+            address.is_multicast,
+            address.is_private,
+            address.is_reserved,
+            address.is_unspecified,
+        )
+    )
+
+
+def _validate_remote_base_image_url(base_image_uri: str) -> None:
+    """Validate remote image URL host policy prior to fetching."""
+
+    parsed = urlparse(base_image_uri)
+    host = parsed.hostname
+    if not host:
+        raise ImagerBuildError(
+            "Base image URL is missing a host. Provide a public hostname or configure IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS."
+        )
+
+    allowed_hosts = set(getattr(settings, "IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS", ()))
+    if allowed_hosts and host not in allowed_hosts:
+        raise ImagerBuildError(
+            f"Remote base image host '{host}' is not in IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS."
+        )
+
+    if not getattr(settings, "IMAGER_BLOCK_PRIVATE_REMOTE_IMAGE_HOSTS", True):
+        return
+
+    try:
+        host_ip = ipaddress.ip_address(host)
+    except ValueError:
+        host_ip = None
+
+    if host_ip and _is_disallowed_remote_host_address(host_ip):
+        raise ImagerBuildError(
+            f"Remote base image host '{host}' resolves to a blocked non-public address. "
+            "Adjust IMAGER_BLOCK_PRIVATE_REMOTE_IMAGE_HOSTS or IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS only if this is intentional."
+        )
+
+    if host_ip:
+        return
+
+    try:
+        addrinfos = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise ImagerBuildError(f"Could not resolve remote base image host '{host}': {exc}") from exc
+
+    for family, _, _, _, sockaddr in addrinfos:
+        if family == socket.AF_INET:
+            address = ipaddress.ip_address(sockaddr[0])
+        elif family == socket.AF_INET6:
+            address = ipaddress.ip_address(sockaddr[0])
+        else:
+            continue
+        if _is_disallowed_remote_host_address(address):
+            raise ImagerBuildError(
+                f"Remote base image host '{host}' resolves to blocked non-public address '{address}'. "
+                "Adjust IMAGER_BLOCK_PRIVATE_REMOTE_IMAGE_HOSTS or IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS only if this is intentional."
+            )
 
 
 def _guestfish_write(image_path: Path, local_path: Path, remote_path: str, chmod_mode: str | None = None) -> None:

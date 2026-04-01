@@ -7,9 +7,10 @@ from unittest.mock import patch
 
 import pytest
 from django.core.management import call_command
+from django.test import override_settings
 
 from apps.imager.models import RaspberryPiImageArtifact
-from apps.imager.services import ImagerBuildError, TARGET_RPI4B, build_rpi4b_image
+from apps.imager.services import TARGET_RPI4B, ImagerBuildError, build_rpi4b_image
 
 
 @pytest.mark.django_db
@@ -128,6 +129,55 @@ def test_build_rpi4b_image_downloads_percent_encoded_http_source(mock_urlopen, t
             git_url="https://github.com/arthexis/arthexis.git",
             customize=True,
         )
+
+    assert result.output_path.exists()
+    assert result.output_path.read_bytes() == source_bytes
+
+
+@pytest.mark.django_db
+@override_settings(IMAGER_BLOCK_PRIVATE_REMOTE_IMAGE_HOSTS=True)
+@patch("apps.imager.services.socket.getaddrinfo")
+def test_build_rpi4b_image_blocks_private_remote_host(getaddrinfo_mock, tmp_path: Path) -> None:
+    """Regression: private/internal resolved addresses should be rejected before download."""
+
+    getaddrinfo_mock.return_value = [
+        (2, 1, 6, "", ("10.0.0.5", 443)),
+    ]
+
+    with pytest.raises(ImagerBuildError, match="blocked non-public address"):
+        build_rpi4b_image(
+            name="blocked-private",
+            base_image_uri="https://internal.example.com/rpi.img",
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+        )
+
+
+@pytest.mark.django_db
+@override_settings(IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS=("updates.example.com",))
+@patch("apps.imager.services.urlopen")
+@patch("apps.imager.services.socket.getaddrinfo")
+def test_build_rpi4b_image_allows_public_remote_host_in_allowlist(
+    getaddrinfo_mock, mock_urlopen, tmp_path: Path
+) -> None:
+    """Regression: explicitly allowed public hosts should pass URL policy gate."""
+
+    source_bytes = b"remote-public"
+    getaddrinfo_mock.return_value = [
+        (2, 1, 6, "", ("93.184.216.34", 443)),
+    ]
+    mock_urlopen.return_value = nullcontext(BytesIO(source_bytes))
+
+    result = build_rpi4b_image(
+        name="allowed-public",
+        base_image_uri="https://updates.example.com/rpi.img",
+        output_dir=tmp_path,
+        download_base_uri="",
+        git_url="https://github.com/arthexis/arthexis.git",
+        customize=False,
+    )
 
     assert result.output_path.exists()
     assert result.output_path.read_bytes() == source_bytes
