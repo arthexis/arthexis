@@ -3,24 +3,25 @@ from __future__ import annotations
 from django.utils import timezone
 
 from .auto_upgrade import (
-    AutoUpgradeMode,
-    AutoUpgradeRepositoryState,
     SEVERITY_CRITICAL,
     SEVERITY_LOW,
     SEVERITY_NORMAL,
+    AutoUpgradeMode,
+    AutoUpgradeRepositoryState,
     _broadcast_upgrade_start_message,
     _canary_gate,
     _ci_status_for_revision,
     _current_revision,
     _project_base_dir,
-    _resolve_auto_upgrade_change_tag,
     _read_auto_upgrade_failure_count,
+    _resolve_auto_upgrade_change_tag,
     _send_auto_upgrade_check_message,
     append_auto_upgrade_log,
     check_github_updates,
     verify_auto_upgrade_health,
 )
 from .heartbeat import heartbeat
+from .log_retention import enforce_log_retention
 from .maintenance import (
     execute_scheduled_release,
     poll_emails,
@@ -46,6 +47,7 @@ __all__ = [
     "AutoUpgradeMode",
     "AutoUpgradeRepositoryState",
     "check_github_updates",
+    "enforce_log_retention",
     "execute_scheduled_release",
     "heartbeat",
     "poll_emails",

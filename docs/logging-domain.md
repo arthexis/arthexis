@@ -17,3 +17,8 @@ This domain centralizes how Arthexis selects log destinations and routes output 
 * **Release publishing**: Headless release workflows and the `release clean-logs` management subcommand rely on `settings.LOG_DIR` for publish logs named `pr.<package>.v<version>.log`, and they fall back to `select_log_dir` when the preferred path is not writable.
 * **Node utilities**: Screenshot and audio captures land in `logs/screenshots/` and `logs/audio/`, and node registration helpers create dedicated `register_visitor_node.log` and `register_local_node.log` files alongside the main logs.
 * **Shell automation**: Startup, upgrade, and service scripts source `scripts/helpers/logging.sh` to mirror `select_log_dir`'s candidate search (including honoring `ARTHEXIS_LOG_DIR`) so their `.log` outputs live beside the Django logs.
+
+## Retention policy and unattended disk safety
+* **Lower transactional retention stays in force**: Django/Celery transactional handlers keep using daily rotation with their existing short retention windows (for example `TRANSACTIONAL_LOG_RETENTION_DAYS`).
+* **Default ceiling for unmanaged logs**: A daily guard task (`apps.core.tasks.log_retention.enforce_log_retention`) trims log artifacts without stricter policies to a maximum age of two years.
+* **Disk pressure response**: The same guard checks filesystem usage for `LOG_DIR` every day. At or above 80% utilization it applies increasingly aggressive age-based trimming passes and sends an email alert to resolved admin recipients if usage remains above the threshold after trimming.
