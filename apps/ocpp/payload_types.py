@@ -12,7 +12,7 @@ JSONValue: TypeAlias = JSONScalar | dict[str, "JSONValue"] | list["JSONValue"]
 JSONObject: TypeAlias = dict[str, JSONValue]
 
 
-class CertificateHashData(TypedDict, total=False):
+class CertificateHashData(TypedDict):
     hashAlgorithm: str
     issuerKeyHash: str
     issuerNameHash: str

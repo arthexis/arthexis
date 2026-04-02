@@ -176,19 +176,11 @@ class CertificatesMixin:
                     "additionalInfo": status_info,
                 },
             }
-            ocsp_result: OCSPResultPayload = {
-                "status": "",
-                "responderUrl": "",
-                "producedAt": "",
-                "thisUpdate": "",
-                "nextUpdate": "",
-                "errors": [],
-            }
             persisted_status = CertificateStatusCheck.STATUS_ERROR
 
             if target is not None:
                 outcome = check_certificate_status(hash_data=certificate_hash_data, target=target)
-                ocsp_result = outcome.ocsp_result
+                ocsp_result: OCSPResultPayload = outcome.ocsp_result
                 status_info = outcome.status_info
 
                 reason_code = "Failed"
