@@ -45,7 +45,7 @@ class ActionServiceMixin:
         "diagnostics_requested_at",
         "diagnostics_last_downloaded_at",
     }
-
+    _REDACTED_CONTROL_PAYLOAD_VALUE = "***redacted***"
 
     def _log_control_operation(
         self,
@@ -71,9 +71,23 @@ class ActionServiceMixin:
             transport=transport,
             status=status,
             detail=(detail or "")[:255],
-            request_payload=request_payload or {},
-            response_payload=response_payload or {},
+            request_payload=self._sanitize_control_payload(request_payload) or {},
+            response_payload=self._sanitize_control_payload(response_payload) or {},
         )
+
+    def _sanitize_control_payload(self, payload: Any) -> Any:
+        """Return a sanitized control-operation payload suitable for event logs."""
+        if isinstance(payload, dict):
+            sanitized: dict[str, Any] = {}
+            for key, value in payload.items():
+                if key.lower() == "idtag":
+                    sanitized[key] = self._REDACTED_CONTROL_PAYLOAD_VALUE
+                    continue
+                sanitized[key] = self._sanitize_control_payload(value)
+            return sanitized
+        if isinstance(payload, list):
+            return [self._sanitize_control_payload(item) for item in payload]
+        return payload
 
     def _send_local_ocpp_call(
         self,
