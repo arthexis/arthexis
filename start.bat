@@ -114,6 +114,12 @@ if errorlevel 1 (
     set EXIT_CODE=1
     goto cleanup
 )
+echo Running startup maintenance hooks...
+%VENV%\Scripts\python.exe manage.py startup_maintenance
+if errorlevel 1 (
+    set EXIT_CODE=1
+    goto cleanup
+)
 set RUNSERVER_SKIP_CHECKS=--skip-checks
 %VENV%\Scripts\python.exe manage.py runserver 0.0.0.0:%PORT% %NORELOAD% %RUNSERVER_SKIP_CHECKS%
 set EXIT_CODE=%ERRORLEVEL%

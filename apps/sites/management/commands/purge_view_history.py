@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from apps.sites.maintenance import purge_view_history
+from apps.sites.maintenance import coerce_retention_days, purge_view_history
 
 
 class Command(BaseCommand):
@@ -18,6 +18,6 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        days = max(1, options["days"])
+        days = coerce_retention_days(options["days"])
         deleted = purge_view_history(days=days)
         self.stdout.write(f"Purged {deleted} view history entries older than {days} days.")

@@ -11,9 +11,16 @@ from .models import ViewHistory
 logger = logging.getLogger(__name__)
 
 
+def coerce_retention_days(days: int) -> int:
+    """Return a safe minimum retention window for view-history purges."""
+
+    return max(1, days)
+
+
 def purge_view_history(*, days: int = 15) -> int:
     """Remove stale :class:`apps.sites.models.ViewHistory` entries."""
 
+    days = coerce_retention_days(days)
     try:
         deleted = ViewHistory.purge_older_than(days=days)
     except DatabaseError:

@@ -3,7 +3,7 @@
 from django.core.management.base import BaseCommand
 
 from apps.ocpp.maintenance import reset_cached_statuses
-from apps.sites.maintenance import purge_view_history
+from apps.sites.maintenance import coerce_retention_days, purge_view_history
 
 
 class Command(BaseCommand):
@@ -20,7 +20,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        days = max(1, options["view_history_days"])
+        days = coerce_retention_days(options["view_history_days"])
 
         cleared = reset_cached_statuses()
         self.stdout.write(f"OCPP cached statuses cleared: {cleared}")

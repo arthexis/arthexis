@@ -10,6 +10,14 @@ from apps.sites.tasks import purge_view_history_task
 
 
 class ViewHistoryMaintenanceTests(SimpleTestCase):
+    def test_purge_view_history_enforces_minimum_days(self):
+        with patch("apps.sites.maintenance.ViewHistory") as view_history:
+            view_history.purge_older_than.return_value = 1
+            deleted = maintenance.purge_view_history(days=0)
+
+        assert deleted == 1
+        view_history.purge_older_than.assert_called_once_with(days=1)
+
     def test_purge_view_history_returns_zero_when_database_unavailable(self):
         with patch("apps.sites.maintenance.ViewHistory") as view_history:
             view_history.purge_older_than.side_effect = DatabaseError

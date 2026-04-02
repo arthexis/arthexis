@@ -541,6 +541,11 @@ if ! run_runserver_preflight; then
   echo "Runserver preflight checks failed; aborting startup." >&2
   exit 1
 fi
+echo "Running startup maintenance hooks..."
+if ! python manage.py startup_maintenance; then
+  echo "Startup maintenance failed; aborting startup." >&2
+  exit 1
+fi
 
 if [ "$AWAIT_START" = true ]; then
   if [ "$RELOAD" = true ]; then
