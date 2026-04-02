@@ -59,6 +59,7 @@ HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not N
 # Disable NetMessage propagation when running maintenance commands that should
 # avoid contacting remote peers.
 NET_MESSAGE_DISABLE_PROPAGATION = env_bool("NET_MESSAGE_DISABLE_PROPAGATION", False)
+NODES_ENABLE_SIBLING_IPC = env_bool("NODES_ENABLE_SIBLING_IPC", False)
 ENABLE_USAGE_ANALYTICS = env_bool("ENABLE_USAGE_ANALYTICS", False)
 ROUTE_PROVIDERS = [
     "apps.actions.routes",

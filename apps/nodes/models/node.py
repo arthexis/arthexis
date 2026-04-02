@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import stat
 import socket
 import uuid
 from pathlib import Path
@@ -20,6 +21,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core import serializers
+from django.core.exceptions import ValidationError
 from django.core.serializers.base import DeserializationError
 from django.core.validators import validate_ipv46_address, validate_ipv6_address
 from django.db import IntegrityError, models, transaction
@@ -145,6 +147,18 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
     )
     public_key = models.TextField(blank=True)
     base_path = models.CharField(max_length=255, blank=True)
+    ipc_scheme = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="Optional sibling IPC transport scheme (for example unix_socket).",
+    )
+    ipc_path = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Optional sibling IPC socket path override.",
+    )
     installed_version = models.CharField(max_length=20, blank=True)
     installed_revision = models.CharField(max_length=40, blank=True)
     mesh_enrollment_state = models.CharField(
@@ -225,6 +239,78 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
 
         base_path = (self.base_path or "").strip()
         return Path(base_path) if base_path else self.default_base_path()
+
+    def get_ipc_socket_path(self) -> Path | None:
+        """Return the configured sibling IPC socket path when available."""
+
+        if (self.ipc_scheme or "unix_socket").strip() not in {"", "unix_socket"}:
+            return None
+        configured = (self.ipc_path or "").strip()
+        if configured:
+            return Path(configured)
+        endpoint = (self.public_endpoint or "").strip()
+        if not endpoint:
+            return None
+        return self.get_base_path() / "ipc" / f"{endpoint}.sock"
+
+    def clean(self) -> None:
+        """Validate sibling IPC override values before persisting."""
+
+        super().clean()
+        errors: dict[str, str] = {}
+        scheme = (self.ipc_scheme or "").strip()
+        if scheme and scheme != "unix_socket":
+            errors["ipc_scheme"] = "Only unix_socket is supported for sibling IPC."
+
+        configured_path = (self.ipc_path or "").strip()
+        if configured_path:
+            if not os.path.isabs(configured_path):
+                errors["ipc_path"] = "IPC path must be absolute."
+            else:
+                managed_root = (self.get_base_path() / "ipc").resolve()
+                candidate = Path(configured_path).resolve()
+                try:
+                    contains_path = os.path.commonpath([str(managed_root), str(candidate)]) == str(managed_root)
+                except ValueError:
+                    contains_path = False
+                if not contains_path:
+                    errors["ipc_path"] = f"IPC path must be within {managed_root}."
+        if errors:
+            raise ValidationError(errors)
+
+    def get_sibling_ipc_status(self) -> dict[str, object]:
+        """Return current sibling IPC status details for diagnostics/admin."""
+
+        from apps.nodes.services.transport import _is_secure_socket_path
+
+        socket_path = self.get_ipc_socket_path()
+        enabled = bool(getattr(settings, "NODES_ENABLE_SIBLING_IPC", False))
+        if not enabled:
+            return {"enabled": False, "status": "disabled", "path": str(socket_path or "")}
+        if not socket_path:
+            return {"enabled": True, "status": "unconfigured", "path": ""}
+        if not socket_path.exists():
+            return {"enabled": True, "status": "missing", "path": str(socket_path)}
+        try:
+            stat_result = socket_path.stat()
+            socket_mode = stat_result.st_mode & 0o777
+        except OSError:
+            return {"enabled": True, "status": "error", "path": str(socket_path)}
+        if not stat.S_ISSOCK(stat_result.st_mode):
+            return {"enabled": True, "status": "wrong_type", "path": str(socket_path), "mode": f"{socket_mode:o}"}
+        if not _is_secure_socket_path(socket_path):
+            return {
+                "enabled": True,
+                "status": "rejected_permissions",
+                "path": str(socket_path),
+                "mode": f"{socket_mode:o}",
+            }
+        return {
+            "enabled": True,
+            "status": "ready",
+            "path": str(socket_path),
+            "mode": f"{socket_mode:o}",
+        }
 
     @classmethod
     def get_preferred_port(cls) -> int:
