@@ -324,15 +324,14 @@ class Command(BaseCommand):
     ) -> str:
         """Return a DeployInstance-compatible service name."""
 
+        service_field = DeployInstance._meta.get_field("service_name")
         service_name = provided_service_name
         if not service_name:
             service_name = f"arthexis-{instance_name}".lower()
-            max_length = DeployInstance._meta.get_field("service_name").max_length
-            service_name = service_name[:max_length]
+            service_name = service_name[: service_field.max_length]
 
-        service_field = DeployInstance._meta.get_field("service_name")
         try:
-            service_field.clean(service_name, None)
+            service_name = service_field.clean(service_name, None)
         except ValidationError as exc:
             errors = getattr(exc, "messages", None) or [str(exc)]
             raise CommandError(
