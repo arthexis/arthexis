@@ -1,6 +1,6 @@
 # Versioning and Maturity Policy
 
-This policy explains how Arthexis uses semantic versioning to communicate release confidence and operational readiness.
+This policy explains how Arthexis uses a versioning scheme inspired by semantic versioning to communicate release confidence and operational readiness.
 
 Arthexis is currently in the `0.2.x` track, which maps to the **Beta** maturity stage defined below.
 
@@ -14,13 +14,13 @@ Arthexis is currently in the `0.2.x` track, which maps to the **Beta** maturity 
 
 Arthexis versions follow `MAJOR.MINOR.PATCH`.
 
-- **MAJOR**: Breaking generation of the suite.
-- **MINOR**: Maturity stage for that major generation.
+- **MAJOR**: Breaking changes that define a new generation of the suite.
+- **MINOR**: Maturity stage for the current major-zero line.
 - **PATCH**: Iterative progress steps within the active maturity stage.
 
 ## Minor maturity stages
 
-Within a given major line, minor values map to fixed maturity meaning:
+Within the current `0.x` line, minor values map to fixed maturity meanings:
 
 | Minor | Maturity stage | Meaning |
 | --- | --- | --- |
@@ -61,7 +61,7 @@ A release manager should confirm:
 5. OCPP and integration behaviors covered by the release are validated.
 6. Release notes clearly describe known limitations and upgrade considerations.
 
-## Current roadmap to 1.0
+## Current roadmap to 0.4 stability
 
 Arthexis is currently `0.2.x` (**Beta**).
 
@@ -70,7 +70,7 @@ The planned maturity path is:
 1. **`0.2.x` (Beta)**: Continue hardening, reduce regressions, and close critical integration gaps.
 2. **`0.3.x` (Release Candidate)**: Freeze scope to readiness fixes, upgrade safety, and operational confidence.
 3. **`0.4.x` (Stable GA for major zero)**: Maintain conservative updates and production-first reliability.
-4. **`1.0.0`**: First stable major with a clearly documented compatibility baseline.
+4. **Post-`0.4.x` track**: Focus on stability and critical security patches.
 
 ## Release note convention
 
