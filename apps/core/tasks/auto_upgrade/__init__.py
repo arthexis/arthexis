@@ -11,7 +11,6 @@ from .tasks import (
     SEVERITY_LOW,
     SEVERITY_NORMAL,
     _broadcast_upgrade_start_message,
-    _ci_status_for_revision,
     _current_revision,
     _handle_failed_health_check,
     _project_base_dir,
@@ -23,7 +22,6 @@ from .tasks import (
 
 __all__ = [
     "_broadcast_upgrade_start_message",
-    "_ci_status_for_revision",
     "_current_revision",
     "_handle_failed_health_check",
     "_project_base_dir",

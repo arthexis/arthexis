@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import logging
 import os
 import re
@@ -16,7 +15,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import requests
 from celery import shared_task
 from django.conf import settings
 from django.db import DatabaseError
@@ -156,158 +154,6 @@ def _read_remote_version(base_dir: Path, branch: str) -> str | None:
         )
     except (subprocess.CalledProcessError, FileNotFoundError):  # pragma: no cover - git failure
         return None
-
-
-def _parse_github_slug(remote_url: str) -> str | None:
-    """Normalize the GitHub repository slug from the ``origin`` remote URL."""
-
-    cleaned = remote_url.strip()
-    if not cleaned:
-        return None
-
-    if "github.com" not in cleaned:
-        return None
-
-    if cleaned.startswith("git@github.com:"):
-        slug = cleaned.split(":", 1)[-1]
-    else:
-        parts = cleaned.split("github.com/", 1)
-        slug = parts[-1] if len(parts) > 1 else ""
-
-    if slug.endswith(".git"):
-        slug = slug[:-4]
-
-    return slug or None
-
-
-def _resolve_github_slug(base_dir: Path) -> str | None:
-    """Return the ``owner/repo`` slug for the ``origin`` remote when available."""
-
-    try:
-        remote_url = subprocess.check_output(
-            ["git", "config", "--get", "remote.origin.url"],
-            cwd=base_dir,
-            text=True,
-        ).strip()
-    except subprocess.CalledProcessError:
-        return None
-
-    return _parse_github_slug(remote_url)
-
-
-def _fetch_ci_workflow_status(repo_slug: str, branch: str, workflow: str = "ci.yml") -> str | None:
-    """Return the latest completed CI workflow status for ``branch`` when available."""
-
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "arthexis-auto-upgrade",
-    }
-
-    token = os.environ.get("GITHUB_TOKEN", "")
-    if isinstance(token, str):
-        cleaned = token.strip()
-        if cleaned:
-            headers["Authorization"] = f"token {cleaned}"
-
-    url = f"https://api.github.com/repos/{repo_slug}/actions/workflows/{workflow}/runs"
-
-    response = None
-    try:
-        response = requests.get(
-            url,
-            headers=headers,
-            params={"branch": branch, "status": "completed", "per_page": 1},
-            timeout=10,
-        )
-    except requests.RequestException:
-        logger.warning("Failed to query CI workflow status for %s", repo_slug, exc_info=True)
-        return None
-
-    try:
-        if response is None or response.status_code != 200:
-            logger.warning(
-                "CI workflow status request for %s returned %s",
-                repo_slug,
-                getattr(response, "status_code", "<unknown>"),
-            )
-            return None
-
-        try:
-            payload = response.json()
-        except ValueError:
-            return None
-
-        runs = payload.get("workflow_runs")
-        if not isinstance(runs, list) or not runs:
-            return None
-
-        conclusion = runs[0].get("conclusion")
-        return conclusion.lower() if isinstance(conclusion, str) else None
-    finally:
-        if response is not None:
-            close = getattr(response, "close", None)
-            if callable(close):
-                with contextlib.suppress(Exception):
-                    close()
-
-
-def _fetch_ci_status(repo_slug: str, revision: str) -> str | None:
-    """Return the combined CI status for ``revision`` when available."""
-
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "arthexis-auto-upgrade",
-    }
-
-    token = os.environ.get("GITHUB_TOKEN", "")
-    if isinstance(token, str):
-        cleaned = token.strip()
-        if cleaned:
-            headers["Authorization"] = f"token {cleaned}"
-
-    url = f"https://api.github.com/repos/{repo_slug}/commits/{revision}/status"
-
-    response = None
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-    except requests.RequestException:
-        logger.warning("Failed to query CI status for %s", repo_slug, exc_info=True)
-        return None
-
-    try:
-        if response is None or response.status_code != 200:
-            logger.warning(
-                "CI status request for %s returned %s", repo_slug, getattr(response, "status_code", "<unknown>")
-            )
-            return None
-
-        try:
-            payload = response.json()
-        except ValueError:
-            return None
-
-        state = payload.get("state")
-        return state.lower() if isinstance(state, str) else None
-    finally:
-        if response is not None:
-            close = getattr(response, "close", None)
-            if callable(close):
-                with contextlib.suppress(Exception):
-                    close()
-
-
-def _ci_status_for_revision(base_dir: Path, revision: str, branch: str = "main") -> str | None:
-    """Return the CI status value aligned with the main branch badge when available."""
-
-    repo_slug = _resolve_github_slug(base_dir)
-    if not repo_slug:
-        return None
-
-    branch_status = _fetch_ci_workflow_status(repo_slug, branch or "main")
-    if branch_status:
-        return branch_status
-
-    return _fetch_ci_status(repo_slug, revision)
 
 
 def _parse_major_minor(version: str) -> tuple[int, int] | None:
@@ -803,25 +649,6 @@ def _fetch_repository_state(
             base_dir,
             f"Skipping auto-upgrade for blocked revision {remote_revision}",
         )
-        ops.ensure_runtime_services(
-            base_dir,
-            restart_if_active=False,
-            revert_on_failure=False,
-            log_appender=append_auto_upgrade_log,
-        )
-        return None
-
-    ci_status = _ci_status_for_revision(base_dir, remote_revision, branch=branch)
-    if ci_status and ci_status != "success":
-        append_auto_upgrade_log(
-            base_dir,
-            (
-                "Skipping auto-upgrade; CI status is "
-                f"{ci_status} for revision {remote_revision}"
-            ),
-        )
-        _record_auto_upgrade_failure(base_dir, "CI-FAILING")
-        state.failure_recorded = True
         ops.ensure_runtime_services(
             base_dir,
             restart_if_active=False,
@@ -1365,7 +1192,6 @@ __all__ = [
     "AutoUpgradeOperations",
     "AutoUpgradeRepositoryState",
     "_broadcast_upgrade_start_message",
-    "_ci_status_for_revision",
     "_current_revision",
     "_project_base_dir",
     "_read_auto_upgrade_failure_count",

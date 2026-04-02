@@ -9,7 +9,6 @@ from .auto_upgrade import (
     AutoUpgradeMode,
     AutoUpgradeRepositoryState,
     _broadcast_upgrade_start_message,
-    _ci_status_for_revision,
     _current_revision,
     _project_base_dir,
     _read_auto_upgrade_failure_count,
@@ -32,7 +31,6 @@ from .system_ops import _read_process_cmdline, _read_process_start_time
 
 __all__ = [
     "_broadcast_upgrade_start_message",
-    "_ci_status_for_revision",
     "_current_revision",
     "_is_migration_server_running",
     "_project_base_dir",
