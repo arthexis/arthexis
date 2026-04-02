@@ -98,7 +98,7 @@ For preloaded environments without Git remotes configured, see the remotes note 
 ### 2. Start and stop
 Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on `localhost:8888` by default.
 
-For local bootstrapping, run `./install.sh --terminal` to install with defaults, start the server with `./start.sh` (optionally passing `--reload`, `--debug`, `--show LEVEL`, `--log-follow`, or `--clear-logs`), and execute a quick smoke test with `pytest -k smoke`. Override the role, port, and test selection with the script flags when needed, and refer to the [Install & Lifecycle Scripts Manual](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md#21-linux-startsh) for full runtime option details.
+For local bootstrapping, run `./install.sh --terminal`, start the server with `./start.sh`, and run a quick smoke test with `pytest -k smoke`. For full runtime options and advanced usage, refer to the [Install & Lifecycle Scripts Manual](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md#21-linux-startsh).
 
 - **VS Code**
    - Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
@@ -110,27 +110,13 @@ For local bootstrapping, run `./install.sh --terminal` to install with defaults,
    - Windows: run [`start.bat`](https://github.com/arthexis/arthexis/blob/main/start.bat) and stop with [`stop.bat`](https://github.com/arthexis/arthexis/blob/main/stop.bat).
 
 ### 3. Install and upgrade
-- **Linux:**
-  - Run `./install.sh --terminal` to bootstrap a default Terminal node (pass `--control`, `--satellite`, or `--watchtower` as needed). Override the port with `--port 8888` (the default fallback), use `--celery` to enable Celery support, and use `--embedded` or `--systemd` when you need to force a service-management mode explicitly. Use `./install.sh --help` to see every available option.
-  - WebRTC streaming requires system media libraries (libavcodec, libavformat, libavutil, libvpx, opus) for the `aiortc` dependency.
-  - Use [`./upgrade.sh`](https://github.com/arthexis/arthexis/blob/main/upgrade.sh) with `--stable` (weekly) or `--latest`/`-l`/`--unstable` (daily) to follow the preferred release cadence.
-   - Consult the [Install & Lifecycle Scripts Manual](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.
-   - Review the [Auto-Upgrade Flow](https://github.com/arthexis/arthexis/blob/main/docs/auto-upgrade.md) for how delegated upgrades run and how to observe them.
+- **Linux:** run `./install.sh --terminal` (or another role preset) and use [`./upgrade.sh`](https://github.com/arthexis/arthexis/blob/main/upgrade.sh) for updates.
+- **Windows:** run [`install.bat`](https://github.com/arthexis/arthexis/blob/main/install.bat) and [`upgrade.bat`](https://github.com/arthexis/arthexis/blob/main/upgrade.bat).
 
-- **Windows:**
-   - Run [`install.bat`](https://github.com/arthexis/arthexis/blob/main/install.bat) to install (Terminal role) and [`upgrade.bat`](https://github.com/arthexis/arthexis/blob/main/upgrade.bat) to upgrade.
-   - To run as a background service, install [NSSM](https://nssm.cc/) and use [`service.bat install --name arthexis`](https://github.com/arthexis/arthexis/blob/main/service.bat) (add `--port` if needed).
-   - Installation is not required to start in Terminal mode (the default).
+Detailed install flags, service-management choices, and upgrade-channel behavior are documented in:
 
-Upgrade channels (selected during install/upgrade and used by `scripts/delegated-upgrade.sh` when auto-upgrade is enabled):
-
-| Channel | Check cadence | Purpose | Channel flags |
-| --- | --- | --- | --- |
-| Stable | Weekly (Thu before 5:00 AM) | Tracks release revisions with automated weekly checks. | `--stable` / `--regular` / `--normal` (default) |
-| Latest (unstable) | Daily (same hour) | Follows the newest `origin/main` revisions with daily checks. | `--latest` / `-l` / `--unstable` |
-| Manual-only | None (manual upgrades only) | Disables unattended checks for full operator control. | Use `--fixed` on install, then run `./upgrade.sh` manually when needed. |
-
-Use `--auto-upgrade` during install when you want unattended checks; without it, upgrades stay operator-driven by default.
+- [Install & Lifecycle Scripts Manual](https://github.com/arthexis/arthexis/blob/main/docs/development/install-lifecycle-scripts-manual.md)
+- [Auto-Upgrade Flow](https://github.com/arthexis/arthexis/blob/main/docs/auto-upgrade.md)
 
 ### 4. Administration
 - Access the Django admin at `localhost:8888/admin/` to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
