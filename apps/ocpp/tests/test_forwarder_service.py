@@ -1,5 +1,5 @@
-import sys
 import json
+import sys
 from datetime import timedelta
 
 import pytest
@@ -484,3 +484,55 @@ def test_sync_forwarded_charge_points_removes_sessions_forwarded_back_to_local(m
     assert connected == 0
     assert forwarder.get_session(charger.pk) is None
     existing.connection.close.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_sync_forwarded_charge_points_flushes_buffer_when_interval_switches_to_immediate(monkeypatch):
+    """Switching to immediate forwarding should flush any buffered throttled payloads."""
+
+    forwarder = Forwarder()
+    mac_address = "00:11:22:33:44:66"
+    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: mac_address))
+    Node._local_cache.clear()
+
+    local = Node.objects.create(hostname="local-interval", mac_address=mac_address)
+    target = Node.objects.create(hostname="remote-interval", mac_address="66:77:88:00:AA:BB")
+    charger = Charger.objects.create(
+        charger_id="CP-INTERVAL",
+        export_transactions=True,
+        forwarded_to=target,
+        node_origin=local,
+    )
+    cp_forwarder = CPForwarder.objects.create(
+        target_node=target,
+        enabled=True,
+        forwarding_frequency_hz=1.0,
+    )
+
+    connection = SimpleNamespace(connected=True, close=Mock(), send=Mock())
+    existing = ForwardingSession(
+        charger_pk=charger.pk,
+        node_id=target.pk,
+        url="ws://existing",
+        connection=connection,
+        connected_at=timezone.now(),
+        forwarder_id=cp_forwarder.pk,
+        forwarding_interval_seconds=1.0,
+    )
+    existing.pending_cp_messages = {"Heartbeat": '{"ocpp":[2,"m-1","Heartbeat",{}]}'}
+    forwarder._sessions[charger.pk] = existing
+
+    cp_forwarder.forwarding_frequency_hz = 0.0
+    cp_forwarder.save(sync_chargers=False)
+
+    monkeypatch.setattr(
+        "apps.forwarder.ocpp.create_connection",
+        lambda *_args, **_kwargs: SimpleNamespace(connected=True, close=Mock(), send=Mock()),
+    )
+
+    forwarder.sync_forwarded_charge_points(refresh_forwarders=False)
+
+    assert forwarder.get_session(charger.pk) is existing
+    connection.send.assert_called_once_with('{"ocpp":[2,"m-1","Heartbeat",{}]}')
+    assert existing.pending_cp_messages == {}
+    assert existing.forwarding_interval_seconds == 0.0

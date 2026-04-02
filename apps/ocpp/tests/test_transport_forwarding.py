@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from asyncio import sleep
 from datetime import timedelta
 from threading import Lock
 from types import SimpleNamespace
@@ -32,6 +33,7 @@ class FakeSession:
         self.last_cp_flush_at = None
         self._pending_lock = Lock()
         self._cp_messages_lock = Lock()
+        self._cp_flush_handle = None
         self.url = "ws://forwarder.test"
         self.last_activity = None
 
@@ -243,3 +245,30 @@ async def test_forward_charge_point_message_records_activity_after_reconnect_ret
     retry_session.connection.send.assert_called_once()
     transport._record_forwarding_activity.assert_called_once()
     assert retry_session.last_activity is not None
+
+
+@pytest.mark.anyio
+async def test_forward_charge_point_message_schedules_flush_without_new_messages(monkeypatch):
+    """Buffered throttled payloads should flush even if no later CP message arrives."""
+
+    transport = DummyTransport()
+    transport.aggregate_charger = None
+    transport.charger = SimpleNamespace(pk=17, charger_id="CP-17", connector_id=1, forwarded_to_id=None)
+    transport._record_forwarding_activity = AsyncMock()
+    session = FakeSession(pending_call_ids=set())
+    session.forwarding_interval_seconds = 0.05
+
+    fake_forwarder = SimpleNamespace(get_session=Mock(return_value=session), remove_session=Mock())
+    monkeypatch.setattr("apps.ocpp.consumers.csms.transport.forwarder", fake_forwarder)
+    monkeypatch.setattr("apps.ocpp.consumers.csms.transport.ocpp_forwarder_enabled", lambda default=True: True)
+    monkeypatch.setattr("apps.ocpp.consumers.csms.transport.Node.get_local", Mock(return_value=None))
+
+    await transport._forward_charge_point_message_legacy("Heartbeat", '[2,"m-1","Heartbeat",{}]')
+    await transport._forward_charge_point_message_legacy("Heartbeat", '[2,"m-2","Heartbeat",{"v":"new"}]')
+    assert session.connection.send.call_count == 1
+
+    await sleep(0.1)
+
+    assert session.connection.send.call_count == 2
+    flushed_payload = json.loads(session.connection.send.call_args_list[-1].args[0])
+    assert flushed_payload["ocpp"][1] == "m-2"
