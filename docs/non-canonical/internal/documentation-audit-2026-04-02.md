@@ -1,0 +1,77 @@
+# Documentation audit (2026-04-02)
+
+> **Non-canonical reference:** This audit snapshot is for internal tracking and is not canonical product documentation.
+
+This inventory classifies every `docs/**/*.md` file as `active`, `archived`, or `internal-only`.
+
+| Path | Classification |
+| --- | --- |
+| `auto-upgrade.md` | `active` |
+| `benchmarking.md` | `active` |
+| `development/admin-ui-framework.md` | `active` |
+| `development/app-structure-policy.md` | `active` |
+| `development/ci-troubleshooting.md` | `active` |
+| `development/codeql.md` | `active` |
+| `development/create-local-app.md` | `active` |
+| `development/deferred_migration_audit.md` | `active` |
+| `development/dependency-management.md` | `active` |
+| `development/devtools-entrypoints.md` | `active` |
+| `development/docker-compose-role-presets.md` | `active` |
+| `development/dual-major-migrations.md` | `active` |
+| `development/health-checks.md` | `active` |
+| `development/install-lifecycle-scripts-manual.md` | `active` |
+| `development/management-command-deprecation-pattern.md` | `active` |
+| `development/marker-governance-policy.md` | `active` |
+| `development/mypy-adoption-checklist.md` | `active` |
+| `development/nodes-admin-package-reference.md` | `active` |
+| `development/ocpp-user-manual.md` | `active` |
+| `development/package-release-process.md` | `active` |
+| `development/release-package-options.md` | `active` |
+| `development/secret-scanning.md` | `active` |
+| `development/testing/test-suite-notes.md` | `active` |
+| `development/typing-conventions.md` | `active` |
+| `development/video-device-admin.md` | `active` |
+| `development/watchtower-attack-simulation.md` | `active` |
+| `ds3231-rtc-wiring.md` | `active` |
+| `energy-transactions-ledger.md` | `active` |
+| `feature/index.md` | `active` |
+| `feature/llm-summary.md` | `active` |
+| `feature/token-management.md` | `active` |
+| `github-canary-deployment.md` | `active` |
+| `index.md` | `active` |
+| `integrations/documentation-completeness-checklist.md` | `active` |
+| `integrations/endpoint-inventory.md` | `active` |
+| `integrations/onboarding-tracks.md` | `active` |
+| `integrations/token-lifecycle.md` | `active` |
+| `lcd-screen-hardware.md` | `active` |
+| `legal/THIRD_PARTY_LICENSES.md` | `active` |
+| `logging-domain.md` | `active` |
+| `non-canonical/archive/development/charger-auto-accept-offered-certificates-removal.md` | `archived` |
+| `non-canonical/archive/development/migration-branch-guards.md` | `archived` |
+| `non-canonical/archive/development/web-sampler-retirement.md` | `archived` |
+| `non-canonical/archive/index.md` | `archived` |
+| `non-canonical/archive/testing/critical-demotion-candidates-2026-03-01.md` | `archived` |
+| `non-canonical/archive/testing/index.md` | `archived` |
+| `non-canonical/internal/documentation-audit-2026-04-02.md` | `internal-only` |
+| `non-canonical/internal/proposals/watchtower-codex-skill-proposal.md` | `internal-only` |
+| `ocpp16_compliance_review.md` | `active` |
+| `ocpp_connection_status.md` | `active` |
+| `ocpp_cp_statuses.md` | `active` |
+| `operations/good-command.md` | `active` |
+| `operations/operational-commands.md` | `active` |
+| `operations/reinstall-data-import-runbook.md` | `active` |
+| `performance/public_charger_optimizations.md` | `active` |
+| `recipes.md` | `active` |
+| `release-notes.md` | `active` |
+| `routing.md` | `active` |
+| `runserver-log-duplication.md` | `active` |
+| `security-model.md` | `active` |
+| `services/celery-beat.md` | `active` |
+| `services/celery-worker.md` | `active` |
+| `services/lcd-screen.md` | `active` |
+| `services/rfid-scanner-service.md` | `active` |
+| `services/suite-service.md` | `active` |
+| `startup-sequence.md` | `active` |
+| `suite-services-report.md` | `active` |
+| `upgrade-error-handling.md` | `active` |
+| `usb-camera-power-off.md` | `active` |
