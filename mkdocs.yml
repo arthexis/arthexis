@@ -9,7 +9,6 @@ nav:
       - Good Command: operations/good-command.md
       - Operational Commands: operations/operational-commands.md
       - Reinstall + Data Import Runbook: operations/reinstall-data-import-runbook.md
-      - GitHub Canary Deployment Setup: github-canary-deployment.md
   - Integrations:
       - Integration Onboarding Tracks: integrations/onboarding-tracks.md
       - Endpoint Inventory: integrations/endpoint-inventory.md

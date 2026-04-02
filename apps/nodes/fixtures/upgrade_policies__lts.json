@@ -5,10 +5,9 @@
       "is_seed_data": true,
       "is_deleted": false,
       "name": "LTS",
-      "description": "Stable long-term support with PyPI and canary requirements.",
+      "description": "Stable long-term support with PyPI requirements.",
       "channel": "stable",
       "interval_minutes": 10080,
-      "requires_canaries": true,
       "requires_pypi_packages": true
     }
   }

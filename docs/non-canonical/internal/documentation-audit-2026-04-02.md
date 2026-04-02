@@ -37,7 +37,6 @@ This inventory classifies every `docs/**/*.md` file as `active`, `archived`, or 
 | `feature/index.md` | `active` |
 | `feature/llm-summary.md` | `active` |
 | `feature/token-management.md` | `active` |
-| `github-canary-deployment.md` | `active` |
 | `index.md` | `active` |
 | `integrations/documentation-completeness-checklist.md` | `active` |
 | `integrations/endpoint-inventory.md` | `active` |

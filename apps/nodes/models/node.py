@@ -170,16 +170,6 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
     mesh_key_fingerprint_metadata = models.JSONField(default=dict, blank=True)
     last_mesh_heartbeat = models.DateTimeField(null=True, blank=True)
     mesh_capability_flags = models.JSONField(default=list, blank=True)
-    upgrade_canaries = models.ManyToManyField(
-        "self",
-        blank=True,
-        symmetrical=False,
-        related_name="upgrade_targets",
-        help_text=(
-            "Nodes that must be running and upgraded before this node can "
-            "auto-upgrade."
-        ),
-    )
     upgrade_policies = models.ManyToManyField(
         "nodes.UpgradePolicy",
         through="nodes.NodeUpgradePolicyAssignment",

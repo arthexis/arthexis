@@ -249,7 +249,6 @@ def _load_upgrade_policy_report() -> dict[str, object]:
                 "channel_state": channel_state,
                 "interval_minutes": policy.interval_minutes,
                 "interval_label": _format_interval_minutes(policy.interval_minutes),
-                "requires_canaries": policy.requires_canaries,
                 "requires_pypi": policy.requires_pypi_packages,
                 "last_checked_at": assignment.last_checked_at,
                 "last_checked_label": _format_timestamp(assignment.last_checked_at),

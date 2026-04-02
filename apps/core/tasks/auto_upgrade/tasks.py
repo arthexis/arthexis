@@ -35,7 +35,6 @@ from apps.release import release_workflow
 
 from ..system_ops import _ensure_runtime_services
 from ..utils import _get_package_release_model
-from .canaries import _canary_gate
 from .locks import (
     _add_skipped_revision,
     _auto_upgrade_ran_recently,
@@ -346,7 +345,6 @@ class AutoUpgradeMode:
     mode_file_exists: bool
     mode_file_physical: bool
     interval_minutes: int
-    requires_canaries: bool
     requires_pypi: bool
     policy_id: int | None = None
     policy_name: str | None = None
@@ -546,7 +544,6 @@ def _resolve_auto_upgrade_mode(
     mode_file_exists = mode_file.exists()
     mode = DEFAULT_AUTO_UPGRADE_MODE
     mode_file_physical = mode_file.is_file()
-    requires_canaries = False
     requires_pypi = False
     policy_id = None
     policy_name = None
@@ -557,7 +554,6 @@ def _resolve_auto_upgrade_mode(
         interval_minutes = int(getattr(policy, "interval_minutes", 0) or 0)
         if interval_minutes <= 0:
             interval_minutes = AUTO_UPGRADE_FALLBACK_INTERVAL
-        requires_canaries = bool(getattr(policy, "requires_canaries", False))
         requires_pypi = bool(getattr(policy, "requires_pypi_packages", False))
         policy_id = getattr(policy, "pk", None)
         policy_name = getattr(policy, "name", None)
@@ -580,7 +576,6 @@ def _resolve_auto_upgrade_mode(
             mode_file_exists=mode_file_exists,
             mode_file_physical=mode_file_physical,
             interval_minutes=interval_minutes,
-            requires_canaries=requires_canaries,
             requires_pypi=requires_pypi,
             policy_id=policy_id,
             policy_name=policy_name,
@@ -625,7 +620,6 @@ def _resolve_auto_upgrade_mode(
         mode_file_exists=mode_file_exists,
         mode_file_physical=mode_file_physical,
         interval_minutes=interval_minutes,
-        requires_canaries=requires_canaries,
         requires_pypi=requires_pypi,
         policy_id=policy_id,
         policy_name=policy_name,
@@ -861,15 +855,6 @@ def build_upgrade_decision(
     *,
     recency_throttled: bool = False,
 ) -> AutoUpgradeDecision:
-    if not _canary_gate(base_dir, repo_state, mode):
-        return AutoUpgradeDecision(
-            skip=True,
-            apply=False,
-            reason="canary-gate-blocked",
-            args=[],
-            notify=False,
-        )
-
     if mode.requires_pypi:
         if not repo_state.release_pypi_url:
             return AutoUpgradeDecision(
@@ -1380,7 +1365,6 @@ __all__ = [
     "AutoUpgradeOperations",
     "AutoUpgradeRepositoryState",
     "_broadcast_upgrade_start_message",
-    "_canary_gate",
     "_ci_status_for_revision",
     "_current_revision",
     "_project_base_dir",

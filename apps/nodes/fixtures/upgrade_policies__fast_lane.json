@@ -8,7 +8,6 @@
       "description": "Unstable channel with hourly checks.",
       "channel": "unstable",
       "interval_minutes": 60,
-      "requires_canaries": true,
       "requires_pypi_packages": false
     }
   }
