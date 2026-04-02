@@ -12,12 +12,11 @@ class UpgradePolicyAdmin(EntityModelAdmin):
         "name",
         "channel",
         "interval_display",
-        "requires_canaries",
         "requires_pypi",
         "is_active",
     )
     search_fields = ("name", "description")
-    list_filter = ("is_active", "channel", "requires_canaries", "requires_pypi_packages")
+    list_filter = ("is_active", "channel", "requires_pypi_packages")
 
     actions = ("activate_selected_policies", "deactivate_selected_policies")
 

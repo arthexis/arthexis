@@ -327,9 +327,6 @@
                 {% endif %}
               </div>
               <div class="upgrade-policy-requirements">
-                {% if policy.requires_canaries %}
-                  <span>{% trans "Canaries required" %}</span>
-                {% endif %}
                 {% if policy.requires_pypi %}
                   <span>{% trans "PyPI required" %}</span>
                 {% endif %}
