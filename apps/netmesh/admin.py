@@ -94,10 +94,17 @@ class MeshMembershipAdmin(EntityModelAdmin):
         )
 
     def _confirm_membership_action(self, request, queryset, *, action_name, title, submit_label, prompt):
-        selected_ids = request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)
-        if not selected_ids:
-            selected_ids = [str(pk) for pk in queryset.values_list("pk", flat=True)]
-        memberships = list(self.get_queryset(request).filter(pk__in=selected_ids).select_related("node", "site"))
+        select_across = request.POST.get("select_across") == "1"
+        if select_across:
+            membership_queryset = queryset
+        else:
+            selected_ids = request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)
+            if selected_ids:
+                membership_queryset = self.get_queryset(request).filter(pk__in=selected_ids)
+            else:
+                membership_queryset = queryset
+
+        memberships = list(membership_queryset.select_related("node", "site"))
         if not memberships:
             self.message_user(request, _("No memberships selected."), messages.INFO)
             return None
@@ -122,17 +129,16 @@ class MeshMembershipAdmin(EntityModelAdmin):
                         messages.WARNING,
                     )
                 else:
-                    changed = 0
+                    nodes = {}
                     for membership in memberships:
-                        revoke_enrollment(
-                            node=membership.node,
-                            actor=request.user,
-                            reason="netmesh incident response",
-                        )
+                        nodes[membership.node_id] = membership.node
                         if membership.is_enabled:
                             membership.is_enabled = False
                             membership.save(update_fields=["is_enabled"])
-                        changed += 1
+                    for node in nodes.values():
+                        revoke_enrollment(node=node, actor=request.user, reason="netmesh incident response")
+
+                    changed = len(nodes)
                     self.message_user(
                         request,
                         ngettext(
@@ -152,7 +158,7 @@ class MeshMembershipAdmin(EntityModelAdmin):
             "memberships": memberships,
             "selected_ids": [str(m.pk) for m in memberships],
             "action_name": action_name,
-            "select_across": request.POST.get("select_across", "0"),
+            "select_across": "1" if select_across else "0",
             "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
             "submit_label": submit_label,
             "prompt": prompt,
