@@ -1,6 +1,6 @@
 # Third-Party License Notices
 
-This project is distributed under the Arthexis Contribution Reciprocity License 1.0. In addition to the
+This project is distributed under the Arthexis Reciprocity License 1.0. In addition to the
 project's own license, the following third-party components are used at runtime. License
 information is collected from the Python Package Index (PyPI) and links point to the upstream
 license texts or project pages so downstream redistributors can comply with notice obligations.

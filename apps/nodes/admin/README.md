@@ -16,6 +16,6 @@ Import `apps.nodes.admin` (the package) to ensure all admin registrations are ev
 
 ## License and Sponsorship
 
-This project is released under the Arthexis Contribution Reciprocity License 1.0. We treat sponsoring Arthexis and doing paid or volunteer work for the open-source dependencies behind the suite as a valid and important contribution alongside code, documentation, review, and maintenance work.
+This project is released under the Arthexis Reciprocity License 1.0. We treat sponsoring Arthexis and doing paid or volunteer work for the open-source dependencies behind the suite as a valid and important contribution alongside code, documentation, review, and maintenance work.
 
 If this admin package helps your work, please review the repository [`LICENSE`](../../../LICENSE) and consider sponsoring or otherwise supporting the maintainers of the dependencies that keep Arthexis running.

@@ -18,7 +18,7 @@ DEFAULT_PACKAGE = Package(
     author="Rafael J. Guillén-Osorio",
     email="tecnologia@gelectriic.com",
     python_requires=">=3.10",
-    license="Arthexis Contribution Reciprocity License 1.0",
+    license="Arthexis Reciprocity License 1.0",
     packages=tuple(DEFAULT_PACKAGE_MODULES),
     repositories=(RepositoryTarget(name="PyPI", verify_availability=True),),
 )

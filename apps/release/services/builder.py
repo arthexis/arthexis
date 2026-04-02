@@ -235,9 +235,9 @@ def _pep639_license_metadata(license_name: str) -> dict[str, object]:
         Mapping of ``project`` metadata keys for the license declaration.
     """
 
-    if license_name == "Arthexis Contribution Reciprocity License 1.0":
+    if license_name == "Arthexis Reciprocity License 1.0":
         return {
-            "license": "LicenseRef-ArthexisReciprocity",
+            "license": "LicenseRef-ARL-1.0",
             "license-files": ["LICENSE"],
         }
     return {"license": license_name}
