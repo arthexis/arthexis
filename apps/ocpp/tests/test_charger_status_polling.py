@@ -494,3 +494,43 @@ def test_status_view_shows_non_transaction_events_for_staff(client):
         item["event"] == "DiagnosticsStatusNotification"
         for item in response.context["non_transaction_events"]
     )
+
+
+def test_dedupe_event_rows_keeps_newest_status_for_out_of_order_retry_collisions():
+    """Regression: out-of-order status retries should keep the newest connector row."""
+
+    row_newest = EventRow(
+        timestamp=timezone.now(),
+        event="Status",
+        details="Unavailable",
+        severity="warning",
+        severity_color="#ffc107",
+        severity_label="Warning",
+        event_id=512,
+    )
+    row_older = EventRow(
+        timestamp=row_newest.timestamp - timezone.timedelta(minutes=3),
+        event="Status",
+        details="Unavailable",
+        severity="warning",
+        severity_color="#ffc107",
+        severity_label="Warning",
+        event_id=512,
+    )
+    retry_warning = EventRow(
+        timestamp=row_newest.timestamp - timezone.timedelta(minutes=1),
+        event="Heartbeat",
+        details="retry in 10s",
+        severity="warning",
+        severity_color="#ffc107",
+        severity_label="Warning",
+        event_id=None,
+    )
+
+    rows = dedupe_event_rows([(row_older, 1), (retry_warning, 1), (row_newest, 1)])
+
+    assert len(rows) == 2
+    status_rows = [row for row in rows if row.event == "Status"]
+    assert len(status_rows) == 1
+    assert status_rows[0].timestamp == row_newest.timestamp
+    assert any(row.event == "Heartbeat" and row.details == "retry in 10s" for row in rows)
