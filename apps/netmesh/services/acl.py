@@ -52,6 +52,10 @@ class ACLResolver:
         policy_group_id = getattr(policy, f"{side}_group_id")
         station_id = getattr(policy, f"{side}_station_id")
         policy_tags = set(getattr(policy, f"{side}_tags") or [])
+        has_selector = bool(node_id or policy_group_id or station_id or policy_tags)
+
+        if not has_selector:
+            return False
 
         if node_id and node_id != node.id:
             return False
