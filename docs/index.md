@@ -16,7 +16,7 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [Good Command](operations/good-command.md)
 - [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
 - [LCD Screen Hardware](lcd-screen-hardware.md)
-- [Migration Branch Guards](development/migration-branch-guards.md)
+- [App Structure Policy](development/app-structure-policy.md)
 - [Endpoint Documentation Inventory](integrations/endpoint-inventory.md)
 - [Endpoint Documentation Completeness Checklist](integrations/documentation-completeness-checklist.md)
 - [Integration Onboarding Tracks](integrations/onboarding-tracks.md)
