@@ -53,11 +53,13 @@ from .actions import (
     create_charge_point_forwarder,
     discover_local_node,
     download_evcs_firmware,
+    enroll_mesh_nodes,
     export_rfids_to_selected,
     import_rfids_from_selected,
     register_visitor,
     reissue_mesh_enrollment_token,
     revoke_mesh_enrollment,
+    rotate_mesh_key,
     send_net_message,
     take_screenshots,
     update_selected_nodes,
@@ -90,7 +92,8 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "role",
         "relation",
         "trusted",
-        "mesh_state",
+        "mesh_status_badge",
+        "mesh_key_age",
         "last_mesh_heartbeat",
         "version_display",
         "last_updated",
@@ -166,8 +169,10 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         discover_local_node,
         update_selected_nodes,
         register_visitor,
+        enroll_mesh_nodes,
         approve_mesh_enrollment,
         revoke_mesh_enrollment,
+        rotate_mesh_key,
         reissue_mesh_enrollment_token,
         take_screenshots,
         download_evcs_firmware,
@@ -229,6 +234,51 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     @admin.display(description=_("Mesh state"), ordering="mesh_enrollment_state")
     def mesh_state(self, obj):
         return obj.get_mesh_enrollment_state_display()
+
+    @admin.display(description=_("Mesh status"), ordering="mesh_enrollment_state")
+    def mesh_status_badge(self, obj):
+        styles = {
+            Node.MeshEnrollmentState.ENROLLED: ("#198754", _("Enrolled")),
+            Node.MeshEnrollmentState.PENDING: ("#fd7e14", _("Pending")),
+            Node.MeshEnrollmentState.FAILED: ("#dc3545", _("Failed")),
+            Node.MeshEnrollmentState.UNENROLLED: ("#6c757d", _("Unenrolled")),
+        }
+        color, label = styles.get(
+            obj.mesh_enrollment_state,
+            ("#6c757d", obj.get_mesh_enrollment_state_display()),
+        )
+        return format_html(
+            '<span style="display:inline-block;padding:0.2rem 0.5rem;border-radius:999px;background:{};color:#fff;font-weight:600;">{}</span>',
+            color,
+            label,
+        )
+
+    @admin.display(description=_("Key age / rotation"))
+    def mesh_key_age(self, obj):
+        active_key = (
+            obj.netmesh_keys.filter(revoked=False)
+            .order_by("-created_at", "-id")
+            .first()
+        )
+        if not active_key:
+            return _("No active key")
+        key_age_days = max((timezone.now() - active_key.created_at).days, 0)
+        due_days = 30
+        if key_age_days >= due_days:
+            due_label = _("Rotation due")
+            color = "#dc3545"
+        elif key_age_days >= due_days - 7:
+            due_label = _("Rotation soon")
+            color = "#fd7e14"
+        else:
+            due_label = _("Healthy")
+            color = "#198754"
+        return format_html(
+            '{} <span style="color:{};font-weight:600;">({})</span>',
+            _("%(days)d days") % {"days": key_age_days},
+            color,
+            due_label,
+        )
 
     @admin.display(description=_("IP Address"), ordering="address")
     def primary_ip(self, obj):
