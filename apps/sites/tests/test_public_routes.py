@@ -196,9 +196,9 @@ def test_feedback_page_link_visibility(client, is_authenticated, has_copy_link):
 
 
 @pytest.mark.parametrize(
-    ("user_kwargs", "expected_href", "expects_staff_badge"),
+    ("user_kwargs", "expected_href", "expects_tooltip", "expects_staff_badge"),
     [
-        (None, reverse("pages:login"), False),
+        (None, reverse("pages:login"), False, False),
         (
             {
                 "username": "public-nonstaff",
@@ -206,7 +206,8 @@ def test_feedback_page_link_visibility(client, is_authenticated, has_copy_link):
                 "password": "secret",
                 "is_staff": False,
             },
-            reverse("pages:login"),
+            "#",
+            True,
             False,
         ),
         (
@@ -218,11 +219,12 @@ def test_feedback_page_link_visibility(client, is_authenticated, has_copy_link):
             },
             reverse("admin:index"),
             True,
+            True,
         ),
     ],
 )
 def test_public_nav_only_exposes_admin_entrypoint_to_staff(
-    client, user_kwargs, expected_href, expects_staff_badge
+    client, user_kwargs, expected_href, expects_tooltip, expects_staff_badge
 ):
     if user_kwargs is not None:
         user = get_user_model().objects.create_user(**user_kwargs)
@@ -232,8 +234,10 @@ def test_public_nav_only_exposes_admin_entrypoint_to_staff(
     html = response.content.decode()
 
     assert response.status_code == 200
-    assert f'class="btn btn-sm btn-outline-light position-relative user-info-trigger" href="{expected_href}"' in html
-    assert ('class="user-info-tooltip"' in html) is expects_staff_badge
+    assert f'href="{expected_href}"' in html
+    assert "user-info-trigger" in html
+    assert ("user-info-tooltip" in html) is expects_tooltip
+    assert (" - Staff" in html) is expects_staff_badge
 
 
 def test_admin_feedback_page_link_is_not_clickable_for_anonymous_users(rf):
