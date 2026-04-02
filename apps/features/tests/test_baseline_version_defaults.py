@@ -7,6 +7,22 @@ import pytest
 from apps.features.management.feature_ops import apply_suite_feature_baseline_defaults
 from apps.features.models import Feature
 
+
+@pytest.mark.django_db
+def test_baseline_reached_accepts_semver_and_v_prefix() -> None:
+    """Baseline gating should parse normal semantic versions and ``v`` prefixes."""
+
+    feature = Feature.objects.create(
+        slug="baseline-ready",
+        display="Baseline Ready",
+        baseline_version="v1.2.0",
+        is_enabled=True,
+    )
+
+    assert feature.baseline_reached(current_version="1.2.0") is True
+    assert feature.baseline_reached(current_version="1.1.9") is False
+
+
 @pytest.mark.django_db
 def test_apply_suite_feature_baseline_defaults_disables_future_only() -> None:
     """Only future-baseline suite features should be disabled by default enforcement."""

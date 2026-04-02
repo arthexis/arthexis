@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 
 from apps.features.models import Feature
 
+
 @pytest.mark.django_db
 def test_enabled_suite_feature_cannot_be_deleted() -> None:
     """Regression: enabled suite features must be disabled before deletion."""
@@ -15,6 +16,7 @@ def test_enabled_suite_feature_cannot_be_deleted() -> None:
 
     with pytest.raises(ValidationError, match="Disable this suite feature before deleting it"):
         feature.delete()
+
 
 @pytest.mark.django_db
 def test_disabled_suite_feature_can_be_deleted() -> None:
@@ -28,6 +30,7 @@ def test_disabled_suite_feature_can_be_deleted() -> None:
 
     assert not Feature.all_objects.filter(pk=feature.pk).exists()
 
+
 @pytest.mark.django_db
 def test_set_enabled_returns_transition_state() -> None:
     """set_enabled should report whether a state transition happened."""
@@ -36,6 +39,19 @@ def test_set_enabled_returns_transition_state() -> None:
 
     assert feature.set_enabled(True) is False
     assert feature.set_enabled(False) is True
+
+
+@pytest.mark.django_db
+def test_set_enabled_persists_when_update_fields_is_empty() -> None:
+    """set_enabled should still persist core fields when callers pass an empty update list."""
+
+    feature = Feature.objects.create(slug="empty-update-fields", display="Empty Update Fields", is_enabled=True)
+
+    assert feature.set_enabled(False, update_fields=[]) is True
+
+    feature.refresh_from_db()
+    assert feature.is_enabled is False
+
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
@@ -59,6 +75,16 @@ def test_params_count_reads_feature_metadata_parameters(metadata, expected_count
 
     assert feature.params_count == expected_count
 
+
+def test_params_count_handles_missing_metadata_dict() -> None:
+    """params_count should return zero when metadata is unset on the model instance."""
+
+    feature = Feature(slug="feature-params-count", display="Feature Params Count")
+    feature.metadata = None
+
+    assert feature.params_count == 0
+
+
 @pytest.mark.django_db
 def test_feature_save_infers_main_app_from_code_locations() -> None:
     """Features with app-prefixed code locations should auto-link main_app."""
@@ -71,6 +97,7 @@ def test_feature_save_infers_main_app_from_code_locations() -> None:
 
     assert feature.main_app is not None
     assert feature.main_app.name == "meta"
+
 
 @pytest.mark.django_db
 def test_set_enabled_persists_inferred_main_app_with_update_fields() -> None:
@@ -90,3 +117,17 @@ def test_set_enabled_persists_inferred_main_app_with_update_fields() -> None:
     feature.refresh_from_db()
     assert feature.main_app is not None
     assert feature.main_app.name == "meta"
+
+
+def test_infer_main_app_name_ignores_non_app_paths() -> None:
+    """Inference should return None when no app-prefixed paths are present."""
+
+    inferred = Feature.infer_main_app_name(
+        [
+            "config/settings/base.py",
+            "README.md",
+            "  /services/worker.py",
+        ]
+    )
+
+    assert inferred is None

@@ -7,10 +7,34 @@ from django.core.management.base import CommandError
 
 from apps.nginx.management.commands.nginx import ConfigureMixin
 
+
 class _ConfigureHarness(ConfigureMixin):
     def __init__(self):
         self.stdout = SimpleNamespace(write=lambda _message: None)
         self.style = SimpleNamespace(SUCCESS=lambda message: message)
+
+
+def test_parse_static_ip_rejects_private_ip():
+    command = _ConfigureHarness()
+    with pytest.raises(CommandError, match="public-routable"):
+        command._parse_static_ip("10.0.0.8")
+
+
+@pytest.mark.parametrize("address", ["8.8.8.8", "2001:4860:4860::8888"])
+def test_parse_static_ip_accepts_public_addresses(address):
+    command = _ConfigureHarness()
+    assert command._parse_static_ip(address) == address
+
+
+@pytest.mark.parametrize(
+    "address",
+    ["127.0.0.1", "169.254.1.1", "fe80::1", "224.0.0.1", "100.64.0.1"],
+)
+def test_parse_static_ip_rejects_non_global_addresses(address):
+    command = _ConfigureHarness()
+    with pytest.raises(CommandError, match="public-routable"):
+        command._parse_static_ip(address)
+
 
 def test_run_configure_requires_public_detection_or_static_ip(monkeypatch):
     command = _ConfigureHarness()
@@ -31,6 +55,7 @@ def test_run_configure_requires_public_detection_or_static_ip(monkeypatch):
                 "static_ip": None,
             }
         )
+
 
 def test_run_configure_skips_ip_checks_for_remove(monkeypatch):
     command = _ConfigureHarness()
@@ -71,6 +96,7 @@ def test_run_configure_skips_ip_checks_for_remove(monkeypatch):
             "static_ip": None,
         }
     )
+
 
 def test_run_configure_allows_valid_static_ip_without_detection(monkeypatch):
     command = _ConfigureHarness()
