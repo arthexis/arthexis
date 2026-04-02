@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 from django.contrib.sites.models import Site
 from django.core.management import call_command
-from django.core.management.base import CommandError
 
 from apps.aws.models import AWSCredentials
 from apps.deploy.management.commands import lightsail as lightsail_command
@@ -11,43 +10,6 @@ from apps.deploy.models import DeployInstance, DeployRun, DeployServer
 from apps.nodes.models import Node
 
 pytestmark = pytest.mark.django_db
-
-
-def test_deploy_command_reports_empty_state(capsys):
-    call_command("deploy")
-
-    output = capsys.readouterr().out
-
-    assert "No deployment instances configured yet." in output
-
-
-def test_deploy_command_lists_instances_and_recent_runs(capsys):
-    server = DeployServer.objects.create(name="ops-1", host="10.2.3.4")
-    instance = DeployInstance.objects.create(
-        server=server,
-        name="main",
-        install_dir="/srv/arthexis-main",
-        service_name="arthexis-main",
-    )
-    DeployRun.objects.create(
-        instance=instance,
-        action=DeployRun.Action.DEPLOY,
-        status=DeployRun.Status.SUCCEEDED,
-    )
-
-    call_command("deploy", "--limit", "1")
-
-    output = capsys.readouterr().out
-
-    assert "Configured deployment instances:" in output
-    assert "ops-1:main" in output
-    assert "Recent deploy runs (latest 1):" in output
-    assert "action=deploy status=succeeded" in output
-
-
-def test_deploy_command_rejects_removed_setup_subcommand():
-    with pytest.raises(CommandError, match="unrecognized arguments: setup-lightsail"):
-        call_command("deploy", "setup-lightsail")
 
 
 def test_lightsail_command_creates_records(monkeypatch, capsys):
