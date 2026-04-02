@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arthexis"
-version = "0.2.3"
+dynamic = ["version"]
 description = "Energy & Power Infrastructure"
 requires-python = ">=3.10,<3.14"
-license = "LicenseRef-ArthexisReciprocity"
+license = "LicenseRef-ARL-1.0"
 license-files = ["LICENSE",]
 classifiers = [ "Programming Language :: Python :: 3", "Framework :: Django",]
 dependencies = [
@@ -464,3 +464,6 @@ extend-select = ["I", "UP", "B904"]
 
 [tool.ruff.lint.per-file-ignores]
 "apps/*/tests/*.py" = ["B904"]
+
+[tool.setuptools.dynamic]
+version = { file = ["VERSION"] }
