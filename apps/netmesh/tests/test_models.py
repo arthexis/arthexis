@@ -146,11 +146,11 @@ def test_peer_policy_rejects_ambiguous_allow_and_deny_with_reordered_tag_selecto
 def test_mesh_membership_disallows_duplicate_default_scope():
     node = Node.objects.create(hostname="mesh-default-scope")
 
-    MeshMembership.objects.create(node=node, tenant="", site=None)
+    MeshMembership.objects.create(node=node, tenant=MeshMembership.DEFAULT_TENANT, site=None)
 
     with pytest.raises(IntegrityError):
         with transaction.atomic():
-            MeshMembership.objects.create(node=node, tenant="", site=None)
+            MeshMembership.objects.create(node=node, tenant=MeshMembership.DEFAULT_TENANT, site=None)
 
 
 @pytest.mark.django_db

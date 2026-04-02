@@ -13,6 +13,8 @@ from apps.core.entity import Entity
 class MeshMembership(Entity):
     """Represents a node enrollment in a tenant/site scoped mesh."""
 
+    DEFAULT_TENANT = "arthexis"
+
     node = models.ForeignKey(
         "nodes.Node",
         on_delete=models.CASCADE,
@@ -20,6 +22,7 @@ class MeshMembership(Entity):
     )
     tenant = models.CharField(
         max_length=64,
+        default=DEFAULT_TENANT,
         blank=True,
         help_text=_("Tenant identifier for external mesh orchestration scope."),
     )
@@ -82,8 +85,11 @@ class NodeKeyMaterial(Entity):
 class PeerPolicy(Entity):
     """Defines service communication policy from a source node/group to destination."""
 
+    DEFAULT_TENANT = MeshMembership.DEFAULT_TENANT
+
     tenant = models.CharField(
         max_length=64,
+        default=DEFAULT_TENANT,
         blank=True,
         help_text=_("Tenant identifier that owns this policy."),
     )
