@@ -163,12 +163,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 ),
             },
         ),
-        (
-            _("Upgrade"),
-            {
-                "fields": ("upgrade_canaries",),
-            },
-        ),
     )
     actions = [
         discover_local_node,

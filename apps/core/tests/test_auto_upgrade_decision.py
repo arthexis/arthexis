@@ -11,7 +11,6 @@ def _mode(**overrides):
         "mode_file_exists": True,
         "mode_file_physical": True,
         "interval_minutes": 60,
-        "requires_canaries": False,
         "requires_pypi": False,
     }
     defaults.update(overrides)
@@ -39,7 +38,6 @@ def test_build_upgrade_decision_applies_stable_and_unstable(monkeypatch):
         def matches_revision(_version, _revision):
             return True
 
-    monkeypatch.setattr(tasks, "_canary_gate", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(tasks, "_get_package_release_model", lambda: _ReleaseModel)
     expected_script = (
         "upgrade.bat"
@@ -69,8 +67,6 @@ def test_build_upgrade_decision_applies_stable_and_unstable(monkeypatch):
 
 
 def test_build_upgrade_decision_skips_when_pypi_gate_blocks(monkeypatch):
-    monkeypatch.setattr(tasks, "_canary_gate", lambda *_args, **_kwargs: True)
-
     decision = tasks.build_upgrade_decision(
         Path("/tmp/base"),
         _mode(requires_pypi=True),
@@ -81,26 +77,12 @@ def test_build_upgrade_decision_skips_when_pypi_gate_blocks(monkeypatch):
     assert decision.reason == "pypi-release-missing"
 
 
-def test_build_upgrade_decision_skips_when_canary_gate_blocks(monkeypatch):
-    monkeypatch.setattr(tasks, "_canary_gate", lambda *_args, **_kwargs: False)
-
-    decision = tasks.build_upgrade_decision(
-        Path("/tmp/base"),
-        _mode(requires_canaries=True),
-        _repo_state(),
-    )
-
-    assert decision.skip is True
-    assert decision.reason == "canary-gate-blocked"
-
-
 def test_build_upgrade_decision_skips_stable_when_release_revision_mismatches(monkeypatch):
     class _ReleaseModel:
         @staticmethod
         def matches_revision(_version, _revision):
             return False
 
-    monkeypatch.setattr(tasks, "_canary_gate", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(tasks, "_get_package_release_model", lambda: _ReleaseModel)
 
     decision = tasks.build_upgrade_decision(
@@ -114,8 +96,6 @@ def test_build_upgrade_decision_skips_stable_when_release_revision_mismatches(mo
 
 
 def test_build_upgrade_decision_skips_when_recency_throttled(monkeypatch):
-    monkeypatch.setattr(tasks, "_canary_gate", lambda *_args, **_kwargs: True)
-
     decision = tasks.build_upgrade_decision(
         Path("/tmp/base"),
         _mode(mode="unstable"),

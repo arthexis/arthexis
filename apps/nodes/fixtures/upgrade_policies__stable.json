@@ -8,7 +8,6 @@
       "description": "Stable release upgrades on the standard cadence.",
       "channel": "stable",
       "interval_minutes": 10080,
-      "requires_canaries": false,
       "requires_pypi_packages": true
     }
   }

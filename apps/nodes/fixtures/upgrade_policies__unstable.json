@@ -8,7 +8,6 @@
       "description": "Unstable channel for rapid rollout testing.",
       "channel": "unstable",
       "interval_minutes": 15,
-      "requires_canaries": false,
       "requires_pypi_packages": false
     }
   }

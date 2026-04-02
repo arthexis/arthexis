@@ -30,10 +30,6 @@ class UpgradePolicy(Entity):
         default=10080,
         help_text=_("How often to check for upgrades, in minutes."),
     )
-    requires_canaries = models.BooleanField(
-        default=False,
-        help_text=_("Require configured canaries to be upgraded before proceeding."),
-    )
     requires_pypi_packages = models.BooleanField(
         default=False,
         help_text=_("Require the latest PyPI packages before upgrading."),
