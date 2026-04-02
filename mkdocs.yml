@@ -6,6 +6,7 @@ nav:
   - Operations:
       - Install & Lifecycle Scripts Manual: development/install-lifecycle-scripts-manual.md
       - Auto-Upgrade Flow: auto-upgrade.md
+      - Integration Onboarding Tracks: integrations/onboarding-tracks.md
   - Architecture:
       - Logging Domain: logging-domain.md
       - Startup Sequence: startup-sequence.md
