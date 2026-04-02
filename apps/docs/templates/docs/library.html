@@ -1,6 +1,11 @@
 {% extends "pages/base.html" %}
 {% load i18n %}
 {% block title %}{{ title }}{% endblock %}
+{% block extra_head %}
+  {% if canonical_url %}
+    <link rel="canonical" href="{{ canonical_url }}">
+  {% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="row">
