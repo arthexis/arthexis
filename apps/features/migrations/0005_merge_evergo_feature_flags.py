@@ -35,6 +35,9 @@ ACTION_RENAMED_LEGACY = "renamed_legacy_to_canonical"
 
 
 def _ensure_state_table(schema_editor):
+    if schema_editor is None:
+        return
+
     with schema_editor.connection.cursor() as cursor:
         cursor.execute(
             f"""
@@ -47,6 +50,9 @@ def _ensure_state_table(schema_editor):
 
 
 def _store_state(schema_editor, payload):
+    if schema_editor is None:
+        return
+
     _ensure_state_table(schema_editor)
     with schema_editor.connection.cursor() as cursor:
         cursor.execute(f"DELETE FROM {STATE_TABLE} WHERE state_key = %s", [STATE_KEY])
@@ -57,6 +63,9 @@ def _store_state(schema_editor, payload):
 
 
 def _load_state(schema_editor):
+    if schema_editor is None:
+        return {}
+
     _ensure_state_table(schema_editor)
     with schema_editor.connection.cursor() as cursor:
         cursor.execute(f"SELECT payload FROM {STATE_TABLE} WHERE state_key = %s", [STATE_KEY])
@@ -67,6 +76,9 @@ def _load_state(schema_editor):
 
 
 def _clear_state(schema_editor):
+    if schema_editor is None:
+        return
+
     with schema_editor.connection.cursor() as cursor:
         cursor.execute(f"DELETE FROM {STATE_TABLE} WHERE state_key = %s", [STATE_KEY])
 
