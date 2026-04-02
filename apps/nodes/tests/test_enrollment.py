@@ -5,13 +5,20 @@ from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.test import RequestFactory
 
+from apps.netmesh.models import NodeKeyMaterial
 from apps.nodes.admin.actions import (
     approve_mesh_enrollment,
+    enroll_mesh_nodes,
     reissue_mesh_enrollment_token,
     revoke_mesh_enrollment,
+    rotate_mesh_key,
 )
 from apps.nodes.models import Node, NodeEnrollment, NodeEnrollmentEvent
-from apps.nodes.services.enrollment import approve_enrollment, issue_enrollment_token, submit_public_key
+from apps.nodes.services.enrollment import (
+    approve_enrollment,
+    issue_enrollment_token,
+    submit_public_key,
+)
 from apps.nodes.views.registration.handlers import submit_enrollment_public_key
 
 
@@ -77,6 +84,7 @@ def test_admin_actions_emit_enrollment_transitions():
     queryset = Node.objects.filter(pk=node.pk)
 
     reissue_mesh_enrollment_token(admin, request, queryset)
+    enroll_mesh_nodes(admin, request, queryset)
     approve_mesh_enrollment(admin, request, queryset)
     revoke_mesh_enrollment(admin, request, queryset)
 
@@ -86,6 +94,35 @@ def test_admin_actions_emit_enrollment_transitions():
     assert NodeEnrollmentEvent.Action.TOKEN_REISSUED in actions
     assert NodeEnrollmentEvent.Action.APPROVED in actions
     assert NodeEnrollmentEvent.Action.REVOKED in actions
+
+
+@pytest.mark.django_db
+def test_rotate_mesh_key_revokes_existing_key_and_reissues_token():
+    user = get_user_model().objects.create_superuser(
+        username="mesh-rotate-admin",
+        email="mesh-rotate-admin@example.com",
+        password="password",
+    )
+    node = Node.objects.create(
+        hostname="node-rotate",
+        mac_address="aa:bb:cc:dd:ee:80",
+        address="198.51.100.80",
+        port=8888,
+        public_endpoint="node-rotate",
+    )
+    active_key = NodeKeyMaterial.objects.create(node=node, public_key="ssh-rsa test", revoked=False)
+    admin = _DummyAdmin()
+    request = RequestFactory().post("/admin/")
+    request.user = user
+
+    rotate_mesh_key(admin, request, Node.objects.filter(pk=node.pk))
+
+    active_key.refresh_from_db()
+    node.refresh_from_db()
+    assert active_key.revoked is True
+    assert active_key.revoked_at is not None
+    assert active_key.rotated_at is not None
+    assert node.mesh_enrollment_state == Node.MeshEnrollmentState.PENDING
 
 
 @pytest.mark.django_db

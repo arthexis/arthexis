@@ -10,16 +10,23 @@ from django.db.models import Q
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.utils.translation import gettext_lazy as _, ngettext
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
+from django.utils.translation import ngettext
 
 from apps.cards.models import RFID
 from apps.cards.sync import serialize_rfid
 from apps.content.utils import capture_screenshot, save_screenshot
 from apps.core.system_ui import systemd_unit_status
-from apps.ocpp.models import CPForwarder, Charger
+from apps.netmesh.models import NodeKeyMaterial
+from apps.ocpp.models import Charger, CPForwarder
 
 from ..models import NetMessage, Node
-from ..services.enrollment import approve_enrollment, issue_enrollment_token, revoke_enrollment
+from ..services.enrollment import (
+    approve_enrollment,
+    issue_enrollment_token,
+    revoke_enrollment,
+)
 from .forms import DownloadFirmwareForm, SendNetMessageForm
 
 
@@ -65,6 +72,30 @@ def approve_mesh_enrollment(modeladmin, request, queryset):
         )
 
 
+@admin.action(description=_("Enroll selected nodes"))
+def enroll_mesh_nodes(modeladmin, request, queryset):
+    updated = 0
+    for node in queryset:
+        issue_enrollment_token(
+            node=node,
+            actor=request.user,
+            site=node.base_site,
+            reissue=True,
+        )
+        updated += 1
+    if updated:
+        modeladmin.message_user(
+            request,
+            ngettext(
+                "Issued enrollment token for %(count)d node.",
+                "Issued enrollment tokens for %(count)d nodes.",
+                updated,
+            )
+            % {"count": updated},
+            messages.SUCCESS,
+        )
+
+
 @admin.action(description=_("Revoke mesh enrollment"))
 def revoke_mesh_enrollment(modeladmin, request, queryset):
     updated = 0
@@ -81,6 +112,40 @@ def revoke_mesh_enrollment(modeladmin, request, queryset):
             )
             % {"count": updated},
             messages.SUCCESS,
+        )
+
+
+@admin.action(description=_("Rotate mesh key"))
+def rotate_mesh_key(modeladmin, request, queryset):
+    rotated = 0
+    for node in queryset:
+        active_key = (
+            NodeKeyMaterial.objects.filter(node=node, revoked=False)
+            .order_by("-created_at", "-id")
+            .first()
+        )
+        if active_key:
+            active_key.rotated_at = timezone.now()
+            active_key.revoked = True
+            active_key.revoked_at = timezone.now()
+            active_key.save(update_fields=["rotated_at", "revoked", "revoked_at"])
+        issue_enrollment_token(
+            node=node,
+            actor=request.user,
+            site=node.base_site,
+            reissue=True,
+        )
+        rotated += 1
+    if rotated:
+        modeladmin.message_user(
+            request,
+            ngettext(
+                "Rotated %(count)d node key.",
+                "Rotated %(count)d node keys.",
+                rotated,
+            )
+            % {"count": rotated},
+            messages.WARNING,
         )
 
 
