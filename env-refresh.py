@@ -795,20 +795,18 @@ def run_database_tasks(
                 MissingBranchSplinterError,
                 InvalidBasesError,
             ) as exc:
-                mismatch_message = (
-                    "Migration graph/version mismatch detected: branch splinter "
-                    "conflict."
+                mismatch_reason = (
+                    "branch splinter conflict"
                     if isinstance(exc, MissingBranchSplinterError)
-                    else
-                    (
-                        "Migration graph/version mismatch detected: branch tag "
-                        "conflict."
+                    else (
+                        "branch tag conflict"
                         if isinstance(exc, BranchTagConflictError)
-                        else (
-                            "Migration graph/version mismatch detected: invalid "
-                            "migration bases."
-                        )
+                        else "invalid migration bases"
                     )
+                )
+                mismatch_message = (
+                    "Migration graph/version mismatch detected: "
+                    f"{mismatch_reason}."
                 )
                 print(mismatch_message, flush=True)
                 if auto_reconcile_on_mismatch and not migrate_reconcile:
