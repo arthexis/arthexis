@@ -1,0 +1,40 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "admin_requirements": "Admins can enable NFC login visibility from Suite Features without requiring detected RFID scanner hardware.",
+      "admin_views": [
+        "admin:features_feature_changelist"
+      ],
+      "code_locations": [
+        "apps/sites/templates/pages/login.html",
+        "apps/sites/views/management.py"
+      ],
+      "created_at": "2024-03-01T00:00:00Z",
+      "display": "NFC Login",
+      "is_deleted": false,
+      "is_enabled": false,
+      "is_seed_data": true,
+      "main_app": [
+        "sites"
+      ],
+      "metadata": {},
+      "node_feature": null,
+      "protocol_coverage": {},
+      "public_requirements": "When enabled, login page can expose RFID login CTA on NFC-capable browsers even without scanner feature detection.",
+      "public_views": [
+        "pages:login",
+        "pages:rfid-login"
+      ],
+      "service_requirements": "Relies on browser Web NFC support for client-side availability.",
+      "service_views": [
+        "apps.sites.views.management.CustomLoginView.get_context_data",
+        "apps.sites.views.management.rfid_login_page"
+      ],
+      "slug": "nfc-login",
+      "source": "mainstream",
+      "summary": "Controls NFC-first RFID login entry visibility on the public login page.",
+      "updated_at": "2024-03-01T00:00:00Z"
+    }
+  }
+]
