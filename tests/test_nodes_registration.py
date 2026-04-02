@@ -18,6 +18,21 @@ from apps.nodes.admin.visitor_registration import (
 )
 from apps.nodes.models import Node
 from apps.nodes.views import registration as registration_views
+from apps.nodes.views.registration.payload import build_payload
+
+
+@pytest.mark.parametrize("relation_value", ["Sibling", "SIBLING"])
+def test_build_payload_preserves_sibling_relation(relation_value):
+    payload = build_payload(
+        {
+            "hostname": "node-1",
+            "mac_address": "aa:bb:cc:dd:ee:01",
+            "address": "203.0.113.1",
+            "current_relation": relation_value,
+        }
+    )
+
+    assert payload.relation_value == Node.Relation.SIBLING
 
 
 @pytest.mark.django_db

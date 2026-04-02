@@ -87,6 +87,7 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         UPSTREAM = "UPSTREAM", "Upstream"
         DOWNSTREAM = "DOWNSTREAM", "Downstream"
         PEER = "PEER", "Peer"
+        SIBLING = "SIBLING", "Sibling"
         SELF = "SELF", "Self"
 
     class MeshEnrollmentState(models.TextChoices):
