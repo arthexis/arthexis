@@ -50,3 +50,18 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
 10. Launch the Django server on `127.0.0.1:<port>` by default, using `--noreload`
    unless `--reload` was requested. Service scripts that need LAN exposure pass an
    explicit bind address instead of relying on the CLI default.
+
+
+## Operational cleanup ownership
+
+Import-time hooks in `AppConfig.ready()` are limited to signal/module wiring only.
+Operational cleanup is owned by app-level maintenance entry points:
+
+- OCPP cached status reset: `manage.py reset_cached_statuses` or
+  `apps.ocpp.tasks.reset_cached_statuses`.
+- Sites view history purge: `manage.py purge_view_history` or
+  `apps.sites.tasks.purge_view_history` (scheduled by Celery Beat).
+- Cross-app startup orchestration: `manage.py startup_maintenance`.
+
+This keeps startup side effects explicit and discoverable from operational
+commands and scheduler configuration instead of import-time behavior.

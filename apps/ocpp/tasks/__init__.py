@@ -20,6 +20,7 @@ from .notifications import (
     send_offline_charge_point_notifications,
 )
 from .projection import request_power_projection, schedule_power_projection_requests
+from .startup import reset_cached_statuses_task
 
 __all__ = [
     "check_charge_point_configuration",
@@ -29,6 +30,7 @@ __all__ = [
     "request_charge_point_firmware",
     "request_charge_point_log",
     "request_power_projection",
+    "reset_cached_statuses_task",
     "schedule_daily_charge_point_configuration_checks",
     "schedule_daily_firmware_snapshot_requests",
     "schedule_power_projection_requests",

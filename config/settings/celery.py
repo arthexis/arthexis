@@ -64,6 +64,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.certs.tasks.refresh_certificate_expirations",
         "schedule": crontab(minute=0, hour=2),
     },
+    "site_view_history_purge": {
+        "task": "apps.sites.tasks.purge_view_history",
+        "schedule": crontab(minute=45, hour=3),
+    },
     "log_retention_guard": {
         "task": "apps.core.tasks.log_retention.enforce_log_retention",
         "schedule": crontab(minute=15, hour=4),
