@@ -169,13 +169,15 @@
                   {% endfor %}
                 </select>
               </form>
-              <a class="btn btn-sm btn-outline-light position-relative user-info-trigger" href="{% if request.user.is_authenticated %}{% url 'admin:index' %}{% else %}{{ login_url }}{% endif %}">
+              <a class="btn btn-sm btn-outline-light position-relative user-info-trigger" href="{% if request.user.is_staff %}{% url 'admin:index' %}{% elif request.user.is_authenticated %}#{% else %}{{ login_url }}{% endif %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-person"></use>
                 </svg>
                 <span class="visually-hidden">
-                  {% if request.user.is_authenticated %}
+                  {% if request.user.is_staff %}
                     {% trans "Admin" %}
+                  {% elif request.user.is_authenticated %}
+                    {% trans "User Profile" %}
                   {% else %}
                     {% trans "Login" %}
                   {% endif %}

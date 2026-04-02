@@ -195,6 +195,51 @@ def test_feedback_page_link_visibility(client, is_authenticated, has_copy_link):
     assert ("data-feedback-copy" in html) is has_copy_link
 
 
+@pytest.mark.parametrize(
+    ("user_kwargs", "expected_href", "expects_tooltip", "expects_staff_badge"),
+    [
+        (None, reverse("pages:login"), False, False),
+        (
+            {
+                "username": "public-nonstaff",
+                "email": "public-nonstaff@example.com",
+                "password": "secret",
+                "is_staff": False,
+            },
+            "#",
+            True,
+            False,
+        ),
+        (
+            {
+                "username": "public-staff",
+                "email": "public-staff@example.com",
+                "password": "secret",
+                "is_staff": True,
+            },
+            reverse("admin:index"),
+            True,
+            True,
+        ),
+    ],
+)
+def test_public_nav_only_exposes_admin_entrypoint_to_staff(
+    client, user_kwargs, expected_href, expects_tooltip, expects_staff_badge
+):
+    if user_kwargs is not None:
+        user = get_user_model().objects.create_user(**user_kwargs)
+        client.force_login(user)
+
+    response = client.get(reverse("pages:index"))
+    html = response.content.decode()
+
+    assert response.status_code == 200
+    assert f'href="{expected_href}"' in html
+    assert "user-info-trigger" in html
+    assert ("user-info-tooltip" in html) is expects_tooltip
+    assert (" - Staff" in html) is expects_staff_badge
+
+
 def test_admin_feedback_page_link_is_not_clickable_for_anonymous_users(rf):
     request = rf.get("/admin/")
     request.user = AnonymousUser()
