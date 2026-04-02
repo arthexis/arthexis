@@ -4,9 +4,11 @@ from pathlib import Path
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.models import Group
 from django.contrib.sites.models import Site
 from django.core.exceptions import PermissionDenied
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -167,25 +169,40 @@ def test_release_checklist_requires_staff(client):
     assert client.get(url).status_code in (200, 404)
 
 
-def test_feedback_page_link_is_not_clickable_for_anonymous_users(client):
+@pytest.mark.parametrize(
+    ("is_authenticated", "has_copy_link"),
+    [
+        (False, False),
+        (True, True),
+    ],
+)
+def test_feedback_page_link_visibility(client, is_authenticated, has_copy_link):
     url = reverse("pages:index")
+    if is_authenticated:
+        user = get_user_model().objects.create_user(
+            username="feedback-user",
+            email="feedback-user@example.com",
+            password="secret",
+        )
+        client.force_login(user)
 
-    anonymous_response = client.get(url)
-    anonymous_html = anonymous_response.content.decode()
-    assert anonymous_response.status_code == 200
-    assert "Please rate this page" in anonymous_html
-    assert "data-feedback-copy" not in anonymous_html
+    response = client.get(url)
+    html = response.content.decode()
 
-    user = get_user_model().objects.create_user(
-        username="feedback-user",
-        email="feedback-user@example.com",
-        password="secret",
-    )
-    client.force_login(user)
-    authenticated_response = client.get(url)
-    authenticated_html = authenticated_response.content.decode()
-    assert authenticated_response.status_code == 200
-    assert "data-feedback-copy" in authenticated_html
+    assert response.status_code == 200
+    if not is_authenticated:
+        assert "Please rate this page" in html
+    assert ("data-feedback-copy" in html) is has_copy_link
+
+
+def test_admin_feedback_page_link_is_not_clickable_for_anonymous_users(rf):
+    request = rf.get("/admin/")
+    request.user = AnonymousUser()
+    request.path = "/admin/"
+    html = render_to_string("admin/includes/user_story_feedback.html", request=request)
+
+    assert "Please rate this page" in html
+    assert "data-feedback-copy" not in html
 
 
 def test_require_site_operator_or_staff_enforces_admin_operator_boundary(rf):
