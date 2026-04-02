@@ -395,7 +395,7 @@ def _collect_document_library(
 def _get_cached_document_library_paths(root_base: Path) -> tuple[list[Path], list[Path]]:
     """Return cached document path lists to avoid repeated filesystem scans."""
 
-    cache_key = f"{DOCUMENT_LIBRARY_CACHE_KEY}:paths"
+    cache_key = f"{DOCUMENT_LIBRARY_CACHE_KEY}:paths:{root_base.as_posix()}"
     cached_paths = cache.get(cache_key)
     if cached_paths is not None:
         docs_paths = [Path(path) for path in cached_paths["docs"]]
