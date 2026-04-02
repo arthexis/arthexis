@@ -162,6 +162,13 @@ class CPForwarder(Entity):
             "Select the CSMS actions that should be accepted from the remote node."
         ),
     )
+    forwarding_frequency_hz = models.FloatField(
+        default=0.0,
+        help_text=_(
+            "Forward message batches at this frequency. Set to 0 for immediate "
+            "real-time forwarding."
+        ),
+    )
     is_running = models.BooleanField(
         default=False,
         editable=False,
@@ -223,6 +230,8 @@ class CPForwarder(Entity):
             self.forwarded_messages
         )
         self.forwarded_calls = self.sanitize_forwarded_calls(self.forwarded_calls)
+        if self.forwarding_frequency_hz < 0:
+            self.forwarding_frequency_hz = 0.0
         if self.source_node_id is None:
             local = Node.get_local()
             if local:
@@ -477,6 +486,12 @@ class CPForwarder(Entity):
 
     def get_forwarded_calls(self) -> list[str]:
         return self.sanitize_forwarded_calls(self.forwarded_calls)
+
+    def get_forwarding_interval_seconds(self) -> float:
+        value = self.forwarding_frequency_hz or 0.0
+        if value <= 0:
+            return 0.0
+        return 1.0 / value
 
     def forwards_action(self, action: str) -> bool:
         if not action:

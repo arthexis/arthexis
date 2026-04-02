@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import datetime
@@ -20,6 +21,70 @@ logger = logging.getLogger(__name__)
 
 class CSMSTransportMixin:
     """Provide forwarding transport helpers for CSMSConsumer."""
+
+    @staticmethod
+    def _forwarding_interval_seconds(session) -> float:
+        interval = getattr(session, "forwarding_interval_seconds", 0.0) or 0.0
+        try:
+            return max(0.0, float(interval))
+        except (TypeError, ValueError):
+            return 0.0
+
+    async def _flush_buffered_forward_messages(self, session, *, now: datetime) -> bool:
+        lock = getattr(session, "_cp_messages_lock", None)
+        if lock is None:
+            return False
+        with lock:
+            session._cp_flush_handle = None
+            pending = dict(getattr(session, "pending_cp_messages", {}))
+            if not pending:
+                return False
+        forwarded = False
+        for action, payload in pending.items():
+            await sync_to_async(session.connection.send)(payload)
+            forwarded = True
+            with lock:
+                if session.pending_cp_messages.get(action) == payload:
+                    session.pending_cp_messages.pop(action, None)
+        with lock:
+            session.last_cp_flush_at = now
+        return forwarded
+
+    async def _send_or_buffer_cp_payload(
+        self,
+        *,
+        session,
+        action: str,
+        wrapped_payload: str,
+    ) -> bool:
+        """Forward immediately or enqueue based on session forwarding interval."""
+        interval_seconds = self._forwarding_interval_seconds(session)
+        if interval_seconds <= 0:
+            self._cancel_scheduled_cp_flush(session)
+            await self._flush_buffered_forward_messages(session, now=timezone.now())
+            await sync_to_async(session.connection.send)(wrapped_payload)
+            return True
+
+        lock = getattr(session, "_cp_messages_lock", None)
+        if lock is None:
+            await sync_to_async(session.connection.send)(wrapped_payload)
+            return True
+
+        now = timezone.now()
+        with lock:
+            session.pending_cp_messages[action] = wrapped_payload
+            last_flush = getattr(session, "last_cp_flush_at", None)
+            should_flush = last_flush is None or (now - last_flush).total_seconds() >= interval_seconds
+        if should_flush:
+            return await self._flush_buffered_forward_messages(
+                session,
+                now=now,
+            )
+        self._schedule_cp_flush(
+            session,
+            interval_seconds=interval_seconds,
+        )
+        return False
 
     async def _ensure_forwarding_context(
         self, charger
@@ -132,9 +197,13 @@ class CSMSTransportMixin:
         if allowed is not None and action not in allowed:
             return
 
+        wrapped_payload = self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms")
+        forwarded = False
         try:
-            await sync_to_async(session.connection.send)(
-                self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms")
+            forwarded = await self._send_or_buffer_cp_payload(
+                session=session,
+                action=action,
+                wrapped_payload=wrapped_payload,
             )
         except Exception as exc:  # pragma: no cover
             logger.warning(
@@ -144,6 +213,11 @@ class CSMSTransportMixin:
                 getattr(session, "url", "unknown"),
                 exc,
             )
+            preserved_pending: dict[str, str] = {}
+            lock = getattr(session, "_cp_messages_lock", None)
+            if lock is not None:
+                with lock:
+                    preserved_pending = dict(getattr(session, "pending_cp_messages", {}))
             forwarder.remove_session(charger.pk)
             session, refreshed = await self._reconnect_forwarding_session(
                 charger,
@@ -159,11 +233,22 @@ class CSMSTransportMixin:
             allowed, forwarder_pk = context
             session.forwarded_messages = allowed
             session.forwarder_id = forwarder_pk
+            lock = getattr(session, "_cp_messages_lock", None)
+            if lock is not None and preserved_pending:
+                with lock:
+                    for pending_action, payload in preserved_pending.items():
+                        session.pending_cp_messages.setdefault(pending_action, payload)
             if allowed is not None and action not in allowed:
                 return
             try:
-                await sync_to_async(session.connection.send)(
-                    self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms")
+                forwarded = await self._send_or_buffer_cp_payload(
+                    session=session,
+                    action=action,
+                    wrapped_payload=self._wrap_forwarding_payload(
+                        charger,
+                        raw,
+                        direction="cp_to_csms",
+                    ),
                 )
             except Exception as retry_exc:  # pragma: no cover
                 logger.warning(
@@ -174,6 +259,9 @@ class CSMSTransportMixin:
                 )
                 forwarder.remove_session(charger.pk)
                 return
+
+        if not forwarded:
+            return
 
         timestamp = timezone.now()
         session.last_activity = timestamp
@@ -241,3 +329,43 @@ class CSMSTransportMixin:
         if local_node and getattr(local_node, "uuid", None):
             meta["route"] = [str(local_node.uuid)]
         return json.dumps({"ocpp": payload, "meta": meta})
+
+    @staticmethod
+    def _cancel_scheduled_cp_flush(session) -> None:
+        lock = getattr(session, "_cp_messages_lock", None)
+        if lock is None:
+            return
+        with lock:
+            handle = getattr(session, "_cp_flush_handle", None)
+            session._cp_flush_handle = None
+        if handle is not None:
+            handle.cancel()
+
+    def _schedule_cp_flush(self, session, *, interval_seconds: float) -> None:
+        lock = getattr(session, "_cp_messages_lock", None)
+        if lock is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        def _run_scheduled_flush() -> None:
+            loop.create_task(self._run_scheduled_cp_flush(session))
+
+        with lock:
+            existing = getattr(session, "_cp_flush_handle", None)
+            if existing is not None and not existing.cancelled():
+                return
+            session._cp_flush_handle = loop.call_later(interval_seconds, _run_scheduled_flush)
+
+    async def _run_scheduled_cp_flush(self, session) -> None:
+        try:
+            await self._flush_buffered_forward_messages(session, now=timezone.now())
+        except Exception as exc:  # pragma: no cover
+            logger.warning(
+                "Scheduled flush failed for charger %s via %s: %s",
+                getattr(session, "charger_pk", "unknown"),
+                getattr(session, "url", "unknown"),
+                exc,
+            )
