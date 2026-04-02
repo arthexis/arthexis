@@ -82,7 +82,8 @@ Other arguments are passed through to `scripts/service-start.sh`.
 | `--stash` | Force auto-stash of local changes before upgrade. |
 | `--force-refresh` | Force environment/dependency refresh steps. |
 | `--clean` | Run clean-upgrade mode (destructive DB cleanup path with warning unless bypassed). |
-| `--migrate` | Rebuild via clean mode and reconcile compatible data from a pre-migration snapshot (SQLite and PostgreSQL only). |
+| `--migrate` | Rebuild via clean mode and reconcile compatible rows from a pre-migration snapshot (supported on SQLite and PostgreSQL only). |
+| `--reconcile` | Keep normal upgrade flow, but auto-retry with reconciliation only when migration graph/version mismatches are detected. |
 | `--no-start`, `--no-restart` | Keep services stopped after upgrade. |
 | `--start`, `-s` | Force startup after upgrade. |
 | `--stop` | Stop services and exit (no restart). |
@@ -101,6 +102,8 @@ Other arguments are passed through to `scripts/service-start.sh`.
 ### `--migrate` backend behavior
 
 `upgrade.sh --migrate` delegates to `env-refresh.py --migrate` and always forces a clean migration cycle before reconciliation.
+
+`upgrade.sh --reconcile` delegates to `env-refresh.py --reconcile` and does **not** force a clean cycle upfront; it only retries with reconciliation after a migration graph/version mismatch is detected.
 
 - **SQLite (`django.db.backends.sqlite3`)**
   - Creates `.locks/<db>.pre_major_migrate.sqlite3`.
