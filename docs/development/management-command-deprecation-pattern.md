@@ -16,7 +16,13 @@ Use a short mapping table in docs/changelog content so operators can update auto
 For one-time script updates, include a simple substitution example:
 
 ```bash
+# GNU sed
 sed -i \
+  -e 's|.venv/bin/python manage.py old_command|.venv/bin/python manage.py new_command|g' \
+  path/to/ops-script.sh
+
+# BSD/macOS sed
+sed -i '' \
   -e 's|.venv/bin/python manage.py old_command|.venv/bin/python manage.py new_command|g' \
   path/to/ops-script.sh
 ```
