@@ -69,6 +69,7 @@ logger = logging.getLogger(__name__)
 
 PASSKEY_CHALLENGE_SESSION_KEY = "passkey_login_challenge"
 NFC_LOGIN_FEATURE_SLUG = "nfc-login"
+RFID_FEATURE_SLUGS = ("rfid", "rfid-scanner")
 
 
 class _GraphvizDeprecationFilter(logging.Filter):
@@ -478,15 +479,14 @@ class CustomLoginView(LoginView):
         node = Node.get_local()
         has_rfid_feature = False
         had_rfid_feature = False
-        rfid_features = ("rfid", "rfid-scanner")
         nfc_login_enabled = is_suite_feature_enabled(NFC_LOGIN_FEATURE_SLUG, default=False)
         if node:
             had_rfid_feature = any(
-                node.has_feature(feature) for feature in rfid_features
+                node.has_feature(feature) for feature in RFID_FEATURE_SLUGS
             )
             ensure_feature_enabled("rfid-scanner", node=node, logger=logger)
             has_rfid_feature = (
-                any(node.has_feature(feature) for feature in rfid_features)
+                any(node.has_feature(feature) for feature in RFID_FEATURE_SLUGS)
                 or had_rfid_feature
             )
         context["show_rfid_login"] = has_rfid_feature or nfc_login_enabled
@@ -607,7 +607,7 @@ def rfid_login_page(request):
     nfc_login_enabled = is_suite_feature_enabled(NFC_LOGIN_FEATURE_SLUG, default=False)
     ensure_feature_enabled("rfid-scanner", node=node, logger=logger)
     has_rfid_feature = bool(node) and any(
-        node.has_feature(feature) for feature in ("rfid", "rfid-scanner")
+        node.has_feature(feature) for feature in RFID_FEATURE_SLUGS
     )
     if not has_rfid_feature and not nfc_login_enabled:
         raise Http404
@@ -623,7 +623,7 @@ def rfid_login_page(request):
         redirect_target = ""
     context = {
         "login_api_url": reverse("rfid-login"),
-        "scan_api_url": reverse("rfid-scan-next"),
+        "scan_api_url": reverse("rfid-scan-next") if has_rfid_feature else "",
         "redirect_field_name": redirect_field_name,
         "redirect_target": redirect_target,
         "back_url": reverse("pages:login"),

@@ -28,6 +28,7 @@ def test_login_page_hides_rfid_link_without_rfid_or_nfc_feature(client, monkeypa
     response = client.get(reverse("pages:login"))
     assert response.status_code == 200
     assert response.context["show_rfid_login"] is False
+    assert response.context["show_rfid_login_when_nfc_available"] is False
 
 
 def test_login_page_shows_nfc_conditioned_rfid_link_when_feature_enabled(client, monkeypatch):
@@ -57,6 +58,16 @@ def test_rfid_login_page_allows_nfc_feature_without_node_scanner(client, monkeyp
     monkeypatch.setattr("apps.sites.views.management.Node.get_local", lambda: None)
     response = client.get(reverse("pages:rfid-login"))
     assert response.status_code == 200
+
+
+def test_rfid_login_page_omits_scan_url_without_rfid_scanner(client, monkeypatch):
+    """NFC-only RFID login page should not poll scanner endpoint when scanner is absent."""
+
+    _set_nfc_login_feature(True)
+    monkeypatch.setattr("apps.sites.views.management.Node.get_local", lambda: None)
+    response = client.get(reverse("pages:rfid-login"))
+    assert response.status_code == 200
+    assert response.context["scan_api_url"] == ""
 
 
 def test_rfid_login_page_requires_rfid_or_nfc_feature(client, monkeypatch):
