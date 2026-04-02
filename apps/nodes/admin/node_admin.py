@@ -81,6 +81,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         Node.Relation.UPSTREAM: "⬆️",
         Node.Relation.DOWNSTREAM: "⬇️",
         Node.Relation.PEER: "↔️",
+        Node.Relation.SIBLING: "🧩",
         Node.Relation.SELF: "🏠",
     }
 

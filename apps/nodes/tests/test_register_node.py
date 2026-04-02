@@ -636,3 +636,26 @@ def test_redact_mac_for_log_masks_plaintext_value():
 
     assert redacted == f"***REDACTED***-{expected_hash}"
     assert _redact_mac_for_log("aabbccddeeff") == redacted
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("relation_value", ["Sibling", "SIBLING"])
+def test_register_node_preserves_sibling_relation(admin_user, relation_value):
+    payload = {
+        "hostname": "visitor-host-sibling",
+        "mac_address": "aa:bb:cc:dd:ee:66",
+        "address": "192.0.2.66",
+        "port": 8888,
+        "current_relation": relation_value,
+    }
+
+    factory = RequestFactory()
+    request = _build_request(factory, payload)
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    response = register_node(request)
+
+    assert response.status_code == 200
+    node = Node.objects.get(mac_address=payload["mac_address"])
+    assert node.current_relation == Node.Relation.SIBLING
