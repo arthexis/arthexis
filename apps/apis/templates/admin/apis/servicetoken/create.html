@@ -1,0 +1,14 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+  <div class="admin-ui-panel admin-ui-stack">
+    <h1>{{ title }}</h1>
+    <p class="admin-ui-muted">Only operators with token management permission can issue scoped credentials.</p>
+    <form method="post" class="admin-ui-stack">{% csrf_token %}
+      {{ form.as_p }}
+      <div class="admin-ui-actions">
+        <button type="submit" class="admin-ui-button admin-ui-button--primary">Issue token</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}

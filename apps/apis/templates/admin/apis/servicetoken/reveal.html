@@ -1,0 +1,14 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+  <div class="admin-ui-panel admin-ui-stack">
+    <h1>{{ title }}</h1>
+    {% if secret %}
+      <p><strong>Token:</strong> {{ secret }}</p>
+      <p class="admin-ui-muted">Copy now. This secret is shown once and is not stored in retrievable form.</p>
+    {% else %}
+      <p>This token secret is no longer available for reveal.</p>
+    {% endif %}
+    <p><a href="{% url 'admin:apis_servicetoken_changelist' %}">Back to tokens</a></p>
+  </div>
+{% endblock %}
