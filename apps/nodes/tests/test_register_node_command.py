@@ -1,5 +1,6 @@
 import base64
 import json
+from pathlib import Path
 
 import pytest
 from django.conf import settings
@@ -174,4 +175,5 @@ def test_node_register_path_mode_uses_base_dir_for_reciprocal_path(monkeypatch, 
 
     assert captured["path"] == sibling_path.resolve()
     reciprocal_index = captured["manage_args"].index("--path") + 1
-    assert captured["manage_args"][reciprocal_index] == str(settings.BASE_DIR)
+    expected = Path(settings.BASE_DIR).resolve().as_posix()
+    assert captured["manage_args"][reciprocal_index] == expected
