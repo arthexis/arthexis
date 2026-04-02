@@ -224,9 +224,6 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             )
             return redirect("..")
 
-        if not RecordingDevice.objects.filter(node=node).exists():
-            RecordingDevice.refresh_from_system(node=node)
-
         devices = RecordingDevice.objects.filter(node=node)
         if not devices.exists():
             self.message_user(
