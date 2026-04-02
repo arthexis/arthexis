@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from .forms import SSHAccountAdminForm
@@ -12,6 +13,7 @@ class SSHAccountAdmin(admin.ModelAdmin):
         "username",
         "node",
         "authentication_method",
+        "credential_status",
         "updated_at",
     )
     list_filter = ("node",)
@@ -43,6 +45,16 @@ class SSHAccountAdmin(admin.ModelAdmin):
         if (obj.password or "").strip():
             return _("Password")
         return _("Not set")
+
+    @admin.display(description=_("Credential status"))
+    def credential_status(self, obj: SSHAccount) -> str:
+        has_auth = bool((obj.password or "").strip() or obj.private_key_media_id or obj.public_key_media_id)
+        if not has_auth:
+            return _("Missing")
+        age = timezone.now() - obj.updated_at
+        if age.days > 180:
+            return _("Set (review recommended)")
+        return _("Set")
 
     @admin.display(description=_("Private key metadata"))
     def private_key_metadata(self, obj: SSHAccount) -> str:
