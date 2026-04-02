@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from django.apps import apps as django_apps
+from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.management.base import CommandError
 from django.db import transaction
@@ -311,8 +313,63 @@ class HttpsProvisioningService:
         elif updated_fields:
             site.save(update_fields=updated_fields)
 
+        self._set_default_site(site=site, domain=domain, require_https=require_https)
         update_local_nginx_scripts()
 
+    def _set_default_site(self, *, site: Site, domain: str, require_https: bool) -> None:
+        """Ensure the configured Django default site points at the managed domain."""
+
+        default_site_id = getattr(settings, "SITE_ID", None)
+        if not isinstance(default_site_id, int) or default_site_id <= 0:
+            return
+
+        default_site, _ = Site.objects.get_or_create(
+            pk=default_site_id,
+            defaults={"domain": domain, "name": domain},
+        )
+
+        if site.pk != default_site.pk:
+            self._reassign_site_relations(source=site, target=default_site)
+            site.delete()
+
+        default_site.domain = domain
+        default_site.name = domain
+        default_site_updates = ["domain", "name"]
+        if hasattr(default_site, "managed") and not getattr(default_site, "managed"):
+            setattr(default_site, "managed", True)
+            default_site_updates.append("managed")
+        if (
+            hasattr(default_site, "require_https")
+            and getattr(default_site, "require_https") != require_https
+        ):
+            setattr(default_site, "require_https", require_https)
+            default_site_updates.append("require_https")
+        default_site.save(update_fields=default_site_updates)
+
+    @staticmethod
+    def _reassign_site_relations(*, source: Site, target: Site) -> None:
+        """Move model relations from ``source`` site to ``target`` site."""
+
+        if source.pk == target.pk:
+            return
+
+        for model in django_apps.get_models():
+            for field in model._meta.concrete_fields:
+                remote_field = getattr(field, "remote_field", None)
+                if remote_field is None or remote_field.model is not Site:
+                    continue
+
+                relation_filter = {field.name: source}
+                relation_update = {field.name: target}
+                if field.one_to_one:
+                    source_qs = model._default_manager.filter(**relation_filter)
+                    if model._default_manager.filter(**{field.name: target}).exists():
+                        source_qs.delete()
+                    else:
+                        source_qs.update(**relation_update)
+                    continue
+
+                model._default_manager.filter(**relation_filter).update(**relation_update)
 
     def _migrate_domain_records(
         self,
