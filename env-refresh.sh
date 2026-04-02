@@ -91,6 +91,7 @@ DEPS_ONLY=0
 INSTALL_AND_REFRESH=0
 INSTALL_PREVIEW_DEPS=0
 MIGRATE_RECONCILE=0
+AUTO_RECONCILE_ON_MISMATCH=0
 
 LATEST=0
 CLEAN=0
@@ -126,6 +127,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --migrate)
       MIGRATE_RECONCILE=1
+      shift
+      ;;
+    --reconcile)
+      AUTO_RECONCILE_ON_MISMATCH=1
       shift
       ;;
     *)
@@ -707,6 +712,9 @@ if [ "$CLEAN" -eq 1 ]; then
 fi
 if [ "$MIGRATE_RECONCILE" -eq 1 ]; then
   ARGS="$ARGS --migrate"
+fi
+if [[ "$AUTO_RECONCILE_ON_MISMATCH" -eq 1 ]]; then
+  ARGS="$ARGS --reconcile"
 fi
 "$PYTHON" env-refresh.py $ARGS database
 echo "Timing: env-refresh.sh completed in $(elapsed_ms "$SCRIPT_START_MS")ms"

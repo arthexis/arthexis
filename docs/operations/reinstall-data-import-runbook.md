@@ -60,6 +60,44 @@ If you are performing a major-version refresh and need best-effort row carryover
 
 Review reconciliation output after the run; it reports copied tables plus skipped tables/columns/rows for auditability.
 
+### Optional: safe fallback `--reconcile`
+
+For standard upgrades where you want to keep manual behavior by default but allow
+automatic rescue for migration graph/version mismatches:
+
+```bash
+./upgrade.sh --reconcile
+```
+
+When enabled, if `env-refresh.py` detects mismatch failures (for example
+`InvalidBasesError` or branch splinter/tag conflicts), it logs:
+
+1. mismatch detected,
+2. fallback engaged,
+3. reconciliation summary (`copied=`, `skipped=`, `missing=`).
+
+Without this flag, behavior stays manual and fail-fast, and operators must rerun
+with explicit reconciliation (for example `./upgrade.sh --migrate`).
+
+#### Rollback steps after fallback
+
+1. Stop services (`./upgrade.sh --stop`) before restoration.
+2. Restore from your pre-upgrade DB backup/snapshot (or from the generated
+   `.locks/*.pre_major_migrate.*` artifact if that is your approved rollback
+   source).
+3. Re-run upgrade in manual mode and inspect migration health before continuing.
+
+#### Post-check steps after fallback
+
+Run the same minimum gates as any reinstall/import flow:
+
+```bash
+.venv/bin/python manage.py migrate --noinput
+bash -lc 'source scripts/helpers/runserver_preflight.sh && run_runserver_preflight'
+.venv/bin/python manage.py health --group core --group ocpp --force
+.venv/bin/python manage.py test run -- apps/ocpp/tests/test_chargers_command.py apps/ocpp/tests/test_simulator_command.py
+```
+
 ## 3) Import approved data payloads
 
 If your import package is Django fixtures:

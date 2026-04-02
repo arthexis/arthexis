@@ -97,6 +97,15 @@ def _migration_recovery_message(using_sqlite: bool) -> str:
 def _emit_reconciliation_report(report: ReconcileReport) -> None:
     """Print a backend-agnostic reconciliation summary."""
 
+    skipped_total = len(report.skipped_tables) + sum(report.skipped_rows.values())
+    missing_total = len(report.missing_in_target) + len(report.missing_in_source)
+    print(
+        "Reconciliation summary: "
+        f"copied={len(report.copied_tables)} "
+        f"skipped={skipped_total} "
+        f"missing={missing_total}",
+        flush=True,
+    )
     print(
         "Major-version migration reconciliation "
         f"({report.backend}) copied {len(report.copied_tables)} table(s).",
@@ -126,6 +135,40 @@ def _emit_reconciliation_report(report: ReconcileReport) -> None:
         print("Skipped incompatible tables:", flush=True)
         for table, reason in sorted(report.skipped_tables.items()):
             print(f"  - {table}: {reason}", flush=True)
+
+
+def _prepare_reconcile_snapshot(
+    *,
+    using_sqlite: bool,
+    default_db: dict[str, Any],
+    locks_dir: Path,
+    base_dir: Path,
+) -> tuple[Path | None, Path | None, str | None]:
+    """Capture a pre-migration reconciliation snapshot when possible."""
+
+    if using_sqlite:
+        reconcile_db_path = Path(default_db["NAME"])
+        if not reconcile_db_path.exists():
+            return None, reconcile_db_path, None
+        reconcile_backup_db = backup_sqlite_database(
+            reconcile_db_path,
+            locks_dir,
+        )
+        print(
+            "Prepared pre-migration backup for major-version reconciliation: "
+            f"{reconcile_backup_db.relative_to(base_dir)}",
+            flush=True,
+        )
+        return reconcile_backup_db, reconcile_db_path, None
+    if default_db["ENGINE"] == "django.db.backends.postgresql":
+        reconcile_backup_db = backup_postgres_database(default_db, locks_dir)
+        print(
+            "Prepared PostgreSQL snapshot for major-version reconciliation: "
+            f"{reconcile_backup_db.relative_to(base_dir)}",
+            flush=True,
+        )
+        return reconcile_backup_db, None, POSTGRES_RECONCILE_TEMP_DB
+    raise CommandError("--migrate supports only SQLite and PostgreSQL backends.")
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing support
@@ -633,6 +676,8 @@ def run_database_tasks(
     clean: bool = False,
     force_db: bool = False,
     migrate_reconcile: bool = False,
+    auto_reconcile_on_mismatch: bool = False,
+    prepared_reconcile_backup_db: Path | None = None,
 ) -> None:
     """Run all database related maintenance steps."""
     default_db = settings.DATABASES["default"]
@@ -647,31 +692,35 @@ def run_database_tasks(
     local_apps = _local_app_labels()
 
     if migrate_reconcile:
-        if using_sqlite:
-            reconcile_db_path = Path(default_db["NAME"])
-            if reconcile_db_path.exists():
-                reconcile_backup_db = backup_sqlite_database(
-                    reconcile_db_path,
-                    locks_dir,
-                )
-                print(
-                    "Prepared pre-migration backup for major-version reconciliation: "
-                    f"{reconcile_backup_db.relative_to(base_dir)}",
-                    flush=True,
-                )
-        elif default_db["ENGINE"] == "django.db.backends.postgresql":
-            reconcile_backup_db = backup_postgres_database(default_db, locks_dir)
-            reconcile_postgres_db_name = POSTGRES_RECONCILE_TEMP_DB
-            print(
-                "Prepared PostgreSQL snapshot for major-version reconciliation: "
-                f"{reconcile_backup_db.relative_to(base_dir)}",
-                flush=True,
-            )
+        if prepared_reconcile_backup_db:
+            reconcile_backup_db = prepared_reconcile_backup_db
+            if using_sqlite:
+                reconcile_db_path = Path(default_db["NAME"])
+            elif default_db["ENGINE"] == "django.db.backends.postgresql":
+                reconcile_postgres_db_name = POSTGRES_RECONCILE_TEMP_DB
         else:
-            raise CommandError(
-                "--migrate supports only SQLite and PostgreSQL backends."
+            (
+                reconcile_backup_db,
+                reconcile_db_path,
+                reconcile_postgres_db_name,
+            ) = _prepare_reconcile_snapshot(
+                using_sqlite=using_sqlite,
+                default_db=default_db,
+                locks_dir=locks_dir,
+                base_dir=base_dir,
             )
         clean = True
+    elif auto_reconcile_on_mismatch:
+        (
+            reconcile_backup_db,
+            reconcile_db_path,
+            reconcile_postgres_db_name,
+        ) = _prepare_reconcile_snapshot(
+            using_sqlite=using_sqlite,
+            default_db=default_db,
+            locks_dir=locks_dir,
+            base_dir=base_dir,
+        )
 
     _remove_integrator_from_auth_migration()
 
@@ -738,11 +787,43 @@ def run_database_tasks(
                     interactive=False,
                 )
                 migrations_ran = True
-            except MissingBranchSplinterError as exc:
-                raise CommandError(
-                    "Detected a retroactively edited migration branch that this "
-                    f"database skipped.\n{exc}\n{_migration_recovery_message(using_sqlite)}"
-                ) from exc
+            except (MissingBranchSplinterError, InvalidBasesError) as exc:
+                mismatch_message = (
+                    "Migration graph/version mismatch detected: branch splinter/tag "
+                    "conflict."
+                    if isinstance(exc, MissingBranchSplinterError)
+                    else (
+                        "Migration graph/version mismatch detected: invalid migration "
+                        "bases."
+                    )
+                )
+                print(mismatch_message, flush=True)
+                if auto_reconcile_on_mismatch and not migrate_reconcile:
+                    if reconcile_backup_db:
+                        print(
+                            "Auto-reconcile fallback engaged; retrying with migration "
+                            "reconciliation enabled.",
+                            flush=True,
+                        )
+                        return run_database_tasks(
+                            latest=latest,
+                            clean=clean,
+                            force_db=force_db,
+                            migrate_reconcile=True,
+                            auto_reconcile_on_mismatch=False,
+                            prepared_reconcile_backup_db=reconcile_backup_db,
+                        )
+                    raise CommandError(
+                        "Migration mismatch detected but no pre-attempt reconciliation "
+                        "snapshot is available; restore from your own backup and rerun "
+                        f"with --migrate.\n{_migration_recovery_message(using_sqlite)}"
+                    ) from exc
+                if isinstance(exc, MissingBranchSplinterError):
+                    raise CommandError(
+                        "Detected a retroactively edited migration branch that this "
+                        f"database skipped.\n{exc}\n{_migration_recovery_message(using_sqlite)}"
+                    ) from exc
+                raise CommandError(_migration_recovery_message(using_sqlite)) from exc
             except InconsistentMigrationHistory:
                 call_command("reset_ocpp_migrations")
                 _run_migrate(
@@ -751,8 +832,6 @@ def run_database_tasks(
                     interactive=False,
                 )
                 migrations_ran = True
-            except InvalidBasesError as exc:
-                raise CommandError(_migration_recovery_message(using_sqlite)) from exc
             except OperationalError as exc:
                 if using_sqlite:
                     _unlink_sqlite_db(Path(default_db["NAME"]))
@@ -1141,6 +1220,7 @@ def main(
     clean: bool = False,
     force_db: bool = False,
     migrate_reconcile: bool = False,
+    auto_reconcile_on_mismatch: bool = False,
 ) -> None:
     """Run the selected maintenance tasks."""
     to_run = selected or list(TASKS)
@@ -1150,6 +1230,7 @@ def main(
             clean=clean,
             force_db=force_db,
             migrate_reconcile=migrate_reconcile,
+            auto_reconcile_on_mismatch=auto_reconcile_on_mismatch,
         )
 
 
@@ -1175,6 +1256,14 @@ if __name__ == "__main__":
             "SQLite or PostgreSQL snapshot while ignoring incompatible structures."
         ),
     )
+    parser.add_argument(
+        "--reconcile",
+        action="store_true",
+        help=(
+            "When migration graph/version mismatches are detected, automatically "
+            "retry with reconciliation enabled."
+        ),
+    )
     args = parser.parse_args()
     try:
         main(
@@ -1183,6 +1272,7 @@ if __name__ == "__main__":
             clean=args.clean,
             force_db=args.force_db,
             migrate_reconcile=args.migrate,
+            auto_reconcile_on_mismatch=args.reconcile,
         )
     except CommandError as exc:
         print(str(exc), file=sys.stderr)
