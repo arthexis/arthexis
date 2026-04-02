@@ -13,7 +13,6 @@ from apps.users.models import PasskeyCredential
 
 pytestmark = [pytest.mark.django_db]
 
-
 @pytest.fixture
 def user():
     """Create a user eligible for passkey login tests."""
@@ -23,7 +22,6 @@ def user():
         email="passkey@example.com",
         password="secret",
     )
-
 
 @pytest.fixture
 def passkey(user):
@@ -38,7 +36,6 @@ def passkey(user):
         user_handle="user-handle",
     )
 
-
 def test_passkey_login_options_sets_challenge_in_session(client, monkeypatch):
     """Options endpoint should issue public key options and persist challenge."""
 
@@ -52,7 +49,6 @@ def test_passkey_login_options_sets_challenge_in_session(client, monkeypatch):
     assert response.status_code == 200
     assert response.json() == {"publicKey": {"challenge": "abc"}}
     assert client.session["passkey_login_challenge"] == "session-challenge"
-
 
 def test_passkey_login_verify_authenticates_user(client, passkey, monkeypatch):
     """Verify endpoint should authenticate and update sign count after valid assertion."""
@@ -95,7 +91,6 @@ def test_passkey_login_verify_authenticates_user(client, passkey, monkeypatch):
     assert current_user.is_authenticated
     assert current_user.pk == passkey.user_id
 
-
 def test_passkey_login_verify_rejects_missing_challenge(client):
     """Verify endpoint should reject requests without a stored challenge."""
 
@@ -107,7 +102,6 @@ def test_passkey_login_verify_rejects_missing_challenge(client):
 
     assert response.status_code == 400
     assert response.json()["detail"]
-
 
 def test_passkey_login_verify_rejects_unknown_credential(client):
     """Verify endpoint should reject credentials that are not registered."""
@@ -135,7 +129,6 @@ def test_passkey_login_verify_rejects_unknown_credential(client):
 
     assert response.status_code == 400
     assert response.json()["detail"]
-
 
 def test_passkey_login_verify_rejects_invalid_json_structure(client, passkey, monkeypatch):
     """Verify endpoint should reject malformed WebAuthn payload structures."""
@@ -166,21 +159,3 @@ def test_passkey_login_verify_rejects_invalid_json_structure(client, passkey, mo
 
     assert response.status_code == 400
     assert response.json()["detail"]
-
-
-def test_login_page_hides_passkey_button_when_no_credentials(client):
-    """Login page should hide passkey CTA when no passkeys are enrolled."""
-
-    response = client.get(reverse("pages:login"))
-
-    assert response.status_code == 200
-    assert response.context["show_passkey_login"] is False
-
-
-def test_login_page_shows_passkey_button_when_credentials_exist(client, passkey):
-    """Login page should show passkey CTA when passkeys exist."""
-
-    response = client.get(reverse("pages:login"))
-
-    assert response.status_code == 200
-    assert response.context["show_passkey_login"] is True

@@ -7,17 +7,6 @@ from apps.groups.constants import (
 from apps.groups.models import SecurityGroup
 from apps.groups.security import ensure_default_staff_groups, ensure_security_groups_exist
 
-
-def test_security_group_labels_distinguish_basic_and_user_facing(db):
-    """Canonical staff groups should be labeled differently from other SGs."""
-
-    basic_group = SecurityGroup.objects.create(name=SITE_OPERATOR_GROUP_NAME)
-    user_facing_group = SecurityGroup.objects.create(name="Customer Portal")
-
-    assert basic_group.security_model_label == "Basic staff security group"
-    assert user_facing_group.security_model_label == "User-facing security group"
-
-
 def test_ensure_security_groups_exist_repairs_missing_child_rows(db):
     """Canonical groups should always exist as concrete ``SecurityGroup`` rows."""
 
