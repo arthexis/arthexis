@@ -229,6 +229,7 @@ arthexis_install_service_stack() {
   local enable_celery="${4:-false}"
   local exec_cmd="$5"
   local service_mode="${6:-embedded}"
+  local enable_boot_upgrade="${7:-false}"
 
   if [ -z "$base_dir" ] || [ -z "$lock_dir" ] || [ -z "$service_name" ]; then
     return 0
@@ -247,12 +248,22 @@ arthexis_install_service_stack() {
   local service_file="${systemd_dir}/${service_name}.service"
   local service_user
   service_user="$(arthexis_detect_service_user "$base_dir")"
+  local prestart_wants=""
+  local prestart_after=""
+
+  if [ "$enable_boot_upgrade" = true ]; then
+    arthexis_install_boot_upgrade_service_unit "$base_dir" "$lock_dir" "$service_name"
+    prestart_wants="Wants=${service_name}-boot-upgrade.service"
+    prestart_after="After=${service_name}-boot-upgrade.service"
+  fi
 
   sudo bash -c "cat > '$service_file'" <<SERVICEEOF
 [Unit]
 Description=Arthexis Constellation Django service
 After=network-online.target
 Wants=network-online.target
+${prestart_wants}
+${prestart_after}
 
 [Service]
 Type=simple
@@ -332,6 +343,43 @@ BEATSERVICEEOF
   if [ "$manage_celery" = true ]; then
     sudo systemctl enable "$celery_service" "$celery_beat_service"
   fi
+}
+
+arthexis_install_boot_upgrade_service_unit() {
+  local base_dir="$1"
+  local lock_dir="$2"
+  local service_name="$3"
+
+  if [ -z "$base_dir" ] || [ -z "$lock_dir" ] || [ -z "$service_name" ]; then
+    return 0
+  fi
+
+  local systemd_dir="${SYSTEMD_DIR:-/etc/systemd/system}"
+  local unit_name="${service_name}-boot-upgrade.service"
+  local service_file="${systemd_dir}/${unit_name}"
+  local service_user
+  service_user="$(arthexis_detect_service_user "$base_dir")"
+
+  sudo bash -c "cat > '$service_file'" <<SERVICEEOF
+[Unit]
+Description=Arthexis pre-start upgrade for ${service_name}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=$base_dir
+ExecStart=$base_dir/scripts/boot-upgrade-prestart.sh --base-dir $base_dir --service $service_name
+TimeoutStartSec=900
+User=$service_user
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable "$unit_name"
+  arthexis_record_systemd_unit "$lock_dir" "$unit_name"
 }
 
 arthexis_update_systemd_service_user() {
