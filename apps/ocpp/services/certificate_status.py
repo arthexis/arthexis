@@ -8,6 +8,7 @@ import requests
 from django.conf import settings
 
 from apps.ocpp.models import InstalledCertificate
+from apps.ocpp.payload_types import CertificateHashData, OCSPResultPayload
 
 
 STATE_ACCEPTED = "accepted"
@@ -33,10 +34,14 @@ class CertificateStatusOutcome:
     state: str
     status_info: str = ""
     responder_errors: list[str] = field(default_factory=list)
-    ocsp_result: dict[str, Any] = field(default_factory=dict)
+    ocsp_result: OCSPResultPayload = field(
+        default_factory=lambda: _structured_ocsp_result(status="", responder_url="")
+    )
 
 
-def check_certificate_status(*, hash_data: dict[str, Any], target) -> CertificateStatusOutcome:
+def check_certificate_status(
+    *, hash_data: CertificateHashData, target
+) -> CertificateStatusOutcome:
     validation_error = _validate_hash_data(hash_data)
     if validation_error:
         return CertificateStatusOutcome(
@@ -118,7 +123,7 @@ def check_certificate_status(*, hash_data: dict[str, Any], target) -> Certificat
     )
 
 
-def _check_ocsp(hash_data: dict[str, Any]) -> tuple[dict[str, Any], str]:
+def _check_ocsp(hash_data: CertificateHashData) -> tuple[OCSPResultPayload, str]:
     configured_url = str(getattr(settings, "OCPP_CERT_STATUS_OCSP_URL", "") or "").strip()
     if not configured_url:
         return _structured_ocsp_result(status=_OCSP_STATUS_GOOD, responder_url=""), ""
@@ -162,7 +167,7 @@ def _check_ocsp(hash_data: dict[str, Any]) -> tuple[dict[str, Any], str]:
     )
 
 
-def _check_crl(hash_data: dict[str, Any]) -> tuple[bool, str]:
+def _check_crl(hash_data: CertificateHashData) -> tuple[bool, str]:
     configured_url = str(getattr(settings, "OCPP_CERT_STATUS_CRL_URL", "") or "").strip()
     if not configured_url:
         return False, ""
@@ -247,7 +252,7 @@ def _structured_ocsp_result(
     this_update: Any = None,
     next_update: Any = None,
     errors: list[str] | None = None,
-) -> dict[str, Any]:
+) -> OCSPResultPayload:
     return {
         "status": status,
         "responderUrl": responder_url,
@@ -275,7 +280,7 @@ def _validate_chain(certificate_chain: str) -> tuple[bool, str]:
     return True, ""
 
 
-def _validate_hash_data(hash_data: dict[str, Any]) -> str:
+def _validate_hash_data(hash_data: CertificateHashData) -> str:
     if not isinstance(hash_data, dict):
         return "certificateHashData must be an object."
     missing_fields = [

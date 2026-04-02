@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Awaitable, Callable, Protocol
+
+from apps.ocpp.payload_types import JSONObject
 
 
 class CallResultContext(Protocol):
@@ -53,20 +55,23 @@ class HandlerContext:
 
     consumer: CallResultContext
     message_id: str
-    metadata: dict[str, Any]
-    payload: dict[str, Any]
+    metadata: JSONObject
+    payload: JSONObject
     log_key: str
 
 
 ContextHandler = Callable[[HandlerContext], Awaitable[bool]]
-LegacyHandler = Callable[[CallResultContext, str, dict, dict, str], Awaitable[bool]]
+LegacyHandler = Callable[
+    [CallResultContext, str, JSONObject, JSONObject, str],
+    Awaitable[bool],
+]
 
 
 def build_context(
     consumer: CallResultContext,
     message_id: str,
-    metadata: dict,
-    payload: dict,
+    metadata: JSONObject,
+    payload: JSONObject,
     log_key: str,
 ) -> HandlerContext:
     """Construct a normalized handler context from legacy call parameters."""

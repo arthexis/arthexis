@@ -14,6 +14,11 @@ from ...models import (
     Charger,
 )
 from ...services import certificate_signing
+from ...payload_types import (
+    CertificateHashData,
+    CertificateStatusResponsePayload,
+    OCSPResultPayload,
+)
 from ...services.certificate_status import (
     STATE_ACCEPTED,
     STATE_NOT_FOUND,
@@ -153,24 +158,29 @@ class CertificatesMixin:
         hash_data = payload.get("certificateHashData") or {}
         if not isinstance(hash_data, dict):
             hash_data = {}
+        certificate_hash_data: CertificateHashData = {
+            "hashAlgorithm": str(hash_data.get("hashAlgorithm") or ""),
+            "issuerKeyHash": str(hash_data.get("issuerKeyHash") or ""),
+            "issuerNameHash": str(hash_data.get("issuerNameHash") or ""),
+            "serialNumber": str(hash_data.get("serialNumber") or ""),
+        }
 
         def _persist_status() -> dict:
             target = self._resolve_certificate_target()
             status_value = "Failed"
             status_info = "Unknown charge point."
-            response_payload: dict[str, object] = {
+            response_payload: CertificateStatusResponsePayload = {
                 "status": status_value,
                 "statusInfo": {
                     "reasonCode": "Failed",
                     "additionalInfo": status_info,
                 },
             }
-            ocsp_result: dict[str, object] = {}
             persisted_status = CertificateStatusCheck.STATUS_ERROR
 
             if target is not None:
-                outcome = check_certificate_status(hash_data=hash_data, target=target)
-                ocsp_result = outcome.ocsp_result
+                outcome = check_certificate_status(hash_data=certificate_hash_data, target=target)
+                ocsp_result: OCSPResultPayload = outcome.ocsp_result
                 status_info = outcome.status_info
 
                 reason_code = "Failed"
@@ -205,7 +215,7 @@ class CertificatesMixin:
 
                 CertificateStatusCheck.objects.create(
                     charger=target,
-                    certificate_hash_data=hash_data,
+                    certificate_hash_data=certificate_hash_data,
                     ocsp_result=ocsp_result,
                     status=persisted_status,
                     status_info=status_info,
