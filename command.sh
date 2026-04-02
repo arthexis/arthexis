@@ -32,6 +32,7 @@ fi
 
 chmod 600 "$LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
+# Keep command logging minimal to avoid exposing sensitive arguments in logs.
 printf "%s command.sh invocation" "$(date -Iseconds)"
 if [[ $# -gt 0 ]]; then
   printf " command=%q" "$1"
