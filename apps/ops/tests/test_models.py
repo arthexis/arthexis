@@ -1,6 +1,7 @@
 """Model tests for operations app."""
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from apps.ops.models import OperationExecution, OperationScreen
@@ -44,3 +45,25 @@ class OperationScreenValidationSqlTests(TestCase):
             execution.validation_output,
             "Custom SQL validation is disabled for security reasons.",
         )
+
+    def test_clean_rejects_absolute_start_url(self):
+        operation = OperationScreen(
+            title="Absolute URL",
+            slug="absolute-url",
+            description="Should fail clean validation.",
+            start_url="https://example.com/admin/",
+        )
+
+        with self.assertRaises(ValidationError):
+            operation.full_clean()
+
+    def test_clean_rejects_relative_start_url_without_leading_slash(self):
+        operation = OperationScreen(
+            title="Missing slash",
+            slug="missing-slash",
+            description="Should fail clean validation.",
+            start_url="admin/",
+        )
+
+        with self.assertRaises(ValidationError):
+            operation.full_clean()
