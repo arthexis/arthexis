@@ -15,6 +15,7 @@ from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.services import (
     TARGET_RPI4B,
     ImagerBuildError,
+    _build_download_uri,
     _download_remote_base_image,
     _validate_remote_base_image_url,
     build_rpi4b_image,
@@ -296,3 +297,50 @@ def test_download_remote_base_image_validates_redirect_target(tmp_path: Path) ->
         call("https://example.com/image.img"),
         call("https://internal.example.com/image.img"),
     ]
+
+
+def test_build_download_uri_accepts_http_and_https() -> None:
+    """Regression: valid HTTP(S) base URIs should produce artifact download links."""
+
+    assert (
+        _build_download_uri("https://downloads.example.com/images", "artifact-rpi-4b.img")
+        == "https://downloads.example.com/images/artifact-rpi-4b.img"
+    )
+    assert (
+        _build_download_uri("http://downloads.example.com/images", "artifact-rpi-4b.img")
+        == "http://downloads.example.com/images/artifact-rpi-4b.img"
+    )
+
+
+def test_build_download_uri_returns_empty_when_base_is_empty() -> None:
+    """Regression: empty download base URI should disable hosted URI output."""
+
+    assert _build_download_uri("", "artifact-rpi-4b.img") == ""
+    assert _build_download_uri("   ", "artifact-rpi-4b.img") == ""
+
+
+def test_build_download_uri_rejects_invalid_scheme() -> None:
+    """Regression: download base URI should reject non-HTTP schemes."""
+
+    with pytest.raises(ImagerBuildError, match="must use http or https"):
+        _build_download_uri("ftp://downloads.example.com/images", "artifact-rpi-4b.img")
+
+
+def test_build_download_uri_rejects_missing_host() -> None:
+    """Regression: download base URI should require a host when a URI is provided."""
+
+    with pytest.raises(ImagerBuildError, match="include a valid host"):
+        _build_download_uri("https:///images", "artifact-rpi-4b.img")
+
+
+def test_build_download_uri_normalizes_odd_slash_combinations() -> None:
+    """Regression: slash normalization should keep paths stable while appending filenames."""
+
+    assert (
+        _build_download_uri("https://downloads.example.com//images///", "artifact-rpi-4b.img")
+        == "https://downloads.example.com//images/artifact-rpi-4b.img"
+    )
+    assert (
+        _build_download_uri("https://downloads.example.com", "artifact-rpi-4b.img")
+        == "https://downloads.example.com/artifact-rpi-4b.img"
+    )
