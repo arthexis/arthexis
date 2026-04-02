@@ -33,7 +33,7 @@ jobs:
       - name: Submit dependency snapshot (attempt 1)
         id: submit_snapshot_attempt_1
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
+        uses: advanced-security/component-detection-dependency-submission-action@9c110eb34dee187cd9eca76a652b9f6a0ed22927
         with:
           detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
 
@@ -45,7 +45,7 @@ jobs:
         id: submit_snapshot_attempt_2
         if: steps.submit_snapshot_attempt_1.outcome == 'failure'
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
+        uses: advanced-security/component-detection-dependency-submission-action@9c110eb34dee187cd9eca76a652b9f6a0ed22927
         with:
           detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
 
@@ -57,7 +57,7 @@ jobs:
         id: submit_snapshot_attempt_3
         if: steps.submit_snapshot_attempt_2.outcome == 'failure'
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
+        uses: advanced-security/component-detection-dependency-submission-action@9c110eb34dee187cd9eca76a652b9f6a0ed22927
         with:
           detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
 
