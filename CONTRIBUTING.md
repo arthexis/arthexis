@@ -102,6 +102,7 @@ python manage.py runserver 127.0.0.1:8888
 
 ### Documentation changes
 - Documentation lives under `docs/` and uses MkDocs.
+- Follow `docs/development/documentation-governance.md` for doc type placement, archive-vs-update decisions, and PR review expectations.
 - Preview changes locally:
   ```bash
   mkdocs serve
