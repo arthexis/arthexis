@@ -512,15 +512,18 @@ queue_startup_net_message() {
     return 1
   fi
 
-  "$PYTHON_BIN" - "$BASE_DIR" <<'PY'
-import sys
-from pathlib import Path
-
-from apps.screens.startup_notifications import queue_startup_message
-
-base_dir = Path(sys.argv[1])
-queue_startup_message(base_dir=base_dir)
-PY
+  local status
+  status="$("$PYTHON_BIN" manage.py startup_message --lock-file "$LOCK_DIR/lcd-high")" || return 1
+  case "$status" in
+    queued:*|skipped:*)
+      printf '%s\n' "$status"
+      return 0
+      ;;
+    *)
+      echo "Unexpected startup message status: $status" >&2
+      return 1
+      ;;
+  esac
 }
 
 broadcast_upgrade_start_net_message() {

@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 import logging
-import os
-import socket
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone as datetime_timezone
 from pathlib import Path
-
-from utils import revision
 
 logger = logging.getLogger(__name__)
 
@@ -160,34 +156,6 @@ def lcd_feature_enabled_for_paths(base_dir: Path, node_base_path: Path) -> bool:
 
     return lcd_feature_enabled_in_dirs(lock_dirs)
 
-def build_startup_message(base_dir: Path, port: str | None = None) -> tuple[str, str]:
-    host = (socket.gethostname() or "").strip()
-    port_value = (port if port is not None else os.environ.get("PORT", "8888")).strip()
-    if not port_value:
-        port_value = "8888"
-
-    version = ""
-    ver_path = Path(base_dir) / "VERSION"
-    if ver_path.exists():
-        try:
-            version = ver_path.read_text().strip()
-        except Exception:
-            logger.debug("Failed to read VERSION file", exc_info=True)
-
-    revision_value = (revision.get_revision() or "").strip()
-    rev_short = revision_value[-6:] if revision_value else ""
-
-    body_parts = []
-    if version:
-        body_parts.append(f"v{version}")
-    if rev_short:
-        body_parts.append(f"r{rev_short}")
-
-    body = " ".join(body_parts)
-
-    subject = f"{host}:{port_value}".strip()
-    return subject, body.strip()
-
 
 def render_lcd_payload(
     subject: str,
@@ -196,16 +164,14 @@ def render_lcd_payload(
     return render_lcd_lock_file(subject=subject, body=body)
 
 
-def queue_startup_message(
+def write_lcd_message(
     *,
-    base_dir: Path,
-    port: str | None = None,
-    lock_file: Path | None = None,
+    lock_file: Path,
+    subject: str,
+    body: str,
+    expires_at: datetime | str | None = None,
 ) -> Path:
-    subject, body = build_startup_message(base_dir=base_dir, port=port)
-
-    target = lock_file or (Path(base_dir) / ".locks" / LCD_HIGH_LOCK_FILE)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    payload = render_lcd_lock_file(subject=subject, body=body)
-    target.write_text(payload, encoding="utf-8")
-    return target
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+    payload = render_lcd_lock_file(subject=subject, body=body, expires_at=expires_at)
+    lock_file.write_text(payload, encoding="utf-8")
+    return lock_file
