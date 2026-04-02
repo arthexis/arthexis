@@ -93,7 +93,7 @@ If your automation still calls legacy entrypoints, update scripts to the canonic
 
 | Removed command | Replacement |
 | --- | --- |
-| `.venv/bin/python manage.py coverage_ocpp16` | `.venv/bin/python manage.py ocpp coverage --version 1.6J` |
+| `.venv/bin/python manage.py coverage_ocpp16` | `.venv/bin/python manage.py ocpp coverage --version 1.6` |
 | `.venv/bin/python manage.py coverage_ocpp201` | `.venv/bin/python manage.py ocpp coverage --version 2.0.1` |
 | `.venv/bin/python manage.py coverage_ocpp21` | `.venv/bin/python manage.py ocpp coverage --version 2.1` |
 | `.venv/bin/python manage.py import_transactions <input.json>` | `.venv/bin/python manage.py ocpp transactions import <input.json>` |
@@ -113,11 +113,11 @@ For shell migration, a direct one-time update can be done with substitutions lik
 
 ```bash
 sed -i \
-  -e 's/.venv/bin/python manage.py coverage_ocpp16/.venv/bin/python manage.py ocpp coverage --version 1.6J/g' \
-  -e 's/.venv/bin/python manage.py coverage_ocpp201/.venv/bin/python manage.py ocpp coverage --version 2.0.1/g' \
-  -e 's/.venv/bin/python manage.py coverage_ocpp21/.venv/bin/python manage.py ocpp coverage --version 2.1/g' \
-  -e 's/.venv/bin/python manage.py import_transactions/.venv/bin/python manage.py ocpp transactions import/g' \
-  -e 's/.venv/bin/python manage.py export_transactions/.venv/bin/python manage.py ocpp transactions export/g' \
-  -e 's/.venv/bin/python manage.py ocpp_replay/.venv/bin/python manage.py ocpp trace replay/g' \
+  -e 's|.venv/bin/python manage.py coverage_ocpp16|.venv/bin/python manage.py ocpp coverage --version 1.6|g' \
+  -e 's|.venv/bin/python manage.py coverage_ocpp201|.venv/bin/python manage.py ocpp coverage --version 2.0.1|g' \
+  -e 's|.venv/bin/python manage.py coverage_ocpp21|.venv/bin/python manage.py ocpp coverage --version 2.1|g' \
+  -e 's|.venv/bin/python manage.py import_transactions|.venv/bin/python manage.py ocpp transactions import|g' \
+  -e 's|.venv/bin/python manage.py export_transactions|.venv/bin/python manage.py ocpp transactions export|g' \
+  -e 's|.venv/bin/python manage.py ocpp_replay|.venv/bin/python manage.py ocpp trace replay|g' \
   path/to/ops-script.sh
 ```
