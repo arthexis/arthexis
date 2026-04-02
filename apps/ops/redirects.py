@@ -8,12 +8,16 @@ from django.utils.http import escape_leading_slashes
 
 
 def safe_host_redirect(
-    request: HttpRequest, url: str, *, fallback: str = "admin:index"
+    _request: HttpRequest, url: str, *, fallback: str = "admin:index"
 ):
-    """Redirect only to same-host/scheme URLs, otherwise fall back to a named route."""
+    """Redirect only to local absolute paths, otherwise fall back to a named route."""
 
     target = url or ""
-    parts = urlsplit(target)
+    try:
+        parts = urlsplit(target)
+    except ValueError:
+        return HttpResponseRedirect(reverse(fallback))
+
     if parts.scheme or parts.netloc:
         target = reverse(fallback)
     else:

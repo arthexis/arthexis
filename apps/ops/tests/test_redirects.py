@@ -1,5 +1,4 @@
 """Tests for ops redirect hardening."""
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -40,14 +39,18 @@ class OpsRedirectTests(TestCase):
 
         self.assertRedirects(response, reverse("admin:index"))
 
-    def test_clear_active_operation_blocks_scheme_relative_next_url(self):
-        response = self.client.get(
-            reverse("ops:clear-active"), {"next": "//malicious.example/phish"}
-        )
+    def test_clear_active_operation_redirect_scenarios(self):
+        cases = [
+            ("//malicious.example/phish", reverse("admin:index")),
+            ("admin/", reverse("admin:index")),
+            ("/admin/", "/admin/"),
+            ("/admin/?tab=ops#recent", "/admin/?tab=ops#recent"),
+            ("http://[::1", reverse("admin:index")),
+        ]
+        for next_url, expected_redirect in cases:
+            with self.subTest(next_url=next_url):
+                response = self.client.get(
+                    reverse("ops:clear-active"), {"next": next_url}
+                )
 
-        self.assertRedirects(response, reverse("admin:index"))
-
-    def test_clear_active_operation_allows_local_next_url(self):
-        response = self.client.get(reverse("ops:clear-active"), {"next": "/admin/"})
-
-        self.assertRedirects(response, "/admin/")
+                self.assertRedirects(response, expected_redirect)
