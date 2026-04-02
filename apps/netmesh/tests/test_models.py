@@ -161,6 +161,10 @@ def test_mesh_membership_requires_non_empty_tenant():
     with pytest.raises(ValidationError):
         membership.full_clean()
 
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            MeshMembership.objects.create(node=node, tenant="")
+
 
 @pytest.mark.django_db
 def test_peer_policy_requires_non_empty_tenant():
@@ -174,6 +178,14 @@ def test_peer_policy_requires_non_empty_tenant():
 
     with pytest.raises(ValidationError):
         policy.full_clean()
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            PeerPolicy.objects.create(
+                tenant="",
+                source_node=source,
+                destination_node=destination,
+            )
 
 
 @pytest.mark.django_db
