@@ -19,7 +19,12 @@ export TZ="${TZ:-America/Monterrey}"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 ERROR_LOG="$LOG_DIR/error.log"
-: > "$ERROR_LOG"
+DEFAULT_LOG_DIR="$BASE_DIR/logs"
+if [ "$LOG_DIR" = "$DEFAULT_LOG_DIR" ]; then
+  arthexis_mark_log_breaks "$(basename "$0")" "$LOG_DIR"
+else
+  arthexis_mark_log_breaks "$(basename "$0")" "$LOG_DIR" "$DEFAULT_LOG_DIR"
+fi
 exec > >(tee "$LOG_FILE") 2> >(tee -a "$ERROR_LOG" >&2)
 cd "$BASE_DIR"
 LOG_FOLLOW_PID=""

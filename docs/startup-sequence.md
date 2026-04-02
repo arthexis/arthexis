@@ -14,9 +14,9 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
 
 ## Main service launcher (`scripts/service-start.sh`)
 1. Resolve the log directory, tee output into `logs/service-start.log`, mirror
-   stderr into `logs/error.log`, and load helper functions. The error log is
-   truncated at the start of every boot so it only contains messages from the
-   current attempt.
+   stderr into `logs/error.log`, and load helper functions. At the start of
+   each boot, existing `*.log` files receive a clear startup-break marker so
+   each attempt is easy to distinguish without deleting prior history.
 2. Ensure the virtual environment exists, activate it, and load any `*.env`
    files into the environment for downstream commands.
 3. Reuse `.locks/staticfiles.md5` together with `.locks/staticfiles.meta` to

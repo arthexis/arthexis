@@ -226,3 +226,25 @@ arthexis_clear_log_files() {
         fi
     done
 }
+
+arthexis_mark_log_breaks() {
+    local script_name="$1"
+    shift || true
+    local -a log_dirs=("$@")
+    local timestamp
+    timestamp=$(date -Iseconds)
+    local marker="----- startup break ${timestamp} (${script_name:-unknown}) -----"
+
+    local dir
+    for dir in "${log_dirs[@]}"; do
+        [ -n "$dir" ] || continue
+        [ -d "$dir" ] || continue
+
+        while IFS= read -r -d '' log_path; do
+            if [ -L "$log_path" ]; then
+                continue
+            fi
+            printf '\n%s\n' "$marker" >>"$log_path" 2>/dev/null || true
+        done < <(find "$dir" -maxdepth 1 -type f -name "*.log" -print0)
+    done
+}
