@@ -113,7 +113,7 @@ def test_netmesh_api_returns_scoped_payloads_and_etag(client):
     acl_json = acl.json()
     assert acl.status_code == 200
     assert len(acl_json["acl"]) == 1
-    assert acl_json["acl"][0]["allowed_services"] == ["ocpp", "heartbeat"]
+    assert acl_json["acl"][0]["allowed_services"] == ["heartbeat", "ocpp"]
 
     key_info = client.get("/api/netmesh/key-info/", **headers)
     assert key_info.status_code == 200

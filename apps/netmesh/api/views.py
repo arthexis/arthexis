@@ -6,7 +6,6 @@ import hashlib
 import json
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.db.models import Q
 from django.utils.http import http_date
 from django.views.decorators.http import require_GET
 
@@ -16,9 +15,9 @@ from apps.netmesh.models import (
     NodeEndpoint,
     NodeKeyMaterial,
     NodeRelayConfig,
-    PeerPolicy,
     ServiceAdvertisement,
 )
+from apps.netmesh.services import ACLResolver
 from utils.api_errors import json_api_error
 
 
@@ -62,32 +61,6 @@ def _json_with_etag(request: HttpRequest, payload: dict) -> HttpResponse:
     response = JsonResponse(payload)
     response.headers["ETag"] = etag
     return response
-
-
-def _policies_for_caller(*, principal, filters):
-    source_role = getattr(principal.node, "role", None)
-    policy_filter = Q(source_node=principal.node)
-    if source_role:
-        policy_filter |= Q(source_group=source_role)
-    return PeerPolicy.objects.filter(**filters).filter(policy_filter)
-
-
-def _peer_ids_from_policies(*, policies, filters):
-    destination_node_ids = set(
-        policies.filter(destination_node__isnull=False).values_list("destination_node_id", flat=True).distinct(),
-    )
-    destination_group_ids = list(
-        policies.filter(destination_group__isnull=False).values_list("destination_group_id", flat=True).distinct(),
-    )
-    if destination_group_ids:
-        destination_node_ids.update(
-            MeshMembership.objects.filter(
-                **filters,
-                is_enabled=True,
-                node__role_id__in=destination_group_ids,
-            ).values_list("node_id", flat=True),
-        )
-    return sorted(destination_node_ids)
 
 
 def _membership_or_auth_error(request: HttpRequest):
@@ -137,23 +110,27 @@ def permitted_peers(request: HttpRequest) -> HttpResponse:
 
     principal, membership = resolved
     filters = _scope_filters(membership=membership)
-    policies = _policies_for_caller(principal=principal, filters=filters)
-    destination_node_ids = _peer_ids_from_policies(policies=policies, filters=filters)
-
-    peer_memberships = (
-        MeshMembership.objects.select_related("node", "node__role")
-        .filter(**filters, is_enabled=True, node_id__in=destination_node_ids)
-        .exclude(node=principal.node)
+    resolver = ACLResolver(tenant=membership.tenant, site_id=membership.site_id)
+    peer_memberships = MeshMembership.objects.select_related("node", "node__role").filter(**filters, is_enabled=True).exclude(
+        node=principal.node
     )
 
     profile = _node_role_profile_name(principal.node)
     peers = []
     for mesh_peer in peer_memberships:
+        pair_summary = resolver.resolve_pair(source_node=principal.node, destination_node=mesh_peer.node)
+        if not pair_summary.allowed_services:
+            continue
         peer_payload = {
             "node_id": mesh_peer.node_id,
             "hostname": mesh_peer.node.hostname,
             "public_endpoint": mesh_peer.node.public_endpoint,
             "role": getattr(mesh_peer.node.role, "name", ""),
+            "policy_summary": {
+                "policy_ids": pair_summary.policy_ids,
+                "allowed_services": pair_summary.allowed_services,
+                "denied_services": pair_summary.denied_services,
+            },
         }
         if profile in {"gateway", "service"}:
             peer_payload["tenant"] = mesh_peer.tenant
@@ -177,9 +154,15 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
 
     principal, membership = resolved
     filters = _scope_filters(membership=membership)
-    policies = _policies_for_caller(principal=principal, filters=filters)
-    peer_ids = _peer_ids_from_policies(policies=policies, filters=filters)
-    peer_ids = [peer_id for peer_id in peer_ids if peer_id != principal.node.id]
+    resolver = ACLResolver(tenant=membership.tenant, site_id=membership.site_id)
+    peer_memberships = list(
+        MeshMembership.objects.select_related("node", "node__role").filter(**filters, is_enabled=True).exclude(node=principal.node)
+    )
+    policy_by_peer = {
+        membership.node_id: resolver.resolve_pair(source_node=principal.node, destination_node=membership.node)
+        for membership in peer_memberships
+    }
+    peer_ids = [peer_id for peer_id, summary in policy_by_peer.items() if summary.allowed_services]
     endpoints_qs = list(NodeEndpoint.objects.filter(node_id__in=peer_ids).select_related("node", "node__role"))
     relay_qs = list(
         NodeRelayConfig.objects.filter(node_id__in=peer_ids, is_enabled=True).select_related("region")
@@ -245,6 +228,11 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
             "relay_required": endpoint.relay_required,
             "relay_reason": endpoint.relay_reason,
             "connection_candidates": all_candidates,
+            "policy_summary": {
+                "policy_ids": policy_by_peer.get(endpoint.node_id).policy_ids,
+                "allowed_services": policy_by_peer.get(endpoint.node_id).allowed_services,
+                "denied_services": policy_by_peer.get(endpoint.node_id).denied_services,
+            },
         }
         if profile == "gateway":
             row["nat_type"] = endpoint.nat_type
@@ -265,27 +253,32 @@ def acl_policy(request: HttpRequest) -> HttpResponse:
 
     principal, membership = resolved
     filters = _scope_filters(membership=membership)
-    policies = _policies_for_caller(principal=principal, filters=filters)
-    policies_list = list(policies.select_related("destination_node", "destination_group"))
+    resolver = ACLResolver(tenant=membership.tenant, site_id=membership.site_id)
+    peer_memberships = list(
+        MeshMembership.objects.select_related("node", "node__role").filter(**filters, is_enabled=True).exclude(node=principal.node)
+    )
 
     profile = _node_role_profile_name(principal.node)
     acl_rows = []
-    for policy in policies_list:
+    for peer in peer_memberships:
+        pair_summary = resolver.resolve_pair(source_node=principal.node, destination_node=peer.node)
+        if not pair_summary.policy_ids:
+            continue
         row = {
-            "policy_id": policy.id,
-            "allowed_services": policy.allowed_services,
+            "destination_node_id": peer.node_id,
+            "allowed_services": pair_summary.allowed_services,
+            "denied_services": pair_summary.denied_services,
+            "policy_ids": pair_summary.policy_ids,
         }
-        if policy.destination_node_id:
-            row["destination_node_id"] = policy.destination_node_id
-            row["destination_endpoint"] = policy.destination_node.public_endpoint
-        elif profile in {"gateway", "service"} and policy.destination_group_id:
-            row["destination_group"] = policy.destination_group.name
+        if profile in {"gateway", "service"}:
+            row["destination_hostname"] = peer.node.hostname
         if profile == "gateway":
-            row["tenant"] = policy.tenant
-            row["site_id"] = policy.site_id
+            row["tenant"] = membership.tenant
+            row["site_id"] = membership.site_id
         acl_rows.append(row)
 
-    version = max([membership.id] + [policy.id for policy in policies_list])
+    policy_version = [policy_id for row in acl_rows for policy_id in row["policy_ids"]]
+    version = max([membership.id] + policy_version) if policy_version else membership.id
     payload = {"version": version, "acl": acl_rows}
     return _json_with_etag(request, payload)
 

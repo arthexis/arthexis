@@ -52,8 +52,11 @@ class PeerPolicyAdmin(EntityModelAdmin):
         "site",
         "source_node",
         "source_group",
+        "source_station",
         "destination_node",
         "destination_group",
+        "destination_station",
+        "policy_summary",
     )
     list_filter = ("site", "source_group", "destination_group")
     search_fields = (
@@ -63,7 +66,15 @@ class PeerPolicyAdmin(EntityModelAdmin):
         "destination_node__hostname",
         "source_group__name",
         "destination_group__name",
+        "source_station__charger_id",
+        "destination_station__charger_id",
     )
+
+    @admin.display(description="Policy summary")
+    def policy_summary(self, obj):
+        allow = ", ".join(obj.normalized_allowed_services()) or "none"
+        deny = ", ".join(obj.normalized_denied_services()) or "none"
+        return f"allow: {allow} | deny: {deny}"
 
 
 @admin.register(NodeEndpoint)

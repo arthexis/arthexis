@@ -11,6 +11,7 @@ from apps.netmesh.models import (
     ServiceAdvertisement,
 )
 from apps.nodes.models import Node, NodeRole
+from apps.ocpp.models import Charger
 
 
 @pytest.mark.django_db
@@ -60,10 +61,85 @@ def test_peer_policy_rejects_mixed_node_and_group_selectors():
 @pytest.mark.django_db
 def test_peer_policy_selector_constraints_block_direct_create():
     source_node = Node.objects.create(hostname="mesh-source-db")
+    policy = PeerPolicy(source_node=source_node)
 
-    with pytest.raises(IntegrityError):
-        with transaction.atomic():
-            PeerPolicy.objects.create(source_node=source_node)
+    with pytest.raises(ValidationError):
+        policy.full_clean()
+
+
+@pytest.mark.django_db
+def test_peer_policy_accepts_station_and_tag_selectors():
+    source = Node.objects.create(hostname="mesh-source-station", mesh_capability_flags=["edge"])
+    destination = Node.objects.create(hostname="mesh-destination-station", mesh_capability_flags=["ingress"])
+    station = Charger.objects.create(charger_id="NETMESH-STATION-1", manager_node=source)
+    policy = PeerPolicy(
+        source_station=station,
+        source_tags=["edge"],
+        destination_node=destination,
+        destination_tags=["ingress"],
+        allowed_services=["telemetry"],
+    )
+
+    policy.full_clean()
+
+
+@pytest.mark.django_db
+def test_peer_policy_rejects_ambiguous_allow_and_deny_combinations():
+    source = Node.objects.create(hostname="mesh-allow-deny-source")
+    destination = Node.objects.create(hostname="mesh-allow-deny-destination")
+    policy = PeerPolicy(
+        tenant="tenant-ambiguous",
+        source_node=source,
+        destination_node=destination,
+        allowed_services=["telemetry"],
+        denied_services=["telemetry"],
+    )
+
+    with pytest.raises(ValidationError):
+        policy.full_clean()
+
+    PeerPolicy.objects.create(
+        tenant="tenant-ambiguous",
+        source_node=source,
+        destination_node=destination,
+        allowed_services=["telemetry"],
+    )
+    conflicting = PeerPolicy(
+        tenant="tenant-ambiguous",
+        source_node=source,
+        destination_node=destination,
+        denied_services=["telemetry"],
+    )
+
+    with pytest.raises(ValidationError):
+        conflicting.full_clean()
+
+
+@pytest.mark.django_db
+def test_peer_policy_rejects_ambiguous_allow_and_deny_with_reordered_tag_selectors():
+    source = Node.objects.create(hostname="mesh-reordered-tag-source")
+    destination = Node.objects.create(hostname="mesh-reordered-tag-destination")
+
+    PeerPolicy.objects.create(
+        tenant="tenant-reordered-tags",
+        source_node=source,
+        source_tags=["edge", "ingress"],
+        destination_node=destination,
+        destination_tags=["relay", "uplink"],
+        allowed_services=["telemetry"],
+    )
+
+    conflicting = PeerPolicy(
+        tenant="tenant-reordered-tags",
+        source_node=source,
+        source_tags=["ingress", "edge"],
+        destination_node=destination,
+        destination_tags=["uplink", "relay"],
+        denied_services=["telemetry"],
+    )
+
+    with pytest.raises(ValidationError):
+        conflicting.full_clean()
 
 
 @pytest.mark.django_db
