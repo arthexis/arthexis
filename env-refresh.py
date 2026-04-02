@@ -97,6 +97,15 @@ def _migration_recovery_message(using_sqlite: bool) -> str:
 def _emit_reconciliation_report(report: ReconcileReport) -> None:
     """Print a backend-agnostic reconciliation summary."""
 
+    skipped_total = len(report.skipped_tables) + len(report.skipped_rows)
+    missing_total = len(report.missing_in_target) + len(report.missing_in_source)
+    print(
+        "Reconciliation summary: "
+        f"copied={len(report.copied_tables)} "
+        f"skipped={skipped_total} "
+        f"missing={missing_total}",
+        flush=True,
+    )
     print(
         "Major-version migration reconciliation "
         f"({report.backend}) copied {len(report.copied_tables)} table(s).",
@@ -633,6 +642,7 @@ def run_database_tasks(
     clean: bool = False,
     force_db: bool = False,
     migrate_reconcile: bool = False,
+    auto_reconcile_on_mismatch: bool = False,
 ) -> None:
     """Run all database related maintenance steps."""
     default_db = settings.DATABASES["default"]
@@ -739,6 +749,24 @@ def run_database_tasks(
                 )
                 migrations_ran = True
             except MissingBranchSplinterError as exc:
+                print(
+                    "Migration graph/version mismatch detected: branch splinter/tag "
+                    "conflict.",
+                    flush=True,
+                )
+                if auto_reconcile_on_mismatch and not migrate_reconcile:
+                    print(
+                        "Auto-reconcile fallback engaged; retrying with migration "
+                        "reconciliation enabled.",
+                        flush=True,
+                    )
+                    return run_database_tasks(
+                        latest=latest,
+                        clean=clean,
+                        force_db=force_db,
+                        migrate_reconcile=True,
+                        auto_reconcile_on_mismatch=False,
+                    )
                 raise CommandError(
                     "Detected a retroactively edited migration branch that this "
                     f"database skipped.\n{exc}\n{_migration_recovery_message(using_sqlite)}"
@@ -752,6 +780,24 @@ def run_database_tasks(
                 )
                 migrations_ran = True
             except InvalidBasesError as exc:
+                print(
+                    "Migration graph/version mismatch detected: invalid migration "
+                    "bases.",
+                    flush=True,
+                )
+                if auto_reconcile_on_mismatch and not migrate_reconcile:
+                    print(
+                        "Auto-reconcile fallback engaged; retrying with migration "
+                        "reconciliation enabled.",
+                        flush=True,
+                    )
+                    return run_database_tasks(
+                        latest=latest,
+                        clean=clean,
+                        force_db=force_db,
+                        migrate_reconcile=True,
+                        auto_reconcile_on_mismatch=False,
+                    )
                 raise CommandError(_migration_recovery_message(using_sqlite)) from exc
             except OperationalError as exc:
                 if using_sqlite:
@@ -1141,6 +1187,7 @@ def main(
     clean: bool = False,
     force_db: bool = False,
     migrate_reconcile: bool = False,
+    auto_reconcile_on_mismatch: bool = False,
 ) -> None:
     """Run the selected maintenance tasks."""
     to_run = selected or list(TASKS)
@@ -1150,6 +1197,7 @@ def main(
             clean=clean,
             force_db=force_db,
             migrate_reconcile=migrate_reconcile,
+            auto_reconcile_on_mismatch=auto_reconcile_on_mismatch,
         )
 
 
@@ -1175,6 +1223,14 @@ if __name__ == "__main__":
             "SQLite or PostgreSQL snapshot while ignoring incompatible structures."
         ),
     )
+    parser.add_argument(
+        "--reconcile",
+        action="store_true",
+        help=(
+            "When migration graph/version mismatches are detected, automatically "
+            "retry with reconciliation enabled."
+        ),
+    )
     args = parser.parse_args()
     try:
         main(
@@ -1183,6 +1239,7 @@ if __name__ == "__main__":
             clean=args.clean,
             force_db=args.force_db,
             migrate_reconcile=args.migrate,
+            auto_reconcile_on_mismatch=args.reconcile,
         )
     except CommandError as exc:
         print(str(exc), file=sys.stderr)

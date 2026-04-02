@@ -955,6 +955,7 @@ REVERT_UPGRADE=0
 CLEAR_LOGS=0
 CLEAR_WORK=0
 MIGRATE_RECONCILE=0
+AUTO_RECONCILE_ON_MISMATCH=0
 REQUESTED_BRANCH=""
 REVERT_TARGET_REVISION=""
 FORWARDED_ARGS=()
@@ -994,6 +995,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --migrate)
       MIGRATE_RECONCILE=1
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+    --reconcile)
+      AUTO_RECONCILE_ON_MISMATCH=1
       FORWARDED_ARGS+=("$1")
       shift
       ;;
@@ -2006,6 +2012,9 @@ fi
 if [[ $MIGRATE_RECONCILE -eq 1 ]]; then
   ENV_ARGS="$ENV_ARGS --migrate"
 fi
+if [[ $AUTO_RECONCILE_ON_MISMATCH -eq 1 ]]; then
+  ENV_ARGS="$ENV_ARGS --reconcile"
+fi
 echo "Refreshing environment..."
 arthexis_timing_start "env_refresh"
 FAILOVER_CREATED=1 ./env-refresh.sh $ENV_ARGS
@@ -2126,4 +2135,3 @@ if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
     echo "Failed to queue startup Net Message" >&2
   fi
 fi
-
