@@ -100,6 +100,39 @@ def test_rotate_token_replaces_old_token_and_records_events(client, staff_user):
 
 
 @pytest.mark.django_db
+def test_rotate_token_rejects_expired_source_token(client, staff_user):
+    """Rotate action should refuse expired tokens to avoid invalid replacements."""
+
+    permissions = Permission.objects.filter(
+        codename__in=["manage_service_tokens", "reveal_service_token_secret"]
+    )
+    staff_user.user_permissions.add(*permissions)
+    client.force_login(staff_user)
+
+    token, _ = ServiceToken.issue(
+        actor=staff_user,
+        name="Expired API",
+        scopes=["nodes.read"],
+        expires_at=timezone.now() + timedelta(days=1),
+    )
+    token.expires_at = timezone.now() - timedelta(minutes=1)
+    token.save(update_fields=["expires_at", "updated_at"])
+
+    rotate_response = client.post(
+        reverse("admin:apis_servicetoken_rotate", args=[token.pk]),
+        {"reason": "Routine rotation", "impact_note": "Update downstream clients."},
+    )
+
+    assert rotate_response.status_code == 200
+    assert "Cannot rotate an expired token" in rotate_response.content.decode("utf-8")
+    assert not ServiceToken.objects.filter(rotated_from=token).exists()
+    assert not ServiceTokenEvent.objects.filter(
+        token=token,
+        event_type=ServiceTokenEvent.EventType.ROTATED,
+    ).exists()
+
+
+@pytest.mark.django_db
 def test_revoke_token_marks_inactive_and_writes_audit_event(client, staff_user):
     """Revoke action should update token status and persist reason in audit details."""
 
@@ -127,3 +160,37 @@ def test_revoke_token_marks_inactive_and_writes_audit_event(client, staff_user):
         event_type=ServiceTokenEvent.EventType.REVOKED,
     )
     assert revoke_event.details["reason"] == "Compromise suspected"
+
+
+@pytest.mark.django_db
+def test_change_form_post_is_forbidden_for_service_tokens(client, staff_user):
+    """Service token lifecycle fields must not be mutable via default change form."""
+
+    change_permission = Permission.objects.get(codename="change_servicetoken")
+    staff_user.user_permissions.add(change_permission)
+    client.force_login(staff_user)
+
+    token, _ = ServiceToken.issue(
+        actor=staff_user,
+        name="Direct Edit Blocked",
+        scopes=["ops.read"],
+        expires_at=timezone.now() + timedelta(days=2),
+    )
+
+    change_url = reverse("admin:apis_servicetoken_change", args=[token.pk])
+    response = client.post(
+        change_url,
+        {
+            "name": "Mutated Name",
+            "status": ServiceToken.Status.REVOKED,
+            "expires_at_0": "2030-01-01",
+            "expires_at_1": "12:00:00",
+            "scopes": '["ops.write"]',
+            "_save": "Save",
+        },
+    )
+
+    assert response.status_code == 403
+    token.refresh_from_db()
+    assert token.name == "Direct Edit Blocked"
+    assert token.status == ServiceToken.Status.ACTIVE

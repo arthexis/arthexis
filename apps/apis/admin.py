@@ -83,7 +83,20 @@ class ServiceTokenAdmin(admin.ModelAdmin):
 
     list_display = ("name", "token_prefix", "status", "expires_at", "created_by", "created_at")
     list_filter = ("status", "created_at")
-    readonly_fields = ("token_prefix", "secret_hash", "created_by", "created_at", "updated_at")
+    readonly_fields = (
+        "created_at",
+        "created_by",
+        "expires_at",
+        "name",
+        "revoked_at",
+        "revoked_reason",
+        "rotated_from",
+        "scopes",
+        "secret_hash",
+        "status",
+        "token_prefix",
+        "updated_at",
+    )
     search_fields = ("name", "token_prefix", "created_by__username")
     change_list_template = "admin/apis/servicetoken/change_list.html"
 
@@ -110,6 +123,22 @@ class ServiceTokenAdmin(admin.ModelAdmin):
         context = extra_context or {}
         context["create_url"] = reverse("admin:apis_servicetoken_create")
         return super().changelist_view(request, extra_context=context)
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+    def changeform_view(self, request: HttpRequest, object_id=None, form_url="", extra_context=None):
+        if request.method == "POST":
+            raise PermissionDenied
+        return super().changeform_view(
+            request,
+            object_id=object_id,
+            form_url=form_url,
+            extra_context=extra_context,
+        )
 
     def create_token(self, request: HttpRequest) -> HttpResponse:
         self._require_manage_permission(request)
@@ -187,29 +216,35 @@ class ServiceTokenAdmin(admin.ModelAdmin):
             raise PermissionDenied
         form = ServiceTokenConfirmForm(request.POST or None)
         if request.method == "POST" and form.is_valid():
-            replacement, raw_secret = ServiceToken.issue(
-                actor=request.user,
-                name=f"{token.name} (rotated)",
-                scopes=token.scopes,
-                expires_at=token.expires_at,
-                rotated_from=token,
-            )
-            token.status = ServiceToken.Status.REPLACED
-            token.revoked_at = timezone.now()
-            token.revoked_reason = form.cleaned_data["reason"]
-            token.save(update_fields=["status", "revoked_at", "revoked_reason", "updated_at"])
-            ServiceTokenEvent.record(
-                token=token,
-                event_type=ServiceTokenEvent.EventType.ROTATED,
-                actor=request.user,
-                details={
-                    "replacement_id": replacement.pk,
-                    "reason": form.cleaned_data["reason"],
-                    "impact_note": form.cleaned_data["impact_note"],
-                },
-            )
-            request.session[f"service-token-secret:{replacement.pk}"] = raw_secret
-            return HttpResponseRedirect(reverse("admin:apis_servicetoken_reveal", args=[replacement.pk]))
+            if token.is_expired:
+                form.add_error(
+                    None,
+                    "Cannot rotate an expired token. Issue a new token with a future expiry.",
+                )
+            else:
+                replacement, raw_secret = ServiceToken.issue(
+                    actor=request.user,
+                    name=f"{token.name} (rotated)",
+                    scopes=token.scopes,
+                    expires_at=token.expires_at,
+                    rotated_from=token,
+                )
+                token.status = ServiceToken.Status.REPLACED
+                token.revoked_at = timezone.now()
+                token.revoked_reason = form.cleaned_data["reason"]
+                token.save(update_fields=["status", "revoked_at", "revoked_reason", "updated_at"])
+                ServiceTokenEvent.record(
+                    token=token,
+                    event_type=ServiceTokenEvent.EventType.ROTATED,
+                    actor=request.user,
+                    details={
+                        "replacement_id": replacement.pk,
+                        "reason": form.cleaned_data["reason"],
+                        "impact_note": form.cleaned_data["impact_note"],
+                    },
+                )
+                request.session[f"service-token-secret:{replacement.pk}"] = raw_secret
+                return HttpResponseRedirect(reverse("admin:apis_servicetoken_reveal", args=[replacement.pk]))
         context = {
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
