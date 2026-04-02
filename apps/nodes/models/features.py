@@ -318,9 +318,11 @@ class NodeFeatureMixin:
 
         suite_qs = Feature.objects.filter(node_feature__slug=slug)
         try:
-            if not suite_qs.exists():
-                return True
-            return suite_qs.filter(is_enabled=True).exists()
+            counts = suite_qs.aggregate(
+                total=models.Count("pk"),
+                enabled=models.Count("pk", filter=models.Q(is_enabled=True)),
+            )
+            return counts["total"] == 0 or counts["enabled"] > 0
         except (DatabaseError, RuntimeError):
             return True
 
