@@ -301,10 +301,18 @@ def _customize_image(image_path: Path, *, git_url: str) -> None:
 def _build_download_uri(download_base_uri: str, output_filename: str) -> str:
     """Build an optional hosted download URI for an artifact."""
 
-    base = (download_base_uri or "").strip().rstrip("/")
+    base = (download_base_uri or "").strip()
     if not base:
         return ""
-    return f"{base}/{output_filename}"
+
+    parsed_base = urlparse(base)
+    if parsed_base.scheme not in {"http", "https"}:
+        raise ImagerBuildError("Download base URI must use http or https.")
+    if not parsed_base.hostname:
+        raise ImagerBuildError("Download base URI must include a valid host.")
+
+    normalized_path = f"{parsed_base.path.rstrip('/')}/{output_filename}"
+    return parsed_base._replace(path=normalized_path).geturl()
 
 
 def build_rpi4b_image(
