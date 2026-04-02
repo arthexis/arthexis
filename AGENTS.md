@@ -183,6 +183,7 @@ users-permissions-regression
 When a PR review requests a bug fix:
 
 * Check the **entire PR discussion** and consider feedback from **all reviewers** before updating the PR.
+* Before submitting an update to an existing PR, check the PR again for newly added comments or branch changes so you do not push a stale update.
 * Ensure **all comments and requested fixes** are addressed, not just the highlighted one.
 * When reviewer feedback reveals a missed failure mode, add or update **tests, validation hooks, or equivalent guardrails** so the same issue is more likely to be caught before reaching CI next time.
 
