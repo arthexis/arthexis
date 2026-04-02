@@ -12,7 +12,6 @@ from .broker import resolve_celery_broker_url
 from .i18n import TIME_ZONE
 from .logging import LOGGING
 
-
 CELERY_BROKER_URL = resolve_celery_broker_url(node_role=NODE_ROLE)
 # Legacy alias retained for older deployments that still export BROKER_URL.
 BROKER_URL = CELERY_BROKER_URL
@@ -64,5 +63,9 @@ CELERY_BEAT_SCHEDULE = {
     "certificate_expiration_refresh": {
         "task": "apps.certs.tasks.refresh_certificate_expirations",
         "schedule": crontab(minute=0, hour=2),
+    },
+    "log_retention_guard": {
+        "task": "apps.core.tasks.log_retention.enforce_log_retention",
+        "schedule": crontab(minute=15, hour=4),
     },
 }
