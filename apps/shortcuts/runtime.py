@@ -8,13 +8,11 @@ from typing import Any
 
 from django.core.exceptions import ValidationError
 
-from apps.features.models import Feature
 from apps.features.utils import is_suite_feature_enabled
-from apps.nodes.feature_detection import is_feature_active_for_node
-from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
+from apps.nodes.models import Node
 from apps.sigils.sigil_resolver import resolve_sigils
 
-from .constants import SHORTCUT_LISTENER_NODE_FEATURE_SLUG, SHORTCUT_MANAGEMENT_FEATURE_SLUG
+from .constants import SHORTCUT_MANAGEMENT_FEATURE_SLUG
 from .models import ClipboardPattern, Shortcut
 from .utils import resolve_arg_tokens
 
@@ -216,32 +214,15 @@ def execute_server_shortcut(*, shortcut: Shortcut) -> ShortcutExecution:
 
 
 def ensure_shortcut_listener_feature_enabled() -> bool:
-    """Enable node feature assignment when suite feature is enabled and available."""
+    """Return whether shortcut management is enabled for this node."""
 
-    if not is_suite_feature_enabled(SHORTCUT_MANAGEMENT_FEATURE_SLUG, default=False):
-        return False
-
-    feature = NodeFeature.objects.filter(slug=SHORTCUT_LISTENER_NODE_FEATURE_SLUG).first()
-    node = Node.get_local()
-    if feature is None or node is None:
-        return False
-
-    if not is_feature_active_for_node(node=node, slug=SHORTCUT_LISTENER_NODE_FEATURE_SLUG):
-        return False
-
-    NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
-
-    Feature.objects.filter(slug=SHORTCUT_MANAGEMENT_FEATURE_SLUG, node_feature__isnull=True).update(
-        node_feature=feature
-    )
-    return True
+    return bool(is_suite_feature_enabled(SHORTCUT_MANAGEMENT_FEATURE_SLUG, default=False) and Node.get_local())
 
 
 __all__ = [
     "ActionResult",
     "ShortcutExecution",
     "ShortcutExecutionError",
-    "ensure_shortcut_listener_feature_enabled",
     "execute_client_shortcut",
     "execute_server_shortcut",
     "execute_shortcut_target",

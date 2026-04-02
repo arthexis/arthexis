@@ -82,6 +82,11 @@ def _ensure_engine_feature_enabled(engine: str) -> None:
     local = Node.get_local()
     if local is None:
         return
+    if not is_feature_active_for_node(node=local, slug=PLAYWRIGHT_AUTOMATION_FEATURE_SLUG):
+        raise PlaywrightEngineFeatureDisabledError(
+            "Playwright automation is disabled on local node feature "
+            f"'{PLAYWRIGHT_AUTOMATION_FEATURE_SLUG}'."
+        )
     if not is_feature_active_for_node(node=local, slug=node_feature_slug):
         raise PlaywrightEngineFeatureDisabledError(
             f"Playwright engine '{engine}' is disabled on local node feature '{node_feature_slug}'."

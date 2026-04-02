@@ -77,20 +77,6 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 url_name="admin:nodes_nodefeature_celery_report",
             ),
         ),
-        "audio-capture": (
-            NodeFeatureDefaultAction(
-                label="Test Microphone",
-                url_name="admin:audio_recordingdevice_test_microphone",
-            ),
-            NodeFeatureDefaultAction(
-                label=_("Take Sample"),
-                url_name="admin:audio_recordingdevice_take_sample",
-            ),
-            NodeFeatureDefaultAction(
-                label=_("Discover"),
-                url_name="admin:audio_recordingdevice_find_devices",
-            ),
-        ),
         "gpio-rtc": (
             NodeFeatureDefaultAction(
                 label="Find Clock Devices",
@@ -223,16 +209,17 @@ class NodeFeatureMixin:
     )
     CONNECTIVITY_MONITOR_ROLES = {"Control", "Satellite"}
     AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
-        "systemd-manager",
-        "ap-router",
         "gpio-rtc",
-        "lcd-screen",
-        "llvm-sigils",
         "gui-toast",
-        "video-cam",
+        "lcd-screen",
         "llm-summary",
+        "playwright-automation",
+        "playwright-browser-chromium",
+        "playwright-browser-firefox",
+        "playwright-browser-webkit",
+        "video-cam",
     }
-    MANUAL_FEATURE_SLUGS = {"audio-capture"}
+    MANUAL_FEATURE_SLUGS = {"screenshot-poll"}
     ROLE_AUTO_FEATURE_SLUGS: set[str] = set()
     AUTO_ENABLE_FOOTPRINT = NodeFeature.Footprint.LIGHT
 

@@ -1,39 +1,13 @@
-"""Sigil token scanners with optional LLVM native acceleration.
+"""Sigil token scanning helpers.
 
-This module keeps the parser regex-free while allowing deployment-time acceleration
-via a tiny native library compiled with clang/LLVM.
-
-Native ABI contract (all indexes are byte offsets in UTF-8 compatible input):
-
-.. code-block:: c
-
-    // Returns number of token pairs written to `out_pairs`.
-    // Each pair is [start_index, end_index_exclusive], where the full token is
-    // text[start:end] and includes the surrounding brackets.
-    uint32_t scan_sigil_tokens(
-        const char* text,
-        uint64_t text_len,
-        uint32_t* out_pairs,
-        uint32_t max_pairs
-    );
-
-If the native scanner is unavailable or invalid, we transparently fall back to
-an in-process Python scanner that preserves nested bracket behavior.
+LLVM-backed scanning has been deprecated; Arthexis now always uses the
+in-process Python scanner to keep behavior predictable across nodes.
 """
 
 from __future__ import annotations
 
-import ctypes
-import logging
-import os
 from dataclasses import dataclass
 from functools import lru_cache
-
-logger = logging.getLogger(__name__)
-
-
-class SigilScannerError(RuntimeError):
-    """Raised when a configured sigil scanner backend cannot be initialized."""
 
 
 @dataclass(frozen=True)
@@ -45,7 +19,7 @@ class TokenSpan:
 
 
 class _PythonScanner:
-    """Reference scanner used as the fallback backend."""
+    """Reference scanner used for sigil token detection."""
 
     @staticmethod
     def scan(text: str) -> list[TokenSpan]:
@@ -72,136 +46,10 @@ class _PythonScanner:
         return tokens
 
 
-class _LlvmScanner:
-    """Optional scanner backed by a shared object produced by clang/LLVM."""
-
-    def __init__(self, library_path: str) -> None:
-        if not library_path:
-            raise SigilScannerError("SIGIL_LLVM_LIBRARY is required for llvm backend")
-        try:
-            self._library = ctypes.CDLL(library_path)
-        except OSError as exc:
-            raise SigilScannerError(f"Unable to load LLVM scanner library: {library_path}") from exc
-
-        try:
-            scanner = self._library.scan_sigil_tokens
-        except AttributeError as exc:
-            raise SigilScannerError(
-                "LLVM scanner library is missing required symbol scan_sigil_tokens"
-            ) from exc
-
-        scanner.argtypes = [
-            ctypes.c_char_p,
-            ctypes.c_uint64,
-            ctypes.POINTER(ctypes.c_uint32),
-            ctypes.c_uint32,
-        ]
-        scanner.restype = ctypes.c_uint32
-        self._scanner = scanner
-
-    def scan(self, text: str) -> list[TokenSpan]:
-        if not text:
-            return []
-        encoded = text.encode("utf-8")
-        max_pairs = max(1, len(text))
-        pair_buffer = (ctypes.c_uint32 * (max_pairs * 2))()
-        pair_count = int(
-            self._scanner(
-                encoded,
-                ctypes.c_uint64(len(encoded)),
-                pair_buffer,
-                ctypes.c_uint32(max_pairs),
-            )
-        )
-        tokens: list[TokenSpan] = []
-        byte_to_char = self._build_utf8_byte_to_char_index(text)
-        for idx in range(pair_count):
-            start = int(pair_buffer[idx * 2])
-            end = int(pair_buffer[idx * 2 + 1])
-            if end > len(encoded) or start >= end:
-                logger.warning("Ignoring invalid LLVM token span (%s, %s)", start, end)
-                continue
-            start_char = byte_to_char[start]
-            end_char = byte_to_char[end]
-            if start_char < 0 or end_char < 0:
-                logger.warning(
-                    "Ignoring non-boundary LLVM token span (%s, %s)", start, end
-                )
-                continue
-            tokens.append(TokenSpan(start=start_char, end=end_char))
-        return tokens
-
-    @staticmethod
-    def _build_utf8_byte_to_char_index(text: str) -> list[int]:
-        encoded_length = len(text.encode("utf-8"))
-        byte_to_char = [-1] * (encoded_length + 1)
-        byte_index = 0
-        byte_to_char[0] = 0
-        for char_index, char in enumerate(text, start=1):
-            byte_index += len(char.encode("utf-8"))
-            byte_to_char[byte_index] = char_index
-        return byte_to_char
-
-
-def get_llvm_library_path() -> str:
-    """Return the configured LLVM sigil scanner library path."""
-
-    return os.environ.get("SIGIL_LLVM_LIBRARY", "").strip()
-
-
-def is_llvm_scanner_runtime_available() -> bool:
-    """Return whether the LLVM scanner can be initialized with current settings."""
-
-    library_path = get_llvm_library_path()
-    if not library_path:
-        return False
-    try:
-        _LlvmScanner(library_path=library_path)
-    except SigilScannerError:
-        return False
-    return True
-
-
-def _is_llvm_node_feature_enabled() -> bool:
-    """Return whether the local node reports the llvm-sigils feature as active."""
-
-    try:
-        from apps.nodes.feature_detection import is_local_node_feature_active
-    except Exception:
-        return False
-    return is_local_node_feature_active("llvm-sigils")
-
-
-def _build_llvm_scanner(*, log_failures: bool) -> _LlvmScanner | None:
-    """Build the LLVM scanner when available and optionally log failures."""
-
-    library_path = get_llvm_library_path()
-    try:
-        scanner = _LlvmScanner(library_path=library_path)
-    except SigilScannerError:
-        if log_failures:
-            logger.exception("Falling back to Python sigil scanner backend")
-        return None
-    logger.info("Using LLVM sigil scanner backend from %s", library_path)
-    return scanner
-
-
 @lru_cache(maxsize=1)
-def get_scanner():
-    """Return the active scanner backend according to environment configuration."""
+def get_scanner() -> _PythonScanner:
+    """Return the active scanner backend (always Python)."""
 
-    backend = os.environ.get("SIGIL_SCANNER_BACKEND", "auto").strip().lower()
-    if backend == "llvm":
-        llvm_scanner = _build_llvm_scanner(log_failures=True)
-        if llvm_scanner is not None:
-            return llvm_scanner
-    elif backend == "auto":
-        if _is_llvm_node_feature_enabled():
-            llvm_scanner = _build_llvm_scanner(log_failures=False)
-            if llvm_scanner is not None:
-                return llvm_scanner
-    elif backend != "python":
-        logger.warning("Unknown SIGIL_SCANNER_BACKEND value %r; using python", backend)
     return _PythonScanner()
 
 

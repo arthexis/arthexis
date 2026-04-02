@@ -17,7 +17,6 @@ from django.utils.translation import gettext_lazy as _
 from apps.base.models import Entity
 from apps.content.models import ContentSample
 from apps.nodes.device_sync import sync_detected_devices
-from apps.nodes.feature_detection import is_feature_active_for_node
 
 logger = logging.getLogger(__name__)
 
@@ -144,11 +143,6 @@ class RecordingDevice(Entity):
 
         Returns a ``(created, updated)`` tuple.
         """
-
-        if not is_feature_active_for_node(node=node, slug="audio-capture"):
-            if return_objects:
-                return 0, 0, [], []
-            return 0, 0
 
         detected = cls.parse_devices(pcm_path=pcm_path)
         return sync_detected_devices(

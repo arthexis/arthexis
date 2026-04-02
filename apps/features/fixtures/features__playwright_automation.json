@@ -7,7 +7,7 @@
       "summary": "Enable Playwright browser launch and on-demand screenshot automation from admin tools.",
       "is_enabled": true,
       "main_app": ["playwright"],
-      "node_feature": null,
+      "node_feature": ["playwright-automation"],
       "admin_requirements": "Allow admins to test browsers.",
       "public_requirements": "",
       "service_requirements": "Require both global suite enablement and per-engine node feature eligibility before Playwright browser launches.",
