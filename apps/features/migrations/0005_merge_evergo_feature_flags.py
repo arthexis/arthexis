@@ -64,6 +64,20 @@ def _merge_evergo_features(apps, schema_editor):
     _apply_canonical_values(canonical)
 
 
+def _restore_legacy_evergo_slug(apps, schema_editor):
+    del schema_editor
+
+    Feature = apps.get_model("features", "Feature")
+    canonical = Feature.objects.filter(slug=CANONICAL_SLUG).first()
+    legacy = Feature.objects.filter(slug=LEGACY_SLUG).first()
+
+    if canonical is None or legacy is not None:
+        return
+
+    canonical.slug = LEGACY_SLUG
+    canonical.save(update_fields=["slug", "updated_at"])
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -71,5 +85,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(_merge_evergo_features, migrations.RunPython.noop),
+        migrations.RunPython(_merge_evergo_features, _restore_legacy_evergo_slug),
     ]

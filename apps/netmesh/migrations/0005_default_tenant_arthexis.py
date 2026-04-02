@@ -38,6 +38,17 @@ def migrate_blank_tenants_to_default(apps, schema_editor):
     policies.filter(tenant="").update(tenant=DEFAULT_TENANT)
 
 
+def migrate_default_tenant_to_blank(apps, schema_editor):
+    db_alias = schema_editor.connection.alias
+    mesh_membership = apps.get_model("netmesh", "MeshMembership")
+    peer_policy = apps.get_model("netmesh", "PeerPolicy")
+    memberships = mesh_membership.objects.using(db_alias)
+    policies = peer_policy.objects.using(db_alias)
+
+    memberships.filter(tenant=DEFAULT_TENANT).update(tenant="")
+    policies.filter(tenant=DEFAULT_TENANT).update(tenant="")
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("netmesh", "0004_remove_peerpolicy_netmesh_policy_source_selector_xor_and_more"),
@@ -46,6 +57,6 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(
             migrate_blank_tenants_to_default,
-            migrations.RunPython.noop,
+            migrate_default_tenant_to_blank,
         ),
     ]

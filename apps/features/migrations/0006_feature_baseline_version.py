@@ -46,6 +46,27 @@ def _disable_future_baseline_features(apps, schema_editor):
         Feature.objects.filter(pk__in=features_to_disable_pks).update(is_enabled=False)
 
 
+def _reenable_future_baseline_features(apps, schema_editor):
+    del schema_editor
+
+    Feature = apps.get_model("features", "Feature")
+    current_version = _current_suite_version()
+    if current_version is None:
+        return
+
+    features_to_enable_pks = []
+    for feature in Feature.objects.filter(is_enabled=False).exclude(baseline_version=""):
+        baseline = _parse_version(feature.baseline_version)
+        if baseline is None:
+            continue
+        if current_version >= baseline:
+            continue
+        features_to_enable_pks.append(feature.pk)
+
+    if features_to_enable_pks:
+        Feature.objects.filter(pk__in=features_to_enable_pks).update(is_enabled=True)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -63,5 +84,5 @@ class Migration(migrations.Migration):
                 max_length=40,
             ),
         ),
-        migrations.RunPython(_disable_future_baseline_features, migrations.RunPython.noop),
+        migrations.RunPython(_disable_future_baseline_features, _reenable_future_baseline_features),
     ]
