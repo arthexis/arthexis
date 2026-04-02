@@ -1,5 +1,7 @@
 # Web sampler retirement
 
+> **Non-canonical reference:** This document is retained for internal or historical context and is not part of the canonical Arthexis documentation set.
+
 Arthexis no longer executes stored shell-style cURL samplers from the content app.
 
 ## What changed

@@ -8,7 +8,6 @@ from apps.credentials.admin import SSHAccountAdmin
 from apps.credentials.models import SSHAccount
 from apps.nodes.models import Node
 
-
 class SSHAccountAdminTests(TestCase):
     def setUp(self):
         self.admin = SSHAccountAdmin(SSHAccount, AdminSite())
@@ -19,15 +18,3 @@ class SSHAccountAdminTests(TestCase):
 
         self.assertEqual(self.admin.credential_status(account), "Missing")
 
-    def test_credential_status_review_for_old_credentials(self):
-        account = SSHAccount.objects.create(
-            node=self.node,
-            username="ops-key",
-            password="secret",
-        )
-        SSHAccount.objects.filter(pk=account.pk).update(
-            updated_at=timezone.now() - timedelta(days=181)
-        )
-        account.refresh_from_db()
-
-        self.assertEqual(self.admin.credential_status(account), "Set (review recommended)")

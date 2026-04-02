@@ -109,7 +109,7 @@ nav.toc a:hover {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem 0.5rem;
+  gap: 0.35rem 0.3rem;
 }
 
 .module-pill-nav .nav-item {

@@ -11,6 +11,7 @@ import re
 import shutil
 import socket
 import subprocess
+import sys
 import textwrap
 import time
 import uuid
@@ -21,6 +22,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import psutil
 import requests
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.test import RequestFactory
@@ -65,7 +67,22 @@ class Command(BaseCommand):
         )
         register_parser.add_argument(
             "token",
+            nargs="?",
             help="Base64 encoded registration token generated from the Nodes admin.",
+        )
+        register_parser.add_argument(
+            "--path",
+            dest="sibling_path",
+            help=(
+                "Register a sibling node by local install path "
+                "(for example /srv/arthexis-sibling)."
+            ),
+        )
+        register_parser.add_argument(
+            "--no-reciprocal",
+            action="store_true",
+            dest="no_reciprocal",
+            help="Skip reciprocal registration on the sibling install.",
         )
 
         register_curl_parser = subparsers.add_parser(
@@ -134,6 +151,11 @@ class Command(BaseCommand):
             "ready",
             help="Verify that this node is ready to register with a host it visits.",
             description="Example: python manage.py node ready",
+        )
+        subparsers.add_parser(
+            "info_json",
+            help="Emit local node info payload as JSON.",
+            description="Example: python manage.py node info_json",
         )
 
         subparsers.add_parser(
@@ -234,7 +256,24 @@ class Command(BaseCommand):
         return handler(**options)
 
     def _handle_register(self, **options):
-        payload = self._decode_token(options["token"])
+        sibling_path = (options.get("sibling_path") or "").strip()
+        token = (options.get("token") or "").strip()
+
+        if sibling_path:
+            if token:
+                raise CommandError("Provide either a token or --path, not both.")
+            return self._register_sibling_from_path(
+                sibling_path,
+                no_reciprocal=bool(options.get("no_reciprocal")),
+            )
+
+        if not token:
+            raise CommandError("Token is required when --path is not provided.")
+
+        if options.get("no_reciprocal"):
+            raise CommandError("--no-reciprocal can only be used together with --path.")
+
+        payload = self._decode_token(token)
         self._ensure_public_https_url(payload["info"], label="Host info")
         self._ensure_public_https_url(payload["register"], label="Host registration")
         session = requests.Session()
@@ -271,6 +310,38 @@ class Command(BaseCommand):
         self._register_host_locally(host_payload)
 
         self.stdout.write(self.style.SUCCESS("Registration completed successfully."))
+
+    def _handle_info_json(self, **options):
+        self.stdout.write(json.dumps(self._load_local_info(), sort_keys=True))
+
+    def _register_sibling_from_path(self, sibling_path: str, *, no_reciprocal: bool) -> None:
+        sibling_root = self._normalize_sibling_install_path(sibling_path)
+        local_root = Path(settings.BASE_DIR).resolve()
+        if sibling_root == local_root:
+            raise CommandError("--path must point to a different installation.")
+
+        sibling_info = self._load_sibling_info_from_path(sibling_root)
+
+        local_payload = self._build_registration_payload(sibling_info, "Sibling")
+        self._register_host_locally(local_payload)
+        self.stdout.write(
+            self.style.SUCCESS(f"Registered sibling from {sibling_root.as_posix()}.")
+        )
+
+        if no_reciprocal:
+            return
+
+        self._run_sibling_registration_subprocess(
+            sibling_root,
+            [
+                "node",
+                "register",
+                "--path",
+                local_root.as_posix(),
+                "--no-reciprocal",
+            ],
+        )
+        self.stdout.write(self.style.SUCCESS("Reciprocal sibling registration complete."))
 
     def _handle_register_curl(self, **options):
         upstream_base = self._normalize_base_url(options["upstream"], label="Upstream")
@@ -835,6 +906,69 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Local registration failed with status {response.status_code}: {detail}"
             )
+
+    def _normalize_sibling_install_path(self, raw_path: str) -> Path:
+        sibling_root = Path(raw_path).expanduser().resolve()
+        manage_path = sibling_root / "manage.py"
+        if not sibling_root.exists():
+            raise CommandError(f"Sibling install path does not exist: {sibling_root}")
+        if not manage_path.is_file():
+            raise CommandError(
+                f"Sibling install path must contain manage.py: {sibling_root}"
+            )
+        return sibling_root
+
+    def _load_sibling_info_from_path(self, sibling_root: Path) -> dict:
+        output = self._run_sibling_registration_subprocess(
+            sibling_root,
+            ["node", "info_json"],
+        )
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        saw_non_dict_payload = False
+        for candidate in reversed(lines):
+            try:
+                payload = json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(payload, dict):
+                return payload
+            saw_non_dict_payload = True
+        try:
+            payload = json.loads(output)
+        except json.JSONDecodeError as exc:
+            if saw_non_dict_payload:
+                raise CommandError("Sibling node info payload must be a JSON object.") from exc
+            raise CommandError("Sibling node info payload is invalid JSON.") from exc
+        if not isinstance(payload, dict):
+            raise CommandError("Sibling node info payload must be a JSON object.")
+        return payload
+
+    def _run_sibling_registration_subprocess(
+        self, sibling_root: Path, manage_args: list[str]
+    ) -> str:
+        python_bin = sibling_root / ".venv" / "bin" / "python"
+        executable = python_bin if python_bin.exists() else Path(sys.executable)
+        command = [str(executable), "manage.py", *manage_args]
+        try:
+            result = subprocess.run(
+                command,
+                cwd=sibling_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or "").strip()
+            stdout = (exc.stdout or "").strip()
+            detail = stderr or stdout or str(exc)
+            raise CommandError(
+                f"Sibling command failed at {sibling_root}: {detail}"
+            ) from exc
+        except OSError as exc:
+            raise CommandError(
+                f"Unable to run sibling command at {sibling_root}: {exc}"
+            ) from exc
+        return (result.stdout or "").strip()
 
     def _normalize_base_url(self, raw: str, *, label: str) -> str:
         if not raw:

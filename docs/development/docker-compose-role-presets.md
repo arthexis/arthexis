@@ -57,8 +57,10 @@ For SQLite-backed environments, you can select the Python SQLite driver with:
 Example:
 
 ```bash
-ARTHEXIS_SQLITE_DRIVER=pysqlite3 python manage.py shell -c "import sqlite3; print(sqlite3.sqlite_version)"
+ARTHEXIS_SQLITE_DRIVER=pysqlite3 .venv/bin/python manage.py shell -c "import sqlite3; print(sqlite3.sqlite_version)"
 ```
+
+This is an intentional `manage.py` exception: the check runs through Django shell and is not exposed through `command.sh`.
 
 If `ARTHEXIS_SQLITE_DRIVER=pysqlite3` is set but the package is unavailable,
 Arthexis falls back to the standard-library `sqlite3` module and emits a warning.

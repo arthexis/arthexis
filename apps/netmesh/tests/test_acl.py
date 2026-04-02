@@ -90,3 +90,4 @@ def test_acl_resolver_ignores_policies_with_no_selectors():
 
     assert summary.policy_ids == []
     assert summary.allowed_services == []
+    assert summary.denied_services == []

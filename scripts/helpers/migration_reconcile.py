@@ -6,22 +6,11 @@ from __future__ import annotations
 import argparse
 import shutil
 import sqlite3
-from dataclasses import dataclass
 from pathlib import Path
 
+from scripts.helpers.migration_reconcile_common import ReconcileReport
 
 _SKIP_TABLES = {"django_migrations", "sqlite_sequence"}
-
-
-@dataclass(slots=True)
-class ReconcileReport:
-    """Summary of copied and skipped SQLite tables."""
-
-    copied_tables: list[str]
-    missing_in_source: list[str]
-    missing_in_target: list[str]
-    skipped_tables: dict[str, str]
-
 
 
 def _table_names(conn: sqlite3.Connection, *, database: str = "main") -> set[str]:
@@ -31,8 +20,6 @@ def _table_names(conn: sqlite3.Connection, *, database: str = "main") -> set[str
         "WHERE type='table' AND name NOT LIKE 'sqlite_%'"
     ).fetchall()
     return {row[0] for row in rows}
-
-
 
 def _quote_identifier(identifier: str) -> str:
     escaped = identifier.replace('"', '""')
@@ -47,8 +34,6 @@ def _column_names(
         (table, database),
     ).fetchall()
     return [row[0] for row in rows]
-
-
 
 def reconcile_sqlite_tables(source_db: Path, target_db: Path) -> ReconcileReport:
     """Copy common tables from *source_db* into *target_db*.
@@ -103,13 +88,12 @@ def reconcile_sqlite_tables(source_db: Path, target_db: Path) -> ReconcileReport
         target_conn.execute("DETACH DATABASE source_db")
 
     return ReconcileReport(
+        backend="sqlite",
         copied_tables=copied_tables,
         missing_in_source=missing_in_source,
         missing_in_target=missing_in_target,
         skipped_tables=skipped_tables,
     )
-
-
 
 def backup_sqlite_database(db_path: Path, destination_dir: Path) -> Path:
     """Create a timestamp-free backup path for deterministic automation."""
@@ -118,8 +102,6 @@ def backup_sqlite_database(db_path: Path, destination_dir: Path) -> Path:
     backup_path = destination_dir / f"{db_path.stem}.pre_major_migrate{db_path.suffix}"
     shutil.copy2(db_path, backup_path)
     return backup_path
-
-
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -131,8 +113,6 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--source", required=True, help="Path to legacy SQLite database")
     parser.add_argument("--target", required=True, help="Path to fresh SQLite database")
     return parser.parse_args()
-
-
 
 def main() -> int:
     args = _parse_args()

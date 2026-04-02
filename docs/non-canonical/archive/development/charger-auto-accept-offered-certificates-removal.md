@@ -1,5 +1,7 @@
 # Charger auto-accept offered certificates field removal
 
+> **Non-canonical reference:** This document is retained for internal or historical context and is not part of the canonical Arthexis documentation set.
+
 ## Backward compatibility note
 
 `Charger.auto_accept_offered_certificates` has been removed from the Django model and database schema.

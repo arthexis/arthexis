@@ -13,10 +13,12 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 ## Quick links
 - [Auto-Upgrade Flow](auto-upgrade.md)
 - [CodeQL Configuration](development/codeql.md)
+- [Cookbook Maintainer Guide](development/cookbook-maintainer-guide.md)
+- [Cookbook QA Checklist](../apps/docs/cookbooks/cookbook-qa-checklist.md)
 - [Good Command](operations/good-command.md)
 - [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
 - [LCD Screen Hardware](lcd-screen-hardware.md)
-- [Migration Branch Guards](development/migration-branch-guards.md)
+- [App Structure Policy](development/app-structure-policy.md)
 - [Endpoint Documentation Inventory](integrations/endpoint-inventory.md)
 - [Endpoint Documentation Completeness Checklist](integrations/documentation-completeness-checklist.md)
 - [Integration Onboarding Tracks](integrations/onboarding-tracks.md)
@@ -27,3 +29,4 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [Suite Services Report](suite-services-report.md)
 - [USB Camera Power-Off](usb-camera-power-off.md)
 - [Watchtower Attack Simulation Playbook](development/watchtower-attack-simulation.md)
+- [Documentation Governance Policy](development/documentation-governance.md)

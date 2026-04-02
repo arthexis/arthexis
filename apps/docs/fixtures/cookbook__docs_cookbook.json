@@ -14,9 +14,9 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "slug": "cookbook-audit",
-      "title": "Cookbook audit",
-      "file_name": "outdated-cookbook-review.md"
+      "slug": "cookbook-qa-checklist",
+      "title": "Cookbook QA checklist",
+      "file_name": "cookbook-qa-checklist.md"
     }
   },
   {

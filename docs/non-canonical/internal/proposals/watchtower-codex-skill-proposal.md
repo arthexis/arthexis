@@ -1,5 +1,7 @@
 # Proposed Codex skill: `watchtower-attack-drill`
 
+> **Non-canonical reference:** This document is retained for internal or historical context and is not part of the canonical Arthexis documentation set.
+
 This proposal defines a reusable Codex skill that operationalizes the Watchtower attack simulation playbook into a repeatable, evidence-driven workflow.
 
 ## Why this skill

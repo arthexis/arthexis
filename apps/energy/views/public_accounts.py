@@ -288,11 +288,13 @@ def charger_account_summary(request, cid, connector=None):
     account = CustomerAccount.objects.filter(user=request.user).first()
     if account is None:
         messages.warning(request, _("No energy account is attached to your user yet."))
-    recent_sessions = (
-        Transaction.objects.filter(account=account)
-        .select_related("charger")
-        .order_by("-start_time")[:20]
-    )
+        recent_sessions = Transaction.objects.none()
+    else:
+        recent_sessions = (
+            Transaction.objects.filter(account=account)
+            .select_related("charger")
+            .order_by("-start_time")[:20]
+        )
     return render(
         request,
         "energy/charger_account_summary.html",

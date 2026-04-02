@@ -38,6 +38,7 @@ REPAIR_AUTO_UPGRADE_CHANNEL=""
 FAILOVER_ROLE=""
 RFID_SERVICE_MODE=""
 CAMERA_SERVICE_MODE=""
+BOOT_UPGRADE_MODE=""
 CELERY_MODE=""
 LCD_SCREEN_MODE=""
 FEATURE_SLUG=""
@@ -48,7 +49,7 @@ FEATURE_PARAM_SPEC=""
 LOCK_DIR="$BASE_DIR/.locks"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--stable|--regular|--normal|--unstable] [--fixed] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--celery|--no-celery] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--feature SLUG [--kind suite|node] [--enabled|--disabled]] [--feature-param FEATURE:KEY=VALUE] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--stable|--regular|--normal|--unstable] [--fixed] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--celery|--no-celery] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--boot-upgrade|--no-boot-upgrade] [--feature SLUG [--kind suite|node] [--enabled|--disabled]] [--feature-param FEATURE:KEY=VALUE] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]" >&2
     exit 1
 }
 
@@ -504,6 +505,22 @@ while [[ $# -gt 0 ]]; do
             CAMERA_SERVICE_MODE="disable"
             shift
             ;;
+        --boot-upgrade)
+            if [ "$BOOT_UPGRADE_MODE" = "disable" ]; then
+                echo "Cannot combine --boot-upgrade with --no-boot-upgrade" >&2
+                usage
+            fi
+            BOOT_UPGRADE_MODE="enable"
+            shift
+            ;;
+        --no-boot-upgrade)
+            if [ "$BOOT_UPGRADE_MODE" = "enable" ]; then
+                echo "Cannot combine --boot-upgrade with --no-boot-upgrade" >&2
+                usage
+            fi
+            BOOT_UPGRADE_MODE="disable"
+            shift
+            ;;
         --celery)
             if [ "$CELERY_MODE" = "disable" ]; then
                 echo "Cannot combine --celery with --no-celery" >&2
@@ -642,7 +659,7 @@ fi
 if [ "$REPAIR" = true ]; then
     if [ "$CHECK" = true ] || [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || \
        [ -n "$AUTO_UPGRADE_MODE" ] || [ -n "$DEBUG_MODE" ] || [ -n "$UPGRADE_CHANNEL" ] || \
-       [ -n "$RFID_SERVICE_MODE" ] || [ -n "$CAMERA_SERVICE_MODE" ] || [ -n "$CELERY_MODE" ] || \
+       [ -n "$RFID_SERVICE_MODE" ] || [ -n "$CAMERA_SERVICE_MODE" ] || [ -n "$BOOT_UPGRADE_MODE" ] || [ -n "$CELERY_MODE" ] || \
        [ -n "$LCD_SCREEN_MODE" ] || [ -n "$FEATURE_SLUG" ] || [ -n "$FEATURE_MODE" ] || \
        [ -n "$FEATURE_KIND" ] || [ -n "$FEATURE_PARAM_SPEC" ]; then
         echo "--repair cannot be combined with other options" >&2
@@ -704,7 +721,7 @@ fi
 if [ "$CHECK" = true ]; then
     if [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || [ -n "$AUTO_UPGRADE_MODE" ] || \
        [ -n "$DEBUG_MODE" ] || [ -n "$UPGRADE_CHANNEL" ] || [ -n "$RFID_SERVICE_MODE" ] || \
-       [ -n "$CAMERA_SERVICE_MODE" ] || [ -n "$CELERY_MODE" ] || [ -n "$LCD_SCREEN_MODE" ] || \
+       [ -n "$CAMERA_SERVICE_MODE" ] || [ -n "$BOOT_UPGRADE_MODE" ] || [ -n "$CELERY_MODE" ] || [ -n "$LCD_SCREEN_MODE" ] || \
        [ -n "$FEATURE_SLUG" ] || [ -n "$FEATURE_MODE" ] || [ -n "$FEATURE_KIND" ] || \
        [ -n "$FEATURE_PARAM_SPEC" ]; then
         echo "--check cannot be combined with other options" >&2
@@ -736,6 +753,12 @@ if [ "$CHECK" = true ]; then
         esac
     else
         echo "Auto-upgrade: disabled"
+    fi
+
+    if [ -f "$LOCK_DIR/boot-upgrade.lck" ]; then
+        echo "Boot-upgrade pre-start: enabled"
+    else
+        echo "Boot-upgrade pre-start: disabled"
     fi
 
     if [ -f "$BASE_DIR/debug.env" ]; then
@@ -781,6 +804,34 @@ if [ -n "$CAMERA_SERVICE_MODE" ] && [ -z "$NODE_ROLE" ]; then
         SERVICE=$(cat "$LOCK_DIR/service.lck")
     fi
     apply_camera_service_setting "$CAMERA_SERVICE_MODE" "$LOCK_DIR" "$BASE_DIR" "$SERVICE"
+fi
+
+if [ -n "$BOOT_UPGRADE_MODE" ] && [ -z "$NODE_ROLE" ]; then
+    ACTION_PERFORMED=true
+    local_enable_celery=false
+    mkdir -p "$LOCK_DIR"
+    if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
+        SERVICE=$(cat "$LOCK_DIR/service.lck")
+    fi
+    if [ -f "$LOCK_DIR/celery.lck" ]; then
+        local_enable_celery=true
+    fi
+    if [ -z "$SERVICE" ] || ! arthexis_using_systemd_mode "$LOCK_DIR"; then
+        echo "Boot upgrade pre-start hook requires a configured systemd service." >&2
+        exit 1
+    fi
+    if [ "$BOOT_UPGRADE_MODE" = "enable" ]; then
+        touch "$LOCK_DIR/boot-upgrade.lck"
+        arthexis_install_boot_upgrade_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE"
+        arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$local_enable_celery" "$BASE_DIR/scripts/service-start.sh" "$ARTHEXIS_SERVICE_MODE_SYSTEMD" true
+        echo "Boot upgrade pre-start hook enabled."
+    else
+        rm -f "$LOCK_DIR/boot-upgrade.lck"
+        rm -f "$LOCK_DIR/${SERVICE}-boot-upgrade-backoff-until.lck"
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${SERVICE}-boot-upgrade.service"
+        arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$local_enable_celery" "$BASE_DIR/scripts/service-start.sh" "$ARTHEXIS_SERVICE_MODE_SYSTEMD" false
+        echo "Boot upgrade pre-start hook disabled."
+    fi
 fi
 
 if [ -n "$CELERY_MODE" ] && [ -z "$NODE_ROLE" ]; then
@@ -913,6 +964,10 @@ EXISTING_CAMERA_SERVICE=false
 if [ -f "$LOCK_DIR/$ARTHEXIS_CAMERA_SERVICE_LOCK" ]; then
     EXISTING_CAMERA_SERVICE=true
 fi
+EXISTING_BOOT_UPGRADE=false
+if [ -f "$LOCK_DIR/boot-upgrade.lck" ]; then
+    EXISTING_BOOT_UPGRADE=true
+fi
 
 if [ "$CELERY_MODE" = "enable" ]; then
     ENABLE_CELERY=true
@@ -926,7 +981,7 @@ elif [ "$LCD_SCREEN_MODE" = "disable" ]; then
     ENABLE_LCD_SCREEN=false
 fi
 
-for lock_name in celery.lck lcd_screen.lck control.lck role.lck service.lck "$ARTHEXIS_RFID_SERVICE_LOCK" "$ARTHEXIS_CAMERA_SERVICE_LOCK"; do
+for lock_name in celery.lck lcd_screen.lck control.lck role.lck service.lck "$ARTHEXIS_RFID_SERVICE_LOCK" "$ARTHEXIS_CAMERA_SERVICE_LOCK" boot-upgrade.lck; do
     rm -f "$LOCK_DIR/$lock_name"
 done
 rm -f "$BASE_DIR"/*.role "$BASE_DIR"/.*.role 2>/dev/null || true
@@ -960,6 +1015,16 @@ fi
 if [ "$ENABLE_CAMERA_SERVICE" = true ]; then
     touch "$LOCK_DIR/$ARTHEXIS_CAMERA_SERVICE_LOCK"
 fi
+if [ "$BOOT_UPGRADE_MODE" = "enable" ]; then
+    ENABLE_BOOT_UPGRADE=true
+elif [ "$BOOT_UPGRADE_MODE" = "disable" ]; then
+    ENABLE_BOOT_UPGRADE=false
+else
+    ENABLE_BOOT_UPGRADE="$EXISTING_BOOT_UPGRADE"
+fi
+if [ "$ENABLE_BOOT_UPGRADE" = true ]; then
+    touch "$LOCK_DIR/boot-upgrade.lck"
+fi
 
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
@@ -968,6 +1033,7 @@ if [ -n "$SERVICE" ]; then
 fi
 
 if [ -n "$SERVICE" ] && arthexis_using_systemd_mode "$LOCK_DIR"; then
+    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$BASE_DIR/scripts/service-start.sh" "$ARTHEXIS_SERVICE_MODE_SYSTEMD" "$ENABLE_BOOT_UPGRADE"
     if [ "$ENABLE_RFID_SERVICE" = true ]; then
         arthexis_install_rfid_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE"
     else
@@ -978,6 +1044,16 @@ if [ -n "$SERVICE" ] && arthexis_using_systemd_mode "$LOCK_DIR"; then
     else
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "camera-${SERVICE}.service"
     fi
+    if [ "$ENABLE_BOOT_UPGRADE" = true ]; then
+        arthexis_install_boot_upgrade_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE"
+    else
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${SERVICE}-boot-upgrade.service"
+        rm -f "$LOCK_DIR/${SERVICE}-boot-upgrade-backoff-until.lck"
+    fi
+fi
+if [ -n "$SERVICE" ] && ! arthexis_using_systemd_mode "$LOCK_DIR"; then
+    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${SERVICE}-boot-upgrade.service"
+    rm -f "$LOCK_DIR/${SERVICE}-boot-upgrade-backoff-until.lck"
 fi
 
 

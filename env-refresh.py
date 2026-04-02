@@ -63,6 +63,13 @@ from scripts.helpers.migration_reconcile import (
     backup_sqlite_database,
     reconcile_sqlite_tables,
 )
+from scripts.helpers.migration_reconcile_common import ReconcileReport
+from scripts.helpers.migration_reconcile_postgres import (
+    backup_postgres_database,
+    drop_postgres_temp_database,
+    reconcile_postgres_tables,
+    restore_postgres_snapshot_to_temp_database,
+)
 
 SQLITE_MIGRATION_RECOVERY_MESSAGE = (
     "Detected migration graph/version mismatch for this database.\n"
@@ -76,6 +83,8 @@ NON_SQLITE_MIGRATION_RECOVERY_MESSAGE = (
     "your database backend."
 )
 
+POSTGRES_RECONCILE_TEMP_DB = "arthexis_pre_major_migrate_snapshot"
+
 
 def _migration_recovery_message(using_sqlite: bool) -> str:
     """Return operator guidance for migration graph/version mismatch failures."""
@@ -83,6 +92,40 @@ def _migration_recovery_message(using_sqlite: bool) -> str:
     if using_sqlite:
         return SQLITE_MIGRATION_RECOVERY_MESSAGE
     return NON_SQLITE_MIGRATION_RECOVERY_MESSAGE
+
+
+def _emit_reconciliation_report(report: ReconcileReport) -> None:
+    """Print a backend-agnostic reconciliation summary."""
+
+    print(
+        "Major-version migration reconciliation "
+        f"({report.backend}) copied {len(report.copied_tables)} table(s).",
+        flush=True,
+    )
+    if report.missing_in_target:
+        print(
+            "Ignored legacy-only tables (not in current schema): "
+            f"{', '.join(report.missing_in_target)}",
+            flush=True,
+        )
+    if report.missing_in_source:
+        print(
+            "Ignored new-schema tables missing from legacy database: "
+            f"{', '.join(report.missing_in_source)}",
+            flush=True,
+        )
+    if report.skipped_columns:
+        print("Skipped columns not present in legacy schema:", flush=True)
+        for table, columns in sorted(report.skipped_columns.items()):
+            print(f"  - {table}: {', '.join(columns)}", flush=True)
+    if report.skipped_rows:
+        print("Rows skipped during conflict-tolerant insert:", flush=True)
+        for table, count in sorted(report.skipped_rows.items()):
+            print(f"  - {table}: {count}", flush=True)
+    if report.skipped_tables:
+        print("Skipped incompatible tables:", flush=True)
+        for table, reason in sorted(report.skipped_tables.items()):
+            print(f"  - {table}: {reason}", flush=True)
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing support
@@ -600,18 +643,33 @@ def run_database_tasks(
     locks_dir.mkdir(exist_ok=True)
     reconcile_backup_db: Path | None = None
     reconcile_db_path: Path | None = None
+    reconcile_postgres_db_name: str | None = None
     local_apps = _local_app_labels()
 
     if migrate_reconcile:
-        if not using_sqlite:
-            raise CommandError("--migrate is currently supported only for SQLite")
-        reconcile_db_path = Path(default_db["NAME"])
-        if reconcile_db_path.exists():
-            reconcile_backup_db = backup_sqlite_database(reconcile_db_path, locks_dir)
+        if using_sqlite:
+            reconcile_db_path = Path(default_db["NAME"])
+            if reconcile_db_path.exists():
+                reconcile_backup_db = backup_sqlite_database(
+                    reconcile_db_path,
+                    locks_dir,
+                )
+                print(
+                    "Prepared pre-migration backup for major-version reconciliation: "
+                    f"{reconcile_backup_db.relative_to(base_dir)}",
+                    flush=True,
+                )
+        elif default_db["ENGINE"] == "django.db.backends.postgresql":
+            reconcile_backup_db = backup_postgres_database(default_db, locks_dir)
+            reconcile_postgres_db_name = POSTGRES_RECONCILE_TEMP_DB
             print(
-                "Prepared pre-migration backup for major-version reconciliation: "
+                "Prepared PostgreSQL snapshot for major-version reconciliation: "
                 f"{reconcile_backup_db.relative_to(base_dir)}",
                 flush=True,
+            )
+        else:
+            raise CommandError(
+                "--migrate supports only SQLite and PostgreSQL backends."
             )
         clean = True
 
@@ -732,33 +790,34 @@ def run_database_tasks(
                     except Exception:
                         raise exc
 
-    if migrate_reconcile and reconcile_backup_db and reconcile_db_path:
+    if migrate_reconcile and reconcile_backup_db:
         _close_old_connections_safely()
-        report = reconcile_sqlite_tables(
-            source_db=reconcile_backup_db,
-            target_db=reconcile_db_path,
-        )
-        print(
-            "Major-version migration reconciliation copied "
-            f"{len(report.copied_tables)} table(s).",
-            flush=True,
-        )
-        if report.missing_in_target:
-            print(
-                "Ignored legacy-only tables (not in current schema): "
-                f"{', '.join(report.missing_in_target)}",
-                flush=True,
+        if using_sqlite and reconcile_db_path:
+            report = reconcile_sqlite_tables(
+                source_db=reconcile_backup_db,
+                target_db=reconcile_db_path,
             )
-        if report.missing_in_source:
-            print(
-                "Ignored new-schema tables missing from legacy database: "
-                f"{', '.join(report.missing_in_source)}",
-                flush=True,
-            )
-        if report.skipped_tables:
-            print("Skipped incompatible tables:", flush=True)
-            for table, reason in sorted(report.skipped_tables.items()):
-                print(f"  - {table}: {reason}", flush=True)
+        elif default_db["ENGINE"] == "django.db.backends.postgresql":
+            if not reconcile_postgres_db_name:
+                raise CommandError("PostgreSQL reconciliation snapshot was not prepared.")
+            try:
+                restore_postgres_snapshot_to_temp_database(
+                    snapshot_path=reconcile_backup_db,
+                    default_db=default_db,
+                    temp_db_name=reconcile_postgres_db_name,
+                )
+                report = reconcile_postgres_tables(
+                    source_db_name=reconcile_postgres_db_name,
+                    target_db=default_db,
+                )
+            finally:
+                drop_postgres_temp_database(
+                    default_db=default_db,
+                    temp_db_name=reconcile_postgres_db_name,
+                )
+        else:
+            raise CommandError("--migrate supports only SQLite and PostgreSQL backends.")
+        _emit_reconciliation_report(report)
 
     # SigilRoot entries are protected from deletion; fixtures will update them.
 
@@ -1112,8 +1171,8 @@ if __name__ == "__main__":
         "--migrate",
         action="store_true",
         help=(
-            "Rebuild the SQLite database and reconcile data from the previous file, "
-            "ignoring missing/incompatible tables."
+            "Rebuild the database and reconcile compatible rows from a pre-migration "
+            "SQLite or PostgreSQL snapshot while ignoring incompatible structures."
         ),
     )
     args = parser.parse_args()

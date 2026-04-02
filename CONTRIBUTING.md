@@ -18,12 +18,19 @@ in issues, pull requests, and reviews.
 ## Getting started
 ### 1. Environment
 - Python 3.10+ is required.
-- Create a virtual environment and install dependencies:
+- Create a virtual environment and install dependencies (runtime + QA extras):
   ```bash
   python -m venv .venv
   source .venv/bin/activate
-  pip install -r requirements.txt
+  ./.venv/bin/pip install -r requirements.txt
+  ./.venv/bin/pip install '.[qa]'
   ```
+
+### Command style convention
+- Default to `.venv/bin/python manage.py ...` for Django commands in docs and local development.
+- If the instance is already running and the task is an operator-facing runtime action, prefer `./command.sh ...`.
+- Windows exception: use `command.bat ...` for runtime operations and keep using the repository `*.bat` lifecycle scripts where documented.
+- Managed-script exception: when a guide points to a dedicated script (`install.sh`, `start.sh`, `upgrade.sh`, etc.), prefer that script over direct `manage.py`.
 
 ### 2. Run the suite locally
 You can run in Terminal mode with the provided scripts (recommended for parity with
@@ -35,8 +42,8 @@ production tooling):
 
 Alternatively, use the Django CLI:
 ```bash
-python manage.py migrate
-python manage.py runserver 127.0.0.1:8888
+.venv/bin/python manage.py migrate
+.venv/bin/python manage.py runserver 127.0.0.1:8888
 ```
 
 ## Development workflow
@@ -48,9 +55,9 @@ python manage.py runserver 127.0.0.1:8888
 ### Django changes
 - Add or update tests alongside app changes.
 - When you touch models:
-  1. Run `python manage.py makemigrations`.
+  1. Run `.venv/bin/python manage.py makemigrations`.
   2. Review the migration file for correctness.
-  3. Apply migrations with `python manage.py migrate`.
+  3. Apply migrations with `.venv/bin/python manage.py migrate`.
   4. Note any data migrations or backfills in your PR description.
 
 ### Formatting and style
@@ -101,25 +108,31 @@ python manage.py runserver 127.0.0.1:8888
 
 ### Documentation changes
 - Documentation lives under `docs/` and uses MkDocs.
+- Follow `docs/development/documentation-governance.md` for doc type placement, archive-vs-update decisions, and PR review expectations.
 - Preview changes locally:
   ```bash
   mkdocs serve
   ```
 
 ## Testing
-Run tests before opening a PR:
+Install test dependencies, then run tests before opening a PR:
 ```bash
-pytest
+./.venv/bin/pip install -r requirements.txt
+./.venv/bin/pip install '.[qa]'
+./env-refresh.sh --deps-only
+./.venv/bin/python manage.py test run
 ```
+
+`requirements.txt` is intentionally runtime-only, so `pytest` may be missing until the QA extras are installed. See [Dependency management](docs/development/dependency-management.md) for details.
 
 Useful subsets:
 - Default CI subset (exclude slow & integration):
   ```bash
-  pytest -m "not slow and not integration"
+  ./.venv/bin/python manage.py test run -- -m "not slow and not integration"
   ```
 - Targeted module or file:
   ```bash
-  pytest apps/ocpp/tests/test_example.py
+  ./.venv/bin/python manage.py test run -- apps/ocpp/tests/test_example.py
   ```
 
 If a test requires system services (Redis, Postgres, etc.), mention the dependency

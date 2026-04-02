@@ -1,7 +1,7 @@
 # Constellation
 
 [![OCPP 1.6 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.0.1 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp201_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.1 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md)
-[![Install CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/install-hourly.yml?branch=main&label=Install%20CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/install-hourly.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/arthexis/arthexis/blob/main/LICENSE)
+[![Install CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/install-hourly.yml?branch=main&label=Install%20CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/install-hourly.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![License: Arthexis 1.0](https://img.shields.io/badge/License-Arthexis%201.0-blue.svg)](https://github.com/arthexis/arthexis/blob/main/LICENSE)
 
 
 ## Purpose
@@ -133,6 +133,10 @@ Detailed install flags, service-management choices, and upgrade-channel behavior
 
 ### 5. Development
 - Browse the [Developer Documentation Library](https://arthexis.com/docs/library/) for architecture references, protocol manuals, and contribution workflows.
+- Command convention:
+  - Default to `.venv/bin/python manage.py ...` for Django and developer tasks.
+  - Prefer `./command.sh ...` (or `command.bat ...` on Windows) for operational tasks when an instance is already up.
+  - Keep using dedicated scripts (for example `install.sh`, `start.sh`, `upgrade.sh`) when a task has a specific lifecycle entrypoint.
 
 ## Support
 
@@ -144,4 +148,4 @@ If you decide to use our suite for your energy projects, you may contact us at [
 
 Arthexis is distributed under the Arthexis Contribution Reciprocity License 1.0. In addition to code, docs, reviews, and maintenance, we also consider sponsoring Arthexis and doing paid or volunteer work for the open-source dependencies we rely on to be a valid and important form of contribution.
 
-If Arthexis helps your team, please review the license terms in [`LICENSE`](LICENSE) and consider sponsoring or directly supporting the maintainers of the libraries, frameworks, and infrastructure projects that make this suite possible. Supporting those dependencies helps keep the whole Arthexis ecosystem healthy.
+If Arthexis helps your team, please review the license terms in [`LICENSE`](https://github.com/arthexis/arthexis/blob/main/LICENSE) and consider sponsoring or directly supporting the maintainers of the libraries, frameworks, and infrastructure projects that make this suite possible. Supporting those dependencies helps keep the whole Arthexis ecosystem healthy.

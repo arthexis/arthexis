@@ -7,6 +7,7 @@ import ipaddress
 import os
 import sys
 
+from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import IntegrityError
 from django.db import transaction
@@ -172,8 +173,9 @@ class Command(BaseCommand):
         install_dir = (
             str(options.get("install_dir") or "").strip() or f"/srv/{instance_name}"
         )
-        service_name = (
-            str(options.get("service") or "").strip() or f"arthexis-{instance_name}"
+        service_name = self._resolve_service_name(
+            instance_name=instance_name,
+            provided_service_name=str(options.get("service") or "").strip(),
         )
         auth_kwargs = self._resolve_aws_auth_kwargs(
             credentials=credentials,
@@ -316,6 +318,26 @@ class Command(BaseCommand):
             f"Deploy instance: {deploy_instance_name} service={service_name} install_dir={install_dir}"
         )
         self.stdout.write(f"Node: {node.hostname} relation={node.current_relation}")
+
+    def _resolve_service_name(
+        self, *, instance_name: str, provided_service_name: str
+    ) -> str:
+        """Return a DeployInstance-compatible service name."""
+
+        service_field = DeployInstance._meta.get_field("service_name")
+        service_name = provided_service_name
+        if not service_name:
+            service_name = f"arthexis-{instance_name}".lower()
+            service_name = service_name[: service_field.max_length]
+
+        try:
+            service_name = service_field.clean(service_name, None)
+        except ValidationError as exc:
+            errors = getattr(exc, "messages", None) or [str(exc)]
+            raise CommandError(
+                f"Invalid service name '{service_name}': {'; '.join(errors)}"
+            ) from exc
+        return service_name
 
     def _region_choices(self) -> tuple[str, ...]:
         """Return normalized Lightsail region choices for CLI validation."""

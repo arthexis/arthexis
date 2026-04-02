@@ -1,5 +1,7 @@
 # Critical demotion candidates (validated in this change)
 
+> **Non-canonical reference:** This document is retained for internal or historical context and is not part of the canonical Arthexis documentation set.
+
 These 30 tests were previously selected by the `critical` marker through regression tagging and were moved to `integration` for slower, non-install/upgrade coverage.
 
 1. `apps/actions/tests/test_admin.py::test_remote_action_token_admin_add_defaults_to_request_user`

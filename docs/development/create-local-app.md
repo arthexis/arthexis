@@ -10,16 +10,16 @@ Use the one-word `create` management command to scaffold either:
 ## Usage
 
 ```bash
-python manage.py create app <app_name>
-python manage.py create app <app_name> --backend-only
-python manage.py create model <app_name> <ModelName|model_name>
+.venv/bin/python manage.py create app <app_name>
+.venv/bin/python manage.py create app <app_name> --backend-only
+.venv/bin/python manage.py create model <app_name> <ModelName|model_name>
 ```
 
 Compatibility alias:
 
 ```bash
-python manage.py create_local_app <app_name>
-python manage.py create_local_app <app_name> --backend-only
+.venv/bin/python manage.py create_local_app <app_name>
+.venv/bin/python manage.py create_local_app <app_name> --backend-only
 ```
 
 ## App scaffold policy
@@ -74,7 +74,7 @@ For backend-only apps (marker present in `manifest.py`), it skips view/URL/route
 ## After generating
 
 1. Run:
-   - `python manage.py makemigrations <app_name>`
-   - `python manage.py migrate`
+   - `.venv/bin/python manage.py makemigrations <app_name>`
+   - `.venv/bin/python manage.py migrate`
 2. Add templates for generated views under `apps/<app_name>/templates/<app_name>/` when using a web-capable scaffold.
 3. Extend fields/admin/views/tests for your domain.

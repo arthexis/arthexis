@@ -1,7 +1,9 @@
 import base64
 import json
+from pathlib import Path
 
 import pytest
+from django.conf import settings
 from django.core.management import get_commands, load_command_class
 from django.core.management.base import CommandError
 
