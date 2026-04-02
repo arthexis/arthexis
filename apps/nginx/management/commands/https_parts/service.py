@@ -6,7 +6,7 @@ from django.apps import apps as django_apps
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.management.base import CommandError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from apps.nginx.management.commands.https_parts.certificate_flow import (
     _get_or_create_certificate,
@@ -327,24 +327,53 @@ class HttpsProvisioningService:
             pk=default_site_id,
             defaults={"domain": domain, "name": domain},
         )
+        default_site_updates: set[str] = set()
 
         if site.pk != default_site.pk:
+            default_site_updates.update(
+                self._copy_site_fields_to_default_site(source=site, target=default_site)
+            )
             self._reassign_site_relations(source=site, target=default_site)
             site.delete()
 
-        default_site.domain = domain
-        default_site.name = domain
-        default_site_updates = ["domain", "name"]
+        if default_site.domain != domain:
+            default_site.domain = domain
+            default_site_updates.add("domain")
+        if default_site.name != domain:
+            default_site.name = domain
+            default_site_updates.add("name")
         if hasattr(default_site, "managed") and not getattr(default_site, "managed"):
             setattr(default_site, "managed", True)
-            default_site_updates.append("managed")
+            default_site_updates.add("managed")
         if (
             hasattr(default_site, "require_https")
             and getattr(default_site, "require_https") != require_https
         ):
             setattr(default_site, "require_https", require_https)
-            default_site_updates.append("require_https")
-        default_site.save(update_fields=default_site_updates)
+            default_site_updates.add("require_https")
+        if default_site_updates:
+            default_site.save(update_fields=sorted(default_site_updates))
+
+    @staticmethod
+    def _copy_site_fields_to_default_site(*, source: Site, target: Site) -> set[str]:
+        """Copy configurable concrete Site fields from ``source`` to ``target``."""
+
+        updated_fields: set[str] = set()
+        for field in target._meta.concrete_fields:
+            if field.primary_key or not field.editable:
+                continue
+
+            field_name = field.name
+            if field_name in {"domain", "managed", "name", "require_https"}:
+                continue
+
+            source_value = getattr(source, field_name)
+            if getattr(target, field_name) == source_value:
+                continue
+
+            setattr(target, field_name, source_value)
+            updated_fields.add(field_name)
+        return updated_fields
 
     @staticmethod
     def _reassign_site_relations(*, source: Site, target: Site) -> None:
@@ -353,7 +382,7 @@ class HttpsProvisioningService:
         if source.pk == target.pk:
             return
 
-        for model in django_apps.get_models():
+        for model in django_apps.get_models(include_auto_created=True):
             for field in model._meta.concrete_fields:
                 remote_field = getattr(field, "remote_field", None)
                 if remote_field is None or remote_field.model is not Site:
@@ -369,7 +398,21 @@ class HttpsProvisioningService:
                         source_qs.update(**relation_update)
                     continue
 
-                model._default_manager.filter(**relation_filter).update(**relation_update)
+                source_qs = model._default_manager.filter(**relation_filter)
+                if not source_qs.exists():
+                    continue
+                try:
+                    with transaction.atomic():
+                        source_qs.update(**relation_update)
+                except IntegrityError:
+                    fallback_qs = model._default_manager.filter(**relation_filter)
+                    for relation in fallback_qs.iterator():
+                        setattr(relation, field.attname, target.pk)
+                        try:
+                            with transaction.atomic():
+                                relation.save(update_fields=[field.name])
+                        except IntegrityError:
+                            relation.delete()
 
     def _migrate_domain_records(
         self,
