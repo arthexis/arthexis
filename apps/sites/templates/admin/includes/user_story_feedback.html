@@ -89,9 +89,13 @@
         <div class="user-story-field">
           <div class="user-story-rating-row">
             <span class="user-story-label" id="user-story-rating-group-label">
-              {% blocktrans trimmed with link_start='<a href="#" class="user-story-copy-link" data-feedback-copy role="button">'|safe link_end='</a>'|safe %}
-                Please rate {{ link_start }}this page{{ link_end }}
-              {% endblocktrans %}
+              {% if request.user.is_authenticated %}
+                {% blocktrans trimmed with link_start='<a href="#" class="user-story-copy-link" data-feedback-copy role="button">'|safe link_end='</a>'|safe %}
+                  Please rate {{ link_start }}this page{{ link_end }}
+                {% endblocktrans %}
+              {% else %}
+                {% trans 'Please rate this page' %}
+              {% endif %}
             </span>
             <div class="user-story-rating" role="radiogroup" aria-labelledby="user-story-title">
               <input type="radio" id="user-story-rating-5" name="rating" value="5" required>

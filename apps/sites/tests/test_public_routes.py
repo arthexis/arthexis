@@ -167,6 +167,27 @@ def test_release_checklist_requires_staff(client):
     assert client.get(url).status_code in (200, 404)
 
 
+def test_feedback_page_link_is_not_clickable_for_anonymous_users(client):
+    url = reverse("pages:index")
+
+    anonymous_response = client.get(url)
+    anonymous_html = anonymous_response.content.decode()
+    assert anonymous_response.status_code == 200
+    assert "Please rate this page" in anonymous_html
+    assert "data-feedback-copy" not in anonymous_html
+
+    user = get_user_model().objects.create_user(
+        username="feedback-user",
+        email="feedback-user@example.com",
+        password="secret",
+    )
+    client.force_login(user)
+    authenticated_response = client.get(url)
+    authenticated_html = authenticated_response.content.decode()
+    assert authenticated_response.status_code == 200
+    assert "data-feedback-copy" in authenticated_html
+
+
 def test_require_site_operator_or_staff_enforces_admin_operator_boundary(rf):
     """Regression: site operators are allowed while non-operator users are denied."""
 
