@@ -352,6 +352,8 @@ def _collect_document_library(
     *,
     docs_prefix: str = "",
     apps_docs_prefix: str = "",
+    docs_files: list[Path] | None = None,
+    apps_docs_files: list[Path] | None = None,
 ) -> list[dict[str, object]]:
     """Build a library index for docs and apps/docs content."""
 
@@ -359,7 +361,7 @@ def _collect_document_library(
     apps_docs_root = root_base / "apps" / "docs"
     sections: list[dict[str, object]] = []
 
-    docs_files = _iter_document_paths(docs_root)
+    docs_files = docs_files if docs_files is not None else _iter_document_paths(docs_root)
     if docs_files:
         sections.append(
             _build_library_section(
@@ -372,7 +374,9 @@ def _collect_document_library(
             )
         )
 
-    apps_docs_files = _iter_document_paths(apps_docs_root)
+    apps_docs_files = (
+        apps_docs_files if apps_docs_files is not None else _iter_document_paths(apps_docs_root)
+    )
     if apps_docs_files:
         sections.append(
             _build_library_section(
@@ -388,6 +392,31 @@ def _collect_document_library(
     return sections
 
 
+def _get_cached_document_library_paths(root_base: Path) -> tuple[list[Path], list[Path]]:
+    """Return cached document path lists to avoid repeated filesystem scans."""
+
+    cache_key = f"{DOCUMENT_LIBRARY_CACHE_KEY}:paths:{root_base.as_posix()}"
+    cached_paths = cache.get(cache_key)
+    if cached_paths is not None:
+        docs_paths = [Path(path) for path in cached_paths["docs"]]
+        apps_docs_paths = [Path(path) for path in cached_paths["apps_docs"]]
+        return docs_paths, apps_docs_paths
+
+    docs_root = root_base / "docs"
+    apps_docs_root = root_base / "apps" / "docs"
+    docs_paths = _iter_document_paths(docs_root)
+    apps_docs_paths = _iter_document_paths(apps_docs_root)
+    cache.set(
+        cache_key,
+        {
+            "docs": [path.as_posix() for path in docs_paths],
+            "apps_docs": [path.as_posix() for path in apps_docs_paths],
+        },
+        timeout=DOCUMENT_LIBRARY_CACHE_TIMEOUT,
+    )
+    return docs_paths, apps_docs_paths
+
+
 def _get_cached_document_library(
     root_base: Path,
     *,
@@ -396,20 +425,14 @@ def _get_cached_document_library(
 ) -> list[dict[str, object]]:
     """Return a cached library index to avoid repeated filesystem scans."""
 
-    cache_key = (
-        f"{DOCUMENT_LIBRARY_CACHE_KEY}:{_normalize_library_prefix(docs_prefix)}:"
-        f"{_normalize_library_prefix(apps_docs_prefix)}"
-    )
-    sections = cache.get(cache_key)
-    if sections is not None:
-        return sections
-    sections = _collect_document_library(
+    docs_paths, apps_docs_paths = _get_cached_document_library_paths(root_base)
+    return _collect_document_library(
         root_base,
         docs_prefix=docs_prefix,
         apps_docs_prefix=apps_docs_prefix,
+        docs_files=docs_paths,
+        apps_docs_files=apps_docs_paths,
     )
-    cache.set(cache_key, sections, timeout=DOCUMENT_LIBRARY_CACHE_TIMEOUT)
-    return sections
 
 
 def _render_document_library(
