@@ -8,6 +8,8 @@ The Django admin setup for the nodes app is split across focused modules to keep
 
 > Note: this link targets the in-repo docs index for repository readers, not a runtime web route.
 
+For release confidence criteria and maturity semantics, see the [Versioning and Maturity Policy](../../../docs/development/versioning-maturity-policy.md).
+
 For a module-by-module map, see the dedicated reference:
 
 - [`docs/development/nodes-admin-package-reference.md`](../../../docs/development/nodes-admin-package-reference.md)
