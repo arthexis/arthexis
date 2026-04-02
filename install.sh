@@ -51,6 +51,8 @@ ENABLE_RFID_SERVICE=false
 DISABLE_RFID_SERVICE=false
 ENABLE_CAMERA_SERVICE=false
 DISABLE_CAMERA_SERVICE=false
+ENABLE_BOOT_UPGRADE=false
+DISABLE_BOOT_UPGRADE=false
 CLEAN=false
 ENABLE_CONTROL=false
 NODE_ROLE="Terminal"
@@ -81,7 +83,7 @@ is_debian_host() {
 }
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--clean] [--start|--no-start] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--boot-upgrade|--no-boot-upgrade] [--clean] [--start|--no-start] [--repair]" >&2
     exit 1
 }
 
@@ -323,6 +325,16 @@ while [[ $# -gt 0 ]]; do
             DISABLE_CAMERA_SERVICE=true
             shift
             ;;
+        --boot-upgrade)
+            ENABLE_BOOT_UPGRADE=true
+            DISABLE_BOOT_UPGRADE=false
+            shift
+            ;;
+        --no-boot-upgrade)
+            ENABLE_BOOT_UPGRADE=false
+            DISABLE_BOOT_UPGRADE=true
+            shift
+            ;;
         --clean)
             CLEAN=true
             shift
@@ -439,6 +451,10 @@ if [ "$REPAIR" = true ]; then
         DISABLE_CAMERA_SERVICE=false
         REQUIRES_REDIS=true
     fi
+    if [ "$ENABLE_BOOT_UPGRADE" = false ] && [ -f "$LOCK_DIR_PATH/boot-upgrade.lck" ]; then
+        ENABLE_BOOT_UPGRADE=true
+        DISABLE_BOOT_UPGRADE=false
+    fi
     if [ "$ENABLE_CONTROL" = false ] && [ -f "$LOCK_DIR_PATH/control.lck" ]; then
         ENABLE_CONTROL=true
     fi
@@ -542,6 +558,13 @@ if [ "$ENABLE_CAMERA_SERVICE" = true ]; then
     touch "$CAMERA_SERVICE_LOCK"
 elif [ "$DISABLE_CAMERA_SERVICE" = true ]; then
     rm -f "$CAMERA_SERVICE_LOCK"
+fi
+
+BOOT_UPGRADE_LOCK="$LOCK_DIR/boot-upgrade.lck"
+if [ "$ENABLE_BOOT_UPGRADE" = true ]; then
+    touch "$BOOT_UPGRADE_LOCK"
+elif [ "$DISABLE_BOOT_UPGRADE" = true ]; then
+    rm -f "$BOOT_UPGRADE_LOCK"
 fi
 
 CONTROL_LOCK="$LOCK_DIR/control.lck"
@@ -731,7 +754,7 @@ if [ -n "$SERVICE" ]; then
         arthexis_record_systemd_unit "$LOCK_DIR" "${SERVICE}.service"
     fi
     EXEC_CMD="$BASE_DIR/scripts/service-start.sh"
-    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE"
+    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE" "$ENABLE_BOOT_UPGRADE"
 fi
 
 if [ -n "$SERVICE" ]; then
@@ -789,10 +812,19 @@ if [ -n "$SERVICE" ]; then
         else
             arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${CAMERA_SERVICE}.service"
         fi
+
+        if [ "$ENABLE_BOOT_UPGRADE" = true ]; then
+            arthexis_install_boot_upgrade_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE"
+        else
+            arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${SERVICE}-boot-upgrade.service"
+            rm -f "$LOCK_DIR/${SERVICE}-boot-upgrade-backoff-until.lck"
+        fi
     else
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${LCD_SERVICE}.service"
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${RFID_SERVICE}.service"
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${CAMERA_SERVICE}.service"
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${SERVICE}-boot-upgrade.service"
+        rm -f "$LOCK_DIR/${SERVICE}-boot-upgrade-backoff-until.lck"
     fi
 fi
 
