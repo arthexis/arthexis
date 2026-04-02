@@ -5,16 +5,9 @@ OCPP 2.x call dispatch. Routing itself does not perform DB writes; side effects
 occur only inside delegated handlers on the consumer.
 """
 
-from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
-
 from apps.ocpp.consumers.csms.dispatch import build_action_registry
-
-if TYPE_CHECKING:
-    from . import CSMSConsumer
-
-
-Handler = Callable[[dict[str, Any], str, str | None, str | None], Awaitable[dict]]
+from apps.ocpp.consumers.csms.dispatch import ConsumerDispatchContext
+from apps.ocpp.payload_types import Handler
 
 
 class ActionRouter:
@@ -26,7 +19,7 @@ class ActionRouter:
     occur.
     """
 
-    def __init__(self, consumer: "CSMSConsumer") -> None:
+    def __init__(self, consumer: ConsumerDispatchContext) -> None:
         self.consumer = consumer
         self._handlers: dict[str, Handler] = self._build_registry()
 

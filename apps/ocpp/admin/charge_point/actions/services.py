@@ -19,6 +19,7 @@ from apps.nodes.models import Node
 
 from .... import store
 from ....models import Charger, ControlOperationEvent, Transaction
+from ....payload_types import JSONObject, JSONValue
 
 
 class ActionServiceMixin:
@@ -56,8 +57,8 @@ class ActionServiceMixin:
         transport: str,
         status: str,
         detail: str = "",
-        request_payload: dict[str, Any] | None = None,
-        response_payload: dict[str, Any] | None = None,
+        request_payload: JSONObject | None = None,
+        response_payload: JSONObject | None = None,
         transaction_id: int | None = None,
     ) -> None:
         transaction = None
@@ -75,10 +76,10 @@ class ActionServiceMixin:
             response_payload=self._sanitize_control_payload(response_payload) or {},
         )
 
-    def _sanitize_control_payload(self, payload: Any) -> Any:
+    def _sanitize_control_payload(self, payload: JSONValue) -> JSONValue:
         """Return a sanitized control-operation payload suitable for event logs."""
         if isinstance(payload, dict):
-            sanitized: dict[str, Any] = {}
+            sanitized: JSONObject = {}
             for key, value in payload.items():
                 if key.lower() == "idtag":
                     sanitized[key] = self._REDACTED_CONTROL_PAYLOAD_VALUE

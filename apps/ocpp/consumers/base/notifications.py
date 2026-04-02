@@ -5,21 +5,42 @@ perform DB side effects such as firmware deployment state updates, log request
 updates, and security event persistence.
 """
 
-from typing import TYPE_CHECKING, Any
+from typing import Protocol
 
-if TYPE_CHECKING:
-    from . import CSMSConsumer
+from apps.ocpp.payload_types import HandlerPayload, HandlerResponse
+
+
+class NotificationConsumer(Protocol):
+    async def _handle_publish_firmware_status_notification_action_legacy(
+        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+    ) -> HandlerResponse: ...
+
+    async def _handle_diagnostics_status_notification_action_legacy(
+        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+    ) -> HandlerResponse: ...
+
+    async def _handle_log_status_notification_action_legacy(
+        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+    ) -> HandlerResponse: ...
+
+    async def _handle_firmware_status_notification_action_legacy(
+        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+    ) -> HandlerResponse: ...
+
+    async def _handle_security_event_notification_action_legacy(
+        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+    ) -> HandlerResponse: ...
 
 
 class NotificationHandler:
     """Adapter grouping notification-oriented OCPP call handlers."""
 
-    def __init__(self, consumer: "CSMSConsumer") -> None:
+    def __init__(self, consumer: NotificationConsumer) -> None:
         self.consumer = consumer
 
     async def handle_publish_firmware_status(
-        self, payload: dict[str, Any], msg_id: str, raw: str | None, text_data: str | None
-    ) -> dict:
+        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+    ) -> HandlerResponse:
         """Handle OCPP 2.x firmware publish notifications with DB updates."""
 
         return await self.consumer._handle_publish_firmware_status_notification_action_legacy(
@@ -27,8 +48,8 @@ class NotificationHandler:
         )
 
     async def handle_diagnostics_status(
-        self, payload: dict[str, Any], msg_id: str, raw: str | None, text_data: str | None
-    ) -> dict:
+        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+    ) -> HandlerResponse:
         """Handle diagnostics status notifications and persist request status."""
 
         return await self.consumer._handle_diagnostics_status_notification_action_legacy(
@@ -36,8 +57,8 @@ class NotificationHandler:
         )
 
     async def handle_log_status(
-        self, payload: dict[str, Any], msg_id: str, raw: str | None, text_data: str | None
-    ) -> dict:
+        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+    ) -> HandlerResponse:
         """Handle log status notifications and persist log delivery progress."""
 
         return await self.consumer._handle_log_status_notification_action_legacy(
@@ -45,8 +66,8 @@ class NotificationHandler:
         )
 
     async def handle_firmware_status(
-        self, payload: dict[str, Any], msg_id: str, raw: str | None, text_data: str | None
-    ) -> dict:
+        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+    ) -> HandlerResponse:
         """Handle OCPP 1.6 firmware status notifications with deployment writes."""
 
         return await self.consumer._handle_firmware_status_notification_action_legacy(
@@ -54,8 +75,8 @@ class NotificationHandler:
         )
 
     async def handle_security_event(
-        self, payload: dict[str, Any], msg_id: str, raw: str | None, text_data: str | None
-    ) -> dict:
+        self, payload: HandlerPayload, msg_id: str, raw: str | None, text_data: str | None
+    ) -> HandlerResponse:
         """Handle security event notifications and persist security events."""
 
         return await self.consumer._handle_security_event_notification_action_legacy(
