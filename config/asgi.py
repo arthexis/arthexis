@@ -30,6 +30,7 @@ import apps.nodes.routing
 import apps.ocpp.routing
 import apps.sites.routing
 import apps.video.routing
+from apps.nodes.services.sibling_ipc import start_server as start_sibling_ipc_server
 
 websocket_patterns = [
     *apps.sites.routing.websocket_urlpatterns,
@@ -37,6 +38,8 @@ websocket_patterns = [
     *apps.ocpp.routing.websocket_urlpatterns,
     *apps.video.routing.websocket_urlpatterns,
 ]
+
+start_sibling_ipc_server()
 
 application = ProtocolTypeRouter(
     {

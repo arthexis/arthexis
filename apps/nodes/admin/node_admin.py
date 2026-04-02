@@ -97,6 +97,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "mesh_key_age",
         "last_mesh_heartbeat",
         "version_display",
+        "sibling_ipc_status_badge",
         "last_updated",
         "visit_link",
     )
@@ -143,6 +144,9 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             {
                 "fields": (
                     "base_path",
+                    "ipc_scheme",
+                    "ipc_path",
+                    "sibling_ipc_status",
                     "installed_version",
                     "installed_revision",
                 )
@@ -182,6 +186,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         export_rfids_to_selected,
         send_net_message,
     ]
+    readonly_fields = ("sibling_ipc_status",)
 
     def _create_registration_user(self):
         UserModel = get_user_model()
@@ -231,6 +236,31 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             getattr(obj, "installed_revision", ""),
         )
         return display or "—"
+
+    @admin.display(description=_("Sibling IPC"))
+    def sibling_ipc_status_badge(self, obj):
+        status = obj.get_sibling_ipc_status()
+        label = str(status.get("status") or "unknown").replace("_", " ").title()
+        color = "#198754" if status.get("status") == "ready" else "#6c757d"
+        if status.get("status") in {"error", "missing"}:
+            color = "#dc3545"
+        if status.get("status") == "disabled":
+            color = "#fd7e14"
+        return format_html(
+            '<span style="display:inline-block;padding:0.2rem 0.5rem;border-radius:999px;background:{};color:#fff;font-weight:600;">{}</span>',
+            color,
+            label,
+        )
+
+    @admin.display(description=_("Sibling IPC status"))
+    def sibling_ipc_status(self, obj):
+        status = obj.get_sibling_ipc_status()
+        path = status.get("path") or "—"
+        mode = status.get("mode")
+        status_label = str(status.get("status") or "unknown")
+        if mode:
+            return f"{status_label} ({path}, mode {mode})"
+        return f"{status_label} ({path})"
 
     @admin.display(description=_("Mesh state"), ordering="mesh_enrollment_state")
     def mesh_state(self, obj):

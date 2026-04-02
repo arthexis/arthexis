@@ -145,6 +145,18 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
     )
     public_key = models.TextField(blank=True)
     base_path = models.CharField(max_length=255, blank=True)
+    ipc_scheme = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="Optional sibling IPC transport scheme (for example unix_socket).",
+    )
+    ipc_path = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Optional sibling IPC socket path override.",
+    )
     installed_version = models.CharField(max_length=20, blank=True)
     installed_revision = models.CharField(max_length=40, blank=True)
     mesh_enrollment_state = models.CharField(
@@ -225,6 +237,41 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
 
         base_path = (self.base_path or "").strip()
         return Path(base_path) if base_path else self.default_base_path()
+
+    def get_ipc_socket_path(self) -> Path | None:
+        """Return the configured sibling IPC socket path when available."""
+
+        if (self.ipc_scheme or "unix_socket").strip() not in {"", "unix_socket"}:
+            return None
+        configured = (self.ipc_path or "").strip()
+        if configured:
+            return Path(configured)
+        endpoint = (self.public_endpoint or "").strip()
+        if not endpoint:
+            return None
+        return self.get_base_path() / "ipc" / f"{endpoint}.sock"
+
+    def get_sibling_ipc_status(self) -> dict[str, object]:
+        """Return current sibling IPC status details for diagnostics/admin."""
+
+        socket_path = self.get_ipc_socket_path()
+        enabled = bool(getattr(settings, "NODES_ENABLE_SIBLING_IPC", False))
+        if not enabled:
+            return {"enabled": False, "status": "disabled", "path": str(socket_path or "")}
+        if not socket_path:
+            return {"enabled": True, "status": "unconfigured", "path": ""}
+        if not socket_path.exists():
+            return {"enabled": True, "status": "missing", "path": str(socket_path)}
+        try:
+            socket_mode = socket_path.stat().st_mode & 0o777
+        except OSError:
+            return {"enabled": True, "status": "error", "path": str(socket_path)}
+        return {
+            "enabled": True,
+            "status": "ready",
+            "path": str(socket_path),
+            "mode": f"{socket_mode:o}",
+        }
 
     @classmethod
     def get_preferred_port(cls) -> int:

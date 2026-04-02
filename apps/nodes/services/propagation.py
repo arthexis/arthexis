@@ -14,6 +14,7 @@ from apps.nodes.models.node import Node
 from apps.nodes.models.role import NodeRole
 from apps.nodes.models.utils import _upgrade_in_progress
 from apps.nodes.models.features import NodeFeature
+from apps.nodes.services.transport import send_net_message
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,6 @@ def receive_payload(message_model, data: dict[str, object], *, sender: Node):
 def propagate(message, seen: list[str] | None = None) -> None:
     """Propagate ``message`` to eligible peers."""
     from apps.core.notifications import notify
-    import requests
     from apps.nodes.models.net_message import PendingNetMessage
 
     if message.is_expired:
@@ -229,16 +229,12 @@ def propagate(message, seen: list[str] | None = None) -> None:
         signature = message._sign_payload(payload_json, private_key)
         if signature:
             headers["X-Signature"] = signature
-        success = False
-        for url in node.iter_remote_urls("/nodes/net-message/"):
-            try:
-                response = requests.post(url, data=payload_json, headers=headers, timeout=1)
-                success = bool(response.ok)
-            except Exception:
-                logger.exception("Failed to propagate NetMessage %s to node %s via %s", message.pk, node.pk, url)
-                continue
-            if success:
-                break
+        success = send_net_message(
+            payload,
+            node,
+            payload_json=payload_json,
+            headers=headers,
+        )
         if success:
             message.clear_queue_for_node(node)
         else:

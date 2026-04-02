@@ -166,6 +166,7 @@ def node_info(request):
         "base_site_domain": base_domain,
         "base_site_requires_https": base_site_requires_https,
         "request_is_https": is_https_request(request),
+        "sibling_ipc": node.get_sibling_ipc_status(),
     }
 
     if token:
