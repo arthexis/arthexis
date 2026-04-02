@@ -307,6 +307,8 @@ def _build_library_section(
 
     for path in files:
         relative = path.relative_to(root).as_posix()
+        if path.stem.lower() == "index":
+            continue
         if prefix:
             if relative == prefix:
                 items.append(_build_library_item(path, root, route_name, label=Path(relative).name))
