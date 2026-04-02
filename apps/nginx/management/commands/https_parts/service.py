@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.management.base import CommandError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from apps.nginx.management.commands.https_parts.certificate_flow import (
     _get_or_create_certificate,
@@ -292,11 +293,37 @@ class HttpsProvisioningService:
 
         if domain == "localhost":
             return
-        site, created = Site.objects.get_or_create(
-            domain=domain, defaults={"name": domain}
-        )
+
+        default_site_id = getattr(settings, "SITE_ID", None)
+        if isinstance(default_site_id, int) and default_site_id > 0:
+            site = Site.objects.filter(pk=default_site_id).first()
+            created = site is None
+            if site is None:
+                site = Site(pk=default_site_id, domain=domain, name=domain)
+                try:
+                    with transaction.atomic():
+                        site.save(force_insert=True)
+                except IntegrityError:
+                    fallback_site = Site.objects.filter(domain=domain).first()
+                    if fallback_site is None:
+                        raise
+                    raise CommandError(
+                        "Cannot set the configured SITE_ID as the default site because "
+                        f"domain '{domain}' already belongs to Site {fallback_site.pk}. "
+                        "Resolve the duplicate site records, then run HTTPS setup again."
+                    )
+        else:
+            site, created = Site.objects.get_or_create(
+                domain=domain, defaults={"name": domain}
+            )
         updated_fields: list[str] = []
 
+        if site.domain != domain:
+            site.domain = domain
+            updated_fields.append("domain")
+        if site.name != domain:
+            site.name = domain
+            updated_fields.append("name")
         if hasattr(site, "managed") and not getattr(site, "managed"):
             setattr(site, "managed", True)
             updated_fields.append("managed")
@@ -309,10 +336,37 @@ class HttpsProvisioningService:
         if created:
             site.save()
         elif updated_fields:
-            site.save(update_fields=updated_fields)
+            try:
+                with transaction.atomic():
+                    site.save(update_fields=updated_fields)
+            except IntegrityError:
+                fallback_site = Site.objects.filter(domain=domain).first()
+                if fallback_site is not None:
+                    if site.pk != fallback_site.pk:
+                        raise CommandError(
+                            f"Configured SITE_ID ({site.pk}) could not be updated to domain "
+                            f"'{domain}' because that domain already belongs to Site {fallback_site.pk}. "
+                            "Resolve the duplicate site records, then run HTTPS setup again."
+                        )
+                    fallback_updates: list[str] = []
+                    if fallback_site.name != domain:
+                        fallback_site.name = domain
+                        fallback_updates.append("name")
+                    if hasattr(fallback_site, "managed") and not getattr(
+                        fallback_site, "managed"
+                    ):
+                        setattr(fallback_site, "managed", True)
+                        fallback_updates.append("managed")
+                    if (
+                        hasattr(fallback_site, "require_https")
+                        and getattr(fallback_site, "require_https") != require_https
+                    ):
+                        setattr(fallback_site, "require_https", require_https)
+                        fallback_updates.append("require_https")
+                    if fallback_updates:
+                        fallback_site.save(update_fields=fallback_updates)
 
         update_local_nginx_scripts()
-
 
     def _migrate_domain_records(
         self,
