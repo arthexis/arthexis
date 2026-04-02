@@ -40,6 +40,13 @@ class RetentionResult:
     alert_sent: bool
 
 
+@dataclass(frozen=True)
+class LogCandidate:
+    path: Path
+    modified: datetime
+    size: int
+
+
 def _disk_usage_percent(path: Path) -> float:
     usage = shutil.disk_usage(path)
     if usage.total <= 0:
@@ -49,17 +56,18 @@ def _disk_usage_percent(path: Path) -> float:
 
 def _is_log_artifact(path: Path) -> bool:
     name = path.name.lower()
-    if ".log." in name:
-        return True
-    return path.suffix.lower() in {".gz", ".json", ".log", ".txt"}
+    return path.suffix.lower() == ".log" or ".log." in name
 
 
-def _is_managed_transactional_log(path: Path, *, log_dir: Path) -> bool:
+def _is_active_log_file(path: Path) -> bool:
+    return path.suffix.lower() == ".log" and ".log." not in path.name.lower()
+
+
+def _is_managed_transactional_log(path: Path, *, archive_dir: Path) -> bool:
     name = path.name
     if name in MANAGED_LOG_BASENAMES:
         return True
 
-    archive_dir = log_dir / "archive"
     if path.parent == archive_dir:
         for base in MANAGED_LOG_BASENAMES:
             if name.startswith(f"{base}."):
@@ -68,10 +76,29 @@ def _is_managed_transactional_log(path: Path, *, log_dir: Path) -> bool:
     return False
 
 
-def _retention_days_for(path: Path, *, log_dir: Path) -> int:
-    if _is_managed_transactional_log(path, log_dir=log_dir):
+def _retention_days_for(path: Path, *, archive_dir: Path) -> int:
+    if _is_managed_transactional_log(path, archive_dir=archive_dir):
         return TRANSACTIONAL_LOG_RETENTION_DAYS
     return MAX_LOG_RETENTION_DAYS
+
+
+def _collect_log_candidates(log_dir: Path) -> list[LogCandidate]:
+    candidates: list[LogCandidate] = []
+    for path in log_dir.rglob("*"):
+        if not path.is_file() or not _is_log_artifact(path):
+            continue
+        try:
+            st = path.stat()
+        except OSError:
+            continue
+        candidates.append(
+            LogCandidate(
+                path=path,
+                modified=datetime.fromtimestamp(st.st_mtime, tz=timezone.utc),
+                size=st.st_size,
+            )
+        )
+    return candidates
 
 
 def _delete_candidates(log_dir: Path, *, max_age_days: int) -> tuple[int, int]:
@@ -79,22 +106,15 @@ def _delete_candidates(log_dir: Path, *, max_age_days: int) -> tuple[int, int]:
     deleted_files = 0
     deleted_bytes = 0
 
-    for path in sorted(log_dir.rglob("*")):
-        if not path.is_file() or not _is_log_artifact(path):
+    for candidate in _collect_log_candidates(log_dir):
+        if _is_active_log_file(candidate.path) or candidate.modified >= cutoff:
             continue
         try:
-            modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
-        except OSError:
-            continue
-        if modified >= cutoff:
-            continue
-        try:
-            size = path.stat().st_size
-            path.unlink()
+            candidate.path.unlink()
         except OSError:
             continue
         deleted_files += 1
-        deleted_bytes += size
+        deleted_bytes += candidate.size
 
     return deleted_files, deleted_bytes
 
@@ -104,24 +124,20 @@ def _trim_with_policy(log_dir: Path) -> tuple[int, int]:
     deleted_bytes = 0
 
     now = datetime.now(timezone.utc)
-    for path in sorted(log_dir.rglob("*")):
-        if not path.is_file() or not _is_log_artifact(path):
+    archive_dir = log_dir / "archive"
+    for candidate in _collect_log_candidates(log_dir):
+        if _is_active_log_file(candidate.path):
             continue
-        try:
-            modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
-        except OSError:
-            continue
-        retention_days = _retention_days_for(path, log_dir=log_dir)
+        retention_days = _retention_days_for(candidate.path, archive_dir=archive_dir)
         cutoff = now - timedelta(days=retention_days)
-        if modified >= cutoff:
+        if candidate.modified >= cutoff:
             continue
         try:
-            size = path.stat().st_size
-            path.unlink()
+            candidate.path.unlink()
         except OSError:
             continue
         deleted_files += 1
-        deleted_bytes += size
+        deleted_bytes += candidate.size
 
     return deleted_files, deleted_bytes
 

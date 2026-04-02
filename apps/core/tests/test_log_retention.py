@@ -16,28 +16,36 @@ def _write_file(path: Path, *, days_old: int) -> None:
     os.utime(path, (stamp, stamp))
 
 
-def test_run_log_retention_applies_two_year_default(settings, tmp_path):
+def test_run_log_retention_applies_two_year_default_to_archived_logs(settings, tmp_path):
     settings.LOG_DIR = str(tmp_path)
-    _write_file(tmp_path / "sessions" / "old-session.json", days_old=731)
-    _write_file(tmp_path / "sessions" / "recent-session.json", days_old=10)
+    _write_file(tmp_path / "archive" / "station.log.1", days_old=731)
+    _write_file(tmp_path / "archive" / "station.log.1.recent", days_old=10)
 
     result = log_retention._run_log_retention()
 
     assert result.deleted_files == 1
-    assert not (tmp_path / "sessions" / "old-session.json").exists()
-    assert (tmp_path / "sessions" / "recent-session.json").exists()
+    assert not (tmp_path / "archive" / "station.log.1").exists()
+    assert (tmp_path / "archive" / "station.log.1.recent").exists()
 
 
-def test_run_log_retention_preserves_lower_transactional_retention(settings, tmp_path):
+def test_run_log_retention_preserves_active_transactional_logs(settings, tmp_path):
     settings.LOG_DIR = str(tmp_path)
-    _write_file(tmp_path / "error.log", days_old=4)
-    _write_file(tmp_path / "sessions" / "session.json", days_old=4)
+    _write_file(tmp_path / "error.log", days_old=365)
 
     result = log_retention._run_log_retention()
 
-    assert result.deleted_files == 1
-    assert not (tmp_path / "error.log").exists()
-    assert (tmp_path / "sessions" / "session.json").exists()
+    assert result.deleted_files == 0
+    assert (tmp_path / "error.log").exists()
+
+
+def test_run_log_retention_preserves_non_log_files(settings, tmp_path):
+    settings.LOG_DIR = str(tmp_path)
+    _write_file(tmp_path / "content-drops" / "sample.json", days_old=900)
+
+    result = log_retention._run_log_retention()
+
+    assert result.deleted_files == 0
+    assert (tmp_path / "content-drops" / "sample.json").exists()
 
 
 def test_run_log_retention_sends_alert_when_disk_remains_high(settings, tmp_path, monkeypatch):

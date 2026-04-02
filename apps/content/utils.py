@@ -49,9 +49,12 @@ def _detect_uploaded_sample_kind(uploaded_file: UploadedFile) -> str:
 
 
 def _get_content_drop_dir() -> Path:
-    """Return the repository-local directory used for admin drag-and-drop uploads."""
+    """Return the directory used for admin drag-and-drop uploads."""
 
-    return settings.LOG_DIR / "content-drops"
+    configured = getattr(settings, "CONTENT_DROP_DIR", None)
+    if configured:
+        return Path(configured)
+    return Path(settings.MEDIA_ROOT) / "content-drops"
 
 
 def _build_uploaded_sample_path(filename: str) -> Path:
