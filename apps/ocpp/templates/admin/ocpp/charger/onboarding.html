@@ -1,0 +1,45 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo;
+  <a href="{{ charger_admin_changelist_url }}">{% translate 'Charge points' %}</a>
+  &rsaquo;
+  {% translate "Onboarding" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="module aligned">
+  <h1>{% translate "Charge point onboarding" %}</h1>
+  <p>
+    {% translate "No charge points are registered yet. Use this checklist to onboard the first charger into Arthexis." %}
+  </p>
+
+  <h2>{% translate "1) WebSocket endpoint" %}</h2>
+  <p>
+    {% blocktranslate with ws_url=ws_url_example %}
+      Configure the charger to connect to: <code>{{ ws_url }}</code>
+    {% endblocktranslate %}
+  </p>
+
+  <h2>{% translate "2) Credentials" %}</h2>
+  <p>
+    {% translate "If your deployment requires HTTP Basic authentication, configure credentials that match the charger's WebSocket auth user/group fields in the Charge Point admin." %}
+  </p>
+
+  <h2>{% translate "3) Create or verify the charge point record" %}</h2>
+  <ol>
+    <li>{% translate "Create a Charge Point record with the charger serial number." %}</li>
+    <li>{% translate "Set location, authorization policy, and remote-control flags as needed." %}</li>
+    <li>{% translate "Save and wait for the first heartbeat/status notification." %}</li>
+  </ol>
+
+  <p>
+    <a class="button default" href="{{ charger_admin_add_url }}">{% translate "Add charge point" %}</a>
+    <a class="button" href="{{ charger_admin_changelist_url }}">{% translate "Open charge points" %}</a>
+  </p>
+</div>
+{% endblock %}

@@ -11,6 +11,7 @@ from django.urls import reverse
 from apps.actions.models import StaffTask
 from apps.actions.staff_tasks import ensure_default_staff_tasks_exist
 from apps.core.system.admin_views import TASK_PANEL_ROUTES
+from apps.ocpp.models import Charger
 
 
 class AdminStaffTasksTests(TestCase):
@@ -98,6 +99,8 @@ class AdminStaffTasksTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, reverse("admin:features_feature_changelist"))
         self.assertContains(response, "Features")
+        self.assertContains(response, reverse("admin:chargers-shortcut"))
+        self.assertContains(response, "Chargers")
         self.assertContains(response, 'id="admin-dashboard-widgets"')
 
     def test_admin_home_hides_features_action_without_permission(self):
@@ -117,3 +120,37 @@ class AdminStaffTasksTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, reverse("admin:features_feature_changelist"))
         self.assertNotContains(response, "Features")
+        self.assertNotContains(response, reverse("admin:chargers-shortcut"))
+        self.assertNotContains(response, "Chargers")
+
+    def test_chargers_shortcut_redirects_to_changelist_when_any_charger_exists(self):
+        """Chargers shortcut should open the list directly when at least one row exists."""
+
+        Charger.objects.create(charger_id="CP-EXISTS")
+
+        response = self.client.get(reverse("admin:chargers-shortcut"), follow=False)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("admin:ocpp_charger_changelist"))
+
+    def test_chargers_shortcut_shows_onboarding_when_no_chargers_exist(self):
+        """Chargers shortcut should render onboarding guidance when list is empty."""
+
+        response = self.client.get(reverse("admin:chargers-shortcut"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Charge point onboarding")
+        self.assertContains(response, "ws://testserver/ws/&lt;charger-id&gt;/")
+        self.assertContains(response, reverse("admin:ocpp_charger_add"))
+
+    @patch("apps.core.system.admin_views.resolve_ws_scheme", return_value="wss")
+    def test_chargers_shortcut_uses_proxy_aware_ws_scheme_resolution(
+        self, mocked_resolver: Mock
+    ):
+        """Onboarding URL should use the shared proxy-aware websocket scheme resolver."""
+
+        response = self.client.get(reverse("admin:chargers-shortcut"))
+
+        self.assertEqual(response.status_code, 200)
+        mocked_resolver.assert_called_once_with(request=response.wsgi_request)
+        self.assertContains(response, "wss://testserver/ws/&lt;charger-id&gt;/")

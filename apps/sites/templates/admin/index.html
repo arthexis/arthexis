@@ -43,6 +43,11 @@
         {% translate "Features" %}
       </a>
     {% endif %}
+    {% if perms.ocpp.view_charger %}
+      <a class="button" href="{% url 'admin:chargers-shortcut' %}">
+        {% translate "Chargers" %}
+      </a>
+    {% endif %}
     {% admin_staff_tasks as staff_tasks %}
     {% for task in staff_tasks %}
       <a class="button" href="{{ task.url }}">{{ task.label }}</a>

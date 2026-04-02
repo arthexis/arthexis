@@ -23,6 +23,8 @@ from apps.actions.staff_tasks import ensure_default_staff_tasks_exist
 from apps.core import changelog
 from apps.core.models import AdminNotice
 from apps.core.systemctl import _systemctl_command
+from apps.ocpp.models import Charger
+from apps.ocpp.utils import resolve_ws_scheme
 from apps.services.lifecycle import SERVICE_NAME_LOCK, lock_dir, read_service_name
 from .filesystem import _clear_auto_upgrade_skip_revisions
 from .network import _upgrade_redirect
@@ -262,6 +264,29 @@ def _system_reports_view(request):
         }
     )
     return TemplateResponse(request, "admin/system_reports.html", context)
+
+
+@task_panel_route(route="chargers/", name="chargers-shortcut", group="panels")
+def _chargers_shortcut_view(request):
+    """Route admin users to charge-point list or onboarding guidance."""
+
+    if not request.user.has_perm("ocpp.view_charger"):
+        raise PermissionDenied
+
+    if Charger.objects.exists():
+        return HttpResponseRedirect(reverse("admin:ocpp_charger_changelist"))
+
+    scheme = resolve_ws_scheme(request=request)
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": _("Charge point onboarding"),
+            "charger_admin_add_url": reverse("admin:ocpp_charger_add"),
+            "charger_admin_changelist_url": reverse("admin:ocpp_charger_changelist"),
+            "ws_url_example": f"{scheme}://{request.get_host()}/ws/<charger-id>/",
+        }
+    )
+    return TemplateResponse(request, "admin/ocpp/charger/onboarding.html", context)
 
 @task_panel_route(route="system/details/", name="system-details", group="panels")
 def _system_details_view(request):

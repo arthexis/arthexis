@@ -19,6 +19,7 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [Migration Branch Guards](development/migration-branch-guards.md)
 - [Endpoint Documentation Inventory](integrations/endpoint-inventory.md)
 - [Endpoint Documentation Completeness Checklist](integrations/documentation-completeness-checklist.md)
+- [Integration Onboarding Tracks](integrations/onboarding-tracks.md)
 - [OCPP 1.6 Compliance Review](ocpp16_compliance_review.md)
 - [Ops Command Wrapper](operations/operational-commands.md)
 - [Reinstall + Data Import Runbook (1.0+)](operations/reinstall-data-import-runbook.md)
