@@ -5,13 +5,16 @@ import sys
 import textwrap
 import tomllib
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "pyproject.toml"
 DOC_PATH = ROOT / "docs" / "legal" / "THIRD_PARTY_LICENSES.md"
+REQUIREMENTS_FILES = (
+    ROOT / "requirements.txt",
+    ROOT / "requirements-ci.txt",
+)
 LGPL3_URL = "https://www.gnu.org/licenses/lgpl-3.0.html"
 LICENSE_OVERRIDES: dict[str, tuple[str, str]] = {
     "psycopg": ("LGPL-3.0-or-later", LGPL3_URL),
@@ -19,73 +22,79 @@ LICENSE_OVERRIDES: dict[str, tuple[str, str]] = {
 }
 
 
-def load_dependencies() -> list[tuple[str, str]]:
+def parse_dependency_spec(raw_spec: str) -> tuple[str, str] | None:
+    """Return a package name and normalized display spec for dependency text."""
+    dep = raw_spec.strip()
+    if not dep or dep.startswith("#"):
+        return None
+    marker_split = dep.split(";", 1)
+    spec = marker_split[0].strip()
+    marker = marker_split[1].strip() if len(marker_split) == 2 else ""
+    match = re.match(r"([A-Za-z0-9_.-]+)", spec)
+    if not match:
+        return None
+    name = match.group(1)
+    spec_display = spec + (f"; {marker}" if marker else "")
+    return name, spec_display
+
+
+def load_pyproject_dependencies() -> list[tuple[str, str]]:
     data = tomllib.loads(PYPROJECT.read_text())
     deps: list[str] = data.get("project", {}).get("dependencies", [])
     parsed: list[tuple[str, str]] = []
     for dep in deps:
-        dep = dep.strip()
-        if not dep:
-            continue
-        marker_split = dep.split(";", 1)
-        spec = marker_split[0].strip()
-        marker = marker_split[1].strip() if len(marker_split) == 2 else ""
-        match = re.match(r"([A-Za-z0-9_.-]+)", spec)
-        if not match:
-            continue
-        name = match.group(1)
-        spec_display = spec + (f"; {marker}" if marker else "")
-        parsed.append((name, spec_display))
+        parsed_spec = parse_dependency_spec(dep)
+        if parsed_spec:
+            parsed.append(parsed_spec)
     return parsed
 
 
-def resolve_dependency_tree(dependencies: list[str]) -> list[tuple[str, str]]:
-    if not dependencies:
-        return []
+def load_generated_requirements() -> list[tuple[str, str]]:
+    parsed: list[tuple[str, str]] = []
+    for req_path in REQUIREMENTS_FILES:
+        for line in req_path.read_text().splitlines():
+            parsed_spec = parse_dependency_spec(line)
+            if parsed_spec:
+                parsed.append(parsed_spec)
+    return parsed
 
-    req_path = ""
-    try:
-        with NamedTemporaryFile("w", delete=False) as tmp:
-            tmp.write("\n".join(dependencies))
-            req_path = tmp.name
 
-        cmd = [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "--dry-run",
-            "--report",
-            "-",
-            "--ignore-installed",
-            "--quiet",
-            "-r",
-            req_path,
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-    finally:
-        if req_path:
-            Path(req_path).unlink(missing_ok=True)
-    if result.returncode != 0:
-        raise RuntimeError(
-            "Failed to resolve dependency tree: "
-            f"{result.stderr.strip() or result.stdout.strip()}"
-        )
+def resolve_transitive_dependencies() -> list[tuple[str, str]]:
+    command = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--dry-run",
+        "--ignore-installed",
+        "--quiet",
+        "--report",
+        "-",
+    ]
+    for req_path in REQUIREMENTS_FILES:
+        command.extend(["-r", str(req_path)])
 
-    try:
-        report = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("Failed to parse dependency resolution report") from exc
+    result = subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    output = result.stdout
+    start = output.find("{")
+    end = output.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        raise ValueError("pip --report output did not contain JSON")
+    report = json.loads(output[start : end + 1])
 
     resolved: list[tuple[str, str]] = []
     for item in report.get("install", []):
-        metadata = item.get("metadata") or {}
+        metadata = item.get("metadata", {})
         name = metadata.get("name")
         version = metadata.get("version")
         if not name or not version:
             continue
         resolved.append((name, f"{name}=={version}"))
-
     return resolved
 
 
@@ -134,13 +143,12 @@ def fetch_license(name: str) -> tuple[str, str]:
 
 def build_inventory() -> list[dict[str, str]]:
     inventory: list[dict[str, str]] = []
-    seen: set[str] = set()
-    dependency_specs = [spec for _, spec in load_dependencies()]
-    for name, spec in resolve_dependency_tree(dependency_specs):
-        canonical = name.lower()
-        if canonical in seen:
-            continue
-        seen.add(canonical)
+    dependencies = {name.lower(): (name, spec) for name, spec in resolve_transitive_dependencies()}
+    for name, spec in load_pyproject_dependencies():
+        dependencies[name.lower()] = (name, spec)
+    for name, spec in load_generated_requirements():
+        dependencies[name.lower()] = (name, spec)
+    for name, spec in dependencies.values():
         license_name, license_url = fetch_license(name)
         inventory.append(
             {
@@ -163,9 +171,12 @@ def render_markdown(inventory: list[dict[str, str]]) -> str:
         information is collected from the Python Package Index (PyPI) and links point to the upstream
         license texts or project pages so downstream redistributors can comply with notice obligations.
 
-        To refresh this inventory, run:
+        This inventory is generated from `pyproject.toml`, `requirements.txt`, and
+        `requirements-ci.txt` so shipped runtime and CI pins stay aligned across releases.
+        Regenerate with:
 
         ```bash
+        python scripts/generate_requirements.py
         python scripts/generate_third_party_licenses.py
         ```
 
