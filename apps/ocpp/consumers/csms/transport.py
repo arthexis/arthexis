@@ -37,11 +37,16 @@ class CSMSTransportMixin:
             pending = dict(getattr(session, "pending_cp_messages", {}))
             if not pending:
                 return False
-            session.pending_cp_messages.clear()
-            session.last_cp_flush_at = now
-        for payload in pending.values():
+        forwarded = False
+        for action, payload in pending.items():
             await sync_to_async(session.connection.send)(payload)
-        return True
+            forwarded = True
+            with lock:
+                if session.pending_cp_messages.get(action) == payload:
+                    session.pending_cp_messages.pop(action, None)
+        with lock:
+            session.last_cp_flush_at = now
+        return forwarded
 
     async def _ensure_forwarding_context(
         self, charger
@@ -209,6 +214,7 @@ class CSMSTransportMixin:
                 await sync_to_async(session.connection.send)(
                     self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms")
                 )
+                forwarded = True
             except Exception as retry_exc:  # pragma: no cover
                 logger.warning(
                     "Failed to forward %s from charger %s after reconnect: %s",

@@ -193,3 +193,53 @@ async def test_forward_charge_point_message_throttles_and_keeps_latest_per_actio
     ]
     assert forwarded_ids == ["m-1", "m-2", "m-3"]
     assert transport._record_forwarding_activity.call_count == 2
+
+
+@pytest.mark.anyio
+async def test_flush_buffered_forward_messages_keeps_unsent_payloads_on_failure():
+    """Flush failures should preserve unsent buffered payloads for retry."""
+
+    transport = DummyTransport()
+    session = FakeSession(
+        pending_call_ids=set(),
+        send=Mock(side_effect=[None, RuntimeError("flush failure")]),
+    )
+    session.pending_cp_messages = {
+        "Heartbeat": '{"ocpp":[2,"m-1","Heartbeat",{}]}',
+        "StatusNotification": '{"ocpp":[2,"m-2","StatusNotification",{}]}',
+    }
+
+    with pytest.raises(RuntimeError, match="flush failure"):
+        await transport._flush_buffered_forward_messages(session, now=timezone.now())
+
+    assert "Heartbeat" not in session.pending_cp_messages
+    assert "StatusNotification" in session.pending_cp_messages
+    assert session.last_cp_flush_at is None
+
+
+@pytest.mark.anyio
+async def test_forward_charge_point_message_records_activity_after_reconnect_retry(monkeypatch):
+    """Successful reconnect retry should still update forwarding activity metadata."""
+
+    transport = DummyTransport()
+    charger = SimpleNamespace(pk=16, charger_id="CP-16", connector_id=1, forwarded_to_id=None)
+    transport.aggregate_charger = None
+    transport.charger = charger
+    transport._record_forwarding_activity = AsyncMock()
+    transport._ensure_forwarding_context = AsyncMock(return_value=(("Heartbeat",), 1))
+
+    session = FakeSession(pending_call_ids=set(), send=Mock(side_effect=RuntimeError("send failure")))
+    retry_session = FakeSession(pending_call_ids=set())
+
+    transport._reconnect_forwarding_session = AsyncMock(return_value=(retry_session, charger))
+    fake_forwarder = SimpleNamespace(get_session=Mock(return_value=session), remove_session=Mock())
+    monkeypatch.setattr("apps.ocpp.consumers.csms.transport.forwarder", fake_forwarder)
+    monkeypatch.setattr("apps.ocpp.consumers.csms.transport.ocpp_forwarder_enabled", lambda default=True: True)
+    monkeypatch.setattr("apps.ocpp.consumers.csms.transport.Node.get_local", Mock(return_value=None))
+
+    await transport._forward_charge_point_message_legacy("Heartbeat", '[2,"m-1","Heartbeat",{}]')
+
+    fake_forwarder.remove_session.assert_called_once_with(16)
+    retry_session.connection.send.assert_called_once()
+    transport._record_forwarding_activity.assert_called_once()
+    assert retry_session.last_activity is not None
