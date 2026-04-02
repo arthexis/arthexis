@@ -1,5 +1,7 @@
 import json
 import re
+import subprocess
+import sys
 import textwrap
 import tomllib
 from pathlib import Path
@@ -57,6 +59,45 @@ def load_generated_requirements() -> list[tuple[str, str]]:
     return parsed
 
 
+def resolve_transitive_dependencies() -> list[tuple[str, str]]:
+    command = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--dry-run",
+        "--ignore-installed",
+        "--quiet",
+        "--report",
+        "-",
+    ]
+    for req_path in REQUIREMENTS_FILES:
+        command.extend(["-r", str(req_path)])
+
+    result = subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    output = result.stdout
+    start = output.find("{")
+    end = output.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        raise ValueError("pip --report output did not contain JSON")
+    report = json.loads(output[start : end + 1])
+
+    resolved: list[tuple[str, str]] = []
+    for item in report.get("install", []):
+        metadata = item.get("metadata", {})
+        name = metadata.get("name")
+        version = metadata.get("version")
+        if not name or not version:
+            continue
+        resolved.append((name, f"{name}=={version}"))
+    return resolved
+
+
 def fetch_license(name: str) -> tuple[str, str]:
     url = f"https://pypi.org/pypi/{name}/json"
     try:
@@ -102,10 +143,9 @@ def fetch_license(name: str) -> tuple[str, str]:
 
 def build_inventory() -> list[dict[str, str]]:
     inventory: list[dict[str, str]] = []
-    dependencies = {
-        name.lower(): (name, spec)
-        for name, spec in load_pyproject_dependencies()
-    }
+    dependencies = {name.lower(): (name, spec) for name, spec in resolve_transitive_dependencies()}
+    for name, spec in load_pyproject_dependencies():
+        dependencies[name.lower()] = (name, spec)
     for name, spec in load_generated_requirements():
         dependencies[name.lower()] = (name, spec)
     for name, spec in dependencies.values():
