@@ -90,9 +90,13 @@
         <div class="mb-3">
           <div class="user-story-rating-row">
             <span class="form-label d-block mb-0" id="user-story-rating-group-label">
-              {% blocktrans trimmed with link_start='<button type="button" class="user-story-copy-link btn btn-link p-0 align-baseline" data-feedback-copy>'|safe link_end='</button>'|safe %}
-                Please rate {{ link_start }}this page{{ link_end }}
-              {% endblocktrans %}
+              {% if request.user.is_authenticated %}
+                {% blocktrans trimmed with link_start='<button type="button" class="user-story-copy-link btn btn-link p-0 align-baseline" data-feedback-copy>'|safe link_end='</button>'|safe %}
+                  Please rate {{ link_start }}this page{{ link_end }}
+                {% endblocktrans %}
+              {% else %}
+                {% trans 'Please rate this page' %}
+              {% endif %}
             </span>
             <div class="user-story-rating" role="radiogroup" aria-labelledby="user-story-rating-group-label" aria-describedby="user-story-rating-hint">
               <input type="radio" id="user-story-rating-5" name="rating" value="5" required>
