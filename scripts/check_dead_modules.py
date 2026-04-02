@@ -6,18 +6,20 @@ import pathlib
 import sys
 
 
-MINIMAL_PLACEHOLDER_PARTS = {"migrations"}
+MINIMAL_PLACEHOLDER_PARTS = {
+    "beat_migrations",
+    "fixtures",
+    "migrations",
+    "node_modules",
+}
 
 
 def _is_ellipsis_expression(node: ast.AST) -> bool:
-    if not isinstance(node, ast.Expr):
-        return False
-
-    value = node.value
-    if isinstance(value, ast.Constant):
-        return value.value is Ellipsis
-
-    return isinstance(value, ast.Ellipsis)
+    return (
+        isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Constant)
+        and node.value.value is Ellipsis
+    )
 
 
 def _is_docstring_expression(node: ast.AST) -> bool:
@@ -59,7 +61,9 @@ def _iter_repo_python_files(repo_root: pathlib.Path) -> list[pathlib.Path]:
     return sorted(
         path
         for path in repo_root.rglob("*.py")
-        if path.is_file() and not _should_skip(path.relative_to(repo_root))
+        if path.is_file()
+        and not any(part.startswith(".") for part in path.relative_to(repo_root).parts)
+        and not _should_skip(path.relative_to(repo_root))
     )
 
 
