@@ -30,6 +30,7 @@ from apps.nodes.models import Node
 
 
 LIGHTSAIL_CLI_AUTH_BOOTSTRAP_FEATURE_SLUG = "deploy-lightsail-cli-auth-bootstrap"
+DEPLOY_SERVICE_PREFIX = "arthexis-"
 
 
 class Command(BaseCommand):
@@ -172,9 +173,9 @@ class Command(BaseCommand):
         install_dir = (
             str(options.get("install_dir") or "").strip() or f"/srv/{instance_name}"
         )
-        service_name = (
-            str(options.get("service") or "").strip() or f"arthexis-{instance_name}"
-        )
+        service_name = str(options.get("service") or "").strip()
+        if not service_name:
+            service_name = self._default_service_name(instance_name)
         auth_kwargs = self._resolve_aws_auth_kwargs(
             credentials=credentials,
             region=region,
@@ -327,6 +328,13 @@ class Command(BaseCommand):
             discovered = []
         merged = sorted({*COMMON_LIGHTSAIL_REGIONS, *discovered})
         return tuple(merged)
+
+    def _default_service_name(self, instance_name: str) -> str:
+        """Build a valid DeployInstance service_name from a Lightsail name."""
+
+        max_length = DeployInstance._meta.get_field("service_name").max_length
+        candidate = f"{DEPLOY_SERVICE_PREFIX}{instance_name}".lower().strip()
+        return candidate[:max_length]
 
     def _cleanup_remote_instance(
         self,

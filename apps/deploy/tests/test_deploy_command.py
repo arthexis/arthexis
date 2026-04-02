@@ -234,6 +234,82 @@ def test_lightsail_registers_node_with_long_instance_name(monkeypatch):
     assert len(node.public_endpoint) <= endpoint_max_length
 
 
+def test_lightsail_normalizes_default_service_name(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+    instance_name = "Ops-Node-With-MixedCase"
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        lambda **kwargs: {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        },
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--region",
+        "us-east-1",
+        "--instance",
+        instance_name,
+        "--skip-create",
+    )
+
+    deploy_instance = DeployInstance.objects.get(name="main")
+    assert deploy_instance.service_name == "arthexis-ops-node-with-mixedcase"
+
+
+def test_lightsail_truncates_default_service_name_to_model_limit(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+    instance_name = "ops-" + ("A" * 80)
+    max_length = DeployInstance._meta.get_field("service_name").max_length
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        lambda **kwargs: {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        },
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--region",
+        "us-east-1",
+        "--instance",
+        instance_name,
+        "--skip-create",
+    )
+
+    deploy_instance = DeployInstance.objects.get(name="main")
+    assert len(deploy_instance.service_name) == max_length
+    assert deploy_instance.service_name == deploy_instance.service_name.lower()
+
+
 def test_lightsail_registers_node_with_host_as_network_hostname(monkeypatch):
     credentials = AWSCredentials.objects.create(
         name="primary",
