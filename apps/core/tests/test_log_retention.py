@@ -69,3 +69,26 @@ def test_run_log_retention_sends_alert_when_disk_remains_high(settings, tmp_path
 
     assert result.alert_sent is True
     assert calls == [(85.0, 85.0)]
+
+
+def test_run_log_retention_continues_when_alert_send_fails(settings, tmp_path, monkeypatch):
+    settings.LOG_DIR = str(tmp_path)
+
+    monkeypatch.setattr(log_retention, "_trim_with_policy", lambda _log_dir: (0, 0))
+    monkeypatch.setattr(log_retention, "_delete_candidates", lambda _log_dir, max_age_days: (1, 10))
+
+    levels = iter([85.0, 85.0, 85.0, 85.0, 85.0, 85.0])
+    monkeypatch.setattr(log_retention, "_disk_usage_percent", lambda _path: next(levels))
+
+    calls: list[tuple[float, float]] = []
+
+    def _record_failed_alert(*, before_percent: float, after_percent: float) -> bool:
+        calls.append((before_percent, after_percent))
+        return False
+
+    monkeypatch.setattr(log_retention, "_send_disk_pressure_alert", _record_failed_alert)
+
+    result = log_retention._run_log_retention()
+
+    assert result.alert_sent is False
+    assert calls == [(85.0, 85.0)]

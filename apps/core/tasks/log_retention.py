@@ -162,10 +162,14 @@ def _send_disk_pressure_alert(*, before_percent: float, after_percent: float) ->
     )
 
     node = Node.get_local()
-    if node is not None:
-        node.send_mail(subject, body, recipients)
-    else:
-        mailer.send(subject=subject, message=body, recipient_list=recipients)
+    try:
+        if node is not None:
+            node.send_mail(subject, body, recipients)
+        else:
+            mailer.send(subject=subject, message=body, recipient_list=recipients)
+    except Exception:
+        logger.exception("Disk pressure alert failed while sending email")
+        return False
     return True
 
 
