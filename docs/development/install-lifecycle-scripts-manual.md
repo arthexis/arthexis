@@ -82,7 +82,7 @@ Other arguments are passed through to `scripts/service-start.sh`.
 | `--stash` | Force auto-stash of local changes before upgrade. |
 | `--force-refresh` | Force environment/dependency refresh steps. |
 | `--clean` | Run clean-upgrade mode (destructive DB cleanup path with warning unless bypassed). |
-| `--migrate` | Rebuild via clean mode and reconcile compatible data from a pre-migration snapshot (SQLite and PostgreSQL only). |
+| `--migrate` | Rebuild via clean mode and reconcile compatible data from a pre-migration snapshot (SQLite and PostgreSQL only); see the canonical migration breakage decision tree in the [reinstall + import runbook](../operations/reinstall-data-import-runbook.md#migration-breakage-decision-tree-canonical). |
 | `--no-start`, `--no-restart` | Keep services stopped after upgrade. |
 | `--start`, `-s` | Force startup after upgrade. |
 | `--stop` | Stop services and exit (no restart). |

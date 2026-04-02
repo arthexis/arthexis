@@ -50,6 +50,27 @@ Do **not** copy old migration files into the new checkout.
 If you need service/role options, include them in the same reinstall command
 (for example `--service`, `--terminal`, `--control`, `--systemd`, etc.).
 
+### Migration breakage decision tree (canonical)
+
+Use this decision tree when migrations fail during upgrade or refresh:
+
+1. Did you hit a **migration graph/version mismatch** and are you running on a
+   supported backend for reconciliation (**SQLite** or **PostgreSQL**)?
+   - **Yes** → run:
+     ```bash
+     ./upgrade.sh --migrate
+     ```
+     This matches the operator recovery guidance emitted by `env-refresh.py`
+     for graph/version mismatch detection (SQLite message and shared
+     reconciliation flow intent).
+   - **No** → use **full reinstall + import**:
+     1. Reinstall clean (`./install.sh --clean --no-start`)
+     2. Import approved payloads (`manage.py loaddata ...` / app import commands)
+     3. Run smoke checks
+
+Use full reinstall + import as the default path for unsupported backends or
+when the existing database state is too inconsistent to reconcile safely.
+
 ### Optional: `upgrade.sh --migrate` reconciliation mode
 
 If you are performing a major-version refresh and need best-effort row carryover:
