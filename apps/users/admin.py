@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
@@ -177,7 +175,7 @@ class PasskeyCredentialAdmin(admin.ModelAdmin):
             "title": _("Register passkey"),
             "form": form,
             "registration_url": reverse("admin:users_passkeycredential_register"),
-            "public_key_options_json": json.dumps(options_data) if options_data else "",
+            "public_key_options_data": options_data,
         }
         return TemplateResponse(request, "admin/users/passkeycredential_wizard.html", context)
 
