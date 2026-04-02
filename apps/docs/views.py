@@ -2,7 +2,7 @@ import logging
 import mimetypes
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlunsplit
 
 from django.conf import settings
 from django.core.cache import cache
@@ -30,6 +30,12 @@ ALLOWED_DOC_EXTENSIONS = (
 DOCUMENT_NOT_FOUND_MESSAGE = "Document not found"
 DOCUMENT_LIBRARY_CACHE_KEY = "docs:library:index"
 DOCUMENT_LIBRARY_CACHE_TIMEOUT = 300
+DOCS_CANONICAL_HOST_OVERRIDES = {
+    "m.arthexis.com": "arthexis.com",
+}
+FULL_CONTENT_DEFAULT_DOCUMENTS = {
+    "docs/development/install-lifecycle-scripts-manual.md",
+}
 
 
 def _is_allowed_doc_path(path: Path) -> bool:
@@ -451,6 +457,7 @@ def _render_document_library(
     docs_prefix = request.GET.get("docs_path", "")
     apps_docs_prefix = request.GET.get("apps_docs_path", "")
     context = {
+        "canonical_url": _build_canonical_url(request),
         "sections": _get_cached_document_library(
             root_base,
             docs_prefix=docs_prefix,
@@ -464,6 +471,33 @@ def _render_document_library(
     response = render(request, "docs/library.html", context, status=status)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
     return response
+
+
+def _canonicalize_docs_host(host: str) -> str:
+    """Return the canonical docs host when the request host uses an alias."""
+
+    return DOCS_CANONICAL_HOST_OVERRIDES.get(host, host)
+
+
+def _build_canonical_url(request, *, path: str | None = None, query: str = "") -> str:
+    """Build a canonical URL for docs pages with stable host normalization."""
+
+    host = _canonicalize_docs_host(request.get_host())
+    target_path = path or request.path
+    return urlunsplit((request.scheme, host, target_path, query, ""))
+
+
+def _should_default_full_document(doc: str | None) -> bool:
+    """Return whether a document should render full content by default."""
+
+    if not doc:
+        return False
+    normalized = doc.strip().replace("\\", "/").lstrip("/")
+    if normalized in FULL_CONTENT_DEFAULT_DOCUMENTS:
+        return True
+    if Path(normalized).suffix:
+        return False
+    return f"{normalized}.md" in FULL_CONTENT_DEFAULT_DOCUMENTS
 
 
 def render_readme_page(
@@ -487,7 +521,10 @@ def render_readme_page(
         html, toc_html = rendering.render_document_file(document.file)
     else:
         html, toc_html = _render_document_cached(document.file, cache_key)
-    full_document = request.GET.get("full") == "1"
+    force_full_document = _should_default_full_document(normalized_doc)
+    full_document = request.GET.get("full") == "1" or (
+        force_full_document and "full" not in request.GET
+    )
     initial_content, remaining_content = rendering.split_html_sections(html, 2)
     if full_document:
         initial_content = html
@@ -505,8 +542,16 @@ def render_readme_page(
     fragment_url = f"{request.path}?{fragment_query.urlencode()}"
     full_query = base_query.copy()
     full_query["full"] = "1"
-    full_document_url = f"{request.path}?{full_query.urlencode()}"
+    full_query_string = full_query.urlencode()
+    full_document_url = f"{request.path}?{full_query_string}"
+    canonical_query = full_query_string if force_full_document else ""
+    canonical_url = _build_canonical_url(
+        request,
+        path=request.path,
+        query=canonical_query,
+    )
     context = {
+        "canonical_url": canonical_url,
         "content": initial_content,
         "title": document.title,
         "toc": toc_html,
