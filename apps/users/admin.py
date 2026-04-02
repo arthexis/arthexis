@@ -1,13 +1,28 @@
 """Admin registrations for the users app."""
 
-from django.contrib import admin
+from __future__ import annotations
+
+import json
+
+from django import forms
+from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.forms import ModelForm
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import redirect
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
+from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
+from webauthn.helpers.exceptions import InvalidJSONStructure, InvalidRegistrationResponse
 
 from apps.core.admin.mixins import OwnableAdminForm, OwnableAdminMixin
 
-from .models import ChatProfile, UserFlag
+from .models import ChatProfile, PasskeyCredential, User, UserFlag
+from .passkeys import build_registration_options, verify_registration_response
+
+PASSKEY_REGISTRATION_SESSION_KEY = "users_admin_passkey_registration"
 
 
 class ChatProfileAdminForm(OwnableAdminForm):
@@ -35,6 +50,13 @@ class ChatProfileAdminForm(OwnableAdminForm):
         return cleaned_data
 
 
+class PasskeyRegistrationForm(forms.Form):
+    """Collect user and friendly label before creating WebAuthn options."""
+
+    user = forms.ModelChoiceField(queryset=User.objects.all())
+    name = forms.CharField(max_length=80)
+
+
 @admin.register(ChatProfile)
 class ChatProfileAdmin(OwnableAdminMixin, admin.ModelAdmin):
     """Manage per-owner chat preferences."""
@@ -49,6 +71,115 @@ class ChatProfileAdmin(OwnableAdminMixin, admin.ModelAdmin):
     )
     list_filter = ("contact_via_chat", "is_enabled")
     search_fields = ("user__username", "group__name", "avatar__name")
+
+
+@admin.register(PasskeyCredential)
+class PasskeyCredentialAdmin(admin.ModelAdmin):
+    """Manage enrolled passkeys and provide a browser-assisted registration wizard."""
+
+    list_display = ("name", "user", "last_used_at", "created_at")
+    search_fields = ("name", "user__username", "user__email", "credential_id")
+    readonly_fields = ("credential_id", "created_at", "last_used_at", "sign_count", "updated_at")
+
+    change_list_template = "admin/users/passkeycredential_changelist.html"
+
+    def get_urls(self):
+        custom = [
+            path(
+                "register/",
+                self.admin_site.admin_view(self.registration_wizard_view),
+                name="users_passkeycredential_register",
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def registration_wizard_view(self, request: HttpRequest) -> HttpResponse:
+        if not self.has_add_permission(request):
+            messages.error(request, _("You do not have permission to register passkeys."))
+            return redirect(reverse("admin:index"))
+
+        form = PasskeyRegistrationForm(request.POST or None)
+        options_data = None
+
+        if request.method == "POST" and "start" in request.POST:
+            if form.is_valid():
+                user = form.cleaned_data["user"]
+                name = form.cleaned_data["name"].strip()
+                options = build_registration_options(
+                    request,
+                    user_id=str(user.pk).encode("utf-8"),
+                    user_name=user.get_username(),
+                    user_display_name=user.get_full_name() or user.get_username(),
+                    rp_name=self.admin_site.site_header,
+                    exclude_credentials=(
+                        base64url_to_bytes(credential.credential_id)
+                        for credential in user.passkeys.only("credential_id")
+                    ),
+                )
+                request.session[PASSKEY_REGISTRATION_SESSION_KEY] = {
+                    "challenge": options.challenge,
+                    "name": name,
+                    "user_handle": options.user_handle,
+                    "user_id": user.pk,
+                }
+                options_data = options.data
+
+        if request.method == "POST" and "finish" in request.POST:
+            pending = request.session.get(PASSKEY_REGISTRATION_SESSION_KEY) or {}
+            challenge = pending.get("challenge")
+            user_id = pending.get("user_id")
+            name = pending.get("name")
+            user_handle = pending.get("user_handle")
+            if not all((challenge, user_id, name, user_handle)):
+                messages.error(request, _("Passkey registration session expired. Please restart."))
+                return redirect(reverse("admin:users_passkeycredential_register"))
+
+            user = User.objects.filter(pk=user_id).first()
+            if user is None:
+                messages.error(request, _("Selected user was not found."))
+                request.session.pop(PASSKEY_REGISTRATION_SESSION_KEY, None)
+                return redirect(reverse("admin:users_passkeycredential_register"))
+
+            try:
+                credential = json.loads(request.POST.get("credential_json") or "")
+                verified = verify_registration_response(
+                    request,
+                    credential,
+                    expected_challenge=challenge,
+                )
+            except (TypeError, ValueError, InvalidJSONStructure, InvalidRegistrationResponse):
+                messages.error(request, _("Passkey verification failed. Please try again."))
+            else:
+                transports = credential.get("response", {}).get("transports") or []
+                try:
+                    passkey = PasskeyCredential.objects.create(
+                        user=user,
+                        name=name,
+                        credential_id=bytes_to_base64url(verified.credential_id),
+                        public_key=verified.credential_public_key,
+                        sign_count=verified.sign_count,
+                        user_handle=user_handle,
+                        transports=transports,
+                    )
+                except IntegrityError:
+                    messages.error(
+                        request,
+                        _("A passkey with this name or credential already exists for the user."),
+                    )
+                else:
+                    request.session.pop(PASSKEY_REGISTRATION_SESSION_KEY, None)
+                    messages.success(request, _("Passkey registered successfully."))
+                    return redirect(reverse("admin:users_passkeycredential_change", args=[passkey.pk]))
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Register passkey"),
+            "form": form,
+            "registration_url": reverse("admin:users_passkeycredential_register"),
+            "public_key_options_json": json.dumps(options_data) if options_data else "",
+        }
+        return TemplateResponse(request, "admin/users/passkeycredential_wizard.html", context)
 
 
 @admin.register(UserFlag)
