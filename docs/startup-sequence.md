@@ -41,8 +41,9 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
    Record the startup timestamp and chosen port in
    `.locks/startup_started_at.lck` for status reporting.
 7. When the LCD feature flag is enabled, queue a startup Net Message via
-   `apps.screens.startup_notifications.queue_startup_message` to record the hostname
-   and port for the boot cycle.
+   `manage.py startup_message` (which delegates to
+   `apps.nodes.tasks.send_startup_net_message`) to record the hostname and port
+   for the boot cycle.
 8. Start embedded Celery worker and beat processes unless Celery management is
    disabled or delegated to systemd, capturing their PIDs for cleanup.
 9. If the LCD is configured for embedded mode, start the `apps.screens.lcd_screen`

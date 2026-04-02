@@ -226,17 +226,18 @@ if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
 fi
 
 queue_startup_net_message() {
-  python - "$BASE_DIR" "$PORT" <<'PY'
-import sys
-from pathlib import Path
-
-from apps.screens.startup_notifications import queue_startup_message
-
-base_dir = Path(sys.argv[1])
-port_value = sys.argv[2]
-
-queue_startup_message(base_dir=base_dir, port=port_value)
-PY
+  local status
+  status="$(python manage.py startup_message --port "$PORT" --lock-file "$LOCK_DIR/lcd-high")" || return 1
+  case "$status" in
+    queued:*|skipped:*)
+      printf '%s\n' "$status"
+      return 0
+      ;;
+    *)
+      echo "Unexpected startup message status: $status" >&2
+      return 1
+      ;;
+  esac
 }
 while [[ $# -gt 0 ]]; do
   case "$1" in

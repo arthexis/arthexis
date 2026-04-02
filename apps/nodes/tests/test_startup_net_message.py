@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -54,14 +53,13 @@ def test_send_startup_net_message_writes_startup_message(
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir()
     (lock_dir / "lcd_screen_enabled.lck").write_text("", encoding="utf-8")
-    def write_high_lock(*, base_dir, port, lock_file=None):
-        target = lock_file or (Path(base_dir) / ".locks" / tasks.LCD_HIGH_LOCK_FILE)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("hi\nthere\n", encoding="utf-8")
-        return target
+    def write_high_lock(*, lock_file, subject, body, expires_at=None):
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+        lock_file.write_text("hi\nthere\n", encoding="utf-8")
+        return lock_file
 
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
-    monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
+    monkeypatch.setattr(tasks, "write_lcd_message", write_high_lock)
 
     tasks.send_startup_net_message()
 
@@ -88,14 +86,13 @@ def test_startup_message_ignores_uptime_lock(monkeypatch, settings, tmp_path):
         json.dumps({"started_at": started_at.isoformat()}), encoding="utf-8"
     )
 
-    def write_high_lock(*, base_dir, port, lock_file=None):
-        target = lock_file or (Path(base_dir) / ".locks" / tasks.LCD_HIGH_LOCK_FILE)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("hi\nthere\n", encoding="utf-8")
-        return target
+    def write_high_lock(*, lock_file, subject, body, expires_at=None):
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+        lock_file.write_text("hi\nthere\n", encoding="utf-8")
+        return lock_file
 
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
-    monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
+    monkeypatch.setattr(tasks, "write_lcd_message", write_high_lock)
 
     tasks.send_startup_net_message()
 
@@ -115,17 +112,16 @@ def test_startup_message_cache_resets_each_boot(
 
     high_payloads: list[str] = []
 
-    def write_high_lock(*, base_dir, port, lock_file=None):
-        target = lock_file or (Path(base_dir) / ".locks" / tasks.LCD_HIGH_LOCK_FILE)
-        target.parent.mkdir(parents=True, exist_ok=True)
+    def write_high_lock(*, lock_file, subject, body, expires_at=None):
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
         payload = f"call-{len(high_payloads)}"
-        target.write_text(f"{payload}\nbody\n", encoding="utf-8")
+        lock_file.write_text(f"{payload}\nbody\n", encoding="utf-8")
         high_payloads.append(payload)
-        return target
+        return lock_file
 
     monkeypatch.setattr(tasks.django_timezone, "now", timezone.now)
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
-    monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
+    monkeypatch.setattr(tasks, "write_lcd_message", write_high_lock)
     monkeypatch.setattr(tasks.psutil, "boot_time", lambda: 1000.0)
 
     tasks.send_startup_net_message()
@@ -153,13 +149,12 @@ def test_lcd_boot_message_avoids_database(
 
     (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
 
-    def write_high_lock(*, base_dir, port, lock_file=None):
-        target = lock_file or (Path(base_dir) / ".locks" / tasks.LCD_HIGH_LOCK_FILE)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("hi\nthere\n", encoding="utf-8")
-        return target
+    def write_high_lock(*, lock_file, subject, body, expires_at=None):
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+        lock_file.write_text("hi\nthere\n", encoding="utf-8")
+        return lock_file
 
-    monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
+    monkeypatch.setattr(tasks, "write_lcd_message", write_high_lock)
 
     with django_assert_num_queries(0):
         tasks.send_startup_net_message()
