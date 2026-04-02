@@ -186,11 +186,17 @@ class PeerPolicy(Entity):
     def normalized_denied_services(self) -> list[str]:
         return self._normalize_services(self.denied_services)
 
+    def normalized_source_tags(self) -> list[str]:
+        return sorted(self._normalize_services(self.source_tags))
+
+    def normalized_destination_tags(self) -> list[str]:
+        return sorted(self._normalize_services(self.destination_tags))
+
     def clean(self):
         super().clean()
         errors: dict[str, list[str]] = {}
         source_selectors = [bool(self.source_node_id), bool(self.source_group_id), bool(self.source_station_id)]
-        source_tags = self._normalize_services(self.source_tags)
+        source_tags = self.normalized_source_tags()
         if not any(source_selectors) and not source_tags:
             errors.setdefault("source_node", []).append(
                 _("Choose a source node, source group, source station, or source tag selector."),
@@ -205,7 +211,7 @@ class PeerPolicy(Entity):
             bool(self.destination_group_id),
             bool(self.destination_station_id),
         ]
-        destination_tags = self._normalize_services(self.destination_tags)
+        destination_tags = self.normalized_destination_tags()
         if not any(destination_selectors) and not destination_tags:
             errors.setdefault("destination_node", []).append(
                 _("Choose a destination node, destination group, destination station, or destination tag selector."),

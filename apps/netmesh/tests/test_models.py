@@ -116,6 +116,33 @@ def test_peer_policy_rejects_ambiguous_allow_and_deny_combinations():
 
 
 @pytest.mark.django_db
+def test_peer_policy_rejects_ambiguous_allow_and_deny_with_reordered_tag_selectors():
+    source = Node.objects.create(hostname="mesh-reordered-tag-source")
+    destination = Node.objects.create(hostname="mesh-reordered-tag-destination")
+
+    PeerPolicy.objects.create(
+        tenant="tenant-reordered-tags",
+        source_node=source,
+        source_tags=["edge", "ingress"],
+        destination_node=destination,
+        destination_tags=["relay", "uplink"],
+        allowed_services=["telemetry"],
+    )
+
+    conflicting = PeerPolicy(
+        tenant="tenant-reordered-tags",
+        source_node=source,
+        source_tags=["ingress", "edge"],
+        destination_node=destination,
+        destination_tags=["uplink", "relay"],
+        denied_services=["telemetry"],
+    )
+
+    with pytest.raises(ValidationError):
+        conflicting.full_clean()
+
+
+@pytest.mark.django_db
 def test_mesh_membership_disallows_duplicate_default_scope():
     node = Node.objects.create(hostname="mesh-default-scope")
 
