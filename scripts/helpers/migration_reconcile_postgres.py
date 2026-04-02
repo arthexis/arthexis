@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +16,7 @@ from scripts.helpers.migration_reconcile_common import ReconcileReport
 
 _SKIP_TABLES = {"django_migrations"}
 _BATCH_SIZE = 500
+_DB_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _connection_kwargs(
@@ -96,32 +97,13 @@ def _column_names(conn: psycopg.Connection[Any], table: str) -> list[str]:
     return [row[0] for row in rows]
 
 
-def _conflict_columns(conn: psycopg.Connection[Any], table: str) -> list[str]:
-    row = conn.execute(
-        """
-        SELECT i.indisprimary, array_agg(a.attname ORDER BY ordinality)
-        FROM pg_index i
-        CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ordinality)
-        JOIN pg_class c ON c.oid = i.indrelid
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
-        WHERE n.nspname = 'public' AND c.relname = %s AND (i.indisprimary OR i.indisunique)
-        GROUP BY i.indexrelid, i.indisprimary
-        ORDER BY i.indisprimary DESC
-        LIMIT 1
-        """,
-        (table,),
-    ).fetchone()
-    if not row:
-        return []
-    return list(row[1] or [])
-
-
-def _batched_rows(
-    rows: list[tuple[Any, ...]], size: int = _BATCH_SIZE
-) -> Iterator[list[tuple[Any, ...]]]:
-    for index in range(0, len(rows), size):
-        yield rows[index : index + size]
+def _validated_db_name(db_name: str) -> str:
+    if not _DB_IDENTIFIER_RE.fullmatch(db_name):
+        raise ValueError(
+            f"Invalid database name '{db_name}'. "
+            "Use only letters, numbers, underscores, and hyphens."
+        )
+    return db_name
 
 
 def _copy_table_rows(
@@ -134,24 +116,20 @@ def _copy_table_rows(
     quoted_table = sql.Identifier(table)
     quoted_columns = sql.SQL(", ").join(sql.Identifier(column) for column in columns)
 
-    source_rows = source_conn.execute(
+    source_cursor = source_conn.cursor()
+    source_cursor.execute(
         sql.SQL("SELECT {} FROM public.{}").format(quoted_columns, quoted_table)
-    ).fetchall()
-    source_count = len(source_rows)
+    )
 
-    if not source_rows:
-        return 0, 0
-
-    conflict_columns = _conflict_columns(target_conn, table)
-    if conflict_columns:
-        conflict_sql = sql.SQL("ON CONFLICT ({}) DO NOTHING").format(
-            sql.SQL(", ").join(sql.Identifier(column) for column in conflict_columns)
-        )
-    else:
-        conflict_sql = sql.SQL("ON CONFLICT DO NOTHING")
+    conflict_sql = sql.SQL("ON CONFLICT DO NOTHING")
 
     inserted = 0
-    for batch in _batched_rows(source_rows):
+    source_count = 0
+    while True:
+        batch = source_cursor.fetchmany(_BATCH_SIZE)
+        if not batch:
+            break
+        source_count += len(batch)
         values_sql = sql.SQL(", ").join(
             sql.SQL("({})").format(
                 sql.SQL(", ").join(sql.Placeholder() for _ in columns)
@@ -160,11 +138,11 @@ def _copy_table_rows(
         )
         params: list[Any] = [value for row in batch for value in row]
 
-        insert_sql = sql.SQL(
-            "INSERT INTO public.{} ({}) VALUES {} {} RETURNING 1"
-        ).format(quoted_table, quoted_columns, values_sql, conflict_sql)
+        insert_sql = sql.SQL("INSERT INTO public.{} ({}) VALUES {} {}").format(
+            quoted_table, quoted_columns, values_sql, conflict_sql
+        )
 
-        inserted += len(target_conn.execute(insert_sql, params).fetchall())
+        inserted += target_conn.execute(insert_sql, params).rowcount
 
     return inserted, source_count
 
@@ -176,6 +154,7 @@ def restore_postgres_snapshot_to_temp_database(
     temp_db_name: str,
 ) -> None:
     """Restore the snapshot into ``temp_db_name`` for row reconciliation."""
+    safe_temp_db_name = _validated_db_name(temp_db_name)
 
     admin_command = ["psql"]
     if default_db.get("HOST"):
@@ -191,8 +170,8 @@ def restore_postgres_snapshot_to_temp_database(
             "postgres",
             "--command",
             (
-                f"DROP DATABASE IF EXISTS \"{temp_db_name}\"; "
-                f"CREATE DATABASE \"{temp_db_name}\";"
+                f'DROP DATABASE IF EXISTS "{safe_temp_db_name}"; '
+                f'CREATE DATABASE "{safe_temp_db_name}";'
             ),
         ]
     )
@@ -205,7 +184,7 @@ def restore_postgres_snapshot_to_temp_database(
         "--no-owner",
         "--no-privileges",
         "--dbname",
-        temp_db_name,
+        safe_temp_db_name,
     ]
     if default_db.get("HOST"):
         restore_command.extend(["--host", default_db["HOST"]])
@@ -220,6 +199,7 @@ def restore_postgres_snapshot_to_temp_database(
 
 def drop_postgres_temp_database(*, default_db: dict[str, Any], temp_db_name: str) -> None:
     """Drop the temporary reconciliation database if present."""
+    safe_temp_db_name = _validated_db_name(temp_db_name)
 
     admin_command = ["psql"]
     if default_db.get("HOST"):
@@ -234,7 +214,7 @@ def drop_postgres_temp_database(*, default_db: dict[str, Any], temp_db_name: str
             "--dbname",
             "postgres",
             "--command",
-            f"DROP DATABASE IF EXISTS \"{temp_db_name}\" WITH (FORCE);",
+            f'DROP DATABASE IF EXISTS "{safe_temp_db_name}" WITH (FORCE);',
         ]
     )
     _run_psql_command(admin_command, default_db=default_db)
@@ -280,6 +260,7 @@ def reconcile_postgres_tables(
             if target_only_columns:
                 skipped_columns[table] = target_only_columns
 
+            target_conn.execute("SAVEPOINT reconcile_table")
             try:
                 inserted_count, source_count = _copy_table_rows(
                     source_conn=source_conn,
@@ -289,9 +270,11 @@ def reconcile_postgres_tables(
                 )
             except psycopg.Error as exc:
                 skipped_tables[table] = str(exc)
-                target_conn.rollback()
+                target_conn.execute("ROLLBACK TO SAVEPOINT reconcile_table")
+                target_conn.execute("RELEASE SAVEPOINT reconcile_table")
                 continue
 
+            target_conn.execute("RELEASE SAVEPOINT reconcile_table")
             copied_tables.append(table)
             skipped = max(source_count - inserted_count, 0)
             if skipped:
