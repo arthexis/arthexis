@@ -160,3 +160,14 @@ def test_lcd_boot_message_avoids_database(
         tasks.send_startup_net_message()
 
     assert not (lock_dir / LCD_LOW_LOCK_FILE).exists()
+
+
+def test_build_startup_message_ignores_invalid_version_encoding(monkeypatch, tmp_path):
+    (tmp_path / "VERSION").write_bytes(b"\x80\x81")
+    monkeypatch.setattr(tasks.socket, "gethostname", lambda: "node-a")
+    monkeypatch.setattr(tasks.revision, "get_revision", lambda: "")
+
+    subject, body = tasks._build_startup_message(base_dir=tmp_path, port="9000")
+
+    assert subject == "node-a:9000"
+    assert body == ""

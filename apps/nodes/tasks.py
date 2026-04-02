@@ -54,16 +54,14 @@ def _startup_message_cache_key() -> str:
 
 def _build_startup_message(base_dir: Path, port: str | None = None) -> tuple[str, str]:
     host = (socket.gethostname() or "").strip()
-    port_value = (port if port is not None else os.environ.get("PORT", "8888")).strip()
-    if not port_value:
-        port_value = "8888"
+    port_value = str(port or os.environ.get("PORT") or "8888").strip()
 
     version = ""
     ver_path = Path(base_dir) / "VERSION"
     if ver_path.exists():
         try:
             version = ver_path.read_text(encoding="utf-8").strip()
-        except OSError:
+        except (OSError, UnicodeDecodeError):
             logger.debug("Failed to read VERSION file", exc_info=True)
 
     revision_value = (revision.get_revision() or "").strip()
@@ -102,8 +100,7 @@ def send_startup_net_message(
     if not lcd_feature_enabled(lock_dir):
         return "skipped:lcd-disabled"
 
-    port_value = port or os.environ.get("PORT", "8888")
-    subject, body = _build_startup_message(base_dir=base_dir, port=port_value)
+    subject, body = _build_startup_message(base_dir=base_dir, port=port)
     try:
         write_lcd_message(lock_file=target_lock, subject=subject, body=body)
     except Exception:
