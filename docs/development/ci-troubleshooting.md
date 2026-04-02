@@ -34,3 +34,11 @@ The screenshot workflow already captures baseline routes. To request additional 
 - Blank lines and `#` comments are ignored.
 
 These path files are read by `.github/workflows/dashboard-screenshot.yml`, which appends them to the default capture list and uploads the resulting screenshots as workflow artifacts.
+
+### When local preview tooling is unavailable
+
+If local preview generation fails because browser/screenshot tooling is unavailable in the current runtime, do not block on manual capture. Register the route for CI screenshot capture instead:
+
+- Add the route (starting with `/`, one per line) to `.github/screenshot-paths.authenticated.txt` (requires login) or `.github/screenshot-paths.public.txt` (public route).
+- Push the change and rely on the screenshot workflow artifacts as the preview source of truth.
+- Prefer this CI route-registration flow over ad-hoc local browser setup in constrained environments.
