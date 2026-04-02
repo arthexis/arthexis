@@ -307,10 +307,10 @@ def _build_library_section(
 
     for path in files:
         relative = path.relative_to(root).as_posix()
-        if path.stem.lower() == "index":
-            continue
         if prefix:
             if relative == prefix:
+                if path.stem.lower() == "index":
+                    continue
                 items.append(_build_library_item(path, root, route_name, label=Path(relative).name))
                 continue
             if not relative.startswith(f"{prefix}/"):
@@ -321,6 +321,8 @@ def _build_library_section(
 
         if "/" in scoped_relative:
             folders.add(scoped_relative.split("/", 1)[0])
+            continue
+        if path.stem.lower() == "index":
             continue
         items.append(_build_library_item(path, root, route_name, label=Path(relative).name))
 

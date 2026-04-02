@@ -83,10 +83,28 @@ def test_collect_document_library_hides_index_documents():
         root_base / "docs" / "guides" / "intro.md",
     ]
 
-    sections = views._collect_document_library(root_base, docs_files=docs_files, apps_docs_files=[])
+    sections = views._collect_document_library(
+        root_base,
+        docs_prefix="guides",
+        docs_files=docs_files,
+        apps_docs_files=[],
+    )
 
     section_items = sections[0]["items"]
     labels = [item["label"] for item in section_items]
 
-    assert "guides/" in labels
+    assert "intro.md" in labels
     assert "index.md" not in labels
+
+
+def test_collect_document_library_keeps_index_only_directories_navigable():
+    """Directories with only an index doc should still appear as folders."""
+
+    root_base = Path("/tmp/arthexis-release")
+    docs_files = [root_base / "docs" / "archive" / "index.md"]
+
+    sections = views._collect_document_library(root_base, docs_files=docs_files, apps_docs_files=[])
+
+    labels = [item["label"] for item in sections[0]["items"]]
+
+    assert "archive/" in labels
