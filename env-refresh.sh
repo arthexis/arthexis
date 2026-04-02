@@ -713,7 +713,7 @@ fi
 if [ "$MIGRATE_RECONCILE" -eq 1 ]; then
   ARGS="$ARGS --migrate"
 fi
-if [ "$AUTO_RECONCILE_ON_MISMATCH" -eq 1 ]; then
+if [[ "$AUTO_RECONCILE_ON_MISMATCH" -eq 1 ]]; then
   ARGS="$ARGS --reconcile"
 fi
 "$PYTHON" env-refresh.py $ARGS database
