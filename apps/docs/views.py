@@ -544,10 +544,11 @@ def render_readme_page(
     full_query["full"] = "1"
     full_query_string = full_query.urlencode()
     full_document_url = f"{request.path}?{full_query_string}"
+    canonical_query = full_query_string if force_full_document else ""
     canonical_url = _build_canonical_url(
         request,
         path=request.path,
-        query=full_query_string if force_full_document else base_query.urlencode(),
+        query=canonical_query,
     )
     context = {
         "canonical_url": canonical_url,

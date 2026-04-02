@@ -13,6 +13,7 @@ def test_should_default_full_document_for_install_lifecycle_manual():
     """Operational manuals should default to full-content rendering."""
 
     assert views._should_default_full_document("docs/development/install-lifecycle-scripts-manual.md")
+    assert views._should_default_full_document("docs/development/install-lifecycle-scripts-manual")
     assert not views._should_default_full_document("docs/development/ocpp-user-manual.md")
 
 
