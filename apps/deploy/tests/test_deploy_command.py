@@ -199,7 +199,9 @@ def test_lightsail_registers_node_with_long_instance_name(monkeypatch):
         secret_access_key="secret",
     )
     endpoint_max_length = Node._meta.get_field("public_endpoint").max_length
-    deploy_service_max_length = DeployInstance._meta.get_field("service_name").max_length
+    deploy_service_max_length = DeployInstance._meta.get_field(
+        "service_name"
+    ).max_length
     max_instance_name_chars = deploy_service_max_length - len("arthexis-")
     overflow_chars = min(max_instance_name_chars - len("ops-"), endpoint_max_length + 10)
     assert overflow_chars > endpoint_max_length
@@ -231,7 +233,95 @@ def test_lightsail_registers_node_with_long_instance_name(monkeypatch):
     )
 
     node = Node.objects.get(hostname=instance_name)
+    deploy_instance = DeployInstance.objects.get(
+        server__name=instance_name,
+        name="main",
+    )
     assert len(node.public_endpoint) <= endpoint_max_length
+    assert (
+        deploy_instance.service_name
+        == f"arthexis-{instance_name}"[:deploy_service_max_length]
+    )
+
+
+def test_lightsail_normalizes_default_service_name(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+    max_service_name_length = DeployInstance._meta.get_field("service_name").max_length
+    instance_name = f"Ops-{'A' * 100}"
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        lambda **kwargs: {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        },
+    )
+
+    call_command(
+        "lightsail",
+        "--credentials",
+        str(credentials.pk),
+        "--region",
+        "us-east-1",
+        "--instance",
+        instance_name,
+        "--skip-create",
+    )
+
+    deploy_instance = DeployInstance.objects.get(
+        server__name=instance_name,
+        name="main",
+    )
+    assert (
+        deploy_instance.service_name
+        == f"arthexis-{instance_name}".lower()[:max_service_name_length]
+    )
+
+
+def test_lightsail_rejects_invalid_explicit_service_name(monkeypatch):
+    credentials = AWSCredentials.objects.create(
+        name="primary",
+        access_key_id="AKIA_TEST",
+        secret_access_key="secret",
+    )
+
+    monkeypatch.setattr(
+        "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
+        lambda **kwargs: {
+            "name": kwargs["name"],
+            "publicIpAddress": "18.1.2.3",
+            "privateIpAddress": "10.0.0.5",
+            "location": {"availabilityZone": "us-east-1a"},
+            "state": {"name": "running"},
+            "blueprintId": "debian_12",
+            "bundleId": "small_3_0",
+            "arn": "arn:aws:lightsail:::instance/ops-node-1",
+        },
+    )
+
+    with pytest.raises(CommandError, match="Invalid service name"):
+        call_command(
+            "lightsail",
+            "--credentials",
+            str(credentials.pk),
+            "--region",
+            "us-east-1",
+            "--instance",
+            "ops-node-1",
+            "--skip-create",
+            "--service",
+            "INVALID_UPPERCASE",
+        )
 
 
 def test_lightsail_registers_node_with_host_as_network_hostname(monkeypatch):
