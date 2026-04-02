@@ -26,6 +26,12 @@ in issues, pull requests, and reviews.
   ./.venv/bin/pip install '.[qa]'
   ```
 
+### Command style convention
+- Default to `.venv/bin/python manage.py ...` for Django commands in docs and local development.
+- If the instance is already running and the task is an operator-facing runtime action, prefer `./command.sh ...`.
+- Windows exception: use `command.bat ...` for runtime operations and keep using the repository `*.bat` lifecycle scripts where documented.
+- Managed-script exception: when a guide points to a dedicated script (`install.sh`, `start.sh`, `upgrade.sh`, etc.), prefer that script over direct `manage.py`.
+
 ### 2. Run the suite locally
 You can run in Terminal mode with the provided scripts (recommended for parity with
 production tooling):
@@ -36,8 +42,8 @@ production tooling):
 
 Alternatively, use the Django CLI:
 ```bash
-python manage.py migrate
-python manage.py runserver 127.0.0.1:8888
+.venv/bin/python manage.py migrate
+.venv/bin/python manage.py runserver 127.0.0.1:8888
 ```
 
 ## Development workflow
@@ -49,9 +55,9 @@ python manage.py runserver 127.0.0.1:8888
 ### Django changes
 - Add or update tests alongside app changes.
 - When you touch models:
-  1. Run `python manage.py makemigrations`.
+  1. Run `.venv/bin/python manage.py makemigrations`.
   2. Review the migration file for correctness.
-  3. Apply migrations with `python manage.py migrate`.
+  3. Apply migrations with `.venv/bin/python manage.py migrate`.
   4. Note any data migrations or backfills in your PR description.
 
 ### Formatting and style

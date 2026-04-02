@@ -9,14 +9,20 @@ Use a short mapping table in docs/changelog content so operators can update auto
 
 | Removed command | Replacement |
 | --- | --- |
-| `python manage.py old_command [args...]` | `python manage.py new_command [args...]` |
+| `.venv/bin/python manage.py old_command [args...]` | `.venv/bin/python manage.py new_command [args...]` |
 
 ## Optional shell migration snippet
 
 For one-time script updates, include a simple substitution example:
 
 ```bash
+# GNU sed
 sed -i \
-  -e 's/python manage.py old_command/python manage.py new_command/g' \
+  -e 's|.venv/bin/python manage.py old_command|.venv/bin/python manage.py new_command|g' \
+  path/to/ops-script.sh
+
+# BSD/macOS sed
+sed -i '' \
+  -e 's|.venv/bin/python manage.py old_command|.venv/bin/python manage.py new_command|g' \
   path/to/ops-script.sh
 ```

@@ -65,7 +65,7 @@ Changes take effect immediately—no service restart is required—so review tok
 
 - Unknown prefixes remain in place (for example `[UNKNOWN.VALUE]`) and are logged so you can spot typos quickly.
 - Failed lookups for entity prefixes raise descriptive errors in the logs; configuration prefixes resolve to an empty string when the key is missing.
-- Use `python manage.py sigil_resolve "[PREFIX.KEY]"` from a shell (when available) or the Sigil Builder test console to verify a token outside of production workflows.
+- Use `.venv/bin/python manage.py sigil_resolve "[PREFIX.KEY]"` from a shell (when available) or the Sigil Builder test console to verify a token outside of production workflows. This is an intentional `manage.py` exception because `sigil_resolve` is not exposed as a `command.sh` ops entrypoint.
 - Keep secrets in environment variables or encrypted configuration stores and reference them through `ENV` rather than duplicating credentials in plain text.
 
 By centralizing dynamic configuration behind sigils, administrators can keep installations consistent, minimise drift between environments, and grant integrators self-service access to the data they need without exposing sensitive details directly.

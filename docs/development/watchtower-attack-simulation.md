@@ -43,7 +43,7 @@ Record a clean baseline for 10 to 15 minutes:
 
 ```bash
 curl -fsS https://WATCHTOWER_HOST/health/
-python manage.py check
+.venv/bin/python manage.py check
 ```
 
 Keep this baseline to compare during each simulation.
