@@ -149,8 +149,13 @@ def _ensure_maintenance_assets(*, sudo: str = "sudo") -> None:
     )
 
 
-def _disable_default_site_for_public_mode(*, mode: str, sudo: str = "sudo") -> None:
-    if mode != "public":
+def _disable_default_site_for_public_mode(
+    *,
+    mode: str,
+    allow_remove_default_site: bool,
+    sudo: str = "sudo",
+) -> None:
+    if mode != "public" or not allow_remove_default_site:
         return
     subprocess.run([sudo, "rm", "-f", "/etc/nginx/sites-enabled/default"], check=False)
 
@@ -168,6 +173,7 @@ def apply_nginx_configuration(
     site_config_path: Path | None = None,
     site_destination: Path | None = None,
     subdomain_prefixes: list[str] | None = None,
+    allow_remove_default_site: bool = False,
     reload: bool = True,
     sudo: str = "sudo",
 ) -> ApplyResult:
@@ -180,6 +186,7 @@ def apply_nginx_configuration(
     record_lock_state(mode, port, role)
 
     primary_dest = destination or Path("/etc/nginx/sites-enabled/arthexis.conf")
+    managed_destination = site_destination or primary_dest
     try:
         config_content = generate_unified_config(
             mode,
@@ -196,9 +203,13 @@ def apply_nginx_configuration(
 
     subprocess.run([sudo, "mkdir", "-p", str(SITES_ENABLED_DIR)], check=False)
 
-    _write_config_with_sudo(primary_dest, config_content, sudo=sudo)
-    _ensure_site_enabled(primary_dest, sudo=sudo)
-    _disable_default_site_for_public_mode(mode=mode, sudo=sudo)
+    _write_config_with_sudo(managed_destination, config_content, sudo=sudo)
+    _ensure_site_enabled(managed_destination, sudo=sudo)
+    _disable_default_site_for_public_mode(
+        mode=mode,
+        allow_remove_default_site=allow_remove_default_site,
+        sudo=sudo,
+    )
 
     _ensure_maintenance_assets(sudo=sudo)
 

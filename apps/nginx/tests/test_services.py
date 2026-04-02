@@ -34,6 +34,7 @@ def test_ensure_site_enabled_creates_symlink(monkeypatch, tmp_path: Path):
     assert calls[1][0][3] == str(source)
     assert calls[1][0][4] == str(sites_enabled / source.name)
 
+
 def test_ensure_site_enabled_skips_non_sites_available(monkeypatch, tmp_path: Path):
     sites_available = tmp_path / "sites-available"
     sites_enabled = tmp_path / "sites-enabled"
@@ -74,7 +75,11 @@ def test_disable_default_site_for_public_mode(monkeypatch):
 
     monkeypatch.setattr(services.subprocess, "run", fake_run)
 
-    services._disable_default_site_for_public_mode(mode="public", sudo="sudo")
+    services._disable_default_site_for_public_mode(
+        mode="public",
+        allow_remove_default_site=True,
+        sudo="sudo",
+    )
 
     assert calls == [["sudo", "rm", "-f", "/etc/nginx/sites-enabled/default"]]
 
@@ -92,7 +97,11 @@ def test_disable_default_site_for_non_public_mode(monkeypatch):
 
     monkeypatch.setattr(services.subprocess, "run", fake_run)
 
-    services._disable_default_site_for_public_mode(mode="proxy", sudo="sudo")
+    services._disable_default_site_for_public_mode(
+        mode="proxy",
+        allow_remove_default_site=True,
+        sudo="sudo",
+    )
 
     assert calls == []
 
@@ -136,7 +145,7 @@ def test_apply_nginx_configuration_preserves_other_site_entries(monkeypatch, tmp
     assert all(not (len(cmd) > 2 and cmd[1] == "rm") for cmd in calls)
 
 
-def test_apply_nginx_configuration_removes_default_site_for_public_mode(
+def test_apply_nginx_configuration_does_not_remove_default_site_without_opt_in(
     monkeypatch, tmp_path: Path
 ):
     calls: list[list[str]] = []
@@ -167,7 +176,78 @@ def test_apply_nginx_configuration_removes_default_site_for_public_mode(
         reload=False,
     )
 
+    assert ["sudo", "rm", "-f", "/etc/nginx/sites-enabled/default"] not in calls
+
+
+def test_apply_nginx_configuration_removes_default_site_for_public_mode_with_opt_in(
+    monkeypatch, tmp_path: Path
+):
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, check=False):
+        calls.append(cmd)
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(services, "can_manage_nginx", lambda: True)
+    monkeypatch.setattr(services, "generate_unified_config", lambda *_, **__: "server {}")
+    monkeypatch.setattr(services, "_write_config_with_sudo", lambda *_, **__: None)
+    monkeypatch.setattr(services, "_ensure_site_enabled", lambda *_, **__: None)
+    monkeypatch.setattr(services, "_ensure_maintenance_assets", lambda **_: None)
+    monkeypatch.setattr(services, "record_lock_state", lambda *_, **__: None)
+    monkeypatch.setattr(services.subprocess, "run", fake_run)
+
+    services.apply_nginx_configuration(
+        mode="public",
+        port=8000,
+        role="web",
+        https_enabled=True,
+        include_ipv6=True,
+        destination=tmp_path / "arthexis.conf",
+        allow_remove_default_site=True,
+        reload=False,
+    )
+
     assert ["sudo", "rm", "-f", "/etc/nginx/sites-enabled/default"] in calls
+
+
+def test_apply_nginx_configuration_uses_site_destination_when_provided(
+    monkeypatch, tmp_path: Path
+):
+    write_calls: list[Path] = []
+    enabled_calls: list[Path] = []
+
+    monkeypatch.setattr(services, "can_manage_nginx", lambda: True)
+    monkeypatch.setattr(services, "generate_unified_config", lambda *_, **__: "server {}")
+    monkeypatch.setattr(
+        services,
+        "_write_config_with_sudo",
+        lambda destination, *_args, **_kwargs: write_calls.append(destination),
+    )
+    monkeypatch.setattr(
+        services,
+        "_ensure_site_enabled",
+        lambda destination, **_kwargs: enabled_calls.append(destination),
+    )
+    monkeypatch.setattr(services, "_ensure_maintenance_assets", lambda **_: None)
+    monkeypatch.setattr(services, "record_lock_state", lambda *_, **__: None)
+
+    services.apply_nginx_configuration(
+        mode="proxy",
+        port=8000,
+        role="web",
+        https_enabled=True,
+        include_ipv6=True,
+        destination=tmp_path / "primary.conf",
+        site_destination=tmp_path / "managed.conf",
+        reload=False,
+    )
+
+    assert write_calls == [tmp_path / "managed.conf"]
+    assert enabled_calls == [tmp_path / "managed.conf"]
 
 def test_apply_nginx_configuration_does_not_cleanup_on_render_error(monkeypatch, tmp_path: Path):
     """No destructive cleanup should run when unified rendering fails validation."""

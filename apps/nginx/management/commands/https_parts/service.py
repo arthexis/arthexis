@@ -342,6 +342,12 @@ class HttpsProvisioningService:
             except IntegrityError:
                 fallback_site = Site.objects.filter(domain=domain).first()
                 if fallback_site is not None:
+                    if site.pk != fallback_site.pk:
+                        raise CommandError(
+                            f"Configured SITE_ID ({site.pk}) could not be updated to domain "
+                            f"'{domain}' because that domain already belongs to Site {fallback_site.pk}. "
+                            "Resolve the duplicate site records, then run HTTPS setup again."
+                        )
                     fallback_updates: list[str] = []
                     if fallback_site.name != domain:
                         fallback_site.name = domain
@@ -359,12 +365,6 @@ class HttpsProvisioningService:
                         fallback_updates.append("require_https")
                     if fallback_updates:
                         fallback_site.save(update_fields=fallback_updates)
-                    if site.pk != fallback_site.pk:
-                        raise CommandError(
-                            f"Configured SITE_ID ({site.pk}) could not be updated to domain "
-                            f"'{domain}' because that domain already belongs to Site {fallback_site.pk}. "
-                            "Resolve the duplicate site records, then run HTTPS setup again."
-                        )
 
         update_local_nginx_scripts()
 
