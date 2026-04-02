@@ -70,3 +70,23 @@ def test_acl_resolver_uses_scope_filters_for_tenant_and_site():
 
     assert summary.allowed_services == ["ocpp"]
     assert other_summary.allowed_services == []
+
+
+@pytest.mark.django_db
+def test_acl_resolver_ignores_policies_with_no_selectors():
+    source = Node.objects.create(hostname="selectorless-source")
+    destination = Node.objects.create(hostname="selectorless-destination")
+
+    MeshMembership.objects.create(node=source, tenant="tenant-selectorless", is_enabled=True)
+    MeshMembership.objects.create(node=destination, tenant="tenant-selectorless", is_enabled=True)
+
+    PeerPolicy.objects.create(
+        tenant="tenant-selectorless",
+        allowed_services=["ssh"],
+    )
+
+    resolver = ACLResolver(tenant="tenant-selectorless", site_id=None)
+    summary = resolver.resolve_pair(source_node=source, destination_node=destination)
+
+    assert summary.policy_ids == []
+    assert summary.allowed_services == []
