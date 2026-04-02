@@ -21,6 +21,28 @@ logger = logging.getLogger(__name__)
 class CSMSTransportMixin:
     """Provide forwarding transport helpers for CSMSConsumer."""
 
+    @staticmethod
+    def _forwarding_interval_seconds(session) -> float:
+        interval = getattr(session, "forwarding_interval_seconds", 0.0) or 0.0
+        try:
+            return max(0.0, float(interval))
+        except (TypeError, ValueError):
+            return 0.0
+
+    async def _flush_buffered_forward_messages(self, session, *, now: datetime) -> bool:
+        lock = getattr(session, "_cp_messages_lock", None)
+        if lock is None:
+            return False
+        with lock:
+            pending = dict(getattr(session, "pending_cp_messages", {}))
+            if not pending:
+                return False
+            session.pending_cp_messages.clear()
+            session.last_cp_flush_at = now
+        for payload in pending.values():
+            await sync_to_async(session.connection.send)(payload)
+        return True
+
     async def _ensure_forwarding_context(
         self, charger
     ) -> tuple[tuple[str, ...], int | None] | None:
@@ -132,10 +154,32 @@ class CSMSTransportMixin:
         if allowed is not None and action not in allowed:
             return
 
+        wrapped_payload = self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms")
+        forwarded = False
         try:
-            await sync_to_async(session.connection.send)(
-                self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms")
-            )
+            interval_seconds = self._forwarding_interval_seconds(session)
+            if interval_seconds <= 0:
+                await sync_to_async(session.connection.send)(wrapped_payload)
+                forwarded = True
+            else:
+                lock = getattr(session, "_cp_messages_lock", None)
+                if lock is None:
+                    await sync_to_async(session.connection.send)(wrapped_payload)
+                    forwarded = True
+                else:
+                    now = timezone.now()
+                    with lock:
+                        session.pending_cp_messages[action] = wrapped_payload
+                        last_flush = getattr(session, "last_cp_flush_at", None)
+                        should_flush = (
+                            last_flush is None
+                            or (now - last_flush).total_seconds() >= interval_seconds
+                        )
+                    if should_flush:
+                        forwarded = await self._flush_buffered_forward_messages(
+                            session,
+                            now=now,
+                        )
         except Exception as exc:  # pragma: no cover
             logger.warning(
                 "Failed to forward %s from charger %s via %s: %s",
@@ -174,6 +218,9 @@ class CSMSTransportMixin:
                 )
                 forwarder.remove_session(charger.pk)
                 return
+
+        if not forwarded:
+            return
 
         timestamp = timezone.now()
         session.last_activity = timestamp

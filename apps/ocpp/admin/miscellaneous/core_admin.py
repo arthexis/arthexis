@@ -1420,6 +1420,7 @@ class CPForwarderAdmin(EntityModelAdmin):
                     "source_node",
                     "target_node",
                     "enabled",
+                    "forwarding_frequency_hz",
                     "is_running",
                     "last_forwarded_at",
                     "last_status",

@@ -31,10 +31,14 @@ class ForwardingSession:
     forwarder_id: int | None = None
     forwarded_messages: tuple[str, ...] | None = None
     forwarded_calls: tuple[str, ...] | None = None
+    forwarding_interval_seconds: float = 0.0
     pending_call_ids: set[str] = field(default_factory=set)
+    pending_cp_messages: dict[str, str] = field(default_factory=dict)
+    last_cp_flush_at: datetime | None = None
     last_activity: datetime | None = None
     listener: threading.Thread | None = None
     _pending_lock: threading.Lock = field(default_factory=threading.Lock)
+    _cp_messages_lock: threading.Lock = field(default_factory=threading.Lock)
 
     @property
     def is_connected(self) -> bool:
@@ -154,6 +158,7 @@ class Forwarder:
         timeout: float = 5.0,
         forwarded_messages: tuple[str, ...] | None = None,
         forwarded_calls: tuple[str, ...] | None = None,
+        forwarding_interval_seconds: float = 0.0,
     ) -> ForwardingSession | None:
         """Establish a websocket forwarding session for ``charger``.
 
@@ -192,6 +197,7 @@ class Forwarder:
                 last_activity=timezone.now(),
                 forwarded_messages=forwarded_messages,
                 forwarded_calls=forwarded_calls,
+                forwarding_interval_seconds=max(0.0, forwarding_interval_seconds),
             )
             with self._sync_lock:
                 self._sessions[charger.pk] = session
@@ -569,10 +575,14 @@ class Forwarder:
                         forwarder.get_forwarded_messages()
                     )
                     existing.forwarded_calls = tuple(forwarder.get_forwarded_calls())
+                    existing.forwarding_interval_seconds = (
+                        forwarder.get_forwarding_interval_seconds()
+                    )
                 else:
                     existing.forwarder_id = None
                     existing.forwarded_messages = None
                     existing.forwarded_calls = None
+                    existing.forwarding_interval_seconds = 0.0
                 if existing.is_connected:
                     continue
                 self.remove_session(charger.pk)
@@ -585,6 +595,9 @@ class Forwarder:
                 ),
                 forwarded_calls=(
                     tuple(forwarder.get_forwarded_calls()) if forwarder else None
+                ),
+                forwarding_interval_seconds=(
+                    forwarder.get_forwarding_interval_seconds() if forwarder else 0.0
                 ),
             )
             if session is None:
@@ -603,6 +616,9 @@ class Forwarder:
                     forwarder.get_forwarded_messages()
                 )
                 session.forwarded_calls = tuple(forwarder.get_forwarded_calls())
+                session.forwarding_interval_seconds = (
+                    forwarder.get_forwarding_interval_seconds()
+                )
                 forwarder.mark_running(session.connected_at)
             connected += 1
 
