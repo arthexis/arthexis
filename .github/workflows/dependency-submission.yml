@@ -13,19 +13,11 @@ on:
       - '**/poetry.lock'
       - '**/uv.lock'
       - '.github/workflows/dependency-submission.yml'
-  pull_request:
-    paths:
-      - '**/pyproject.toml'
-      - '**/requirements*.txt'
-      - '**/Pipfile'
-      - '**/Pipfile.lock'
-      - '**/poetry.lock'
-      - '**/uv.lock'
-      - '.github/workflows/dependency-submission.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  dependency-graph: write
   id-token: write
 
 jobs:
