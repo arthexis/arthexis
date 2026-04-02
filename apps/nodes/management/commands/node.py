@@ -23,6 +23,7 @@ from urllib.parse import urlsplit, urlunsplit
 import psutil
 import requests
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.test import RequestFactory
 from django.urls import reverse
@@ -326,7 +327,7 @@ class Command(BaseCommand):
         if no_reciprocal:
             return
 
-        local_root = Path.cwd().resolve()
+        local_root = Path(settings.BASE_DIR).resolve()
         self._run_sibling_registration_subprocess(
             sibling_root,
             [
@@ -859,6 +860,12 @@ class Command(BaseCommand):
             sibling_root,
             ["node", "info_json"],
         )
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        for candidate in reversed(lines):
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
         try:
             return json.loads(output)
         except json.JSONDecodeError as exc:

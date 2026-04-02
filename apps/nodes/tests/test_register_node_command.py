@@ -2,6 +2,7 @@ import base64
 import json
 
 import pytest
+from django.conf import settings
 from django.core.management import get_commands, load_command_class
 from django.core.management.base import CommandError
 
@@ -114,3 +115,63 @@ def test_node_register_path_mode_rejects_token_and_path_together(tmp_path):
             sibling_path=str(sibling_path),
             no_reciprocal=False,
         )
+
+
+def test_load_sibling_info_from_path_accepts_banner_prefix(tmp_path, monkeypatch):
+    command = _load_node_command()
+    sibling_path = tmp_path / "sibling"
+    sibling_path.mkdir()
+
+    monkeypatch.setattr(
+        command,
+        "_run_sibling_registration_subprocess",
+        lambda *_args, **_kwargs: "Arthexis 1.0.0\n{\"hostname\":\"sibling-node\"}",
+    )
+
+    result = command._load_sibling_info_from_path(sibling_path)
+
+    assert result == {"hostname": "sibling-node"}
+
+
+def test_node_register_path_mode_uses_base_dir_for_reciprocal_path(monkeypatch, tmp_path):
+    command = _load_node_command()
+    sibling_path = tmp_path / "sibling"
+    sibling_path.mkdir()
+    (sibling_path / "manage.py").write_text("# sibling manage.py\n", encoding="utf-8")
+    captured = {}
+
+    monkeypatch.setattr(
+        command,
+        "_load_sibling_info_from_path",
+        lambda *_args, **_kwargs: {
+            "hostname": "sibling-node",
+            "address": "127.0.0.1",
+            "port": 9999,
+            "mac_address": "aa:bb:cc:dd:ee:ff",
+            "public_key": "PUB",
+            "features": ["mesh"],
+        },
+    )
+    monkeypatch.setattr(
+        command, "_register_host_locally", lambda *_args, **_kwargs: None
+    )
+
+    def _capture_subprocess(path, manage_args):
+        captured["path"] = path
+        captured["manage_args"] = manage_args
+        return ""
+
+    monkeypatch.setattr(
+        command, "_run_sibling_registration_subprocess", _capture_subprocess
+    )
+
+    command.handle(
+        action="register",
+        token="",
+        sibling_path=str(sibling_path),
+        no_reciprocal=False,
+    )
+
+    assert captured["path"] == sibling_path.resolve()
+    reciprocal_index = captured["manage_args"].index("--path") + 1
+    assert captured["manage_args"][reciprocal_index] == str(settings.BASE_DIR)
