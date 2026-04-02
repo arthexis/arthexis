@@ -236,7 +236,6 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
                         "priority": relay.priority,
                         "path": "relay",
                         "region": relay.region.code,
-                        "config": relay.config,
                     }
                 )
             relay_candidates.sort(key=lambda candidate: (candidate["priority"], candidate["endpoint"]))
