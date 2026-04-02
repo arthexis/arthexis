@@ -4,6 +4,7 @@ import pytest
 
 from apps.nginx import services
 
+
 def test_ensure_site_enabled_creates_symlink(monkeypatch, tmp_path: Path):
     sites_available = tmp_path / "sites-available"
     sites_enabled = tmp_path / "sites-enabled"
@@ -59,6 +60,43 @@ def test_ensure_site_enabled_skips_non_sites_available(monkeypatch, tmp_path: Pa
 
     assert calls == []
 
+
+def test_disable_default_site_for_public_mode(monkeypatch):
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, check=False):
+        calls.append(cmd)
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(services.subprocess, "run", fake_run)
+
+    services._disable_default_site_for_public_mode(mode="public", sudo="sudo")
+
+    assert calls == [["sudo", "rm", "-f", "/etc/nginx/sites-enabled/default"]]
+
+
+def test_disable_default_site_for_non_public_mode(monkeypatch):
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, check=False):
+        calls.append(cmd)
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(services.subprocess, "run", fake_run)
+
+    services._disable_default_site_for_public_mode(mode="proxy", sudo="sudo")
+
+    assert calls == []
+
+
 def test_apply_nginx_configuration_preserves_other_site_entries(monkeypatch, tmp_path: Path):
     """Regression: applying one Arthexis config must not remove unrelated nginx entries."""
 
@@ -96,6 +134,40 @@ def test_apply_nginx_configuration_preserves_other_site_entries(monkeypatch, tmp
     assert ["sudo", "rm", "-f", "/etc/nginx/sites-available/default"] not in calls
     assert ["sudo", "rm", "-f", "/etc/nginx/sites-enabled/default"] not in calls
     assert all(not (len(cmd) > 2 and cmd[1] == "rm") for cmd in calls)
+
+
+def test_apply_nginx_configuration_removes_default_site_for_public_mode(
+    monkeypatch, tmp_path: Path
+):
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, check=False):
+        calls.append(cmd)
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(services, "can_manage_nginx", lambda: True)
+    monkeypatch.setattr(services, "generate_unified_config", lambda *_, **__: "server {}")
+    monkeypatch.setattr(services, "_write_config_with_sudo", lambda *_, **__: None)
+    monkeypatch.setattr(services, "_ensure_site_enabled", lambda *_, **__: None)
+    monkeypatch.setattr(services, "_ensure_maintenance_assets", lambda **_: None)
+    monkeypatch.setattr(services, "record_lock_state", lambda *_, **__: None)
+    monkeypatch.setattr(services.subprocess, "run", fake_run)
+
+    services.apply_nginx_configuration(
+        mode="public",
+        port=8000,
+        role="web",
+        https_enabled=True,
+        include_ipv6=True,
+        destination=tmp_path / "arthexis.conf",
+        reload=False,
+    )
+
+    assert ["sudo", "rm", "-f", "/etc/nginx/sites-enabled/default"] in calls
 
 def test_apply_nginx_configuration_does_not_cleanup_on_render_error(monkeypatch, tmp_path: Path):
     """No destructive cleanup should run when unified rendering fails validation."""

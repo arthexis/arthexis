@@ -296,10 +296,22 @@ class HttpsProvisioningService:
 
         default_site_id = getattr(settings, "SITE_ID", None)
         if isinstance(default_site_id, int) and default_site_id > 0:
-            site, created = Site.objects.get_or_create(
-                pk=default_site_id,
-                defaults={"domain": domain, "name": domain},
-            )
+            site = Site.objects.filter(pk=default_site_id).first()
+            created = site is None
+            if site is None:
+                site = Site(pk=default_site_id, domain=domain, name=domain)
+                try:
+                    with transaction.atomic():
+                        site.save(force_insert=True)
+                except IntegrityError:
+                    fallback_site = Site.objects.filter(domain=domain).first()
+                    if fallback_site is None:
+                        raise
+                    raise CommandError(
+                        "Cannot set the configured SITE_ID as the default site because "
+                        f"domain '{domain}' already belongs to Site {fallback_site.pk}. "
+                        "Resolve the duplicate site records, then run HTTPS setup again."
+                    )
         else:
             site, created = Site.objects.get_or_create(
                 domain=domain, defaults={"name": domain}
@@ -325,7 +337,8 @@ class HttpsProvisioningService:
             site.save()
         elif updated_fields:
             try:
-                site.save(update_fields=updated_fields)
+                with transaction.atomic():
+                    site.save(update_fields=updated_fields)
             except IntegrityError:
                 fallback_site = Site.objects.filter(domain=domain).first()
                 if fallback_site is not None:
@@ -346,6 +359,12 @@ class HttpsProvisioningService:
                         fallback_updates.append("require_https")
                     if fallback_updates:
                         fallback_site.save(update_fields=fallback_updates)
+                    if site.pk != fallback_site.pk:
+                        raise CommandError(
+                            f"Configured SITE_ID ({site.pk}) could not be updated to domain "
+                            f"'{domain}' because that domain already belongs to Site {fallback_site.pk}. "
+                            "Resolve the duplicate site records, then run HTTPS setup again."
+                        )
 
         update_local_nginx_scripts()
 
