@@ -34,6 +34,7 @@ class NodeRegistrationPayload:
 
     hostname: str
     mac_address: str
+    host_instance_id: str
     address: str
     network_hostname: str
     ipv4_candidates: list[str]
@@ -162,6 +163,7 @@ def build_payload(data) -> NodeRegistrationPayload:
     return NodeRegistrationPayload(
         hostname=(data.get("hostname") or "").strip(),
         mac_address=(data.get("mac_address") or "").strip(),
+        host_instance_id=(data.get("host_instance_id") or "").strip(),
         address=(data.get("address") or "").strip(),
         network_hostname=(data.get("network_hostname") or "").strip(),
         ipv4_candidates=_extract_ipv4_candidates(data),

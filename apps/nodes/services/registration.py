@@ -113,6 +113,7 @@ def register_current(node_model: type["Node"], notify_peers: bool = True) -> tup
     rev_value = revision.get_revision()
     installed_revision = rev_value if rev_value else ""
     mac = node_model.get_current_mac()
+    host_instance_id = node_model.get_host_instance_id()
     local_registration_logger.info("Local node registration started hostname=%s mac=%s", hostname, mac)
 
     endpoint_override = os.environ.get("NODE_PUBLIC_ENDPOINT", "").strip()
@@ -132,6 +133,7 @@ def register_current(node_model: type["Node"], notify_peers: bool = True) -> tup
         "installed_revision": installed_revision,
         "public_endpoint": slug,
         "mac_address": mac,
+        "host_instance_id": host_instance_id,
         "current_relation": node_model.Relation.SELF,
     }
     if managed_site:

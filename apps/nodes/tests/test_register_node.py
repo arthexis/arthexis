@@ -264,6 +264,7 @@ def test_node_info_includes_mesh_identity_fields():
     node = Node.objects.create(
         hostname="mesh-local",
         mac_address="aa:bb:cc:dd:ef:02",
+        host_instance_id="machine-1",
         address="198.51.100.42",
         port=8888,
         public_endpoint="mesh-local",
@@ -281,6 +282,8 @@ def test_node_info_includes_mesh_identity_fields():
     assert data["mesh_enrollment_state"] == node.mesh_enrollment_state
     assert data["mesh_key_fingerprint_metadata"] == node.mesh_key_fingerprint_metadata
     assert data["mesh_capability_flags"] == node.mesh_capability_flags
+    assert data["host_instance_id"] == node.host_instance_id
+    assert data["uuid"] == str(node.uuid)
 
 @pytest.mark.django_db
 def test_register_current_logs_to_local_logger(settings, caplog):
@@ -651,6 +654,34 @@ def test_register_node_preserves_sibling_relation(admin_user, relation_value):
 
     factory = RequestFactory()
     request = _build_request(factory, payload)
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    response = register_node(request)
+
+    assert response.status_code == 200
+    node = Node.objects.get(mac_address=payload["mac_address"])
+    assert node.current_relation == Node.Relation.SIBLING
+
+
+@pytest.mark.django_db
+def test_register_node_demotes_conflicting_self_relation_to_sibling(admin_user):
+    Node.objects.create(
+        hostname="self-a",
+        mac_address="aa:bb:cc:dd:ee:10",
+        host_instance_id="machine-10",
+        current_relation=Node.Relation.SELF,
+    )
+    payload = {
+        "hostname": "self-b",
+        "mac_address": "aa:bb:cc:dd:ee:11",
+        "host_instance_id": "machine-10",
+        "address": "192.0.2.11",
+        "port": 8889,
+        "current_relation": "SELF",
+    }
+
+    request = _build_request(RequestFactory(), payload)
     request.user = admin_user
     request._cached_user = admin_user
 

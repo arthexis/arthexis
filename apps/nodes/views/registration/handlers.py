@@ -153,6 +153,8 @@ def node_info(request):
         "ipv6_address": node.ipv6_address,
         "port": advertised_port,
         "mac_address": node.mac_address,
+        "host_instance_id": node.host_instance_id,
+        "uuid": str(node.uuid),
         "public_key": node.public_key,
         "features": list(node.features.values_list("slug", flat=True)),
         "role": node.role.name if node.role_id else "",
@@ -284,7 +286,7 @@ def _deactivate_user_if_requested(request, deactivate_user: bool):
         deactivate()
 
 
-def _update_existing_node(node: Node, *, payload: NodeRegistrationPayload, address_value: str, ipv4_value: str, ipv6_value: str, verified: bool, desired_role, trusted_allowed: bool, base_site: Site | None, request):
+def _update_existing_node(node: Node, *, payload: NodeRegistrationPayload, relation_value: Node.Relation | None, address_value: str, ipv4_value: str, ipv6_value: str, verified: bool, desired_role, trusted_allowed: bool, base_site: Site | None, request):
     """Update an existing node while preserving response compatibility."""
 
     previous_version = (node.installed_version or "").strip()
@@ -296,6 +298,7 @@ def _update_existing_node(node: Node, *, payload: NodeRegistrationPayload, addre
         ("address", address_value),
         ("ipv4_address", ipv4_value),
         ("ipv6_address", ipv6_value),
+        ("host_instance_id", payload.host_instance_id),
         ("port", payload.port),
     ):
         current = getattr(node, field)
@@ -341,8 +344,8 @@ def _update_existing_node(node: Node, *, payload: NodeRegistrationPayload, addre
     ):
         node.mesh_capability_flags = payload.mesh_capability_flags
         update_fields.append("mesh_capability_flags")
-    if payload.relation_value is not None and node.current_relation != payload.relation_value:
-        node.current_relation = payload.relation_value
+    if relation_value is not None and node.current_relation != relation_value:
+        node.current_relation = relation_value
         update_fields.append("current_relation")
     if desired_role and node.role_id != desired_role.id:
         node.role = desired_role
@@ -419,6 +422,14 @@ def register_node(request):
     desired_role = _resolve_role(payload.role_name, can_assign=verified or request.user.is_authenticated)
     base_site = Site.objects.filter(domain__iexact=payload.base_site_domain).first() if payload.base_site_domain else None
     existing_node = Node.objects.filter(mac_address=mac_address).first()
+    relation_value = payload.relation_value
+    if relation_value == Node.Relation.SELF and payload.host_instance_id:
+        other_self_exists = Node.objects.filter(
+            current_relation=Node.Relation.SELF,
+            host_instance_id=payload.host_instance_id,
+        ).exclude(mac_address=mac_address).exists()
+        if other_self_exists:
+            relation_value = Node.Relation.SIBLING
 
     if payload.enrollment_token and payload.public_key:
         if existing_node is None:
@@ -459,6 +470,7 @@ def register_node(request):
         "address": address_value,
         "ipv4_address": ipv4_value,
         "ipv6_address": ipv6_value,
+        "host_instance_id": payload.host_instance_id,
         "port": payload.port,
     }
     if trusted_allowed:
@@ -481,14 +493,15 @@ def register_node(request):
         defaults["last_mesh_heartbeat"] = payload.last_mesh_heartbeat
     if payload.mesh_capability_flags:
         defaults["mesh_capability_flags"] = payload.mesh_capability_flags
-    if payload.relation_value is not None:
-        defaults["current_relation"] = payload.relation_value
+    if relation_value is not None:
+        defaults["current_relation"] = relation_value
 
     node, created = Node.objects.get_or_create(mac_address=mac_address, defaults=defaults)
     if not created:
         response = _update_existing_node(
             node,
             payload=payload,
+            relation_value=relation_value,
             address_value=address_value,
             ipv4_value=ipv4_value,
             ipv6_value=ipv6_value,

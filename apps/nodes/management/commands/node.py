@@ -326,6 +326,7 @@ class Command(BaseCommand):
                 \"installed_revision\",
                 \"role\",
                 \"base_site_domain\",
+                \"host_instance_id\",
             ):
                 value = data.get(key)
                 if value:
@@ -375,6 +376,7 @@ class Command(BaseCommand):
                 \"installed_revision\",
                 \"role\",
                 \"base_site_domain\",
+                \"host_instance_id\",
             ):
                 value = data.get(key)
                 if value:
@@ -715,11 +717,13 @@ class Command(BaseCommand):
             raise CommandError("Local node information payload is invalid") from exc
 
     def _build_registration_payload(self, info: dict, relation: str | None) -> dict:
+        relation = self._resolve_relation_for_registration(info, relation)
         payload = {
             "hostname": info.get("hostname", ""),
             "address": info.get("address", ""),
             "port": info.get("port", 8888),
             "mac_address": info.get("mac_address", ""),
+            "host_instance_id": info.get("host_instance_id", ""),
             "public_key": info.get("public_key", ""),
             "features": info.get("features") or [],
             "trusted": True,
@@ -732,6 +736,7 @@ class Command(BaseCommand):
             "ipv6_address",
             "installed_version",
             "installed_revision",
+            "host_instance_id",
         ):
             value = info.get(key)
             if value:
@@ -747,6 +752,42 @@ class Command(BaseCommand):
         if value:
             payload["base_site_domain"] = value
         return payload
+
+    def _resolve_relation_for_registration(
+        self, info: dict, relation: str | None
+    ) -> str | None:
+        if not relation:
+            return relation
+
+        normalized = Node.normalize_relation(relation)
+        if normalized != Node.Relation.PEER:
+            return relation
+
+        local_node = Node.get_local()
+        if not local_node:
+            return relation
+
+        local_host_instance_id = (local_node.host_instance_id or "").strip()
+        remote_host_instance_id = (info.get("host_instance_id") or "").strip()
+        if not local_host_instance_id or local_host_instance_id != remote_host_instance_id:
+            return relation
+
+        remote_uuid = str(info.get("uuid") or "").strip()
+        local_uuid = str(local_node.uuid or "").strip()
+        try:
+            remote_port = int(info.get("port") or 0)
+        except (TypeError, ValueError):
+            remote_port = 0
+        try:
+            local_port = int(local_node.port or 0)
+        except (TypeError, ValueError):
+            local_port = 0
+        if (remote_uuid and remote_uuid != local_uuid) or (
+            remote_port and remote_port != local_port
+        ):
+            return Node.Relation.SIBLING
+
+        return relation
 
     def _register_host_locally(self, payload: dict) -> None:
         user_model = get_user_model()
