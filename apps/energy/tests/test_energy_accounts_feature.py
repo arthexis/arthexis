@@ -5,13 +5,14 @@ from django.contrib.messages import get_messages
 from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.cards.models import RFID
 from apps.energy.models import CustomerAccount
 from apps.features.models import Feature
 from apps.ocpp import store
 from apps.ocpp.consumers.csms.consumer import CSMSConsumer
-from apps.ocpp.models import Charger, PublicConnectorPage
+from apps.ocpp.models import Charger, PublicConnectorPage, Transaction
 from apps.users.backends import LocalhostAdminBackend
 
 
@@ -192,3 +193,27 @@ def test_public_connector_page_create_account_rejects_authenticated_post(client)
     assert not get_user_model().objects.filter(username="should-not-create").exists()
     messages = [message.message for message in get_messages(response.wsgi_request)]
     assert "Please sign out before creating a new account." in messages
+
+
+@pytest.mark.django_db
+def test_charger_account_summary_excludes_null_account_sessions(client):
+    user = get_user_model().objects.create_user(
+        username="no-account-user",
+        email="no-account@example.com",
+        password="safe-password-123",
+    )
+    client.force_login(user)
+    charger = Charger.objects.create(charger_id="CP-EA-NO-ACCOUNT", connector_id=1)
+    Transaction.objects.create(
+        charger=charger,
+        account=None,
+        start_time=timezone.now(),
+    )
+
+    response = client.get(reverse("ocpp:charger-account-summary", args=[charger.charger_id]))
+
+    assert response.status_code == 200
+    assert response.context["account"] is None
+    assert list(response.context["recent_sessions"]) == []
+    messages = [message.message for message in get_messages(response.wsgi_request)]
+    assert "No energy account is attached to your user yet." in messages
