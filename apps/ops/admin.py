@@ -1,18 +1,34 @@
 """Admin configuration for operation screen management."""
 
+from django import forms
 from django.contrib import admin
 from django.http import Http404
 from django.urls import path, reverse
 from django.utils.html import format_html
-
-from .redirects import safe_host_redirect
 
 from .models import (
     OperationExecution,
     OperationLink,
     OperationScreen,
     SecurityAlertEvent,
+    validate_local_absolute_path_url,
 )
+from .redirects import safe_host_redirect
+
+
+class OperationScreenAdminForm(forms.ModelForm):
+    """Admin form that enforces start URL redirect safety constraints."""
+
+    class Meta:
+        model = OperationScreen
+        fields = "__all__"
+
+    def clean_start_url(self) -> str:
+        """Return validated start URL value."""
+
+        start_url = self.cleaned_data.get("start_url", "")
+        validate_local_absolute_path_url(start_url)
+        return start_url
 
 
 class OperationLinkInline(admin.TabularInline):
@@ -39,6 +55,7 @@ class OperationScreenAdmin(admin.ModelAdmin):
     search_fields = ("title", "slug", "description", "start_url")
     prepopulated_fields = {"slug": ("title",)}
     inlines = [OperationLinkInline]
+    form = OperationScreenAdminForm
 
     def get_urls(self):
         """Expose custom admin start endpoint for operations."""
@@ -95,4 +112,3 @@ class SecurityAlertEventAdmin(admin.ModelAdmin):
     list_filter = ("severity", "is_active", "last_occurred_at")
     search_fields = ("key", "message", "detail")
     readonly_fields = ("occurrence_count", "last_occurred_at", "created_at", "updated_at")
-

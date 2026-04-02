@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, models, transaction
 from django.db.models import F, Value
 from django.db.models.functions import Greatest, Now
+from django.utils.http import escape_leading_slashes
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -38,6 +39,19 @@ def _sanitize_remediation_url(remediation_url: str) -> str:
 
     return "/admin/"
 
+
+def validate_local_absolute_path_url(start_url: str) -> None:
+    """Validate that start URLs are local absolute paths only."""
+
+    parts = urlsplit(start_url or "")
+    if parts.scheme or parts.netloc:
+        raise ValidationError(_("Start URL must be a local absolute path."))
+
+    path = escape_leading_slashes(parts.path)
+    if not path.startswith("/"):
+        raise ValidationError(_("Start URL must start with '/' and include no scheme or host."))
+
+
 class OperationScreen(Entity):
     """Defines an operation that staff can execute through one or more screens."""
 
@@ -50,7 +64,8 @@ class OperationScreen(Entity):
     description = models.TextField()
     start_url = models.CharField(
         max_length=500,
-        help_text=_("Internal admin or public URL where this operation starts."),
+        help_text=_("Local absolute path where this operation starts, without scheme or host."),
+        validators=[validate_local_absolute_path_url],
     )
     validation_sql = models.TextField(
         blank=True,
@@ -89,9 +104,7 @@ class OperationScreen(Entity):
         super().clean()
         if self.recurrence_days is not None and self.recurrence_days < 1:
             raise ValidationError({"recurrence_days": _("Recurrence must be at least one day.")})
-        scheme = urlparse(self.start_url).scheme
-        if scheme and scheme not in {"http", "https"}:
-            raise ValidationError({"start_url": _("Start URL must be HTTP(S) or a relative path.")})
+        validate_local_absolute_path_url(self.start_url)
 
     def run_validation_sql(self) -> tuple[bool | None, str]:
         """Return SQL validation status.
