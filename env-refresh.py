@@ -36,7 +36,10 @@ from django.db.migrations.recorder import MigrationRecorder
 from django.db.migrations.loader import MigrationLoader
 from django.db.migrations.executor import MigrationExecutor
 from django.core.serializers.base import DeserializationError
-from utils.migration_branches import MissingBranchSplinterError
+from utils.migration_branches import (
+    BranchTagConflictError,
+    MissingBranchSplinterError,
+)
 
 
 os.environ.setdefault("NET_MESSAGE_DISABLE_PROPAGATION", "1")
@@ -787,15 +790,23 @@ def run_database_tasks(
                     interactive=False,
                 )
                 migrations_ran = True
-            except (MissingBranchSplinterError, InvalidBasesError) as exc:
-                mismatch_message = (
-                    "Migration graph/version mismatch detected: branch splinter/tag "
-                    "conflict."
+            except (
+                BranchTagConflictError,
+                MissingBranchSplinterError,
+                InvalidBasesError,
+            ) as exc:
+                mismatch_reason = (
+                    "branch splinter conflict"
                     if isinstance(exc, MissingBranchSplinterError)
                     else (
-                        "Migration graph/version mismatch detected: invalid migration "
-                        "bases."
+                        "branch tag conflict"
+                        if isinstance(exc, BranchTagConflictError)
+                        else "invalid migration bases"
                     )
+                )
+                mismatch_message = (
+                    "Migration graph/version mismatch detected: "
+                    f"{mismatch_reason}."
                 )
                 print(mismatch_message, flush=True)
                 if auto_reconcile_on_mismatch and not migrate_reconcile:
