@@ -76,12 +76,17 @@ def _ensure_engine_feature_enabled(engine: str) -> None:
         PlaywrightBrowser.Engine.FIREFOX: "playwright-browser-firefox",
         PlaywrightBrowser.Engine.WEBKIT: "playwright-browser-webkit",
     }
+    wrapper_feature_slug = "playwright-automation"
     node_feature_slug = feature_map.get(engine)
     if node_feature_slug is None:
         raise UnsupportedBrowserEngineError(f"Unsupported browser engine: {engine}")
     local = Node.get_local()
     if local is None:
         return
+    if not is_feature_active_for_node(node=local, slug=wrapper_feature_slug):
+        raise PlaywrightEngineFeatureDisabledError(
+            f"Playwright automation is disabled on local node feature '{wrapper_feature_slug}'."
+        )
     if not is_feature_active_for_node(node=local, slug=node_feature_slug):
         raise PlaywrightEngineFeatureDisabledError(
             f"Playwright engine '{engine}' is disabled on local node feature '{node_feature_slug}'."

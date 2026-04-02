@@ -32,17 +32,19 @@ Use the search field to find features by slug or display string. The queryset pr
 
 | Feature | Slug | Default roles | Key actions / notes |
 | --- | --- | --- | --- |
-| AP Router | `ap-router` | Control, Satellite | Auto-managed network access point capability for satellites. |
-| Audio Capture | `audio-capture` | Control | Manual feature with a **Test Microphone** admin action for verification. |
 | Celery Queue | `celery-queue` | Satellite, Control, Watchtower | Auto-managed feature with a **Celery Report** admin action. |
 | GUI Toast | `gui-toast` | Terminal, Control | Auto-managed feature that surfaces GUI toast notifications when supported. |
 | LCD Screen | `lcd-screen` | Control | Auto-managed flag for nodes driving an attached LCD panel. |
 | NGINX Server | `nginx-server` | Satellite, Control, Watchtower | Auto-managed flag for nodes running the bundled NGINX front end. |
 | RFID Scanner | `rfid-scanner` | Control, Satellite | Auto-managed feature with a **Scanner** admin action. |
-| Video Camera | `video-cam` | Control, Satellite | Auto-managed feature with built-in eligibility checks, **Take a Snapshot**/**View stream** default actions, and RFID/QR snapshot and scan integrations. |
+| Playwright Automation | `playwright-automation` | (auto-detected) | Wrapper node capability that must be active before any Playwright browser engine feature can run. |
+| Playwright Chromium | `playwright-browser-chromium` | (auto-detected) | Engine-specific Playwright node capability. |
+| Playwright Firefox | `playwright-browser-firefox` | (auto-detected) | Engine-specific Playwright node capability. |
+| Playwright WebKit | `playwright-browser-webkit` | (auto-detected) | Engine-specific Playwright node capability. |
+| Video Camera | `video-cam` | (manual enablement) | Auto-managed feature with built-in eligibility checks, **Take a Snapshot**/**View stream** default actions, and RFID/QR snapshot and scan integrations. |
 | Screenshot Poll | `screenshot-poll` | (manual enablement) | Manual feature providing a **Take Screenshot** admin action. |
 
-Manual features (those without default roles) still appear in the changelist and can be enabled through the admin action once local hardware or environment checks pass.
+Features without default roles still appear in the changelist and can be enabled through admin actions once local hardware or environment checks pass.
 
 ## Assigning features to roles and nodes
 

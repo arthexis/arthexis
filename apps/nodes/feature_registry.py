@@ -16,12 +16,6 @@ from apps.playwright.node_features import (
 from apps.screens.node_features import (
     register_node_feature_detection as register_screens_features,
 )
-from apps.shortcuts.node_features import (
-    register_node_feature_detection as register_shortcuts_features,
-)
-from apps.sigils.node_features import (
-    register_node_feature_detection as register_sigils_features,
-)
 from apps.summary.node_features import (
     register_node_feature_detection as register_summary_features,
 )
@@ -33,8 +27,6 @@ APPROVED_NODE_FEATURE_REGISTRARS: Sequence[DetectionRegistrar] = (
     register_cards_features,
     register_playwright_features,
     register_screens_features,
-    register_shortcuts_features,
-    register_sigils_features,
     register_summary_features,
 )
 

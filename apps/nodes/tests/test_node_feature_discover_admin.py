@@ -9,7 +9,7 @@ def test_discover_progress_includes_manual_toggle_metadata(admin_client, monkeyp
     """Discover progress should expose manual toggle state for manual features."""
 
     node = Node.objects.create(hostname="local-node", public_endpoint="local-node")
-    feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
+    feature = NodeFeature.objects.create(slug="screenshot-poll", display="Screenshot Poll")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
     from django.contrib import messages
@@ -75,7 +75,7 @@ def test_discover_manual_toggle_blocks_when_ineligible(admin_client, monkeypatch
     """Regression: manual toggle should be blocked when eligibility check fails."""
 
     node = Node.objects.create(hostname="manual-blocked", public_endpoint="manual-blocked")
-    feature = NodeFeature.objects.create(slug="audio-capture", display="Audio Capture")
+    feature = NodeFeature.objects.create(slug="screenshot-poll", display="Screenshot Poll")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
 
     from django.contrib import messages
@@ -86,7 +86,7 @@ def test_discover_manual_toggle_blocks_when_ineligible(admin_client, monkeypatch
         "apps.nodes.feature_checks.feature_checks.run",
         lambda _feature, node=None: FeatureCheckResult(
             False,
-            "Recording device missing.",
+            "Screenshot prerequisites missing.",
             messages.WARNING,
         ),
     )

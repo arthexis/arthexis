@@ -11,8 +11,7 @@ from django_object_actions import DjangoObjectActions
 
 from apps.discovery.services import record_discovery_item, start_discovery
 from apps.locals.user_data import EntityModelAdmin
-from apps.nodes.feature_detection import is_feature_active_for_node
-from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
+from apps.nodes.models import Node
 
 from .models import AudioSample, RecordingDevice
 from .utils import record_microphone_sample, save_audio_sample
@@ -88,46 +87,6 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     take_sample.short_description = _("Take Sample")
     take_sample.changelist = True
 
-    def _ensure_audio_feature_enabled(
-        self,
-        request,
-        action_label: str,
-        *,
-        node: Node | None = None,
-        auto_enable: bool = False,
-    ):
-        try:
-            feature = NodeFeature.objects.get(slug="audio-capture")
-        except NodeFeature.DoesNotExist:
-            self.message_user(
-                request,
-                _("%(action)s is unavailable because the feature is not configured.")
-                % {"action": action_label},
-                level=messages.ERROR,
-            )
-            return None
-        if not feature.is_enabled:
-            if auto_enable and node:
-                NodeFeatureAssignment.objects.update_or_create(
-                    node=node, feature=feature
-                )
-                node.sync_feature_tasks()
-                self.message_user(
-                    request,
-                    _("%(feature)s feature was automatically enabled.")
-                    % {"feature": feature.display},
-                    level=messages.SUCCESS,
-                )
-            else:
-                self.message_user(
-                    request,
-                    _("%(feature)s feature is not enabled on this node.")
-                    % {"feature": feature.display},
-                    level=messages.WARNING,
-                )
-                return None
-        return feature
-
     def _get_local_node(self, request):
         node = Node.get_local()
         if node is None:
@@ -143,35 +102,12 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
         if node is None:
             return redirect("..")
 
-        feature = self._ensure_audio_feature_enabled(
-            request,
-            self.find_devices.label,
-            node=node,
-            auto_enable=True,
-        )
-        if not feature:
-            return redirect("..")
-
         discovery = start_discovery(
             _("Discover"),
             request,
             model=self.model,
             metadata={"action": "audio_find_devices"},
         )
-
-        if not is_feature_active_for_node(node=node, slug="audio-capture"):
-            if discovery:
-                discovery.metadata = {
-                    "action": "audio_find_devices",
-                    "result": "no_devices",
-                }
-                discovery.save(update_fields=["metadata"])
-            self.message_user(
-                request,
-                _("No audio recording devices were detected on this node."),
-                level=messages.WARNING,
-            )
-            return redirect("..")
 
         created, updated, created_devices, updated_devices = (
             RecordingDevice.refresh_from_system(node=node, return_objects=True)
@@ -228,29 +164,15 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
         return redirect("..")
 
     def test_microphone_view(self, request):
-        feature = self._ensure_audio_feature_enabled(
-            request, _("Test Microphone")
-        )
-        if not feature:
-            return redirect("..")
-
         node = self._get_local_node(request)
         if node is None:
-            return redirect("..")
-
-        if not is_feature_active_for_node(node=node, slug="audio-capture"):
-            self.message_user(
-                request,
-                _("Audio Capture feature is enabled but no recording device was detected."),
-                level=messages.ERROR,
-            )
             return redirect("..")
 
         RecordingDevice.refresh_from_system(node=node)
         if not RecordingDevice.objects.filter(node=node, capture_channels__gt=0).exists():
             self.message_user(
                 request,
-                _("Audio Capture feature is enabled but no recording device was detected."),
+                _("No recording device was detected on this node."),
                 level=messages.ERROR,
             )
             return redirect("..")
@@ -289,29 +211,15 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
         if not self.has_change_permission(request):
             raise PermissionDenied
 
-        feature = self._ensure_audio_feature_enabled(
-            request, _("Take Sample"), auto_enable=True
-        )
-        if not feature:
-            return redirect("..")
-
         node = self._get_local_node(request)
         if node is None:
-            return redirect("..")
-
-        if not is_feature_active_for_node(node=node, slug="audio-capture"):
-            self.message_user(
-                request,
-                _("Audio Capture feature is enabled but no recording device was detected."),
-                level=messages.ERROR,
-            )
             return redirect("..")
 
         RecordingDevice.refresh_from_system(node=node)
         if not RecordingDevice.objects.filter(node=node, capture_channels__gt=0).exists():
             self.message_user(
                 request,
-                _("Audio Capture feature is enabled but no recording device was detected."),
+                _("No recording device was detected on this node."),
                 level=messages.ERROR,
             )
             return redirect("..")

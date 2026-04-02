@@ -10,6 +10,8 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from apps.nodes.models import Node
 
 
+PLAYWRIGHT_AUTOMATION_SLUG = "playwright-automation"
+
 ENGINE_TO_SLUG = {
     "chromium": "playwright-browser-chromium",
     "firefox": "playwright-browser-firefox",
@@ -47,6 +49,8 @@ def check_node_feature(
     """Return Playwright browser availability for matching feature slugs."""
 
     del node, base_dir, base_path
+    if slug == PLAYWRIGHT_AUTOMATION_SLUG:
+        return any(_playwright_engine_available(engine) for engine in ENGINE_TO_SLUG)
     for engine, engine_slug in ENGINE_TO_SLUG.items():
         if slug == engine_slug:
             return _playwright_engine_available(engine)
@@ -73,6 +77,7 @@ def setup_node_feature(
 def register_node_feature_detection(registry: NodeFeatureDetectionRegistry) -> None:
     """Register Playwright browser feature detectors."""
 
+    registry.register(PLAYWRIGHT_AUTOMATION_SLUG, check=check_node_feature, setup=setup_node_feature)
     for slug in sorted(ENGINE_TO_SLUG.values()):
         registry.register(slug, check=check_node_feature, setup=setup_node_feature)
 

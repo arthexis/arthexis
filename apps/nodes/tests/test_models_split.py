@@ -27,13 +27,12 @@ def test_select_preferred_ip_prefers_global_address():
     [
         pytest.param("rfid-scanner", ["systemctl"], "rfid.lck", True, id="rfid-lock-requires-systemctl"),
         pytest.param("celery-queue", [], "celery.lck", False, id="systemd-lock-blocked-without-systemctl"),
-        pytest.param("systemd-manager", ["systemctl"], None, True, id="systemd-manager-detected"),
     ],
 )
 def test_detect_auto_feature_systemd_detection_matrix(
     monkeypatch, tmp_path, slug, systemctl_command, lock_file, expected
 ):
-    """Systemd-manager availability should gate lock-file based systemd detections."""
+    """Systemd availability should gate lock-file based systemd detections."""
 
     node = Node(
         hostname="auto-feature-node",
