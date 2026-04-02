@@ -154,6 +154,29 @@ def test_mesh_membership_disallows_duplicate_default_scope():
 
 
 @pytest.mark.django_db
+def test_mesh_membership_requires_non_empty_tenant():
+    node = Node.objects.create(hostname="mesh-empty-membership-tenant")
+    membership = MeshMembership(node=node, tenant="")
+
+    with pytest.raises(ValidationError):
+        membership.full_clean()
+
+
+@pytest.mark.django_db
+def test_peer_policy_requires_non_empty_tenant():
+    source = Node.objects.create(hostname="mesh-empty-policy-tenant-source")
+    destination = Node.objects.create(hostname="mesh-empty-policy-tenant-destination")
+    policy = PeerPolicy(
+        tenant="",
+        source_node=source,
+        destination_node=destination,
+    )
+
+    with pytest.raises(ValidationError):
+        policy.full_clean()
+
+
+@pytest.mark.django_db
 def test_service_advertisement_port_range_validation():
     node = Node.objects.create(hostname="mesh-port")
     out_of_range_port = ServiceAdvertisement(

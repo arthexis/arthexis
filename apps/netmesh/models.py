@@ -23,7 +23,7 @@ class MeshMembership(Entity):
     tenant = models.CharField(
         max_length=64,
         default=DEFAULT_TENANT,
-        blank=True,
+        blank=False,
         help_text=_("Tenant identifier for external mesh orchestration scope."),
     )
     site = models.ForeignKey(
@@ -38,6 +38,10 @@ class MeshMembership(Entity):
     class Meta(Entity.Meta):
         ordering = ["tenant", "site__domain", "node__hostname", "pk"]
         constraints = [
+            models.CheckConstraint(
+                condition=~Q(tenant=""),
+                name="netmesh_membership_tenant_non_empty",
+            ),
             models.UniqueConstraint(
                 fields=["node", "tenant"],
                 condition=Q(site__isnull=True),
@@ -90,7 +94,7 @@ class PeerPolicy(Entity):
     tenant = models.CharField(
         max_length=64,
         default=DEFAULT_TENANT,
-        blank=True,
+        blank=False,
         help_text=_("Tenant identifier that owns this policy."),
     )
     site = models.ForeignKey(
@@ -171,7 +175,12 @@ class PeerPolicy(Entity):
                 name="netmesh_policy_scope_src_idx",
             ),
         ]
-        constraints = []
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(tenant=""),
+                name="netmesh_peerpolicy_tenant_non_empty",
+            ),
+        ]
 
     @staticmethod
     def _normalize_services(services) -> list[str]:
