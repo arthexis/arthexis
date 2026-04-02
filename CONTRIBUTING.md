@@ -18,11 +18,12 @@ in issues, pull requests, and reviews.
 ## Getting started
 ### 1. Environment
 - Python 3.10+ is required.
-- Create a virtual environment and install dependencies:
+- Create a virtual environment and install dependencies (runtime + QA extras):
   ```bash
   python -m venv .venv
   source .venv/bin/activate
-  pip install -r requirements.txt
+  ./.venv/bin/pip install -r requirements.txt
+  ./.venv/bin/pip install '.[qa]'
   ```
 
 ### 2. Run the suite locally
@@ -107,19 +108,24 @@ python manage.py runserver 127.0.0.1:8888
   ```
 
 ## Testing
-Run tests before opening a PR:
+Install test dependencies, then run tests before opening a PR:
 ```bash
-pytest
+./.venv/bin/pip install -r requirements.txt
+./.venv/bin/pip install '.[qa]'
+./env-refresh.sh --deps-only
+./.venv/bin/python manage.py test run
 ```
+
+`requirements.txt` is intentionally runtime-only, so `pytest` may be missing until the QA extras are installed. See [Dependency management](docs/development/dependency-management.md) for details.
 
 Useful subsets:
 - Default CI subset (exclude slow & integration):
   ```bash
-  pytest -m "not slow and not integration"
+  ./.venv/bin/python manage.py test run -- -m "not slow and not integration"
   ```
 - Targeted module or file:
   ```bash
-  pytest apps/ocpp/tests/test_example.py
+  ./.venv/bin/python manage.py test run -- apps/ocpp/tests/test_example.py
   ```
 
 If a test requires system services (Redis, Postgres, etc.), mention the dependency
