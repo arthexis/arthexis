@@ -76,15 +76,15 @@ Pending-call metadata is stored in-memory and mirrored to Redis so responses can
 Use the unified `ocpp` management command for operational workflows:
 
 - Coverage reports:
-  - `python manage.py ocpp coverage --version 1.6`
-  - `python manage.py ocpp coverage --version 2.0.1`
-  - `python manage.py ocpp coverage --version 2.1`
+  - `.venv/bin/python manage.py ocpp coverage --version 1.6`
+  - `.venv/bin/python manage.py ocpp coverage --version 2.0.1`
+  - `.venv/bin/python manage.py ocpp coverage --version 2.1`
 - Transaction data:
-  - `python manage.py ocpp transactions export <output.json> [--start ... --end ... --chargers ...]`
-  - `python manage.py ocpp transactions import <input.json>`
+  - `.venv/bin/python manage.py ocpp transactions export <output.json> [--start ... --end ... --chargers ...]`
+  - `.venv/bin/python manage.py ocpp transactions import <input.json>`
 - Trace tools:
-  - `python manage.py ocpp trace extract [--txn ... --out ... --log ...]`
-  - `python manage.py ocpp trace replay <extract.json>`
+  - `.venv/bin/python manage.py ocpp trace extract [--txn ... --out ... --log ...]`
+  - `.venv/bin/python manage.py ocpp trace replay <extract.json>`
 
 Legacy single-purpose commands (`coverage_ocpp16`, `coverage_ocpp201`, `coverage_ocpp21`, `import_transactions`, `export_transactions`, and `ocpp_replay`) have been removed; use the unified `ocpp` command surface above.
 
@@ -93,12 +93,12 @@ If your automation still calls legacy entrypoints, update scripts to the canonic
 
 | Removed command | Replacement |
 | --- | --- |
-| `python manage.py coverage_ocpp16` | `python manage.py ocpp coverage --version 1.6J` |
-| `python manage.py coverage_ocpp201` | `python manage.py ocpp coverage --version 2.0.1` |
-| `python manage.py coverage_ocpp21` | `python manage.py ocpp coverage --version 2.1` |
-| `python manage.py import_transactions <input.json>` | `python manage.py ocpp transactions import <input.json>` |
-| `python manage.py export_transactions <output.json> [--start ... --end ... --chargers ...]` | `python manage.py ocpp transactions export <output.json> [--start ... --end ... --chargers ...]` |
-| `python manage.py ocpp_replay <extract.json>` | `python manage.py ocpp trace replay <extract.json>` |
+| `.venv/bin/python manage.py coverage_ocpp16` | `.venv/bin/python manage.py ocpp coverage --version 1.6J` |
+| `.venv/bin/python manage.py coverage_ocpp201` | `.venv/bin/python manage.py ocpp coverage --version 2.0.1` |
+| `.venv/bin/python manage.py coverage_ocpp21` | `.venv/bin/python manage.py ocpp coverage --version 2.1` |
+| `.venv/bin/python manage.py import_transactions <input.json>` | `.venv/bin/python manage.py ocpp transactions import <input.json>` |
+| `.venv/bin/python manage.py export_transactions <output.json> [--start ... --end ... --chargers ...]` | `.venv/bin/python manage.py ocpp transactions export <output.json> [--start ... --end ... --chargers ...]` |
+| `.venv/bin/python manage.py ocpp_replay <extract.json>` | `.venv/bin/python manage.py ocpp trace replay <extract.json>` |
 
 ### Release migration notes (simulator import path removal)
 The compatibility package at `apps.ocpp.simulator` has been removed.
@@ -113,11 +113,11 @@ For shell migration, a direct one-time update can be done with substitutions lik
 
 ```bash
 sed -i \
-  -e 's/python manage.py coverage_ocpp16/python manage.py ocpp coverage --version 1.6J/g' \
-  -e 's/python manage.py coverage_ocpp201/python manage.py ocpp coverage --version 2.0.1/g' \
-  -e 's/python manage.py coverage_ocpp21/python manage.py ocpp coverage --version 2.1/g' \
-  -e 's/python manage.py import_transactions/python manage.py ocpp transactions import/g' \
-  -e 's/python manage.py export_transactions/python manage.py ocpp transactions export/g' \
-  -e 's/python manage.py ocpp_replay/python manage.py ocpp trace replay/g' \
+  -e 's/.venv/bin/python manage.py coverage_ocpp16/.venv/bin/python manage.py ocpp coverage --version 1.6J/g' \
+  -e 's/.venv/bin/python manage.py coverage_ocpp201/.venv/bin/python manage.py ocpp coverage --version 2.0.1/g' \
+  -e 's/.venv/bin/python manage.py coverage_ocpp21/.venv/bin/python manage.py ocpp coverage --version 2.1/g' \
+  -e 's/.venv/bin/python manage.py import_transactions/.venv/bin/python manage.py ocpp transactions import/g' \
+  -e 's/.venv/bin/python manage.py export_transactions/.venv/bin/python manage.py ocpp transactions export/g' \
+  -e 's/.venv/bin/python manage.py ocpp_replay/.venv/bin/python manage.py ocpp trace replay/g' \
   path/to/ops-script.sh
 ```

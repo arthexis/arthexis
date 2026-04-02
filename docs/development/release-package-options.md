@@ -12,7 +12,7 @@ model, which now exposes additional optional fields:
   when the field is empty.
 - **Test command** – custom command executed when the `build` helper runs the
   test suite. The command is parsed with `shlex.split` and executed via
-  `subprocess.run`. When unset, the workflow runs `python manage.py test`.
+  `subprocess.run`. When unset, the workflow runs `.venv/bin/python manage.py test`.
 
 These settings allow packaging projects with non-standard layouts without
 modifying the release tooling. Every value is optional, so existing packages

@@ -133,6 +133,10 @@ Detailed install flags, service-management choices, and upgrade-channel behavior
 
 ### 5. Development
 - Browse the [Developer Documentation Library](https://arthexis.com/docs/library/) for architecture references, protocol manuals, and contribution workflows.
+- Command convention:
+  - Default to `.venv/bin/python manage.py ...` for Django and developer tasks.
+  - Prefer `./command.sh ...` (or `command.bat ...` on Windows) for operational tasks when an instance is already up.
+  - Keep using dedicated scripts (for example `install.sh`, `start.sh`, `upgrade.sh`) when a task has a specific lifecycle entrypoint.
 
 ## Support
 

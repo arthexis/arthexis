@@ -17,8 +17,8 @@ This marker is the repository-wide convention that signals omission is intention
 
 ## Scaffold behavior
 
-- `python manage.py create app <app_name>` generates the default web-capable scaffold.
-- `python manage.py create app <app_name> --backend-only` generates a backend-only scaffold and writes the marker to `manifest.py`.
-- `python manage.py create model <app_name> <model_name>` checks `manifest.py` for the marker:
+- `.venv/bin/python manage.py create app <app_name>` generates the default web-capable scaffold.
+- `.venv/bin/python manage.py create app <app_name> --backend-only` generates a backend-only scaffold and writes the marker to `manifest.py`.
+- `.venv/bin/python manage.py create model <app_name> <model_name>` checks `manifest.py` for the marker:
   - if present, model scaffolding only updates model/admin code.
   - if absent, model scaffolding also updates view/url/route wiring.
