@@ -86,7 +86,6 @@ def build_registration_options(
     ]
     if isinstance(user_id, (bytes, bytearray)):
         user_id_bytes = bytes(user_id)
-        user_id_value = bytes_to_base64url(user_id_bytes)
     else:
         user_id_value = str(user_id)
         try:
@@ -101,7 +100,7 @@ def build_registration_options(
     options = generate_registration_options(
         rp_id=_rp_id(request),
         rp_name=rp_name,
-        user_id=user_id_value,
+        user_id=user_id_bytes,
         user_name=user_name,
         user_display_name=user_display_name,
         authenticator_selection=selection,
