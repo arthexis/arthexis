@@ -1092,9 +1092,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ $CLEAN -eq 1 && $MIGRATE_RECONCILE -eq 1 ]]; then
-  echo "Cannot combine --clean with --migrate." >&2
-  echo "Use --migrate on its own to preserve and reconcile the pre-upgrade SQLite database." >&2
+if [[ $CLEAN -eq 1 && ( $MIGRATE_RECONCILE -eq 1 || $AUTO_RECONCILE_ON_MISMATCH -eq 1 ) ]]; then
+  echo "Cannot combine --clean with --migrate or --reconcile." >&2
+  echo "Use --migrate or --reconcile on their own to preserve and reconcile the pre-upgrade database (SQLite or PostgreSQL)." >&2
   exit 1
 fi
 
