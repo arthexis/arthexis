@@ -10,3 +10,8 @@ repos:
         # source of truth for the rollout baseline. Migrations stay excluded via
         # pyproject.toml [tool.mypy].exclude and are intentionally omitted here.
         files: '^(scripts/(generate_requirements|sort_pyproject_deps)\.py|apps/protocols/.*\.py|apps/repos/(github\.py|services/github\.py|release_management\.py|views/webhooks\.py)|apps/core/(services/health(_checks)?\.py|modeling/.*\.py|system_ui\.py))$'
+      - id: dead-modules
+        name: dead modules
+        entry: python3 scripts/check_dead_modules.py
+        language: system
+        types: [python]
