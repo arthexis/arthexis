@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.contrib.sites.models import Site
 from django.db import transaction
 from django.utils import timezone
@@ -34,6 +36,7 @@ def issue_enrollment_token(
     site: Site | None = None,
     reissue: bool = False,
     scope: str = "mesh:read",
+    ttl: timedelta = timedelta(hours=1),
 ):
     normalized_scope = _normalize_scope(scope)
     current_state = node.mesh_enrollment_state
@@ -57,6 +60,7 @@ def issue_enrollment_token(
         site=site or node.base_site,
         issued_by=actor,
         scope=normalized_scope,
+        ttl=ttl,
     )
     _record_event(
         node=node,
