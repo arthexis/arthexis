@@ -32,9 +32,11 @@ fi
 
 chmod 600 "$LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
-printf "%s command.sh invocation:" "$(date -Iseconds)"
-printf " %q" "$@"
-echo
+printf "%s command.sh invocation" "$(date -Iseconds)"
+if [[ $# -gt 0 ]]; then
+  printf " command=%q" "$1"
+fi
+echo " args=<redacted>"
 cd "$BASE_DIR"
 
 # Ensure virtual environment is available
