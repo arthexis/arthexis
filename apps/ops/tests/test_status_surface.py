@@ -27,6 +27,7 @@ class StatusSurfaceTests(TestCase):
         self.owner_charger = Charger.objects.create(charger_id="CP-OWNER")
         self.owner_charger.owner_users.add(self.owner)
         self.other_charger = Charger.objects.create(charger_id="CP-OTHER")
+        self.other_charger.owner_users.add(self.intruder)
 
         owner_key = store.identity_key("CP-OWNER", None)
         other_key = store.identity_key("CP-OTHER", None)
@@ -55,6 +56,7 @@ class StatusSurfaceTests(TestCase):
         store.clear_log(store.identity_key("CP-OWNER", None), log_type="charger")
         store.clear_log(store.identity_key("CP-OTHER", None), log_type="charger")
         store.pending_calls.clear()
+        store.monitoring_report_requests.clear()
 
     def test_redact_log_line_masks_secret_values(self):
         redacted = redact_log_line(
@@ -153,3 +155,23 @@ class StatusSurfaceTests(TestCase):
         security_events = [event for event in staff_events if event["source"] == "security_alert"]
         self.assertEqual(len(security_events), 1)
         self.assertNotIn("visible-secret", security_events[0]["details"])
+
+    def test_status_surface_scopes_queue_health_to_tenant_visibility(self):
+        owner_key = store.identity_key("CP-OWNER", None)
+        other_key = store.identity_key("CP-OTHER", None)
+        store.pending_calls["owner-call"] = {"log_key": owner_key}
+        store.pending_calls["other-call"] = {"log_key": other_key}
+        store.monitoring_report_requests[11] = {"charger_id": "CP-OWNER", "connector_id": None}
+        store.monitoring_report_requests[12] = {"charger_id": "CP-OTHER", "connector_id": None}
+
+        self.client.force_login(self.owner)
+        owner_response = self.client.get(reverse("ops:status-surface"))
+        owner_queue = owner_response.json()["service_health"]["queue"]
+        self.assertEqual(owner_queue["pending_calls"], 1)
+        self.assertEqual(owner_queue["monitoring_requests"], 1)
+
+        self.client.force_login(self.staff)
+        staff_response = self.client.get(reverse("ops:status-surface"))
+        staff_queue = staff_response.json()["service_health"]["queue"]
+        self.assertEqual(staff_queue["pending_calls"], 2)
+        self.assertEqual(staff_queue["monitoring_requests"], 2)

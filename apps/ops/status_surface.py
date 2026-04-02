@@ -23,8 +23,8 @@ _SECRET_FIELD_PATTERN = re.compile(
     r'(?P<value>"[^"\\]*(?:\\.[^"\\]*)*"|\S+)',
     re.IGNORECASE,
 )
-_BEARER_PATTERN = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._\-+/=]+")
-_BASIC_PATTERN = re.compile(r"(?i)\bBasic\s+[A-Za-z0-9._\-+/=]+")
+_BEARER_PATTERN = re.compile(r"(?i)\bBearer\s+[A-Z0-9._+/=-]+")
+_BASIC_PATTERN = re.compile(r"(?i)\bBasic\s+[A-Z0-9._+/=-]+")
 
 
 @dataclass(frozen=True)
@@ -89,6 +89,31 @@ def _redact_payload_mapping(payload: dict[str, object]) -> None:
 
 def _visible_chargers(user) -> Iterable[Charger]:
     return Charger.visible_for_user(user).only("id", "charger_id", "connector_id")
+
+
+def _is_staff_scope(user) -> bool:
+    return bool(getattr(user, "is_staff", False) or getattr(user, "is_superuser", False))
+
+
+def _scope_queue_counts(*, user, visible: list[Charger]) -> tuple[int, int]:
+    if _is_staff_scope(user):
+        return len(store.pending_calls), len(store.monitoring_report_requests)
+
+    visible_keys = {store.identity_key(charger.charger_id, charger.connector_id) for charger in visible}
+    visible_pairs = {(charger.charger_id, charger.connector_id) for charger in visible}
+    pending_calls = sum(
+        1 for metadata in store.pending_calls.values() if metadata.get("log_key") in visible_keys
+    )
+    monitoring_requests = sum(
+        1
+        for metadata in store.monitoring_report_requests.values()
+        if (
+            metadata.get("charger_id"),
+            metadata.get("connector_id"),
+        )
+        in visible_pairs
+    )
+    return pending_calls, monitoring_requests
 
 
 def _status_role(user) -> str:
@@ -183,7 +208,7 @@ def _critical_events_for_scope(*, user, limit: int = 10) -> list[dict[str, objec
         charger_id__in=visible_charger_ids,
     ).select_related("charger")[:limit]
     alerts = SecurityAlertEvent.objects.none()
-    if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
+    if _is_staff_scope(user):
         alerts = SecurityAlertEvent.objects.filter(
             is_active=True,
             last_occurred_at__gte=since,
@@ -260,7 +285,7 @@ def build_status_surface(*, user) -> dict[str, object]:
         for charger in visible
         if store.is_connected(charger.charger_id, charger.connector_id)
     )
-    pending_count = len(store.pending_calls)
+    pending_count, monitoring_request_count = _scope_queue_counts(user=user, visible=visible)
     critical_events = _critical_events_for_scope(user=user)
     conditions = [
         _guidance_for_connectivity(connected, len(visible)),
@@ -273,7 +298,7 @@ def build_status_surface(*, user) -> dict[str, object]:
         "scope": {
             "role": _status_role(user),
             "visible_chargers": len(visible),
-            "sensitive_events_visible": bool(getattr(user, "is_staff", False)),
+            "sensitive_events_visible": _is_staff_scope(user),
         },
         "service_health": {
             "ocpp_websocket": {
@@ -282,7 +307,7 @@ def build_status_surface(*, user) -> dict[str, object]:
             },
             "queue": {
                 "pending_calls": pending_count,
-                "monitoring_requests": len(store.monitoring_report_requests),
+                "monitoring_requests": monitoring_request_count,
             },
         },
         "recent_critical_events": critical_events,
