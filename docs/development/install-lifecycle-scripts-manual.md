@@ -82,7 +82,7 @@ Other arguments are passed through to `scripts/service-start.sh`.
 | `--stash` | Force auto-stash of local changes before upgrade. |
 | `--force-refresh` | Force environment/dependency refresh steps. |
 | `--clean` | Run clean-upgrade mode (destructive DB cleanup path with warning unless bypassed). |
-| `--migrate` | Rebuild via clean mode and reconcile compatible rows from a pre-migration snapshot (supported on SQLite and PostgreSQL only). |
+| `--migrate` | Rebuild schema from current migrations and reconcile compatible rows from a pre-migration snapshot (supported on SQLite and PostgreSQL only; mutually exclusive with `--clean`). |
 | `--reconcile` | Keep normal upgrade flow, but auto-retry with reconciliation only when migration graph/version mismatches are detected. |
 | `--no-start`, `--no-restart` | Keep services stopped after upgrade. |
 | `--start`, `-s` | Force startup after upgrade. |
