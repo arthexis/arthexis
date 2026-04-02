@@ -3,6 +3,7 @@ from uuid import uuid4
 import pytest
 from django.contrib.sites.models import Site
 
+from apps.features.models import Feature
 from apps.nodes.feature_detection import node_feature_detection_registry
 from apps.nodes.models import Node, NodeFeature
 from apps.nodes.models import utils as node_utils
@@ -154,6 +155,60 @@ def test_refresh_features_does_not_assign_gpio_rtc_when_clock_device_absent(monk
     node.refresh_features()
 
     assert not node.features.filter(pk=feature.pk).exists()
+
+
+@pytest.mark.django_db
+def test_refresh_features_skips_auto_enable_when_linked_suite_feature_disabled(
+    monkeypatch, tmp_path
+):
+    """Auto-detected node features should not auto-enable while linked suite features are off."""
+
+    node = Node.objects.create(
+        hostname="suite-disabled-node",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+        public_endpoint="suite-disabled-node",
+        base_path=str(tmp_path),
+    )
+    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
+    Feature.objects.create(
+        slug="rtc-suite-feature",
+        display="RTC Suite Feature",
+        is_enabled=False,
+        node_feature=feature,
+    )
+    monkeypatch.setattr("apps.nodes.models.features.has_clock_device", lambda: True)
+
+    node.refresh_features()
+
+    assert not node.features.filter(pk=feature.pk).exists()
+
+
+@pytest.mark.django_db
+def test_refresh_features_auto_enables_when_linked_suite_feature_enabled(
+    monkeypatch, tmp_path
+):
+    """Auto-detected node features can auto-enable when a linked suite feature is on."""
+
+    node = Node.objects.create(
+        hostname="suite-enabled-node",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+        public_endpoint="suite-enabled-node",
+        base_path=str(tmp_path),
+    )
+    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
+    Feature.objects.create(
+        slug="rtc-suite-feature",
+        display="RTC Suite Feature",
+        is_enabled=True,
+        node_feature=feature,
+    )
+    monkeypatch.setattr("apps.nodes.models.features.has_clock_device", lambda: True)
+
+    node.refresh_features()
+
+    assert node.features.filter(pk=feature.pk).exists()
 
 
 
