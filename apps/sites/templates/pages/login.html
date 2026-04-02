@@ -72,7 +72,10 @@
     </div>
     {% endif %}
     {% if show_rfid_login %}
-    <div class="mt-3 text-center">
+    <div
+      class="mt-3 text-center{% if show_rfid_login_when_nfc_available %} d-none{% endif %}"
+      {% if show_rfid_login_when_nfc_available %}data-rfid-login-link{% endif %}
+    >
       <a href="{% if rfid_login_url %}{{ rfid_login_url }}{% else %}{% url 'pages:rfid-login' %}{% endif %}">{% trans "Login with RF Card" %}</a>
     </div>
     {% endif %}
@@ -189,6 +192,20 @@
     button.addEventListener('click', function () {
       handlePasskeyLogin();
     });
+  }());
+</script>
+{% endif %}
+{% if show_rfid_login_when_nfc_available %}
+<script>
+  (function () {
+    const nfcSupported = 'NDEFReader' in window;
+    if (!nfcSupported) {
+      return;
+    }
+    const linkNode = document.querySelector('[data-rfid-login-link]');
+    if (linkNode) {
+      linkNode.classList.remove('d-none');
+    }
   }());
 </script>
 {% endif %}
