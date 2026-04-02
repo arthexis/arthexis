@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import shutil
+import socket
 import subprocess
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from pathlib import Path
@@ -26,8 +27,9 @@ from apps.core.tasks.auto_upgrade import check_github_updates
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
     lcd_feature_enabled,
-    queue_startup_message,
+    write_lcd_message,
 )
+from utils import revision
 from .models import NetMessage, Node, NodeUpgradePolicyAssignment, PendingNetMessage
 
 logger = logging.getLogger(__name__)
@@ -48,6 +50,31 @@ def _startup_message_cache_key() -> str:
         return f"{STARTUP_NET_MESSAGE_CACHE_KEY}:{int(boot_time)}"
 
     return STARTUP_NET_MESSAGE_CACHE_KEY
+
+
+def _build_startup_message(base_dir: Path, port: str | None = None) -> tuple[str, str]:
+    host = (socket.gethostname() or "").strip()
+    port_value = str(port or os.environ.get("PORT") or "8888").strip()
+
+    version = ""
+    ver_path = Path(base_dir) / "VERSION"
+    if ver_path.exists():
+        try:
+            version = ver_path.read_text(encoding="utf-8").strip()
+        except (OSError, UnicodeDecodeError):
+            logger.debug("Failed to read VERSION file", exc_info=True)
+
+    revision_value = (revision.get_revision() or "").strip()
+    rev_short = revision_value[-6:] if revision_value else ""
+
+    body_parts = []
+    if version:
+        body_parts.append(f"v{version}")
+    if rev_short:
+        body_parts.append(f"r{rev_short}")
+
+    subject = f"{host}:{port_value}".strip()
+    return subject, " ".join(body_parts).strip()
 
 
 @shared_task
@@ -73,9 +100,9 @@ def send_startup_net_message(
     if not lcd_feature_enabled(lock_dir):
         return "skipped:lcd-disabled"
 
-    port_value = port or os.environ.get("PORT", "8888")
+    subject, body = _build_startup_message(base_dir=base_dir, port=port)
     try:
-        queue_startup_message(base_dir=base_dir, port=port_value, lock_file=target_lock)
+        write_lcd_message(lock_file=target_lock, subject=subject, body=body)
     except Exception:
         logger.exception("Failed to queue startup Net Message")
         raise
