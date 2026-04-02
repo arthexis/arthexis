@@ -50,6 +50,16 @@ Do **not** copy old migration files into the new checkout.
 If you need service/role options, include them in the same reinstall command
 (for example `--service`, `--terminal`, `--control`, `--systemd`, etc.).
 
+### Optional: `upgrade.sh --migrate` reconciliation mode
+
+If you are performing a major-version refresh and need best-effort row carryover:
+
+- On **SQLite**, `--migrate` snapshots `db.sqlite3` into `.locks/*.pre_major_migrate.sqlite3`, rebuilds the schema, then copies compatible rows with `INSERT OR IGNORE`.
+- On **PostgreSQL**, `--migrate` snapshots the active DB into `.locks/*.pre_major_migrate.dump` using `pg_dump`, rebuilds the schema, restores that dump into a temporary DB (`arthexis_pre_major_migrate_snapshot`), then copies compatible rows using conflict-tolerant inserts.
+- Other database backends are not supported by `--migrate` and fail fast.
+
+Review reconciliation output after the run; it reports copied tables plus skipped tables/columns/rows for auditability.
+
 ## 3) Import approved data payloads
 
 If your import package is Django fixtures:
@@ -84,6 +94,6 @@ If any check fails, stop and fix before tagging.
 
 ## Fail-fast behavior reference
 
-`install.sh` and `upgrade.sh` now run a migration-history guard against
-`db.sqlite3`. When unknown legacy migration entries are found, scripts abort
+`install.sh` and `upgrade.sh` run a migration-history guard against the active
+default database. When unknown legacy migration entries are found, scripts abort
 with a clear message and point to this runbook.

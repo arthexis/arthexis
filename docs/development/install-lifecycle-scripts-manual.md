@@ -82,7 +82,7 @@ Other arguments are passed through to `scripts/service-start.sh`.
 | `--stash` | Force auto-stash of local changes before upgrade. |
 | `--force-refresh` | Force environment/dependency refresh steps. |
 | `--clean` | Run clean-upgrade mode (destructive DB cleanup path with warning unless bypassed). |
-| `--migrate` | Reconcile migration flow without clean mode. |
+| `--migrate` | Rebuild via clean mode and reconcile compatible data from a pre-migration snapshot (SQLite and PostgreSQL only). |
 | `--no-start`, `--no-restart` | Keep services stopped after upgrade. |
 | `--start`, `-s` | Force startup after upgrade. |
 | `--stop` | Stop services and exit (no restart). |
@@ -97,6 +97,23 @@ Other arguments are passed through to `scripts/service-start.sh`.
 | `--revert` | Revert to pre-upgrade revision lock target. |
 | `--branch NAME` | Upgrade against a specific branch. |
 | `--main` | Shortcut for `--branch main`. |
+
+### `--migrate` backend behavior
+
+`upgrade.sh --migrate` delegates to `env-refresh.py --migrate` and always forces a clean migration cycle before reconciliation.
+
+- **SQLite (`django.db.backends.sqlite3`)**
+  - Creates `.locks/<db>.pre_major_migrate.sqlite3`.
+  - Rebuilds schema from current migrations.
+  - Reconciles shared tables using `INSERT OR IGNORE`.
+- **PostgreSQL (`django.db.backends.postgresql`)**
+  - Creates `.locks/<db>.pre_major_migrate.dump` via `pg_dump --format=custom`.
+  - Rebuilds schema from current migrations.
+  - Restores the dump into a temporary database (`arthexis_pre_major_migrate_snapshot`) and reconciles compatible rows into the active DB with conflict-tolerant inserts (`ON CONFLICT DO NOTHING`).
+- **Other backends**
+  - `--migrate` is rejected with a clear `CommandError`.
+
+Both supported backends emit a consistent reconciliation report that includes copied tables, legacy-only/new-schema-only tables, skipped tables, skipped columns, and row-conflict skips.
 
 ## 4. Runtime reconfiguration (`configure.sh`)
 
