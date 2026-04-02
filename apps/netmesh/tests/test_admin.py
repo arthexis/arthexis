@@ -5,7 +5,7 @@ from django.contrib import admin
 from django.contrib.admin import helpers
 from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
-from django.test import RequestFactory
+from django.test import Client, RequestFactory
 
 from apps.netmesh.admin import MeshMembershipAdmin, NodeEndpointAdmin, PeerPolicyAdmin
 from apps.netmesh.models import MeshMembership, NodeEndpoint, PeerPolicy
@@ -162,3 +162,35 @@ def test_peer_policy_matrix_view_renders(admin_client):
 
     assert response.status_code == 200
     assert "rows" in response.context_data
+
+
+@pytest.mark.django_db
+def test_peer_policy_matrix_view_denies_staff_without_model_permissions():
+    user = get_user_model().objects.create_user(
+        username="staff-no-peerpolicy-perm",
+        email="staff-no-peerpolicy-perm@example.com",
+        password="password",
+        is_staff=True,
+    )
+    client = Client()
+    client.force_login(user)
+
+    response = client.get("/admin/netmesh/peerpolicy/matrix/")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_node_endpoint_health_view_denies_staff_without_model_permissions():
+    user = get_user_model().objects.create_user(
+        username="staff-no-nodeendpoint-perm",
+        email="staff-no-nodeendpoint-perm@example.com",
+        password="password",
+        is_staff=True,
+    )
+    client = Client()
+    client.force_login(user)
+
+    response = client.get("/admin/netmesh/nodeendpoint/health/")
+
+    assert response.status_code == 403

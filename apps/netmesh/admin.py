@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib import admin, messages
 from django.contrib.admin import helpers
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -222,6 +223,8 @@ class PeerPolicyAdmin(EntityModelAdmin):
         return super().changelist_view(request, extra_context=extra_context)
 
     def policy_matrix_view(self, request):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
         policies = list(
             self.get_queryset(request)
             .select_related("site", "source_node", "source_group", "destination_node", "destination_group")
@@ -297,6 +300,8 @@ class NodeEndpointAdmin(EntityModelAdmin):
         return super().changelist_view(request, extra_context=extra_context)
 
     def endpoint_health_view(self, request):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
         endpoints = []
         for endpoint in self.get_queryset(request).select_related("node").order_by("node__hostname", "endpoint_priority"):
             if endpoint.last_successful_direct_at:
