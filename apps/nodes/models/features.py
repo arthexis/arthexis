@@ -9,6 +9,7 @@ from pathlib import Path
 from django.apps import apps as django_apps
 from django.conf import settings
 from django.db import models, transaction
+from django.db.utils import DatabaseError
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
@@ -291,6 +292,9 @@ class NodeFeatureMixin:
     ) -> bool:
         """Detect whether an auto-managed feature is active for the node."""
 
+        if not self._is_auto_detection_allowed_for_slug(slug):
+            return False
+
         hook_result = node_feature_detection_registry.detect(
             slug,
             node=self,
@@ -300,6 +304,27 @@ class NodeFeatureMixin:
         if hook_result is None:
             return False
         return bool(hook_result)
+
+    @staticmethod
+    def _is_auto_detection_allowed_for_slug(slug: str) -> bool:
+        """Return whether auto-detection should run for ``slug``."""
+
+        try:
+            Feature = django_apps.get_model("features", "Feature")
+        except LookupError:
+            return True
+        if Feature is None:
+            return True
+
+        suite_qs = Feature.objects.filter(node_feature__slug=slug)
+        try:
+            counts = suite_qs.aggregate(
+                total=models.Count("pk"),
+                enabled=models.Count("pk", filter=models.Q(is_enabled=True)),
+            )
+            return counts["total"] == 0 or counts["enabled"] > 0
+        except (DatabaseError, RuntimeError):
+            return True
 
 
 
