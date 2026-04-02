@@ -50,6 +50,42 @@ class CSMSTransportMixin:
             session.last_cp_flush_at = now
         return forwarded
 
+    async def _send_or_buffer_cp_payload(
+        self,
+        *,
+        session,
+        action: str,
+        wrapped_payload: str,
+    ) -> bool:
+        """Forward immediately or enqueue based on session forwarding interval."""
+        interval_seconds = self._forwarding_interval_seconds(session)
+        if interval_seconds <= 0:
+            self._cancel_scheduled_cp_flush(session)
+            await self._flush_buffered_forward_messages(session, now=timezone.now())
+            await sync_to_async(session.connection.send)(wrapped_payload)
+            return True
+
+        lock = getattr(session, "_cp_messages_lock", None)
+        if lock is None:
+            await sync_to_async(session.connection.send)(wrapped_payload)
+            return True
+
+        now = timezone.now()
+        with lock:
+            session.pending_cp_messages[action] = wrapped_payload
+            last_flush = getattr(session, "last_cp_flush_at", None)
+            should_flush = last_flush is None or (now - last_flush).total_seconds() >= interval_seconds
+        if should_flush:
+            return await self._flush_buffered_forward_messages(
+                session,
+                now=now,
+            )
+        self._schedule_cp_flush(
+            session,
+            interval_seconds=interval_seconds,
+        )
+        return False
+
     async def _ensure_forwarding_context(
         self, charger
     ) -> tuple[tuple[str, ...], int | None] | None:
@@ -164,36 +200,11 @@ class CSMSTransportMixin:
         wrapped_payload = self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms")
         forwarded = False
         try:
-            interval_seconds = self._forwarding_interval_seconds(session)
-            if interval_seconds <= 0:
-                self._cancel_scheduled_cp_flush(session)
-                await self._flush_buffered_forward_messages(session, now=timezone.now())
-                await sync_to_async(session.connection.send)(wrapped_payload)
-                forwarded = True
-            else:
-                lock = getattr(session, "_cp_messages_lock", None)
-                if lock is None:
-                    await sync_to_async(session.connection.send)(wrapped_payload)
-                    forwarded = True
-                else:
-                    now = timezone.now()
-                    with lock:
-                        session.pending_cp_messages[action] = wrapped_payload
-                        last_flush = getattr(session, "last_cp_flush_at", None)
-                        should_flush = (
-                            last_flush is None
-                            or (now - last_flush).total_seconds() >= interval_seconds
-                        )
-                    if should_flush:
-                        forwarded = await self._flush_buffered_forward_messages(
-                            session,
-                            now=now,
-                        )
-                    else:
-                        self._schedule_cp_flush(
-                            session,
-                            interval_seconds=interval_seconds,
-                        )
+            forwarded = await self._send_or_buffer_cp_payload(
+                session=session,
+                action=action,
+                wrapped_payload=wrapped_payload,
+            )
         except Exception as exc:  # pragma: no cover
             logger.warning(
                 "Failed to forward %s from charger %s via %s: %s",
@@ -230,14 +241,15 @@ class CSMSTransportMixin:
             if allowed is not None and action not in allowed:
                 return
             try:
-                await sync_to_async(session.connection.send)(
-                    self._wrap_forwarding_payload(charger, raw, direction="cp_to_csms")
+                forwarded = await self._send_or_buffer_cp_payload(
+                    session=session,
+                    action=action,
+                    wrapped_payload=self._wrap_forwarding_payload(
+                        charger,
+                        raw,
+                        direction="cp_to_csms",
+                    ),
                 )
-                forwarded = True
-                lock = getattr(session, "_cp_messages_lock", None)
-                if lock is not None:
-                    with lock:
-                        session.pending_cp_messages.pop(action, None)
             except Exception as retry_exc:  # pragma: no cover
                 logger.warning(
                     "Failed to forward %s from charger %s after reconnect: %s",

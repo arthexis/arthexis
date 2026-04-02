@@ -248,6 +248,39 @@ async def test_forward_charge_point_message_records_activity_after_reconnect_ret
 
 
 @pytest.mark.anyio
+async def test_forward_charge_point_message_reconnect_retry_respects_throttling(monkeypatch):
+    """Reconnect retry should keep throttled payloads in batching flow."""
+
+    transport = DummyTransport()
+    charger = SimpleNamespace(pk=18, charger_id="CP-18", connector_id=1, forwarded_to_id=None)
+    transport.aggregate_charger = None
+    transport.charger = charger
+    transport._record_forwarding_activity = AsyncMock()
+    transport._ensure_forwarding_context = AsyncMock(return_value=(("Heartbeat",), 1))
+
+    session = FakeSession(pending_call_ids=set(), send=Mock(side_effect=RuntimeError("send failure")))
+    retry_session = FakeSession(pending_call_ids=set())
+    retry_session.forwarding_interval_seconds = 0.05
+    retry_session.last_cp_flush_at = timezone.now()
+
+    transport._reconnect_forwarding_session = AsyncMock(return_value=(retry_session, charger))
+    fake_forwarder = SimpleNamespace(get_session=Mock(return_value=session), remove_session=Mock())
+    monkeypatch.setattr("apps.ocpp.consumers.csms.transport.forwarder", fake_forwarder)
+    monkeypatch.setattr("apps.ocpp.consumers.csms.transport.ocpp_forwarder_enabled", lambda default=True: True)
+    monkeypatch.setattr("apps.ocpp.consumers.csms.transport.Node.get_local", Mock(return_value=None))
+
+    await transport._forward_charge_point_message_legacy("Heartbeat", '[2,"m-1","Heartbeat",{}]')
+
+    assert retry_session.connection.send.call_count == 0
+    assert "Heartbeat" in retry_session.pending_cp_messages
+
+    await sleep(0.1)
+
+    assert retry_session.connection.send.call_count == 1
+    transport._record_forwarding_activity.assert_not_called()
+
+
+@pytest.mark.anyio
 async def test_forward_charge_point_message_schedules_flush_without_new_messages(monkeypatch):
     """Buffered throttled payloads should flush even if no later CP message arrives."""
 
