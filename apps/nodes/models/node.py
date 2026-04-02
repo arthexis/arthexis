@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import stat
 import socket
 import uuid
 from pathlib import Path
@@ -20,6 +21,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core import serializers
+from django.core.exceptions import ValidationError
 from django.core.serializers.base import DeserializationError
 from django.core.validators import validate_ipv46_address, validate_ipv6_address
 from django.db import IntegrityError, models, transaction
@@ -251,8 +253,35 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             return None
         return self.get_base_path() / "ipc" / f"{endpoint}.sock"
 
+    def clean(self) -> None:
+        """Validate sibling IPC override values before persisting."""
+
+        super().clean()
+        errors: dict[str, str] = {}
+        scheme = (self.ipc_scheme or "").strip()
+        if scheme and scheme != "unix_socket":
+            errors["ipc_scheme"] = "Only unix_socket is supported for sibling IPC."
+
+        configured_path = (self.ipc_path or "").strip()
+        if configured_path:
+            if not os.path.isabs(configured_path):
+                errors["ipc_path"] = "IPC path must be absolute."
+            else:
+                managed_root = (self.get_base_path() / "ipc").resolve()
+                candidate = Path(configured_path).resolve()
+                try:
+                    contains_path = os.path.commonpath([str(managed_root), str(candidate)]) == str(managed_root)
+                except ValueError:
+                    contains_path = False
+                if not contains_path:
+                    errors["ipc_path"] = f"IPC path must be within {managed_root}."
+        if errors:
+            raise ValidationError(errors)
+
     def get_sibling_ipc_status(self) -> dict[str, object]:
         """Return current sibling IPC status details for diagnostics/admin."""
+
+        from apps.nodes.services.transport import _is_secure_socket_path
 
         socket_path = self.get_ipc_socket_path()
         enabled = bool(getattr(settings, "NODES_ENABLE_SIBLING_IPC", False))
@@ -263,9 +292,19 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         if not socket_path.exists():
             return {"enabled": True, "status": "missing", "path": str(socket_path)}
         try:
-            socket_mode = socket_path.stat().st_mode & 0o777
+            stat_result = socket_path.stat()
+            socket_mode = stat_result.st_mode & 0o777
         except OSError:
             return {"enabled": True, "status": "error", "path": str(socket_path)}
+        if not stat.S_ISSOCK(stat_result.st_mode):
+            return {"enabled": True, "status": "wrong_type", "path": str(socket_path), "mode": f"{socket_mode:o}"}
+        if not _is_secure_socket_path(socket_path):
+            return {
+                "enabled": True,
+                "status": "rejected_permissions",
+                "path": str(socket_path),
+                "mode": f"{socket_mode:o}",
+            }
         return {
             "enabled": True,
             "status": "ready",

@@ -73,11 +73,13 @@ def _request_via_unix_socket(*, socket_path: Path, operation: str, payload: dict
 
 
 def _post_json(url: str, *, payload_json: str, headers: dict[str, str], timeout: float = 1.0) -> bool:
+    """Send a JSON payload over HTTP and return ``True`` on success."""
+
     import requests
 
     try:
         response = requests.post(url, data=payload_json, headers=headers, timeout=timeout)
-    except Exception as exc:
+    except requests.RequestException as exc:
         logger.debug("Transport HTTP POST failed for %s: %s", url, exc)
         return False
     return bool(response.ok)
@@ -98,10 +100,16 @@ def send_registration(payload: dict[str, object], target_node: Node) -> bool:
                     operation="registration",
                     payload=payload,
                 )
-            except Exception as exc:
+            except (PermissionError, TransportError) as exc:
                 logger.info("Sibling registration IPC failed for node %s: %s", target_node.pk, exc)
             else:
-                return bool(response.get("ok"))
+                if bool(response.get("ok")):
+                    return True
+                logger.info(
+                    "Sibling registration IPC rejected for node %s: %s; falling back to HTTP",
+                    target_node.pk,
+                    response.get("detail", "unknown error"),
+                )
 
     for url in target_node.iter_remote_urls("/nodes/register/"):
         if _post_json(url, payload_json=payload_json, headers=headers, timeout=2.0):
@@ -131,10 +139,16 @@ def send_net_message(
                     operation="net_message",
                     payload=ipc_payload,
                 )
-            except Exception as exc:
+            except (PermissionError, TransportError) as exc:
                 logger.info("Sibling net message IPC failed for node %s: %s", target_node.pk, exc)
             else:
-                return bool(response.get("ok"))
+                if bool(response.get("ok")):
+                    return True
+                logger.info(
+                    "Sibling net message IPC rejected for node %s: %s; falling back to HTTP",
+                    target_node.pk,
+                    response.get("detail", "unknown error"),
+                )
 
     for url in target_node.iter_remote_urls("/nodes/net-message/"):
         if _post_json(url, payload_json=payload_json, headers=headers):

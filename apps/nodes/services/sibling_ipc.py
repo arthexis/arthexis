@@ -7,8 +7,13 @@ import logging
 import os
 import socketserver
 import threading
+from base64 import b64decode
+from binascii import Error as BinasciiError
 from pathlib import Path
 
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 from django.conf import settings
 from django.http import HttpRequest
 from django.test.client import RequestFactory
@@ -40,11 +45,41 @@ def _build_register_request(payload: dict[str, object]) -> HttpRequest:
     )
 
 
+def _signature_is_valid(sender: Node, signature: str, msg_payload: dict[str, object]) -> bool:
+    """Verify a sibling IPC net message signature against the sender key."""
+
+    if not sender.public_key:
+        return False
+    try:
+        signature_bytes = b64decode(signature)
+        public_key = serialization.load_pem_public_key(sender.public_key.encode())
+        signed_payload = json.dumps(
+            msg_payload,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        public_key.verify(
+            signature_bytes,
+            signed_payload,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
+            hashes.SHA256(),
+        )
+    except (BinasciiError, InvalidSignature, TypeError, ValueError):
+        return False
+    return True
+
+
 def handle_operation(operation: str, payload: dict[str, object]) -> dict[str, object]:
     """Handle an inbound sibling IPC operation and return status details."""
 
     if operation == "registration":
-        sender = Node.objects.filter(mac_address__iexact=str(payload.get("mac_address") or "")).first()
+        sender = None
+        mac_address = str(payload.get("mac_address") or "").strip()
+        if mac_address:
+            sender = Node.objects.filter(mac_address__iexact=mac_address).first()
         if not sender and payload.get("public_key"):
             sender = Node.objects.filter(public_key=str(payload.get("public_key"))).first()
         if not _relation_is_sibling(sender):
@@ -63,6 +98,8 @@ def handle_operation(operation: str, payload: dict[str, object]) -> dict[str, ob
             return {"ok": False, "detail": "sibling relation required"}
         if not signature:
             return {"ok": False, "detail": "signature required"}
+        if not _signature_is_valid(sender, signature, msg_payload):
+            return {"ok": False, "detail": "invalid signature"}
         try:
             NetMessage.receive_payload(msg_payload, sender=sender)
         except ValueError as exc:
@@ -78,7 +115,7 @@ class _SiblingIPCHandler(socketserver.StreamRequestHandler):
         response = {"ok": False, "detail": "invalid request"}
         try:
             data = json.loads(raw.decode("utf-8") or "{}")
-        except Exception:
+        except (UnicodeDecodeError, json.JSONDecodeError):
             data = {}
         if isinstance(data, dict):
             operation = str(data.get("operation") or "").strip()

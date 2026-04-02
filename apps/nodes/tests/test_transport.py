@@ -73,10 +73,39 @@ def test_send_net_message_falls_back_to_http_when_ipc_unavailable(monkeypatch, t
 
 @pytest.mark.django_db
 @override_settings(NODES_ENABLE_SIBLING_IPC=True)
-def test_send_net_message_handles_permission_denied_socket_path(monkeypatch, tmp_path):
+def test_send_net_message_falls_back_to_http_when_ipc_rejects_payload(monkeypatch, tmp_path):
+    node = Node.objects.create(
+        hostname="sibling-c",
+        public_endpoint="sibling-c",
+        base_path=str(tmp_path),
+        current_relation=Node.Relation.SIBLING,
+        address="127.0.0.1",
+        port=8888,
+    )
+
+    monkeypatch.setattr(
+        transport,
+        "_request_via_unix_socket",
+        lambda **kwargs: {"ok": False, "detail": "sibling relation required"},
+    )
+    monkeypatch.setattr(transport, "_post_json", lambda *args, **kwargs: True)
+
+    ok = transport.send_net_message(
+        {"sender": "abc", "subject": "test"},
+        node,
+        payload_json="{}",
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert ok is True
+
+
+@pytest.mark.django_db
+@override_settings(NODES_ENABLE_SIBLING_IPC=True)
+def test_send_net_message_falls_back_to_http_when_socket_path_invalid(monkeypatch, tmp_path):
     socket_path = tmp_path / "ipc" / "sibling-c.sock"
     socket_path.parent.mkdir(parents=True)
-    socket_path.write_text("stub", encoding="utf-8")
+    socket_path.write_text("stub", encoding="utf-8")  # Not a valid UNIX socket.
     socket_path.chmod(0o666)
 
     node = Node.objects.create(
