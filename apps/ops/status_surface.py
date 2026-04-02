@@ -17,9 +17,10 @@ from apps.ops.models import SecurityAlertEvent
 SEVERITY_INFO = "info"
 SEVERITY_WARNING = "warning"
 SEVERITY_CRITICAL = "critical"
+REDACTION_SENTINEL = "[REDACTED]"
 
 _SECRET_FIELD_PATTERN = re.compile(
-    r'(?P<key>"?(?:password|passphrase|token|api[_-]?key|authorization|secret)"?\s*[:=]\s*)'
+    r'(?P<key>"?[\w-]*?(?:password|passphrase|token|api[_-]?key|authorization|secret)[\w-]*"?\s*[:=]\s*)'
     r'(?P<value>"[^"\\]*(?:\\.[^"\\]*)*"|\S+)',
     re.IGNORECASE,
 )
@@ -47,8 +48,8 @@ class StatusCondition:
 
 def _redact_value(value: str) -> str:
     if value.startswith('"') and value.endswith('"'):
-        return '"[REDACTED]"'
-    return "[REDACTED]"
+        return f'"{REDACTION_SENTINEL}"'
+    return REDACTION_SENTINEL
 
 
 def redact_log_line(raw_line: str) -> str:
@@ -80,11 +81,11 @@ def _redact_payload_mapping(payload: dict[str, object]) -> None:
     for key, value in list(payload.items()):
         lowered = str(key).lower()
         if any(token in lowered for token in ("password", "token", "secret", "authorization", "api_key", "apikey")):
-            payload[key] = "[REDACTED]"
+            payload[key] = REDACTION_SENTINEL
         elif isinstance(value, dict):
             _redact_payload_mapping(value)
         elif isinstance(value, list):
-            payload[key] = ["[REDACTED]" if isinstance(item, str) and "bearer " in item.lower() else item for item in value]
+            payload[key] = [REDACTION_SENTINEL if isinstance(item, str) and "bearer " in item.lower() else item for item in value]
 
 
 def _visible_chargers(user) -> Iterable[Charger]:
@@ -200,13 +201,8 @@ def _guidance_for_failures(failure_count: int) -> StatusCondition:
 
 
 def _critical_events_for_scope(*, user, limit: int = 10) -> list[dict[str, object]]:
+    failed_ops = _failed_operations_for_scope(user=user).select_related("charger")[:limit]
     since = timezone.now() - timedelta(hours=24)
-    visible_charger_ids = list(_visible_chargers(user).values_list("id", flat=True))
-    failed_ops = ControlOperationEvent.objects.filter(
-        created_at__gte=since,
-        status=ControlOperationEvent.Status.FAILED,
-        charger_id__in=visible_charger_ids,
-    ).select_related("charger")[:limit]
     alerts = SecurityAlertEvent.objects.none()
     if _is_staff_scope(user):
         alerts = SecurityAlertEvent.objects.filter(
@@ -238,10 +234,20 @@ def _critical_events_for_scope(*, user, limit: int = 10) -> list[dict[str, objec
     return sorted(items, key=lambda item: item["timestamp"], reverse=True)[:limit]
 
 
+def _failed_operations_for_scope(*, user):
+    since = timezone.now() - timedelta(hours=24)
+    visible_charger_ids = list(_visible_chargers(user).values_list("id", flat=True))
+    return ControlOperationEvent.objects.filter(
+        created_at__gte=since,
+        status=ControlOperationEvent.Status.FAILED,
+        charger_id__in=visible_charger_ids,
+    )
+
+
 def scoped_log_excerpts(*, user, limit_per_charger: int = 5) -> list[dict[str, object]]:
     """Return role-aware, tenant-scoped log excerpts with redaction."""
 
-    include_sensitive_event_names = getattr(user, "is_staff", False)
+    include_sensitive_event_names = _is_staff_scope(user)
     excerpts: list[dict[str, object]] = []
     for charger in _visible_chargers(user).order_by("charger_id", "connector_id")[:20]:
         key = store.identity_key(charger.charger_id, charger.connector_id)
@@ -286,11 +292,12 @@ def build_status_surface(*, user) -> dict[str, object]:
         if store.is_connected(charger.charger_id, charger.connector_id)
     )
     pending_count, monitoring_request_count = _scope_queue_counts(user=user, visible=visible)
+    failure_count = _failed_operations_for_scope(user=user).count()
     critical_events = _critical_events_for_scope(user=user)
     conditions = [
         _guidance_for_connectivity(connected, len(visible)),
         _guidance_for_backlog(pending_count),
-        _guidance_for_failures(len(critical_events)),
+        _guidance_for_failures(failure_count),
     ]
 
     return {

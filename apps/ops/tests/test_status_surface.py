@@ -68,6 +68,18 @@ class StatusSurfaceTests(TestCase):
         self.assertIn('"token": "[REDACTED]"', redacted)
         self.assertIn('"password": "[REDACTED]"', redacted)
 
+    def test_redact_log_line_masks_secret_key_variants_in_raw_text(self):
+        redacted = redact_log_line(
+            "auth access_token=abc123 refresh_token=def456 client_secret=ghi789"
+        )
+
+        self.assertNotIn("abc123", redacted)
+        self.assertNotIn("def456", redacted)
+        self.assertNotIn("ghi789", redacted)
+        self.assertIn("access_token=[REDACTED]", redacted)
+        self.assertIn("refresh_token=[REDACTED]", redacted)
+        self.assertIn("client_secret=[REDACTED]", redacted)
+
     def test_status_surface_requires_authentication(self):
         response = self.client.get(reverse("ops:status-surface"))
 
@@ -175,3 +187,30 @@ class StatusSurfaceTests(TestCase):
         staff_queue = staff_response.json()["service_health"]["queue"]
         self.assertEqual(staff_queue["pending_calls"], 2)
         self.assertEqual(staff_queue["monitoring_requests"], 2)
+
+    def test_status_surface_recent_failures_condition_counts_only_failed_operations(self):
+        ControlOperationEvent.objects.create(
+            charger=self.owner_charger,
+            actor=self.owner,
+            action="GetConfiguration",
+            transport=ControlOperationEvent.Transport.LOCAL,
+            status=ControlOperationEvent.Status.FAILED,
+            detail="failed op",
+        )
+        SecurityAlertEvent.objects.create(
+            key="alert-only",
+            severity="critical",
+            message="Security alert present",
+            detail="token=sec-value",
+            last_occurred_at=timezone.now(),
+            is_active=True,
+        )
+
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("ops:status-surface"))
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        recent_failures = next(
+            condition for condition in payload["status_conditions"] if condition["code"] == "recent_failures"
+        )
+        self.assertIn("(1)", recent_failures["summary"])
