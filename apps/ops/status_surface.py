@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import timedelta
 
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.ocpp import store
@@ -90,6 +91,19 @@ def _redact_payload_mapping(payload: dict[str, object]) -> None:
 
 def _visible_chargers(user) -> Iterable[Charger]:
     return Charger.visible_for_user(user).only("id", "charger_id", "connector_id")
+
+
+def _log_visible_chargers(user) -> Iterable[Charger]:
+    """Return chargers whose logs may be viewed in the status surface."""
+
+    chargers = _visible_chargers(user)
+    if _is_staff_scope(user):
+        return chargers
+    group_ids = list(user.groups.values_list("pk", flat=True))
+    owner_visibility = Q(owner_users=user)
+    if group_ids:
+        owner_visibility |= Q(owner_groups__pk__in=group_ids)
+    return chargers.filter(owner_visibility).distinct()
 
 
 def _is_staff_scope(user) -> bool:
@@ -249,7 +263,7 @@ def scoped_log_excerpts(*, user, limit_per_charger: int = 5) -> list[dict[str, o
 
     include_sensitive_event_names = _is_staff_scope(user)
     excerpts: list[dict[str, object]] = []
-    for charger in _visible_chargers(user).order_by("charger_id", "connector_id")[:20]:
+    for charger in _log_visible_chargers(user).order_by("charger_id", "connector_id")[:20]:
         key = store.identity_key(charger.charger_id, charger.connector_id)
         lines = []
         for entry in store.iter_log_entries(key, log_type="charger", limit=limit_per_charger * 3):

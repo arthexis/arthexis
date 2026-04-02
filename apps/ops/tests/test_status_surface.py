@@ -28,9 +28,11 @@ class StatusSurfaceTests(TestCase):
         self.owner_charger.owner_users.add(self.owner)
         self.other_charger = Charger.objects.create(charger_id="CP-OTHER")
         self.other_charger.owner_users.add(self.intruder)
+        self.public_charger = Charger.objects.create(charger_id="CP-PUBLIC")
 
         owner_key = store.identity_key("CP-OWNER", None)
         other_key = store.identity_key("CP-OTHER", None)
+        public_key = store.identity_key("CP-PUBLIC", None)
         store.add_log(
             owner_key,
             'Authorize processed: {"token":"tok-secret","idTag":"A1"}',
@@ -51,10 +53,16 @@ class StatusSurfaceTests(TestCase):
             'DataTransfer received: {"password":"private","status":"ok"}',
             log_type="charger",
         )
+        store.add_log(
+            public_key,
+            "Public charger diagnostic detail",
+            log_type="charger",
+        )
 
     def tearDown(self):
         store.clear_log(store.identity_key("CP-OWNER", None), log_type="charger")
         store.clear_log(store.identity_key("CP-OTHER", None), log_type="charger")
+        store.clear_log(store.identity_key("CP-PUBLIC", None), log_type="charger")
         store.pending_calls.clear()
         store.monitoring_report_requests.clear()
 
@@ -95,6 +103,7 @@ class StatusSurfaceTests(TestCase):
         excerpts = payload["log_excerpts"]
         self.assertEqual(len(excerpts), 1)
         self.assertEqual(excerpts[0]["charger_id"], "CP-OWNER")
+        self.assertTrue(all(excerpt["charger_id"] != "CP-PUBLIC" for excerpt in excerpts))
         lines = "\n".join(item["line"] for item in excerpts[0]["entries"])
         self.assertNotIn("SecurityEventNotification", lines)
         self.assertNotIn("tok-secret", lines)
