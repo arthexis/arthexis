@@ -105,6 +105,7 @@ def test_netmesh_api_returns_scoped_payloads_and_etag(client):
     assert endpoint_payload["connection_candidates"][0]["path"] == "direct"
     assert endpoint_payload["connection_candidates"][-1]["path"] == "relay"
     assert endpoint_payload["connection_candidates"][-1]["region"] == "use1"
+    assert "config" not in endpoint_payload["connection_candidates"][-1]
     assert endpoint_payload["services"] == [
         {"service": "ocpp", "port": 443, "protocol": "https"}
     ]
