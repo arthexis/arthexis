@@ -41,13 +41,31 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
    Record the startup timestamp and chosen port in
    `.locks/startup_started_at.lck` for status reporting.
 7. When the LCD feature flag is enabled, queue a startup Net Message via
-   `manage.py startup_message` (which delegates to
-   `apps.nodes.tasks.send_startup_net_message`) to record the hostname and port
-   for the boot cycle.
-8. Start embedded Celery worker and beat processes unless Celery management is
+   `apps.screens.startup_notifications.queue_startup_message` to record the hostname
+   and port for the boot cycle.
+8. Run `manage.py startup_maintenance` so OCPP cache resets and other startup-owned
+   cleanup hooks execute explicitly during boot without relying on import-time
+   side effects.
+9. Start embedded Celery worker and beat processes unless Celery management is
    disabled or delegated to systemd, capturing their PIDs for cleanup.
-9. If the LCD is configured for embedded mode, start the `apps.screens.lcd_screen`
+10. If the LCD is configured for embedded mode, start the `apps.screens.lcd_screen`
    process alongside the web server.
-10. Launch the Django server on `127.0.0.1:<port>` by default, using `--noreload`
+11. Launch the Django server on `127.0.0.1:<port>` by default, using `--noreload`
    unless `--reload` was requested. Service scripts that need LAN exposure pass an
    explicit bind address instead of relying on the CLI default.
+
+
+## Operational cleanup ownership
+
+Import-time hooks in `AppConfig.ready()` are limited to signal/module wiring only.
+Operational cleanup is owned by app-level maintenance entry points:
+
+- OCPP cached status reset: `manage.py reset_cached_statuses` or
+  `apps.ocpp.tasks.reset_cached_statuses`.
+- Sites view history purge: `manage.py purge_view_history` or
+  `apps.sites.tasks.purge_view_history` (scheduled by Celery Beat).
+- Cross-app startup orchestration: `manage.py startup_maintenance` (invoked by
+  startup scripts before `runserver` and available for manual runs).
+
+This keeps startup side effects explicit and discoverable from operational
+commands and scheduler configuration instead of import-time behavior.
