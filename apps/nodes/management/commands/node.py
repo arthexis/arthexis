@@ -22,8 +22,8 @@ from urllib.parse import urlsplit, urlunsplit
 
 import psutil
 import requests
-from django.contrib.auth import get_user_model
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.test import RequestFactory
 from django.urls import reverse
@@ -316,6 +316,10 @@ class Command(BaseCommand):
 
     def _register_sibling_from_path(self, sibling_path: str, *, no_reciprocal: bool) -> None:
         sibling_root = self._normalize_sibling_install_path(sibling_path)
+        local_root = Path(settings.BASE_DIR).resolve()
+        if sibling_root == local_root:
+            raise CommandError("--path must point to a different installation.")
+
         sibling_info = self._load_sibling_info_from_path(sibling_root)
 
         local_payload = self._build_registration_payload(sibling_info, "Sibling")
@@ -327,7 +331,6 @@ class Command(BaseCommand):
         if no_reciprocal:
             return
 
-        local_root = Path(settings.BASE_DIR).resolve()
         self._run_sibling_registration_subprocess(
             sibling_root,
             [
@@ -861,15 +864,24 @@ class Command(BaseCommand):
             ["node", "info_json"],
         )
         lines = [line.strip() for line in output.splitlines() if line.strip()]
+        saw_non_dict_payload = False
         for candidate in reversed(lines):
             try:
-                return json.loads(candidate)
+                payload = json.loads(candidate)
             except json.JSONDecodeError:
                 continue
+            if isinstance(payload, dict):
+                return payload
+            saw_non_dict_payload = True
         try:
-            return json.loads(output)
+            payload = json.loads(output)
         except json.JSONDecodeError as exc:
+            if saw_non_dict_payload:
+                raise CommandError("Sibling node info payload must be a JSON object.") from exc
             raise CommandError("Sibling node info payload is invalid JSON.") from exc
+        if not isinstance(payload, dict):
+            raise CommandError("Sibling node info payload must be a JSON object.")
+        return payload
 
     def _run_sibling_registration_subprocess(
         self, sibling_root: Path, manage_args: list[str]
@@ -891,6 +903,10 @@ class Command(BaseCommand):
             detail = stderr or stdout or str(exc)
             raise CommandError(
                 f"Sibling command failed at {sibling_root}: {detail}"
+            ) from exc
+        except OSError as exc:
+            raise CommandError(
+                f"Unable to run sibling command at {sibling_root}: {exc}"
             ) from exc
         return (result.stdout or "").strip()
 

@@ -134,6 +134,21 @@ def test_load_sibling_info_from_path_accepts_banner_prefix(tmp_path, monkeypatch
     assert result == {"hostname": "sibling-node"}
 
 
+def test_load_sibling_info_from_path_requires_json_object(tmp_path, monkeypatch):
+    command = _load_node_command()
+    sibling_path = tmp_path / "sibling"
+    sibling_path.mkdir()
+
+    monkeypatch.setattr(
+        command,
+        "_run_sibling_registration_subprocess",
+        lambda *_args, **_kwargs: "Arthexis 1.0.0\n[]",
+    )
+
+    with pytest.raises(CommandError, match="must be a JSON object"):
+        command._load_sibling_info_from_path(sibling_path)
+
+
 def test_node_register_path_mode_uses_base_dir_for_reciprocal_path(monkeypatch, tmp_path):
     command = _load_node_command()
     sibling_path = tmp_path / "sibling"
@@ -177,3 +192,29 @@ def test_node_register_path_mode_uses_base_dir_for_reciprocal_path(monkeypatch, 
     reciprocal_index = captured["manage_args"].index("--path") + 1
     expected = Path(settings.BASE_DIR).resolve().as_posix()
     assert captured["manage_args"][reciprocal_index] == expected
+
+
+def test_node_register_path_mode_rejects_local_install_path(monkeypatch):
+    command = _load_node_command()
+
+    with pytest.raises(CommandError, match="different installation"):
+        command.handle(
+            action="register",
+            token="",
+            sibling_path=str(settings.BASE_DIR),
+            no_reciprocal=True,
+        )
+
+
+def test_run_sibling_registration_subprocess_wraps_os_error(monkeypatch, tmp_path):
+    command = _load_node_command()
+    sibling_path = tmp_path / "sibling"
+    sibling_path.mkdir()
+
+    def _raise_os_error(*_args, **_kwargs):
+        raise OSError("launcher not found")
+
+    monkeypatch.setattr("subprocess.run", _raise_os_error)
+
+    with pytest.raises(CommandError, match="Unable to run sibling command"):
+        command._run_sibling_registration_subprocess(sibling_path, ["node", "info_json"])
