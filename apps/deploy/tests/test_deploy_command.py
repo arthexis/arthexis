@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 from django.contrib.sites.models import Site
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 
 from apps.aws.models import AWSCredentials
 from apps.deploy.management.commands import lightsail as lightsail_command
