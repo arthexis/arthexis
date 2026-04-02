@@ -142,3 +142,15 @@ class AdminStaffTasksTests(TestCase):
         self.assertContains(response, "Charge point onboarding")
         self.assertContains(response, "ws://testserver/ws/&lt;charger-id&gt;/")
         self.assertContains(response, reverse("admin:ocpp_charger_add"))
+
+    @patch("apps.core.system.admin_views.resolve_ws_scheme", return_value="wss")
+    def test_chargers_shortcut_uses_proxy_aware_ws_scheme_resolution(
+        self, mocked_resolver: Mock
+    ):
+        """Onboarding URL should use the shared proxy-aware websocket scheme resolver."""
+
+        response = self.client.get(reverse("admin:chargers-shortcut"))
+
+        self.assertEqual(response.status_code, 200)
+        mocked_resolver.assert_called_once_with(request=response.wsgi_request)
+        self.assertContains(response, "wss://testserver/ws/&lt;charger-id&gt;/")

@@ -22,8 +22,9 @@ from apps.actions.models import StaffTask, StaffTaskPreference
 from apps.actions.staff_tasks import ensure_default_staff_tasks_exist
 from apps.core import changelog
 from apps.core.models import AdminNotice
-from apps.ocpp.models import Charger
 from apps.core.systemctl import _systemctl_command
+from apps.ocpp.models import Charger
+from apps.ocpp.utils import resolve_ws_scheme
 from apps.services.lifecycle import SERVICE_NAME_LOCK, lock_dir, read_service_name
 from .filesystem import _clear_auto_upgrade_skip_revisions
 from .network import _upgrade_redirect
@@ -275,7 +276,7 @@ def _chargers_shortcut_view(request):
     if Charger.objects.exists():
         return HttpResponseRedirect(reverse("admin:ocpp_charger_changelist"))
 
-    scheme = "wss" if request.is_secure() else "ws"
+    scheme = resolve_ws_scheme(request=request)
     context = admin.site.each_context(request)
     context.update(
         {
