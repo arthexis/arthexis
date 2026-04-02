@@ -26,5 +26,5 @@ Run cookbook maintenance during:
 ## Quick links
 
 - [Cookbook library fixtures](../../apps/docs/fixtures/cookbook__docs_cookbook.json)
-- [Cookbook source directory](../../apps/docs/cookbooks/)
+- [Cookbook QA checklist source](../../apps/docs/cookbooks/cookbook-qa-checklist.md)
 - [Arthexis documentation index](../index.md)
