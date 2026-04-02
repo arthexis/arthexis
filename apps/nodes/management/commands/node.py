@@ -433,7 +433,26 @@ class Command(BaseCommand):
                         )
                     )
                     continue
-                if local_mac and mac_address == local_mac:
+                remote_uuid = str(info.get("uuid") or "").strip()
+                local_uuid = str(local_node.uuid or "").strip() if local_node else ""
+                try:
+                    remote_port = int(info.get("port") or 0)
+                except (TypeError, ValueError):
+                    remote_port = 0
+                try:
+                    local_port = int(local_node.port or 0) if local_node else 0
+                except (TypeError, ValueError):
+                    local_port = 0
+                if (
+                    local_mac
+                    and mac_address == local_mac
+                    and remote_uuid
+                    and local_uuid
+                    and remote_uuid == local_uuid
+                    and remote_port
+                    and local_port
+                    and remote_port == local_port
+                ):
                     self.stdout.write(
                         self.style.WARNING(
                             f"Skipping {host}:{port} (local node detected)."

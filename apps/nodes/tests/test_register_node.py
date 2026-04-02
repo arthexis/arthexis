@@ -690,3 +690,36 @@ def test_register_node_demotes_conflicting_self_relation_to_sibling(admin_user):
     assert response.status_code == 200
     node = Node.objects.get(mac_address=payload["mac_address"])
     assert node.current_relation == Node.Relation.SIBLING
+
+
+@pytest.mark.django_db
+def test_register_node_retries_as_sibling_on_self_host_constraint_conflict(admin_user, monkeypatch):
+    payload = {
+        "hostname": "self-race",
+        "mac_address": "aa:bb:cc:dd:ee:77",
+        "host_instance_id": "machine-77",
+        "address": "192.0.2.77",
+        "port": 8899,
+        "current_relation": "SELF",
+    }
+
+    request = _build_request(RequestFactory(), payload)
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    original_get_or_create = Node.objects.get_or_create
+    calls = {"count": 0}
+
+    def fake_get_or_create(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise IntegrityError("nodes_node_self_host_instance_unique")
+        return original_get_or_create(*args, **kwargs)
+
+    monkeypatch.setattr(Node.objects, "get_or_create", fake_get_or_create)
+
+    response = register_node(request)
+
+    assert response.status_code == 200
+    node = Node.objects.get(mac_address=payload["mac_address"])
+    assert node.current_relation == Node.Relation.SIBLING

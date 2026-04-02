@@ -12,6 +12,7 @@ import requests
 from cryptography.hazmat.primitives import serialization
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.sites.models import Site
+from django.db import IntegrityError
 from django.http import JsonResponse
 from django.test.client import RequestFactory
 from django.utils import timezone
@@ -286,6 +287,22 @@ def _deactivate_user_if_requested(request, deactivate_user: bool):
         deactivate()
 
 
+def _is_self_host_conflict_error(
+    error: IntegrityError, *, relation_value: Node.Relation | None, host_instance_id: str
+) -> bool:
+    """Return True when a write failed due to SELF host uniqueness conflict."""
+
+    if relation_value != Node.Relation.SELF:
+        return False
+    if not (host_instance_id or "").strip():
+        return False
+    message = str(error)
+    return (
+        "nodes_node_self_host_instance_unique" in message
+        or "host_instance_id" in message
+    )
+
+
 def _update_existing_node(node: Node, *, payload: NodeRegistrationPayload, relation_value: Node.Relation | None, address_value: str, ipv4_value: str, ipv6_value: str, verified: bool, desired_role, trusted_allowed: bool, base_site: Site | None, request):
     """Update an existing node while preserving response compatibility."""
 
@@ -496,21 +513,59 @@ def register_node(request):
     if relation_value is not None:
         defaults["current_relation"] = relation_value
 
-    node, created = Node.objects.get_or_create(mac_address=mac_address, defaults=defaults)
-    if not created:
-        response = _update_existing_node(
-            node,
-            payload=payload,
-            relation_value=relation_value,
-            address_value=address_value,
-            ipv4_value=ipv4_value,
-            ipv6_value=ipv6_value,
-            verified=verified,
-            desired_role=desired_role,
-            trusted_allowed=trusted_allowed,
-            base_site=base_site,
-            request=request,
+    try:
+        node, created = Node.objects.get_or_create(
+            mac_address=mac_address,
+            defaults=defaults,
         )
+    except IntegrityError as error:
+        if not _is_self_host_conflict_error(
+            error,
+            relation_value=relation_value,
+            host_instance_id=payload.host_instance_id,
+        ):
+            raise
+        relation_value = Node.Relation.SIBLING
+        defaults["current_relation"] = relation_value
+        node, created = Node.objects.get_or_create(
+            mac_address=mac_address,
+            defaults=defaults,
+        )
+    if not created:
+        try:
+            response = _update_existing_node(
+                node,
+                payload=payload,
+                relation_value=relation_value,
+                address_value=address_value,
+                ipv4_value=ipv4_value,
+                ipv6_value=ipv6_value,
+                verified=verified,
+                desired_role=desired_role,
+                trusted_allowed=trusted_allowed,
+                base_site=base_site,
+                request=request,
+            )
+        except IntegrityError as error:
+            if not _is_self_host_conflict_error(
+                error,
+                relation_value=relation_value,
+                host_instance_id=payload.host_instance_id,
+            ):
+                raise
+            response = _update_existing_node(
+                node,
+                payload=payload,
+                relation_value=Node.Relation.SIBLING,
+                address_value=address_value,
+                ipv4_value=ipv4_value,
+                ipv6_value=ipv6_value,
+                verified=verified,
+                desired_role=desired_role,
+                trusted_allowed=trusted_allowed,
+                base_site=base_site,
+                request=request,
+            )
         _log_registration_event("succeeded", payload, request, detail=f"updated node {node.id}")
         return add_cors_headers(request, response)
 
