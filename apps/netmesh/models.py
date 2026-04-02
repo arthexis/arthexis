@@ -13,6 +13,8 @@ from apps.core.entity import Entity
 class MeshMembership(Entity):
     """Represents a node enrollment in a tenant/site scoped mesh."""
 
+    DEFAULT_TENANT = "arthexis"
+
     node = models.ForeignKey(
         "nodes.Node",
         on_delete=models.CASCADE,
@@ -20,7 +22,8 @@ class MeshMembership(Entity):
     )
     tenant = models.CharField(
         max_length=64,
-        blank=True,
+        default=DEFAULT_TENANT,
+        blank=False,
         help_text=_("Tenant identifier for external mesh orchestration scope."),
     )
     site = models.ForeignKey(
@@ -35,6 +38,10 @@ class MeshMembership(Entity):
     class Meta(Entity.Meta):
         ordering = ["tenant", "site__domain", "node__hostname", "pk"]
         constraints = [
+            models.CheckConstraint(
+                condition=~Q(tenant=""),
+                name="netmesh_membership_tenant_non_empty",
+            ),
             models.UniqueConstraint(
                 fields=["node", "tenant"],
                 condition=Q(site__isnull=True),
@@ -82,9 +89,12 @@ class NodeKeyMaterial(Entity):
 class PeerPolicy(Entity):
     """Defines service communication policy from a source node/group to destination."""
 
+    DEFAULT_TENANT = MeshMembership.DEFAULT_TENANT
+
     tenant = models.CharField(
         max_length=64,
-        blank=True,
+        default=DEFAULT_TENANT,
+        blank=False,
         help_text=_("Tenant identifier that owns this policy."),
     )
     site = models.ForeignKey(
@@ -165,7 +175,12 @@ class PeerPolicy(Entity):
                 name="netmesh_policy_scope_src_idx",
             ),
         ]
-        constraints = []
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(tenant=""),
+                name="netmesh_peerpolicy_tenant_non_empty",
+            ),
+        ]
 
     @staticmethod
     def _normalize_services(services) -> list[str]:

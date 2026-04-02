@@ -146,11 +146,46 @@ def test_peer_policy_rejects_ambiguous_allow_and_deny_with_reordered_tag_selecto
 def test_mesh_membership_disallows_duplicate_default_scope():
     node = Node.objects.create(hostname="mesh-default-scope")
 
-    MeshMembership.objects.create(node=node, tenant="", site=None)
+    MeshMembership.objects.create(node=node, tenant=MeshMembership.DEFAULT_TENANT, site=None)
 
     with pytest.raises(IntegrityError):
         with transaction.atomic():
-            MeshMembership.objects.create(node=node, tenant="", site=None)
+            MeshMembership.objects.create(node=node, tenant=MeshMembership.DEFAULT_TENANT, site=None)
+
+
+@pytest.mark.django_db
+def test_mesh_membership_requires_non_empty_tenant():
+    node = Node.objects.create(hostname="mesh-empty-membership-tenant")
+    membership = MeshMembership(node=node, tenant="")
+
+    with pytest.raises(ValidationError):
+        membership.full_clean()
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            MeshMembership.objects.create(node=node, tenant="")
+
+
+@pytest.mark.django_db
+def test_peer_policy_requires_non_empty_tenant():
+    source = Node.objects.create(hostname="mesh-empty-policy-tenant-source")
+    destination = Node.objects.create(hostname="mesh-empty-policy-tenant-destination")
+    policy = PeerPolicy(
+        tenant="",
+        source_node=source,
+        destination_node=destination,
+    )
+
+    with pytest.raises(ValidationError):
+        policy.full_clean()
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            PeerPolicy.objects.create(
+                tenant="",
+                source_node=source,
+                destination_node=destination,
+            )
 
 
 @pytest.mark.django_db
