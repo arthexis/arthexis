@@ -39,6 +39,6 @@ These path files are read by `.github/workflows/dashboard-screenshot.yml`, which
 
 If local preview generation fails because browser/screenshot tooling is unavailable in the current runtime, do not block on manual capture. Register the route for CI screenshot capture instead:
 
-- Add the route to `.github/screenshot-paths.authenticated.txt` (requires login) or `.github/screenshot-paths.public.txt` (public route).
+- Add the route (starting with `/`, one per line) to `.github/screenshot-paths.authenticated.txt` (requires login) or `.github/screenshot-paths.public.txt` (public route).
 - Push the change and rely on the screenshot workflow artifacts as the preview source of truth.
 - Prefer this CI route-registration flow over ad-hoc local browser setup in constrained environments.
