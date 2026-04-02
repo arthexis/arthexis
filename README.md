@@ -144,4 +144,4 @@ If you decide to use our suite for your energy projects, you may contact us at [
 
 Arthexis is distributed under the Arthexis Contribution Reciprocity License 1.0. In addition to code, docs, reviews, and maintenance, we also consider sponsoring Arthexis and doing paid or volunteer work for the open-source dependencies we rely on to be a valid and important form of contribution.
 
-If Arthexis helps your team, please review the license terms in [`LICENSE`](LICENSE) and consider sponsoring or directly supporting the maintainers of the libraries, frameworks, and infrastructure projects that make this suite possible. Supporting those dependencies helps keep the whole Arthexis ecosystem healthy.
+If Arthexis helps your team, please review the license terms in [`LICENSE`](https://github.com/arthexis/arthexis/blob/main/LICENSE) and consider sponsoring or directly supporting the maintainers of the libraries, frameworks, and infrastructure projects that make this suite possible. Supporting those dependencies helps keep the whole Arthexis ecosystem healthy.
