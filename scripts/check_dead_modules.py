@@ -4,6 +4,7 @@ from __future__ import annotations
 import ast
 import pathlib
 import sys
+import tokenize
 
 
 MINIMAL_PLACEHOLDER_PARTS = {
@@ -96,10 +97,11 @@ def _collect_dead_modules(paths: list[pathlib.Path], repo_root: pathlib.Path) ->
     dead_modules: list[pathlib.Path] = []
 
     for path in paths:
-        source = path.read_text(encoding="utf-8")
         try:
+            with tokenize.open(path) as handle:
+                source = handle.read()
             tree = ast.parse(source, filename=str(path))
-        except SyntaxError:
+        except (OSError, SyntaxError, UnicodeDecodeError):
             continue
 
         if _is_dead_module(tree):
