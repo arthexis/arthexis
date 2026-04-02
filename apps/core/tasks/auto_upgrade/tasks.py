@@ -171,6 +171,12 @@ def _shares_stable_series(local: str, remote: str) -> bool:
     return local_parts == remote_parts
 
 
+def _ci_status_for_revision(_base_dir: Path, _revision: str) -> str:
+    """Compatibility shim for legacy admin pre-upgrade checks."""
+
+    return ""
+
+
 @dataclass
 class AutoUpgradeOperations:
     git_fetch: Callable[[Path, str], None]
