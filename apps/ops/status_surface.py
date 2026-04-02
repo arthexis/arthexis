@@ -176,17 +176,19 @@ def _guidance_for_failures(failure_count: int) -> StatusCondition:
 
 def _critical_events_for_scope(*, user, limit: int = 10) -> list[dict[str, object]]:
     since = timezone.now() - timedelta(hours=24)
-    visible_ids = list(_visible_chargers(user).values_list("charger_id", flat=True))
+    visible_charger_ids = list(_visible_chargers(user).values_list("id", flat=True))
     failed_ops = ControlOperationEvent.objects.filter(
         created_at__gte=since,
         status=ControlOperationEvent.Status.FAILED,
-        charger__charger_id__in=visible_ids,
+        charger_id__in=visible_charger_ids,
     ).select_related("charger")[:limit]
-    alerts = SecurityAlertEvent.objects.filter(
-        is_active=True,
-        last_occurred_at__gte=since,
-        severity__in=["error", "critical"],
-    )[:limit]
+    alerts = SecurityAlertEvent.objects.none()
+    if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
+        alerts = SecurityAlertEvent.objects.filter(
+            is_active=True,
+            last_occurred_at__gte=since,
+            severity__in=["error", "critical"],
+        )[:limit]
     items: list[dict[str, object]] = []
     for event in failed_ops:
         items.append(

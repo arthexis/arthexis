@@ -5,9 +5,11 @@ from __future__ import annotations
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.ocpp import store
-from apps.ocpp.models import Charger
+from apps.ocpp.models import Charger, ControlOperationEvent
+from apps.ops.models import SecurityAlertEvent
 from apps.ops.status_surface import redact_log_line
 
 
@@ -98,3 +100,56 @@ class StatusSurfaceTests(TestCase):
         self.assertIn("SecurityEventNotification", joined_lines)
         self.assertNotIn("secret-token-value", joined_lines)
         self.assertIn("[REDACTED]", joined_lines)
+
+    def test_status_surface_scopes_failed_operations_by_visible_charger_pk(self):
+        owner_connector_one = Charger.objects.create(charger_id="CP-SHARED", connector_id=1)
+        owner_connector_one.owner_users.add(self.owner)
+        hidden_connector_two = Charger.objects.create(charger_id="CP-SHARED", connector_id=2)
+        hidden_connector_two.owner_users.add(self.staff)
+        ControlOperationEvent.objects.create(
+            charger=owner_connector_one,
+            actor=self.owner,
+            action="RemoteStopTransaction",
+            transport=ControlOperationEvent.Transport.LOCAL,
+            status=ControlOperationEvent.Status.FAILED,
+            detail="Owner-visible failure",
+        )
+        ControlOperationEvent.objects.create(
+            charger=hidden_connector_two,
+            actor=self.staff,
+            action="RemoteStopTransaction",
+            transport=ControlOperationEvent.Transport.LOCAL,
+            status=ControlOperationEvent.Status.FAILED,
+            detail="Hidden failure",
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("ops:status-surface"))
+
+        self.assertEqual(response.status_code, 200)
+        events = response.json()["recent_critical_events"]
+        details = "\n".join(event["details"] for event in events if event["source"] == "control_operation")
+        self.assertIn("Owner-visible failure", details)
+        self.assertNotIn("Hidden failure", details)
+
+    def test_status_surface_includes_security_alerts_only_for_staff(self):
+        SecurityAlertEvent.objects.create(
+            key="sec-alert-1",
+            severity="critical",
+            message="Security alert present",
+            detail="Authorization: Bearer visible-secret",
+            last_occurred_at=timezone.now(),
+            is_active=True,
+        )
+
+        self.client.force_login(self.owner)
+        tenant_response = self.client.get(reverse("ops:status-surface"))
+        tenant_events = tenant_response.json()["recent_critical_events"]
+        self.assertFalse(any(event["source"] == "security_alert" for event in tenant_events))
+
+        self.client.force_login(self.staff)
+        staff_response = self.client.get(reverse("ops:status-surface"))
+        staff_events = staff_response.json()["recent_critical_events"]
+        security_events = [event for event in staff_events if event["source"] == "security_alert"]
+        self.assertEqual(len(security_events), 1)
+        self.assertNotIn("visible-secret", security_events[0]["details"])
