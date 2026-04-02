@@ -121,6 +121,7 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         validators=[validate_ipv46_address],
     )
     mac_address = models.CharField(max_length=17, blank=True)
+    host_instance_id = models.CharField(max_length=255, blank=True, db_index=True)
     port = models.PositiveIntegerField(default=8888)
     trusted = models.BooleanField(
         default=False,
@@ -200,6 +201,11 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
                 fields=["mac_address"],
                 condition=~Q(mac_address=""),
                 name="nodes_node_mac_address_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["host_instance_id"],
+                condition=Q(current_relation="SELF") & ~Q(host_instance_id=""),
+                name="nodes_node_self_host_instance_unique",
             ),
         ]
         verbose_name = "Node"
@@ -366,6 +372,32 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
     def get_current_mac() -> str:
         """Return the MAC address of the current host."""
         return ":".join(re.findall("..", f"{uuid.getnode():012x}"))
+
+    @classmethod
+    def get_host_instance_id(cls) -> str:
+        """Return a stable host identity from machine-id or configured fallback."""
+
+        host_instance_id = (os.environ.get("NODE_HOST_INSTANCE_ID") or "").strip()
+        if host_instance_id:
+            return host_instance_id
+
+        machine_id_path = (
+            os.environ.get("NODE_MACHINE_ID_PATH")
+            or getattr(settings, "NODE_MACHINE_ID_PATH", "")
+            or "/etc/machine-id"
+        )
+        try:
+            machine_id = Path(machine_id_path).read_text(encoding="utf-8").strip()
+        except (FileNotFoundError, OSError, UnicodeDecodeError):
+            machine_id = ""
+        if machine_id:
+            return machine_id
+
+        return (
+            os.environ.get("NODE_HOST_INSTANCE_ID_FALLBACK")
+            or getattr(settings, "NODE_HOST_INSTANCE_ID_FALLBACK", "")
+            or ""
+        ).strip()
 
     @classmethod
     def get_local(cls):
