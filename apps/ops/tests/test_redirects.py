@@ -6,6 +6,7 @@ from django.urls import reverse
 
 from apps.ops.models import OperationScreen
 
+
 class OpsRedirectTests(TestCase):
     def setUp(self):
         self.staff = get_user_model().objects.create_user(
@@ -38,3 +39,15 @@ class OpsRedirectTests(TestCase):
         )
 
         self.assertRedirects(response, reverse("admin:index"))
+
+    def test_clear_active_operation_blocks_scheme_relative_next_url(self):
+        response = self.client.get(
+            reverse("ops:clear-active"), {"next": "//malicious.example/phish"}
+        )
+
+        self.assertRedirects(response, reverse("admin:index"))
+
+    def test_clear_active_operation_allows_local_next_url(self):
+        response = self.client.get(reverse("ops:clear-active"), {"next": "/admin/"})
+
+        self.assertRedirects(response, "/admin/")
