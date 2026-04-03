@@ -1,0 +1,120 @@
+import json
+from io import StringIO
+from pathlib import Path
+
+from django.core.management import call_command
+
+
+def _invoke_startup_orchestrate(tmp_path: Path, monkeypatch, *, extra_args: list[str] | None = None):
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate.Command._run_preflight",
+        lambda self, lock_dir, base_dir: (
+            True,
+            {"name": "runserver_preflight", "status": "ok", "detail": "ok"},
+        ),
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate.Command._run_startup_maintenance",
+        lambda self: (
+            True,
+            {"name": "startup_maintenance", "status": "ok", "detail": "ok"},
+        ),
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate.send_startup_net_message",
+        lambda port=None: f"queued:{port}",
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate.lcd_feature_enabled",
+        lambda value: True,
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate._read_service_mode",
+        lambda value: "embedded",
+    )
+
+    stdout = StringIO()
+    args = [
+        "startup_orchestrate",
+        "--port",
+        "8899",
+        "--lock-dir",
+        str(lock_dir),
+    ]
+    if extra_args:
+        args.extend(extra_args)
+
+    call_command(*args, stdout=stdout)
+    return lock_dir, json.loads(stdout.getvalue())
+
+
+def test_startup_orchestrate_outputs_json_contract_and_writes_locks(tmp_path, monkeypatch):
+    lock_dir, payload = _invoke_startup_orchestrate(tmp_path, monkeypatch)
+
+    assert payload["status"] == "ok"
+    assert payload["launch"]["celery_embedded"] is True
+    assert payload["launch"]["lcd_embedded"] is True
+    assert payload["startup_message_status"] == "queued:8899"
+
+    started_payload = json.loads((lock_dir / "startup_started_at.lck").read_text(encoding="utf-8"))
+    assert started_payload["port"] == "8899"
+    assert "started_at" in started_payload
+
+    duration_payload = json.loads((lock_dir / "startup_duration.lck").read_text(encoding="utf-8"))
+    assert duration_payload["phase"] == "orchestration"
+    assert duration_payload["status"] == 0
+
+
+def test_startup_orchestrate_uses_systemd_decisions_when_requested(tmp_path, monkeypatch):
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    (lock_dir / "service.lck").write_text("suite", encoding="utf-8")
+    (lock_dir / "systemd_services.lck").write_text(
+        "celery-suite.service\ncelery-beat-suite.service\nlcd-suite.service\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate.Command._run_preflight",
+        lambda self, lock_dir, base_dir: (
+            True,
+            {"name": "runserver_preflight", "status": "ok", "detail": "ok"},
+        ),
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate.Command._run_startup_maintenance",
+        lambda self: (
+            True,
+            {"name": "startup_maintenance", "status": "ok", "detail": "ok"},
+        ),
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate.send_startup_net_message",
+        lambda port=None: "queued:ok",
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate.lcd_feature_enabled",
+        lambda value: True,
+    )
+
+    stdout = StringIO()
+    call_command(
+        "startup_orchestrate",
+        "--port",
+        "9000",
+        "--lock-dir",
+        str(lock_dir),
+        "--service-mode",
+        "systemd",
+        "--celery-mode",
+        "systemd",
+        stdout=stdout,
+    )
+
+    payload = json.loads(stdout.getvalue())
+    assert payload["launch"]["celery_embedded"] is False
+    assert payload["launch"]["lcd_embedded"] is False
+    assert payload["launch"]["lcd_target_mode"] == "systemd"
