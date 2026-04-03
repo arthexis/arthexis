@@ -99,6 +99,22 @@ arthexis_python_bin() {
     return 1
   }
 
+  if [ -n "${ARTHEXIS_PYTHON_BIN:-}" ] \
+    && _arthexis_python_candidate_is_executable "${ARTHEXIS_PYTHON_BIN}" \
+    && _arthexis_python_candidate_is_py3 "${ARTHEXIS_PYTHON_BIN}"; then
+    printf '%s' "${ARTHEXIS_PYTHON_BIN}"
+    return 0
+  fi
+
+  if [ -n "${VIRTUAL_ENV:-}" ]; then
+    for candidate in "${VIRTUAL_ENV}/bin/python" "${VIRTUAL_ENV}/Scripts/python.exe"; do
+      if _arthexis_python_candidate_is_executable "$candidate" && _arthexis_python_candidate_is_py3 "$candidate"; then
+        printf '%s' "$candidate"
+        return 0
+      fi
+    done
+  fi
+
   # Cache is PATH-dependent so inherited shell state cannot override lookup
   # results when the caller provides a different PATH.
   current_path="${PATH-}"

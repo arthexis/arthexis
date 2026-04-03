@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import shlex
 import subprocess
+import sys
 import time
 
 from django.conf import settings
@@ -156,6 +157,7 @@ class Command(BaseCommand):
         quoted_helper = shlex.quote(str(helper_script))
         env = {
             **os.environ,
+            "ARTHEXIS_PYTHON_BIN": sys.executable,
             "BASE_DIR": str(base_dir),
             "LOCK_DIR": str(lock_dir),
         }
