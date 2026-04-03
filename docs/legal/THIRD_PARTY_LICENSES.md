@@ -39,7 +39,7 @@ python scripts/generate_third_party_licenses.py
 | `channels` | `channels==4.3.2` | BSD | [link](https://github.com/django/channels) |
 | `channels-redis` | `channels-redis==4.3.0` | BSD | [link](https://github.com/django/channels_redis/) |
 | `channels_redis` | `channels_redis==4.3.0` | BSD | [link](https://github.com/django/channels_redis/) |
-| `charset-normalizer` | `charset-normalizer==3.4.6` | MIT | [link](https://pypi.org/project/charset-normalizer/) |
+| `charset-normalizer` | `charset-normalizer==3.4.7` | MIT | [link](https://pypi.org/project/charset-normalizer/) |
 | `click` | `click==8.3.1` | Unknown | [link](https://pypi.org/project/click/) |
 | `click-didyoumean` | `click-didyoumean==0.3.1` | MIT | [link](https://github.com/click-contrib/click-didyoumean) |
 | `click-plugins` | `click-plugins==1.1.1.2` | New BSD | [link](https://github.com/click-contrib/click-plugins) |
@@ -104,7 +104,7 @@ python scripts/generate_third_party_licenses.py
 | `mfrc522` | `mfrc522==0.0.7; sys_platform == "linux"` | GNU General Public License v3 (GPLv3) | [link](https://github.com/pimylifeup/MFRC522-python) |
 | `mkdocs` | `mkdocs==1.6.1` | BSD License | [link](https://pypi.org/project/mkdocs/) |
 | `mkdocs-get-deps` | `mkdocs-get-deps==0.2.2` | MIT License | [link](https://pypi.org/project/mkdocs-get-deps/) |
-| `more-itertools` | `more-itertools==10.8.0` | Unknown | [link](https://github.com/more-itertools/more-itertools) |
+| `more-itertools` | `more-itertools==11.0.1` | Unknown | [link](https://github.com/more-itertools/more-itertools) |
 | `msgpack` | `msgpack==1.1.2` | Unknown | [link](https://msgpack.org/) |
 | `mypy` | `mypy==1.19.1` | Unknown | [link](https://www.mypy-lang.org/) |
 | `mypy_extensions` | `mypy_extensions==1.1.0` | Unknown | [link](https://github.com/python/mypy_extensions) |
@@ -125,11 +125,8 @@ python scripts/generate_third_party_licenses.py
 | `psycopg-binary` | `psycopg-binary==3.3.3` | LGPL-3.0-or-later | [link](https://www.gnu.org/licenses/lgpl-3.0.html) |
 | `pyasn1` | `pyasn1==0.6.3` | BSD-2-Clause | [link](https://github.com/pyasn1/pyasn1) |
 | `pyasn1_modules` | `pyasn1_modules==0.4.2` | BSD | [link](https://github.com/pyasn1/pyasn1-modules) |
-| `pyasynchat` | `pyasynchat==1.0.5` | Python Software Foundation License Version 2 | [link](https://github.com/simonrob/pyasynchat) |
-| `pyasyncore` | `pyasyncore==1.0.5` | Python Software Foundation License Version 2 | [link](https://github.com/simonrob/pyasyncore) |
 | `pycparser` | `pycparser==3.0` | Unknown | [link](https://github.com/eliben/pycparser) |
 | `pyee` | `pyee==13.0.1` | MIT | [link](https://pypi.org/project/pyee/) |
-| `pyftpdlib` | `pyftpdlib==2.2.0` | Unknown | [link](https://github.com/giampaolo/pyftpdlib/) |
 | `Pygments` | `Pygments==2.20.0` | Unknown | [link](https://pygments.org) |
 | `pylibsrtp` | `pylibsrtp==1.0.0` | Unknown | [link](https://pypi.org/project/pylibsrtp/) |
 | `pyOpenSSL` | `pyOpenSSL==26.0.0` | Apache License, Version 2.0 | [link](https://pyopenssl.org/) |
@@ -175,7 +172,7 @@ python scripts/generate_third_party_licenses.py
 | `txaio` | `txaio==25.9.2` | Unknown | [link](https://txaio.readthedocs.io/) |
 | `types-PyYAML` | `types-PyYAML==6.0.12.20250915` | Unknown | [link](https://github.com/python/typeshed) |
 | `typing_extensions` | `typing_extensions==4.15.0` | Unknown | [link](https://pypi.org/project/typing_extensions/) |
-| `tzdata` | `tzdata==2025.3` | Apache-2.0 | [link](https://github.com/python/tzdata) |
+| `tzdata` | `tzdata==2026.1` | Apache-2.0 | [link](https://github.com/python/tzdata) |
 | `urllib3` | `urllib3~=2.6.3` | Unknown | [link](https://pypi.org/project/urllib3/) |
 | `vine` | `vine==5.1.0` | BSD | [link](https://github.com/celery/vine) |
 | `watchdog` | `watchdog==6.0.0` | Apache-2.0 | [link](https://github.com/gorakhargosh/watchdog) |

@@ -48,3 +48,33 @@ make requirements-check
 ```
 
 CI runs this check and fails when either committed file differs from generated output.
+
+## Wheel policy by requirements profile
+
+Arthexis enforces a strict wheel-only policy for generated requirements files:
+
+- `requirements.txt` installs with `--only-binary=:all:`.
+- `requirements-ci.txt` also installs with `--only-binary=:all:`.
+
+Use these exact command patterns:
+
+```bash
+python -m pip install --only-binary=:all: -r requirements.txt
+python -m pip install --only-binary=:all: -r requirements-ci.txt
+```
+
+When refreshing through the suite installer, `env-refresh.sh` applies these
+same flags automatically per requirements file.
+
+## FTP feature dependency install
+
+`pyftpdlib==2.2.0` is intentionally excluded from generated `requirements-ci.txt`
+and shipped as the dedicated optional extra `.[ftp]`. This keeps FTP dependencies
+disabled by default unless the OCPP-aware FTP suite feature is explicitly enabled.
+
+Enable and provision FTP support with:
+
+```bash
+python -m pip install '.[ftp]'
+python manage.py feature ocpp-ftp-reports --enabled
+```

@@ -109,6 +109,9 @@ dev = [
 docs = [
   "mkdocs==1.6.1",
 ]
+ftp = [
+  "pyftpdlib==2.2.0",
+]
 hardware = [
   "gpiozero==2.0.1; sys_platform == \"linux\"",
   "mfrc522==0.0.7; sys_platform == \"linux\"",
@@ -116,7 +119,6 @@ hardware = [
 ]
 nodes = [
   "graphviz==0.21",
-  "pyftpdlib==2.2.0",
   "qrcode==8.2",
 ]
 preview = [

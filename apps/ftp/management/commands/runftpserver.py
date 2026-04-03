@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+from importlib import import_module
 from pathlib import Path
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import models
 
 from apps.nodes.models import Node
 
-from ...authorizers import DjangoFTPAuthorizer
 from ...models import FTPFolder, FTPServer
 from ...utils import build_user_mounts
 
@@ -35,9 +35,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        from pyftpdlib.handlers import FTPHandler
-        from pyftpdlib.log import config_logging
-        from pyftpdlib.servers import FTPServer as PyFTPServer
+        DjangoFTPAuthorizer, FTPHandler, config_logging, PyFTPServer = self._load_ftp_runtime()
 
         node = Node.get_local()
         server_config = self._resolve_server_config(node)
@@ -75,6 +73,22 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Starting FTP server on {bind_address}:{port}"))
         server = PyFTPServer((bind_address, port), handler)
         server.serve_forever()
+
+    def _load_ftp_runtime(self):
+        try:
+            django_ftp_authorizer = import_module("apps.ftp.authorizers").DjangoFTPAuthorizer
+            ftp_handler = import_module("pyftpdlib.handlers").FTPHandler
+            config_logging = import_module("pyftpdlib.log").config_logging
+            py_ftp_server = import_module("pyftpdlib.servers").FTPServer
+        except ModuleNotFoundError as exc:
+            missing_module = exc.name or ""
+            if missing_module == "pyftpdlib" or missing_module.startswith("pyftpdlib."):
+                raise CommandError(
+                    "pyftpdlib is not installed. Install FTP support with "
+                    "`python -m pip install '.[ftp]'` and retry.",
+                ) from exc
+            raise
+        return django_ftp_authorizer, ftp_handler, config_logging, py_ftp_server
 
     def _eligible_folders(self, node):
         folders = FTPFolder.objects.filter(enabled=True).select_related("user", "group")
