@@ -1,16 +1,21 @@
 import datetime
+import json
 from pathlib import Path
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.contrib.sites.models import Site
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
 from apps.energy.models import ClientReport
+from apps.features.models import Feature
 from apps.groups.constants import SITE_OPERATOR_GROUP_NAME
+from apps.modules.models import Module
+from apps.sites.models import Landing, SiteProfile
 from apps.sites.utils import require_site_operator_or_staff
 
 pytestmark = [pytest.mark.django_db]
@@ -75,6 +80,72 @@ def test_invitation_login_invalid_tokens_are_handled_safely(client):
         reverse("pages:invitation-login", args=["!!invalid!!", "bad-token"])
     )
     assert malformed_uid_response.status_code == 400
+
+
+@pytest.mark.integration
+def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
+    url = reverse("pages:whatsapp-webhook")
+
+    assert client.get(url).status_code == 405
+
+    settings.PAGES_WHATSAPP_ENABLED = False
+    disabled = client.post(
+        url,
+        data=json.dumps({"from": "+15551234", "message": "Hello"}),
+        content_type="application/json",
+    )
+    assert disabled.status_code == 404
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("payload", "expected_status"),
+    [
+        ({"from": "+15551234", "message": "Hello"}, 201),
+        ("{not-json}", 400),
+        ({"from": "", "message": ""}, 400),
+    ],
+)
+def test_whatsapp_webhook_post_payload_validation(
+    client, settings, payload, expected_status
+):
+    settings.PAGES_WHATSAPP_ENABLED = True
+    url = reverse("pages:whatsapp-webhook")
+    response = client.post(
+        url,
+        data=payload if isinstance(payload, str) else json.dumps(payload),
+        content_type="application/json",
+    )
+    assert response.status_code == expected_status
+    if expected_status == 201:
+        assert response.json()["status"] == "ok"
+
+
+@pytest.mark.integration
+def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
+    Feature.objects.update_or_create(
+        slug="operator-site-interface",
+        defaults={"display": "Operator Site Interface", "is_enabled": False},
+    )
+    module = Module.objects.create(path="operator-unsafe")
+    landing = Landing.objects.create(
+        module=module,
+        path="//malicious.example/phish",
+        label="Unsafe",
+    )
+    site, _created = Site.objects.get_or_create(
+        domain="testserver",
+        defaults={"name": "testserver"},
+    )
+    SiteProfile.objects.update_or_create(
+        site=site,
+        defaults={"interface_landing": landing},
+    )
+
+    response = client.get(reverse("pages:index"))
+
+    assert response.status_code == 200
+    assert 'id="operator-interface-title"' in response.content.decode()
 
 
 def test_require_site_operator_or_staff_enforces_admin_operator_boundary(rf):
