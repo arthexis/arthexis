@@ -147,6 +147,8 @@ class SiteAdmin(DjangoSiteAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+        if hasattr(form, "save_profile"):
+            form.save_profile()
         if {"managed", "require_https"} & set(form.changed_data or []):
             self.message_user(
                 request,

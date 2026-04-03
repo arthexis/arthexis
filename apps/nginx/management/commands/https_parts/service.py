@@ -341,9 +341,11 @@ class HttpsProvisioningService:
             profile.require_https = require_https
             profile_updates.append("require_https")
         if created:
-            site.save()
-            if profile_updates:
-                profile.save(update_fields=profile_updates)
+            with transaction.atomic():
+                if updated_fields:
+                    site.save(update_fields=updated_fields)
+                if profile_updates:
+                    profile.save(update_fields=profile_updates)
         elif updated_fields:
             try:
                 with transaction.atomic():
@@ -378,7 +380,8 @@ class HttpsProvisioningService:
                     if fallback_profile_updates:
                         fallback_profile.save(update_fields=fallback_profile_updates)
         elif profile_updates:
-            profile.save(update_fields=profile_updates)
+            with transaction.atomic():
+                profile.save(update_fields=profile_updates)
 
     def _migrate_domain_records(
         self,

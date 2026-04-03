@@ -85,6 +85,7 @@ class SiteForm(forms.ModelForm):
             if updated_fields:
                 profile.save(update_fields=updated_fields)
 
+        self._save_profile = save_profile
         if commit:
             save_profile()
         else:
@@ -92,10 +93,16 @@ class SiteForm(forms.ModelForm):
 
             def save_m2m():
                 original_save_m2m()
-                save_profile()
+                self.save_profile()
 
             self.save_m2m = save_m2m
         return site
+
+    def save_profile(self) -> None:
+        save_profile = getattr(self, "_save_profile", None)
+        if save_profile is None:
+            return
+        save_profile()
 
 
 class SiteTemplateAdminForm(forms.ModelForm):

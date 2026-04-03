@@ -49,12 +49,14 @@ class SiteHttpsRedirectMiddleware:
             site = get_site(request)
             request.site = site
 
-        require_https = getattr(site, "require_https", None)
-        if require_https is None and site is not None:
+        require_https = None
+        if site is not None:
             try:
                 require_https = bool(site.profile.require_https)
             except (AttributeError, ObjectDoesNotExist):
-                require_https = False
+                require_https = None
+            if require_https is None:
+                require_https = bool(getattr(site, "require_https", False))
 
         if require_https and not is_https_request(request):
             try:
