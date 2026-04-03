@@ -187,16 +187,14 @@ pip_binary_policy_args_for_requirements_file() {
   local requirements_file_basename="$1"
 
   case "$requirements_file_basename" in
-    requirements.txt)
-      echo "--only-binary=:all:"
-      ;;
-    requirements-ci.txt)
+    requirements.txt|requirements-ci.txt)
       echo "--only-binary=:all:"
       ;;
     *)
       echo ""
       ;;
   esac
+  return 0
 }
 
 celery_requirement() {
@@ -675,7 +673,7 @@ else
   for req_file in "${install_targets[@]}"; do
     FILE_INSTALL_START_MS=$(now_ms)
     req_policy_args=$(pip_binary_policy_args_for_requirements_file "$(basename "$req_file")")
-    if [ -n "$req_policy_args" ]; then
+    if [[ -n "$req_policy_args" ]]; then
       # shellcheck disable=SC2206
       pip_policy_args=( $req_policy_args )
     else

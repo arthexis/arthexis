@@ -35,9 +35,10 @@ class RequirementsGenerationError(RuntimeError):
 def _load_dependencies(pyproject_path: Path) -> tuple[list[str], list[str]]:
     """Return runtime and CI dependency specifiers from ``pyproject.toml``.
 
-    The CI requirements intentionally include every optional dependency group so
-    that validation environments can install the full toolchain from one generated
-    file while production installs stay on the slimmer runtime set.
+    The CI requirements include optional dependency groups except those listed in
+    ``CI_EXCLUDED_OPTIONAL_GROUPS`` so validation environments can install the
+    toolchain from one generated file while production installs stay on the
+    slimmer runtime set.
     """
     if not pyproject_path.exists():
         raise FileNotFoundError(f"Missing dependency source file: {pyproject_path}")

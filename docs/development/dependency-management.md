@@ -76,5 +76,5 @@ Enable and provision FTP support with:
 
 ```bash
 python -m pip install '.[ftp]'
-.venv/bin/python manage.py feature ocpp-ftp-reports --enabled
+python manage.py feature ocpp-ftp-reports --enabled
 ```
