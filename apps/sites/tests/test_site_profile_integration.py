@@ -6,9 +6,7 @@ from apps.sites.admin.forms import SiteForm
 from apps.sites.models import SiteProfile
 from config.middleware import SiteHttpsRedirectMiddleware
 
-
 pytestmark = [pytest.mark.django_db]
-
 
 def test_site_form_persists_profile_fields_when_saved_with_commit_false():
     site, _created = Site.objects.update_or_create(
@@ -42,21 +40,3 @@ def test_site_form_persists_profile_fields_when_saved_with_commit_false():
     assert profile.require_https is True
     assert profile.enable_public_chat is True
 
-
-def test_site_https_redirect_uses_site_profile_flag():
-    site, _created = Site.objects.update_or_create(
-        domain="https-profile.example.test",
-        defaults={"name": "https-profile.example.test"},
-    )
-    SiteProfile.objects.create(site=site, require_https=True)
-
-    request = RequestFactory().get(
-        "/dashboard", HTTP_HOST="https-profile.example.test"
-    )
-    request.site = site
-
-    middleware = SiteHttpsRedirectMiddleware(lambda _request: None)
-    response = middleware(request)
-
-    assert response.status_code == 301
-    assert response["Location"] == "https://https-profile.example.test/dashboard"

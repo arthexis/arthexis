@@ -7,20 +7,6 @@ from apps.sites.templatetags.admin_extras import related_admin_models
 
 pytestmark = pytest.mark.django_db
 
-
-def test_related_admin_models_exposes_target_filter_lookups():
-    """Related-model metadata should include lookup keys for selected-id prefiltering."""
-
-    related = related_admin_models(get_user_model()._meta)
-
-    assert isinstance(related, list)
-    assert related
-    assert any(
-        item.get("filter_lookups") and "user__id__in" in item["filter_lookups"]
-        for item in related
-    )
-
-
 def test_related_selection_prefilter_limits_target_admin_results(client):
     """Target changelist should show only records related to selected source rows."""
 

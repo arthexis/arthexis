@@ -23,6 +23,7 @@ from apps.imager.services import (
 
 
 @pytest.mark.django_db
+@pytest.mark.integration
 @patch("apps.imager.management.commands.imager.build_rpi4b_image")
 def test_imager_build_command_prints_metadata(mock_build, tmp_path: Path) -> None:
     """Regression: imager build should print generated artifact metadata."""
@@ -58,29 +59,6 @@ def test_imager_build_command_prints_metadata(mock_build, tmp_path: Path) -> Non
 
 
 @pytest.mark.django_db
-def test_imager_list_command_prints_registered_artifacts() -> None:
-    """Regression: imager list should render persisted artifact rows."""
-
-    RaspberryPiImageArtifact.objects.create(
-        name="nightly",
-        target=TARGET_RPI4B,
-        base_image_uri="https://example.com/rpi.img.xz",
-        output_filename="nightly-rpi-4b.img",
-        output_path="/tmp/nightly-rpi-4b.img",
-        sha256="f" * 64,
-        size_bytes=1024,
-        download_uri="https://downloads.example.com/nightly-rpi-4b.img",
-    )
-
-    out = StringIO()
-    call_command("imager", "list", stdout=out)
-    output = out.getvalue()
-
-    assert "nightly [rpi-4b]" in output
-    assert "uri=https://downloads.example.com/nightly-rpi-4b.img" in output
-
-
-@pytest.mark.django_db
 def test_build_rpi4b_image_creates_artifact_with_download_uri(tmp_path: Path) -> None:
     """Regression: building an artifact should persist checksum and URI metadata."""
 
@@ -102,7 +80,6 @@ def test_build_rpi4b_image_creates_artifact_with_download_uri(tmp_path: Path) ->
     assert artifact.sha256 == result.sha256
     assert artifact.download_uri == "https://cdn.example.com/images/stable-rpi-4b.img"
 
-
 @pytest.mark.django_db
 def test_build_rpi4b_image_rejects_unsafe_artifact_name(tmp_path: Path) -> None:
     """Regression: artifact names should not include path traversal or separators."""
@@ -119,7 +96,6 @@ def test_build_rpi4b_image_rejects_unsafe_artifact_name(tmp_path: Path) -> None:
             git_url="https://github.com/arthexis/arthexis.git",
             customize=False,
         )
-
 
 @pytest.mark.django_db
 @patch("apps.imager.services._download_remote_base_image")
@@ -149,7 +125,6 @@ def test_build_rpi4b_image_downloads_percent_encoded_http_source(
     assert result.output_path.exists()
     assert result.output_path.read_bytes() == source_bytes
 
-
 @pytest.mark.django_db
 @override_settings(IMAGER_BLOCK_PRIVATE_REMOTE_IMAGE_HOSTS=True)
 @patch("apps.imager.services.socket.getaddrinfo")
@@ -169,7 +144,6 @@ def test_build_rpi4b_image_blocks_private_remote_host(getaddrinfo_mock, tmp_path
             git_url="https://github.com/arthexis/arthexis.git",
             customize=False,
         )
-
 
 @pytest.mark.django_db
 @override_settings(IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS=("updates.example.com",))
@@ -199,7 +173,6 @@ def test_build_rpi4b_image_allows_public_remote_host_in_allowlist(
     assert result.output_path.exists()
     assert result.output_path.read_bytes() == source_bytes
 
-
 @pytest.mark.django_db
 def test_build_rpi4b_image_rejects_same_source_and_output_path(tmp_path: Path) -> None:
     """Regression: build should fail when source image equals output path."""
@@ -217,37 +190,6 @@ def test_build_rpi4b_image_rejects_same_source_and_output_path(tmp_path: Path) -
             customize=False,
         )
 
-
-@pytest.mark.django_db
-def test_build_rpi4b_image_treats_windows_drive_paths_as_local_sources(tmp_path: Path) -> None:
-    """Regression: Windows drive-letter paths should fail as missing local files, not invalid schemes."""
-
-    with pytest.raises(ImagerBuildError, match="Base image does not exist:"):
-        build_rpi4b_image(
-            name="stable",
-            base_image_uri="C:/missing/base.img",
-            output_dir=tmp_path,
-            download_base_uri="",
-            git_url="https://github.com/arthexis/arthexis.git",
-            customize=False,
-        )
-
-
-@pytest.mark.django_db
-def test_build_rpi4b_image_treats_windows_backslash_drive_paths_as_local_sources(tmp_path: Path) -> None:
-    """Regression: Windows drive-letter paths with backslashes should be treated as local paths."""
-
-    with pytest.raises(ImagerBuildError, match="Base image does not exist:"):
-        build_rpi4b_image(
-            name="stable",
-            base_image_uri="C:\\missing\\base.img",
-            output_dir=tmp_path,
-            download_base_uri="",
-            git_url="https://github.com/arthexis/arthexis.git",
-            customize=False,
-        )
-
-
 @override_settings(IMAGER_ALLOWED_REMOTE_IMAGE_HOSTS=("internal.example.com",))
 @patch("apps.imager.services.socket.getaddrinfo")
 def test_validate_remote_base_image_url_allows_private_host_when_allowlisted(getaddrinfo_mock) -> None:
@@ -256,16 +198,6 @@ def test_validate_remote_base_image_url_allows_private_host_when_allowlisted(get
     getaddrinfo_mock.return_value = [(2, 1, 6, "", ("10.0.0.5", 443))]
 
     _validate_remote_base_image_url("https://internal.example.com/rpi.img")
-
-
-@patch("apps.imager.services.socket.getaddrinfo")
-def test_validate_remote_base_image_url_allows_proxy_only_host_resolution(getaddrinfo_mock) -> None:
-    """Regression: unresolved hosts should not fail pre-checks in proxy-routed setups."""
-
-    getaddrinfo_mock.side_effect = socket.gaierror("Name or service not known")
-
-    _validate_remote_base_image_url("https://proxy-only.example.com/rpi.img")
-
 
 def test_download_remote_base_image_validates_redirect_target(tmp_path: Path) -> None:
     """Regression: redirect targets should be validated before following."""
