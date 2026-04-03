@@ -448,11 +448,12 @@ fi
 
 readarray -t ORCHESTRATE_EXPORTS < <(
   python - "$ORCHESTRATE_OUTPUT_FILE" <<'PY'
-import json
 import pathlib
 import sys
 
-payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+from scripts.startup_orchestration import extract_payload
+
+payload = extract_payload(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 launch = payload.get("launch") or {}
 service = payload.get("service") or {}
 
