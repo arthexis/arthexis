@@ -38,6 +38,18 @@ def backfill_site_profiles(apps, schema_editor):
         )
     )
 
+    legacy_rows_by_site_id = {}
+    if has_legacy_columns:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT id, default_landing_id, enable_public_chat, interface_landing_id,
+                       managed, require_https, template_id
+                FROM {site_table}
+                """
+            )
+            legacy_rows_by_site_id = {row[0]: row[1:] for row in cursor.fetchall()}
+
     sites = Site.objects.using(schema_editor.connection.alias).all().only("id")
     for site in sites.iterator():
         if site.pk in existing_profile_site_ids:
@@ -49,29 +61,23 @@ def backfill_site_profiles(apps, schema_editor):
             "managed": False,
             "require_https": False,
         }
-        if has_legacy_columns:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    f"""
-                    SELECT default_landing_id, enable_public_chat, interface_landing_id,
-                           managed, require_https, template_id
-                    FROM {site_table}
-                    WHERE id = %s
-                    """,
-                    [site.pk],
-                )
-                row = cursor.fetchone()
-            if row:
-                (
-                    values["default_landing_id"],
-                    values["enable_public_chat"],
-                    values["interface_landing_id"],
-                    values["managed"],
-                    values["require_https"],
-                    values["template_id"],
-                ) = row
+        row = legacy_rows_by_site_id.get(site.pk)
+        if row:
+            (
+                values["default_landing_id"],
+                values["enable_public_chat"],
+                values["interface_landing_id"],
+                values["managed"],
+                values["require_https"],
+                values["template_id"],
+            ) = row
 
         SiteProfile.objects.using(schema_editor.connection.alias).create(**values)
+
+
+def reverse_backfill_site_profiles(apps, schema_editor):
+    SiteProfile = apps.get_model("pages", "SiteProfile")
+    SiteProfile.objects.using(schema_editor.connection.alias).all().delete()
 
 
 class Migration(migrations.Migration):
@@ -172,5 +178,5 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Site profiles",
             },
         ),
-        migrations.RunPython(backfill_site_profiles, migrations.RunPython.noop),
+        migrations.RunPython(backfill_site_profiles, reverse_backfill_site_profiles),
     ]

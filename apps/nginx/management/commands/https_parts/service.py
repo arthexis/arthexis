@@ -380,8 +380,6 @@ class HttpsProvisioningService:
         elif profile_updates:
             profile.save(update_fields=profile_updates)
 
-        update_local_nginx_scripts()
-
     def _migrate_domain_records(
         self,
         *,

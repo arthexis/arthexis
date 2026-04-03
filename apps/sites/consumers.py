@@ -354,7 +354,11 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
 
         host = self._scope_host()
         if host:
-            site = Site.objects.filter(domain__iexact=host).first()
+            site = (
+                Site.objects.select_related("profile")
+                .filter(domain__iexact=host)
+                .first()
+            )
             if site is not None:
                 return site
         try:

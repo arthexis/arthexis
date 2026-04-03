@@ -105,12 +105,6 @@ class SiteAdmin(DjangoSiteAdmin):
         "require_https_short",
         "public_chat_short",
     )
-    list_select_related = (
-        "profile",
-        "profile__default_landing",
-        "profile__interface_landing",
-        "profile__template",
-    )
     list_filter = (ManagedSiteListFilter, RequireHttpsListFilter)
 
     def _has_siteproxy_permission(self, request, action: str) -> bool:

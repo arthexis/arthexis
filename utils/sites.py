@@ -36,4 +36,9 @@ def get_site(request) -> Optional[Site]:
     except (Site.DoesNotExist, DatabaseError):
         return None
 
-    return site if isinstance(site, Site) else None
+    if not isinstance(site, Site):
+        return None
+    try:
+        return Site.objects.select_related("profile").filter(pk=site.pk).first()
+    except DatabaseError:
+        return None

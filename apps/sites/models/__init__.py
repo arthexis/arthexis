@@ -23,7 +23,6 @@ __all__ = [
     "ReferrerLanding",
     "ReferrerLandingManager",
     "SiteBadge",
-    "get_site_badge_favicon_bucket",
     "SiteProfile",
     "SiteProxy",
     "SiteTemplate",
@@ -31,4 +30,5 @@ __all__ = [
     "UserStory",
     "UserStoryAttachment",
     "ViewHistory",
+    "get_site_badge_favicon_bucket",
 ]

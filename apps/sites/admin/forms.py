@@ -64,17 +64,37 @@ class SiteForm(forms.ModelForm):
 
     def save(self, commit=True):
         site = super().save(commit=commit)
-        if not commit:
-            return site
+        profile_values = {
+            "template": self.cleaned_data.get("template"),
+            "default_landing": self.cleaned_data.get("default_landing"),
+            "interface_landing": self.cleaned_data.get("interface_landing"),
+            "managed": bool(self.cleaned_data.get("managed")),
+            "require_https": bool(self.cleaned_data.get("require_https")),
+            "enable_public_chat": bool(self.cleaned_data.get("enable_public_chat")),
+        }
 
-        profile, _created = SiteProfile.objects.get_or_create(site=site)
-        profile.template = self.cleaned_data.get("template")
-        profile.default_landing = self.cleaned_data.get("default_landing")
-        profile.interface_landing = self.cleaned_data.get("interface_landing")
-        profile.managed = bool(self.cleaned_data.get("managed"))
-        profile.require_https = bool(self.cleaned_data.get("require_https"))
-        profile.enable_public_chat = bool(self.cleaned_data.get("enable_public_chat"))
-        profile.save()
+        def save_profile() -> None:
+            if not site.pk:
+                return
+            profile, _created = SiteProfile.objects.get_or_create(site=site)
+            updated_fields: list[str] = []
+            for field, value in profile_values.items():
+                if getattr(profile, field) != value:
+                    setattr(profile, field, value)
+                    updated_fields.append(field)
+            if updated_fields:
+                profile.save(update_fields=updated_fields)
+
+        if commit:
+            save_profile()
+        else:
+            original_save_m2m = self.save_m2m
+
+            def save_m2m():
+                original_save_m2m()
+                save_profile()
+
+            self.save_m2m = save_m2m
         return site
 
 
