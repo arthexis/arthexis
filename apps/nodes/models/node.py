@@ -266,7 +266,9 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
                 managed_root = (self.get_base_path() / "ipc").resolve()
                 candidate = Path(configured_path).resolve()
                 try:
-                    contains_path = os.path.commonpath([str(managed_root), str(candidate)]) == str(managed_root)
+                    contains_path = os.path.commonpath(
+                        [str(managed_root), str(candidate)]
+                    ) == str(managed_root)
                 except ValueError:
                     contains_path = False
                 if not contains_path:
@@ -282,7 +284,11 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         socket_path = self.get_ipc_socket_path()
         enabled = bool(getattr(settings, "NODES_ENABLE_SIBLING_IPC", False))
         if not enabled:
-            return {"enabled": False, "status": "disabled", "path": str(socket_path or "")}
+            return {
+                "enabled": False,
+                "status": "disabled",
+                "path": str(socket_path or ""),
+            }
         if not socket_path:
             return {"enabled": True, "status": "unconfigured", "path": ""}
         if not socket_path.exists():
@@ -293,7 +299,12 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         except OSError:
             return {"enabled": True, "status": "error", "path": str(socket_path)}
         if not stat.S_ISSOCK(stat_result.st_mode):
-            return {"enabled": True, "status": "wrong_type", "path": str(socket_path), "mode": f"{socket_mode:o}"}
+            return {
+                "enabled": True,
+                "status": "wrong_type",
+                "path": str(socket_path),
+                "mode": f"{socket_mode:o}",
+            }
         if not _is_secure_socket_path(socket_path):
             return {
                 "enabled": True,
@@ -331,11 +342,15 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
 
         try:
             site = (
-                SiteModel.objects.filter(managed=True)
-                .only("domain", "require_https")
+                SiteModel.objects.filter(profile__managed=True)
+                .select_related("profile")
+                .only("domain", "profile__require_https")
                 .order_by("id")
                 .first()
-                or SiteModel.objects.only("domain", "require_https").order_by("id").first()
+                or SiteModel.objects.select_related("profile")
+                .only("domain", "profile__require_https")
+                .order_by("id")
+                .first()
             )
         except DatabaseError:
             return None, "", False
@@ -350,7 +365,8 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         try:
             ipaddress.ip_address(domain)
         except ValueError:
-            return site, domain, bool(getattr(site, "require_https", False))
+            site_profile = getattr(site, "profile", None)
+            return site, domain, bool(getattr(site_profile, "require_https", False))
         return None, "", False
 
     @classmethod
@@ -449,8 +465,12 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
                     if transaction.get_connection().in_atomic_block:
                         transaction.set_rollback(False)
                     try:
-                        node = cls.objects.filter(mac_address__iexact=mac).first() or node
-                        should_cache = (node.mac_address or "").strip().lower() == current_mac
+                        node = (
+                            cls.objects.filter(mac_address__iexact=mac).first() or node
+                        )
+                        should_cache = (
+                            node.mac_address or ""
+                        ).strip().lower() == current_mac
                     except DatabaseError:
                         should_cache = False
                 except DatabaseError:
@@ -479,7 +499,9 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
                 cls._local_cache[mac] = (node, now + cls._LOCAL_CACHE_TIMEOUT)
             return node
         except DatabaseError:
-            logger.debug("nodes.Node.get_local skipped: database unavailable", exc_info=True)
+            logger.debug(
+                "nodes.Node.get_local skipped: database unavailable", exc_info=True
+            )
             return None
 
     @classmethod
@@ -517,9 +539,7 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         return get_private_key(self)
 
     @staticmethod
-    def sign_payload(
-        payload: str, private_key
-    ) -> tuple[str | None, str | None]:
+    def sign_payload(payload: str, private_key) -> tuple[str | None, str | None]:
         """Sign ``payload`` with ``private_key`` and return a base64 signature."""
         from apps.nodes.services.crypto import sign_payload
 
@@ -677,6 +697,7 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             **kwargs,
         )
 
+
 node_information_updated = Signal()
 
 
@@ -708,6 +729,7 @@ def _announce_peer_startup(
     hostname = (node.hostname or "Node").strip() or "Node"
     subject = f"UP {hostname}"
     notify_async(subject, body)
+
 
 UserModel = get_user_model()
 

@@ -5,7 +5,6 @@ from django import forms
 from django.contrib import admin, messages
 from django.contrib.sites.admin import SiteAdmin as DjangoSiteAdmin
 from django.contrib.sites.models import Site
-from django.core.exceptions import FieldDoesNotExist, FieldError
 from django.core.management import CommandError, call_command
 from django.shortcuts import redirect
 from django.urls import path
@@ -18,7 +17,6 @@ from apps.locals.user_data import EntityModelAdmin
 from apps.media.models import MediaFile
 from apps.media.utils import create_media_file
 from ..models import SiteBadge, SiteTemplate, SiteProxy, get_site_badge_favicon_bucket
-from ..site_config import ensure_site_fields
 from .filters import ManagedSiteListFilter, RequireHttpsListFilter
 from .forms import SiteForm, SiteTemplateAdminForm
 
@@ -44,7 +42,9 @@ class SiteBadgeInlineForm(forms.ModelForm):
         upload = self.cleaned_data.get("favicon_upload")
         if upload:
             bucket = get_site_badge_favicon_bucket()
-            instance.favicon_media = create_media_file(bucket=bucket, uploaded_file=upload)
+            instance.favicon_media = create_media_file(
+                bucket=bucket, uploaded_file=upload
+            )
         if commit:
             instance.save()
             self.save_m2m()
@@ -81,9 +81,6 @@ class SiteBadgeInline(admin.StackedInline):
         }
 
 
-ensure_site_fields()
-
-
 class SiteAdmin(DjangoSiteAdmin):
     form = SiteForm
     inlines = [SiteBadgeInline]
@@ -101,14 +98,13 @@ class SiteAdmin(DjangoSiteAdmin):
     list_display = (
         "domain",
         "name",
-        "template",
+        "template_short",
         "default_landing_short",
         "interface_landing_short",
-        "managed",
+        "managed_short",
         "require_https_short",
         "public_chat_short",
     )
-    list_select_related = ()
     list_filter = (ManagedSiteListFilter, RequireHttpsListFilter)
 
     def _has_siteproxy_permission(self, request, action: str) -> bool:
@@ -137,20 +133,22 @@ class SiteAdmin(DjangoSiteAdmin):
     def has_view_permission(self, request, obj=None):
         if super().has_view_permission(request, obj=obj):
             return True
-        return self._has_siteproxy_permission(request, "view") or self._has_siteproxy_permission(
-            request, "change"
-        )
+        return self._has_siteproxy_permission(
+            request, "view"
+        ) or self._has_siteproxy_permission(request, "change")
 
     def has_module_permission(self, request):
         if super().has_module_permission(request):
             return True
         meta = self.model._meta
-        return request.user.has_module_perms(meta.app_label) or request.user.has_module_perms(
-            "sites"
-        )
+        return request.user.has_module_perms(
+            meta.app_label
+        ) or request.user.has_module_perms("sites")
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+        if hasattr(form, "save_profile"):
+            form.save_profile()
         if {"managed", "require_https"} & set(form.changed_data or []):
             self.message_user(
                 request,
@@ -171,40 +169,44 @@ class SiteAdmin(DjangoSiteAdmin):
         )
 
     def get_queryset(self, request):
-        ensure_site_fields()
-        return super().get_queryset(request)
+        return (
+            super()
+            .get_queryset(request)
+            .select_related(
+                "profile",
+                "profile__default_landing",
+                "profile__interface_landing",
+                "profile__template",
+            )
+        )
 
-    def get_list_display(self, request):
-        list_display = list(super().get_list_display(request))
-        try:
-            Site._meta.get_field("interface_landing")
-        except (FieldDoesNotExist, FieldError):
-            return tuple(item for item in list_display if item != "interface_landing_short")
-        return tuple(list_display)
+    @admin.display(description=_("Template"), ordering="profile__template")
+    def template_short(self, obj):
+        return getattr(getattr(obj, "profile", None), "template", None)
 
-    @admin.display(description=_("Default"), ordering="default_landing")
+    @admin.display(description=_("Default"), ordering="profile__default_landing")
     def default_landing_short(self, obj):
         """Render the default landing with a compact changelist heading."""
+        return getattr(getattr(obj, "profile", None), "default_landing", None)
 
-        return obj.default_landing
-
-    @admin.display(description=_("Interface"), ordering="interface_landing")
+    @admin.display(description=_("Interface"), ordering="profile__interface_landing")
     def interface_landing_short(self, obj):
         """Render the interface landing with a compact changelist heading."""
+        return getattr(getattr(obj, "profile", None), "interface_landing", None)
 
-        return obj.interface_landing
+    @admin.display(description=_("Managed"), ordering="profile__managed")
+    def managed_short(self, obj):
+        return bool(getattr(getattr(obj, "profile", None), "managed", False))
 
-    @admin.display(description=_("HTTPS"), ordering="require_https")
+    @admin.display(description=_("HTTPS"), ordering="profile__require_https")
     def require_https_short(self, obj):
         """Render the HTTPS toggle with a compact changelist heading."""
+        return bool(getattr(getattr(obj, "profile", None), "require_https", False))
 
-        return obj.require_https
-
-    @admin.display(description=_("Public chat"), ordering="enable_public_chat")
+    @admin.display(description=_("Public chat"), ordering="profile__enable_public_chat")
     def public_chat_short(self, obj):
         """Render public chat toggle with a compact changelist heading."""
-
-        return obj.enable_public_chat
+        return bool(getattr(getattr(obj, "profile", None), "enable_public_chat", False))
 
     def _reload_site_fixtures(self, request):
         fixtures_dir = Path(settings.BASE_DIR) / "apps" / "links" / "fixtures"
@@ -317,7 +319,7 @@ class SiteTemplateAdmin(EntityModelAdmin):
     def _render_swatch(color: str):  # pragma: no cover - admin rendering
         return format_html(
             '<span style="display:inline-block;width:1.35rem;height:1.35rem;'
-            'border-radius:0.35rem;border:1px solid rgba(0,0,0,0.12);'
+            "border-radius:0.35rem;border:1px solid rgba(0,0,0,0.12);"
             'background:{};margin-right:0.2rem;"></span>',
             color,
         )

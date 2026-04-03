@@ -69,7 +69,8 @@ def _format_operator_ws_endpoint_host(request, site) -> str:
     if port in {80, 443}:
         return hostname
 
-    if site is not None and bool(getattr(site, "managed", False)):
+    profile = getattr(site, "profile", None) if site else None
+    if profile is not None and bool(profile.managed):
         return hostname
 
     return raw_host
@@ -144,7 +145,10 @@ def index(request):
         "operator-site-interface", default=True
     )
     if not interface_enabled:
-        interface_landing = getattr(site, "interface_landing", None) if site else None
+        site_profile = getattr(site, "profile", None) if site else None
+        interface_landing = (
+            getattr(site_profile, "interface_landing", None) if site_profile else None
+        )
         if (
             interface_landing
             and not getattr(interface_landing, "is_deleted", False)
@@ -196,7 +200,9 @@ def index(request):
             badge = getattr(site, "badge", None)
             landing_page = getattr(badge, "landing_override", None)
             if landing_page is None:
-                landing_page = getattr(site, "default_landing", None)
+                landing_page = getattr(
+                    getattr(site, "profile", None), "default_landing", None
+                )
             if (
                 landing_page
                 and not getattr(landing_page, "is_deleted", False)
@@ -313,7 +319,9 @@ def changelog_report_data(request):
         logger.exception(
             "Failed to load public changelog page %s (offset %s)", page_number, offset
         )
-        return JsonResponse({"error": _("Unable to load additional updates.")}, status=500)
+        return JsonResponse(
+            {"error": _("Unable to load additional updates.")}, status=500
+        )
 
     if not page_data.sections:
         return JsonResponse({"html": "", "has_more": False, "next_page": None})

@@ -23,7 +23,11 @@ def get_site(request) -> Optional[Site]:
     host, _ = split_domain_port(host)
     if host:
         try:
-            return Site.objects.filter(domain__iexact=host).first()
+            return (
+                Site.objects.select_related("profile")
+                .filter(domain__iexact=host)
+                .first()
+            )
         except DatabaseError:
             return None
 
@@ -32,4 +36,9 @@ def get_site(request) -> Optional[Site]:
     except (Site.DoesNotExist, DatabaseError):
         return None
 
-    return site if isinstance(site, Site) else None
+    if not isinstance(site, Site):
+        return None
+    try:
+        return Site.objects.select_related("profile").filter(pk=site.pk).first()
+    except DatabaseError:
+        return None

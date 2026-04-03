@@ -2,6 +2,7 @@ import logging
 from http import HTTPStatus
 from django.conf import settings
 from django.core.exceptions import DisallowedHost
+from django.core.exceptions import ObjectDoesNotExist
 from django.http import HttpResponsePermanentRedirect
 from django.http.request import split_domain_port
 from django.urls import Resolver404, resolve
@@ -48,7 +49,16 @@ class SiteHttpsRedirectMiddleware:
             site = get_site(request)
             request.site = site
 
-        if getattr(site, "require_https", False) and not is_https_request(request):
+        require_https = None
+        if site is not None:
+            try:
+                require_https = bool(site.profile.require_https)
+            except (AttributeError, ObjectDoesNotExist):
+                require_https = None
+            if require_https is None:
+                require_https = bool(getattr(site, "require_https", False))
+
+        if require_https and not is_https_request(request):
             try:
                 host = request.get_host()
             except DisallowedHost:  # pragma: no cover - defensive guard

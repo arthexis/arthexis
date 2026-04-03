@@ -18,13 +18,15 @@ from apps.energy.models import ClientReport
 from apps.features.models import Feature
 from apps.groups.constants import SITE_OPERATOR_GROUP_NAME
 from apps.modules.models import Module
-from apps.sites.models import Landing
+from apps.sites.models import Landing, SiteProfile
 from apps.sites.utils import require_site_operator_or_staff
 
 pytestmark = [pytest.mark.django_db]
 
 
-def test_client_report_download_enforces_login_and_ownership(client, monkeypatch, tmp_path):
+def test_client_report_download_enforces_login_and_ownership(
+    client, monkeypatch, tmp_path
+):
     user_model = get_user_model()
     owner = user_model.objects.create_user(
         username="report-owner", email="owner@example.com", password="secret"
@@ -111,7 +113,10 @@ def test_whatsapp_webhook_post_payload_validation(client, settings):
     assert success.status_code == 201
     assert success.json()["status"] == "ok"
 
-    assert client.post(url, data="{not-json}", content_type="application/json").status_code == 400
+    assert (
+        client.post(url, data="{not-json}", content_type="application/json").status_code
+        == 400
+    )
 
     empty_fields = client.post(
         url,
@@ -137,8 +142,10 @@ def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
         domain="testserver",
         defaults={"name": "testserver"},
     )
-    site.interface_landing = landing
-    site.save(update_fields=["interface_landing"])
+    SiteProfile.objects.update_or_create(
+        site=site,
+        defaults={"interface_landing": landing},
+    )
 
     response = client.get(reverse("pages:index"))
 
@@ -270,7 +277,9 @@ def test_require_site_operator_or_staff_enforces_admin_operator_boundary(rf):
         email="boundary-operator@example.com",
         password="secret",
     )
-    Group.objects.get_or_create(name=SITE_OPERATOR_GROUP_NAME)[0].user_set.add(operator_user)
+    Group.objects.get_or_create(name=SITE_OPERATOR_GROUP_NAME)[0].user_set.add(
+        operator_user
+    )
     request.user = operator_user
     assert require_site_operator_or_staff(request) is None
 

@@ -14,7 +14,8 @@ class NodeNetworkingMixin:
         if require_https is not None:
             return require_https
         site = getattr(self, "base_site", None)
-        if site and bool(getattr(site, "require_https", False)):
+        site_profile = getattr(site, "profile", None) if site else None
+        if site_profile and bool(site_profile.require_https):
             return True
         if getattr(self, "port", None) == 443:
             return True
@@ -335,7 +336,9 @@ class NodeNetworkingMixin:
                     if ip_obj.version == 6 and not formatted_host.startswith("["):
                         formatted_host = f"[{formatted_host}]"
 
-            combined_path = f"{base_path}{normalized_path}" if base_path else normalized_path
+            combined_path = (
+                f"{base_path}{normalized_path}" if base_path else normalized_path
+            )
 
             for scheme in scheme_candidates:
                 scheme_default_port = 443 if scheme == "https" else 80
@@ -346,10 +349,7 @@ class NodeNetworkingMixin:
                 for candidate_port in port_sources:
                     scheme_port: int | None = candidate_port
 
-                    if (
-                        scheme_port in (80, 443)
-                        and scheme_port != scheme_default_port
-                    ):
+                    if scheme_port in (80, 443) and scheme_port != scheme_default_port:
                         scheme_port = None
 
                     if scheme_port and scheme_port != scheme_default_port:

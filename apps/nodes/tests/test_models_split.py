@@ -7,6 +7,7 @@ from apps.features.models import Feature
 from apps.nodes.feature_detection import node_feature_detection_registry
 from apps.nodes.models import Node, NodeFeature
 from apps.nodes.models import utils as node_utils
+from apps.sites.models import SiteProfile
 
 
 @pytest.fixture
@@ -25,8 +26,20 @@ def test_select_preferred_ip_prefers_global_address():
 @pytest.mark.parametrize(
     ("slug", "systemctl_command", "lock_file", "expected"),
     [
-        pytest.param("rfid-scanner", ["systemctl"], "rfid.lck", True, id="rfid-lock-requires-systemctl"),
-        pytest.param("celery-queue", [], "celery.lck", False, id="systemd-lock-blocked-without-systemctl"),
+        pytest.param(
+            "rfid-scanner",
+            ["systemctl"],
+            "rfid.lck",
+            True,
+            id="rfid-lock-requires-systemctl",
+        ),
+        pytest.param(
+            "celery-queue",
+            [],
+            "celery.lck",
+            False,
+            id="systemd-lock-blocked-without-systemctl",
+        ),
     ],
 )
 def test_detect_auto_feature_systemd_detection_matrix(
@@ -84,7 +97,9 @@ def test_detect_auto_feature_allows_rfid_service_probe_without_systemctl(
 
 
 @pytest.mark.django_db
-def test_detect_auto_feature_detects_gpio_rtc_when_clock_device_present(monkeypatch, tmp_path):
+def test_detect_auto_feature_detects_gpio_rtc_when_clock_device_present(
+    monkeypatch, tmp_path
+):
     """gpio-rtc auto-detection should defer to the clock-device probe."""
 
     node = Node(
@@ -102,7 +117,9 @@ def test_detect_auto_feature_detects_gpio_rtc_when_clock_device_present(monkeypa
 
 
 @pytest.mark.django_db
-def test_refresh_features_assigns_gpio_rtc_when_clock_device_present(monkeypatch, tmp_path):
+def test_refresh_features_assigns_gpio_rtc_when_clock_device_present(
+    monkeypatch, tmp_path
+):
     """Feature refresh should auto-assign gpio-rtc when an RTC is detected."""
 
     node = Node.objects.create(
@@ -119,8 +136,11 @@ def test_refresh_features_assigns_gpio_rtc_when_clock_device_present(monkeypatch
 
     assert node.features.filter(pk=feature.pk).exists()
 
+
 @pytest.mark.django_db
-def test_detect_auto_feature_does_not_detect_gpio_rtc_when_clock_device_absent(monkeypatch, tmp_path):
+def test_detect_auto_feature_does_not_detect_gpio_rtc_when_clock_device_absent(
+    monkeypatch, tmp_path
+):
     """gpio-rtc auto-detection should not trigger when no clock device is present."""
 
     node = Node(
@@ -138,7 +158,9 @@ def test_detect_auto_feature_does_not_detect_gpio_rtc_when_clock_device_absent(m
 
 
 @pytest.mark.django_db
-def test_refresh_features_does_not_assign_gpio_rtc_when_clock_device_absent(monkeypatch, tmp_path):
+def test_refresh_features_does_not_assign_gpio_rtc_when_clock_device_absent(
+    monkeypatch, tmp_path
+):
     """Feature refresh should not auto-assign gpio-rtc when no RTC is detected."""
 
     node = Node.objects.create(
@@ -208,7 +230,6 @@ def test_refresh_features_auto_enables_when_linked_suite_feature_enabled(
     node.refresh_features()
 
     assert node.features.filter(pk=feature.pk).exists()
-
 
 
 @pytest.fixture
@@ -299,8 +320,8 @@ def test_iter_remote_urls_prefers_https_port_443_when_required():
     site = Site.objects.create(
         domain=domain,
         name="Arthexis",
-        require_https=True,
     )
+    SiteProfile.objects.create(site=site, require_https=True)
     node = Node(
         hostname="watchtower",
         base_site=site,
@@ -337,7 +358,9 @@ def test_format_upgrade_body_uses_release_matcher_when_available(monkeypatch):
     class _ReleaseModels:
         PackageRelease = _PackageRelease
 
-    monkeypatch.setattr(node_utils.importlib, "import_module", lambda _name: _ReleaseModels)
+    monkeypatch.setattr(
+        node_utils.importlib, "import_module", lambda _name: _ReleaseModels
+    )
 
     assert node_utils._format_upgrade_body("1.2.3", "abcdef1234") == "v1.2.3 ref1234"
 
@@ -361,7 +384,9 @@ def test_detect_auto_feature_uses_app_node_feature_hooks(
     monkeypatch.setattr(
         cards_node_features,
         "check_node_feature",
-        lambda slug, *, node, base_dir, base_path: True if slug == "rfid-scanner" else None,
+        lambda slug, *, node, base_dir, base_path: True
+        if slug == "rfid-scanner"
+        else None,
     )
 
     def _setup(slug, *, node, base_dir, base_path):

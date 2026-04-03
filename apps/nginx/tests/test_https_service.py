@@ -8,6 +8,7 @@ from django.core.management.base import CommandError
 from django.test import override_settings
 
 from apps.nginx.management.commands.https_parts.service import HttpsProvisioningService
+from apps.sites.models import SiteProfile
 
 
 @pytest.mark.django_db
@@ -30,8 +31,9 @@ def test_ensure_managed_site_sets_instance_default_site(monkeypatch):
     created = Site.objects.get(pk=42)
     assert created.domain == "arthexis.com"
     assert created.name == "arthexis.com"
-    assert created.managed is True
-    assert created.require_https is True
+    created_profile = SiteProfile.objects.get(site=created)
+    assert created_profile.managed is True
+    assert created_profile.require_https is True
 
 
 @pytest.mark.django_db
@@ -50,15 +52,11 @@ def test_ensure_managed_site_raises_when_site_id_conflicts_with_domain(monkeypat
         pk=10,
         domain="arthexis.com",
         name="arthexis.com",
-        managed=True,
-        require_https=True,
     )
     Site.objects.create(
         pk=42,
         domain="legacy.example",
         name="legacy.example",
-        managed=False,
-        require_https=False,
     )
 
     with override_settings(SITE_ID=42):

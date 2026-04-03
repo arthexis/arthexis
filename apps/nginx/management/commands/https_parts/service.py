@@ -26,6 +26,7 @@ from apps.nginx.management.commands.https_parts.verification import (
 )
 from apps.nginx.models import SiteConfiguration
 from apps.nodes.models import Node
+from apps.sites.models import SiteProfile
 from apps.sites.site_config import update_local_nginx_scripts
 
 
@@ -65,17 +66,22 @@ class HttpsProvisioningService:
         positional_domain = options.get("domain")
         explicit_migrate_from = options.get("migrate_from")
 
-        if positional_domain and not (certbot_domain or godaddy_domain or explicit_site):
+        if positional_domain and not (
+            certbot_domain or godaddy_domain or explicit_site
+        ):
             certbot_domain = positional_domain
 
         parsed_site = _parse_site_domain(explicit_site) if explicit_site else None
         migrate_from = (
-            _parse_site_domain(explicit_migrate_from)
-            if explicit_migrate_from
-            else None
+            _parse_site_domain(explicit_migrate_from) if explicit_migrate_from else None
         )
 
-        if migrate_from and not parsed_site and not certbot_domain and not godaddy_domain:
+        if (
+            migrate_from
+            and not parsed_site
+            and not certbot_domain
+            and not godaddy_domain
+        ):
             raise CommandError(
                 "--migrate-from requires a target domain via --site, --certbot, or --godaddy."
             )
@@ -114,7 +120,9 @@ class HttpsProvisioningService:
                 "--sandbox/--no-sandbox are no longer supported. "
                 "Use manual DNS configuration, then run HTTPS with --certbot or --site."
             )
-        if (options.get("key") or "").strip() or (options.get("static_ip") or "").strip():
+        if (options.get("key") or "").strip() or (
+            options.get("static_ip") or ""
+        ).strip():
             raise CommandError(
                 "--key/--static-ip are no longer supported. "
                 "Use manual DNS configuration, then run HTTPS with --certbot or --site."
@@ -324,21 +332,26 @@ class HttpsProvisioningService:
         if site.name != domain:
             site.name = domain
             updated_fields.append("name")
-        if hasattr(site, "managed") and not getattr(site, "managed"):
-            setattr(site, "managed", True)
-            updated_fields.append("managed")
-        if (
-            hasattr(site, "require_https")
-            and getattr(site, "require_https") != require_https
-        ):
-            setattr(site, "require_https", require_https)
-            updated_fields.append("require_https")
+        profile, _profile_created = SiteProfile.objects.get_or_create(site=site)
+        profile_updates: list[str] = []
+        if not profile.managed:
+            profile.managed = True
+            profile_updates.append("managed")
+        if profile.require_https != require_https:
+            profile.require_https = require_https
+            profile_updates.append("require_https")
         if created:
-            site.save()
+            with transaction.atomic():
+                if updated_fields:
+                    site.save(update_fields=updated_fields)
+                if profile_updates:
+                    profile.save(update_fields=profile_updates)
         elif updated_fields:
             try:
                 with transaction.atomic():
                     site.save(update_fields=updated_fields)
+                    if profile_updates:
+                        profile.save(update_fields=profile_updates)
             except IntegrityError:
                 fallback_site = Site.objects.filter(domain=domain).first()
                 if fallback_site is not None:
@@ -352,21 +365,23 @@ class HttpsProvisioningService:
                     if fallback_site.name != domain:
                         fallback_site.name = domain
                         fallback_updates.append("name")
-                    if hasattr(fallback_site, "managed") and not getattr(
-                        fallback_site, "managed"
-                    ):
-                        setattr(fallback_site, "managed", True)
-                        fallback_updates.append("managed")
-                    if (
-                        hasattr(fallback_site, "require_https")
-                        and getattr(fallback_site, "require_https") != require_https
-                    ):
-                        setattr(fallback_site, "require_https", require_https)
-                        fallback_updates.append("require_https")
                     if fallback_updates:
                         fallback_site.save(update_fields=fallback_updates)
-
-        update_local_nginx_scripts()
+                    fallback_profile, _created = SiteProfile.objects.get_or_create(
+                        site=fallback_site
+                    )
+                    fallback_profile_updates: list[str] = []
+                    if not fallback_profile.managed:
+                        fallback_profile.managed = True
+                        fallback_profile_updates.append("managed")
+                    if fallback_profile.require_https != require_https:
+                        fallback_profile.require_https = require_https
+                        fallback_profile_updates.append("require_https")
+                    if fallback_profile_updates:
+                        fallback_profile.save(update_fields=fallback_profile_updates)
+        elif profile_updates:
+            with transaction.atomic():
+                profile.save(update_fields=profile_updates)
 
     def _migrate_domain_records(
         self,
@@ -388,7 +403,9 @@ class HttpsProvisioningService:
         """
 
         if source_domain == target_domain:
-            raise CommandError("--migrate-from source must differ from the target domain.")
+            raise CommandError(
+                "--migrate-from source must differ from the target domain."
+            )
 
         target_site = Site.objects.filter(domain__iexact=target_domain).first()
         source_site = Site.objects.filter(domain__iexact=source_domain).first()
@@ -413,7 +430,11 @@ class HttpsProvisioningService:
         )
 
         source_config = SiteConfiguration.objects.filter(name=source_domain).first()
-        if source_config and source_config.enabled and source_config.protocol == "https":
+        if (
+            source_config
+            and source_config.enabled
+            and source_config.protocol == "https"
+        ):
             source_config.enabled = False
             source_config.save(update_fields=["enabled"])
 

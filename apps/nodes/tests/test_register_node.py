@@ -11,6 +11,7 @@ from django.test import RequestFactory
 import pytest
 
 from apps.nodes.models import Node, NodeRole
+from apps.sites.models import SiteProfile
 from apps.nodes.services.enrollment import issue_enrollment_token
 from apps.nodes.services import registration
 from apps.nodes.views import node_info, register_node
@@ -23,6 +24,7 @@ def admin_user(db):
         username="admin", email="admin@example.com", password="password"
     )
 
+
 def _build_request(factory, payload):
     request = factory.post(
         "/nodes/register/",
@@ -30,6 +32,7 @@ def _build_request(factory, payload):
         content_type="application/json",
     )
     return request
+
 
 @pytest.mark.django_db
 def test_register_node_logs_attempt_and_success(admin_user, caplog):
@@ -54,6 +57,7 @@ def test_register_node_logs_attempt_and_success(admin_user, caplog):
     assert any("Node registration attempt" in message for message in messages)
     assert any("Node registration succeeded" in message for message in messages)
 
+
 @pytest.mark.django_db
 def test_register_node_logs_validation_failure(admin_user, caplog):
     factory = RequestFactory()
@@ -75,6 +79,7 @@ def test_register_node_logs_validation_failure(admin_user, caplog):
     assert any("Node registration attempt" in message for message in messages)
     assert any("Node registration failed" in message for message in messages)
 
+
 @pytest.mark.django_db
 def test_register_node_sets_cors_headers_without_origin(admin_user):
     payload = {
@@ -95,6 +100,7 @@ def test_register_node_sets_cors_headers_without_origin(admin_user):
     assert response["Access-Control-Allow-Origin"] == "*"
     assert response["Access-Control-Allow-Headers"] == "Content-Type"
     assert response["Access-Control-Allow-Methods"] == "POST, OPTIONS"
+
 
 @pytest.mark.django_db
 def test_register_node_allows_authenticated_user_with_invalid_signature(admin_user):
@@ -119,6 +125,7 @@ def test_register_node_allows_authenticated_user_with_invalid_signature(admin_us
     node = Node.objects.get(mac_address=payload["mac_address"])
     assert node.hostname == payload["hostname"]
 
+
 @pytest.mark.django_db
 def test_register_node_links_base_site_when_domain_matches(admin_user):
     site = Site.objects.create(domain="linked.example.com", name="Linked")
@@ -140,6 +147,7 @@ def test_register_node_links_base_site_when_domain_matches(admin_user):
     assert response.status_code == 200
     node = Node.objects.get(mac_address=payload["mac_address"])
     assert node.base_site_id == site.id
+
 
 @pytest.mark.django_db
 def test_register_node_updates_base_site_for_existing_node(admin_user):
@@ -172,7 +180,9 @@ def test_register_node_updates_base_site_for_existing_node(admin_user):
 
 
 @pytest.mark.django_db
-def test_register_node_rejects_invalid_enrollment_token_without_creating_node(admin_user):
+def test_register_node_rejects_invalid_enrollment_token_without_creating_node(
+    admin_user,
+):
     payload = {
         "hostname": "mesh-invalid-token",
         "mac_address": "aa:bb:cc:dd:ee:45",
@@ -239,7 +249,10 @@ def test_register_node_updates_mesh_identity_fields(admin_user):
         "address": node.address,
         "port": node.port,
         "mesh_enrollment_state": Node.MeshEnrollmentState.ENROLLED,
-        "mesh_key_fingerprint_metadata": {"algorithm": "sha256", "fingerprint": "abc123"},
+        "mesh_key_fingerprint_metadata": {
+            "algorithm": "sha256",
+            "fingerprint": "abc123",
+        },
         "last_mesh_heartbeat": "2026-03-31T12:34:56Z",
         "mesh_capability_flags": ["routing", "store-and-forward"],
     }
@@ -254,7 +267,9 @@ def test_register_node_updates_mesh_identity_fields(admin_user):
     assert response.status_code == 200
     node.refresh_from_db()
     assert node.mesh_enrollment_state == Node.MeshEnrollmentState.ENROLLED
-    assert node.mesh_key_fingerprint_metadata == payload["mesh_key_fingerprint_metadata"]
+    assert (
+        node.mesh_key_fingerprint_metadata == payload["mesh_key_fingerprint_metadata"]
+    )
     assert node.last_mesh_heartbeat is not None
     assert node.mesh_capability_flags == sorted(payload["mesh_capability_flags"])
 
@@ -285,6 +300,7 @@ def test_node_info_includes_mesh_identity_fields():
     assert data["host_instance_id"] == node.host_instance_id
     assert data["uuid"] == str(node.uuid)
 
+
 @pytest.mark.django_db
 def test_register_current_logs_to_local_logger(settings, caplog):
     settings.LOG_DIR = settings.BASE_DIR / "logs"
@@ -305,6 +321,7 @@ def test_register_current_logs_to_local_logger(settings, caplog):
         for message in messages
     )
 
+
 @pytest.mark.django_db
 def test_register_current_uses_managed_site_domain(settings, caplog):
     caplog.set_level(logging.INFO, logger="register_local_node")
@@ -315,9 +332,11 @@ def test_register_current_uses_managed_site_domain(settings, caplog):
     site = Site.objects.get_current()
     site.domain = "arthexis.com"
     site.name = "Arthexis"
-    site.managed = True
-    site.require_https = True
     site.save()
+    SiteProfile.objects.update_or_create(
+        site=site,
+        defaults={"managed": True, "require_https": True},
+    )
 
     node, created = Node.register_current(notify_peers=False)
 
@@ -330,13 +349,19 @@ def test_register_current_uses_managed_site_domain(settings, caplog):
 
 
 @pytest.mark.django_db
-def test_register_current_prefers_node_role_from_env_when_settings_missing(settings, monkeypatch, tmp_path):
+def test_register_current_prefers_node_role_from_env_when_settings_missing(
+    settings, monkeypatch, tmp_path
+):
     """Registration should use NODE_ROLE env value before lock-file fallback."""
-    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(
+        Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], []))
+    )
     monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
     monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
     monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
-    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
+    )
     Node.objects.all().delete()
     Node._local_cache.clear()
     NodeRole.objects.get_or_create(name="Terminal")
@@ -353,13 +378,19 @@ def test_register_current_prefers_node_role_from_env_when_settings_missing(setti
 
 
 @pytest.mark.django_db
-def test_register_current_uses_role_lock_when_node_role_is_missing(settings, monkeypatch, tmp_path):
+def test_register_current_uses_role_lock_when_node_role_is_missing(
+    settings, monkeypatch, tmp_path
+):
     """Registration should honor legacy lock-file role resolution when NODE_ROLE is unset."""
-    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(
+        Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], []))
+    )
     monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
     monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
     monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
-    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
+    )
     Node.objects.all().delete()
     Node._local_cache.clear()
     NodeRole.objects.get_or_create(name="Terminal")
@@ -379,13 +410,19 @@ def test_register_current_uses_role_lock_when_node_role_is_missing(settings, mon
 
 
 @pytest.mark.django_db
-def test_register_current_prefers_settings_node_role_over_lock(settings, monkeypatch, tmp_path):
+def test_register_current_prefers_settings_node_role_over_lock(
+    settings, monkeypatch, tmp_path
+):
     """Registration should use settings.NODE_ROLE before legacy lock role."""
-    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(
+        Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], []))
+    )
     monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
     monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
     monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
-    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
+    )
     Node.objects.all().delete()
     Node._local_cache.clear()
     NodeRole.objects.get_or_create(name="Terminal")
@@ -405,13 +442,19 @@ def test_register_current_prefers_settings_node_role_over_lock(settings, monkeyp
 
 
 @pytest.mark.django_db
-def test_register_current_reloads_lock_when_settings_node_role_is_bootstrap_terminal(settings, monkeypatch, tmp_path):
+def test_register_current_reloads_lock_when_settings_node_role_is_bootstrap_terminal(
+    settings, monkeypatch, tmp_path
+):
     """Registration should still honor runtime lock-file updates when settings.NODE_ROLE is bootstrapped Terminal."""
-    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(
+        Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], []))
+    )
     monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
     monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
     monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
-    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
+    )
     Node.objects.all().delete()
     Node._local_cache.clear()
     NodeRole.objects.get_or_create(name="Terminal")
@@ -431,13 +474,19 @@ def test_register_current_reloads_lock_when_settings_node_role_is_bootstrap_term
 
 
 @pytest.mark.django_db
-def test_register_current_normalizes_env_role_name_case(settings, monkeypatch, tmp_path):
+def test_register_current_normalizes_env_role_name_case(
+    settings, monkeypatch, tmp_path
+):
     """Registration should normalize lowercase NODE_ROLE values."""
-    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(
+        Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], []))
+    )
     monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
     monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
     monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
-    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
+    )
     Node.objects.all().delete()
     Node._local_cache.clear()
     NodeRole.objects.get_or_create(name="Terminal")
@@ -456,11 +505,15 @@ def test_register_current_normalizes_env_role_name_case(settings, monkeypatch, t
 @pytest.mark.django_db
 def test_register_current_defaults_to_terminal_role(settings, monkeypatch, tmp_path):
     """Registration should default to Terminal when no role configuration exists."""
-    monkeypatch.setattr(Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], [])))
+    monkeypatch.setattr(
+        Node, "_resolve_ip_addresses", classmethod(lambda cls, *hosts: ([], []))
+    )
     monkeypatch.setattr(registration.socket, "getfqdn", lambda host: "")
     monkeypatch.setattr(registration.socket, "gethostbyname", lambda host: "127.0.0.1")
     monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
-    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
+    )
     Node.objects.all().delete()
     Node._local_cache.clear()
     terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
@@ -473,6 +526,7 @@ def test_register_current_defaults_to_terminal_role(settings, monkeypatch, tmp_p
 
     assert created
     assert node.role_id == terminal_role.id
+
 
 @pytest.mark.django_db
 def test_node_info_prefers_base_site_domain(monkeypatch):
@@ -498,6 +552,7 @@ def test_node_info_prefers_base_site_domain(monkeypatch):
     assert data["contact_hosts"][0] == "base.example.test"
     assert data["base_site_domain"] == site.domain
 
+
 @pytest.mark.django_db
 def test_get_local_refreshes_self_node_mac_on_mismatch(monkeypatch, caplog):
     """Node.get_local should refresh stale SELF node MAC addresses."""
@@ -507,7 +562,9 @@ def test_get_local_refreshes_self_node_mac_on_mismatch(monkeypatch, caplog):
         current_relation=Node.Relation.SELF,
     )
     Node._local_cache.clear()
-    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
+    )
 
     caplog.set_level(logging.WARNING, logger="apps.nodes.models.node")
     local = Node.get_local()
@@ -516,7 +573,10 @@ def test_get_local_refreshes_self_node_mac_on_mismatch(monkeypatch, caplog):
     assert local.pk == stale_node.pk
     stale_node.refresh_from_db()
     assert stale_node.mac_address == "aa:bb:cc:dd:ee:ff"
-    assert any("refreshed stale self-node MAC address" in rec.getMessage() for rec in caplog.records)
+    assert any(
+        "refreshed stale self-node MAC address" in rec.getMessage()
+        for rec in caplog.records
+    )
 
 
 @pytest.mark.django_db
@@ -527,7 +587,9 @@ def test_get_local_updates_self_node_when_stored_mac_is_empty(monkeypatch):
         current_relation=Node.Relation.SELF,
     )
     Node._local_cache.clear()
-    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
+    )
 
     local = Node.get_local()
 
@@ -545,7 +607,9 @@ def test_get_local_does_not_cache_stale_self_after_mac_conflict(monkeypatch):
         current_relation=Node.Relation.SELF,
     )
     Node._local_cache.clear()
-    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
+    )
 
     original_save = Node.save
 
@@ -583,7 +647,9 @@ def test_get_local_keeps_self_node_mac_when_runtime_mac_is_in_use(monkeypatch, c
         current_relation=Node.Relation.PEER,
     )
     Node._local_cache.clear()
-    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
+    )
 
     caplog.set_level(logging.WARNING, logger="apps.nodes.models.node")
     local = Node.get_local()
@@ -604,7 +670,9 @@ def test_get_local_logs_redacted_mac_values(monkeypatch, caplog):
         current_relation=Node.Relation.SELF,
     )
     Node._local_cache.clear()
-    monkeypatch.setattr(Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff"))
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
+    )
 
     def raise_conflict(*args, **kwargs):
         raise IntegrityError("simulated uniqueness conflict")
@@ -693,7 +761,9 @@ def test_register_node_demotes_conflicting_self_relation_to_sibling(admin_user):
 
 
 @pytest.mark.django_db
-def test_register_node_retries_as_sibling_on_self_host_constraint_conflict(admin_user, monkeypatch):
+def test_register_node_retries_as_sibling_on_self_host_constraint_conflict(
+    admin_user, monkeypatch
+):
     payload = {
         "hostname": "self-race",
         "mac_address": "aa:bb:cc:dd:ee:77",

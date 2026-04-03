@@ -99,7 +99,9 @@ class ChatConsumerAccessControlTests(TestCase):
             mock.patch.object(
                 consumer,
                 "_current_site",
-                return_value=SimpleNamespace(enable_public_chat=False),
+                return_value=SimpleNamespace(
+                    profile=SimpleNamespace(enable_public_chat=False)
+                ),
             ),
         ):
             allowed = consumer._is_chat_access_allowed_sync(user=SimpleNamespace())
@@ -119,7 +121,9 @@ class ChatConsumerAccessControlTests(TestCase):
             mock.patch.object(
                 consumer,
                 "_current_site",
-                return_value=SimpleNamespace(enable_public_chat=True),
+                return_value=SimpleNamespace(
+                    profile=SimpleNamespace(enable_public_chat=True)
+                ),
             ),
         ):
             allowed = consumer._is_chat_access_allowed_sync(user=SimpleNamespace())
@@ -146,7 +150,9 @@ class ChatConsumerAccessControlTests(TestCase):
             mock.patch.object(
                 consumer,
                 "_current_site",
-                return_value=SimpleNamespace(enable_public_chat=False),
+                return_value=SimpleNamespace(
+                    profile=SimpleNamespace(enable_public_chat=False)
+                ),
             ),
         ):
             allowed = consumer._is_chat_access_allowed_sync(user=user)
@@ -173,7 +179,9 @@ class ChatConsumerAccessControlTests(TestCase):
             mock.patch.object(
                 consumer,
                 "_current_site",
-                return_value=SimpleNamespace(enable_public_chat=False),
+                return_value=SimpleNamespace(
+                    profile=SimpleNamespace(enable_public_chat=False)
+                ),
             ),
         ):
             allowed = consumer._is_chat_access_allowed_sync(user=user)
@@ -200,7 +208,9 @@ class ChatConsumerAccessControlTests(TestCase):
             mock.patch.object(
                 consumer,
                 "_current_site",
-                return_value=SimpleNamespace(enable_public_chat=False),
+                return_value=SimpleNamespace(
+                    profile=SimpleNamespace(enable_public_chat=False)
+                ),
             ),
         ):
             allowed = consumer._is_chat_access_allowed_sync(user=user)
@@ -213,12 +223,15 @@ class ChatConsumerAccessControlTests(TestCase):
         consumer = ChatConsumer()
         consumer.scope = {"headers": [(b"host", b"chat.example.test:8443")]}
         resolved_site = SimpleNamespace(domain="chat.example.test")
+        queryset = SimpleNamespace(
+            filter=lambda **_kwargs: SimpleNamespace(first=lambda: resolved_site)
+        )
 
         with (
             mock.patch(
-                "apps.sites.consumers.Site.objects.filter",
-                return_value=SimpleNamespace(first=lambda: resolved_site),
-            ) as mock_filter,
+                "apps.sites.consumers.Site.objects.select_related",
+                return_value=queryset,
+            ) as mock_select_related,
             mock.patch(
                 "apps.sites.consumers.Site.objects.get_current"
             ) as mock_get_current,
@@ -226,7 +239,7 @@ class ChatConsumerAccessControlTests(TestCase):
             site = consumer._current_site()
 
         self.assertIs(site, resolved_site)
-        mock_filter.assert_called_once_with(domain__iexact="chat.example.test")
+        mock_select_related.assert_called_once_with("profile")
         mock_get_current.assert_not_called()
 
     def test_chat_access_denied_when_pages_chat_feature_disabled(self):
@@ -243,7 +256,9 @@ class ChatConsumerAccessControlTests(TestCase):
             mock.patch.object(
                 consumer,
                 "_current_site",
-                return_value=SimpleNamespace(enable_public_chat=True),
+                return_value=SimpleNamespace(
+                    profile=SimpleNamespace(enable_public_chat=True)
+                ),
             ),
         ):
             allowed = consumer._is_chat_access_allowed_sync(user=SimpleNamespace())
@@ -263,7 +278,9 @@ class ChatConsumerAccessControlTests(TestCase):
             mock.patch.object(
                 consumer,
                 "_current_site",
-                return_value=SimpleNamespace(enable_public_chat=True),
+                return_value=SimpleNamespace(
+                    profile=SimpleNamespace(enable_public_chat=True)
+                ),
             ),
         ):
             allowed = consumer._is_chat_access_allowed_sync(user=SimpleNamespace())
