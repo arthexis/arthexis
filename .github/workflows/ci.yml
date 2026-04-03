@@ -93,7 +93,7 @@ jobs:
       - name: Install CI dependencies
         run: |
           source .venv/bin/activate
-          python -m pip install -r requirements-ci.txt
+          python -m pip install --only-binary=:all: -r requirements-ci.txt
       - name: Verify editable install import
         run: |
           source .venv/bin/activate

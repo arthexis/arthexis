@@ -5,7 +5,7 @@
       "slug": "ocpp-ftp-reports",
       "display": "OCPP-aware FTP Server",
       "summary": "Provide an OCPP-aware FTP server for charge points to upload diagnostics and report archives.",
-      "is_enabled": true,
+      "is_enabled": false,
       "main_app": [
         "ocpp"
       ],
