@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from io import StringIO
 import json
+import os
 from pathlib import Path
+import shlex
 import subprocess
 import time
 
@@ -100,7 +102,7 @@ class Command(BaseCommand):
             "checks": [],
         }
 
-        self._write_startup_started_lock(startup_started_lock, started_at_epoch, str(options["port"]))
+        self._write_startup_started_lock(startup_started_lock, started_at_epoch)
 
         preflight_ok, preflight_status = self._run_preflight(lock_dir=lock_dir, base_dir=base_dir)
         payload["checks"].append(preflight_status)
@@ -151,11 +153,20 @@ class Command(BaseCommand):
         if not helper_script.is_file():
             return False, {"name": "runserver_preflight", "status": "error", "detail": "helper script missing"}
 
-        command = (
-            f"BASE_DIR={base_dir} LOCK_DIR={lock_dir} "
-            f"source {helper_script} && run_runserver_preflight"
+        quoted_helper = shlex.quote(str(helper_script))
+        env = {
+            **os.environ,
+            "BASE_DIR": str(base_dir),
+            "LOCK_DIR": str(lock_dir),
+        }
+        command = f"source {quoted_helper} && run_runserver_preflight"
+        result = subprocess.run(
+            ["bash", "-lc", command],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
         )
-        result = subprocess.run(["bash", "-lc", command], check=False, capture_output=True, text=True)
         if result.returncode == 0:
             detail = "ok"
             if result.stdout.strip():
@@ -242,8 +253,7 @@ class Command(BaseCommand):
         return ARTHEXIS_SERVICE_MODE_EMBEDDED
 
     @staticmethod
-    def _write_startup_started_lock(lock_path: Path, started_at_epoch: int, port: str) -> None:
-        _ = port
+    def _write_startup_started_lock(lock_path: Path, started_at_epoch: int) -> None:
         lock_path.write_text(f"{started_at_epoch}\n", encoding="utf-8")
 
     @staticmethod
