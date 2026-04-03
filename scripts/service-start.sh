@@ -119,7 +119,6 @@ start_log_follower() {
 LOCK_DIR="$BASE_DIR/.locks"
 STARTUP_LOCK="$LOCK_DIR/startup_started_at.lck"
 STARTUP_DURATION_LOCK="$LOCK_DIR/startup_duration.lck"
-SYSTEMD_LOCK_FILE="$LOCK_DIR/systemd_services.lck"
 SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
 SERVICE_NAME=""
 if [ -f "$LOCK_DIR/service.lck" ]; then
@@ -127,9 +126,6 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
 fi
 
 mkdir -p "$LOCK_DIR"
-
-# shellcheck source=scripts/helpers/runserver_preflight.sh
-. "$BASE_DIR/scripts/helpers/runserver_preflight.sh"
 
 DJANGO_PID_FILE="$LOCK_DIR/django.pid"
 CELERY_WORKER_PID_FILE="$LOCK_DIR/celery_worker.pid"
@@ -184,11 +180,8 @@ APP_LOG_FILE="$LOG_DIR/$(hostname).log"
 # Celery workers process Post Office's email queue; prefer embedded mode.
 CELERY_MANAGEMENT_MODE="$SERVICE_MANAGEMENT_MODE"
 CELERY_FLAG_SET=false
-SYSTEMD_CELERY_UNITS=false
-LCD_FEATURE=false
-LCD_SYSTEMD_UNIT=false
 LCD_EMBEDDED=false
-LCD_TARGET_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
+CELERY_EMBEDDED=false
 CELERY_WORKER_PID=""
 CELERY_BEAT_PID=""
 LCD_PROCESS_PID=""
@@ -212,33 +205,6 @@ cleanup_background_processes() {
   clear_pid_files
 }
 trap cleanup_background_processes EXIT
-if [ -n "$SERVICE_NAME" ] && [ -f "$SYSTEMD_LOCK_FILE" ]; then
-  if grep -Fxq "celery-${SERVICE_NAME}.service" "$SYSTEMD_LOCK_FILE" || \
-     grep -Fxq "celery-beat-${SERVICE_NAME}.service" "$SYSTEMD_LOCK_FILE"; then
-    SYSTEMD_CELERY_UNITS=true
-  fi
-  if grep -Fxq "lcd-${SERVICE_NAME}.service" "$SYSTEMD_LOCK_FILE"; then
-    LCD_SYSTEMD_UNIT=true
-  fi
-fi
-if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
-  LCD_FEATURE=true
-fi
-
-queue_startup_net_message() {
-  local status
-  status="$(python manage.py startup_message --port "$PORT" --lock-file "$LOCK_DIR/lcd-high")" || return 1
-  case "$status" in
-    queued:*|skipped:*)
-      printf '%s\n' "$status"
-      return 0
-      ;;
-    *)
-      echo "Unexpected startup message status: $status" >&2
-      return 1
-      ;;
-  esac
-}
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --port)
@@ -467,57 +433,68 @@ PY
 }
 
 STARTUP_STARTED_AT=$(date +%s)
-{
-  printf '%s\n' "$STARTUP_STARTED_AT"
-  printf 'port=%s\n' "$PORT"
-} > "$STARTUP_LOCK"
-
-CELERY=true
-case "$CELERY_MANAGEMENT_MODE" in
-  "$ARTHEXIS_SERVICE_MODE_SYSTEMD")
-    CELERY=false
-    ;;
-  disabled)
-    CELERY=false
-    ;;
-  *)
-    CELERY=true
-    if [ "$CELERY_FLAG_SET" = false ] && [ "$SYSTEMD_CELERY_UNITS" = true ]; then
-      echo "Skipping systemd-managed Celery units because embedded workers are enabled. Use --systemd to override."
-    fi
-    ;;
-esac
-
-if [ "$LCD_FEATURE" = true ]; then
-  if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && [ "$LCD_SYSTEMD_UNIT" = true ]; then
-    LCD_TARGET_MODE="$ARTHEXIS_SERVICE_MODE_SYSTEMD"
-  fi
-
-  arthexis_disable_lcd_modes "$LOCK_DIR" "$SERVICE_NAME"
-
-  if [ "$LCD_TARGET_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-    LCD_EMBEDDED=false
-    if [ -n "$SERVICE_NAME" ]; then
-      arthexis_start_systemd_unit_if_present "lcd-${SERVICE_NAME}.service"
-    fi
-  else
-    LCD_EMBEDDED=true
-    if [ "$LCD_SYSTEMD_UNIT" = true ]; then
-      echo "Skipping systemd-managed LCD service because embedded mode is enabled. Reinstall with --systemd to manage the LCD via systemd."
-    fi
-  fi
+ORCHESTRATE_OUTPUT_FILE="$(mktemp)"
+if ! python manage.py startup_orchestrate \
+  --port "$PORT" \
+  --lock-dir "$LOCK_DIR" \
+  --service-name "$SERVICE_NAME" \
+  --service-mode "$SERVICE_MANAGEMENT_MODE" \
+  --celery-mode "$CELERY_MANAGEMENT_MODE" > "$ORCHESTRATE_OUTPUT_FILE"; then
+  echo "Startup orchestration failed; aborting startup." >&2
+  cat "$ORCHESTRATE_OUTPUT_FILE" >&2 || true
+  rm -f "$ORCHESTRATE_OUTPUT_FILE"
+  exit 1
 fi
 
-if [ "$LCD_FEATURE" = true ]; then
-  if ! queue_startup_net_message; then
-    echo "Failed to queue startup Net Message" >&2
-  fi
+readarray -t ORCHESTRATE_EXPORTS < <(
+  python - "$ORCHESTRATE_OUTPUT_FILE" <<'PY'
+import json
+import pathlib
+import sys
+
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+launch = payload.get("launch") or {}
+service = payload.get("service") or {}
+
+def emit(name, value):
+    print(f"{name}={value}")
+
+emit("ORCHESTRATE_STATUS", payload.get("status") or "error")
+emit("STARTUP_STARTED_AT", int(payload.get("started_at_epoch") or 0))
+emit("CELERY_EMBEDDED", "true" if bool(launch.get("celery_embedded")) else "false")
+emit("LCD_EMBEDDED", "true" if bool(launch.get("lcd_embedded")) else "false")
+emit("LCD_TARGET_MODE", launch.get("lcd_target_mode") or "embedded")
+emit("LCD_SYSTEMD_UNIT", "true" if bool(service.get("lcd_systemd_unit")) else "false")
+PY
+)
+rm -f "$ORCHESTRATE_OUTPUT_FILE"
+for export_line in "${ORCHESTRATE_EXPORTS[@]}"; do
+  eval "$export_line"
+done
+
+if [ "${ORCHESTRATE_STATUS:-error}" != "ok" ]; then
+  echo "Startup orchestration returned error status; aborting startup." >&2
+  exit 1
+fi
+
+if [ "$STARTUP_STARTED_AT" -le 0 ]; then
+  STARTUP_STARTED_AT=$(date +%s)
+fi
+
+if [ "$LCD_TARGET_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] || [ "$LCD_EMBEDDED" = true ]; then
+  arthexis_disable_lcd_modes "$LOCK_DIR" "$SERVICE_NAME"
+fi
+
+if [ "$LCD_TARGET_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && [ -n "$SERVICE_NAME" ]; then
+  arthexis_start_systemd_unit_if_present "lcd-${SERVICE_NAME}.service"
+elif [ "$LCD_EMBEDDED" = true ] && [ "$LCD_SYSTEMD_UNIT" = true ]; then
+  echo "Skipping systemd-managed LCD service because embedded mode is enabled. Reinstall with --systemd to manage the LCD via systemd."
 fi
 
 RUNSERVER_EXTRA_ARGS=()
 
 # Start Celery components to handle queued email if enabled
-if [ "$CELERY" = true ]; then
+if [ "$CELERY_EMBEDDED" = true ]; then
   CELERY_NODE_SERVICE_NAME="${SERVICE_NAME:-}"
   if [ -z "$CELERY_NODE_SERVICE_NAME" ]; then
     CELERY_NODE_SERVICE_NAME="embedded-$$"
@@ -535,17 +512,6 @@ if [ "$LCD_EMBEDDED" = true ]; then
   python -m apps.screens.lcd_screen.runner &
   LCD_PROCESS_PID=$!
   record_pid_file "$LCD_PROCESS_PID" "$LCD_PID_FILE"
-fi
-
-# Start the Django development server
-if ! run_runserver_preflight; then
-  echo "Runserver preflight checks failed; aborting startup." >&2
-  exit 1
-fi
-echo "Running startup maintenance hooks..."
-if ! python manage.py startup_maintenance; then
-  echo "Startup maintenance failed; aborting startup." >&2
-  exit 1
 fi
 
 if [ "$AWAIT_START" = true ]; then

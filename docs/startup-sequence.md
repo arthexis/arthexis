@@ -1,9 +1,16 @@
 # Suite startup sequence
 
-The following steps describe what happens during a normal suite startup,
-covering both the manual entry point and the main service launcher. Environment
-refreshes are not triggered automatically during start; they are reserved for
-manual runs of `env-refresh.sh` or calls made as part of an upgrade.
+The startup flow is intentionally layered so startup intelligence lives in the
+suite, while shell remains a thin transport/process launcher.
+
+- **Shell transport (`scripts/service-start.sh`)** handles environment activation,
+  logging plumbing, static asset sync, and process spawning.
+- **Suite intelligence (`manage.py startup_orchestrate`)** handles startup
+  decisions, preflight checks, and startup metadata artifacts.
+
+Environment refreshes are not triggered automatically during start; they are
+reserved for manual runs of `env-refresh.sh` or calls made as part of an
+upgrade.
 
 ## Manual entry point (`start.sh`)
 - `start.sh` writes a note to `logs/start.log` to record the manual request.
@@ -25,35 +32,27 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
    `--force-collectstatic` is provided), compute a new hash with
    `scripts/staticfiles_md5.py`, refresh both lock files, and run
    `manage.py collectstatic --noinput` if the hash differs.
-4. During runserver preflight, generate a fast metadata snapshot for
-   `apps/**/migrations/*.py` (relative path + mtime + size) and compare it to
-   `.locks/migrations.meta`. If it matches exactly and `.locks/migrations.sha`
-   is present, reuse the stored fingerprint and skip recomputing the full
-   content hash. When metadata differs, metadata/fingerprint cache files are
-   missing or invalid, or `RUNSERVER_PREFLIGHT_FORCE_REFRESH=true` is set, the
-   launcher recomputes the full fingerprint and refreshes both lock files.
-5. Even when fingerprint reuse is possible, preflight still runs
-   `manage.py migrate --check` before declaring startup migration checks
-   complete.
-6. Detect the backend port, parse CLI flags (reload mode, port overrides, and
-   Celery management preferences), and evaluate whether systemd-managed Celery
-   or LCD units are present so embedded workers are enabled only when needed.
-   Record the startup timestamp and chosen port in
-   `.locks/startup_started_at.lck` for status reporting.
-7. When the LCD feature flag is enabled, queue a startup Net Message via
-   `apps.screens.startup_notifications.queue_startup_message` to record the hostname
-   and port for the boot cycle.
-8. Run `manage.py startup_maintenance` so OCPP cache resets and other startup-owned
-   cleanup hooks execute explicitly during boot without relying on import-time
-   side effects.
-9. Start embedded Celery worker and beat processes unless Celery management is
-   disabled or delegated to systemd, capturing their PIDs for cleanup.
-10. If the LCD is configured for embedded mode, start the `apps.screens.lcd_screen`
-   process alongside the web server.
-11. Launch the Django server on `127.0.0.1:<port>` by default, using `--noreload`
-   unless `--reload` was requested. Service scripts that need LAN exposure pass an
-   explicit bind address instead of relying on the CLI default.
+4. Invoke `manage.py startup_orchestrate` and consume its JSON contract to keep
+   shell branching deterministic (`launch.celery_embedded`,
+   `launch.lcd_embedded`, `launch.lcd_target_mode`, and structured check
+   statuses).
+5. Launch embedded Celery worker/beat only when orchestration says embedded
+   mode is required.
+6. Launch embedded LCD only when orchestration says embedded mode is required;
+   otherwise start the systemd LCD unit when the orchestrator resolves systemd
+   ownership.
+7. Launch the Django server on `0.0.0.0:<port>`, using `--noreload` unless
+   `--reload` was requested.
 
+## Startup orchestration (`manage.py startup_orchestrate`)
+1. Evaluate lock/feature state for service mode, Celery units, and LCD feature
+   enablement.
+2. Record startup metadata in `.locks/startup_started_at.lck`.
+3. Run preflight checks (`run_runserver_preflight`) and startup maintenance
+   (`manage.py startup_maintenance`), emitting structured statuses for each.
+4. Queue LCD startup messaging when LCD is enabled.
+5. Write orchestration status metadata to
+   `.locks/startup_orchestrate_status.lck` and emit a JSON launch contract.
 
 ## Operational cleanup ownership
 
