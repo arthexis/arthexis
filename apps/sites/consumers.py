@@ -273,8 +273,10 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             user_is_staff or user_is_superuser
         )
 
+        current_site = self._current_site()
+        site_profile = getattr(current_site, "profile", None)
         site_public_chat_enabled = bool(
-            getattr(self._current_site(), "enable_public_chat", False)
+            getattr(site_profile, "enable_public_chat", False)
         )
         user_chat_opt_in = False
         if user_is_authenticated and user_has_pk:

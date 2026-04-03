@@ -21,7 +21,8 @@ def _build_site_url(site: Site) -> str:
     if "://" in domain:
         return domain
 
-    scheme = "https" if getattr(site, "require_https", False) else "http"
+    site_profile = getattr(site, "profile", None)
+    scheme = "https" if getattr(site_profile, "require_https", False) else "http"
     return f"{scheme}://{domain}"
 
 

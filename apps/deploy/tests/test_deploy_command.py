@@ -8,6 +8,7 @@ from apps.aws.models import AWSCredentials
 from apps.deploy.management.commands import lightsail as lightsail_command
 from apps.deploy.models import DeployInstance, DeployRun, DeployServer
 from apps.nodes.models import Node
+from apps.sites.models import SiteProfile
 
 pytestmark = pytest.mark.django_db
 
@@ -80,9 +81,8 @@ def test_lightsail_registers_node_as_downstream_when_site_has_top_domain(monkeyp
     )
     site = Site.objects.create(
         domain="ops.example.com",
-        managed=True,
-        require_https=True,
     )
+    SiteProfile.objects.create(site=site, managed=True, require_https=True)
 
     monkeypatch.setattr(
         "apps.deploy.management.commands.lightsail.fetch_lightsail_instance",
@@ -203,7 +203,9 @@ def test_lightsail_registers_node_with_long_instance_name(monkeypatch):
         "service_name"
     ).max_length
     max_instance_name_chars = deploy_service_max_length - len("arthexis-")
-    overflow_chars = min(max_instance_name_chars - len("ops-"), endpoint_max_length + 10)
+    overflow_chars = min(
+        max_instance_name_chars - len("ops-"), endpoint_max_length + 10
+    )
     assert overflow_chars > endpoint_max_length
     instance_name = f"ops-{'a' * overflow_chars}"
 
@@ -360,7 +362,9 @@ def test_lightsail_registers_node_with_host_as_network_hostname(monkeypatch):
     assert node.network_hostname == "18.1.2.3"
 
 
-def test_lightsail_clears_base_site_when_relation_changes_to_non_downstream(monkeypatch):
+def test_lightsail_clears_base_site_when_relation_changes_to_non_downstream(
+    monkeypatch,
+):
     credentials = AWSCredentials.objects.create(
         name="primary",
         access_key_id="AKIA_TEST",
@@ -368,9 +372,8 @@ def test_lightsail_clears_base_site_when_relation_changes_to_non_downstream(monk
     )
     site = Site.objects.create(
         domain="ops.example.com",
-        managed=True,
-        require_https=True,
     )
+    SiteProfile.objects.create(site=site, managed=True, require_https=True)
     Node.objects.create(
         hostname="ops-node-1",
         public_endpoint="deploy-ops-node-1",

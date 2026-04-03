@@ -1,11 +1,11 @@
-from django.contrib import admin
-from django.core.exceptions import FieldError
-from django.utils.translation import gettext_lazy as _
 from django.apps import apps as django_apps
+from django.contrib import admin
+
+from django.utils.translation import gettext_lazy as _
 
 
 class _BooleanAttributeListFilter(admin.SimpleListFilter):
-    """Filter helper for boolean attributes on :class:`~django.contrib.sites.models.Site`."""
+    """Filter helper for site profile booleans linked from ``Site``."""
 
     field_name: str
 
@@ -17,22 +17,19 @@ class _BooleanAttributeListFilter(admin.SimpleListFilter):
         if value not in {"0", "1"}:
             return queryset
         expected = value == "1"
-        try:
-            return queryset.filter(**{self.field_name: expected})
-        except FieldError:  # pragma: no cover - defensive when fields missing
-            return queryset
+        return queryset.filter(**{self.field_name: expected})
 
 
 class ManagedSiteListFilter(_BooleanAttributeListFilter):
     title = _("Managed by local NGINX")
     parameter_name = "managed"
-    field_name = "managed"
+    field_name = "profile__managed"
 
 
 class RequireHttpsListFilter(_BooleanAttributeListFilter):
     title = _("Require HTTPS")
     parameter_name = "require_https"
-    field_name = "require_https"
+    field_name = "profile__require_https"
 
 
 class ApplicationInstalledListFilter(admin.SimpleListFilter):

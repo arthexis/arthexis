@@ -438,7 +438,8 @@ def _build_chat_context(site, user, *, pages_chat_enabled: bool):
     staff_chat_bridge_enabled = is_suite_feature_enabled(
         "staff-chat-bridge", default=False
     )
-    site_public_chat_enabled = bool(getattr(site, "enable_public_chat", False))
+    site_profile = getattr(site, "profile", None) if site else None
+    site_public_chat_enabled = bool(getattr(site_profile, "enable_public_chat", False))
     user_chat_opt_in = False
     if user_is_authenticated and user_has_pk:
         try:
@@ -504,7 +505,7 @@ def _select_site_template(site, user):
             site_template = _get_user_group_site_template(user)
 
     if site_template is None and site:
-        site_template = getattr(site, "template", None)
+        site_template = getattr(getattr(site, "profile", None), "template", None)
     if site_template is not None:
         return site_template
     try:

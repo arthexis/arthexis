@@ -23,7 +23,11 @@ def get_site(request) -> Optional[Site]:
     host, _ = split_domain_port(host)
     if host:
         try:
-            return Site.objects.filter(domain__iexact=host).first()
+            return (
+                Site.objects.select_related("profile")
+                .filter(domain__iexact=host)
+                .first()
+            )
         except DatabaseError:
             return None
 

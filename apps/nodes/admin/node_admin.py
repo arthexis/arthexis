@@ -1097,7 +1097,12 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             https_warnings.append(
                 _("This admin session is not using HTTPS. Visitor registration requires HTTPS on both nodes.")
             )
-        if node.base_site_id and not getattr(node.base_site, "require_https", False):
+        base_site_profile = (
+            getattr(node.base_site, "profile", None) if node.base_site_id else None
+        )
+        if node.base_site_id and not bool(
+            getattr(base_site_profile, "require_https", False)
+        ):
             https_warnings.append(
                 _("This host node is not configured to require HTTPS. Update Sites settings before continuing.")
             )
