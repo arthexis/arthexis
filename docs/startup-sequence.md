@@ -41,9 +41,8 @@ upgrade.
 6. Launch embedded LCD only when orchestration says embedded mode is required;
    otherwise start the systemd LCD unit when the orchestrator resolves systemd
    ownership.
-7. Launch the Django server on `127.0.0.1:<port>` by default, using `--noreload`
-   unless `--reload` was requested. Service scripts that need LAN exposure pass an
-   explicit bind address instead of relying on the CLI default.
+7. Launch the Django server on `0.0.0.0:<port>`, using `--noreload` unless
+   `--reload` was requested.
 
 ## Startup orchestration (`manage.py startup_orchestrate`)
 1. Evaluate lock/feature state for service mode, Celery units, and LCD feature
@@ -52,8 +51,8 @@ upgrade.
 3. Run preflight checks (`run_runserver_preflight`) and startup maintenance
    (`manage.py startup_maintenance`), emitting structured statuses for each.
 4. Queue LCD startup messaging when LCD is enabled.
-5. Write duration/status artifacts (`.locks/startup_duration.lck` and
-   `.locks/startup_orchestrate_status.lck`) and emit a JSON launch contract.
+5. Write orchestration status metadata to
+   `.locks/startup_orchestrate_status.lck` and emit a JSON launch contract.
 
 ## Operational cleanup ownership
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from io import StringIO
 import json
 from pathlib import Path
 import subprocess
@@ -60,7 +61,6 @@ class Command(BaseCommand):
         lock_dir.mkdir(parents=True, exist_ok=True)
 
         startup_started_lock = lock_dir / "startup_started_at.lck"
-        startup_duration_lock = lock_dir / "startup_duration.lck"
         startup_orchestrate_lock = lock_dir / "startup_orchestrate_status.lck"
 
         service_name = (options.get("service_name") or "").strip()
@@ -86,7 +86,6 @@ class Command(BaseCommand):
             "started_at": started_at_iso,
             "paths": {
                 "startup_started": str(startup_started_lock),
-                "startup_duration": str(startup_duration_lock),
                 "startup_orchestrate": str(startup_orchestrate_lock),
             },
             "service": {
@@ -126,7 +125,7 @@ class Command(BaseCommand):
 
         payload["launch"] = {
             "celery_embedded": celery_embedded,
-            "lcd_embedded": lcd_target_mode == ARTHEXIS_SERVICE_MODE_EMBEDDED,
+            "lcd_embedded": lcd_enabled and lcd_target_mode == ARTHEXIS_SERVICE_MODE_EMBEDDED,
             "lcd_target_mode": lcd_target_mode,
         }
 
@@ -142,15 +141,6 @@ class Command(BaseCommand):
             phase="orchestration",
             port=str(options["port"]),
         )
-        self._write_duration_lock(
-            lock_path=startup_duration_lock,
-            started_at_epoch=started_at_epoch,
-            duration_seconds=orchestration_duration,
-            status=0 if payload["status"] == "ok" else 1,
-            phase="orchestration",
-            port=str(options["port"]),
-        )
-
         self.stdout.write(json.dumps(payload, sort_keys=True))
 
         if payload["status"] != "ok":
@@ -177,13 +167,23 @@ class Command(BaseCommand):
         return False, {"name": "runserver_preflight", "status": "error", "detail": detail}
 
     def _run_startup_maintenance(self) -> tuple[bool, dict[str, str]]:
+        stdout = StringIO()
+        stderr = StringIO()
         try:
-            call_command("startup_maintenance")
-        except Exception as exc:
+            call_command("startup_maintenance", stdout=stdout, stderr=stderr)
+        except CommandError as exc:
+            detail = stderr.getvalue().strip() or stdout.getvalue().strip() or str(exc)
             return False, {
                 "name": "startup_maintenance",
                 "status": "error",
-                "detail": str(exc),
+                "detail": detail,
+            }
+        except Exception as exc:
+            detail = stderr.getvalue().strip() or stdout.getvalue().strip() or str(exc)
+            return False, {
+                "name": "startup_maintenance",
+                "status": "error",
+                "detail": detail,
             }
         return True, {"name": "startup_maintenance", "status": "ok", "detail": "ok"}
 
@@ -243,12 +243,8 @@ class Command(BaseCommand):
 
     @staticmethod
     def _write_startup_started_lock(lock_path: Path, started_at_epoch: int, port: str) -> None:
-        payload = {
-            "started_at": datetime.fromtimestamp(started_at_epoch, tz=timezone.utc).isoformat(),
-            "started_at_epoch": started_at_epoch,
-            "port": port,
-        }
-        lock_path.write_text(json.dumps(payload), encoding="utf-8")
+        _ = port
+        lock_path.write_text(f"{started_at_epoch}\n", encoding="utf-8")
 
     @staticmethod
     def _write_duration_lock(
@@ -260,7 +256,7 @@ class Command(BaseCommand):
         phase: str,
         port: str,
     ) -> None:
-        finished_at_epoch = started_at_epoch + duration_seconds
+        finished_at_epoch = int(time.time())
         payload = {
             "started_at": datetime.fromtimestamp(started_at_epoch, tz=timezone.utc).isoformat(),
             "finished_at": datetime.fromtimestamp(finished_at_epoch, tz=timezone.utc).isoformat(),

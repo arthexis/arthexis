@@ -59,11 +59,10 @@ def test_startup_orchestrate_outputs_json_contract_and_writes_locks(tmp_path, mo
     assert payload["launch"]["lcd_embedded"] is True
     assert payload["startup_message_status"] == "queued:8899"
 
-    started_payload = json.loads((lock_dir / "startup_started_at.lck").read_text(encoding="utf-8"))
-    assert started_payload["port"] == "8899"
-    assert "started_at" in started_payload
+    started_at = (lock_dir / "startup_started_at.lck").read_text(encoding="utf-8").strip()
+    assert started_at.isdigit()
 
-    duration_payload = json.loads((lock_dir / "startup_duration.lck").read_text(encoding="utf-8"))
+    duration_payload = json.loads((lock_dir / "startup_orchestrate_status.lck").read_text(encoding="utf-8"))
     assert duration_payload["phase"] == "orchestration"
     assert duration_payload["status"] == 0
 
@@ -118,3 +117,49 @@ def test_startup_orchestrate_uses_systemd_decisions_when_requested(tmp_path, mon
     assert payload["launch"]["celery_embedded"] is False
     assert payload["launch"]["lcd_embedded"] is False
     assert payload["launch"]["lcd_target_mode"] == "systemd"
+
+
+def test_startup_orchestrate_skips_lcd_when_feature_disabled(tmp_path, monkeypatch):
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate.Command._run_preflight",
+        lambda self, lock_dir, base_dir: (
+            True,
+            {"name": "runserver_preflight", "status": "ok", "detail": "ok"},
+        ),
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate.Command._run_startup_maintenance",
+        lambda self: (
+            True,
+            {"name": "startup_maintenance", "status": "ok", "detail": "ok"},
+        ),
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate.send_startup_net_message",
+        lambda port=None: f"queued:{port}",
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate.lcd_feature_enabled",
+        lambda value: False,
+    )
+    monkeypatch.setattr(
+        "apps.core.management.commands.startup_orchestrate._read_service_mode",
+        lambda value: "embedded",
+    )
+
+    stdout = StringIO()
+    call_command(
+        "startup_orchestrate",
+        "--port",
+        "9010",
+        "--lock-dir",
+        str(lock_dir),
+        stdout=stdout,
+    )
+
+    payload = json.loads(stdout.getvalue())
+    assert payload["startup_message_status"] == "skipped:lcd-disabled"
+    assert payload["launch"]["lcd_embedded"] is False
