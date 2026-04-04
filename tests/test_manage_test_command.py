@@ -10,11 +10,23 @@ from apps.tests.management.commands.test import Command
 
 def test_run_pytest_requires_pytest_module(monkeypatch: pytest.MonkeyPatch) -> None:
     command = Command()
-
+    monkeypatch.setattr(command, "_base_dir", lambda: "/tmp/repo")
     monkeypatch.setattr(
-        "apps.tests.management.commands.test.importlib.util.find_spec",
-        lambda name: None if name == "pytest" else object(),
+        "apps.tests.management.commands.test.resolve_project_python",
+        lambda _base_dir: ".venv/bin/python",
     )
+
+    def fake_run(command_args, *, cwd, env):
+        assert command_args[0] == ".venv/bin/python"
+        assert command_args[1:3] == [
+            "-c",
+            "import importlib.util,sys;sys.exit(0 if importlib.util.find_spec('pytest') else 1)",
+        ]
+        assert cwd == "/tmp/repo"
+        assert env
+        return SimpleNamespace(returncode=1)
+
+    monkeypatch.setattr("apps.tests.management.commands.test.subprocess.run", fake_run)
 
     with pytest.raises(CommandError, match="pytest is not installed"):
         command._run_pytest([])
@@ -22,27 +34,25 @@ def test_run_pytest_requires_pytest_module(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_run_pytest_forwards_remainder_args(monkeypatch: pytest.MonkeyPatch) -> None:
     command = Command()
-
-    monkeypatch.setattr(
-        "apps.tests.management.commands.test.importlib.util.find_spec",
-        lambda _name: object(),
-    )
+    monkeypatch.setattr(command, "_base_dir", lambda: "/tmp/repo")
     monkeypatch.setattr(
         "apps.tests.management.commands.test.resolve_project_python",
         lambda _base_dir: ".venv/bin/python",
     )
 
-    captured: dict[str, object] = {}
+    captured: list[list[str]] = []
 
     def fake_run(command_args, *, cwd, env):
-        captured["command_args"] = command_args
-        captured["cwd"] = cwd
-        captured["env"] = env
+        captured.append(command_args)
+        assert cwd == "/tmp/repo"
+        assert env
+        if command_args[1] == "-c":
+            return SimpleNamespace(returncode=0)
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr("apps.tests.management.commands.test.subprocess.run", fake_run)
 
     command._run_pytest(["--", "-k", "netmesh"])
 
-    command_args = captured["command_args"]
-    assert command_args[-2:] == ["-k", "netmesh"]
+    assert captured[0][1] == "-c"
+    assert captured[1][-2:] == ["-k", "netmesh"]

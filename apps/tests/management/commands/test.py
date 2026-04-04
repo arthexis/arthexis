@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import os
 import subprocess
 from pathlib import Path
@@ -62,7 +61,18 @@ class Command(BaseCommand):
     def _run_pytest(self, pytest_args: list[str]) -> None:
         """Execute pytest as a subprocess."""
 
-        if importlib.util.find_spec("pytest") is None:
+        base_dir = self._base_dir()
+        python = resolve_project_python(base_dir)
+        probe = subprocess.run(
+            [
+                python,
+                "-c",
+                "import importlib.util,sys;sys.exit(0 if importlib.util.find_spec('pytest') else 1)",
+            ],
+            cwd=base_dir,
+            env=os.environ.copy(),
+        )
+        if probe.returncode != 0:
             raise CommandError(
                 "pytest is not installed in the active environment. "
                 "Install test dependencies (for example: "
@@ -72,8 +82,8 @@ class Command(BaseCommand):
         args = list(pytest_args)
         if args and args[0] == "--":
             args = args[1:]
-        command = [resolve_project_python(self._base_dir()), "-m", "pytest", *args]
-        result = subprocess.run(command, cwd=self._base_dir(), env=os.environ.copy())
+        command = [python, "-m", "pytest", *args]
+        result = subprocess.run(command, cwd=base_dir, env=os.environ.copy())
         if result.returncode != 0:
             raise CommandError(f"pytest exited with status {result.returncode}")
 
