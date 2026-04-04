@@ -507,6 +507,11 @@ if [ "$CELERY_EMBEDDED" = true ]; then
   PYTHONPATH="$BASE_DIR${PYTHONPATH:+:$PYTHONPATH}" python -m celery -A config beat -l info &
   CELERY_BEAT_PID=$!
   record_pid_file "$CELERY_BEAT_PID" "$CELERY_BEAT_PID_FILE"
+elif [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && \
+     [ -n "$SERVICE_NAME" ] && [ -f "$LOCK_DIR/celery.lck" ]; then
+  # Keep dedicated Celery units aligned with the core service in systemd mode.
+  arthexis_start_systemd_unit_if_present "celery-${SERVICE_NAME}.service"
+  arthexis_start_systemd_unit_if_present "celery-beat-${SERVICE_NAME}.service"
 fi
 
 if [ "$LCD_EMBEDDED" = true ]; then
