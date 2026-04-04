@@ -9,14 +9,14 @@ from import_export.forms import (
 )
 
 from apps.cards.models import RFID
+from apps.core.widgets import OdooProductWidget
 from apps.emails.models import EmailInbox, EmailOutbox
 from apps.energy.models import CustomerAccount
 from apps.odoo.models import OdooEmployee, OdooProduct
 from apps.payments.models.openpay import OpenPayProcessor
 from apps.payments.models.paypal import PayPalProcessor
 from apps.payments.models.stripe import StripeProcessor
-from apps.users.models import User
-from apps.core.widgets import OdooProductWidget
+from apps.users.models import User, UserDiagnosticsProfile
 
 
 def _raw_instance_value(instance, field_name):
@@ -130,6 +130,14 @@ class UserRFIDWriteForm(forms.Form):
         label=_("Confirm write"),
         help_text=_("Write the configured login value to the RFID card."),
     )
+
+
+class UserDiagnosticsProfileInlineForm(forms.ModelForm):
+    """Inline admin form for user diagnostics profile settings."""
+
+    class Meta:
+        model = UserDiagnosticsProfile
+        fields = "__all__"
 
 
 class OdooEmployeeAdminForm(forms.ModelForm):

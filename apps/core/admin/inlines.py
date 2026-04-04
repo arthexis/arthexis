@@ -3,7 +3,7 @@ from django.contrib import admin
 from apps.emails.models import EmailCollector, EmailInbox, EmailOutbox
 from apps.energy.models import CustomerAccount
 from apps.odoo.models import OdooEmployee
-from apps.users.models import UserPhoneNumber
+from apps.users.models import UserDiagnosticsProfile, UserPhoneNumber
 
 from .forms import (
     CustomerAccountRFIDForm,
@@ -11,6 +11,7 @@ from .forms import (
     EmailOutboxInlineForm,
     OdooEmployeeInlineForm,
     ProfileInlineFormSet,
+    UserDiagnosticsProfileInlineForm,
 )
 
 
@@ -70,6 +71,14 @@ PROFILE_INLINE_CONFIG = {
             "from_email",
         ),
     },
+    UserDiagnosticsProfile: {
+        "form": UserDiagnosticsProfileInlineForm,
+        "fields": (
+            "is_enabled",
+            "collect_diagnostics",
+            "allow_manual_feedback",
+        ),
+    },
 }
 
 
@@ -113,6 +122,7 @@ PROFILE_MODELS = (
     OdooEmployee,
     EmailInbox,
     EmailOutbox,
+    UserDiagnosticsProfile,
 )
 USER_PROFILE_INLINES = [
     _build_profile_inline(model, "user") for model in PROFILE_MODELS
