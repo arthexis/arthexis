@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -46,6 +47,47 @@ def test_release_artifact_collection_finds_wheel_and_sdist(tmp_path: Path, monke
 
     assert {path.name for path in artifacts} == {wheel.name, sdist.name}
     assert len(artifacts) == 2
+
+
+def test_prepare_step_progress_invalid_restart_counter_defaults_to_zero(tmp_path: Path):
+    restart_path = tmp_path / "release.restarts"
+    restart_path.write_text("bad-counter", encoding="utf-8")
+
+    restart_count, step_param = pipeline._prepare_step_progress(
+        RequestFactory().get("/release/publish"),
+        {"step": 4},
+        restart_path,
+        resume_requested=True,
+    )
+
+    assert restart_count == 0
+    assert step_param == "4"
+
+
+def test_current_git_revision_returns_empty_on_subprocess_failure(monkeypatch):
+    def boom(_args):
+        raise subprocess.CalledProcessError(returncode=2, cmd=["git", "rev-parse", "HEAD"])
+
+    monkeypatch.setattr(pipeline, "_git_stdout", boom)
+
+    assert pipeline._current_git_revision() == ""
+
+
+def test_broadcast_release_message_logs_failures(monkeypatch, caplog):
+    class DummyRelease:
+        version = "1.2.3"
+
+    monkeypatch.setattr(pipeline.Node, "get_local", lambda: None)
+    monkeypatch.setattr(
+        pipeline.NetMessage,
+        "broadcast",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("broadcast offline")),
+    )
+
+    with caplog.at_level("ERROR"):
+        pipeline._broadcast_release_message(DummyRelease())
+
+    assert "Failed to broadcast release Net Message" in caplog.text
 
 
 def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path: Path):
