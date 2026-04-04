@@ -64,9 +64,17 @@ class ViewHistoryMiddleware:
             status_code = getattr(exc, "status_code", 500) or 500
             error_message = str(exc)
             exception_name = exc.__class__.__name__
-            self._record_visit(
-                request, status_code, error_message, exception_name=exception_name
-            )
+            try:
+                self._record_visit(
+                    request, status_code, error_message, exception_name=exception_name
+                )
+            except Exception:  # pragma: no cover - best effort logging
+                logger.debug(
+                    "Failed to record ViewHistory while handling %s for %s",
+                    exception_name,
+                    request.get_full_path(),
+                    exc_info=True,
+                )
             raise
         else:
             status_code = getattr(response, "status_code", 0) or 0
@@ -147,7 +155,7 @@ class ViewHistoryMiddleware:
                 exception_name=exception_name,
                 view_name=view_name,
             )
-        except DatabaseError as exc:  # pragma: no cover - best effort logging
+        except DatabaseError as exc:
             logger.debug(
                 "Failed to record ViewHistory (%s) for %s",
                 exc.__class__.__name__,
@@ -207,7 +215,7 @@ class ViewHistoryMiddleware:
                 user_agent=user_agent,
                 ip_address=ip_address,
             )
-        except DatabaseError as exc:  # pragma: no cover - best effort logging
+        except DatabaseError as exc:
             logger.debug(
                 "Failed to record LandingLead (%s) for %s",
                 exc.__class__.__name__,
