@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import datetime, timedelta
-from pathlib import Path
 import logging
+from pathlib import Path
 import subprocess
 
 from django.conf import settings
+from django.core.exceptions import AppRegistryNotReady, FieldError, ImproperlyConfigured
 from django.db import DatabaseError
+from django.db.utils import OperationalError, ProgrammingError
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _, ngettext
@@ -651,7 +653,12 @@ def _get_auto_upgrade_periodic_task():
 
     try:  # pragma: no cover - optional dependency failures
         from django_celery_beat.models import PeriodicTask
-    except Exception:
+    except (ImportError, AppRegistryNotReady, ImproperlyConfigured) as exc:
+        logger.exception(
+            "Failed loading auto-upgrade periodic task dependency "
+            "[stage=import, exception=%s]",
+            exc.__class__.__name__,
+        )
         return None, False, str(_("django-celery-beat is not installed or configured."))
 
     def _query():
@@ -690,21 +697,44 @@ def _get_auto_upgrade_periodic_task():
                 return None, True, ""
             try:
                 ensure_auto_upgrade_periodic_task()
-            except Exception:  # pragma: no cover - repair attempt failed
-                logger.exception("Unable to recreate auto-upgrade periodic task")
+            except (
+                AppRegistryNotReady,
+                DatabaseError,
+                ImproperlyConfigured,
+                ImportError,
+                OperationalError,
+                ProgrammingError,
+            ) as exc:  # pragma: no cover - repair attempt failed
+                logger.exception(
+                    "Unable to recreate auto-upgrade periodic task "
+                    "[stage=repair, exception=%s]",
+                    exc.__class__.__name__,
+                )
                 return None, False, str(_("Auto-upgrade schedule could not be loaded."))
-        except DatabaseError:
-            logger.exception("Error loading auto-upgrade periodic task")
+        except (DatabaseError, FieldError) as exc:
+            logger.exception(
+                "Error loading auto-upgrade periodic task "
+                "[stage=query, exception=%s]",
+                exc.__class__.__name__,
+            )
             if attempt:
                 return None, False, str(_("Auto-upgrade schedule could not be loaded."))
             try:
                 ensure_auto_upgrade_periodic_task()
-            except Exception:  # pragma: no cover - repair attempt failed
-                logger.exception("Unable to recreate auto-upgrade periodic task")
+            except (
+                AppRegistryNotReady,
+                DatabaseError,
+                ImproperlyConfigured,
+                ImportError,
+                OperationalError,
+                ProgrammingError,
+            ) as exc:  # pragma: no cover - repair attempt failed
+                logger.exception(
+                    "Unable to recreate auto-upgrade periodic task "
+                    "[stage=repair, exception=%s]",
+                    exc.__class__.__name__,
+                )
                 return None, False, str(_("Auto-upgrade schedule could not be loaded."))
-        except Exception:
-            logger.exception("Unexpected failure while loading auto-upgrade task")
-            return None, False, str(_("Auto-upgrade schedule could not be loaded."))
         else:
             return task, True, ""
 
