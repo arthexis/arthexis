@@ -55,6 +55,7 @@ def test_ensure_auto_upgrade_periodic_task_reuses_duplicate_interval_schedules(
     assert PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).count() == 1
 
 
+@pytest.mark.integration
 def test_ensure_auto_upgrade_periodic_task_disables_task_when_feature_is_off(
     monkeypatch,
 ):
