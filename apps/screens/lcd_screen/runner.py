@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 ROTATION_SECONDS = 10
 EVENT_LINE_SCROLL_SECONDS = 10
+EVENT_STATIC_REFRESH_SECONDS = 2.0
 BASE_RELIEF_BLOCKED_CYCLES = 3
 BASE_RELIEF_LONG_EXPIRY = timedelta(seconds=ROTATION_SECONDS * BASE_RELIEF_BLOCKED_CYCLES)
 
@@ -77,6 +78,7 @@ class EventLoopState:
     lock_file: Path | None = None
     line_index: int = 0
     line_deadline: float = 0.0
+    refresh_deadline: float = 0.0
 
     def reset(self) -> None:
         """Clear all active event state."""
@@ -87,6 +89,7 @@ class EventLoopState:
         self.lock_file = None
         self.line_index = 0
         self.line_deadline = 0.0
+        self.refresh_deadline = 0.0
 
 
 @dataclass
@@ -463,6 +466,7 @@ class LCDRunner:
         self.event.line_deadline = (
             now + EVENT_LINE_SCROLL_SECONDS if len(self.event.payload.lines) > 2 else 0.0
         )
+        self.event.refresh_deadline = 0.0
 
     def render_event_frame(self) -> bool:
         """Render the current event frame and record LCD health state."""
@@ -470,8 +474,21 @@ class LCDRunner:
         self.ensure_lcd()
         self.scroll_scheduler.sleep_until_ready()
         frame_timestamp = datetime.now(datetime_timezone.utc)
+        display_state = self.event.display_state
+        refresh_now = time.monotonic()
+        if (
+            display_state is not None
+            and display_state.steps1 == 1
+            and display_state.steps2 == 1
+            and (
+                self.event.refresh_deadline == 0.0
+                or refresh_now >= self.event.refresh_deadline
+            )
+        ):
+            display_state = display_state._replace(last_segment1=None, last_segment2=None)
+            self.event.refresh_deadline = refresh_now + EVENT_STATIC_REFRESH_SECONDS
         self.event.display_state, write_success, shutdown_triggered = _advance_display(
-            self.event.display_state,
+            display_state,
             self.frame_writer,
             shutdown_requested=_shutdown_requested,
             label="event",
@@ -585,6 +602,18 @@ class LCDRunner:
                 and prefetched_cycle.order == self.rotation.order
                 and prefetched_cycle.index == next_index
             ):
+                # Prefetched states are built without advancing the shared
+                # channel cycle. Consume the matching slot here so numbered
+                # LCD lock files rotate instead of sticking to the same entry.
+                with self.cycle_state_lock:
+                    channel_info, channel_text = self.load_channel_states(now_dt)
+                    self.payload_for_state(
+                        self.rotation.order,
+                        next_index,
+                        channel_info,
+                        channel_text,
+                        now_dt,
+                    )
                 self.rotation.next_display_state = prefetched_cycle.display_state
             else:
                 with self.cycle_state_lock:

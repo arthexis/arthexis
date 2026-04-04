@@ -23,6 +23,19 @@ class DummyFuture:
         return None
 
 
+class StaticFuture:
+    """Return a fixed prefetched cycle without spawning threads."""
+
+    def __init__(self, value) -> None:
+        self.value = value
+
+    def done(self) -> bool:
+        return True
+
+    def result(self):
+        return self.value
+
+
 class DummyExecutor:
     """Capture shutdown requests without spawning threads."""
 
@@ -259,3 +272,89 @@ def test_render_event_frame_raises_stop_iteration_on_shutdown(monkeypatch):
 
     assert shutdown_calls == [coordinator.lcd]
     assert coordinator.scroll_scheduler.actions == [("sleep", None)]
+
+
+def test_render_event_frame_refreshes_static_event_periodically(monkeypatch):
+    """Static event frames should be redrawn while the event remains active."""
+
+    coordinator = runner.LCDRunner()
+    coordinator.scroll_scheduler = FakeScheduler()
+    coordinator.frame_writer = FakeWriter(object())
+    coordinator.lcd = object()
+    coordinator.event.display_state = runner._prepare_display_state(
+        "Codex ready",
+        "Please review",
+        0,
+    )._replace(
+        last_segment1="Codex ready     ",
+        last_segment2="Please review   ",
+    )
+    coordinator.event.refresh_deadline = 5.0
+
+    advanced_states: list[object] = []
+    monkeypatch.setattr(runner.time, "monotonic", lambda: 5.0)
+
+    def fake_advance_display(state, frame_writer, **kwargs):
+        advanced_states.append(state)
+        return state, True, False
+
+    monkeypatch.setattr(runner, "_advance_display", fake_advance_display)
+
+    handled = coordinator.render_event_frame()
+
+    assert handled is True
+    assert advanced_states
+    assert advanced_states[0].last_segment1 is None
+    assert advanced_states[0].last_segment2 is None
+    assert coordinator.event.refresh_deadline == 7.0
+    assert coordinator.scroll_scheduler.actions == [("sleep", None), ("advance", 0.5)]
+
+
+def test_finalize_rotation_step_consumes_prefetched_channel_slot(monkeypatch):
+    """Using a prefetched slot should still advance the shared channel cycle."""
+
+    coordinator = runner.LCDRunner()
+    coordinator.cycle_prefetch_executor = DummyExecutor()
+    coordinator.rotation.order = ("high", "low", "stats", "clock")
+    coordinator.rotation.index = 2
+    coordinator.rotation.display_state = SimpleNamespace(name="stats-display")
+    coordinator.rotation.next_display_state = SimpleNamespace(name="clock-display")
+    coordinator.rotation.deadline = 0.0
+
+    high_cycle = runner.ChannelCycle(
+        payloads=[
+            runner.locks.LockPayload("Codex ready", "2 files changed", 0),
+            runner.locks.LockPayload("Upgrade gway-001", "068f8e - 614c0f", 0),
+        ],
+        signature=((0, 1.0), (1, 2.0)),
+        index=0,
+    )
+    empty_cycle = runner.ChannelCycle(payloads=[], signature=(), index=0)
+    channel_info = {
+        "high": high_cycle,
+        "low": empty_cycle,
+        "stats": empty_cycle,
+        "clock": empty_cycle,
+    }
+    channel_text = {label: bool(cycle.payloads) for label, cycle in channel_info.items()}
+    monkeypatch.setattr(
+        coordinator,
+        "load_channel_states",
+        lambda now_dt: (channel_info, channel_text),
+    )
+    monkeypatch.setattr(coordinator, "schedule_cycle_prefetch", lambda *args, **kwargs: None)
+
+    coordinator.cycle_prefetch_future = StaticFuture(
+        runner.PrefetchedCycle(
+            order=coordinator.rotation.order,
+            index=0,
+            display_state=SimpleNamespace(name="prefetched-high"),
+        )
+    )
+
+    coordinator.finalize_rotation_step(datetime(2026, 3, 20, tzinfo=timezone.utc))
+
+    assert coordinator.rotation.index == 3
+    assert coordinator.rotation.display_state.name == "clock-display"
+    assert coordinator.rotation.next_display_state.name == "prefetched-high"
+    assert high_cycle.index == 1
