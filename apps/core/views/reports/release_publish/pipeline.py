@@ -1959,13 +1959,17 @@ def release_progress_impl(request, pk: int, action: str):
     release, error_response = _get_release_or_response(request, pk, action)
     if error_response:
         return error_response
-    session_key = f"release_publish_{pk}"
+    release_pk = release.pk
+    session_key = f"release_publish_{release_pk}"
     lock_dir = Path(settings.BASE_DIR) / ".locks"
     try:
-        lock_path = _resolve_safe_child_path(lock_dir, f"release_publish_{pk}.json")
+        lock_path = _resolve_safe_child_path(
+            lock_dir,
+            f"release_publish_{release_pk}.json",
+        )
         restart_path = _resolve_safe_child_path(
             lock_dir,
-            f"release_publish_{pk}.restarts",
+            f"release_publish_{release_pk}.restarts",
         )
     except ValueError:
         return _render_release_progress_error(
@@ -1974,7 +1978,7 @@ def release_progress_impl(request, pk: int, action: str):
             action,
             _("Invalid release state path."),
             status=400,
-            debug_info={"pk": pk, "action": action},
+            debug_info={"pk": release_pk, "action": action},
         )
     log_dir, log_dir_warning = _resolve_release_log_dir(Path(settings.LOG_DIR))
     log_dir_warning_message = log_dir_warning
