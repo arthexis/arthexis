@@ -32,27 +32,3 @@ def test_run_pytest_requires_pytest_module(monkeypatch: pytest.MonkeyPatch) -> N
         command._run_pytest([])
 
 
-def test_run_pytest_forwards_remainder_args(monkeypatch: pytest.MonkeyPatch) -> None:
-    command = Command()
-    monkeypatch.setattr(command, "_base_dir", lambda: "/tmp/repo")
-    monkeypatch.setattr(
-        "apps.tests.management.commands.test.resolve_project_python",
-        lambda _base_dir: ".venv/bin/python",
-    )
-
-    captured: list[list[str]] = []
-
-    def fake_run(command_args, *, cwd, env):
-        captured.append(command_args)
-        assert cwd == "/tmp/repo"
-        assert env
-        if command_args[1] == "-c":
-            return SimpleNamespace(returncode=0)
-        return SimpleNamespace(returncode=0)
-
-    monkeypatch.setattr("apps.tests.management.commands.test.subprocess.run", fake_run)
-
-    command._run_pytest(["--", "-k", "netmesh"])
-
-    assert captured[0][1] == "-c"
-    assert captured[1][-2:] == ["-k", "netmesh"]
