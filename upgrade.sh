@@ -512,15 +512,26 @@ queue_startup_net_message() {
     return 1
   fi
 
-  local status
-  status="$("$PYTHON_BIN" manage.py startup_message --lock-file "$LOCK_DIR/lcd-high")" || return 1
+  local raw_status
+  raw_status="$("$PYTHON_BIN" manage.py startup_message --lock-file "$LOCK_DIR/lcd-high")" || return 1
+
+  local status=""
+  local line
+  while IFS= read -r line; do
+    case "$line" in
+      queued:*|skipped:*)
+        status="$line"
+        ;;
+    esac
+  done <<< "$raw_status"
+
   case "$status" in
     queued:*|skipped:*)
       printf '%s\n' "$status"
       return 0
       ;;
     *)
-      echo "Unexpected startup message status: $status" >&2
+      echo "Unexpected startup message status: $raw_status" >&2
       return 1
       ;;
   esac
