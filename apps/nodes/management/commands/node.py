@@ -517,12 +517,14 @@ class Command(BaseCommand):
                 if (
                     local_mac
                     and mac_address == local_mac
-                    and remote_uuid
-                    and local_uuid
-                    and remote_uuid == local_uuid
                     and remote_port
                     and local_port
                     and remote_port == local_port
+                    and (
+                        not remote_uuid
+                        or not local_uuid
+                        or remote_uuid == local_uuid
+                    )
                 ):
                     self.stdout.write(
                         self.style.WARNING(
@@ -857,13 +859,8 @@ class Command(BaseCommand):
         if not local_node:
             return relation
 
-        local_host_instance_id = (local_node.host_instance_id or "").strip()
-        remote_host_instance_id = (info.get("host_instance_id") or "").strip()
-        if not local_host_instance_id or local_host_instance_id != remote_host_instance_id:
-            return relation
-
-        remote_uuid = str(info.get("uuid") or "").strip()
-        local_uuid = str(local_node.uuid or "").strip()
+        local_mac = (local_node.mac_address or "").strip().lower()
+        remote_mac = (info.get("mac_address") or "").strip().lower()
         try:
             remote_port = int(info.get("port") or 0)
         except (TypeError, ValueError):
@@ -872,6 +869,24 @@ class Command(BaseCommand):
             local_port = int(local_node.port or 0)
         except (TypeError, ValueError):
             local_port = 0
+
+        if (
+            local_mac
+            and remote_mac
+            and local_mac == remote_mac
+            and remote_port
+            and local_port
+            and remote_port != local_port
+        ):
+            return Node.Relation.SIBLING
+
+        local_host_instance_id = (local_node.host_instance_id or "").strip()
+        remote_host_instance_id = (info.get("host_instance_id") or "").strip()
+        if not local_host_instance_id or local_host_instance_id != remote_host_instance_id:
+            return relation
+
+        remote_uuid = str(info.get("uuid") or "").strip()
+        local_uuid = str(local_node.uuid or "").strip()
         if (remote_uuid and remote_uuid != local_uuid) or (
             remote_port and remote_port != local_port
         ):
