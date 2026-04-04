@@ -67,39 +67,56 @@ def _build_external_app(
     return f"{app_label}.apps.{app_label.title()}Config"
 
 
-def test_external_app_requires_declared_compatibility(settings, monkeypatch, tmp_path):
-    app_config_path = _build_external_app(
-        tmp_path,
-        monkeypatch,
-        app_label="missingcompat",
-        compatibility=None,
-    )
-    settings.ARTHEXIS_EXTERNAL_APPS = [app_config_path]
-    settings.PROJECT_LOCAL_APPS = ["apps.core"]
-    settings.PROJECT_APPS = []
-    settings.INSTALLED_APPS = ["apps.core", app_config_path]
-
-    errors = run_checks(tags=["core"])
-
-    assert any(error.id == "core.E004" and app_config_path in error.msg for error in errors)
-
-
-def test_external_app_support_range_must_include_running_version(
+@pytest.mark.parametrize(
+    ("app_config_path", "builder_kwargs", "expected_error_id"),
+    [
+        pytest.param(
+            "missingmodule.apps.MissingModuleConfig",
+            None,
+            "core.E003",
+            id="invalid-import-path",
+        ),
+        pytest.param(
+            None,
+            {"app_label": "missingcompat", "compatibility": None},
+            "core.E004",
+            id="compatibility-missing",
+        ),
+        pytest.param(
+            None,
+            {"app_label": "invalidcompat", "compatibility": ">>=1.0"},
+            "core.E005",
+            id="compatibility-invalid",
+        ),
+        pytest.param(
+            None,
+            {"app_label": "unsupportedcompat", "compatibility": "<0.1"},
+            "core.E006",
+            id="compatibility-unsupported",
+        ),
+    ],
+)
+def test_external_app_validation_errors(
     settings,
     monkeypatch,
     tmp_path,
+    app_config_path,
+    builder_kwargs,
+    expected_error_id,
 ):
-    app_config_path = _build_external_app(
-        tmp_path,
-        monkeypatch,
-        app_label="unsupportedcompat",
-        compatibility="<0.1",
-    )
+    if builder_kwargs is not None:
+        app_config_path = _build_external_app(tmp_path, monkeypatch, **builder_kwargs)
+
     settings.ARTHEXIS_EXTERNAL_APPS = [app_config_path]
     settings.PROJECT_LOCAL_APPS = ["apps.core"]
     settings.PROJECT_APPS = []
-    settings.INSTALLED_APPS = ["apps.core", app_config_path]
+    installed_apps = ["apps.core"]
+    if builder_kwargs is not None:
+        installed_apps.append(app_config_path)
+    settings.INSTALLED_APPS = installed_apps
 
     errors = run_checks(tags=["core"])
 
-    assert any(error.id == "core.E006" and app_config_path in error.msg for error in errors)
+    assert any(
+        error.id == expected_error_id and app_config_path in error.msg for error in errors
+    )

@@ -36,6 +36,12 @@ def _parse_arthexis_version(version_text: str) -> Version | None:
 def _resolve_class(import_path: str) -> type:
     """Return the class referenced by a dotted import path."""
 
+    if not isinstance(import_path, str):
+        raise ValueError(
+            "External app entries must be strings using a dotted AppConfig path "
+            "(for example 'pkg.apps.PluginConfig')."
+        )
+
     if "." not in import_path:
         raise ValueError(
             "External app entries must use a dotted AppConfig path "
@@ -69,8 +75,6 @@ def _get_external_app_compatibility_errors(external_apps: list[str]) -> list[Err
     errors: list[Error] = []
 
     current_version = _parse_arthexis_version(ARTHEXIS_VERSION)
-    if current_version is None:
-        return errors
 
     for app_path in external_apps:
         try:
@@ -86,9 +90,26 @@ def _get_external_app_compatibility_errors(external_apps: list[str]) -> list[Err
             )
             continue
 
-        compatibility_range = getattr(
-            app_config_class, "arthexis_compatibility", ""
-        ).strip()
+        raw_compatibility = getattr(app_config_class, "arthexis_compatibility", "")
+        if raw_compatibility is None:
+            compatibility_range = ""
+        elif isinstance(raw_compatibility, str):
+            compatibility_range = raw_compatibility.strip()
+        else:
+            errors.append(
+                Error(
+                    (
+                        f"External app '{app_path}' declares an invalid "
+                        f"compatibility range value of type "
+                        f"'{type(raw_compatibility).__name__}'."
+                    ),
+                    hint="Set arthexis_compatibility to a non-empty PEP 440 specifier string.",
+                    id=EXTERNAL_APP_VERSION_RANGE_INVALID_ID,
+                    obj=app_path,
+                )
+            )
+            continue
+
         if not compatibility_range:
             errors.append(
                 Error(
@@ -119,7 +140,7 @@ def _get_external_app_compatibility_errors(external_apps: list[str]) -> list[Err
             )
             continue
 
-        if current_version not in supported_versions:
+        if current_version is not None and current_version not in supported_versions:
             errors.append(
                 Error(
                     (

@@ -13,6 +13,7 @@ ARTHEXIS_EXTERNAL_APPS = [
 Then run:
 
 ```bash
+.venv/bin/pip install -e examples/external_plugin_reference
 .venv/bin/python manage.py migrate
 .venv/bin/python manage.py check --tag core
 ```
