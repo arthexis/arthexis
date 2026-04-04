@@ -154,8 +154,6 @@ def node_info(request):
         "ipv6_address": node.ipv6_address,
         "port": advertised_port,
         "mac_address": node.mac_address,
-        "host_instance_id": node.host_instance_id,
-        "uuid": str(node.uuid),
         "public_key": node.public_key,
         "features": list(node.features.values_list("slug", flat=True)),
         "role": node.role.name if node.role_id else "",

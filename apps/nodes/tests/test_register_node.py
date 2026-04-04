@@ -260,7 +260,7 @@ def test_register_node_updates_mesh_identity_fields(admin_user):
 
 
 @pytest.mark.django_db
-def test_node_info_includes_mesh_identity_fields():
+def test_node_info_omits_sensitive_identity_fields():
     node = Node.objects.create(
         hostname="mesh-local",
         mac_address="aa:bb:cc:dd:ef:02",
@@ -282,8 +282,8 @@ def test_node_info_includes_mesh_identity_fields():
     assert data["mesh_enrollment_state"] == node.mesh_enrollment_state
     assert data["mesh_key_fingerprint_metadata"] == node.mesh_key_fingerprint_metadata
     assert data["mesh_capability_flags"] == node.mesh_capability_flags
-    assert data["host_instance_id"] == node.host_instance_id
-    assert data["uuid"] == str(node.uuid)
+    assert "host_instance_id" not in data
+    assert "uuid" not in data
 
 @pytest.mark.django_db
 def test_register_current_logs_to_local_logger(settings, caplog):
