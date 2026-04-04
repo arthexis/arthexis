@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from django.core.signals import got_request_exception
 from django.test import RequestFactory
 
@@ -36,6 +37,7 @@ def _build_request():
     return request
 
 
+@pytest.mark.critical
 def test_request_exceptions_do_not_enqueue_github_reporting_when_feature_disabled(
     db, monkeypatch, settings, tmp_path
 ):
@@ -94,6 +96,7 @@ def test_request_exceptions_enqueue_github_reporting_when_feature_enabled(
     assert (Path(tmp_path) / ".locks" / "github-issues" / payload["fingerprint"]).exists()
 
 
+@pytest.mark.critical
 def test_duplicate_exception_cooldown_still_blocks_repeated_reporting(
     db, monkeypatch, settings, tmp_path
 ):

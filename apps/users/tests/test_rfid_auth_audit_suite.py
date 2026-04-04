@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -109,6 +110,7 @@ class RFIDAuthAuditSuiteTests(TestCase):
         self.assertTrue(attempt.authenticated)
         self.assertEqual(user.pk, response.json()["id"])
 
+    @pytest.mark.critical
     def test_rfid_login_records_rejected_reason_for_blocked_tag(self) -> None:
         """Regression: blocked RFID tags should emit a rejected auth attempt reason."""
 

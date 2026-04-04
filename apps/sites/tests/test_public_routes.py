@@ -148,6 +148,7 @@ def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
     assert 'id="operator-interface-title"' in response.content.decode()
 
 
+@pytest.mark.critical
 def test_require_site_operator_or_staff_enforces_admin_operator_boundary(rf):
     request = rf.get("/ocpp/secure/")
     user_model = get_user_model()
