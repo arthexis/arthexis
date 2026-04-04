@@ -19,7 +19,7 @@ from apps.content.models import ContentSample
 from apps.content.utils import save_content_sample
 from apps.nodes.models import NetMessage, Node, NodeRole
 
-from .forms import LogbookEntryForm
+from .forms import LogbookEntryForm, is_logbook_attachable_log
 from .models import LogbookEntry, LogbookLogAttachment
 
 
@@ -132,7 +132,7 @@ class LogbookCreateView(LoginRequiredMixin, FormView):
         logs_dir = Path(getattr(settings, "LOG_DIR", settings.BASE_DIR / "logs"))
         for name in log_names:
             source = logs_dir / name
-            if not source.exists() or not source.is_file():
+            if not source.exists() or not is_logbook_attachable_log(source):
                 continue
             attachment = LogbookLogAttachment(
                 entry=entry,
