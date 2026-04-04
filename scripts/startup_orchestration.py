@@ -7,8 +7,18 @@ import json
 
 def extract_payload(raw_output: str) -> dict[str, object]:
     """Return the last JSON object emitted in orchestration output."""
-    lines = [line.strip() for line in raw_output.splitlines() if line.strip()]
-    for line in reversed(lines):
+    try:
+        payload = json.loads(raw_output)
+    except json.JSONDecodeError:
+        payload = None
+
+    if isinstance(payload, dict):
+        return payload
+
+    for line in reversed(raw_output.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
