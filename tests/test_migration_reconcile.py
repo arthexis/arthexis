@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 import pytest
-from pathlib import Path
 
 from scripts.helpers.migration_reconcile import reconcile_sqlite_tables
 

@@ -20,6 +20,7 @@ on:
       - '**/*.json'
       - '**/*.toml'
       - '**/*.txt'
+      - 'pytest.ini'
       - '.github/workflows/pr-critical.yml'
       - 'apps/**'
       - 'config/**'
