@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 import socket
 import ssl
 from dataclasses import dataclass
@@ -12,11 +13,14 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import requests
 import urllib3
 from django.conf import settings
+from django.core.exceptions import DisallowedHost
 from django.http.request import split_domain_port
 
 from config.request_utils import is_https_request
 
 from .network_utils import _get_route_address
+
+logger = logging.getLogger(__name__)
 
 
 def get_client_ip(request) -> str:
@@ -43,7 +47,8 @@ def _get_host_ip(request) -> str:
 
     try:
         host = request.get_host()
-    except Exception:
+    except DisallowedHost:
+        logger.debug("Rejected invalid host header while deriving host IP.")
         return ""
     if not host:
         return ""
@@ -62,7 +67,8 @@ def _get_host_domain(request) -> str:
 
     try:
         host = request.get_host()
-    except Exception:
+    except DisallowedHost:
+        logger.debug("Rejected invalid host header while deriving host domain.")
         return ""
     if not host:
         return ""
@@ -99,6 +105,8 @@ def _get_host_port(request) -> int | None:
     port = _normalize_port(forwarded_port)
     if port:
         return port
+    if forwarded_port:
+        logger.warning("Ignoring invalid X-Forwarded-Port header value.")
 
     forwarded_proto = request.headers.get("X-Forwarded-Proto") or request.META.get(
         "HTTP_X_FORWARDED_PROTO", ""
@@ -112,8 +120,9 @@ def _get_host_port(request) -> int | None:
 
     try:
         host = request.get_host()
-    except Exception:
-        host = request.META.get("HTTP_HOST", "")
+    except DisallowedHost:
+        logger.debug("Rejected invalid host header while deriving host port.")
+        host = ""
     if host:
         _, host_port = split_domain_port(host)
         port = _normalize_port(host_port)
@@ -149,6 +158,9 @@ def append_token(url: str, token: str) -> str:
 
     if not (url and token):
         return url
+    if not isinstance(url, str):
+        logger.debug("Unable to append token to malformed URL value.")
+        return url
     try:
         parsed = urlsplit(url)
         query = dict(parse_qsl(parsed.query, keep_blank_values=True))
@@ -162,7 +174,8 @@ def append_token(url: str, token: str) -> str:
                 parsed.fragment,
             )
         )
-    except Exception:
+    except (TypeError, ValueError):
+        logger.debug("Unable to append token to malformed URL value.")
         return url
 
 
@@ -170,11 +183,20 @@ def iter_port_fallback_urls(base_url: str):
     """Yield ``base_url`` and supported fallback URLs for alternate ports."""
 
     yield base_url
+    if not isinstance(base_url, str):
+        logger.debug("Unable to parse URL for fallback-port iteration.")
+        return
     try:
         parsed = urlsplit(base_url)
-    except Exception:
+    except (TypeError, ValueError):
+        logger.debug("Unable to parse URL for fallback-port iteration.")
         return
-    if not parsed.hostname or parsed.port != 8888:
+    try:
+        parsed_port = parsed.port
+    except ValueError:
+        logger.debug("Unable to parse URL port for fallback-port iteration.")
+        return
+    if not parsed.hostname or parsed_port != 8888:
         return
 
     netloc = parsed.hostname
