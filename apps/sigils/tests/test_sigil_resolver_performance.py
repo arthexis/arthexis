@@ -71,7 +71,7 @@ def test_resolve_sigils_handles_unclosed_brackets_without_hanging():
 
 
 @pytest.mark.django_db
-def test_resolve_sigils_raises_timeout_on_slow_entity_attribute(monkeypatch):
+def test_resolve_sigils_raises_timeout_on_slow_entity_attribute(monkeypatch, caplog):
     User = get_user_model()
     user = User.objects.create(username="slowpoke")
 
@@ -90,10 +90,15 @@ def test_resolve_sigils_raises_timeout_on_slow_entity_attribute(monkeypatch):
         },
     )
 
-    with sigil_resolution_deadline(2):
-        start = time.perf_counter()
-        resolved = sigil_resolver.resolve_sigils("[USR.very-slow-method]")
-        elapsed = time.perf_counter() - start
+    with caplog.at_level("WARNING"):
+        with sigil_resolution_deadline(3):
+            start = time.perf_counter()
+            resolved = sigil_resolver.resolve_sigils("[USR.very-slow-method]")
+            elapsed = time.perf_counter() - start
 
     assert resolved == "[USR.very-slow-method]"
     assert elapsed < 2.5
+    assert len(caplog.records) == 2
+    assert "Sigil attribute User.very_slow_method exceeded timeout" in caplog.text
+    assert "Timed out resolving sigil [USR.very-slow-method]" in caplog.text
+    assert "Error resolving sigil [USR.very-slow-method]" not in caplog.text

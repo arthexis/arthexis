@@ -821,12 +821,14 @@ def _resolve_token(token: str, current: models.Model | None = None) -> str:
 
     try:
         return resolver(root, context)
+    except TimeoutError:
+        logger.warning("Timed out resolving sigil [%s]", context.original_token)
+        return _failed_resolution(context.original_token)
     except (
         AttributeError,
         FieldDoesNotExist,
         FieldError,
         LookupError,
-        TimeoutError,
         TypeError,
         ValueError,
     ):
