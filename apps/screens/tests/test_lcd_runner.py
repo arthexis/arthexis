@@ -160,6 +160,8 @@ def test_handle_external_event_interrupt_loads_and_renders(monkeypatch):
             line2=line2,
             scroll_ms=scroll_ms,
             scroll_sec=0.25,
+            steps1=2,
+            steps2=2,
         ),
     )
 
@@ -249,7 +251,7 @@ def test_render_event_frame_raises_stop_iteration_on_shutdown(monkeypatch):
     coordinator.scroll_scheduler = FakeScheduler()
     coordinator.frame_writer = FakeWriter(object())
     coordinator.lcd = object()
-    coordinator.event.display_state = SimpleNamespace(scroll_sec=0.25)
+    coordinator.event.display_state = SimpleNamespace(scroll_sec=0.25, steps1=2, steps2=2)
 
     shutdown_calls: list[object] = []
     monkeypatch.setattr(

@@ -481,7 +481,7 @@ class LCDRunner:
             and display_state.steps1 == 1
             and display_state.steps2 == 1
             and (
-                self.event.refresh_deadline == 0.0
+                not self.event.refresh_deadline
                 or refresh_now >= self.event.refresh_deadline
             )
         ):
