@@ -7,3 +7,4 @@ This archive stores dated, historical ledgers for marker promotions and demotion
 ## Ledgers
 
 - [Critical demotion candidates (2026-03-01)](critical-demotion-candidates-2026-03-01.md)
+- [Critical promotions (2026-04-04)](critical-promotions-2026-04-04.md)

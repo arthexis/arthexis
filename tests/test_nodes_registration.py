@@ -407,6 +407,7 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_register_visitor_proxy_reports_partial_failure_on_visitor_confirmation(
     admin_client, monkeypatch
 ):

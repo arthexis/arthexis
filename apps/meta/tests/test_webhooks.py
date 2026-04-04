@@ -255,6 +255,7 @@ def test_whatsapp_webhook_contacts_align_with_messages_by_index(client):
 
 @pytest.mark.django_db
 @override_settings(PAGES_WHATSAPP_APP_SECRET="test-secret")
+@pytest.mark.critical
 def test_whatsapp_webhook_rejects_invalid_signature(client):
     site = Site.objects.create(domain="example.test", name="example")
     bridge = WhatsAppChatBridge.objects.create(
@@ -281,6 +282,7 @@ def test_whatsapp_webhook_rejects_invalid_signature(client):
 
 @pytest.mark.django_db
 @override_settings(PAGES_WHATSAPP_APP_SECRET="test-secret")
+@pytest.mark.critical
 def test_whatsapp_webhook_accepts_valid_signature(client):
     site = Site.objects.create(domain="example.test", name="example")
     bridge = WhatsAppChatBridge.objects.create(
