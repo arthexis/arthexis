@@ -69,7 +69,7 @@ class Command(BaseCommand):
         del options
         endpoint = service_endpoint()
         lock_path = rfid_service.rfid_service_lock_path()
-        scanner_lock = rfid_scan_lock_path()
+        scanner_lock = rfid_service.rfid_service_lock_path()
         configured = scanner_lock.exists()
         ping = rfid_service.request_service("ping", timeout=0.5)
 
@@ -309,10 +309,10 @@ class Command(BaseCommand):
         endpoint = rfid_service.service_endpoint()
         self.stdout.write(f"Service endpoint: {endpoint.host}:{endpoint.port} (RFID_SERVICE_HOST/PORT)")
         service_lock = rfid_service.rfid_service_lock_path()
-        scanner_lock = lock_file_path()
+        scanner_lock = rfid_scan_lock_path()
         self.stdout.write(f"Service lock: {service_lock} ({'present' if service_lock.exists() else 'missing'})")
         self.stdout.write(f"Scanner lock: {scanner_lock} ({'present' if scanner_lock.exists() else 'missing'})")
-        configured = is_configured()
+        configured = rfid_service_enabled()
         self.stdout.write(f"RFID reader configuration: {'configured' if configured else 'not configured'}")
         self._report_device_status(configured)
         ping = rfid_service.request_service("ping", timeout=0.5)

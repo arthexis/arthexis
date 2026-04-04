@@ -161,8 +161,16 @@ class RFIDServiceState:
         payload = dict(result)
         payload.setdefault("service_mode", "service")
         payload["scanned_at"] = datetime.now(datetime_timezone.utc).isoformat()
-        write_rfid_scan_lock(payload)
-        append_scan_log(payload)
+        try:
+            write_rfid_scan_lock(payload)
+            append_scan_log(payload)
+        except Exception:  # pragma: no cover - defensive guard for worker loop
+            logger.exception(
+                "Failed to emit RFID scan artifacts for rfid=%s payload=%s",
+                rfid_value,
+                sanitize_rfid_payload(payload),
+            )
+            return
         self._last_emitted_rfid = rfid_value
         self._last_emitted_at = now
 
@@ -335,7 +343,10 @@ def rfid_scan_lock_path(base_dir: Path | None = None) -> Path:
 
 def rfid_scan_log_path(base_dir: Path | None = None) -> Path:
     base_dir = base_dir or Path(settings.BASE_DIR)
-    return Path(settings.LOG_DIR) / SCAN_LOG_FILE
+    log_dir = Path(settings.LOG_DIR)
+    if not log_dir.is_absolute():
+        log_dir = base_dir / log_dir
+    return log_dir / SCAN_LOG_FILE
 
 
 def write_rfid_scan_lock(payload: dict[str, Any], *, base_dir: Path | None = None) -> None:

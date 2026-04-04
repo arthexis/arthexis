@@ -437,7 +437,7 @@ should_install_hardware_requirements() {
   local role_file="$lock_dir/role.lck"
   local lcd_lock="$ARTHEXIS_LCD_LOCK"
   local rfid_service_lock="$ARTHEXIS_RFID_SERVICE_LOCK"
-  local rfid_lock="$ARTHEXIS_RFID_SERVICE_LOCK"
+  local rfid_lock="${ARTHEXIS_RFID_LOCK:-rfid.lck}"
 
   case "${ARTHEXIS_INSTALL_HARDWARE_DEPS:-}" in
     1|true|TRUE|yes|YES)

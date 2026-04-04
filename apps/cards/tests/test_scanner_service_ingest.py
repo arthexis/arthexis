@@ -25,3 +25,8 @@ def test_ingest_service_scans_reads_ndjson_log(monkeypatch, settings, tmp_path):
     attempt = RFIDAttempt.objects.get()
     assert attempt.source == RFIDAttempt.Source.SERVICE
     assert attempt.rfid == "ABCD1234"
+
+    processed_again = ingest_service_scans()
+
+    assert processed_again == 0
+    assert RFIDAttempt.objects.count() == 1

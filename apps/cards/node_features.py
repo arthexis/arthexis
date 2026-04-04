@@ -42,10 +42,35 @@ def _lockfile_status(
 ) -> tuple[bool, Path | None]:
     """Return whether an RFID lock file already exists."""
 
+    default_lock_path: Path | None = None
+    default_lock_active = False
+    default_lock_marker: str | None = None
+    try:
+        from apps.cards.background_reader import lock_file_active, lock_file_path
+
+        default_lock_active, default_lock_path = lock_file_active()
+        default_lock_marker = (
+            default_lock_path.read_text(encoding="utf-8").strip()
+            if default_lock_path and default_lock_path.exists()
+            else None
+        ) or None
+    except Exception:
+        default_lock_active = False
+        default_lock_path = None
+        default_lock_marker = None
+
     for path in _lock_paths(node=node, base_dir=base_dir, base_path=base_path):
         try:
             if not path.exists():
                 continue
+            if default_lock_path and path == default_lock_path:
+                if default_lock_active:
+                    return True, path
+                continue
+            if default_lock_marker:
+                marker = path.read_text(encoding="utf-8").strip()
+                if marker != default_lock_marker:
+                    continue
         except OSError:
             continue
         return True, path

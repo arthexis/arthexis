@@ -24,6 +24,7 @@ SCANNER_SOURCES = {
     RFIDAttempt.Source.ON_DEMAND,
 }
 SCAN_INGEST_OFFSET_FILE = "rfid-scan.offset"
+SERVICE_SCAN_DB_ERROR = "scan requests are handled via the database"
 
 
 def _normalize_scan_response(
@@ -188,6 +189,8 @@ def scan_sources(
     if not result:
         return {"rfid": None, "label_id": None, "service_mode": "service"}
     if result.get("error"):
+        if SERVICE_SCAN_DB_ERROR in str(result.get("error", "")).lower():
+            return _scan_from_attempts(timeout=timeout_value, endianness=endianness)
         result["service_mode"] = "service"
         return result
 
@@ -195,6 +198,31 @@ def scan_sources(
         result, endianness=endianness, service_mode="service"
     )
     return normalized
+
+
+def _scan_from_attempts(*, timeout: float, endianness: str | None) -> dict:
+    latest_id = (
+        RFIDAttempt.objects.filter(source=RFIDAttempt.Source.SERVICE)
+        .order_by("-pk")
+        .values_list("pk", flat=True)
+        .first()
+        or 0
+    )
+    start = time.monotonic()
+    while time.monotonic() - start < max(timeout, 0):
+        ingest_service_scans()
+        attempt = (
+            RFIDAttempt.objects.filter(
+                source=RFIDAttempt.Source.SERVICE,
+                pk__gt=latest_id,
+            )
+            .order_by("pk")
+            .first()
+        )
+        if attempt is not None:
+            return build_attempt_response(attempt, endianness=endianness)
+        time.sleep(0.1)
+    return {"rfid": None, "label_id": None, "service_mode": "service"}
 
 
 def restart_sources():
