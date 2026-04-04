@@ -9,7 +9,6 @@ import subprocess
 from django.conf import settings
 from django.core.exceptions import AppRegistryNotReady, FieldError, ImproperlyConfigured
 from django.db import DatabaseError
-from django.db.utils import OperationalError, ProgrammingError
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _, ngettext
@@ -702,8 +701,6 @@ def _get_auto_upgrade_periodic_task():
                 DatabaseError,
                 ImproperlyConfigured,
                 ImportError,
-                OperationalError,
-                ProgrammingError,
             ) as exc:  # pragma: no cover - repair attempt failed
                 logger.exception(
                     "Unable to recreate auto-upgrade periodic task "
@@ -726,8 +723,6 @@ def _get_auto_upgrade_periodic_task():
                 DatabaseError,
                 ImproperlyConfigured,
                 ImportError,
-                OperationalError,
-                ProgrammingError,
             ) as exc:  # pragma: no cover - repair attempt failed
                 logger.exception(
                     "Unable to recreate auto-upgrade periodic task "
