@@ -15,28 +15,30 @@ import contextlib
 import json
 import logging
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
-from typing import NoReturn, Optional, Sequence
+from typing import NoReturn
 from urllib.parse import urlencode, urlparse
 
 import requests
-from packaging.version import InvalidVersion, Version
 from django.conf import settings
 from django.contrib import messages
+from django.db import DatabaseError
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.translation import gettext as _
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.translation import gettext as _
+from packaging.version import InvalidVersion, Version
 
-from apps.nodes.models import NetMessage, Node
 import apps.release as release_utils
+from apps.nodes.models import NetMessage, Node
 from apps.release import git_utils
+from apps.release.models import PackageRelease
 from apps.release.services import builder as release_builder
 from apps.release.services import uploader as release_uploader
-from apps.release.models import PackageRelease
 from apps.repos.models import GitHubToken
 from utils import revision
 
@@ -57,34 +59,59 @@ from ..report_rendering import (
     _render_release_progress_error,
     _sanitize_release_error_message,
 )
-
 from .context import (
     ReleaseContextState,
     load_release_context,
+)
+from .context import (
     persist_release_context as _persist_release_context,
+)
+from .context import (
     store_release_context as _store_release_context,
 )
 from .exceptions import DirtyRepository, PublishPending
-from .steps import StepDefinition, run_release_step
-from .workflow import ReleasePublishContext, ReleasePublishWorkflow
 from .git_ops import (
     SubprocessGitAdapter,
-    collect_dirty_files as git_collect_dirty_files,
-    current_branch as git_current_branch,
-    git_stdout as git_adapter_stdout,
-    has_upstream as git_has_upstream,
-    working_tree_dirty as git_working_tree_dirty,
-    format_subprocess_error as git_format_subprocess_error,
     git_authentication_missing,
+)
+from .git_ops import (
+    collect_dirty_files as git_collect_dirty_files,
+)
+from .git_ops import (
+    current_branch as git_current_branch,
+)
+from .git_ops import (
+    format_subprocess_error as git_format_subprocess_error,
+)
+from .git_ops import (
+    git_stdout as git_adapter_stdout,
+)
+from .git_ops import (
+    has_upstream as git_has_upstream,
+)
+from .git_ops import (
+    working_tree_dirty as git_working_tree_dirty,
 )
 from .github_ops import (
     ensure_github_release as gh_ensure_github_release,
+)
+from .github_ops import (
     fetch_publish_workflow_run as gh_fetch_publish_workflow_run,
+)
+from .github_ops import (
     get_user_github_token as gh_get_user_github_token,
+)
+from .github_ops import (
     parse_github_repository as gh_parse_github_repository,
+)
+from .github_ops import (
     resolve_github_token as gh_resolve_github_token,
+)
+from .github_ops import (
     upload_release_assets as gh_upload_release_assets,
 )
+from .steps import StepDefinition, run_release_step
+from .workflow import ReleasePublishContext, ReleasePublishWorkflow
 
 logger = logging.getLogger(__name__)
 GIT_ADAPTER = SubprocessGitAdapter()
@@ -335,7 +362,7 @@ def _reset_release_progress(
     if restart_path.exists():
         try:
             count = int(restart_path.read_text(encoding="utf-8"))
-        except Exception:
+        except (FileNotFoundError, OSError, ValueError):
             count = 0
     restart_path.parent.mkdir(parents=True, exist_ok=True)
     restart_path.write_text(str(count + 1), encoding="utf-8")
@@ -480,7 +507,7 @@ def _prepare_step_progress(
     if restart_path.exists():
         try:
             restart_count = int(restart_path.read_text(encoding="utf-8"))
-        except Exception:
+        except (FileNotFoundError, OSError, ValueError):
             restart_count = 0
     step_count = ctx.get("step", 0)
     step_param = request.GET.get("step")
@@ -555,13 +582,13 @@ def _broadcast_release_message(release: PackageRelease) -> None:
     subject = f"Release v{release.version}"
     try:
         node = Node.get_local()
-    except Exception:
+    except DatabaseError:
         node = None
     node_label = str(node) if node else "unknown"
     body = f"@ {node_label}"
     try:
         NetMessage.broadcast(subject=subject, body=body)
-    except Exception:
+    except (DatabaseError, RuntimeError, ValueError):
         logger.exception(
             "Failed to broadcast release Net Message",
             extra={"subject": subject, "body": body},
@@ -753,7 +780,7 @@ def _sync_with_origin_main(log_path: Path) -> None:
         )
         _append_log(log_path, "\n".join(instructions))
 
-        raise Exception("Rebase onto main failed") from exc
+        raise RuntimeError("Rebase onto main failed") from exc
 
 
 def _clean_repo() -> None:
@@ -776,7 +803,7 @@ def _git_stdout(args: Sequence[str]) -> str:
 def _current_git_revision() -> str:
     try:
         return _git_stdout(["git", "rev-parse", "HEAD"])
-    except Exception:
+    except (subprocess.SubprocessError, OSError, ValueError):
         return ""
 
 
@@ -849,7 +876,7 @@ def _resolve_github_repository(release: PackageRelease) -> tuple[str, str]:
         parsed = _parse_github_repository(remote_url)
         if parsed:
             return parsed
-    raise Exception("GitHub repository URL is required to export artifacts")
+    raise ValueError("GitHub repository URL is required to export artifacts")
 
 
 def _ensure_release_tag(release: PackageRelease, log_path: Path) -> str:
@@ -916,7 +943,7 @@ def _fetch_publish_workflow_run(
 ) -> dict[str, object] | None:
     try:
         tag_sha = _git_stdout(["git", "rev-list", "-n", "1", tag_name])
-    except Exception:
+    except (subprocess.SubprocessError, OSError, ValueError):
         tag_sha = None
 
     return gh_fetch_publish_workflow_run(
@@ -945,7 +972,13 @@ def _append_publish_workflow_status(
             tag_name=f"v{release.version}",
             token=token,
         )
-    except Exception:
+    except (
+        requests.exceptions.RequestException,
+        subprocess.SubprocessError,
+        OSError,
+        RuntimeError,
+        ValueError,
+    ):
         logger.warning(
             "Failed to fetch publish workflow run for %s", release, exc_info=True
         )
@@ -1130,11 +1163,11 @@ def _push_release_changes(log_path: Path, ctx: dict, *, step_name: str) -> bool:
                 head=head,
                 details=details or None,
             )
-            raise PublishPending()
+            raise PublishPending() from exc
         _append_log(
             log_path, f"Failed to push release changes to origin: {details}"
         )
-        raise Exception("Failed to push release changes") from exc
+        raise RuntimeError("Failed to push release changes") from exc
 
     _append_log(log_path, "Pushed release changes to origin")
     pending_push = ctx.get("pending_git_push")
@@ -1164,11 +1197,11 @@ def _ensure_origin_main_unchanged(log_path: Path) -> None:
             _append_log(log_path, f"Failed to verify origin/main status: {details}")
         else:  # pragma: no cover - defensive fallback
             _append_log(log_path, "Failed to verify origin/main status")
-        raise Exception("Unable to verify origin/main status") from exc
+        raise RuntimeError("Unable to verify origin/main status") from exc
 
     if origin_main != merge_base:
         _append_log(log_path, "origin/main advanced during release; restart required")
-        raise Exception("origin/main changed during release; restart required")
+        raise RuntimeError("origin/main changed during release; restart required")
 
     _append_log(log_path, "origin/main unchanged since last sync")
 
@@ -1215,11 +1248,11 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
     Side effects: may commit version/fixture changes and update context pause flags.
     Rollback expectations: conflicts require manual cleanup or restart.
     """
-    sync_error: Optional[Exception] = None
+    sync_error: Exception | None = None
     retry_sync = False
     try:
         _sync_with_origin_main(log_path)
-    except Exception as exc:
+    except RuntimeError as exc:
         sync_error = exc
 
     if not release_builder._git_clean():
@@ -1241,7 +1274,7 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
                 path = Path(f)
                 try:
                     data = json.loads(path.read_text(encoding="utf-8"))
-                except Exception:
+                except (json.JSONDecodeError, OSError, ValueError):
                     count = 0
                     models: list[str] = []
                 else:
@@ -1318,7 +1351,7 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
     if retry_sync and sync_error is not None:
         try:
             _sync_with_origin_main(log_path)
-        except Exception as exc:
+        except RuntimeError as exc:
             sync_error = exc
         else:
             sync_error = None
@@ -1335,11 +1368,11 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
                 left = Version(release.version)
                 right = Version(current_clean)
             except InvalidVersion as exc:
-                raise Exception(
+                raise ValueError(
                     f"Invalid release.version '{release.version}': {exc}"
                 ) from exc
             if left < right:
-                raise Exception(
+                raise ValueError(
                     f"Version {release.version} is older than existing {current}"
                 )
 
@@ -1375,13 +1408,13 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
                         for file_data in files or []
                     )
                     if has_available_files:
-                        raise Exception(
+                        raise RuntimeError(
                             f"Version {release.version} already on PyPI"
                         )
-        except Exception as exc:
+        except RuntimeError:
+            raise
+        except (requests.exceptions.RequestException, ValueError) as exc:
             # network errors should be logged but not crash
-            if "already on PyPI" in str(exc):
-                raise
             _append_log(log_path, f"PyPI check failed: {exc}")
         else:
             _append_log(
@@ -1557,7 +1590,13 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
         _append_log(log_path, "Updated release fixtures")
     except PublishPending:
         raise
-    except Exception:
+    except (
+        OSError,
+        RuntimeError,
+        subprocess.SubprocessError,
+        requests.exceptions.RequestException,
+        ValueError,
+    ):
         _clean_repo()
         raise
     target_name = _release_log_name(release.package.name, release.version)
@@ -1613,7 +1652,7 @@ def _step_verify_release_environment(
 def _collect_release_artifacts() -> list[Path]:
     dist_path = Path("dist")
     if not dist_path.exists():
-        raise Exception("dist directory not found")
+        raise FileNotFoundError("dist directory not found")
     artifacts = sorted(
         [
             *dist_path.glob("*.whl"),
@@ -1621,7 +1660,7 @@ def _collect_release_artifacts() -> list[Path]:
         ]
     )
     if not artifacts:
-        raise Exception("No release artifacts found in dist/")
+        raise RuntimeError("No release artifacts found in dist/")
     return artifacts
 
 
@@ -1640,7 +1679,7 @@ def _step_export_and_dispatch(release, ctx, log_path: Path, *, user=None) -> Non
         return
 
     if not release_utils.network_available():
-        raise Exception("Network unavailable; cannot export artifacts")
+        raise RuntimeError("Network unavailable; cannot export artifacts")
 
     artifacts = _collect_release_artifacts()
     owner, repo = _resolve_github_repository(release)
