@@ -19,7 +19,16 @@ from webauthn.helpers.exceptions import InvalidJSONStructure, InvalidRegistratio
 
 from apps.core.admin.mixins import OwnableAdminForm, OwnableAdminMixin
 
-from .models import ChatProfile, PasskeyCredential, User, UserFlag
+from .diagnostics import build_diagnostic_bundle, create_manual_feedback
+from .models import (
+    ChatProfile,
+    PasskeyCredential,
+    User,
+    UserDiagnosticBundle,
+    UserDiagnosticEvent,
+    UserDiagnosticsProfile,
+    UserFlag,
+)
 from .passkeys import build_registration_options, verify_registration_response
 
 PASSKEY_REGISTRATION_SESSION_KEY = "users_admin_passkey_registration"
@@ -189,6 +198,82 @@ class UserFlagAdmin(admin.ModelAdmin):
     list_display = ("id", "user", "key", "is_enabled", "updated_at")
     list_filter = ("is_enabled",)
     search_fields = ("user__username", "user__email", "key")
+
+
+@admin.register(UserDiagnosticsProfile)
+class UserDiagnosticsProfileAdmin(OwnableAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "owner_display",
+        "is_enabled",
+        "collect_diagnostics",
+        "allow_manual_feedback",
+    )
+    list_filter = ("is_enabled", "collect_diagnostics", "allow_manual_feedback")
+    search_fields = ("user__username", "group__name", "avatar__name")
+
+
+@admin.register(UserDiagnosticEvent)
+class UserDiagnosticEventAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "source", "summary", "request_method", "occurred_at")
+    list_filter = ("source", "occurred_at")
+    search_fields = ("user__username", "summary", "details", "request_path", "fingerprint")
+    readonly_fields = ("fingerprint", "occurred_at", "metadata")
+    actions = ("create_bundle_for_selected_users",)
+
+    @admin.action(description=_("Create diagnostics bundle for selected users"))
+    def create_bundle_for_selected_users(self, request, queryset):
+        user_ids = sorted(set(queryset.values_list("user_id", flat=True)))
+        created = 0
+        for user_id in user_ids:
+            if not user_id:
+                continue
+            user = User.objects.filter(pk=user_id).first()
+            if user is None:
+                continue
+            build_diagnostic_bundle(user=user)
+            created += 1
+        if created:
+            self.message_user(
+                request,
+                _("Created %(count)s diagnostics bundle(s).") % {"count": created},
+                level=messages.SUCCESS,
+            )
+            return
+        self.message_user(request, _("No bundles were created."), level=messages.WARNING)
+
+    def save_model(self, request, obj, form, change):
+        if not change and obj.source == UserDiagnosticEvent.Source.FEEDBACK:
+            event = create_manual_feedback(
+                user=obj.user,
+                summary=obj.summary,
+                details=obj.details,
+            )
+            if event is None:
+                self.message_user(
+                    request,
+                    _(
+                        "Manual feedback is disabled for this user profile or no diagnostics profile exists."
+                    ),
+                    level=messages.ERROR,
+                )
+                raise ValidationError(
+                    _(
+                        "Cannot save feedback: manual feedback is disabled for this user."
+                    )
+                )
+            obj.pk = event.pk
+            return
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(UserDiagnosticBundle)
+class UserDiagnosticBundleAdmin(admin.ModelAdmin):
+    list_display = ("id", "title", "user", "created_at")
+    list_filter = ("created_at",)
+    search_fields = ("title", "user__username", "report")
+    filter_horizontal = ("events",)
+    readonly_fields = ("created_at",)
 
 
 __all__ = ["admin"]
