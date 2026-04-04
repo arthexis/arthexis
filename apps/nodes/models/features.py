@@ -200,7 +200,7 @@ def _sync_tasks_on_assignment_delete(sender, instance, **kwargs):
 
 class NodeFeatureMixin:
     FEATURE_LOCK_MAP = {
-        "rfid-scanner": "rfid.lck",
+        "rfid-scanner": "rfid-service.lck",
         "celery-queue": "celery.lck",
         "nginx-server": "nginx_mode.lck",
     }

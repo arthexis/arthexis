@@ -12,7 +12,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 
 RFID_SCANNER_SLUG = "rfid-scanner"
-RFID_LOCK_NAME = "rfid.lck"
+RFID_LOCK_NAME = "rfid-service.lck"
 
 
 def _lock_paths(
@@ -40,36 +40,39 @@ def _lockfile_status(
     base_dir: Path | None = None,
     base_path: Path | None = None,
 ) -> tuple[bool, Path | None]:
-    """Return whether a compatibility RFID lock file already exists."""
+    """Return whether an RFID lock file already exists."""
 
+    default_lock_path: Path | None = None
+    default_lock_active = False
+    default_lock_marker: str | None = None
     try:
-        from apps.cards.background_reader import lock_file_active
-    except Exception:  # pragma: no cover - defensive import fallback
-        lock_file_active = None
+        from apps.cards.background_reader import lock_file_active, lock_file_path
 
-    default_base_dir = Path(settings.BASE_DIR)
-    resolved_base_dir = base_dir or default_base_dir
+        default_lock_active, default_lock_path = lock_file_active()
+        default_lock_marker = (
+            default_lock_path.read_text(encoding="utf-8").strip()
+            if default_lock_path and default_lock_path.exists()
+            else None
+        ) or None
+    except Exception:
+        default_lock_active = False
+        default_lock_path = None
+        default_lock_marker = None
 
-    for path in _lock_paths(node=node, base_dir=resolved_base_dir, base_path=base_path):
+    for path in _lock_paths(node=node, base_dir=base_dir, base_path=base_path):
         try:
             if not path.exists():
                 continue
+            if default_lock_path and path == default_lock_path:
+                if default_lock_active:
+                    return True, path
+                continue
+            if default_lock_marker:
+                marker = path.read_text(encoding="utf-8").strip()
+                if marker != default_lock_marker:
+                    continue
         except OSError:
             continue
-
-        if (
-            lock_file_active is not None
-            and resolved_base_dir == default_base_dir
-            and path == resolved_base_dir / ".locks" / RFID_LOCK_NAME
-        ):
-            try:
-                is_active, active_path = lock_file_active()
-            except Exception:
-                continue
-            if is_active:
-                return True, active_path
-            continue
-
         return True, path
     return False, None
 
@@ -112,6 +115,9 @@ def detect_scanner_capability(
     base_path: Path | None = None,
 ) -> dict[str, Any]:
     """Return detection metadata for the RFID scanner node feature."""
+
+    if node is not None and getattr(getattr(node, "role", None), "name", "") == "Control":
+        return {"detected": True, "assumed": True, "reason": "Control role scanner service"}
 
     has_lock, lock_path = _lockfile_status(
         node=node,
@@ -175,7 +181,7 @@ def _write_compatibility_lock(
     base_dir: Path | None = None,
     base_path: Path | None = None,
 ) -> None:
-    """Persist lock files for compatibility with existing runtime checks."""
+    """Persist lock files for runtime checks."""
 
     resolved_base_dir = base_dir or Path(settings.BASE_DIR)
 

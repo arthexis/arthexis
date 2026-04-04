@@ -22,7 +22,6 @@ from apps.core.notifications import notify_event_async
 from apps.screens.startup_notifications import lcd_feature_enabled
 
 from .background_reader import get_next_tag, is_configured, start as start_reader, stop as stop_reader
-from .models import RFIDAttempt
 from .reader import toggle_deep_read
 
 logger = logging.getLogger(__name__)
@@ -37,6 +36,8 @@ DEFAULT_EVENT_DURATION = int(os.environ.get("RFID_EVENT_DURATION", "180"))
 DEFAULT_SCAN_DEDUPE_SECONDS = float(
     os.environ.get("RFID_SCAN_DEDUPE_SECONDS", "1.0")
 )
+SCAN_STATE_FILE = "rfid-scan.json"
+SCAN_LOG_FILE = "rfid-scans.ndjson"
 
 
 @dataclass(frozen=True)
@@ -87,8 +88,8 @@ class RFIDServiceState:
         self.started_at = datetime.now(datetime_timezone.utc)
         self.stop_event = threading.Event()
         self.worker_thread: threading.Thread | None = None
-        self._last_persisted_rfid: str | None = None
-        self._last_persisted_at: float | None = None
+        self._last_emitted_rfid: str | None = None
+        self._last_emitted_at: float | None = None
 
     def start_worker(self) -> None:
         if self.worker_thread and self.worker_thread.is_alive():
@@ -121,7 +122,7 @@ class RFIDServiceState:
                     )
                     self.queue.put(result)
                     self._notify_lcd_event(result)
-                    self._persist_scan(result)
+                    self._emit_scan_artifacts(result)
         finally:
             stop_reader()
             logger.info("RFID service worker stopped")
@@ -146,30 +147,32 @@ class RFIDServiceState:
         body = " ".join(part for part in (rfid_value, color) if part)
         notify_event_async(subject, body, duration=DEFAULT_EVENT_DURATION, event_id=0)
 
-    def _persist_scan(self, result: dict[str, Any]) -> None:
+    def _emit_scan_artifacts(self, result: dict[str, Any]) -> None:
         rfid_value = str(result.get("rfid", "") or "").strip().upper()
         if not rfid_value:
             return
         now = time.monotonic()
         if (
-            self._last_persisted_rfid == rfid_value
-            and self._last_persisted_at is not None
-            and now - self._last_persisted_at < DEFAULT_SCAN_DEDUPE_SECONDS
+            self._last_emitted_rfid == rfid_value
+            and self._last_emitted_at is not None
+            and now - self._last_emitted_at < DEFAULT_SCAN_DEDUPE_SECONDS
         ):
             return
         payload = dict(result)
         payload.setdefault("service_mode", "service")
+        payload["scanned_at"] = datetime.now(datetime_timezone.utc).isoformat()
         try:
-            RFIDAttempt.record_attempt(
-                payload,
-                source=RFIDAttempt.Source.SERVICE,
-                status=RFIDAttempt.Status.SCANNED,
+            write_rfid_scan_lock(payload)
+            append_scan_log(payload)
+        except Exception:  # pragma: no cover - defensive guard for worker loop
+            logger.exception(
+                "Failed to emit RFID scan artifacts for rfid=%s payload=%s",
+                rfid_value,
+                sanitize_rfid_payload(payload),
             )
-        except Exception:  # pragma: no cover - database dependent
-            logger.exception("RFID service failed to persist scan attempt")
             return
-        self._last_persisted_rfid = rfid_value
-        self._last_persisted_at = now
+        self._last_emitted_rfid = rfid_value
+        self._last_emitted_at = now
 
     def status(self) -> ServiceStatus:
         queue_depth, _last_scan, last_scan_at = self.queue.status()
@@ -332,6 +335,32 @@ def mask_rfid(value: Any) -> str | None:
 
 def rfid_service_lock_path(base_dir: Path | None = None) -> Path:
     return get_lock_dir(base_dir) / "rfid-service.lck"
+
+
+def rfid_scan_lock_path(base_dir: Path | None = None) -> Path:
+    return get_lock_dir(base_dir) / SCAN_STATE_FILE
+
+
+def rfid_scan_log_path(base_dir: Path | None = None) -> Path:
+    base_dir = base_dir or Path(settings.BASE_DIR)
+    log_dir = Path(settings.LOG_DIR)
+    if not log_dir.is_absolute():
+        log_dir = base_dir / log_dir
+    return log_dir / SCAN_LOG_FILE
+
+
+def write_rfid_scan_lock(payload: dict[str, Any], *, base_dir: Path | None = None) -> None:
+    lock_path = rfid_scan_lock_path(base_dir)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+
+
+def append_scan_log(payload: dict[str, Any], *, base_dir: Path | None = None) -> None:
+    log_path = rfid_scan_log_path(base_dir)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8") as log_file:
+        log_file.write(json.dumps(payload, sort_keys=True))
+        log_file.write("\n")
 
 
 def rfid_service_enabled(lock_dir: Path | None = None) -> bool:

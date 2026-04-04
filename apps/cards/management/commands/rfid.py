@@ -14,14 +14,13 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
 from apps.cards import rfid_service
-from apps.cards.background_reader import is_configured, lock_file_path
 from apps.cards.detect import detect_scanner
 from apps.cards.models import RFID, RFIDAttempt
 from apps.cards.reader import validate_rfid_value
 from apps.cards.rfid_import_export import account_column_for_field, parse_accounts, serialize_accounts
 from apps.cards.node_features import RFID_SCANNER_SLUG
-from apps.cards.rfid_service import rfid_service_enabled, run_service, service_available, service_endpoint
-from apps.cards.scanner import scan_sources
+from apps.cards.rfid_service import rfid_scan_lock_path, rfid_service_enabled, run_service, service_available, service_endpoint
+from apps.cards.scanner import ingest_service_scans, scan_sources
 from apps.cards.utils import drain_stdin, user_requested_stop
 from apps.nodes.feature_detection import is_feature_active_for_node
 from apps.nodes.models import Node
@@ -70,7 +69,7 @@ class Command(BaseCommand):
         del options
         endpoint = service_endpoint()
         lock_path = rfid_service.rfid_service_lock_path()
-        scanner_lock = lock_file_path()
+        scanner_lock = rfid_service.rfid_service_lock_path()
         configured = scanner_lock.exists()
         ping = rfid_service.request_service("ping", timeout=0.5)
 
@@ -158,16 +157,14 @@ class Command(BaseCommand):
         if timeout is None or timeout <= 0:
             raise CommandError("Timeout must be a positive number of seconds")
 
-        no_irq = options.get("no_irq", False)
-        if no_irq or not service_available():
-            result = self._scan_via_local(timeout, no_irq=no_irq)
-        else:
-            result = self._scan_via_attempt(timeout)
+        result = self._scan_via_attempt(timeout)
+        if (result.get("rfid") is None) and not result.get("error"):
+            result = self._scan_via_local(timeout)
         if result.get("error"):
             return result
         if not result.get("rfid"):
-            if not is_configured() and not service_available():
-                return {"error": "RFID scanner not configured or detected"}
+            if not service_available():
+                return {"error": "RFID scanner service not configured or detected"}
             return {"error": "No RFID detected before timeout"}
         return result
 
@@ -181,6 +178,7 @@ class Command(BaseCommand):
         latest_id = RFIDAttempt.objects.filter(source=RFIDAttempt.Source.SERVICE).order_by("-pk").values_list("pk", flat=True).first()
         attempt = None
         while True:
+            ingest_service_scans()
             if interactive and user_requested_stop():
                 return {"error": "Scan cancelled by user"}
             attempt = RFIDAttempt.objects.filter(source=RFIDAttempt.Source.SERVICE, pk__gt=latest_id or 0).order_by("pk").first()
@@ -197,7 +195,7 @@ class Command(BaseCommand):
             payload.setdefault("label_id", attempt.label_id)
         return payload
 
-    def _scan_via_local(self, timeout: float, *, no_irq: bool = False) -> dict:
+    def _scan_via_local(self, timeout: float) -> dict:
         interactive = sys.stdin.isatty()
         if interactive:
             self.stdout.write("Press any key to stop scanning.")
@@ -207,26 +205,15 @@ class Command(BaseCommand):
         while True:
             if interactive and user_requested_stop():
                 return {"error": "Scan cancelled by user"}
-            result = scan_sources(timeout=0.2, no_irq=no_irq)
+            result = scan_sources(timeout=0.2)
             if result.get("rfid") or result.get("error"):
                 return result
             if not interactive and time.monotonic() - start >= timeout:
                 return {"rfid": None, "label_id": None}
 
     def _handle_watch(self, options):
-        from apps.cards.always_on import is_running, start, stop
-
-        if options["stop"]:
-            stop()
-            self.stdout.write(self.style.SUCCESS("RFID watch disabled"))
-            return
-
-        if not self._scanner_feature_available():
-            raise CommandError("rfid-scanner feature is not active on this node")
-
-        start()
-        state = "enabled" if is_running() else "disabled"
-        self.stdout.write(self.style.SUCCESS(f"RFID watch {state}"))
+        del options
+        raise CommandError("RFID watch mode was removed; run `rfid service` under systemd instead")
 
     def _add_service_arguments(self, parser):
         endpoint = service_endpoint()
@@ -322,10 +309,10 @@ class Command(BaseCommand):
         endpoint = rfid_service.service_endpoint()
         self.stdout.write(f"Service endpoint: {endpoint.host}:{endpoint.port} (RFID_SERVICE_HOST/PORT)")
         service_lock = rfid_service.rfid_service_lock_path()
-        scanner_lock = lock_file_path()
+        scanner_lock = rfid_scan_lock_path()
         self.stdout.write(f"Service lock: {service_lock} ({'present' if service_lock.exists() else 'missing'})")
         self.stdout.write(f"Scanner lock: {scanner_lock} ({'present' if scanner_lock.exists() else 'missing'})")
-        configured = is_configured()
+        configured = rfid_service_enabled()
         self.stdout.write(f"RFID reader configuration: {'configured' if configured else 'not configured'}")
         self._report_device_status(configured)
         ping = rfid_service.request_service("ping", timeout=0.5)
@@ -386,7 +373,7 @@ class Command(BaseCommand):
             return
         self.stdout.write(self.style.MIGRATE_HEADING("Troubleshooting checklist"))
         if not configured:
-            self.stdout.write("- Ensure the RFID reader lock file exists (./.locks/rfid.lck) or enable auto-detect.")
+            self.stdout.write("- Ensure the RFID reader lock file exists (./.locks/rfid-service.lck) or enable auto-detect.")
         if not detection.get("detected"):
             self.stdout.write("- Confirm SPI is enabled and /dev/spidev* is present.")
             self.stdout.write("- Verify the MFRC522 and GPIO libraries are installed and accessible.")

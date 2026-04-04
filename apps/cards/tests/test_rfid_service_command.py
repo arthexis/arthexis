@@ -100,7 +100,7 @@ def test_rfid_status_does_not_delete_scanner_lock(tmp_path, capsys, monkeypatch)
     """Status checks must not mutate scanner lock state."""
     monkeypatch.setattr(settings, "BASE_DIR", tmp_path, raising=False)
     _write_lock(tmp_path / ".locks" / "rfid-service.lck")
-    scanner_lock = tmp_path / ".locks" / "rfid.lck"
+    scanner_lock = tmp_path / ".locks" / "rfid-scan.json"
     _write_lock(scanner_lock, "stale-marker")
     rfid_command = importlib.import_module("apps.cards.management.commands.rfid")
 

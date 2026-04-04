@@ -146,7 +146,7 @@ def _record_setup_failure(reason: str) -> None:
 def _lock_path() -> Path:
     """Return the sentinel file that marks an installed RFID reader."""
 
-    return Path(settings.BASE_DIR) / ".locks" / "rfid.lck"
+    return Path(settings.BASE_DIR) / ".locks" / "rfid-service.lck"
 
 
 def lock_file_path() -> Path:
