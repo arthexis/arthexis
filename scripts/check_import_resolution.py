@@ -12,8 +12,9 @@ import ast
 import importlib.util
 import os
 import sys
+from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Iterable, Iterator, NamedTuple, TypeAlias
+from typing import NamedTuple, TypeAlias
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 IGNORED_DIRS = {
@@ -27,13 +28,26 @@ IGNORED_DIRS = {
     ".git",
 }
 OPTIONAL_MODULES = {
-    "plyer",
-    "smbus",
-    "build",
     "RPi.GPIO",
+    "aiortc",
+    "av",
+    "build",
+    "cv2",
+    "gpiozero",
+    "graphviz",
     "mfrc522",
+    "numpy",
+    "playwright",
+    "plyer",
     "pwd",
+    "pyftpdlib",
+    "qrcode",
     "resource",
+    "selenium",
+    "smbus",
+    "smbus2",
+    "trio",
+    "trio_websocket",
 }
 OPTIONAL_IMPORT_MARKER = "optional-import"
 OPTIONAL_IMPORT_HELPERS = {"optional_import", "optional_import_block"}
@@ -122,6 +136,29 @@ def resolve_import(module: str, package: str | None, level: int) -> str | None:
     return module
 
 
+def is_optional_module(module: str) -> bool:
+    """Return ``True`` when ``module`` is an optional module path."""
+
+    prefix = ""
+    for part in module.split("."):
+        prefix = f"{prefix}.{part}" if prefix else part
+        if prefix in OPTIONAL_MODULES:
+            return True
+    return False
+
+
+def is_missing_optional_module(module: str) -> bool:
+    """Return ``True`` when an optional module is not importable in runtime."""
+
+    if not is_optional_module(module):
+        return False
+    top_level_module = module.split(".", 1)[0]
+    try:
+        return importlib.util.find_spec(top_level_module) is None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return True
+
+
 class ImportCollector(ast.NodeVisitor):
     """Collect unresolved imports from a parsed Python module."""
 
@@ -198,7 +235,9 @@ class ImportCollector(ast.NodeVisitor):
         if not module:
             return
         resolved_module = resolve_import(module, self.package, level)
-        if resolved_module is None or resolved_module in OPTIONAL_MODULES:
+        if resolved_module is None:
+            return
+        if is_missing_optional_module(resolved_module):
             return
         module_path = PROJECT_ROOT / Path(resolved_module.replace(".", "/"))
         if self._path_exists(module_path):
