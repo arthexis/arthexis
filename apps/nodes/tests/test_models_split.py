@@ -29,7 +29,7 @@ def test_select_preferred_ip_prefers_global_address():
         pytest.param(
             "rfid-scanner",
             ["systemctl"],
-            "rfid.lck",
+            "rfid-service.lck",
             True,
             id="rfid-lock-requires-systemctl",
         ),

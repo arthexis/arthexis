@@ -1,16 +1,17 @@
+import json
 import os
 import time
+from pathlib import Path
 
+from django.conf import settings
 from django.db import IntegrityError
 from django.utils import timezone
 
 from apps.cards.models import RFID, RFIDAttempt
 
-from .background_reader import get_next_tag, is_configured, start, stop
 from .irq_wiring_check import check_irq_pin
-from .reader import read_rfid, toggle_deep_read
 from .utils import convert_endianness_value, normalize_endianness
-from .rfid_service import deep_read_via_service
+from .rfid_service import deep_read_via_service, request_service, rfid_scan_log_path
 
 
 RECENT_SCAN_WINDOW_SECONDS = float(
@@ -22,6 +23,7 @@ SCANNER_SOURCES = {
     RFIDAttempt.Source.CAMERA,
     RFIDAttempt.Source.ON_DEMAND,
 }
+SCAN_INGEST_OFFSET_FILE = "rfid-scan.offset"
 
 
 def _normalize_scan_response(
@@ -95,6 +97,7 @@ def poll_scan_attempt(
     endianness: str | None = None,
     sources: set[str] | None = None,
 ) -> dict:
+    ingest_service_scans()
     sources = sources or SCANNER_SOURCES
     queryset = RFIDAttempt.objects.filter(source__in=sources)
     if after_id:
@@ -127,6 +130,49 @@ def record_scan_attempt(
     )
 
 
+def _scan_ingest_offset_path() -> Path:
+    return Path(settings.BASE_DIR) / ".locks" / SCAN_INGEST_OFFSET_FILE
+
+
+def ingest_service_scans() -> int:
+    """Ingest scanner service NDJSON entries into RFIDAttempt history."""
+
+    log_path = rfid_scan_log_path()
+    if not log_path.exists():
+        return 0
+    offset_path = _scan_ingest_offset_path()
+    offset_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        last_offset = int(offset_path.read_text(encoding="utf-8").strip())
+    except Exception:
+        last_offset = 0
+
+    processed = 0
+    with log_path.open("r", encoding="utf-8") as scan_log:
+        scan_log.seek(last_offset)
+        while True:
+            line = scan_log.readline()
+            if not line:
+                break
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                payload = dict(json.loads(stripped))
+            except (TypeError, ValueError):
+                continue
+            payload.setdefault("service_mode", "service")
+            attempt = RFIDAttempt.record_attempt(
+                payload,
+                source=RFIDAttempt.Source.SERVICE,
+                status=RFIDAttempt.Status.SCANNED,
+            )
+            if attempt is not None:
+                processed += 1
+        offset_path.write_text(str(scan_log.tell()), encoding="utf-8")
+    return processed
+
+
 def scan_sources(
     request=None,
     *,
@@ -134,79 +180,42 @@ def scan_sources(
     timeout: float | None = None,
     no_irq: bool = False,
 ):
-    """Read the next RFID tag from the local scanner."""
-    start_time = time.monotonic()
-    service_mode = "on-demand"
-    if not is_configured():
-        return {"rfid": None, "label_id": None, "service_mode": service_mode}
-    if not no_irq:
-        start()
-    remaining_timeout = 0.0
-    if timeout is not None:
-        elapsed = time.monotonic() - start_time
-        remaining_timeout = max(0.0, timeout - elapsed)
-    if no_irq:
-        result = read_rfid(timeout=remaining_timeout, use_irq=False)
-    else:
-        result = get_next_tag(timeout=remaining_timeout)
+    """Read the next RFID tag from the scanner service."""
+    timeout_value = timeout if timeout is not None else 0.5
+    result = request_service("scan", payload={"timeout": timeout_value}, timeout=timeout_value + 0.2)
+    if result is None:
+        return {"error": "scanner service unavailable", "service_mode": "service"}
     if not result:
-        return {"rfid": None, "label_id": None, "service_mode": service_mode}
+        return {"rfid": None, "label_id": None, "service_mode": "service"}
     if result.get("error"):
-        result["service_mode"] = service_mode
+        result["service_mode"] = "service"
         return result
 
     normalized = _normalize_scan_response(
-        result, endianness=endianness, service_mode=service_mode
+        result, endianness=endianness, service_mode="service"
     )
-    attempt = record_scan_attempt(
-        normalized, source=RFIDAttempt.Source.ON_DEMAND, status=RFIDAttempt.Status.SCANNED
-    )
-    if attempt:
-        normalized["attempt_id"] = attempt.pk
     return normalized
 
 
 def restart_sources():
-    """Restart the local RFID scanner."""
-    if not is_configured():
-        return {"error": "no scanner available"}
-    try:
-        stop()
-        start()
-        test = get_next_tag()
-        if test is not None and not test.get("error"):
-            return {"status": "restarted"}
-    except Exception:
-        pass
-    return {"error": "no scanner available"}
+    """Scanner service restart is managed by the service manager."""
+    return {"status": "managed-by-service"}
 
 
 def test_sources():
-    """Check the local RFID scanner for availability."""
-    if not is_configured():
-        return {"error": "no scanner available"}
-    return check_irq_pin()
+    """Check scanner availability through IRQ and service probes."""
+    service_ping = request_service("ping", timeout=0.3)
+    irq = check_irq_pin()
+    if service_ping and service_ping.get("status") == "ok":
+        return {"status": "ok", "service_mode": "service", "irq": irq}
+    return {"error": "no scanner service available", "irq": irq}
 
 
 def enable_deep_read_mode(duration: float = 60) -> dict:
     """Toggle the RFID reader deep read mode and report the new state."""
+    del duration
     response = deep_read_via_service()
     if response is not None:
         response.setdefault("service_mode", "service")
         return response
-
-    start()
-    if not is_configured():
-        return {"error": "no scanner available", "service_mode": "on-demand"}
-    enabled = toggle_deep_read()
-    status = "deep read enabled" if enabled else "deep read disabled"
-    response: dict[str, object] = {
-        "status": status,
-        "enabled": enabled,
-        "service_mode": "on-demand",
-    }
-    if enabled:
-        tag = get_next_tag()
-        if tag is not None:
-            response["scan"] = tag
-    return response
+    return {"error": "no scanner service available", "service_mode": "service"}

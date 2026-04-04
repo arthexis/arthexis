@@ -11,7 +11,7 @@ class CardsConfig(AppConfig):
 
     def ready(self):  # pragma: no cover - startup side effects
         control_lock = Path(settings.BASE_DIR) / ".locks" / "control.lck"
-        rfid_lock = Path(settings.BASE_DIR) / ".locks" / "rfid.lck"
+        rfid_lock = Path(settings.BASE_DIR) / ".locks" / "rfid-service.lck"
         if not (control_lock.exists() and rfid_lock.exists()):
             return
 
