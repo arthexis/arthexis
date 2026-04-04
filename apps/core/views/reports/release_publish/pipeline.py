@@ -248,6 +248,18 @@ def _get_release_or_response(request, pk: int, action: str):
     return release, None
 
 
+def _resolve_safe_child_path(root: Path, child: str) -> Path:
+    """Resolve ``child`` under ``root`` and reject path traversal."""
+
+    normalized_root = root.resolve(strict=False)
+    normalized_path = (normalized_root / child).resolve(strict=False)
+    try:
+        normalized_path.relative_to(normalized_root)
+    except ValueError as exc:
+        raise ValueError(f"Unsafe path outside {normalized_root}: {child}") from exc
+    return normalized_path
+
+
 def _handle_release_sync(
     request,
     release: PackageRelease,
@@ -1949,8 +1961,21 @@ def release_progress_impl(request, pk: int, action: str):
         return error_response
     session_key = f"release_publish_{pk}"
     lock_dir = Path(settings.BASE_DIR) / ".locks"
-    lock_path = lock_dir / f"release_publish_{pk}.json"
-    restart_path = lock_dir / f"release_publish_{pk}.restarts"
+    try:
+        lock_path = _resolve_safe_child_path(lock_dir, f"release_publish_{pk}.json")
+        restart_path = _resolve_safe_child_path(
+            lock_dir,
+            f"release_publish_{pk}.restarts",
+        )
+    except ValueError:
+        return _render_release_progress_error(
+            request,
+            release,
+            action,
+            _("Invalid release state path."),
+            status=400,
+            debug_info={"pk": pk, "action": action},
+        )
     log_dir, log_dir_warning = _resolve_release_log_dir(Path(settings.LOG_DIR))
     log_dir_warning_message = log_dir_warning
 
