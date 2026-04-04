@@ -147,6 +147,18 @@ def is_optional_module(module: str) -> bool:
     return False
 
 
+def is_missing_optional_module(module: str) -> bool:
+    """Return ``True`` when an optional module is not importable in runtime."""
+
+    if not is_optional_module(module):
+        return False
+    top_level_module = module.split(".", 1)[0]
+    try:
+        return importlib.util.find_spec(top_level_module) is None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return True
+
+
 class ImportCollector(ast.NodeVisitor):
     """Collect unresolved imports from a parsed Python module."""
 
@@ -223,7 +235,9 @@ class ImportCollector(ast.NodeVisitor):
         if not module:
             return
         resolved_module = resolve_import(module, self.package, level)
-        if resolved_module is None or is_optional_module(resolved_module):
+        if resolved_module is None:
+            return
+        if is_missing_optional_module(resolved_module):
             return
         module_path = PROJECT_ROOT / Path(resolved_module.replace(".", "/"))
         if self._path_exists(module_path):
