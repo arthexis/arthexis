@@ -109,3 +109,34 @@ def test_get_host_port_parses_forwarded_port_and_falls_back_to_proto():
         HTTP_X_FORWARDED_PROTO="https",
     )
     assert _get_host_port(request_with_invalid_port) == 443
+
+
+def test_get_host_port_ignores_disallowed_host_and_uses_proto_fallback(monkeypatch):
+    """Port derivation should not trust HTTP_HOST when get_host() is disallowed."""
+
+    from apps.nodes.views.registration.network import _get_host_port
+
+    request = RequestFactory().get(
+        "/nodes/info/",
+        HTTP_HOST="node.example.com:9999",
+        HTTP_X_FORWARDED_PROTO="https",
+    )
+
+    def _raise_disallowed_host():
+        raise DisallowedHost("bad host")
+
+    monkeypatch.setattr(request, "get_host", _raise_disallowed_host)
+
+    assert _get_host_port(request) == 443
+
+
+def test_iter_port_fallback_urls_handles_malformed_inputs():
+    """Fallback URL iterator should tolerate malformed URL values."""
+
+    from apps.nodes.views.registration.network import iter_port_fallback_urls
+
+    invalid_url = ["not-a-url"]
+    assert list(iter_port_fallback_urls(invalid_url)) == [invalid_url]
+
+    malformed_port_url = "https://example.com:badport/ocpp/"
+    assert list(iter_port_fallback_urls(malformed_port_url)) == [malformed_port_url]

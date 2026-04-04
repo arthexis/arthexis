@@ -106,7 +106,7 @@ def _get_host_port(request) -> int | None:
     if port:
         return port
     if forwarded_port:
-        logger.debug("Ignoring invalid X-Forwarded-Port header value: %r", forwarded_port)
+        logger.warning("Ignoring invalid X-Forwarded-Port header value: %r", forwarded_port)
 
     forwarded_proto = request.headers.get("X-Forwarded-Proto") or request.META.get(
         "HTTP_X_FORWARDED_PROTO", ""
@@ -122,7 +122,7 @@ def _get_host_port(request) -> int | None:
         host = request.get_host()
     except DisallowedHost:
         logger.debug("Rejected invalid host header while deriving host port.")
-        host = request.META.get("HTTP_HOST", "")
+        host = ""
     if host:
         _, host_port = split_domain_port(host)
         port = _normalize_port(host_port)
@@ -158,6 +158,9 @@ def append_token(url: str, token: str) -> str:
 
     if not (url and token):
         return url
+    if not isinstance(url, str):
+        logger.debug("Unable to append token to malformed URL value: %r", url)
+        return url
     try:
         parsed = urlsplit(url)
         query = dict(parse_qsl(parsed.query, keep_blank_values=True))
@@ -180,6 +183,9 @@ def iter_port_fallback_urls(base_url: str):
     """Yield ``base_url`` and supported fallback URLs for alternate ports."""
 
     yield base_url
+    if not isinstance(base_url, str):
+        logger.debug("Unable to parse URL for fallback-port iteration: %r", base_url)
+        return
     try:
         parsed = urlsplit(base_url)
     except (TypeError, ValueError):
