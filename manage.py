@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
 import json
+import logging
 import os
 import signal
 import subprocess
@@ -17,6 +18,7 @@ from config.sqlite_driver import bootstrap_sqlite_driver
 from utils import revision
 
 _RUNSERVER_STARTED_AT: float | None = None
+logger = logging.getLogger(__name__)
 
 
 def _resolve_interrupt_main() -> Callable[[], None]:
@@ -124,6 +126,22 @@ def _run_env_refresh(base_dir: Path) -> None:
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     subprocess.run(command, cwd=base_dir, check=True, env=env)
+
+
+def _service_mode_allows_embedded_celery(base_dir: Path) -> bool:
+    """Return whether embedded Celery should be launched for this node."""
+
+    service_mode_path = base_dir / ".locks" / "service_mode.lck"
+    try:
+        service_mode = service_mode_path.read_text(encoding="utf-8").strip().lower()
+    except FileNotFoundError:
+        return True
+    except OSError as exc:
+        logger.warning(
+            "Failed to read service mode lock %s: %s", service_mode_path, exc
+        )
+        return True
+    return service_mode != "systemd"
 
 
 def _is_process_alive(pid: int) -> bool:
@@ -343,8 +361,10 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     args = list(argv or sys.argv[1:])
     celery_enabled = (base_dir / ".locks/celery.lck").exists()
+    celery_forced = False
     if "--celery" in args:
         celery_enabled = True
+        celery_forced = True
         args.remove("--celery")
         os.environ.pop("ARTHEXIS_DISABLE_CELERY", None)
     if "--no-celery" in args:
@@ -358,6 +378,11 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     worker = beat = None
     is_runserver = bool(args) and args[0] == "runserver"
+    should_launch_embedded_celery = (
+        is_runserver
+        and celery_enabled
+        and (celery_forced or _service_mode_allows_embedded_celery(base_dir))
+    )
     is_debug_session = debug_flag or "DEBUGPY_LAUNCHER_PORT" in os.environ
     if is_runserver:
         _ensure_runserver_default_bind(args)
@@ -368,7 +393,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         if "--noreload" not in args:
             args.insert(1, "--noreload")
     try:
-        if celery_enabled and is_runserver:
+        if should_launch_embedded_celery:
             worker = subprocess.Popen(
                 [
                     sys.executable,
