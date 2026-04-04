@@ -85,6 +85,64 @@ arthexis_read_startup_timestamp() {
   printf '%s' "$started_at"
 }
 
+arthexis_read_startup_duration_seconds() {
+  local duration_lock="$LOCK_DIR/startup_duration.lck"
+  if [ ! -f "$duration_lock" ]; then
+    return 1
+  fi
+
+  local python_bin=""
+  if command -v python3 >/dev/null 2>&1; then
+    python_bin=python3
+  elif command -v python >/dev/null 2>&1; then
+    python_bin=python
+  else
+    return 1
+  fi
+
+  local duration
+  duration=$("$python_bin" - "$duration_lock" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+lock_path = Path(sys.argv[1])
+raw = lock_path.read_text(encoding="utf-8").strip()
+if not raw:
+    sys.exit(1)
+
+duration = None
+try:
+    payload = json.loads(raw)
+except json.JSONDecodeError:
+    payload = None
+
+if isinstance(payload, dict):
+    duration_value = payload.get("duration_seconds")
+    try:
+        duration = int(float(duration_value))
+    except (TypeError, ValueError):
+        duration = None
+else:
+    try:
+        duration = int(float(raw.splitlines()[0]))
+    except (TypeError, ValueError, IndexError):
+        duration = None
+
+if duration is None or duration < 0:
+    sys.exit(1)
+
+print(duration)
+PY
+)
+
+  if ! printf '%s' "$duration" | grep -Eq '^[0-9]+$'; then
+    return 1
+  fi
+
+  printf '%s' "$duration"
+}
+
 LOCK_DIR="$BASE_DIR/.locks"
 STARTUP_LOCK="$LOCK_DIR/startup_started_at.lck"
 SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
@@ -266,7 +324,11 @@ if STARTED_AT=$(arthexis_read_startup_timestamp); then
   ELAPSED=$((NOW - STARTED_AT))
 
   if [ "$SUITE_REACHABLE" = true ]; then
-    echo "Startup completed after ${ELAPSED}s; clearing startup lock."
+    if DURATION_SECONDS=$(arthexis_read_startup_duration_seconds); then
+      echo "Startup completed in ${DURATION_SECONDS}s (recorded); clearing startup lock."
+    else
+      echo "Startup completed after ${ELAPSED}s; clearing startup lock."
+    fi
     rm -f "$STARTUP_LOCK"
   elif [ "$ELAPSED" -lt "$STARTUP_TIMEOUT" ]; then
     echo "Startup in progress: suite not reachable yet (${ELAPSED}s elapsed, waiting up to ${STARTUP_TIMEOUT}s)."
