@@ -23,6 +23,7 @@ from apps.nodes.views.registration.handlers import submit_enrollment_public_key
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_submit_enrollment_public_key_accepts_valid_token():
     site = Site.objects.create(domain="mesh.example.com", name="Mesh")
     node = Node.objects.create(
@@ -170,6 +171,7 @@ def test_submit_enrollment_public_key_rejects_missing_site_for_scoped_token():
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_submit_enrollment_public_key_rejects_duplicate_submission_regression():
     """Regression: repeated token submissions should be idempotent after first success."""
 

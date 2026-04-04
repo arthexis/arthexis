@@ -67,6 +67,7 @@ def test_github_webhook_header_lookup_is_case_insensitive(client):
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_github_webhook_app_signature_verifies(client):
     app = GitHubApp.objects.create(
         display_name="Example App",
@@ -96,6 +97,7 @@ def test_github_webhook_app_signature_verifies(client):
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_github_webhook_app_rejects_invalid_signature(client):
     app = GitHubApp.objects.create(
         display_name="Example App",

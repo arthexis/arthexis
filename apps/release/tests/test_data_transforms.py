@@ -98,6 +98,7 @@ def test_release_transforms_normalize_modules_video_and_reports(tmp_path) -> Non
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_release_transforms_enable_ocpp_defaults_and_link_stations(tmp_path) -> None:
     """Deferred transforms should restore OCPP defaults and link charging stations."""
 
