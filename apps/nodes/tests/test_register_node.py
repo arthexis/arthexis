@@ -647,11 +647,13 @@ def test_register_visitor_proxy_returns_502_on_info_timeout(admin_user, monkeypa
 @pytest.mark.django_db
 def test_register_visitor_proxy_returns_502_on_non_json_info_response(admin_user, monkeypatch):
     class _TextResponse:
-        content = b"visitor info as plain text"
-
         @staticmethod
         def raise_for_status():
             return None
+
+        @staticmethod
+        def json():
+            raise json.JSONDecodeError("Expecting value", "visitor info as plain text", 0)
 
     monkeypatch.setattr(handlers, "is_allowed_visitor_url", lambda _: True)
     monkeypatch.setattr(handlers, "iter_port_fallback_urls", lambda url: [url])
@@ -686,6 +688,63 @@ def test_register_visitor_proxy_returns_502_on_non_json_info_response(admin_user
     response = handlers.register_visitor_proxy(request)
     assert response.status_code == 502
     assert json.loads(response.content.decode())["detail"] == "visitor info unavailable"
+
+
+@pytest.mark.django_db
+def test_register_visitor_proxy_accepts_utf16_json_info_response(admin_user, monkeypatch):
+    class _Utf16JsonResponse:
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return json.loads('{"id": 2, "base_site_requires_https": true}'.encode("utf-16").decode("utf-16"))
+
+    class _VisitorRegisterResponse:
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return {"id": 3, "detail": "registered"}
+
+    monkeypatch.setattr(handlers, "is_allowed_visitor_url", lambda _: True)
+    monkeypatch.setattr(handlers, "iter_port_fallback_urls", lambda url: [url])
+    monkeypatch.setattr(
+        handlers,
+        "get_public_targets",
+        lambda url: [
+            SimpleNamespace(
+                url=url,
+                host_header="visitor.example.test",
+                server_hostname="visitor.example.test",
+            )
+        ],
+    )
+    monkeypatch.setattr(handlers, "node_info", lambda request: JsonResponse({"id": 1, "base_site_requires_https": False}))
+    monkeypatch.setattr(handlers, "register_node", lambda request: JsonResponse({"id": 1, "detail": "ok"}))
+    monkeypatch.setattr(requests.Session, "get", lambda *args, **kwargs: _Utf16JsonResponse())
+    monkeypatch.setattr(requests.Session, "post", lambda *args, **kwargs: _VisitorRegisterResponse())
+
+    request = RequestFactory().post(
+        "/nodes/register-visitor-proxy/",
+        data=json.dumps(
+            {
+                "visitor_info_url": "https://visitor.example.test/nodes/info/",
+                "visitor_register_url": "https://visitor.example.test/nodes/register/",
+            }
+        ),
+        content_type="application/json",
+    )
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    response = handlers.register_visitor_proxy(request)
+    assert response.status_code == 200
+    response_body = json.loads(response.content.decode())
+    assert response_body["visitor"]["id"] == 3
 
 
 @pytest.mark.django_db
