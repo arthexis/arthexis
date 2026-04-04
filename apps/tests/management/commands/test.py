@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import subprocess
 from pathlib import Path
@@ -60,6 +61,13 @@ class Command(BaseCommand):
 
     def _run_pytest(self, pytest_args: list[str]) -> None:
         """Execute pytest as a subprocess."""
+
+        if importlib.util.find_spec("pytest") is None:
+            raise CommandError(
+                "pytest is not installed in the active environment. "
+                "Install test dependencies (for example: "
+                "`.venv/bin/pip install -r requirements-ci.txt`) and retry."
+            )
 
         args = list(pytest_args)
         if args and args[0] == "--":
