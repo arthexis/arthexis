@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from django.core.exceptions import DisallowedHost
 from django.test import RequestFactory, override_settings
 
 from apps.nodes.views.registration import (
@@ -63,3 +64,48 @@ def test_get_client_ip_uses_forwarded_for_only_for_trusted_proxy():
         HTTP_X_FORWARDED_FOR="203.0.113.10",
     )
     assert get_client_ip(untrusted_request) == "198.51.100.7"
+
+
+def test_host_helpers_return_empty_for_invalid_host_header(monkeypatch):
+    """Host helpers should gracefully handle rejected host headers."""
+
+    from apps.nodes.views.registration.network import _get_host_domain, _get_host_ip
+
+    request = RequestFactory().get("/nodes/info/", HTTP_HOST="bad host")
+    def _raise_disallowed_host():
+        raise DisallowedHost("bad host")
+
+    monkeypatch.setattr(request, "get_host", _raise_disallowed_host)
+
+    assert _get_host_ip(request) == ""
+    assert _get_host_domain(request) == ""
+
+
+def test_append_token_returns_original_value_for_malformed_url_input():
+    """Malformed URL inputs should be returned as-is."""
+
+    from apps.nodes.views.registration.network import append_token
+
+    invalid_url = ["not-a-url"]
+    assert append_token(invalid_url, "token") == invalid_url
+
+
+def test_get_host_port_parses_forwarded_port_and_falls_back_to_proto():
+    """Forwarded port should win when valid and fall back when malformed."""
+
+    from apps.nodes.views.registration.network import _get_host_port
+
+    request_with_port = RequestFactory().get(
+        "/nodes/info/",
+        HTTP_HOST="node.example.com",
+        HTTP_X_FORWARDED_PORT="8443",
+    )
+    assert _get_host_port(request_with_port) == 8443
+
+    request_with_invalid_port = RequestFactory().get(
+        "/nodes/info/",
+        HTTP_HOST="node.example.com",
+        HTTP_X_FORWARDED_PORT="8443,443",
+        HTTP_X_FORWARDED_PROTO="https",
+    )
+    assert _get_host_port(request_with_invalid_port) == 443
