@@ -180,6 +180,7 @@ def test_register_node_updates_base_site_for_existing_node(admin_user):
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_register_node_rejects_invalid_enrollment_token_without_creating_node(
     admin_user,
 ):
@@ -503,6 +504,7 @@ def test_register_current_normalizes_env_role_name_case(
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_register_current_defaults_to_terminal_role(settings, monkeypatch, tmp_path):
     """Registration should default to Terminal when no role configuration exists."""
     monkeypatch.setattr(

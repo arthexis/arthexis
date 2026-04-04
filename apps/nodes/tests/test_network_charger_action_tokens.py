@@ -35,6 +35,7 @@ def test_network_charger_action_accepts_ocpp_control_enrollment_token(client, mo
 
 
 @pytest.mark.django_db
+@pytest.mark.critical
 def test_network_charger_action_rejects_insufficient_scope_token(client):
     role = NodeRole.objects.create(name="Gateway")
     node = Node.objects.create(hostname="mesh-node", role=role)
