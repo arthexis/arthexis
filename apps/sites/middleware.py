@@ -8,6 +8,8 @@ from http import HTTPStatus
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import ImproperlyConfigured
+from django.db import DatabaseError
 from django.urls import Resolver404, resolve
 
 from .models import Landing, LandingLead, ViewHistory
@@ -62,9 +64,17 @@ class ViewHistoryMiddleware:
             status_code = getattr(exc, "status_code", 500) or 500
             error_message = str(exc)
             exception_name = exc.__class__.__name__
-            self._record_visit(
-                request, status_code, error_message, exception_name=exception_name
-            )
+            try:
+                self._record_visit(
+                    request, status_code, error_message, exception_name=exception_name
+                )
+            except Exception:  # pragma: no cover - best effort logging
+                logger.debug(
+                    "Failed to record ViewHistory while handling %s for %s",
+                    exception_name,
+                    request.path,
+                    exc_info=True,
+                )
             raise
         else:
             status_code = getattr(response, "status_code", 0) or 0
@@ -126,8 +136,19 @@ class ViewHistoryMiddleware:
                 from utils.sites import get_site
 
                 site = get_site(request)
-            except Exception:  # pragma: no cover - best effort logging
-                site = None
+            except (
+                DatabaseError,
+                ImportError,
+                ImproperlyConfigured,
+                RuntimeError,
+            ) as exc:
+                logger.debug(
+                    "Failed to resolve Site (%s) for %s",
+                    exc.__class__.__name__,
+                    request.path,
+                    exc_info=True,
+                )
+                return
 
         try:
             ViewHistory.objects.create(
@@ -141,9 +162,12 @@ class ViewHistoryMiddleware:
                 exception_name=exception_name,
                 view_name=view_name,
             )
-        except Exception:  # pragma: no cover - best effort logging
+        except DatabaseError as exc:
             logger.debug(
-                "Failed to record ViewHistory for %s", full_path, exc_info=True
+                "Failed to record ViewHistory (%s) for %s",
+                exc.__class__.__name__,
+                request.path,
+                exc_info=True,
             )
         else:
             self._update_user_last_visit_ip(request)
@@ -179,7 +203,16 @@ class ViewHistoryMiddleware:
         if not getattr(landing, "track_leads", False):
             return
 
-        if not landing_leads_supported():
+        try:
+            if not landing_leads_supported():
+                return
+        except DatabaseError as exc:
+            logger.debug(
+                "Failed to check landing lead support (%s) for %s",
+                exc.__class__.__name__,
+                request.path,
+                exc_info=True,
+            )
             return
 
         referer = get_original_referer(request)
@@ -198,9 +231,12 @@ class ViewHistoryMiddleware:
                 user_agent=user_agent,
                 ip_address=ip_address,
             )
-        except Exception:  # pragma: no cover - best effort logging
+        except DatabaseError as exc:
             logger.debug(
-                "Failed to record LandingLead for %s", landing.path, exc_info=True
+                "Failed to record LandingLead (%s) for %s",
+                exc.__class__.__name__,
+                request.path,
+                exc_info=True,
             )
 
     def _resolve_view_name(self, request) -> str:
