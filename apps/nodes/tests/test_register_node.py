@@ -204,4 +204,71 @@ def test_node_info_handles_invalid_private_key_material(monkeypatch, tmp_path, c
     assert any(getattr(record, "attempt", "") == "key_parse" for record in caplog.records)
     assert any(getattr(record, "exception_class", "") == "ValueError" for record in caplog.records)
 
+@pytest.mark.django_db
+def test_get_local_does_not_cache_stale_self_after_mac_conflict(monkeypatch):
+    self_node = Node.objects.create(
+        hostname="self-node",
+        mac_address="00:11:22:33:44:55",
+        current_relation=Node.Relation.SELF,
+    )
+    Node._local_cache.clear()
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
+    )
+
+    original_save = Node.save
+
+    def conflicting_save(self, *args, **kwargs):
+        if self.pk == self_node.pk and kwargs.get("update_fields") == ["mac_address"]:
+            Node.objects.create(
+                hostname="racer",
+                mac_address="aa:bb:cc:dd:ee:ff",
+                current_relation=Node.Relation.PEER,
+            )
+        return original_save(self, *args, **kwargs)
+
+    monkeypatch.setattr(Node, "save", conflicting_save)
+
+    local = Node.get_local()
+
+    assert local is not None
+    assert local.hostname == "racer"
+    self_node.refresh_from_db()
+    assert self_node.mac_address == "00:11:22:33:44:55"
+    assert Node._local_cache["aa:bb:cc:dd:ee:ff"][0].hostname == "racer"
+
+
+@pytest.mark.django_db
+def test_get_local_logs_redacted_mac_values(monkeypatch, caplog):
+    self_node = Node.objects.create(
+        hostname="self-node",
+        mac_address="00:11:22:33:44:55",
+        current_relation=Node.Relation.SELF,
+    )
+    Node._local_cache.clear()
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
+    )
+
+    def raise_conflict(*args, **kwargs):
+        raise IntegrityError("simulated uniqueness conflict")
+
+    monkeypatch.setattr(Node, "save", raise_conflict)
+
+    caplog.set_level(logging.WARNING, logger="apps.nodes.models.node")
+    Node.get_local()
+
+    conflict_records = [
+        rec
+        for rec in caplog.records
+        if "could not update due to MAC uniqueness conflict" in rec.getMessage()
+    ]
+    assert conflict_records
+    record = conflict_records[-1]
+    assert getattr(record, "runtime_mac_redacted", "").startswith("***REDACTED***-")
+    assert getattr(record, "stored_mac_redacted", "").startswith("***REDACTED***-")
+    assert not hasattr(record, "runtime_mac")
+    assert not hasattr(record, "stored_mac")
+    assert "aa:bb:cc:dd:ee:ff" not in caplog.text
+    assert "00:11:22:33:44:55" not in caplog.text
 
