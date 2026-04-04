@@ -300,9 +300,10 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=$base_dir
+Environment=PYTHONPATH=$base_dir
 EnvironmentFile=-$base_dir/redis.env
 EnvironmentFile=-$base_dir/debug.env
-ExecStart=$base_dir/.venv/bin/celery -A config worker -l info --concurrency=1 -n worker.${service_name}@%%h
+ExecStart=$base_dir/.venv/bin/python -m celery -A config worker -l info --concurrency=1 -n worker.${service_name}@%%h
 Restart=always
 TimeoutStartSec=500
 User=$service_user
@@ -325,9 +326,10 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=$base_dir
+Environment=PYTHONPATH=$base_dir
 EnvironmentFile=-$base_dir/redis.env
 EnvironmentFile=-$base_dir/debug.env
-ExecStart=$base_dir/.venv/bin/celery -A config beat -l info
+ExecStart=$base_dir/.venv/bin/python -m celery -A config beat -l info
 Restart=always
 TimeoutStartSec=500
 User=$service_user

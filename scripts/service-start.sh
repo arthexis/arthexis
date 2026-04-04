@@ -501,10 +501,10 @@ if [ "$CELERY_EMBEDDED" = true ]; then
     CELERY_NODE_SERVICE_NAME="embedded-$$"
   fi
 
-  celery -A config worker -l info --concurrency=2 -n worker.${CELERY_NODE_SERVICE_NAME}@%h &
+  PYTHONPATH="$BASE_DIR${PYTHONPATH:+:$PYTHONPATH}" python -m celery -A config worker -l info --concurrency=2 -n worker.${CELERY_NODE_SERVICE_NAME}@%h &
   CELERY_WORKER_PID=$!
   record_pid_file "$CELERY_WORKER_PID" "$CELERY_WORKER_PID_FILE"
-  celery -A config beat -l info &
+  PYTHONPATH="$BASE_DIR${PYTHONPATH:+:$PYTHONPATH}" python -m celery -A config beat -l info &
   CELERY_BEAT_PID=$!
   record_pid_file "$CELERY_BEAT_PID" "$CELERY_BEAT_PID_FILE"
 fi
