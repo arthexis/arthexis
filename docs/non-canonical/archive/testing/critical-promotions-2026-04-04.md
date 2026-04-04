@@ -18,4 +18,4 @@ These tests were promoted to the `critical` marker to keep historically fragile 
 12. `apps/core/tests/test_auto_upgrade_periodic_task.py::test_sync_auto_upgrade_periodic_task_for_feature_change_enables_task`
 13. `apps/repos/tests/test_github_issue_reporting.py::test_request_exceptions_do_not_enqueue_github_reporting_when_feature_disabled`
 14. `apps/repos/tests/test_github_issue_reporting.py::test_duplicate_exception_cooldown_still_blocks_repeated_reporting`
-15. `apps/users/tests/test_rfid_auth_audit_suite.py::test_rfid_login_records_rejected_reason_for_blocked_tag`
+15. apps/users/tests/test_rfid_auth_audit_suite.py::RFIDAuthAuditSuiteTests::test_rfid_login_records_rejected_reason_for_blocked_tag
