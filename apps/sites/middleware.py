@@ -72,7 +72,7 @@ class ViewHistoryMiddleware:
                 logger.debug(
                     "Failed to record ViewHistory while handling %s for %s",
                     exception_name,
-                    request.get_full_path(),
+                    request.path,
                     exc_info=True,
                 )
             raise
@@ -137,11 +137,18 @@ class ViewHistoryMiddleware:
 
                 site = get_site(request)
             except (
+                DatabaseError,
                 ImportError,
                 ImproperlyConfigured,
                 RuntimeError,
-            ):  # pragma: no cover - best effort logging
-                site = None
+            ) as exc:
+                logger.debug(
+                    "Failed to resolve Site (%s) for %s",
+                    exc.__class__.__name__,
+                    request.path,
+                    exc_info=True,
+                )
+                return
 
         try:
             ViewHistory.objects.create(
@@ -159,7 +166,7 @@ class ViewHistoryMiddleware:
             logger.debug(
                 "Failed to record ViewHistory (%s) for %s",
                 exc.__class__.__name__,
-                full_path,
+                request.path,
                 exc_info=True,
             )
         else:
@@ -196,7 +203,16 @@ class ViewHistoryMiddleware:
         if not getattr(landing, "track_leads", False):
             return
 
-        if not landing_leads_supported():
+        try:
+            if not landing_leads_supported():
+                return
+        except DatabaseError as exc:
+            logger.debug(
+                "Failed to check landing lead support (%s) for %s",
+                exc.__class__.__name__,
+                request.path,
+                exc_info=True,
+            )
             return
 
         referer = get_original_referer(request)
@@ -219,7 +235,7 @@ class ViewHistoryMiddleware:
             logger.debug(
                 "Failed to record LandingLead (%s) for %s",
                 exc.__class__.__name__,
-                request.get_full_path(),
+                request.path,
                 exc_info=True,
             )
 

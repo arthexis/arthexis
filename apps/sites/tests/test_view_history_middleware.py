@@ -80,3 +80,59 @@ def test_record_visit_failure_does_not_mask_original_exception(monkeypatch):
     assert mock_logger.debug.call_count == 1
     assert "ValueError" == mock_logger.debug.call_args.args[1]
     assert "/analytics-error/" == mock_logger.debug.call_args.args[2]
+
+
+def test_get_site_failure_does_not_break_response(monkeypatch):
+    request = RequestFactory().get("/site-lookup-safe/")
+    middleware = ViewHistoryMiddleware(lambda _request: HttpResponse("ok", status=200))
+
+    mock_logger = Mock()
+    create_mock = Mock()
+    monkeypatch.setattr("apps.sites.middleware.logger", mock_logger)
+    monkeypatch.setattr("apps.sites.middleware.ViewHistory.objects.create", create_mock)
+    monkeypatch.setattr(
+        "utils.sites.get_site",
+        Mock(side_effect=OperationalError("site db unavailable")),
+    )
+
+    response = middleware(request)
+
+    assert response.status_code == 200
+    create_mock.assert_not_called()
+    assert mock_logger.debug.call_count == 1
+    assert "OperationalError" == mock_logger.debug.call_args.args[1]
+    assert "/site-lookup-safe/" == mock_logger.debug.call_args.args[2]
+
+
+def test_landing_leads_supported_failure_does_not_break_response(monkeypatch):
+    module = Module.objects.create(path="/lead-check-module/")
+    Landing.objects.create(
+        module=module,
+        path="/landing-support-safe/",
+        label="Lead Support Safe",
+        track_leads=True,
+    )
+
+    request = RequestFactory().get("/landing-support-safe/")
+    middleware = ViewHistoryMiddleware(lambda _request: HttpResponse("ok", status=200))
+
+    mock_logger = Mock()
+    monkeypatch.setattr("apps.sites.middleware.logger", mock_logger)
+    monkeypatch.setattr("apps.sites.middleware.ViewHistory.objects.create", Mock())
+    monkeypatch.setattr(
+        "apps.sites.middleware.landing_leads_supported",
+        Mock(side_effect=OperationalError("support check failed")),
+    )
+    landing_lead_create_mock = Mock()
+    monkeypatch.setattr(
+        "apps.sites.middleware.LandingLead.objects.create",
+        landing_lead_create_mock,
+    )
+
+    response = middleware(request)
+
+    assert response.status_code == 200
+    landing_lead_create_mock.assert_not_called()
+    assert mock_logger.debug.call_count == 1
+    assert "OperationalError" == mock_logger.debug.call_args.args[1]
+    assert "/landing-support-safe/" == mock_logger.debug.call_args.args[2]
