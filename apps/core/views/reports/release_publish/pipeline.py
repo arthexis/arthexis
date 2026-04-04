@@ -780,7 +780,7 @@ def _sync_with_origin_main(log_path: Path) -> None:
         )
         _append_log(log_path, "\n".join(instructions))
 
-        raise Exception("Rebase onto main failed") from exc
+        raise RuntimeError("Rebase onto main failed") from exc
 
 
 def _clean_repo() -> None:
@@ -972,7 +972,13 @@ def _append_publish_workflow_status(
             tag_name=f"v{release.version}",
             token=token,
         )
-    except (requests.exceptions.RequestException, subprocess.SubprocessError, OSError, ValueError):
+    except (
+        requests.exceptions.RequestException,
+        subprocess.SubprocessError,
+        OSError,
+        RuntimeError,
+        ValueError,
+    ):
         logger.warning(
             "Failed to fetch publish workflow run for %s", release, exc_info=True
         )
@@ -1161,7 +1167,7 @@ def _push_release_changes(log_path: Path, ctx: dict, *, step_name: str) -> bool:
         _append_log(
             log_path, f"Failed to push release changes to origin: {details}"
         )
-        raise Exception("Failed to push release changes") from exc
+        raise RuntimeError("Failed to push release changes") from exc
 
     _append_log(log_path, "Pushed release changes to origin")
     pending_push = ctx.get("pending_git_push")
@@ -1191,11 +1197,11 @@ def _ensure_origin_main_unchanged(log_path: Path) -> None:
             _append_log(log_path, f"Failed to verify origin/main status: {details}")
         else:  # pragma: no cover - defensive fallback
             _append_log(log_path, "Failed to verify origin/main status")
-        raise Exception("Unable to verify origin/main status") from exc
+        raise RuntimeError("Unable to verify origin/main status") from exc
 
     if origin_main != merge_base:
         _append_log(log_path, "origin/main advanced during release; restart required")
-        raise Exception("origin/main changed during release; restart required")
+        raise RuntimeError("origin/main changed during release; restart required")
 
     _append_log(log_path, "origin/main unchanged since last sync")
 
@@ -1646,7 +1652,7 @@ def _step_verify_release_environment(
 def _collect_release_artifacts() -> list[Path]:
     dist_path = Path("dist")
     if not dist_path.exists():
-        raise Exception("dist directory not found")
+        raise FileNotFoundError("dist directory not found")
     artifacts = sorted(
         [
             *dist_path.glob("*.whl"),
@@ -1654,7 +1660,7 @@ def _collect_release_artifacts() -> list[Path]:
         ]
     )
     if not artifacts:
-        raise Exception("No release artifacts found in dist/")
+        raise RuntimeError("No release artifacts found in dist/")
     return artifacts
 
 
@@ -1673,7 +1679,7 @@ def _step_export_and_dispatch(release, ctx, log_path: Path, *, user=None) -> Non
         return
 
     if not release_utils.network_available():
-        raise Exception("Network unavailable; cannot export artifacts")
+        raise RuntimeError("Network unavailable; cannot export artifacts")
 
     artifacts = _collect_release_artifacts()
     owner, repo = _resolve_github_repository(release)
