@@ -120,12 +120,14 @@ PROJECT_APPS = [
     "config.auth_app.AuthConfig",
     "apps.celery.beat_app.CeleryBeatConfig",
 ]
+ARTHEXIS_EXTERNAL_APPS: list[str] = []
 
 INSTALLED_APPS = (
     PROJECT_APPS
     + DJANGO_CORE_APPS
     + THIRD_PARTY_APPS
     + PROJECT_LOCAL_APPS
+    + ARTHEXIS_EXTERNAL_APPS
 )
 
 if HAS_DEBUG_TOOLBAR:
