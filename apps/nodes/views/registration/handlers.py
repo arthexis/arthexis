@@ -57,15 +57,17 @@ def _extract_response_detail(response) -> str:
     """Extract detail text from JSON and non-JSON responses."""
 
     try:
-        payload = json.loads(response.content.decode())
-    except Exception:
+        decoded_body = response.content.decode()
+    except UnicodeDecodeError:
+        return ""
+
+    try:
+        payload = json.loads(decoded_body)
+    except json.JSONDecodeError:
         payload = None
     if isinstance(payload, Mapping) and payload.get("detail"):
         return str(payload["detail"])
-    try:
-        return response.content.decode(errors="ignore")
-    except Exception:
-        return ""
+    return decoded_body
 
 
 @api_login_required
@@ -178,25 +180,69 @@ def node_info(request):
     if token:
         try:
             priv_path = node.get_base_path() / "security" / f"{node.public_endpoint}"
-            private_key = serialization.load_pem_private_key(
-                priv_path.read_bytes(), password=None
-            )
-        except Exception as exc:
+            private_key_bytes = priv_path.read_bytes()
+        except (FileNotFoundError, OSError) as exc:
             registration_logger.warning(
-                "Visitor registration: unable to load key for %s: %s",
+                "Visitor registration: unable to read signing key for %s",
                 node.public_endpoint,
-                exc,
+                extra={
+                    "target": str(priv_path),
+                    "attempt": "key_read",
+                    "exception_class": exc.__class__.__name__,
+                },
             )
         else:
-            signature, error = Node.sign_payload(token, private_key)
-            if signature:
-                data["token_signature"] = signature
-            elif error:
-                registration_logger.warning(
-                    "Visitor registration: unable to sign token for %s: %s",
-                    node.public_endpoint,
-                    error,
+            try:
+                private_key = serialization.load_pem_private_key(
+                    private_key_bytes, password=None
                 )
+            except (TypeError, ValueError) as exc:
+                registration_logger.warning(
+                    "Visitor registration: unable to parse signing key for %s",
+                    node.public_endpoint,
+                    extra={
+                        "target": str(priv_path),
+                        "attempt": "key_parse",
+                        "exception_class": exc.__class__.__name__,
+                    },
+                )
+            except Exception as exc:
+                registration_logger.warning(
+                    "Visitor registration: crypto error loading key for %s",
+                    node.public_endpoint,
+                    extra={
+                        "target": str(priv_path),
+                        "attempt": "key_crypto",
+                        "exception_class": exc.__class__.__name__,
+                    },
+                )
+            else:
+                try:
+                    signature, error = Node.sign_payload(token, private_key)
+                except Exception as exc:
+                    registration_logger.warning(
+                        "Visitor registration: unable to sign token for %s",
+                        node.public_endpoint,
+                        extra={
+                            "target": node.public_endpoint,
+                            "attempt": "token_sign",
+                            "exception_class": exc.__class__.__name__,
+                        },
+                    )
+                else:
+                    if signature:
+                        data["token_signature"] = signature
+                    elif error:
+                        registration_logger.warning(
+                            "Visitor registration: unable to sign token for %s: %s",
+                            node.public_endpoint,
+                            error,
+                            extra={
+                                "target": node.public_endpoint,
+                                "attempt": "token_sign",
+                                "exception_class": "SignPayloadError",
+                            },
+                        )
 
     response = JsonResponse(data)
     response["Access-Control-Allow-Origin"] = "*"
@@ -712,22 +758,66 @@ def register_visitor_proxy(request):
 
     visitor_info = None
     last_error: Exception | None = None
+    info_attempt = 0
     for candidate in iter_port_fallback_urls(visitor_info_url):
         for target in get_public_targets(candidate):
+            info_attempt += 1
             try:
                 parsed_target = urlsplit(target.url)
                 session.mount(f"{parsed_target.scheme}://{parsed_target.netloc}", HostNameSSLAdapter(target.server_hostname))
                 resp = session.get(target.url, headers={"Host": target.host_header}, timeout=timeout_seconds)
                 resp.raise_for_status()
-                visitor_info = resp.json()
+            except requests.exceptions.RequestException as exc:
+                last_error = exc
+                registration_logger.warning(
+                    "Visitor registration proxy: info request failed",
+                    extra={
+                        "target": redact_url_token(target.url),
+                        "attempt": info_attempt,
+                        "exception_class": exc.__class__.__name__,
+                    },
+                )
+                continue
+            try:
+                visitor_info = json.loads(resp.content.decode())
+            except UnicodeDecodeError as exc:
+                last_error = exc
+                registration_logger.warning(
+                    "Visitor registration proxy: info response decode failed",
+                    extra={
+                        "target": redact_url_token(target.url),
+                        "attempt": info_attempt,
+                        "exception_class": exc.__class__.__name__,
+                    },
+                )
+                continue
+            except json.JSONDecodeError as exc:
+                last_error = exc
+                registration_logger.warning(
+                    "Visitor registration proxy: info response json parse failed",
+                    extra={
+                        "target": redact_url_token(target.url),
+                        "attempt": info_attempt,
+                        "exception_class": exc.__class__.__name__,
+                    },
+                )
+                continue
+            else:
                 visitor_info_url = candidate
                 break
-            except Exception as exc:
-                last_error = exc
         if visitor_info is not None:
             break
     if visitor_info is None:
-        registration_logger.warning("Visitor registration proxy: unable to fetch visitor info from %s: %s", redact_url_token(visitor_info_url), last_error)
+        registration_logger.warning(
+            "Visitor registration proxy: unable to fetch visitor info from %s: %s",
+            redact_url_token(visitor_info_url),
+            last_error,
+            extra={
+                "target": redact_url_token(visitor_info_url),
+                "attempt": info_attempt,
+                "exception_class": (last_error.__class__.__name__ if last_error else ""),
+            },
+        )
         return JsonResponse({"detail": "visitor info unavailable"}, status=502)
 
     host_payload = _build_registration_payload(visitor_info, "Downstream")
@@ -745,22 +835,66 @@ def register_visitor_proxy(request):
 
     visitor_register_body = None
     last_error = None
+    register_attempt = 0
     for candidate in iter_port_fallback_urls(visitor_register_url):
         for target in get_public_targets(candidate):
+            register_attempt += 1
             try:
                 parsed_target = urlsplit(target.url)
                 session.mount(f"{parsed_target.scheme}://{parsed_target.netloc}", HostNameSSLAdapter(target.server_hostname))
                 resp = session.post(target.url, json=visitor_payload, headers={"Host": target.host_header}, timeout=timeout_seconds)
                 resp.raise_for_status()
-                visitor_register_body = resp.json()
+            except requests.exceptions.RequestException as exc:
+                last_error = exc
+                registration_logger.warning(
+                    "Visitor registration proxy: visitor notification request failed",
+                    extra={
+                        "target": redact_url_token(target.url),
+                        "attempt": register_attempt,
+                        "exception_class": exc.__class__.__name__,
+                    },
+                )
+                continue
+            try:
+                visitor_register_body = json.loads(resp.content.decode())
+            except UnicodeDecodeError as exc:
+                last_error = exc
+                registration_logger.warning(
+                    "Visitor registration proxy: visitor response decode failed",
+                    extra={
+                        "target": redact_url_token(target.url),
+                        "attempt": register_attempt,
+                        "exception_class": exc.__class__.__name__,
+                    },
+                )
+                continue
+            except json.JSONDecodeError as exc:
+                last_error = exc
+                registration_logger.warning(
+                    "Visitor registration proxy: visitor response json parse failed",
+                    extra={
+                        "target": redact_url_token(target.url),
+                        "attempt": register_attempt,
+                        "exception_class": exc.__class__.__name__,
+                    },
+                )
+                continue
+            else:
                 visitor_register_url = candidate
                 break
-            except Exception as exc:
-                last_error = exc
         if visitor_register_body is not None:
             break
     if visitor_register_body is None:
-        registration_logger.warning("Visitor registration proxy: unable to notify visitor at %s: %s", redact_url_token(visitor_register_url), last_error)
+        registration_logger.warning(
+            "Visitor registration proxy: unable to notify visitor at %s: %s",
+            redact_url_token(visitor_register_url),
+            last_error,
+            extra={
+                "target": redact_url_token(visitor_register_url),
+                "attempt": register_attempt,
+                "exception_class": (last_error.__class__.__name__ if last_error else ""),
+            },
+        )
         return JsonResponse({"detail": "visitor confirmation failed"}, status=502)
 
     return JsonResponse(
