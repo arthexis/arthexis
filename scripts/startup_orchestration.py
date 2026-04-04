@@ -15,6 +15,18 @@ def extract_payload(raw_output: str) -> dict[str, object]:
     if isinstance(payload, dict):
         return payload
 
+    lines = raw_output.splitlines()
+    for start in range(len(lines) - 1, -1, -1):
+        candidate = "\n".join(lines[start:]).strip()
+        if not candidate:
+            continue
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            return payload
+
     for line in reversed(raw_output.splitlines()):
         line = line.strip()
         if not line:
