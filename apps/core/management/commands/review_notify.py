@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 from apps.core.review_notifications import (
     DEFAULT_REVIEW_NOTIFICATION_EXPIRY_SECONDS,
@@ -37,6 +37,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:
+        if options["expires_in"] < 0:
+            raise CommandError("--expires-in must be greater than or equal to 0.")
+
         result = send_review_notification(
             actor=options["actor"],
             summary=options["summary"],

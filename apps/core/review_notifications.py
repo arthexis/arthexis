@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone as datetime_timezone
+from datetime import timedelta
 from pathlib import Path
 import subprocess
 
 from django.conf import settings
+from django.utils import timezone
 
 from apps.core.notifications import notify
 from apps.screens.startup_notifications import lcd_feature_enabled
 
 LCD_LINE_WIDTH = 16
 DEFAULT_REVIEW_NOTIFICATION_EXPIRY_SECONDS = 1800
+STICKY_REVIEW_NOTIFICATION_EXPIRY_DAYS = 3650
+GIT_COMMAND_TIMEOUT_SECONDS = 5
 
 
 @dataclass(frozen=True)
@@ -42,8 +45,13 @@ def _run_git(base_dir: Path, *args: str) -> str | None:
             capture_output=True,
             check=True,
             text=True,
+            timeout=GIT_COMMAND_TIMEOUT_SECONDS,
         )
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except (
+        FileNotFoundError,
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+    ):
         return None
     return result.stdout
 
@@ -100,9 +108,10 @@ def send_review_notification(
     branch = _current_branch(resolved_base_dir)
     changed_file_count = _changed_file_count(resolved_base_dir)
     subject = _default_subject(actor)
-    body = _clip_lcd_text(summary) if summary else _default_body(changed_file_count)
+    summary_text = (summary or "").strip()
+    body = _clip_lcd_text(summary_text) if summary_text else _default_body(changed_file_count)
 
-    if changed_file_count == 0 and not force:
+    if (changed_file_count == 0 or changed_file_count is None) and not force:
         return ReviewNotificationResult(
             subject=subject,
             body=body,
@@ -114,7 +123,11 @@ def send_review_notification(
 
     expires_at = None
     if expires_in > 0:
-        expires_at = datetime.now(datetime_timezone.utc) + timedelta(seconds=expires_in)
+        expires_at = timezone.localtime() + timedelta(seconds=expires_in)
+    elif expires_in == 0:
+        expires_at = timezone.localtime() + timedelta(
+            days=STICKY_REVIEW_NOTIFICATION_EXPIRY_DAYS
+        )
 
     # Review-ready notifications should interrupt the LCD immediately when
     # a screen is present instead of waiting for the rotating high channel.
