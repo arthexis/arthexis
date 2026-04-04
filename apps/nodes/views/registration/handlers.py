@@ -774,20 +774,9 @@ def _try_proxy_json_request(
                         timeout=timeout_seconds,
                     )
                 response.raise_for_status()
-                body = response.json()
-            except requests.exceptions.RequestException as exc:
-                last_error = exc
-                registration_logger.warning(
-                    "%s: %s",
-                    log_prefix,
-                    request_error_message,
-                    extra={
-                        "target": redact_url_token(target.url),
-                        "attempt": attempt,
-                        "exception_class": exc.__class__.__name__,
-                    },
-                )
-                continue
+                parsed_body = response.json()
+                if not isinstance(parsed_body, Mapping):
+                    raise ValueError("expected JSON object")
             except ValueError as exc:
                 last_error = exc
                 registration_logger.warning(
@@ -801,6 +790,20 @@ def _try_proxy_json_request(
                     },
                 )
                 continue
+            except requests.exceptions.RequestException as exc:
+                last_error = exc
+                registration_logger.warning(
+                    "%s: %s",
+                    log_prefix,
+                    request_error_message,
+                    extra={
+                        "target": redact_url_token(target.url),
+                        "attempt": attempt,
+                        "exception_class": exc.__class__.__name__,
+                    },
+                )
+                continue
+            body = parsed_body
             selected_url = candidate
             return body, selected_url, last_error, attempt
 
