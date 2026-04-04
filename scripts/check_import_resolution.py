@@ -33,6 +33,7 @@ OPTIONAL_MODULES = {
     "av",
     "build",
     "cv2",
+    "gpiozero",
     "graphviz",
     "mfrc522",
     "numpy",
@@ -45,6 +46,8 @@ OPTIONAL_MODULES = {
     "selenium",
     "smbus",
     "smbus2",
+    "trio",
+    "trio_websocket",
 }
 OPTIONAL_IMPORT_MARKER = "optional-import"
 OPTIONAL_IMPORT_HELPERS = {"optional_import", "optional_import_block"}
@@ -136,10 +139,12 @@ def resolve_import(module: str, package: str | None, level: int) -> str | None:
 def is_optional_module(module: str) -> bool:
     """Return ``True`` when ``module`` is an optional module path."""
 
-    return any(
-        module == optional_module or module.startswith(f"{optional_module}.")
-        for optional_module in OPTIONAL_MODULES
-    )
+    prefix = ""
+    for part in module.split("."):
+        prefix = f"{prefix}.{part}" if prefix else part
+        if prefix in OPTIONAL_MODULES:
+            return True
+    return False
 
 
 class ImportCollector(ast.NodeVisitor):
