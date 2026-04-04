@@ -1,9 +1,8 @@
 import logging
 import os
 import sys
-from django.apps import AppConfig
 
-from apps.celery.utils import schedule_task
+from django.apps import AppConfig
 
 logger = logging.getLogger(__name__)
 
@@ -12,21 +11,24 @@ class NodesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.nodes"
     label = "nodes"
+    _ASGI_SERVER_EXECUTABLES = ("daphne", "gunicorn", "hypercorn", "uvicorn")
 
     def _should_enqueue_startup_message(self) -> bool:
         argv = sys.argv
         if not argv:
-            return True
+            return False
         executable = os.path.basename(argv[0])
         command_args = argv[1:]
+        if any(executable.startswith(server) for server in self._ASGI_SERVER_EXECUTABLES):
+            return True
         if executable != "manage.py":
             if executable.startswith("python") and command_args:
                 executable = os.path.basename(command_args[0])
                 command_args = command_args[1:]
             else:
-                return True
+                return False
         if executable != "manage.py":
-            return True
+            return False
         return any(arg == "runserver" for arg in command_args)
 
     def ready(self):  # pragma: no cover - exercised on app start
@@ -42,10 +44,6 @@ class NodesConfig(AppConfig):
         try:
             from .tasks import send_startup_net_message
 
-            schedule_task(
-                send_startup_net_message,
-                countdown=0,
-                require_enabled=True,
-            )
+            send_startup_net_message(port=os.environ.get("PORT"))
         except Exception:
-            logger.exception("Failed to enqueue LCD startup message")
+            logger.exception("Failed to send LCD startup message")
