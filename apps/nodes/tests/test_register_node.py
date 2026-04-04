@@ -504,7 +504,6 @@ def test_register_current_normalizes_env_role_name_case(
 
 
 @pytest.mark.django_db
-@pytest.mark.critical
 def test_register_current_defaults_to_terminal_role(settings, monkeypatch, tmp_path):
     """Registration should default to Terminal when no role configuration exists."""
     monkeypatch.setattr(

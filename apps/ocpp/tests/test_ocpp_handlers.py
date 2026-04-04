@@ -111,7 +111,7 @@ def _reset_pending_calls() -> None:
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
+@pytest.mark.integration
 async def test_handle_clear_charging_profile_result_updates_profile():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CLR-CP-1")
     profile = ChargingProfile(
@@ -283,7 +283,7 @@ async def test_set_monitoring_level_error_clears_pending_call_from_action():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
+@pytest.mark.integration
 async def test_unlock_connector_result_updates_state():
     _reset_pending_calls()
 
@@ -1476,7 +1476,7 @@ async def test_request_start_transaction_result_tracks_status():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
+@pytest.mark.integration
 async def test_transaction_event_updates_request_status(monkeypatch, charger_factory):
     charger = await charger_factory(
         charger_id="CP-TRX",
