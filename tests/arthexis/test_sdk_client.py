@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from websocket import WebSocketException
 
 from arthexis.sdk import (
     ArthexisClient,
@@ -10,6 +11,7 @@ from arthexis.sdk import (
     RetryPolicy,
     SDKHTTPError,
     SDKRetryExhausted,
+    SDKWebSocketError,
     StartSessionRequest,
 )
 from arthexis.sdk.transport import HTTPTransport, WebSocketTransport
@@ -28,6 +30,20 @@ class DummySocket:
 
     def close(self) -> None:
         return None
+
+
+class SendFailingSocket(DummySocket):
+    def __init__(self, exc: Exception) -> None:
+        super().__init__('{"accepted": true}')
+        self.closed = False
+        self.exc = exc
+
+    def send(self, payload: str) -> None:
+        self.sent.append(payload)
+        raise self.exc
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def test_start_session_maps_typed_response() -> None:
@@ -170,3 +186,26 @@ def test_websocket_event_submission_uses_typed_response() -> None:
     assert response.event_id == "evt-2"
     assert response.status == "queued"
     assert socket.sent
+
+
+def test_websocket_transport_closes_socket_on_send_failure() -> None:
+    socket = SendFailingSocket(WebSocketException("send failed"))
+    ws = WebSocketTransport(
+        url="wss://example.test/sdk/events",
+        websocket_factory=lambda *args, **kwargs: socket,
+    )
+
+    with pytest.raises(SDKWebSocketError):
+        ws.send_json({"x": 1})
+
+    assert socket.closed is True
+
+
+def test_websocket_transport_wraps_oserror_as_sdk_error() -> None:
+    ws = WebSocketTransport(
+        url="wss://example.test/sdk/events",
+        websocket_factory=lambda *args, **kwargs: (_ for _ in ()).throw(OSError("dns down")),
+    )
+
+    with pytest.raises(SDKWebSocketError, match="dns down"):
+        ws.send_json({"x": 1})

@@ -60,8 +60,6 @@ class HTTPTransport:
 
             raise SDKHTTPError(response.status_code, response.text)
 
-        raise SDKRetryExhausted("HTTP request exhausted retries")
-
     def _client(self) -> httpx.Client:
         if self.client is not None:
             return self.client
@@ -73,6 +71,7 @@ class HTTPTransport:
         self.client = httpx.Client(
             base_url=self.base_url,
             headers=headers,
+            follow_redirects=True,
             timeout=self.timeout_seconds,
         )
         return self.client
@@ -100,10 +99,12 @@ class WebSocketTransport:
                 timeout=self.timeout_seconds,
                 header=headers,
             )
-            socket.send(json.dumps(payload))
-            raw = socket.recv()
-            socket.close()
-        except WebSocketException as exc:
+            try:
+                socket.send(json.dumps(payload))
+                raw = socket.recv()
+            finally:
+                socket.close()
+        except (OSError, WebSocketException) as exc:
             raise SDKWebSocketError(str(exc)) from exc
 
         if isinstance(raw, bytes):

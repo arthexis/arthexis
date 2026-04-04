@@ -37,6 +37,8 @@ def main() -> int:
         )
     )
     print(f"started={started.accepted} session={started.session_id} status={started.status}")
+    if not started.accepted:
+        return 1
 
     stopped = client.stop_session(
         StopSessionRequest(session_id=started.session_id, reason=args.stop_reason)
