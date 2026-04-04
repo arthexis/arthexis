@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
 import json
+import logging
 import os
 import signal
 import subprocess
@@ -17,6 +18,7 @@ from config.sqlite_driver import bootstrap_sqlite_driver
 from utils import revision
 
 _RUNSERVER_STARTED_AT: float | None = None
+logger = logging.getLogger(__name__)
 
 
 def _resolve_interrupt_main() -> Callable[[], None]:
@@ -133,6 +135,11 @@ def _service_mode_allows_embedded_celery(base_dir: Path) -> bool:
     try:
         service_mode = service_mode_path.read_text(encoding="utf-8").strip().lower()
     except FileNotFoundError:
+        return True
+    except OSError as exc:
+        logger.warning(
+            "Failed to read service mode lock %s: %s", service_mode_path, exc
+        )
         return True
     return service_mode != "systemd"
 
@@ -371,9 +378,10 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     worker = beat = None
     is_runserver = bool(args) and args[0] == "runserver"
-    embedded_celery_allowed = _service_mode_allows_embedded_celery(base_dir)
     should_launch_embedded_celery = (
-        celery_enabled and is_runserver and (embedded_celery_allowed or celery_forced)
+        is_runserver
+        and celery_enabled
+        and (celery_forced or _service_mode_allows_embedded_celery(base_dir))
     )
     is_debug_session = debug_flag or "DEBUGPY_LAUNCHER_PORT" in os.environ
     if is_runserver:
