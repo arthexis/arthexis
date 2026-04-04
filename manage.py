@@ -126,6 +126,17 @@ def _run_env_refresh(base_dir: Path) -> None:
     subprocess.run(command, cwd=base_dir, check=True, env=env)
 
 
+def _service_mode_allows_embedded_celery(base_dir: Path) -> bool:
+    """Return whether embedded Celery should be launched for this node."""
+
+    service_mode_path = base_dir / ".locks" / "service_mode.lck"
+    try:
+        service_mode = service_mode_path.read_text(encoding="utf-8").strip().lower()
+    except FileNotFoundError:
+        return True
+    return service_mode != "systemd"
+
+
 def _is_process_alive(pid: int) -> bool:
     """Return ``True`` when *pid* refers to a running process."""
 
@@ -343,8 +354,10 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     args = list(argv or sys.argv[1:])
     celery_enabled = (base_dir / ".locks/celery.lck").exists()
+    celery_forced = False
     if "--celery" in args:
         celery_enabled = True
+        celery_forced = True
         args.remove("--celery")
         os.environ.pop("ARTHEXIS_DISABLE_CELERY", None)
     if "--no-celery" in args:
@@ -358,6 +371,10 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     worker = beat = None
     is_runserver = bool(args) and args[0] == "runserver"
+    embedded_celery_allowed = _service_mode_allows_embedded_celery(base_dir)
+    should_launch_embedded_celery = (
+        celery_enabled and is_runserver and (embedded_celery_allowed or celery_forced)
+    )
     is_debug_session = debug_flag or "DEBUGPY_LAUNCHER_PORT" in os.environ
     if is_runserver:
         _ensure_runserver_default_bind(args)
@@ -368,7 +385,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         if "--noreload" not in args:
             args.insert(1, "--noreload")
     try:
-        if celery_enabled and is_runserver:
+        if should_launch_embedded_celery:
             worker = subprocess.Popen(
                 [
                     sys.executable,
