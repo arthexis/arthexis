@@ -18,8 +18,8 @@ class UserDiagnosticsProfile(Profile):
     """Per-owner diagnostics preferences for support and development triage."""
 
     is_enabled = models.BooleanField(
-        default=True,
-        db_default=True,
+        default=False,
+        db_default=False,
         verbose_name=_("Enabled"),
         help_text=_("Disable this profile without deleting saved preferences."),
     )
@@ -32,8 +32,8 @@ class UserDiagnosticsProfile(Profile):
         ),
     )
     allow_manual_feedback = models.BooleanField(
-        default=True,
-        db_default=True,
+        default=False,
+        db_default=False,
         verbose_name=_("Allow manual feedback"),
         help_text=_("Allow staff to attach manual feedback notes to diagnostics logs."),
     )
@@ -80,14 +80,14 @@ class UserDiagnosticEvent(Entity):
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="diagnostic_events",
     )
     profile = models.ForeignKey(
         UserDiagnosticsProfile,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="events",
@@ -106,6 +106,9 @@ class UserDiagnosticEvent(Entity):
         ordering = ["-occurred_at", "-id"]
         verbose_name = _("User Diagnostic Event")
         verbose_name_plural = _("User Diagnostic Events")
+        indexes = [
+            models.Index(fields=["user", "occurred_at", "id"]),
+        ]
 
     @classmethod
     def build_fingerprint(
@@ -138,14 +141,14 @@ class UserDiagnosticBundle(Entity):
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="diagnostic_bundles",
     )
     profile = models.ForeignKey(
         UserDiagnosticsProfile,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="bundles",

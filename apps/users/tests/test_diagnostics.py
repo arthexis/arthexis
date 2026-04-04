@@ -16,6 +16,7 @@ def test_capture_request_exception_creates_event_when_opted_in():
     user = User.objects.create_user(username="diag-user")
     UserDiagnosticsProfile.objects.create(
         user=user,
+        is_enabled=True,
         collect_diagnostics=True,
         allow_manual_feedback=True,
     )
@@ -37,6 +38,7 @@ def test_capture_request_exception_skips_when_collection_disabled():
     user = User.objects.create_user(username="diag-user-disabled")
     UserDiagnosticsProfile.objects.create(
         user=user,
+        is_enabled=True,
         collect_diagnostics=False,
         allow_manual_feedback=True,
     )
@@ -53,6 +55,7 @@ def test_manual_feedback_and_bundle_generation_command():
     user = User.objects.create_user(username="diag-feedback")
     UserDiagnosticsProfile.objects.create(
         user=user,
+        is_enabled=True,
         collect_diagnostics=True,
         allow_manual_feedback=True,
     )

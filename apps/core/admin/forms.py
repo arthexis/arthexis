@@ -137,7 +137,7 @@ class UserDiagnosticsProfileInlineForm(forms.ModelForm):
 
     class Meta:
         model = UserDiagnosticsProfile
-        fields = "__all__"
+        fields = ("is_enabled", "collect_diagnostics", "allow_manual_feedback")
 
 
 class OdooEmployeeAdminForm(forms.ModelForm):

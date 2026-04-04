@@ -12,10 +12,10 @@ __all__ = [
     "ChatProfile",
     "PasskeyCredential",
     "Profile",
+    "User",
     "UserDiagnosticBundle",
     "UserDiagnosticEvent",
     "UserDiagnosticsProfile",
-    "User",
     "UserFlag",
     "UserPhoneNumber",
 ]

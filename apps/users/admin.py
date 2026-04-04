@@ -255,9 +255,13 @@ class UserDiagnosticEventAdmin(admin.ModelAdmin):
                     _(
                         "Manual feedback is disabled for this user profile or no diagnostics profile exists."
                     ),
-                    level=messages.WARNING,
+                    level=messages.ERROR,
                 )
-                return
+                raise ValidationError(
+                    _(
+                        "Cannot save feedback: manual feedback is disabled for this user."
+                    )
+                )
             obj.pk = event.pk
             return
         super().save_model(request, obj, form, change)

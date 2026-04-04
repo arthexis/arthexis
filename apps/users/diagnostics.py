@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
@@ -49,9 +50,7 @@ def capture_request_exception(*, request, exception: Exception) -> None:
             request_method=method,
             request_path=path,
         ),
-        metadata={
-            "full_path": getattr(request, "get_full_path", lambda: path)(),
-        },
+        metadata={"query_keys": sorted(getattr(request, "GET", {}).keys())},
     )
 
 
@@ -90,7 +89,7 @@ def build_diagnostic_bundle(*, user, title: str = "", limit: int = 50) -> UserDi
     heading = title.strip() if title else ""
     if not heading:
         heading = f"Diagnostics bundle for {getattr(user, 'username', 'unknown')}"
-    lines = [heading, f"Generated at: {timezone.now().isoformat()}", ""]
+    lines = [heading, f"Generated at: {timezone.localtime().isoformat()}", ""]
     for event in events:
         lines.append(
             f"- [{event.source}] {event.occurred_at.isoformat()} {event.summary}"
@@ -122,6 +121,8 @@ def attach_exception_signal(sender, request=None, **kwargs) -> None:
     if isinstance(exc_info, Exception):
         exception = exc_info
     else:
+        exception = sys.exc_info()[1]
+    if not isinstance(exception, Exception):
         exception = Exception("Unknown request exception")
     try:
         capture_request_exception(request=request, exception=exception)
