@@ -11,6 +11,7 @@ class NodesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.nodes"
     label = "nodes"
+    _ASGI_SERVER_EXECUTABLES = ("daphne", "gunicorn", "hypercorn", "uvicorn")
 
     def _should_enqueue_startup_message(self) -> bool:
         argv = sys.argv
@@ -18,6 +19,8 @@ class NodesConfig(AppConfig):
             return False
         executable = os.path.basename(argv[0])
         command_args = argv[1:]
+        if any(executable.startswith(server) for server in self._ASGI_SERVER_EXECUTABLES):
+            return True
         if executable != "manage.py":
             if executable.startswith("python") and command_args:
                 executable = os.path.basename(command_args[0])

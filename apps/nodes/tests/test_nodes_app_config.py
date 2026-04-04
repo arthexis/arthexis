@@ -11,11 +11,14 @@ def _nodes_config() -> NodesConfig:
     return NodesConfig("apps.nodes", importlib.import_module("apps.nodes"))
 
 
-def test_should_enqueue_startup_message_only_for_manage_runserver(monkeypatch):
+def test_should_enqueue_startup_message_for_runserver_and_asgi_entrypoints(monkeypatch):
     config = _nodes_config()
 
     monkeypatch.setattr("apps.nodes.apps.sys.argv", ["daphne", "config.asgi:application"])
-    assert config._should_enqueue_startup_message() is False
+    assert config._should_enqueue_startup_message() is True
+
+    monkeypatch.setattr("apps.nodes.apps.sys.argv", ["gunicorn", "config.asgi:application"])
+    assert config._should_enqueue_startup_message() is True
 
     monkeypatch.setattr("apps.nodes.apps.sys.argv", ["python", "manage.py", "runserver"])
     assert config._should_enqueue_startup_message() is True
