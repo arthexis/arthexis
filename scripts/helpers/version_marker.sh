@@ -25,15 +25,8 @@ arthexis_update_version_marker() {
   fi
 
   local normalized_version="$raw_version"
-  if [[ "$normalized_version" == *"+d" ]]; then
-    normalized_version="${normalized_version%+d}"
-  elif [[ "$normalized_version" == *"+" ]]; then
-    normalized_version="${normalized_version%+}"
-  fi
-
-  if [ -z "$normalized_version" ]; then
-    return 0
-  fi
+  normalized_version="${normalized_version%+d}"
+  normalized_version="${normalized_version%+}"
 
   # Ensure the file always ends with a newline.
   printf '%s\n' "$normalized_version" > "$version_file"
