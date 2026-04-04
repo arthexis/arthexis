@@ -132,7 +132,7 @@ class LogbookCreateView(LoginRequiredMixin, FormView):
         logs_dir = Path(getattr(settings, "LOG_DIR", settings.BASE_DIR / "logs"))
         for name in log_names:
             source = logs_dir / name
-            if not source.exists() or not is_logbook_attachable_log(source):
+            if source.parent != logs_dir or not is_logbook_attachable_log(source):
                 continue
             attachment = LogbookLogAttachment(
                 entry=entry,
