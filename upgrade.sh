@@ -1960,7 +1960,7 @@ else
   fi
 fi
 
-# Update the development marker to reflect the new revision.
+# Normalize VERSION by removing any trailing development markers.
 arthexis_update_version_marker "$BASE_DIR"
 
 # Create virtual environment automatically if missing
