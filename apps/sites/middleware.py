@@ -8,6 +8,8 @@ from http import HTTPStatus
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import ImproperlyConfigured
+from django.db import DatabaseError
 from django.urls import Resolver404, resolve
 
 from .models import Landing, LandingLead, ViewHistory
@@ -126,7 +128,11 @@ class ViewHistoryMiddleware:
                 from utils.sites import get_site
 
                 site = get_site(request)
-            except Exception:  # pragma: no cover - best effort logging
+            except (
+                ImportError,
+                ImproperlyConfigured,
+                RuntimeError,
+            ):  # pragma: no cover - best effort logging
                 site = None
 
         try:
@@ -141,9 +147,12 @@ class ViewHistoryMiddleware:
                 exception_name=exception_name,
                 view_name=view_name,
             )
-        except Exception:  # pragma: no cover - best effort logging
+        except DatabaseError as exc:  # pragma: no cover - best effort logging
             logger.debug(
-                "Failed to record ViewHistory for %s", full_path, exc_info=True
+                "Failed to record ViewHistory (%s) for %s",
+                exc.__class__.__name__,
+                full_path,
+                exc_info=True,
             )
         else:
             self._update_user_last_visit_ip(request)
@@ -198,9 +207,12 @@ class ViewHistoryMiddleware:
                 user_agent=user_agent,
                 ip_address=ip_address,
             )
-        except Exception:  # pragma: no cover - best effort logging
+        except DatabaseError as exc:  # pragma: no cover - best effort logging
             logger.debug(
-                "Failed to record LandingLead for %s", landing.path, exc_info=True
+                "Failed to record LandingLead (%s) for %s",
+                exc.__class__.__name__,
+                request.get_full_path(),
+                exc_info=True,
             )
 
     def _resolve_view_name(self, request) -> str:
