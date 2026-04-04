@@ -1,22 +1,16 @@
 #!/usr/bin/env bash
 
-# Update the VERSION file to include or remove the development marker.
+# Normalize the VERSION file and remove historical development markers.
 #
 # Arguments:
 #   $1 - Repository root containing the VERSION file
-#   $2 - Optional flag indicating whether to force the development marker even
-#        when the HEAD revision matches the tagged release
+#   $2 - Deprecated (ignored). Kept for call-site compatibility.
 #
-# The function compares the current HEAD revision to the tagged revision for the
-# VERSION's release (without the development marker). When the HEAD revision
-# differs from the release tag, a ``+d`` suffix is appended to the VERSION file
-# to indicate development changes. When the HEAD revision matches the tag, any
-# trailing development marker is removed so that packaged releases retain their
-# original version number. Legacy versions ending with ``+`` are handled for
-# backward compatibility.
+# Arthexis versions are stored exactly as declared in ``VERSION``. We no longer
+# append development suffixes such as ``+d`` or legacy ``+`` markers. Existing
+# marker suffixes are stripped for backward compatibility.
 arthexis_update_version_marker() {
   local repo_root="$1"
-  local force_dev_marker="${2:-0}"
   local version_file
   version_file="$repo_root/VERSION"
 
@@ -30,119 +24,25 @@ arthexis_update_version_marker() {
     return 0
   fi
 
-  local dev_suffix="+d"
-  local legacy_suffix="+"
-  local has_dev_marker=0
-
-  local base_version="$raw_version"
-  if [[ "$raw_version" == *"$dev_suffix" ]]; then
-    has_dev_marker=1
-    base_version="${raw_version%$dev_suffix}"
-  elif [[ "$raw_version" == *"$legacy_suffix" ]]; then
-    has_dev_marker=1
-    base_version="${raw_version%$legacy_suffix}"
+  local normalized_version="$raw_version"
+  if [[ "$normalized_version" == *"+d" ]]; then
+    normalized_version="${normalized_version%+d}"
+  elif [[ "$normalized_version" == *"+" ]]; then
+    normalized_version="${normalized_version%+}"
   fi
-  if [ -z "$base_version" ]; then
+
+  if [ -z "$normalized_version" ]; then
     return 0
   fi
 
-  local head_rev
-  if ! head_rev=$(git -C "$repo_root" rev-parse HEAD 2>/dev/null); then
-    return 0
-  fi
-
-  local tag_ref="v${base_version}"
-  local tag_rev
-  if git -C "$repo_root" rev-parse --verify --quiet "${tag_ref}^{commit}" >/dev/null 2>&1; then
-    tag_rev=$(git -C "$repo_root" rev-parse "${tag_ref}^{commit}" 2>/dev/null)
-  else
-    tag_rev=""
-  fi
-
-  local needs_dev_marker=0
-  if [ -n "$tag_rev" ] && [ "$head_rev" != "$tag_rev" ]; then
-    needs_dev_marker=1
-  elif (( force_dev_marker )); then
-    needs_dev_marker=1
-  fi
-
-  if (( needs_dev_marker )); then
-    if (( ! has_dev_marker )); then
-      printf '%s%s\n' "$base_version" "$dev_suffix" > "$version_file"
-    fi
-  elif (( has_dev_marker )); then
-    printf '%s\n' "$base_version" > "$version_file"
-  else
-    # Ensure the file always ends with a newline.
-    printf '%s\n' "$raw_version" > "$version_file"
-  fi
+  # Ensure the file always ends with a newline.
+  printf '%s\n' "$normalized_version" > "$version_file"
 }
 
-# Append the development marker to the VERSION file before committing changes
-# that do not already update the version number. This ensures that any commit
-# created after a tagged release automatically carries the ``+d`` suffix unless
-# the developer explicitly staged a new version string.
+# No-op retained for backward compatibility with older hooks/workflows.
 #
 # Arguments:
 #   $1 - Repository root containing the VERSION file
 arthexis_prepare_dev_version_marker() {
-  local repo_root="$1"
-  local version_file
-  version_file="$repo_root/VERSION"
-
-  if [ ! -f "$version_file" ]; then
-    return 0
-  fi
-
-  if git -C "$repo_root" diff --cached --name-only --diff-filter=ACMRTUXB | grep -qx "VERSION"; then
-    return 0
-  fi
-
-  local raw_version
-  raw_version=$(tr -d '\r\n' < "$version_file")
-  if [ -z "$raw_version" ]; then
-    return 0
-  fi
-
-  local dev_suffix="+d"
-  local legacy_suffix="+"
-  local has_dev_marker=0
-
-  local base_version="$raw_version"
-  if [[ "$raw_version" == *"$dev_suffix" ]]; then
-    has_dev_marker=1
-    base_version="${raw_version%$dev_suffix}"
-  elif [[ "$raw_version" == *"$legacy_suffix" ]]; then
-    has_dev_marker=1
-    base_version="${raw_version%$legacy_suffix}"
-  fi
-  if [ -z "$base_version" ]; then
-    return 0
-  fi
-
-  local head_rev
-  if ! head_rev=$(git -C "$repo_root" rev-parse HEAD 2>/dev/null); then
-    return 0
-  fi
-
-  if git -C "$repo_root" diff --cached --quiet --exit-code; then
-    return 0
-  fi
-
-  if (( has_dev_marker )); then
-    return 0
-  fi
-
-  local tag_ref="v${base_version}"
-  local tag_rev=""
-  if git -C "$repo_root" rev-parse --verify --quiet "${tag_ref}^{commit}" >/dev/null 2>&1; then
-    tag_rev=$(git -C "$repo_root" rev-parse "${tag_ref}^{commit}" 2>/dev/null)
-  fi
-
-  if [ -z "$tag_rev" ]; then
-    return 0
-  fi
-
-  printf '%s%s\n' "$base_version" "$dev_suffix" > "$version_file"
-  git -C "$repo_root" add "$version_file"
+  return 0
 }
