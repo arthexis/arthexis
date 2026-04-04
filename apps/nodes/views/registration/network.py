@@ -106,7 +106,7 @@ def _get_host_port(request) -> int | None:
     if port:
         return port
     if forwarded_port:
-        logger.warning("Ignoring invalid X-Forwarded-Port header value: %r", forwarded_port)
+        logger.warning("Ignoring invalid X-Forwarded-Port header value.")
 
     forwarded_proto = request.headers.get("X-Forwarded-Proto") or request.META.get(
         "HTTP_X_FORWARDED_PROTO", ""
@@ -159,7 +159,7 @@ def append_token(url: str, token: str) -> str:
     if not (url and token):
         return url
     if not isinstance(url, str):
-        logger.debug("Unable to append token to malformed URL value: %r", url)
+        logger.debug("Unable to append token to malformed URL value.")
         return url
     try:
         parsed = urlsplit(url)
@@ -175,7 +175,7 @@ def append_token(url: str, token: str) -> str:
             )
         )
     except (TypeError, ValueError):
-        logger.debug("Unable to append token to malformed URL value: %r", url)
+        logger.debug("Unable to append token to malformed URL value.")
         return url
 
 
@@ -184,17 +184,17 @@ def iter_port_fallback_urls(base_url: str):
 
     yield base_url
     if not isinstance(base_url, str):
-        logger.debug("Unable to parse URL for fallback-port iteration: %r", base_url)
+        logger.debug("Unable to parse URL for fallback-port iteration.")
         return
     try:
         parsed = urlsplit(base_url)
     except (TypeError, ValueError):
-        logger.debug("Unable to parse URL for fallback-port iteration: %r", base_url)
+        logger.debug("Unable to parse URL for fallback-port iteration.")
         return
     try:
         parsed_port = parsed.port
     except ValueError:
-        logger.debug("Unable to parse URL port for fallback-port iteration: %r", base_url)
+        logger.debug("Unable to parse URL port for fallback-port iteration.")
         return
     if not parsed.hostname or parsed_port != 8888:
         return
