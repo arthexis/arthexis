@@ -22,7 +22,7 @@ from apps.sites.utils import (
     require_site_operator_or_staff,
 )
 
-from ..models import StationModel, Transaction
+from ..models import annotate_transaction_energy_bounds, StationModel, Transaction
 from .common import *  # noqa: F401,F403
 from .common import (
     _charger_state,
@@ -580,20 +580,20 @@ def charger_session_search(request, cid, connector=None):
                 end_date = timezone.localdate() + timedelta(days=1)
                 start_date = end_date - timedelta(days=7)
             else:
+                if not date_str:
+                    raise ValueError("Missing date")
                 date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
                 start_date = date_obj
                 end_date = start_date + timedelta(days=1)
                 quick_range = ""
-            start = datetime.combine(
-                start_date, datetime.min.time(), tzinfo=dt_timezone.utc
-            )
-            end = datetime.combine(end_date, datetime.min.time(), tzinfo=dt_timezone.utc)
+            start = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+            end = timezone.make_aware(datetime.combine(end_date, datetime.min.time()))
             qs = Transaction.objects.filter(start_time__gte=start, start_time__lt=end)
             if charger.connector_id is None:
                 qs = qs.filter(charger__charger_id=cid)
             else:
                 qs = qs.filter(charger=charger)
-            transactions = qs.order_by("-start_time")
+            transactions = annotate_transaction_energy_bounds(qs).order_by("-start_time")
         except ValueError:
             transactions = []
             quick_range = ""

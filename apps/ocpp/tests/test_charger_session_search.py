@@ -1,6 +1,6 @@
 """Tests for charger session search filters and summary rendering."""
 
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -88,3 +88,61 @@ def test_charger_session_search_date_filter_still_supported(client):
     body = response.content.decode("utf-8")
     assert "1</strong> sessions" in body
     assert "1.00</strong> kW" in body
+
+
+@pytest.mark.django_db
+def test_charger_session_search_today_uses_local_day_boundaries(client, monkeypatch):
+    """Today quick range should align to local timezone midnight boundaries."""
+
+    user = get_user_model().objects.create_user(
+        username="session-search-local-day-user",
+        password="secret",
+    )
+    charger = Charger.objects.create(charger_id="SS-CP-3", connector_id=1)
+    fixed_today = date(2026, 1, 15)
+    monkeypatch.setattr(timezone, "localdate", lambda: fixed_today)
+    current_tz = timezone.get_current_timezone()
+    Transaction.objects.create(
+        charger=charger,
+        start_time=timezone.make_aware(datetime(2026, 1, 15, 0, 30), current_tz),
+        meter_start=1000,
+        meter_stop=2000,
+    )
+    Transaction.objects.create(
+        charger=charger,
+        start_time=timezone.make_aware(datetime(2026, 1, 14, 23, 30), current_tz),
+        meter_start=2000,
+        meter_stop=3000,
+    )
+
+    assert client.login(username=user.username, password="secret")
+
+    response = client.get(
+        reverse("ocpp:charger-session-search-connector", args=[charger.charger_id, "1"]),
+        {"range": "today"},
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode("utf-8")
+    assert "1</strong> sessions" in body
+    assert "Today" in body
+
+
+@pytest.mark.django_db
+def test_charger_session_search_invalid_range_without_date_is_safe(client):
+    """Unsupported quick range values should not raise server errors."""
+
+    user = get_user_model().objects.create_user(
+        username="session-search-invalid-range-user",
+        password="secret",
+    )
+    charger = Charger.objects.create(charger_id="SS-CP-4", connector_id=1)
+    assert client.login(username=user.username, password="secret")
+
+    response = client.get(
+        reverse("ocpp:charger-session-search-connector", args=[charger.charger_id, "1"]),
+        {"range": "not-a-range"},
+    )
+
+    assert response.status_code == 200
+    assert "No sessions found." in response.content.decode("utf-8")
