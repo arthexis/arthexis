@@ -119,7 +119,7 @@
           {% with primary_image=images|first %}
           <div class="hero-media mb-3">
             <a href="{{ primary_image.file.url }}" target="_blank" rel="noopener">
-              <img src="{{ primary_image.file.url }}" alt="{{ primary_image.original_name }}">
+              <img src="{{ primary_image.file.url }}" alt="{{ station_model.vendor }} {{ station_model.model_family }} {{ station_model.model }}">
             </a>
           </div>
           {% endwith %}
@@ -196,8 +196,8 @@
                 {% if doc.content_type %}
                 <span>{{ doc.content_type }}</span>
                 {% endif %}
-                {% if doc.file.size %}
-                <span>{{ doc.file.size|filesizeformat }}</span>
+                {% if doc.size %}
+                <span>{{ doc.size|filesizeformat }}</span>
                 {% endif %}
                 {% if doc.uploaded_at %}
                 <span>{% trans "Uploaded" %}: {{ doc.uploaded_at|date:"M j, Y" }}</span>

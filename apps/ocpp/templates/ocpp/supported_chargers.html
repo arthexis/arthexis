@@ -99,8 +99,8 @@
           <div
             class="col-12 col-lg-6"
             data-supported-card
-            data-vendor="{{ model.vendor|default:'Unknown vendor'|lower }}"
-            data-ocpp="{{ model.preferred_ocpp_version|default:'not specified'|lower }}"
+            data-vendor="{{ model.vendor|default:'Unknown vendor' }}"
+            data-ocpp="{{ model.preferred_ocpp_version|default:'Not specified' }}"
             data-rating="{{ model.integration_rating|default:0 }}"
           >
             <article class="supported-card h-100 p-3 p-sm-4">
@@ -199,6 +199,7 @@
     const labels = {
       all: '{% trans "All" %}',
       'not specified': '{% trans "Not specified" %}',
+      'Not specified': '{% trans "Not specified" %}',
     };
 
     const createChip = (field, value, label) => {
