@@ -360,6 +360,146 @@ def test_register_visitor_proxy_uses_safe_failure_detail(monkeypatch, admin_user
 
 
 @pytest.mark.django_db
+def test_register_visitor_proxy_returns_400_when_host_id_missing(
+    monkeypatch, admin_user
+):
+    factory = RequestFactory()
+    request = factory.post(
+        "/nodes/register-visitor-proxy/",
+        data=json.dumps(
+            {
+                "visitor_info_url": "https://visitor.example/nodes/info/",
+                "visitor_register_url": "https://visitor.example/nodes/register/",
+            }
+        ),
+        content_type="application/json",
+    )
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    target = SimpleNamespace(
+        url="https://visitor.example/nodes/info/",
+        server_hostname="visitor.example",
+        host_header="visitor.example",
+    )
+    monkeypatch.setattr(handlers, "is_allowed_visitor_url", lambda _: True)
+    monkeypatch.setattr(handlers, "get_public_targets", lambda _: [target])
+    monkeypatch.setattr(
+        handlers,
+        "node_info",
+        lambda _request: JsonResponse({"hostname": "host-node"}),
+    )
+    monkeypatch.setattr(
+        handlers,
+        "register_node",
+        lambda _request: JsonResponse({"detail": "missing id"}, status=200),
+    )
+    monkeypatch.setattr(
+        handlers,
+        "_try_proxy_json_request",
+        lambda *, method, **_kwargs: (
+            (
+                {
+                    "hostname": "visitor-node",
+                    "address": "198.51.100.6",
+                    "port": 8888,
+                    "mac_address": "00:11:22:33:44:66",
+                },
+                "https://visitor.example/nodes/info/",
+                None,
+                1,
+            )
+            if method == "get"
+            else ({"id": 11}, "https://visitor.example/nodes/register/", None, 2)
+        ),
+    )
+
+    response = handlers.register_visitor_proxy(request)
+
+    assert response.status_code == 400
+    data = json.loads(response.content.decode())
+    assert data["detail"] == "host registration failed"
+
+
+@pytest.mark.django_db
+def test_register_visitor_proxy_marks_visitor_confirmation_failed_without_id(
+    monkeypatch, admin_user
+):
+    factory = RequestFactory()
+    request = factory.post(
+        "/nodes/register-visitor-proxy/",
+        data=json.dumps(
+            {
+                "visitor_info_url": "https://visitor.example/nodes/info/",
+                "visitor_register_url": "https://visitor.example/nodes/register/",
+            }
+        ),
+        content_type="application/json",
+    )
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    target = SimpleNamespace(
+        url="https://visitor.example/nodes/info/",
+        server_hostname="visitor.example",
+        host_header="visitor.example",
+    )
+    monkeypatch.setattr(handlers, "is_allowed_visitor_url", lambda _: True)
+    monkeypatch.setattr(handlers, "get_public_targets", lambda _: [target])
+    monkeypatch.setattr(
+        handlers,
+        "node_info",
+        lambda _request: JsonResponse(
+            {
+                "hostname": "host-node",
+                "address": "198.51.100.5",
+                "port": 8888,
+                "mac_address": "00:11:22:33:44:55",
+                "base_site_requires_https": True,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        handlers,
+        "register_node",
+        lambda _request: JsonResponse({"id": 9, "detail": "ok"}, status=200),
+    )
+    monkeypatch.setattr(
+        handlers,
+        "_try_proxy_json_request",
+        lambda *, method, **_kwargs: (
+            (
+                {
+                    "hostname": "visitor-node",
+                    "address": "198.51.100.6",
+                    "port": 8888,
+                    "mac_address": "00:11:22:33:44:66",
+                    "base_site_requires_https": False,
+                },
+                "https://visitor.example/nodes/info/",
+                None,
+                1,
+            )
+            if method == "get"
+            else (
+                {"detail": "upstream accepted without id"},
+                "https://visitor.example/nodes/register/",
+                None,
+                2,
+            )
+        ),
+    )
+
+    response = handlers.register_visitor_proxy(request)
+
+    assert response.status_code == 200
+    data = json.loads(response.content.decode())
+    assert data["host"]["id"] == 9
+    assert data["visitor"]["id"] is None
+    assert data["visitor"]["detail"] == "visitor confirmation failed"
+
+
+@pytest.mark.django_db
 def test_get_local_does_not_cache_stale_self_after_mac_conflict(monkeypatch):
     self_node = Node.objects.create(
         hostname="self-node",

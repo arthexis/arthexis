@@ -963,9 +963,12 @@ def register_visitor_proxy(request):
     host_register_response = register_node(host_register_request)
     host_register_body = json.loads(host_register_response.content.decode() or "{}")
     if host_register_response.status_code != 200 or not host_register_body.get("id"):
+        status_code = host_register_response.status_code or 400
+        if status_code == 200:
+            status_code = 400
         return JsonResponse(
             {"detail": "host registration failed"},
-            status=host_register_response.status_code or 400,
+            status=status_code,
         )
 
     visitor_payload = _build_registration_payload(host_info, "Upstream")
@@ -998,6 +1001,11 @@ def register_visitor_proxy(request):
         )
         return JsonResponse({"detail": "visitor confirmation failed"}, status=502)
 
+    visitor_id = visitor_register_body.get("id")
+    visitor_detail = (
+        "visitor confirmation accepted" if visitor_id else "visitor confirmation failed"
+    )
+
     return JsonResponse(
         {
             "host": {
@@ -1005,8 +1013,8 @@ def register_visitor_proxy(request):
                 "id": host_register_body.get("id"),
             },
             "visitor": {
-                "detail": "visitor confirmation accepted",
-                "id": visitor_register_body.get("id"),
+                "detail": visitor_detail,
+                "id": visitor_id,
             },
             "host_requires_https": bool(host_info.get("base_site_requires_https")),
             "visitor_requires_https": bool(
