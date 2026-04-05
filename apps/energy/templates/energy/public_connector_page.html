@@ -67,8 +67,8 @@
                 {% csrf_token %}
                 <div class="col-12">
                   <label class="visually-hidden" for="create-account-username">{% trans "Username" %}</label>
-                  <input id="create-account-username" class="form-control" type="text" name="username" required placeholder="{% trans 'Username' %}" maxlength="150" autocomplete="username">
-                  <div class="invalid-feedback">{% trans "Use letters, numbers, and @/./+/-/_ only." %}</div>
+                  <input id="create-account-username" class="form-control" type="text" name="username" required placeholder="{% trans 'Username' %}" maxlength="150" autocomplete="username" pattern="[\w.@+-]+">
+                  <div class="invalid-feedback">{% trans "Enter a valid username." %}</div>
                 </div>
                 <div class="col-12">
                   <label class="visually-hidden" for="create-account-email">{% trans "Email (optional)" %}</label>
@@ -77,11 +77,11 @@
                 </div>
                 <div class="col-12">
                   <label class="visually-hidden" for="create-account-password">{% trans "Password" %}</label>
-                  <input id="create-account-password" class="form-control" type="password" name="password" required placeholder="{% trans 'Password' %}" autocomplete="new-password">
-                  <div class="form-text">
-                    {% trans "Use at least 8 characters with a mix of uppercase, lowercase, and numbers." %}
-                  </div>
-                  <div class="invalid-feedback">{% trans "Password must meet the minimum strength requirements." %}</div>
+                  <input id="create-account-password" class="form-control" type="password" name="password" required placeholder="{% trans 'Password' %}" autocomplete="new-password" minlength="8">
+                  {% if account_create_form.password.help_text %}
+                  <div class="form-text">{{ account_create_form.password.help_text|safe }}</div>
+                  {% endif %}
+                  <div class="invalid-feedback">{% trans "Choose a valid password." %}</div>
                 </div>
                 <div class="col-12 d-grid gap-2 d-sm-flex mt-2">
                   <button type="submit" class="btn btn-primary">{% trans "Create Account" %}</button>

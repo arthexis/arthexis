@@ -5,7 +5,12 @@ from django import forms
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
+from django.contrib.auth.password_validation import (
+    password_validators_help_text_html,
+    validate_password,
+)
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import IntegrityError, transaction
 from django.db.utils import OperationalError, ProgrammingError
 from django.http import Http404
@@ -42,9 +47,17 @@ PUBLIC_CONNECTOR_PAGE_URL_NAME = "ocpp:public-connector-page"
 class PublicConnectorAccountCreateForm(forms.Form):
     """Minimal signup form for public connector pages."""
 
-    username = forms.CharField(max_length=150)
+    username = forms.CharField(max_length=150, validators=[UnicodeUsernameValidator()])
     email = forms.EmailField(required=False)
-    password = forms.CharField(widget=forms.PasswordInput())
+    password = forms.CharField(
+        help_text=password_validators_help_text_html(),
+        widget=forms.PasswordInput(),
+    )
+
+    def clean_password(self):
+        password = self.cleaned_data["password"]
+        validate_password(password)
+        return password
 
 
 def _energy_accounts_enabled() -> bool:
