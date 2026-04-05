@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.utils import OperationalError, ProgrammingError
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import translation
+from django.utils import timezone, translation
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET, require_POST
 
@@ -542,6 +542,7 @@ def charger_session_search(request, cid, connector=None):
         return access_response
     connectors = _connector_set(charger)
     date_str = request.GET.get("date")
+    quick_range = request.GET.get("range", "").lower()
     date_view = request.GET.get("dates", "charger").lower()
     if date_view not in {"charger", "received"}:
         date_view = "charger"
@@ -565,13 +566,28 @@ def charger_session_search(request, cid, connector=None):
         }.items()
     ]
     transactions = None
-    if date_str:
+    filtered_count = 0
+    filtered_total_kw = 0.0
+    if date_str or quick_range:
         try:
-            date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+            if quick_range == "today":
+                start_date = timezone.localdate()
+                end_date = start_date + timedelta(days=1)
+            elif quick_range == "yesterday":
+                end_date = timezone.localdate()
+                start_date = end_date - timedelta(days=1)
+            elif quick_range == "last7":
+                end_date = timezone.localdate() + timedelta(days=1)
+                start_date = end_date - timedelta(days=7)
+            else:
+                date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+                start_date = date_obj
+                end_date = start_date + timedelta(days=1)
+                quick_range = ""
             start = datetime.combine(
-                date_obj, datetime.min.time(), tzinfo=dt_timezone.utc
+                start_date, datetime.min.time(), tzinfo=dt_timezone.utc
             )
-            end = start + timedelta(days=1)
+            end = datetime.combine(end_date, datetime.min.time(), tzinfo=dt_timezone.utc)
             qs = Transaction.objects.filter(start_time__gte=start, start_time__lt=end)
             if charger.connector_id is None:
                 qs = qs.filter(charger__charger_id=cid)
@@ -580,6 +596,7 @@ def charger_session_search(request, cid, connector=None):
             transactions = qs.order_by("-start_time")
         except ValueError:
             transactions = []
+            quick_range = ""
     if transactions is not None:
         transactions = list(transactions)
         rfid_cache: dict[str, dict[str, str | None]] = {}
@@ -589,6 +606,8 @@ def charger_session_search(request, cid, connector=None):
             if details:
                 label_value = str(details.get("label") or "").strip() or None
             tx.rfid_label = label_value
+        filtered_count = len(transactions)
+        filtered_total_kw = sum(tx.kw or 0 for tx in transactions)
     overview = _connector_overview(charger, request.user, connectors=connectors)
     connector_links = [
         {
@@ -612,6 +631,9 @@ def charger_session_search(request, cid, connector=None):
             "status_url": status_url,
             "date_view": date_view,
             "date_toggle_links": date_toggle_links,
+            "quick_range": quick_range,
+            "filtered_count": filtered_count,
+            "filtered_total_kw": filtered_total_kw,
             "hide_default_footer": True,
         },
     )
