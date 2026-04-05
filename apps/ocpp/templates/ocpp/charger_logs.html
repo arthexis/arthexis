@@ -62,7 +62,7 @@
     max-height: 60vh;
     overflow: auto;
     background: var(--bs-dark-bg-subtle, #141922);
-    border: 1px solid var(--bs-border-color);
+    border: none;
     border-radius: var(--bs-border-radius);
     padding: 1rem;
     color: var(--bs-light, #f8f9fa);
@@ -155,7 +155,7 @@
 {% translate "On" as auto_reload_on_label %}
 {% translate "Off" as auto_reload_off_label %}
 <script>
-  window.__chargerLogLabels = {
+  globalThis.__chargerLogLabels = {
     autoReloadOn: "{{ auto_reload_on_label|escapejs }}",
     autoReloadOff: "{{ auto_reload_off_label|escapejs }}",
   };
@@ -211,7 +211,7 @@
     const prefix = 'charger-log';
     let reloadTimer;
     function getViewer() {
-      return window.__logViewers && window.__logViewers[prefix];
+      return globalThis.__logViewers && globalThis.__logViewers[prefix];
     }
     function updateRefreshTimestamp() {
       if (!metadataLastRefresh) {
@@ -232,7 +232,7 @@
       if (!reloadState) {
         return;
       }
-      const labels = window.__chargerLogLabels || {};
+      const labels = globalThis.__chargerLogLabels || {};
       reloadState.textContent = enabled ? (labels.autoReloadOn || 'On') : (labels.autoReloadOff || 'Off');
       reloadState.classList.toggle('text-bg-success', enabled);
       reloadState.classList.toggle('text-bg-secondary', !enabled);

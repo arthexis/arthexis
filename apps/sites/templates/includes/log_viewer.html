@@ -101,28 +101,33 @@
         }
         const content = document.getElementById(`${prefix}-content`);
         const escapeHtml = (value) => value
-          .replaceAll('&', '&amp;')
-          .replaceAll('<', '&lt;')
-          .replaceAll('>', '&gt;')
-          .replaceAll('"', '&quot;')
-          .replaceAll("'", '&#39;');
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
         const severityMatchers = [
           { className: 'log-line-severity-error', pattern: /\bERROR\b/i },
           { className: 'log-line-severity-warn', pattern: /\bWARN(?:ING)?\b/i },
           { className: 'log-line-severity-info', pattern: /\bINFO\b/i },
         ];
+        let lastDecoratedText = null;
         function decorateContent() {
           if (!content) {
             return;
           }
           const text = content.textContent || '';
+          if (text === lastDecoratedText) {
+            return;
+          }
           const lines = text.split('\n');
           const decorated = lines.map((line) => {
             const matcher = severityMatchers.find(({ pattern }) => pattern.test(line));
             const cssClass = matcher ? ` class="${matcher.className}"` : '';
             return `<span${cssClass}>${escapeHtml(line)}</span>`;
-          }).join('\n');
+          }).join('');
           content.innerHTML = decorated;
+          lastDecoratedText = text;
         }
         function scrollToBottom() {
           if (!content) {
@@ -344,8 +349,8 @@
           });
         }
         if (mode === 'fetch') {
-          window.__logViewers = window.__logViewers || {};
-          window.__logViewers[prefix] = {
+          globalThis.__logViewers = globalThis.__logViewers || {};
+          globalThis.__logViewers[prefix] = {
             refresh() {
               if (!limitSlider) {
                 return;
