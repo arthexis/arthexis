@@ -34,58 +34,62 @@
         {% endif %}
       </div>
     {% endif %}
-    <div class="{{ viewer_actions_class|default:'log-viewer-actions' }}">
-      {% if not hide_limit_slider %}
-        <div class="{{ viewer_slider_class|default:'log-viewer-slider' }}">
-          <label for="{{ prefix }}-limit">
-            {{ limit_label_text|default:default_limit_label }}:
-            <span id="{{ prefix }}-limit-value">{{ log_limit_label }}</span>
-          </label>
-          <input
-            type="range"
-            id="{{ prefix }}-limit"
-            class="{{ limit_slider_class|default:'log-viewer-limit' }}"
-            min="0"
-            max="{{ log_limit_options|length|add:'-1' }}"
-            step="1"
-            value="{{ log_limit_index }}"
-            list="{{ prefix }}-limit-options"
-            {% if limit_slider_data %}{% for key, value in limit_slider_data.items %}data-{{ key }}="{{ value }}" {% endfor %}{% endif %}{% if limit_slider_log %}data-log="{{ limit_slider_log }}"{% endif %}
-          >
-          <datalist id="{{ prefix }}-limit-options">{% for option in log_limit_options %}<option value="{{ forloop.counter0 }}" label="{{ option.label }}"></option>{% endfor %}</datalist>
-        </div>
-      {% endif %}
-      {% if show_copy|default:True %}
-        <button
-          type="button"
-          id="{{ prefix }}-copy"
-          class="{{ copy_button_class|default:'button button-secondary' }}"
-          data-copy-target="#{{ prefix }}-content"
-          data-copy-success="{{ copy_success|default:default_copy_success|escapejs|escape }}"
-          data-copy-error="{{ copy_error|default:default_copy_error|escapejs|escape }}"
-        >{{ copy_label|default:default_copy_label }}</button>
-        <span
-          id="{{ prefix }}-copy-status"
-          class="{{ copy_status_class|default:'log-viewer-status' }}"
-          aria-live="polite"
-          hidden
-        ></span>
-      {% endif %}
+    <div class="{{ toolbar_card_class|default:'' }}">
+      <div class="{{ viewer_actions_class|default:'log-viewer-actions' }}">
+        {% if not hide_limit_slider %}
+          <div class="{{ viewer_slider_class|default:'log-viewer-slider' }}">
+            <label for="{{ prefix }}-limit">
+              {{ limit_label_text|default:default_limit_label }}:
+              <span id="{{ prefix }}-limit-value">{{ log_limit_label }}</span>
+            </label>
+            <input
+              type="range"
+              id="{{ prefix }}-limit"
+              class="{{ limit_slider_class|default:'log-viewer-limit' }}"
+              min="0"
+              max="{{ log_limit_options|length|add:'-1' }}"
+              step="1"
+              value="{{ log_limit_index }}"
+              list="{{ prefix }}-limit-options"
+              {% if limit_slider_data %}{% for key, value in limit_slider_data.items %}data-{{ key }}="{{ value }}" {% endfor %}{% endif %}{% if limit_slider_log %}data-log="{{ limit_slider_log }}"{% endif %}
+            >
+            <datalist id="{{ prefix }}-limit-options">{% for option in log_limit_options %}<option value="{{ forloop.counter0 }}" label="{{ option.label }}"></option>{% endfor %}</datalist>
+          </div>
+        {% endif %}
+        {% if show_copy|default:True %}
+          <button
+            type="button"
+            id="{{ prefix }}-copy"
+            class="{{ copy_button_class|default:'button button-secondary' }}"
+            data-copy-target="#{{ prefix }}-content"
+            data-copy-success="{{ copy_success|default:default_copy_success|escapejs|escape }}"
+            data-copy-error="{{ copy_error|default:default_copy_error|escapejs|escape }}"
+          >{{ copy_label|default:default_copy_label }}</button>
+          <span
+            id="{{ prefix }}-copy-status"
+            class="{{ copy_status_class|default:'log-viewer-status' }}"
+            aria-live="polite"
+            hidden
+          ></span>
+        {% endif %}
+      </div>
     </div>
     {% if not hide_limit_slider %}{{ log_limit_options|json_script:prefix|add:'-limit-data' }}{% endif %}
-    {% with provided_content=log_content|default_if_none:'' %}
-      {% if provided_content %}
-        <pre id="{{ prefix }}-content" class="{{ content_class|default:'log-viewer-content' }}" tabindex="{{ content_tabindex|default:'0' }}">{{ provided_content }}</pre>
-      {% else %}
-        {% with log_lines=log|default:log_lines %}
-          {% if log_lines %}
-            <pre id="{{ prefix }}-content" class="{{ content_class|default:'log-viewer-content' }}" tabindex="{{ content_tabindex|default:'0' }}">{{ log_lines|join:'\n' }}</pre>
-          {% else %}
-            <pre id="{{ prefix }}-content" class="{{ content_class|default:'log-viewer-content' }}" tabindex="{{ content_tabindex|default:'0' }}">{{ default_empty_message }}</pre>
-          {% endif %}
-        {% endwith %}
-      {% endif %}
-    {% endwith %}
+    <div class="{{ content_card_class|default:'' }}">
+      {% with provided_content=log_content|default_if_none:'' %}
+        {% if provided_content %}
+          <pre id="{{ prefix }}-content" class="{{ content_class|default:'log-viewer-content' }}" tabindex="{{ content_tabindex|default:'0' }}">{{ provided_content }}</pre>
+        {% else %}
+          {% with log_lines=log|default:log_lines %}
+            {% if log_lines %}
+              <pre id="{{ prefix }}-content" class="{{ content_class|default:'log-viewer-content' }}" tabindex="{{ content_tabindex|default:'0' }}">{{ log_lines|join:'\n' }}</pre>
+            {% else %}
+              <pre id="{{ prefix }}-content" class="{{ content_class|default:'log-viewer-content' }}" tabindex="{{ content_tabindex|default:'0' }}">{{ default_empty_message }}</pre>
+            {% endif %}
+          {% endwith %}
+        {% endif %}
+      {% endwith %}
+    </div>
   </div>
   <script>
     (function() {
@@ -96,11 +100,66 @@
           return;
         }
         const content = document.getElementById(`${prefix}-content`);
-        if (content) {
+        const escapeHtml = (value) => value
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+        const severityMatchers = [
+          { className: 'log-line-severity-error', pattern: /\bERROR\b/i },
+          { className: 'log-line-severity-warn', pattern: /\bWARN(?:ING)?\b/i },
+          { className: 'log-line-severity-info', pattern: /\bINFO\b/i },
+        ];
+        let lastDecoratedText = null;
+        function getSeverityClass(line) {
+          for (const matcher of severityMatchers) {
+            if (matcher.pattern.test(line)) {
+              return matcher.className;
+            }
+          }
+          return '';
+        }
+        function decorateContent() {
+          if (!content) {
+            return;
+          }
+          const text = content.textContent || '';
+          const alreadyDecorated = Boolean(
+            content.firstElementChild && content.firstElementChild.tagName === 'SPAN',
+          );
+          if (text === lastDecoratedText && alreadyDecorated) {
+            return;
+          }
+          const lines = text.split('\n');
+          const decorated = lines.map((line) => {
+            const severityClass = getSeverityClass(line);
+            const cssClass = severityClass ? ` class="${severityClass}"` : '';
+            return `<span${cssClass}>${escapeHtml(line)}</span>`;
+          }).join('\n');
+          content.innerHTML = decorated;
+          lastDecoratedText = text;
+        }
+        function scrollToBottom() {
+          if (!content) {
+            return;
+          }
           window.requestAnimationFrame(() => {
             content.scrollTop = content.scrollHeight;
           });
         }
+        function emitRefreshEvent() {
+          if (!container) {
+            return;
+          }
+          container.dispatchEvent(new CustomEvent('logviewer:refreshed', {
+            detail: {
+              refreshedAt: Date.now(),
+            },
+          }));
+        }
+        decorateContent();
+        scrollToBottom();
         const copyButton = document.getElementById(`${prefix}-copy`);
         const status = document.getElementById(`${prefix}-copy-status`);
         if (copyButton) {
@@ -235,9 +294,8 @@
               const newContent = replacement.querySelector('#' + prefix + '-content');
               if (content && newContent) {
                 content.textContent = newContent.textContent;
-                window.requestAnimationFrame(() => {
-                  content.scrollTop = content.scrollHeight;
-                });
+                decorateContent();
+                scrollToBottom();
               }
               const newDownload = replacement.querySelector('[data-log-role="download"]');
               if (downloadLink && newDownload) {
@@ -264,6 +322,7 @@
                 limitSlider.dataset.log = newSlider.dataset ? newSlider.dataset.log || '' : '';
               }
               updateLimitLabel();
+              emitRefreshEvent();
               if (!silent && status) {
                 status.hidden = true;
               }
@@ -301,8 +360,8 @@
           });
         }
         if (mode === 'fetch') {
-          window.__logViewers = window.__logViewers || {};
-          window.__logViewers[prefix] = {
+          globalThis.__logViewers = globalThis.__logViewers || {};
+          globalThis.__logViewers[prefix] = {
             refresh() {
               if (!limitSlider) {
                 return;
