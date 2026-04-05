@@ -32,6 +32,12 @@
     flex-wrap: wrap;
     align-items: flex-start;
     gap: 0.75rem;
+  }
+  .log-viewer-toolbar-card {
+    background: var(--bs-tertiary-bg, rgba(0, 0, 0, 0.03));
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+    padding: 0.875rem 1rem;
     margin-bottom: 1rem;
   }
   .log-viewer-slider {
@@ -46,17 +52,39 @@
   .log-viewer-limit {
     min-width: 220px;
   }
+  .log-viewer-pane-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+    background: var(--bs-body-bg);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
   .log-viewer-content {
     max-height: 60vh;
     overflow: auto;
-    background: var(--bs-light-bg-subtle, #f8f9fa);
+    background: var(--bs-dark-bg-subtle, #141922);
     border: 1px solid var(--bs-border-color);
     border-radius: var(--bs-border-radius);
     padding: 1rem;
+    color: var(--bs-light, #f8f9fa);
     font-family: var(--bs-font-monospace, var(--font-monospace, monospace));
     font-size: 0.875rem;
     line-height: 1.4;
     white-space: pre-wrap;
+    margin: 0;
+  }
+  .log-viewer-content > span {
+    display: block;
+  }
+  .log-line-severity-error {
+    color: var(--bs-danger, #dc3545);
+    font-weight: 700;
+  }
+  .log-line-severity-warn {
+    color: var(--bs-warning, #ffc107);
+    font-weight: 600;
+  }
+  .log-line-severity-info {
+    color: var(--bs-info, #0dcaf0);
   }
   .log-viewer-status {
     font-size: 0.875rem;
@@ -64,6 +92,30 @@
   }
   .log-viewer-status.error {
     color: var(--bs-danger-text, #dc3545);
+  }
+  .log-viewer-meta-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .log-viewer-meta-item {
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+    background: var(--bs-tertiary-bg, rgba(0, 0, 0, 0.03));
+    padding: 0.5rem 0.75rem;
+  }
+  .log-viewer-meta-label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0.15rem;
+  }
+  .log-viewer-meta-value {
+    font-weight: 600;
+    font-size: 0.9rem;
   }
 </style>
 {% endblock %}
@@ -86,14 +138,46 @@
   {% endfor %}
 </nav>
 {% endif %}
-<div class="form-check mb-3">
-  <input class="form-check-input" type="checkbox" id="auto-reload">
+<div class="form-check d-flex align-items-center gap-2 mb-3">
+  <input class="form-check-input mt-0" type="checkbox" id="auto-reload">
   <label class="form-check-label" for="auto-reload">{% trans "Auto reload" %}</label>
+  <span id="auto-reload-state" class="badge text-bg-secondary">{% trans "Off" %}</span>
 </div>
 {% blocktranslate with name=charger.display_name|default:charger.name|default:charger.charger_id asvar viewer_heading %}Viewing log for {{ name }}{% endblocktranslate %}
 {% translate 'Log copied to your clipboard.' as copy_success %}
 {% translate 'Copy failed. Use your browser copy command instead.' as copy_error %}
 {% translate 'Copy to clipboard' as copy_label %}
+{% translate "Source type" as source_type_label %}
+{% translate "Connector" as connector_label %}
+{% translate "Current row limit" as current_limit_label %}
+{% translate "Last refresh" as last_refresh_label %}
+{% translate "Never" as never_refresh_label %}
+{% translate "On" as auto_reload_on_label %}
+{% translate "Off" as auto_reload_off_label %}
+<script>
+  window.__chargerLogLabels = {
+    autoReloadOn: "{{ auto_reload_on_label|escapejs }}",
+    autoReloadOff: "{{ auto_reload_off_label|escapejs }}",
+  };
+</script>
+<div class="log-viewer-meta-row">
+  <div class="log-viewer-meta-item">
+    <span class="log-viewer-meta-label">{{ source_type_label }}</span>
+    <span class="log-viewer-meta-value">{{ log_type|title }}</span>
+  </div>
+  <div class="log-viewer-meta-item">
+    <span class="log-viewer-meta-label">{{ connector_label }}</span>
+    <span class="log-viewer-meta-value">{{ charger.connector_label|default:"—" }}</span>
+  </div>
+  <div class="log-viewer-meta-item">
+    <span class="log-viewer-meta-label">{{ current_limit_label }}</span>
+    <span class="log-viewer-meta-value" id="metadata-current-limit">{{ log_limit_label }}</span>
+  </div>
+  <div class="log-viewer-meta-item">
+    <span class="log-viewer-meta-label">{{ last_refresh_label }}</span>
+    <span class="log-viewer-meta-value" id="metadata-last-refresh">{{ never_refresh_label }}</span>
+  </div>
+</div>
 {% include "includes/log_viewer.html" with
   viewer_prefix="charger-log"
   viewer_wrapper_class="log-viewer-card"
@@ -111,6 +195,8 @@
   copy_status_class="log-viewer-status text-body-secondary small"
   download_button_class="btn btn-secondary"
   content_class="log-viewer-content"
+  content_card_class="log-viewer-pane-card"
+  toolbar_card_class="log-viewer-toolbar-card"
   limit_slider_class="log-viewer-limit"
   viewer_actions_class="log-viewer-actions"
   viewer_slider_class="log-viewer-slider"
@@ -119,10 +205,37 @@
 <script>
   (function() {
     const checkbox = document.getElementById('auto-reload');
+    const reloadState = document.getElementById('auto-reload-state');
+    const metadataLimit = document.getElementById('metadata-current-limit');
+    const metadataLastRefresh = document.getElementById('metadata-last-refresh');
     const prefix = 'charger-log';
     let reloadTimer;
     function getViewer() {
       return window.__logViewers && window.__logViewers[prefix];
+    }
+    function updateRefreshTimestamp() {
+      if (!metadataLastRefresh) {
+        return;
+      }
+      metadataLastRefresh.textContent = new Date().toLocaleTimeString();
+    }
+    function updateLimit() {
+      if (!metadataLimit) {
+        return;
+      }
+      const limitValue = document.getElementById(`${prefix}-limit-value`);
+      if (limitValue) {
+        metadataLimit.textContent = limitValue.textContent;
+      }
+    }
+    function updateAutoReloadBadge(enabled) {
+      if (!reloadState) {
+        return;
+      }
+      const labels = window.__chargerLogLabels || {};
+      reloadState.textContent = enabled ? (labels.autoReloadOn || 'On') : (labels.autoReloadOff || 'Off');
+      reloadState.classList.toggle('text-bg-success', enabled);
+      reloadState.classList.toggle('text-bg-secondary', !enabled);
     }
     function refresh() {
       const viewer = getViewer();
@@ -146,12 +259,23 @@
       } else {
         stop();
       }
+      updateAutoReloadBadge(event.target.checked);
     }
     function initialize() {
       if (!checkbox) {
         return;
       }
       checkbox.addEventListener('change', onToggle);
+      updateAutoReloadBadge(checkbox.checked);
+      updateLimit();
+      updateRefreshTimestamp();
+      const viewerEl = document.getElementById(`${prefix}-viewer`);
+      if (viewerEl) {
+        viewerEl.addEventListener('logviewer:refreshed', () => {
+          updateLimit();
+          updateRefreshTimestamp();
+        });
+      }
     }
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', initialize, { once: true });
