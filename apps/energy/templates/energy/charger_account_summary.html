@@ -6,7 +6,7 @@
 {% block content %}
 <div class="container px-3 px-sm-4">
   <div class="row justify-content-center mt-2 mt-sm-4">
-    <div class="col-12 col-lg-8 col-xl-6">
+    <div class="col-12 col-xl-10">
       <div class="card shadow-sm border-0 overflow-hidden">
         <div class="card-header">
           <h1 class="h4 mb-0">{% trans "Energy Account Summary" %}</h1>
@@ -14,40 +14,89 @@
         <div class="card-body">
           {% if account %}
             <div class="landing-card-section">
-              <p class="landing-card-section-title">{% trans "Account" %}</p>
-              <p class="mb-1"><strong>{% trans "Name" %}:</strong> {{ account.name }}</p>
-              <p class="mb-1"><strong>{% trans "Balance (kWh)" %}:</strong> {{ account.balance_kw|floatformat:3 }}</p>
-              <p class="mb-1"><strong>{% trans "Balance (MXN)" %}:</strong> {{ account.balance_mxn|floatformat:2 }}</p>
-              <p class="mb-0">
-                <strong>{% trans "Credits required for auth" %}:</strong>
-                {% if energy_credits_required %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}
-              </p>
+              <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+                <div>
+                  <p class="landing-card-section-title mb-1">{% trans "Account" %}</p>
+                  <p class="mb-0 text-muted small">{{ account.name }}</p>
+                </div>
+              </div>
+
+              <div class="row g-2 g-sm-3">
+                <div class="col-12 col-md-4">
+                  <div class="border rounded p-3 h-100 bg-light-subtle">
+                    <p class="text-uppercase text-muted small fw-semibold mb-1">{% trans "Balance" %}</p>
+                    <p class="h5 mb-0">{{ account.balance_kw|floatformat:3 }} <span class="fs-6 text-muted">kWh</span></p>
+                  </div>
+                </div>
+                <div class="col-12 col-md-4">
+                  <div class="border rounded p-3 h-100 bg-light-subtle">
+                    <p class="text-uppercase text-muted small fw-semibold mb-1">{% trans "Available Credit" %}</p>
+                    <p class="h5 mb-0">${{ account.balance_mxn|floatformat:2 }} <span class="fs-6 text-muted">MXN</span></p>
+                  </div>
+                </div>
+                <div class="col-12 col-md-4">
+                  <div class="border rounded p-3 h-100 bg-light-subtle">
+                    <p class="text-uppercase text-muted small fw-semibold mb-1">{% trans "Auth Requirement" %}</p>
+                    <p class="h5 mb-0 {% if energy_credits_required %}text-warning-emphasis{% else %}text-success-emphasis{% endif %}">
+                      {% if energy_credits_required %}{% trans "Credits Required" %}{% else %}{% trans "No Credits Required" %}{% endif %}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
+
             <div class="landing-card-section">
-              <p class="landing-card-section-title">{% trans "Previous Sessions" %}</p>
+              <p class="landing-card-section-title mb-2">{% trans "Previous Sessions" %}</p>
+
               {% if recent_sessions %}
+                <div class="d-flex flex-wrap gap-2 gap-md-3 align-items-stretch mb-3">
+                  <div class="border rounded px-3 py-2">
+                    <p class="text-uppercase text-muted small fw-semibold mb-1">{% trans "Recent sessions" %}</p>
+                    <p class="h6 mb-0">{{ recent_sessions|length }}</p>
+                  </div>
+                  <div class="border rounded px-3 py-2">
+                    <p class="text-uppercase text-muted small fw-semibold mb-1">{% trans "Total recent energy" %}</p>
+                    <p class="h6 mb-0"><span id="recent-energy-total" data-empty="0.00">0.00</span> kWh</p>
+                  </div>
+                </div>
+
                 <div class="table-responsive">
-                  <table class="table table-sm align-middle">
-                    <thead>
+                  <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
                       <tr>
-                        <th>{% trans "Started" %}</th>
-                        <th>{% trans "Charge Point" %}</th>
-                        <th>{% trans "Energy" %}</th>
+                        <th class="small text-uppercase text-muted fw-semibold">{% trans "Started" %}</th>
+                        <th class="small text-uppercase text-muted fw-semibold">{% trans "Charge Point" %}</th>
+                        <th class="small text-uppercase text-muted fw-semibold text-end">{% trans "Energy" %}</th>
                       </tr>
                     </thead>
                     <tbody>
                     {% for session in recent_sessions %}
                       <tr>
-                        <td>{{ session.start_time|date:"SHORT_DATETIME_FORMAT" }}</td>
-                        <td>{{ session.charger.display_name|default:session.charger.charger_id }}</td>
-                        <td>{{ session.kw|floatformat:2 }} kWh</td>
+                        <td class="py-2">
+                          <span class="fw-semibold">{{ session.start_time|date:"M j, Y" }}</span>
+                          <span class="text-muted small d-block">{{ session.start_time|date:"H:i" }}</span>
+                        </td>
+                        <td class="py-2">
+                          <span class="fw-semibold">{{ session.charger.display_name|default:session.charger.charger_id }}</span>
+                          <span class="text-muted small d-block">{{ session.charger.charger_id }}</span>
+                        </td>
+                        <td class="py-2 text-end" data-recent-energy="{{ session.kw|floatformat:3 }}">
+                          <span class="fw-semibold">{{ session.kw|floatformat:2 }}</span>
+                          <span class="text-muted">kWh</span>
+                        </td>
                       </tr>
                     {% endfor %}
                     </tbody>
                   </table>
                 </div>
               {% else %}
-                <p class="text-muted mb-0">{% trans "No sessions recorded yet." %}</p>
+                <div class="border rounded p-4 bg-light-subtle text-center">
+                  <p class="h6 mb-2">{% trans "No charging sessions yet" %}</p>
+                  <p class="text-muted mb-3">{% trans "Start a charging session from this charge point to build your activity history and track recent energy usage here." %}</p>
+                  <a class="btn btn-sm btn-primary" href="{% url 'ocpp:charger-page-connector' charger.charger_id charger.connector_slug %}">
+                    {% trans "Start from Charge Point" %}
+                  </a>
+                </div>
               {% endif %}
             </div>
           {% else %}
@@ -63,4 +112,24 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+  {{ block.super }}
+  <script>
+    (function () {
+      const totalEl = document.getElementById('recent-energy-total');
+      if (!totalEl) {
+        return;
+      }
+      let total = 0;
+      document.querySelectorAll('[data-recent-energy]').forEach((cell) => {
+        const value = parseFloat(cell.getAttribute('data-recent-energy'));
+        if (!Number.isNaN(value)) {
+          total += value;
+        }
+      });
+      totalEl.textContent = total.toFixed(2);
+    })();
+  </script>
 {% endblock %}
