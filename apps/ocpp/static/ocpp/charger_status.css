@@ -45,7 +45,7 @@
   color: var(--bs-body-color);
   max-width: 16rem;
   text-align: left;
-  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .status-table-wrap {
@@ -107,29 +107,29 @@
 
 .usage-legend-swatch.usage-offline,
 .usage-timeline-segment.usage-offline {
-  background-color: rgba(0, 0, 0, 0.85);
+  background-color: var(--bs-gray-900);
   background-image: repeating-linear-gradient(
     135deg,
-    rgba(0, 0, 0, 0.85),
-    rgba(0, 0, 0, 0.85) 8px,
-    rgba(0, 0, 0, 0.45) 8px,
-    rgba(0, 0, 0, 0.45) 16px
+    var(--bs-gray-900),
+    var(--bs-gray-900) 8px,
+    var(--bs-gray-700) 8px,
+    var(--bs-gray-700) 16px
   );
 }
 
 .usage-legend-swatch.usage-untracked,
 .usage-timeline-segment.usage-untracked {
-  background-color: #343a40;
+  background-color: var(--bs-secondary);
 }
 
 .usage-legend-swatch.usage-available,
 .usage-timeline-segment.usage-available {
-  background-color: #0b3d91;
+  background-color: var(--bs-primary);
 }
 
 .usage-legend-swatch.usage-charging,
 .usage-timeline-segment.usage-charging {
-  background-color: #198754;
+  background-color: var(--bs-success);
 }
 
 .usage-timeline-entry:not(:last-child) {
