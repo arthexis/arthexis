@@ -80,7 +80,7 @@
                           <span class="fw-semibold">{{ session.charger.display_name|default:session.charger.charger_id }}</span>
                           <span class="text-muted small d-block">{{ session.charger.charger_id }}</span>
                         </td>
-                        <td class="py-2 text-end" data-recent-energy="{{ session.kw|floatformat:3 }}">
+                        <td class="py-2 text-end" data-recent-energy="{{ session.kw|floatformat:"3u" }}">
                           <span class="fw-semibold">{{ session.kw|floatformat:2 }}</span>
                           <span class="text-muted">kWh</span>
                         </td>
