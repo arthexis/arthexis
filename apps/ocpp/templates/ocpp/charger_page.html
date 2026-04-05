@@ -43,26 +43,29 @@
                 </div>
               </dl>
             </div>
-            <div class="d-flex flex-column align-items-stretch align-items-sm-end gap-2">
-              <span class="badge text-uppercase fw-semibold px-3 py-2 shadow-sm" style="background-color: {{ color }}; color: #fff;">{{ state }}</span>
+            <div class="landing-action-group d-flex flex-column align-items-stretch align-items-sm-end gap-2">
+              <span class="badge landing-status-badge {{ status_badge_class }} text-uppercase fw-semibold px-3 py-2 shadow-sm">{{ state }}</span>
               {% if request.user.is_authenticated %}
-              <a class="btn btn-outline-primary w-100 w-sm-auto" href="{{ status_url }}" data-i18n="advanced_view_label">
-                {% trans "Advanced View" %}
-              </a>
-              {% if account_summary_url %}
-              <a class="btn btn-outline-secondary w-100 w-sm-auto" href="{{ account_summary_url }}">
-                {% trans "Account & Sessions" %}
-              </a>
-              {% endif %}
+              <div class="landing-section w-100 w-sm-auto text-sm-end">
+                <p class="landing-section-heading" data-i18n="support_label">{% trans "Support" %}</p>
+                <a class="btn btn-primary w-100 w-sm-auto" href="{{ status_url }}" data-i18n="advanced_view_label">
+                  {% trans "Advanced View" %}
+                </a>
+                {% if account_summary_url %}
+                <a class="btn btn-outline-secondary landing-action-secondary w-100 w-sm-auto" href="{{ account_summary_url }}">
+                  {% trans "Account & Sessions" %}
+                </a>
+                {% endif %}
+              </div>
               {% endif %}
             </div>
           </div>
         </div>
         <div class="card-body">
           {% if charger.last_status or charger_error_code or charger.last_status_timestamp or charger.last_status_vendor_info %}
-          <div class="landing-card-section">
-            <p class="landing-card-section-title mb-1" data-i18n="latest_status_label">{% trans "Latest report" %}</p>
-            <div class="text-muted small">
+          <div class="landing-section">
+            <p class="landing-section-heading" data-i18n="latest_status_label">{% trans "Latest report" %}</p>
+            <div class="landing-stack-sm text-muted small">
             {% if charger.last_status %}
             <p class="mb-1"><span data-i18n="status_reported_label">{% trans "Reported status" %}</span>: {{ charger.last_status }}</p>
             {% endif %}
@@ -89,8 +92,13 @@
           </div>
           {% endif %}
           {% if tx %}
-          <div class="landing-card-section">
-            <p class="text-muted mb-3" data-i18n="charging_label">{% trans "Charging" %}</p>
+          <div class="landing-section">
+            <p class="landing-section-heading" data-i18n="charging_label">{% trans "Charging" %}</p>
+            {% now "SHORT_DATETIME_FORMAT" as live_now_timestamp %}
+            <p class="landing-live-now mb-2">
+              <span class="landing-live-now-icon" aria-hidden="true"></span>
+              <span>{% trans "Live now" %} · {{ live_now_timestamp }}</span>
+            </p>
           {% if charger.connector_id is None and active_connector_count %}
           <p class="small text-muted" data-i18n="connectors_active_message" data-count="{{ active_connector_count }}">
             {% blocktrans count active=active_connector_count %}{{ active }} connector active{% plural %}{{ active }} connectors active{% endblocktrans %}
@@ -99,7 +107,7 @@
           <div class="progress bg-body-secondary mb-3" role="progressbar" aria-valuenow="{{ tx.kw|default:0|floatformat:0 }}" aria-valuemin="0" aria-valuemax="100">
             <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: {{ tx.kw|default:0|floatformat:0}}%;"></div>
           </div>
-          <div class="landing-stat-grid text-center text-sm-start">
+          <div class="landing-stat-grid landing-stack-md text-center text-sm-start">
             <div>
               <p class="stat-label" data-i18n="energy_label">{% trans "Energy" %}</p>
               <p class="stat-value">{{ tx.kw|floatformat:2 }} kW</p>
@@ -111,7 +119,7 @@
           </div>
           </div>
           {% if tx_rfid_details %}
-          <div class="landing-card-section text-center text-sm-start">
+          <div class="landing-section text-center text-sm-start">
             <p class="stat-label mb-1" data-i18n="rfid_label">
             {% if tx_rfid_details.display_label %}
               {{ tx_rfid_details.display_label }}
@@ -127,7 +135,7 @@
           </div>
           {% endif %}
           {% else %}
-          <div class="landing-card-section py-3 text-center">
+          <div class="landing-section text-center">
             <p class="lead mb-0" data-i18n="instruction_text">
               {% if energy_accounts_enabled %}
                 {% trans "Plug in your vehicle and authenticate with your energy account to begin charging." %}
@@ -148,13 +156,13 @@
       <div class="row gy-3">
         {% for item in connector_overview %}
         <div class="col-12 col-md-6">
-          <div class="landing-connector-card h-100 position-relative">
+          <div class="landing-connector-card h-100 position-relative{% if item.slug == connector_slug %} is-selected{% endif %}">
             <div class="d-flex justify-content-between align-items-center mb-2">
               <span class="fw-semibold">{{ item.label }}</span>
-              <span class="badge" style="background-color: {{ item.color }};">{{ item.status }}</span>
+              <span class="badge landing-status-badge {{ item.status_badge_class }}">{{ item.status }}</span>
             </div>
             {% if item.last_status or item.last_error_code or item.last_status_timestamp or item.last_status_vendor_info %}
-            <div class="mb-2 text-muted small">
+            <div class="landing-stack-sm mb-2 text-muted small">
               {% if item.last_status %}
               <p class="mb-1"><span data-i18n="status_reported_label">{% trans "Reported status" %}</span>: {{ item.last_status }}</p>
               {% endif %}
@@ -195,7 +203,7 @@
             {% else %}
             <p class="mb-0 text-muted"><small data-i18n="no_active_transaction">{% trans "No active transaction" %}</small></p>
             {% endif %}
-            <a class="stretched-link" href="{{ item.url }}" aria-label="{{ item.label }}"></a>
+            <a class="stretched-link" href="{{ item.url }}" aria-label="{{ item.label }}" {% if item.slug == connector_slug %}aria-current="page"{% endif %}></a>
           </div>
         </div>
         {% endfor %}

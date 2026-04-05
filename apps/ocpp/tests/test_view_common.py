@@ -136,6 +136,7 @@ def test_connector_overview_uses_active_transaction_fallback(monkeypatch):
 
     assert overview[0]["status"] == STATUS_BADGE_MAP["charging"][0]
     assert overview[0]["color"] == STATUS_BADGE_MAP["charging"][1]
+    assert overview[0]["status_badge_class"] == "status-charging"
 
 
 @pytest.mark.django_db

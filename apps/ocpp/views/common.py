@@ -92,6 +92,38 @@ SEVERITY_INFO = ("info", "#0d6efd", "Info")
 SEVERITY_WARNING = ("warning", "#ffc107", "Warning")
 
 
+def _status_badge_class(state: str | None, color: str | None) -> str:
+    """Return the semantic badge class used by landing pages."""
+
+    normalized_state = slugify(force_str(state or "")).replace("-", "")
+    if normalized_state in {"available", "preparing", "reserved"}:
+        return "status-available"
+    if normalized_state in {
+        "charging",
+        "finishing",
+        "occupied",
+        "suspendedev",
+        "suspendedevse",
+    }:
+        return "status-charging"
+    if normalized_state in {"faulted", "outofservice", "unavailable"}:
+        return "status-faulted"
+    if normalized_state in {"offline", "disconnected"}:
+        return "status-offline"
+
+    normalized_color = force_str(color or "").strip().casefold()
+    if normalized_color in {"#0d6efd", "blue"}:
+        return "status-available"
+    if normalized_color in {"#198754", "green"}:
+        return "status-charging"
+    if normalized_color in {"#dc3545", "red", "#ffc107", "yellow"}:
+        return "status-faulted"
+    if normalized_color in {"grey", "gray", "#6c757d"}:
+        return "status-offline"
+
+    return "status-unknown"
+
+
 @dataclass(frozen=True)
 class EventFeedConfig:
     """Configuration for building non-transaction event rows from log lines."""
@@ -533,6 +565,7 @@ def _connector_overview(
                 "connected": store.is_connected(
                     sibling.charger_id, sibling.connector_id
                 ),
+                "status_badge_class": _status_badge_class(state, color),
             }
         )
     return overview
