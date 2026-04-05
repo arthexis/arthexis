@@ -144,11 +144,19 @@
     };
 
     const updateDashboardMetrics = () => {
-      const rows = Array.from(document.querySelectorAll('[data-dashboard-row]'));
-      const visibleCount = rows.length;
-      const onlineCount = rows.filter((row) => row.dataset.statusGroup === 'online').length;
-      const activeCount = rows.filter((row) => row.dataset.activeSession === '1').length;
-      const todayEnergy = rows.reduce((total, row) => {
+      const allRows = Array.from(document.querySelectorAll('[data-dashboard-row]'));
+      const parentRows = allRows.filter((row) => row.dataset.rowType === 'parent');
+      const childRows = allRows.filter((row) => row.dataset.rowType === 'child');
+      const orphanChildRows = childRows.filter((row) => row.dataset.hasParent !== '1');
+      const topLevelRows = parentRows.concat(orphanChildRows);
+      const sessionRows = childRows.concat(
+        parentRows.filter((row) => row.dataset.hasChildren !== '1'),
+      );
+
+      const visibleCount = topLevelRows.length;
+      const onlineCount = topLevelRows.filter((row) => row.dataset.statusGroup === 'online').length;
+      const activeCount = sessionRows.filter((row) => row.dataset.activeSession === '1').length;
+      const todayEnergy = sessionRows.reduce((total, row) => {
         const value = parseFloat(row.dataset.todayKw || '0');
         return total + (Number.isFinite(value) ? value : 0);
       }, 0);
@@ -202,10 +210,7 @@
         return;
       }
 
-      const wasSuccessful =
-        Boolean(event.detail && event.detail.successful) ||
-        (event.detail && event.detail.xhr && event.detail.xhr.status >= 200 && event.detail.xhr.status < 300);
-      if (!wasSuccessful) {
+      if (!Boolean(event.detail && event.detail.successful)) {
         return;
       }
 

@@ -169,6 +169,22 @@ def dashboard(request):
             .select_related("charger")
         }
 
+    def _status_group(state_value: str, color_value: str) -> str:
+        if not force_str(state_value or "").strip():
+            return "unknown"
+        normalized_color = force_str(color_value or "").strip().casefold()
+        if normalized_color in {"#dc3545", "red", "grey", "gray", "#6c757d"}:
+            return "offline"
+        return "online"
+
+    def _status_tone(color_value: str) -> str:
+        normalized_color = force_str(color_value or "").strip().casefold()
+        if normalized_color in {"#dc3545", "red", "grey", "gray", "#6c757d"}:
+            return "danger"
+        if normalized_color in {"#198754", "green", "#0dcaf0", "#fd7e14"}:
+            return "active"
+        return "healthy"
+
     chargers: list[dict[str, object]] = []
     charger_groups: list[dict[str, object]] = []
     group_lookup: dict[str, dict[str, object]] = {}
@@ -192,6 +208,9 @@ def dashboard(request):
             "charger": charger,
             "state": state,
             "color": color,
+            "has_active_session": has_session,
+            "status_group": _status_group(state, color),
+            "status_tone": _status_tone(color),
             "display_name": _charger_display_name(charger),
             "last_seen": _charger_last_seen(charger),
             "last_session": _last_session_date(tx_obj),
@@ -226,6 +245,8 @@ def dashboard(request):
             label, badge_color = STATUS_BADGE_MAP["charging"]
             parent_entry["state"] = label
             parent_entry["color"] = badge_color
+            parent_entry["status_group"] = _status_group(label, badge_color)
+            parent_entry["status_tone"] = _status_tone(badge_color)
     scheme = "wss" if is_https_request(request) else "ws"
     host = request.get_host()
     ws_url = f"{scheme}://{host}/ocpp/<CHARGE_POINT_ID>/"
