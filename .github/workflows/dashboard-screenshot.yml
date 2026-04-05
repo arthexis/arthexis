@@ -238,21 +238,32 @@ jobs:
 
           body = os.environ.get("PR_BODY", "").splitlines()
           requested: list[str] = []
+          active_section = "auth"
 
           for raw_line in body:
-              line = raw_line.strip()
+              line = re.sub(r"^[-*]\s+", "", raw_line.strip())
               if not line or line.startswith("#"):
                   continue
 
-              if line.lower().startswith("public:"):
+              lower = line.lower()
+              if lower == "public:":
+                  active_section = "public"
+                  continue
+              if lower == "auth:":
+                  active_section = "auth"
                   continue
 
-              if line.lower().startswith("auth:"):
+              if lower.startswith("public:"):
+                  active_section = "public"
                   line = line.split(":", maxsplit=1)[1].strip()
-              else:
-                  line = re.sub(r"^[-*]\s+", "", line)
+              elif lower.startswith("auth:"):
+                  active_section = "auth"
+                  line = line.split(":", maxsplit=1)[1].strip()
 
               if not line.startswith("/"):
+                  continue
+
+              if active_section == "public":
                   continue
 
               path = line if line.endswith("/") else f"{line}/"
@@ -344,7 +355,6 @@ jobs:
         run: |
           source .venv/bin/activate
           python <<'PY'
-          import re
           from pathlib import Path
 
           marker = "<!-- dashboard-screenshot-preview -->"
@@ -352,23 +362,19 @@ jobs:
           images = {path.name: path for path in Path("artifacts").glob("*.png")}
           bundle_url = "${{ steps.upload-pr-screenshot-bundle.outputs.artifact-url }}".strip()
 
-          def path_slug(path: str) -> str:
-              cleaned = path.strip("/") or "root"
-              return re.sub(r"[^a-zA-Z0-9]+", "-", cleaned).strip("-") or "root"
-
-          expected_paths = []
-          configured_paths_file = Path("/tmp/authenticated-screenshot-paths.txt")
-          if configured_paths_file.exists():
-              for raw_line in configured_paths_file.read_text(encoding="utf-8").splitlines():
+          expected_images: list[tuple[str, str]] = []
+          readme = Path("artifacts/README.md")
+          current_path: str | None = None
+          if readme.exists():
+              for raw_line in readme.read_text(encoding="utf-8").splitlines():
                   line = raw_line.strip()
-                  if not line:
+                  if line.startswith("## `") and line.endswith("`"):
+                      current_path = line.removeprefix("## `").removesuffix("`")
                       continue
-                  expected_paths.append(line)
-
-          expected_images = []
-          for path in expected_paths:
-              slug = path_slug(path)
-              expected_images.append((f"{slug}-desktop.png", path))
+                  if current_path is None or not line.startswith("- **desktop**: ["):
+                      continue
+                  link = line.split("[", maxsplit=1)[1].split("]", maxsplit=1)[0].strip()
+                  expected_images.append((Path(link).name, current_path))
 
           lines = [
               marker,
