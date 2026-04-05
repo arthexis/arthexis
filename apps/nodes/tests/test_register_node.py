@@ -295,6 +295,10 @@ def test_register_visitor_proxy_uses_safe_success_details(monkeypatch, admin_use
     assert data["visitor"]["id"] == 11
     assert data["host"]["detail"] == "host registration accepted"
     assert data["visitor"]["detail"] == "visitor confirmation accepted"
+    assert data["host_requires_https"] is True
+    assert data["visitor_requires_https"] is False
+    assert "Traceback" not in data["host"]["detail"]
+    assert "Exception" not in data["visitor"]["detail"]
 
 
 @pytest.mark.django_db
@@ -393,6 +397,69 @@ def test_register_visitor_proxy_returns_400_when_host_id_missing(
         handlers,
         "register_node",
         lambda _request: JsonResponse({"detail": "missing id"}, status=200),
+    )
+    monkeypatch.setattr(
+        handlers,
+        "_try_proxy_json_request",
+        lambda *, method, **_kwargs: (
+            (
+                {
+                    "hostname": "visitor-node",
+                    "address": "198.51.100.6",
+                    "port": 8888,
+                    "mac_address": "00:11:22:33:44:66",
+                },
+                "https://visitor.example/nodes/info/",
+                None,
+                1,
+            )
+            if method == "get"
+            else ({"id": 11}, "https://visitor.example/nodes/register/", None, 2)
+        ),
+    )
+
+    response = handlers.register_visitor_proxy(request)
+
+    assert response.status_code == 400
+    data = json.loads(response.content.decode())
+    assert data["detail"] == "host registration failed"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("host_status", [200, 201, 204])
+def test_register_visitor_proxy_coerces_2xx_to_400_when_host_id_missing(
+    monkeypatch, admin_user, host_status
+):
+    factory = RequestFactory()
+    request = factory.post(
+        "/nodes/register-visitor-proxy/",
+        data=json.dumps(
+            {
+                "visitor_info_url": "https://visitor.example/nodes/info/",
+                "visitor_register_url": "https://visitor.example/nodes/register/",
+            }
+        ),
+        content_type="application/json",
+    )
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    target = SimpleNamespace(
+        url="https://visitor.example/nodes/info/",
+        server_hostname="visitor.example",
+        host_header="visitor.example",
+    )
+    monkeypatch.setattr(handlers, "is_allowed_visitor_url", lambda _: True)
+    monkeypatch.setattr(handlers, "get_public_targets", lambda _: [target])
+    monkeypatch.setattr(
+        handlers,
+        "node_info",
+        lambda _request: JsonResponse({"hostname": "host-node"}),
+    )
+    monkeypatch.setattr(
+        handlers,
+        "register_node",
+        lambda _request: JsonResponse({"detail": "missing id"}, status=host_status),
     )
     monkeypatch.setattr(
         handlers,

@@ -964,7 +964,7 @@ def register_visitor_proxy(request):
     host_register_body = json.loads(host_register_response.content.decode() or "{}")
     if host_register_response.status_code != 200 or not host_register_body.get("id"):
         status_code = host_register_response.status_code or 400
-        if status_code == 200:
+        if 200 <= status_code < 300:
             status_code = 400
         return JsonResponse(
             {"detail": "host registration failed"},
