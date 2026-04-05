@@ -228,28 +228,35 @@
               </li>
             {% endfor %}
           </ul>
-          <div class="charging-location-details" id="charging-location-details" aria-live="polite">
-            <h3 id="charging-location-name">{% trans "Select a charging station" %}</h3>
-            <div class="charging-location-details-grid">
-              <p class="charging-location-meta mb-0">
-                <strong>{% trans "Coordinates:" %}</strong>
-                <span id="charging-location-coordinates">—</span>
-              </p>
-              <p class="charging-location-meta mb-0">
-                <strong>{% trans "Operator:" %}</strong>
-                <span id="charging-location-operator">—</span>
-              </p>
-              <p class="charging-location-meta mb-0">
-                <strong>{% trans "Access notes:" %}</strong>
-                <span id="charging-location-access">—</span>
-              </p>
-            </div>
-            <div class="charging-location-actions">
-              <a class="btn btn-primary btn-sm" id="charging-location-directions" href="#" target="_blank" rel="noopener">
-                {% trans "Get directions" %}
-              </a>
-              <div class="charging-qr-inline" id="charging-qr"></div>
-            </div>
+        </div>
+        <div class="charging-location-details" id="charging-location-details" aria-live="polite">
+          <h3 id="charging-location-name">{% trans "Select a charging station" %}</h3>
+          <div class="charging-location-details-grid">
+            <p class="charging-location-meta mb-0">
+              <strong>{% trans "Coordinates:" %}</strong>
+              <span id="charging-location-coordinates">—</span>
+            </p>
+            <p class="charging-location-meta mb-0">
+              <strong>{% trans "Operator:" %}</strong>
+              <span id="charging-location-operator">—</span>
+            </p>
+            <p class="charging-location-meta mb-0">
+              <strong>{% trans "Access notes:" %}</strong>
+              <span id="charging-location-access">—</span>
+            </p>
+          </div>
+          <div class="charging-location-actions">
+            <a
+              class="btn btn-primary btn-sm"
+              id="charging-location-directions"
+              href="#"
+              target="_blank"
+              rel="noopener"
+              data-label-template="{% blocktrans trimmed %}Get directions to %(name)s{% endblocktrans %}"
+            >
+              {% trans "Get directions" %}
+            </a>
+            <div class="charging-qr-inline" id="charging-qr"></div>
           </div>
         </div>
       </aside>
@@ -321,7 +328,8 @@
         }
         if (directionsCta) {
           directionsCta.href = location.directions_url;
-          directionsCta.setAttribute('aria-label', `Get directions to ${location.name}`);
+          const labelTemplate = directionsCta.dataset.labelTemplate || 'Get directions to %(name)s';
+          directionsCta.setAttribute('aria-label', labelTemplate.replace('%(name)s', location.name));
         }
         if (operatorLabel) {
           operatorLabel.textContent = location.operator_name || '—';
