@@ -12,63 +12,254 @@
     crossorigin=""
   >
   <style>
-    #charging-map {
-      min-height: 60vh;
-      height: 75vh;
-      border-radius: 0.5rem;
+    .charging-map-layout {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: minmax(0, 1fr);
+      margin-top: 1rem;
     }
+
+    .charging-map-panel {
+      background: var(--bs-body-bg);
+      border: 1px solid var(--bs-border-color);
+      border-radius: 0.75rem;
+      box-shadow: 0 0.25rem 0.75rem rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+    }
+
+    .charging-map-panel-header {
+      align-items: center;
+      border-bottom: 1px solid var(--bs-border-color);
+      display: flex;
+      justify-content: space-between;
+      padding: 0.9rem 1rem;
+    }
+
+    .charging-map-panel-header h2 {
+      font-size: 1rem;
+      margin: 0;
+    }
+
+    .charging-map-toggle {
+      font-size: 0.875rem;
+      padding: 0.25rem 0.6rem;
+    }
+
+    .charging-location-list-wrap {
+      max-height: min(34vh, 18rem);
+      overflow-y: auto;
+      padding: 0.75rem;
+    }
+
+    .charging-location-list-item + .charging-location-list-item {
+      margin-top: 0.5rem;
+    }
+
     .charging-location-link {
+      align-items: center;
+      background: var(--bs-light);
+      border: 1px solid transparent;
+      border-radius: 0.65rem;
+      color: inherit;
+      display: flex;
+      font-weight: 500;
+      gap: 0.625rem;
+      padding: 0.7rem 0.75rem;
+      text-decoration: none;
+      transition: all 120ms ease-in-out;
+    }
+
+    .charging-location-link:hover {
+      border-color: var(--bs-primary-border-subtle);
       text-decoration: none;
     }
-    .charging-location-link.active {
-      font-weight: 600;
+
+    .charging-location-link .charging-location-icon {
+      align-items: center;
+      background: rgba(var(--bs-primary-rgb), 0.12);
+      border-radius: 999px;
       color: var(--bs-primary);
+      display: inline-flex;
+      font-size: 0.9rem;
+      height: 1.55rem;
+      justify-content: center;
+      width: 1.55rem;
+    }
+
+    .charging-location-link.active {
+      background: var(--bs-primary);
+      border-color: var(--bs-primary);
+      box-shadow: 0 0.4rem 1rem rgba(var(--bs-primary-rgb), 0.3);
+      color: #fff;
+    }
+
+    .charging-location-link.active .charging-location-icon {
+      background: #fff;
+      color: var(--bs-primary);
+    }
+
+    .charging-location-link .charging-location-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .charging-location-details {
+      border-top: 1px solid var(--bs-border-color);
+      display: grid;
+      gap: 0.8rem;
+      padding: 1rem;
+    }
+
+    .charging-location-details h3 {
+      font-size: 1.05rem;
+      margin: 0;
+    }
+
+    .charging-location-details-grid {
+      display: grid;
+      gap: 0.5rem;
+    }
+
+    .charging-location-meta {
+      color: var(--bs-secondary-color);
+      font-size: 0.87rem;
+      margin-bottom: 0;
+    }
+
+    .charging-location-meta strong {
+      color: var(--bs-body-color);
+      font-weight: 600;
+      margin-right: 0.25rem;
+    }
+
+    .charging-location-actions {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      justify-content: space-between;
+    }
+
+    .charging-qr-inline {
+      min-height: 120px;
+      min-width: 120px;
+    }
+
+    #charging-map {
+      border-radius: 0.75rem;
+      height: 75vh;
+      min-height: 60vh;
+    }
+
+    @media (max-width: 991.98px) {
+      .charging-map-layout {
+        grid-template-areas:
+          "map"
+          "sidebar";
+      }
+
+      .charging-map-main {
+        grid-area: map;
+      }
+
+      .charging-map-sidebar {
+        grid-area: sidebar;
+      }
+
+      .charging-location-list-wrap {
+        max-height: 40vh;
+      }
+    }
+
+    @media (min-width: 992px) {
+      .charging-map-layout {
+        align-items: start;
+        grid-template-columns: minmax(20rem, 26rem) minmax(0, 1fr);
+      }
+
+      .charging-map-sidebar {
+        position: sticky;
+        top: 1rem;
+      }
+
+      .charging-location-list-collapse {
+        display: block !important;
+      }
+
+      .charging-map-toggle {
+        display: none;
+      }
     }
   </style>
 {% endblock %}
 
 {% block content %}
-<div class="row">
-  <div class="col-12 col-lg-3 mt-4 mt-lg-0 order-2 order-lg-1">
-    <div class="reader-sidebar">
-      <nav class="toc">
-        <h4>{% trans "Charging Locations" %}</h4>
-        <ul class="list-unstyled" id="charging-location-list">
-          {% for location in locations %}
-            <li class="mb-2">
-              <a
-                href="#"
-                class="charging-location-link{% if forloop.first %} active{% endif %}"
-                data-location-id="{{ location.id }}"
-              >
-                {{ location.name }}
+<div class="markdown-body" id="reader-content">
+  <h1>{% trans "Charging Station Map" %}</h1>
+  {% if locations %}
+    <div class="charging-map-layout">
+      <aside class="charging-map-sidebar charging-map-panel" aria-label="{% trans 'Charging location directory' %}">
+        <div class="charging-map-panel-header">
+          <h2>{% trans "Charging Locations" %}</h2>
+          <button
+            class="btn btn-outline-primary btn-sm charging-map-toggle"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#charging-location-list-panel"
+            aria-expanded="false"
+            aria-controls="charging-location-list-panel"
+          >
+            {% trans "Show locations" %}
+          </button>
+        </div>
+        <div class="collapse charging-location-list-collapse" id="charging-location-list-panel">
+          <ul class="list-unstyled charging-location-list-wrap mb-0" id="charging-location-list">
+            {% for location in locations %}
+              <li class="charging-location-list-item">
+                <a
+                  href="#"
+                  class="charging-location-link{% if forloop.first %} active{% endif %}"
+                  data-location-id="{{ location.id }}"
+                >
+                  <span class="charging-location-icon" aria-hidden="true">📍</span>
+                  <span class="charging-location-label">{{ location.name }}</span>
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+          <div class="charging-location-details" id="charging-location-details" aria-live="polite">
+            <h3 id="charging-location-name">{% trans "Select a charging station" %}</h3>
+            <div class="charging-location-details-grid">
+              <p class="charging-location-meta mb-0">
+                <strong>{% trans "Coordinates:" %}</strong>
+                <span id="charging-location-coordinates">—</span>
+              </p>
+              <p class="charging-location-meta mb-0">
+                <strong>{% trans "Operator:" %}</strong>
+                <span id="charging-location-operator">—</span>
+              </p>
+              <p class="charging-location-meta mb-0">
+                <strong>{% trans "Access notes:" %}</strong>
+                <span id="charging-location-access">—</span>
+              </p>
+            </div>
+            <div class="charging-location-actions">
+              <a class="btn btn-primary btn-sm" id="charging-location-directions" href="#" target="_blank" rel="noopener">
+                {% trans "Get directions" %}
               </a>
-            </li>
-          {% empty %}
-            <li class="text-muted">{% trans "No charging locations available yet." %}</li>
-          {% endfor %}
-        </ul>
-      </nav>
-      <div class="reader-qr-card mt-4 d-flex flex-column align-items-center">
-        <p class="small text-uppercase mb-3 text-muted">
-          {% trans "Directions to" %} <span id="charging-qr-location-name">
-            {% if initial_location %}{{ initial_location.name }}{% else %}{% trans "station" %}{% endif %}
-          </span>
-        </p>
-        <div class="reader-qr-image" id="charging-qr"></div>
-      </div>
-    </div>
-  </div>
-  <div class="col-12 col-lg-9 order-1 order-lg-2">
-    <div class="markdown-body" id="reader-content">
-      <h1>{% trans "Charging Station Map" %}</h1>
-      {% if locations %}
+              <div class="charging-qr-inline" id="charging-qr"></div>
+            </div>
+          </div>
+        </div>
+      </aside>
+      <section class="charging-map-main">
         <div id="charging-map"></div>
-      {% else %}
-        <p class="text-muted">{% trans "There are no charging locations with coordinates yet." %}</p>
-      {% endif %}
+      </section>
     </div>
-  </div>
+  {% else %}
+    <p class="text-muted">{% trans "No charging locations available yet." %}</p>
+  {% endif %}
 </div>
 {{ locations|json_script:"charging-locations-data" }}
 {% endblock %}
@@ -86,8 +277,13 @@
       const locations = dataElement ? JSON.parse(dataElement.textContent || '[]') : [];
       const mapContainer = document.getElementById('charging-map');
       const qrContainer = document.getElementById('charging-qr');
-      const qrLabel = document.getElementById('charging-qr-location-name');
+      const nameLabel = document.getElementById('charging-location-name');
+      const coordinatesLabel = document.getElementById('charging-location-coordinates');
+      const directionsCta = document.getElementById('charging-location-directions');
+      const operatorLabel = document.getElementById('charging-location-operator');
+      const accessLabel = document.getElementById('charging-location-access');
       const locationLinks = Array.from(document.querySelectorAll('.charging-location-link'));
+      const locationListPanel = document.getElementById('charging-location-list-panel');
       const markers = new Map();
       let map = null;
 
@@ -105,14 +301,43 @@
         qrContainer.innerHTML = '';
         new QRCode(qrContainer, {
           text: location.directions_url,
-          width: 176,
-          height: 176,
+          width: 120,
+          height: 120,
           colorDark: '#0a0a0a',
           colorLight: '#ffffff',
           correctLevel: QRCode.CorrectLevel.M,
         });
-        if (qrLabel) {
-          qrLabel.textContent = location.name;
+      }
+
+      function renderDetails(location) {
+        if (!location) {
+          return;
+        }
+        if (nameLabel) {
+          nameLabel.textContent = location.name;
+        }
+        if (coordinatesLabel) {
+          coordinatesLabel.textContent = `${location.latitude}, ${location.longitude}`;
+        }
+        if (directionsCta) {
+          directionsCta.href = location.directions_url;
+          directionsCta.setAttribute('aria-label', `Get directions to ${location.name}`);
+        }
+        if (operatorLabel) {
+          operatorLabel.textContent = location.operator_name || '—';
+        }
+        if (accessLabel) {
+          accessLabel.textContent = location.access_notes || '—';
+        }
+      }
+
+      function closeSidebarOnSmallScreens() {
+        if (!locationListPanel || window.innerWidth >= 992) {
+          return;
+        }
+        if (window.bootstrap && window.bootstrap.Collapse) {
+          const collapse = window.bootstrap.Collapse.getOrCreateInstance(locationListPanel, { toggle: false });
+          collapse.hide();
         }
       }
 
@@ -128,7 +353,9 @@
           marker.openPopup();
           map.setView(marker.getLatLng(), Math.max(map.getZoom(), 14));
         }
+        renderDetails(location);
         renderQr(location);
+        closeSidebarOnSmallScreens();
       }
 
       if (mapContainer && locations.length) {
@@ -144,6 +371,10 @@
           const marker = L.marker(latLng)
             .addTo(map)
             .bindPopup(location.name);
+          marker.on('click', () => {
+            const linkedItem = locationLinks.find((link) => Number.parseInt(link.dataset.locationId, 10) === location.id);
+            selectLocation(location, linkedItem);
+          });
           markers.set(location.id, marker);
         });
         if (bounds.length === 1) {
