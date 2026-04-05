@@ -48,7 +48,7 @@
   {% if transactions %}
   <div class="d-flex justify-content-between align-items-center small text-muted border rounded px-3 py-2 mb-2">
     <span><strong class="text-body">{{ filtered_count }}</strong> {% trans "sessions" %}</span>
-    <span>{% trans "Total energy" %}: <strong class="text-body">{{ filtered_total_kw|floatformat:2 }}</strong> {% trans "kW" %}</span>
+    <span>{% trans "Total energy" %}: <strong class="text-body">{{ filtered_total_kw|floatformat:2 }}</strong> {% trans "kWh" %}</span>
   </div>
   <div class="table-responsive">
     <table class="table table-sm align-middle table-striped">
@@ -60,7 +60,7 @@
           {% endif %}
           <th scope="col">{% trans "Start" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
           <th scope="col">{% trans "Stop" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
-          <th scope="col">{% trans "Energy (kW)" %}</th>
+          <th scope="col">{% trans "Energy (kWh)" %}</th>
           <th scope="col">{% trans "RFID Label" %}</th>
         </tr>
       </thead>

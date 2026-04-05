@@ -49,7 +49,7 @@ def test_charger_session_search_quick_range_filters_and_summary(client):
     assert response.status_code == 200
     body = response.content.decode("utf-8")
     assert "2</strong> sessions" in body
-    assert "4.00</strong> kW" in body
+    assert "4.00</strong> kWh" in body
     assert "Last 7 days" in body
 
 
@@ -87,7 +87,7 @@ def test_charger_session_search_date_filter_still_supported(client):
     assert response.status_code == 200
     body = response.content.decode("utf-8")
     assert "1</strong> sessions" in body
-    assert "1.00</strong> kW" in body
+    assert "1.00</strong> kWh" in body
 
 
 @pytest.mark.django_db
