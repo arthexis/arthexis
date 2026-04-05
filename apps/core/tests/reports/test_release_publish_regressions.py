@@ -14,6 +14,7 @@ from apps.core.views.reports.release_publish.workflow import ReleasePublishConte
 
 def test_publish_workflow_polling_pauses_when_run_in_progress(monkeypatch, tmp_path: Path):
     class DummyRelease:
+        pk = 1
         version = "1.2.3"
 
     ctx: dict[str, object] = {}
@@ -92,6 +93,7 @@ def test_broadcast_release_message_logs_failures(monkeypatch, caplog):
 
 def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path: Path):
     class DummyRelease:
+        pk = 1
         version = "1.2.3"
 
         @staticmethod
@@ -191,3 +193,35 @@ def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path
     assert response.status_code == 200
     assert captured["ctx"].paused is True
     assert captured["ctx"].extras["pending_git_push"] == {"branch": "main"}
+
+
+def test_resolve_safe_child_path_rejects_parent_traversal(tmp_path: Path):
+    with pytest.raises(ValueError):
+        pipeline._resolve_safe_child_path(tmp_path, "../escape.txt")
+
+
+def test_release_progress_returns_400_for_invalid_state_path(monkeypatch):
+    class DummyRelease:
+        pk = 1
+
+    def raise_unsafe_path(*_args, **_kwargs):
+        raise ValueError("unsafe")
+
+    monkeypatch.setattr(pipeline, "_get_release_or_response", lambda *_args: (DummyRelease(), None))
+    monkeypatch.setattr(
+        pipeline,
+        "_resolve_safe_child_path",
+        raise_unsafe_path,
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_render_release_progress_error",
+        lambda *_args, **_kwargs: HttpResponse("bad path", status=400),
+    )
+
+    request = RequestFactory().get("/release/publish")
+    request.user = type("User", (), {"is_authenticated": False})()
+
+    response = pipeline.release_progress_impl(request, pk=1, action="publish")
+
+    assert response.status_code == 400
