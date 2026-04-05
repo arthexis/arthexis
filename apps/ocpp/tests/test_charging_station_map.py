@@ -26,6 +26,9 @@ def test_charging_station_map_renders_charger_locations(monkeypatch, client):
     content = response.content.decode("utf-8")
     assert "North Depot" in content
     assert "destination=19.432608,-99.133209" in content
+    assert 'data-label-template="Get directions to %(name)s"' in content
+    assert content.index('id="charging-location-list-panel"') < content.index('id="charging-location-details"')
+    assert content.index('id="charging-location-details"') < content.index('id="charging-map"')
 
 
 @pytest.mark.django_db
