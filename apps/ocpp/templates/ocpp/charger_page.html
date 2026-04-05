@@ -97,7 +97,7 @@
             {% now "SHORT_DATETIME_FORMAT" as live_now_timestamp %}
             <p class="landing-live-now mb-2">
               <span class="landing-live-now-icon" aria-hidden="true"></span>
-              <span>{% trans "Live now" %} · {{ live_now_timestamp }}</span>
+              <span data-i18n="live_now_label">{% trans "Live now" %}</span> · {{ live_now_timestamp }}
             </p>
           {% if charger.connector_id is None and active_connector_count %}
           <p class="small text-muted" data-i18n="connectors_active_message" data-count="{{ active_connector_count }}">

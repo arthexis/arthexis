@@ -106,15 +106,15 @@ def _status_badge_class(state: str | None, color: str | None) -> str:
         "suspendedevse",
     }:
         return "status-charging"
-    if normalized_state in {"faulted", "outofservice", "unavailable"}:
+    if normalized_state in {"faulted"}:
         return "status-faulted"
-    if normalized_state in {"offline", "disconnected"}:
+    if normalized_state in {"offline", "disconnected", "outofservice", "unavailable"}:
         return "status-offline"
 
     normalized_color = force_str(color or "").strip().casefold()
-    if normalized_color in {"#0d6efd", "blue"}:
+    if normalized_color in {"#0d6efd", "blue", "#6f42c1"}:
         return "status-available"
-    if normalized_color in {"#198754", "green"}:
+    if normalized_color in {"#198754", "green", "#fd7e14", "#20c997", "#0dcaf0"}:
         return "status-charging"
     if normalized_color in {"#dc3545", "red", "#ffc107", "yellow"}:
         return "status-faulted"
@@ -1045,6 +1045,7 @@ def _landing_page_translations() -> dict[str, dict[str, str]]:
                 "serial_number_label": gettext("Serial Number"),
                 "connector_label": gettext("Connector"),
                 "advanced_view_label": gettext("Advanced View"),
+                "live_now_label": gettext("Live now"),
                 "authorization_policy_label": gettext(
                     "Authorization policy requires validated RFID/account credentials."
                 ),
@@ -1073,6 +1074,7 @@ def _landing_page_translations() -> dict[str, dict[str, str]]:
                 "status_vendor_label": gettext("Vendor"),
                 "status_info_label": gettext("Info"),
                 "latest_status_label": gettext("Latest report"),
+                "support_label": gettext("Support"),
             }
     return catalog
 
