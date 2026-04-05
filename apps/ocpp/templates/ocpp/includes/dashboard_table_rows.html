@@ -2,44 +2,100 @@
 {% if charger_groups %}
   {% for group in charger_groups %}
     {% if group.parent %}
-    <tr>
-      <td>
-        <a href="{{ group.parent.status_url }}">{{ group.parent.display_name }}</a>
-        {% if group.parent.charging_limit %}
-        <div class="text-muted small">
-          {% trans "Limit" %}: {{ group.parent.charging_limit.label|default:group.parent.charging_limit.source }}
-        </div>
-        {% endif %}
-      </td>
-      <td>{{ group.parent.charger.charger_id }}</td>
-      <td class="text-end">{{ group.parent.stats.total_kw|floatformat:2 }}</td>
-      <td class="text-end">{{ group.parent.stats.today_kw|floatformat:2 }}</td>
-      {% include "ocpp/includes/_last_session_cell.html" with last_session_date=group.parent.last_session %}
-      <td>
-        <span class="badge" style="background-color: {{ group.parent.color }};">{{ group.parent.state }}</span>
-      </td>
-    </tr>
+      {% with state_value=group.parent.state|default:'' state_lower=group.parent.state|default:''|lower %}
+      <tr
+        data-dashboard-row
+        data-today-kw="{{ group.parent.stats.today_kw|default_if_none:0 }}"
+        data-status="{{ state_value }}"
+        data-status-group="{% if 'offline' in state_lower or 'fault' in state_lower or 'unavailable' in state_lower %}offline{% else %}online{% endif %}"
+        data-active-session="{% if 'charging' in state_lower or 'occupied' in state_lower or 'suspended' in state_lower %}1{% else %}0{% endif %}"
+      >
+        <td>
+          <div class="fw-semibold">
+            <a href="{{ group.parent.status_url }}">{{ group.parent.display_name }}</a>
+          </div>
+          {% if group.parent.charging_limit %}
+          <div class="text-muted small">
+            {% trans "Limit" %}: {{ group.parent.charging_limit.label|default:group.parent.charging_limit.source }}
+          </div>
+          {% endif %}
+        </td>
+        <td>{{ group.parent.charger.charger_id }}</td>
+        <td class="text-end">{{ group.parent.stats.total_kw|floatformat:2 }}</td>
+        <td class="text-end">{{ group.parent.stats.today_kw|floatformat:2 }}</td>
+        {% include "ocpp/includes/_last_session_cell.html" with last_session_date=group.parent.last_session %}
+        <td>
+          {% if 'offline' in state_lower or 'fault' in state_lower or 'unavailable' in state_lower %}
+          <span class="badge text-bg-danger-subtle border border-danger-subtle text-danger-emphasis">
+            <i class="bi bi-x-octagon-fill me-1" aria-hidden="true"></i>{{ state_value }}
+          </span>
+          {% elif 'charging' in state_lower or 'occupied' in state_lower or 'suspended' in state_lower %}
+          <span class="badge text-bg-primary-subtle border border-primary-subtle text-primary-emphasis">
+            <i class="bi bi-lightning-charge-fill me-1" aria-hidden="true"></i>{{ state_value }}
+          </span>
+          {% else %}
+          <span class="badge text-bg-success-subtle border border-success-subtle text-success-emphasis">
+            <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>{{ state_value }}
+          </span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endwith %}
     {% endif %}
     {% for item in group.children %}
-    <tr>
-      <td class="ps-4">
-        <a href="{{ item.status_url }}">{{ item.display_name }}</a>
-        {% if item.charging_limit %}
-        <div class="text-muted small">
-          {% trans "Limit" %}: {{ item.charging_limit.label|default:item.charging_limit.source }}
-        </div>
-        {% endif %}
-      </td>
-      <td>
-        {{ item.charger.charger_id }}{% if item.charger.connector_letter %} #{{ item.charger.connector_letter }}{% endif %}
-      </td>
-      <td class="text-end">{{ item.stats.total_kw|floatformat:2 }}</td>
-      <td class="text-end">{{ item.stats.today_kw|floatformat:2 }}</td>
-      {% include "ocpp/includes/_last_session_cell.html" with last_session_date=item.last_session %}
-      <td>
-        <span class="badge" style="background-color: {{ item.color }};">{{ item.state }}</span>
-      </td>
-    </tr>
+      {% with state_value=item.state|default:'' state_lower=item.state|default:''|lower %}
+      <tr
+        data-dashboard-row
+        data-today-kw="{{ item.stats.today_kw|default_if_none:0 }}"
+        data-status="{{ state_value }}"
+        data-status-group="{% if 'offline' in state_lower or 'fault' in state_lower or 'unavailable' in state_lower %}offline{% else %}online{% endif %}"
+        data-active-session="{% if 'charging' in state_lower or 'occupied' in state_lower or 'suspended' in state_lower %}1{% else %}0{% endif %}"
+      >
+        <td class="ps-0">
+          <div class="d-flex align-items-start gap-2 ps-4">
+            <span class="text-muted" aria-hidden="true">↳</span>
+            <div>
+              <div class="fw-semibold">
+                <a href="{{ item.status_url }}">{{ item.display_name }}</a>
+              </div>
+              {% if item.charging_limit %}
+              <div class="text-muted small">
+                {% trans "Limit" %}: {{ item.charging_limit.label|default:item.charging_limit.source }}
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </td>
+        <td>
+          <div class="d-flex align-items-center gap-2">
+            <span>{{ item.charger.charger_id }}</span>
+            {% if item.charger.connector_letter %}
+            <span class="badge rounded-pill text-bg-light border">
+              {% trans "Connector" %} {{ item.charger.connector_letter }}
+            </span>
+            {% endif %}
+          </div>
+        </td>
+        <td class="text-end">{{ item.stats.total_kw|floatformat:2 }}</td>
+        <td class="text-end">{{ item.stats.today_kw|floatformat:2 }}</td>
+        {% include "ocpp/includes/_last_session_cell.html" with last_session_date=item.last_session %}
+        <td>
+          {% if 'offline' in state_lower or 'fault' in state_lower or 'unavailable' in state_lower %}
+          <span class="badge text-bg-danger-subtle border border-danger-subtle text-danger-emphasis">
+            <i class="bi bi-x-octagon-fill me-1" aria-hidden="true"></i>{{ state_value }}
+          </span>
+          {% elif 'charging' in state_lower or 'occupied' in state_lower or 'suspended' in state_lower %}
+          <span class="badge text-bg-primary-subtle border border-primary-subtle text-primary-emphasis">
+            <i class="bi bi-lightning-charge-fill me-1" aria-hidden="true"></i>{{ state_value }}
+          </span>
+          {% else %}
+          <span class="badge text-bg-success-subtle border border-success-subtle text-success-emphasis">
+            <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>{{ state_value }}
+          </span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endwith %}
     {% endfor %}
   {% endfor %}
 {% else %}

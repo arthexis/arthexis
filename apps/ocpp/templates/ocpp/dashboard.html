@@ -22,78 +22,65 @@
     {% blocktrans trimmed %}You may also provide the identifier as a query parameter using any of the following names: <code>cid</code>, <code>chargePointId</code>, <code>charge_point_id</code>, <code>chargeBoxId</code>, <code>charge_box_id</code>, or <code>chargerId</code>.{% endblocktrans %}
   </p>
 </div>
-<script>
-  (function () {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      return;
-    }
-
-    const notice = document.getElementById('demo-notice');
-    if (!notice) {
-      return;
-    }
-
-    const dismissButton = notice.querySelector('[data-demo-notice-dismiss]');
-    if (!dismissButton) {
-      return;
-    }
-
-    const storage = (() => {
-      try {
-        if (!('sessionStorage' in window)) {
-          return null;
-        }
-        const testKey = '__ocppDemoNoticeTest__';
-        window.sessionStorage.setItem(testKey, '1');
-        window.sessionStorage.removeItem(testKey);
-        return window.sessionStorage;
-      } catch (error) {
-        return null;
-      }
-    })();
-
-    const storageKey = notice.dataset.sessionKey || 'ocppDemoNoticeDismissed';
-    const dismissed = storage ? storage.getItem(storageKey) === '1' : false;
-    if (dismissed) {
-      notice.classList.add('d-none');
-      return;
-    }
-
-    dismissButton.addEventListener('click', () => {
-      notice.classList.add('d-none');
-      if (!storage) {
-        return;
-      }
-      try {
-        storage.setItem(storageKey, '1');
-      } catch (error) {
-        // Ignore storage errors (e.g., disabled cookies)
-      }
-    });
-  })();
-</script>
 {% endif %}
-<table class="table">
-  <thead>
-    <tr>
-      <th>{% trans "Name" %}</th>
-      <th>{% trans "Serial Number" %}</th>
-      <th class="text-end">{% trans "Total kW" %}</th>
-      <th class="text-end">{% trans "Today's kW" %}</th>
-      <th>{% trans "Last Session" %}</th>
-      <th>{% trans "Status" %}</th>
-    </tr>
-  </thead>
-  <tbody
-    data-dashboard-table-body
-    hx-get="{% url 'ocpp:ocpp-dashboard' %}?partial=table"
-    hx-trigger="load, every 5s"
-    hx-target="this"
-    hx-swap="innerHTML"
-  >
-    {% include "ocpp/includes/dashboard_table_rows.html" %}
-  </tbody>
-</table>
+
+<div class="row g-2 mb-3" data-dashboard-kpis>
+  <div class="col-6 col-lg-3">
+    <div class="border rounded p-2 h-100 bg-body-tertiary">
+      <div class="small text-muted">{% trans "Visible chargers" %}</div>
+      <div class="h4 mb-0" data-kpi-visible>0</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="border rounded p-2 h-100 bg-body-tertiary">
+      <div class="small text-muted">{% trans "Online chargers" %}</div>
+      <div class="h4 mb-0 text-success" data-kpi-online>0</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="border rounded p-2 h-100 bg-body-tertiary">
+      <div class="small text-muted">{% trans "Active sessions" %}</div>
+      <div class="h4 mb-0 text-primary" data-kpi-active>0</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="border rounded p-2 h-100 bg-body-tertiary">
+      <div class="small text-muted">{% trans "Today energy" %}</div>
+      <div class="h4 mb-0" data-kpi-energy>0.00 kW</div>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-2 gap-3">
+  <h2 class="h5 mb-0">{% trans "Charge point status" %}</h2>
+  <small class="text-muted" data-dashboard-last-updated data-prefix="{% trans "Last updated" %}">
+    {% trans "Last updated" %}: --
+  </small>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle mb-0">
+    <thead class="table-light">
+      <tr>
+        <th class="position-sticky top-0 bg-body z-1">{% trans "Name" %}</th>
+        <th class="position-sticky top-0 bg-body z-1">{% trans "Serial Number" %}</th>
+        <th class="position-sticky top-0 bg-body z-1 text-end">{% trans "Total kW" %}</th>
+        <th class="position-sticky top-0 bg-body z-1 text-end">{% trans "Today's kW" %}</th>
+        <th class="position-sticky top-0 bg-body z-1">{% trans "Last Session" %}</th>
+        <th class="position-sticky top-0 bg-body z-1">{% trans "Status" %}</th>
+      </tr>
+    </thead>
+    <tbody
+      data-dashboard-table-body
+      hx-get="{% url 'ocpp:ocpp-dashboard' %}?partial=table"
+      hx-trigger="load, every 5s"
+      hx-target="this"
+      hx-swap="innerHTML"
+    >
+      {% include "ocpp/includes/dashboard_table_rows.html" %}
+    </tbody>
+  </table>
+</div>
 <ul class="list-inline text-center mt-3 mb-0">
   {% if request.user.is_staff %}
   <li class="list-inline-item">
@@ -104,4 +91,126 @@
     <a href="{% url 'ocpp:cp-simulator' %}">{% trans "Open simulator" %}</a>
   </li>
 </ul>
+
+<script>
+  (function () {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const initializeDemoNotice = () => {
+      const notice = document.getElementById('demo-notice');
+      if (!notice) {
+        return;
+      }
+
+      const dismissButton = notice.querySelector('[data-demo-notice-dismiss]');
+      if (!dismissButton) {
+        return;
+      }
+
+      const storage = (() => {
+        try {
+          if (!('sessionStorage' in window)) {
+            return null;
+          }
+          const testKey = '__ocppDemoNoticeTest__';
+          window.sessionStorage.setItem(testKey, '1');
+          window.sessionStorage.removeItem(testKey);
+          return window.sessionStorage;
+        } catch (error) {
+          return null;
+        }
+      })();
+
+      const storageKey = notice.dataset.sessionKey || 'ocppDemoNoticeDismissed';
+      const dismissed = storage ? storage.getItem(storageKey) === '1' : false;
+      if (dismissed) {
+        notice.classList.add('d-none');
+        return;
+      }
+
+      dismissButton.addEventListener('click', () => {
+        notice.classList.add('d-none');
+        if (!storage) {
+          return;
+        }
+        try {
+          storage.setItem(storageKey, '1');
+        } catch (error) {
+          // Ignore storage errors (e.g., disabled cookies)
+        }
+      });
+    };
+
+    const updateDashboardMetrics = () => {
+      const rows = Array.from(document.querySelectorAll('[data-dashboard-row]'));
+      const visibleCount = rows.length;
+      const onlineCount = rows.filter((row) => row.dataset.statusGroup === 'online').length;
+      const activeCount = rows.filter((row) => row.dataset.activeSession === '1').length;
+      const todayEnergy = rows.reduce((total, row) => {
+        const value = parseFloat(row.dataset.todayKw || '0');
+        return total + (Number.isFinite(value) ? value : 0);
+      }, 0);
+
+      const visibleEl = document.querySelector('[data-kpi-visible]');
+      const onlineEl = document.querySelector('[data-kpi-online]');
+      const activeEl = document.querySelector('[data-kpi-active]');
+      const energyEl = document.querySelector('[data-kpi-energy]');
+      if (visibleEl) {
+        visibleEl.textContent = String(visibleCount);
+      }
+      if (onlineEl) {
+        onlineEl.textContent = String(onlineCount);
+      }
+      if (activeEl) {
+        activeEl.textContent = String(activeCount);
+      }
+      if (energyEl) {
+        energyEl.textContent = `${todayEnergy.toFixed(2)} kW`;
+      }
+    };
+
+    const updateLastUpdated = () => {
+      const lastUpdatedEl = document.querySelector('[data-dashboard-last-updated]');
+      if (!lastUpdatedEl) {
+        return;
+      }
+      const prefix = lastUpdatedEl.dataset.prefix || 'Last updated';
+      const timestamp = new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      lastUpdatedEl.textContent = `${prefix}: ${timestamp}`;
+    };
+
+    initializeDemoNotice();
+    updateDashboardMetrics();
+    updateLastUpdated();
+
+    document.body.addEventListener('htmx:afterSwap', (event) => {
+      if (!event.target || !event.target.matches('[data-dashboard-table-body]')) {
+        return;
+      }
+      updateDashboardMetrics();
+    });
+
+    document.body.addEventListener('htmx:afterRequest', (event) => {
+      const target = event.target;
+      if (!target || !target.matches('[data-dashboard-table-body]')) {
+        return;
+      }
+
+      const wasSuccessful =
+        Boolean(event.detail && event.detail.successful) ||
+        (event.detail && event.detail.xhr && event.detail.xhr.status >= 200 && event.detail.xhr.status < 300);
+      if (!wasSuccessful) {
+        return;
+      }
+
+      updateLastUpdated();
+    });
+  })();
+</script>
 {% endblock %}
