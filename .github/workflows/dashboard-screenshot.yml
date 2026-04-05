@@ -227,6 +227,56 @@ jobs:
             exit 1
           fi
 
+      - name: Collect pull request screenshot path requests
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
+        run: |
+          python <<'PY' > /tmp/pr-authenticated-screenshot-paths.txt
+          import os
+          import re
+
+          body = os.environ.get("PR_BODY", "").splitlines()
+          requested: list[str] = []
+          active_section = "auth"
+
+          for raw_line in body:
+              line = re.sub(r"^[-*]\s+", "", raw_line.strip())
+              if not line or line.startswith("#"):
+                  continue
+
+              lower = line.lower()
+              if lower == "public:":
+                  active_section = "public"
+                  continue
+              if lower == "auth:":
+                  active_section = "auth"
+                  continue
+
+              if lower.startswith("public:"):
+                  active_section = "public"
+                  line = line.split(":", maxsplit=1)[1].strip()
+              elif lower.startswith("auth:"):
+                  active_section = "auth"
+                  line = line.split(":", maxsplit=1)[1].strip()
+
+              if not line.startswith("/"):
+                  continue
+
+              if active_section == "public":
+                  continue
+
+              path = line if line.endswith("/") else f"{line}/"
+              requested.append(path)
+
+          ordered: list[str] = []
+          for path in requested:
+              if path not in ordered:
+                  ordered.append(path)
+
+          print("\n".join(ordered))
+          PY
+
       - name: Capture authenticated previews
         run: |
           source .venv/bin/activate
@@ -235,7 +285,9 @@ jobs:
 
           defaults = ["/admin/", "/ocpp/cpms/dashboard/"]
           configured_paths_file = Path(".github/screenshot-paths.authenticated.txt")
+          requested_paths_file = Path("/tmp/pr-authenticated-screenshot-paths.txt")
           configured = []
+          requested = []
 
           if configured_paths_file.exists():
               for raw_line in configured_paths_file.read_text(encoding="utf-8").splitlines():
@@ -244,8 +296,15 @@ jobs:
                       continue
                   configured.append(line if line.startswith("/") else f"/{line}")
 
+          if requested_paths_file.exists():
+              for raw_line in requested_paths_file.read_text(encoding="utf-8").splitlines():
+                  line = raw_line.strip()
+                  if not line or line.startswith("#"):
+                      continue
+                  requested.append(line if line.startswith("/") else f"/{line}")
+
           ordered = []
-          for path in defaults + configured:
+          for path in defaults + configured + requested:
               if path not in ordered:
                   ordered.append(path)
 
@@ -281,6 +340,16 @@ jobs:
           name: ocpp-dashboard
           path: artifacts/ocpp-cpms-dashboard-desktop.png
 
+      - name: Upload pull request screenshot bundle
+        if: ${{ github.event_name == 'pull_request' }}
+        id: upload-pr-screenshot-bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: pull-request-screenshots
+          path: |
+            artifacts/*.png
+            artifacts/README.md
+
       - name: Build PR screenshot comment body
         if: ${{ github.event_name == 'pull_request' }}
         run: |
@@ -290,19 +359,22 @@ jobs:
 
           marker = "<!-- dashboard-screenshot-preview -->"
           output = Path("artifacts/pr-screenshot-comment.md")
-          images = sorted(Path("artifacts").glob("*.png"))
-          expected_images = [
-              (
-                  Path("artifacts/admin-desktop.png"),
-                  "Admin Desktop",
-                  "${{ steps.upload-admin-dashboard.outputs.artifact-url }}",
-              ),
-              (
-                  Path("artifacts/ocpp-cpms-dashboard-desktop.png"),
-                  "Ocpp Cpms Dashboard Desktop",
-                  "${{ steps.upload-ocpp-dashboard.outputs.artifact-url }}",
-              ),
-          ]
+          images = {path.name: path for path in Path("artifacts").glob("*.png")}
+          bundle_url = "${{ steps.upload-pr-screenshot-bundle.outputs.artifact-url }}".strip()
+
+          expected_images: list[tuple[str, str]] = []
+          readme = Path("artifacts/README.md")
+          current_path: str | None = None
+          if readme.exists():
+              for raw_line in readme.read_text(encoding="utf-8").splitlines():
+                  line = raw_line.strip()
+                  if line.startswith("## `") and line.endswith("`"):
+                      current_path = line.removeprefix("## `").removesuffix("`")
+                      continue
+                  if current_path is None or not line.startswith("- **desktop**: ["):
+                      continue
+                  link = line.split("[", maxsplit=1)[1].split("]", maxsplit=1)[0].strip()
+                  expected_images.append((Path(link).name, current_path))
 
           lines = [
               marker,
@@ -318,22 +390,25 @@ jobs:
           if not images:
               lines.append("- ⚠️ No screenshots were produced in this run.")
           else:
-              for expected_path, expected_label, _ in expected_images:
-                  if not expected_path.exists():
+              for expected_name, requested_path in expected_images:
+                  if expected_name not in images:
                       lines.append(
-                          f"- ⚠️ {expected_label}: expected screenshot was not produced."
+                          f"- ⚠️ `{requested_path}`: expected screenshot was not produced."
                       )
               lines.append("| Screenshot | Artifact |")
               lines.append("|---|---|")
 
-          for path, expected_label, artifact_url in expected_images:
-              if not path.exists():
+          for expected_name, requested_path in expected_images:
+              if expected_name not in images:
                   continue
-              link = artifact_url.strip()
-              if link:
-                  lines.append(f"| {expected_label} | [Download artifact]({link}) |")
+              if bundle_url:
+                  lines.append(
+                      f"| `{requested_path}` (`{expected_name}`) | [Download artifact]({bundle_url}) |"
+                  )
               else:
-                  lines.append(f"| {expected_label} | ⚠️ Artifact URL unavailable. |")
+                  lines.append(
+                      f"| `{requested_path}` (`{expected_name}`) | ⚠️ Artifact URL unavailable. |"
+                  )
 
           output.write_text("\n".join(lines), encoding="utf-8")
           PY
