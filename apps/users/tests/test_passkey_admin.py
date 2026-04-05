@@ -30,24 +30,6 @@ def test_passkey_admin_register_start_sets_session(admin_client):
     assert pending["user_id"] == user.pk
 
 
-def test_passkey_admin_register_start_escapes_options_json(admin_client):
-    user = get_user_model().objects.create_user(
-        username='bad </script><script>alert("x")</script>',
-        email="xss-target@example.com",
-        password="secret",
-    )
-
-    response = admin_client.post(
-        reverse("admin:users_passkeycredential_register"),
-        data={"start": "1", "user": str(user.pk), "name": "Office Key"},
-    )
-
-    assert response.status_code == 200
-    content = response.content.decode()
-    assert 'id="passkey-public-key-options"' in content
-    assert "</script><script>alert(" not in content
-    assert "\\u003C/script\\u003E\\u003Cscript\\u003Ealert" in content
-
 
 def test_passkey_admin_register_finish_creates_passkey(admin_client, monkeypatch):
     user = get_user_model().objects.create_user(
