@@ -112,20 +112,31 @@
           { className: 'log-line-severity-info', pattern: /\bINFO\b/i },
         ];
         let lastDecoratedText = null;
+        function getSeverityClass(line) {
+          for (const matcher of severityMatchers) {
+            if (matcher.pattern.test(line)) {
+              return matcher.className;
+            }
+          }
+          return '';
+        }
         function decorateContent() {
           if (!content) {
             return;
           }
           const text = content.textContent || '';
-          if (text === lastDecoratedText) {
+          const alreadyDecorated = Boolean(
+            content.firstElementChild && content.firstElementChild.tagName === 'SPAN',
+          );
+          if (text === lastDecoratedText && alreadyDecorated) {
             return;
           }
           const lines = text.split('\n');
           const decorated = lines.map((line) => {
-            const matcher = severityMatchers.find(({ pattern }) => pattern.test(line));
-            const cssClass = matcher ? ` class="${matcher.className}"` : '';
+            const severityClass = getSeverityClass(line);
+            const cssClass = severityClass ? ` class="${severityClass}"` : '';
             return `<span${cssClass}>${escapeHtml(line)}</span>`;
-          }).join('');
+          }).join('\n');
           content.innerHTML = decorated;
           lastDecoratedText = text;
         }
