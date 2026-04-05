@@ -168,7 +168,9 @@ def test_node_info_handles_missing_private_key_file(monkeypatch, tmp_path, caplo
         public_endpoint="missing-key",
     )
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
-    monkeypatch.setattr(Node, "register_current", classmethod(lambda cls: (node, False)))
+    monkeypatch.setattr(
+        Node, "register_current", classmethod(lambda cls: (node, False))
+    )
     monkeypatch.setattr(Node, "get_base_path", lambda self: tmp_path)
 
     caplog.set_level(logging.WARNING, logger="register_visitor")
@@ -177,8 +179,13 @@ def test_node_info_handles_missing_private_key_file(monkeypatch, tmp_path, caplo
     assert response.status_code == 200
     payload = json.loads(response.content.decode())
     assert "token_signature" not in payload
-    assert any(getattr(record, "attempt", "") == "key_read" for record in caplog.records)
-    assert any(getattr(record, "exception_class", "") == "FileNotFoundError" for record in caplog.records)
+    assert any(
+        getattr(record, "attempt", "") == "key_read" for record in caplog.records
+    )
+    assert any(
+        getattr(record, "exception_class", "") == "FileNotFoundError"
+        for record in caplog.records
+    )
 
 
 @pytest.mark.django_db
@@ -192,7 +199,9 @@ def test_node_info_handles_invalid_private_key_material(monkeypatch, tmp_path, c
     security_dir.mkdir(parents=True, exist_ok=True)
     (security_dir / node.public_endpoint).write_bytes(b"not-a-pem-key")
     monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
-    monkeypatch.setattr(Node, "register_current", classmethod(lambda cls: (node, False)))
+    monkeypatch.setattr(
+        Node, "register_current", classmethod(lambda cls: (node, False))
+    )
     monkeypatch.setattr(Node, "get_base_path", lambda self: tmp_path)
 
     caplog.set_level(logging.WARNING, logger="register_visitor")
@@ -201,8 +210,154 @@ def test_node_info_handles_invalid_private_key_material(monkeypatch, tmp_path, c
     assert response.status_code == 200
     payload = json.loads(response.content.decode())
     assert "token_signature" not in payload
-    assert any(getattr(record, "attempt", "") == "key_parse" for record in caplog.records)
-    assert any(getattr(record, "exception_class", "") == "ValueError" for record in caplog.records)
+    assert any(
+        getattr(record, "attempt", "") == "key_parse" for record in caplog.records
+    )
+    assert any(
+        getattr(record, "exception_class", "") == "ValueError"
+        for record in caplog.records
+    )
+
+
+@pytest.mark.django_db
+def test_register_visitor_proxy_uses_safe_success_details(monkeypatch, admin_user):
+    factory = RequestFactory()
+    request = factory.post(
+        "/nodes/register-visitor-proxy/",
+        data=json.dumps(
+            {
+                "visitor_info_url": "https://visitor.example/nodes/info/",
+                "visitor_register_url": "https://visitor.example/nodes/register/",
+                "token": "secret-token",
+            }
+        ),
+        content_type="application/json",
+    )
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    target = SimpleNamespace(
+        url="https://visitor.example/nodes/info/",
+        server_hostname="visitor.example",
+        host_header="visitor.example",
+    )
+    monkeypatch.setattr(handlers, "is_allowed_visitor_url", lambda _: True)
+    monkeypatch.setattr(handlers, "get_public_targets", lambda _: [target])
+    monkeypatch.setattr(
+        handlers,
+        "node_info",
+        lambda _request: JsonResponse(
+            {
+                "hostname": "host-node",
+                "address": "198.51.100.5",
+                "port": 8888,
+                "mac_address": "00:11:22:33:44:55",
+                "base_site_requires_https": True,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        handlers,
+        "register_node",
+        lambda _request: JsonResponse(
+            {"id": 9, "detail": "Traceback: internal stack"}, status=200
+        ),
+    )
+
+    def fake_proxy_request(*, method, **_kwargs):
+        if method == "get":
+            return (
+                {
+                    "hostname": "visitor-node",
+                    "address": "198.51.100.6",
+                    "port": 8888,
+                    "mac_address": "00:11:22:33:44:66",
+                    "base_site_requires_https": False,
+                },
+                "https://visitor.example/nodes/info/",
+                None,
+                1,
+            )
+        return (
+            {"id": 11, "detail": "Exception: visitor stack trace"},
+            "https://visitor.example/nodes/register/",
+            None,
+            2,
+        )
+
+    monkeypatch.setattr(handlers, "_try_proxy_json_request", fake_proxy_request)
+
+    response = handlers.register_visitor_proxy(request)
+
+    assert response.status_code == 200
+    data = json.loads(response.content.decode())
+    assert data["host"]["id"] == 9
+    assert data["visitor"]["id"] == 11
+    assert data["host"]["detail"] == "host registration accepted"
+    assert data["visitor"]["detail"] == "visitor confirmation accepted"
+
+
+@pytest.mark.django_db
+def test_register_visitor_proxy_uses_safe_failure_detail(monkeypatch, admin_user):
+    factory = RequestFactory()
+    request = factory.post(
+        "/nodes/register-visitor-proxy/",
+        data=json.dumps(
+            {
+                "visitor_info_url": "https://visitor.example/nodes/info/",
+                "visitor_register_url": "https://visitor.example/nodes/register/",
+            }
+        ),
+        content_type="application/json",
+    )
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    target = SimpleNamespace(
+        url="https://visitor.example/nodes/info/",
+        server_hostname="visitor.example",
+        host_header="visitor.example",
+    )
+    monkeypatch.setattr(handlers, "is_allowed_visitor_url", lambda _: True)
+    monkeypatch.setattr(handlers, "get_public_targets", lambda _: [target])
+    monkeypatch.setattr(
+        handlers,
+        "node_info",
+        lambda _request: JsonResponse({"hostname": "host-node"}),
+    )
+    monkeypatch.setattr(
+        handlers,
+        "register_node",
+        lambda _request: JsonResponse(
+            {"detail": "Traceback: should stay private"}, status=400
+        ),
+    )
+    monkeypatch.setattr(
+        handlers,
+        "_try_proxy_json_request",
+        lambda *, method, **_kwargs: (
+            (
+                {
+                    "hostname": "visitor-node",
+                    "address": "198.51.100.6",
+                    "port": 8888,
+                    "mac_address": "00:11:22:33:44:66",
+                },
+                "https://visitor.example/nodes/info/",
+                None,
+                1,
+            )
+            if method == "get"
+            else ({"id": 11}, "https://visitor.example/nodes/register/", None, 2)
+        ),
+    )
+
+    response = handlers.register_visitor_proxy(request)
+
+    assert response.status_code == 400
+    data = json.loads(response.content.decode())
+    assert data["detail"] == "host registration failed"
+
 
 @pytest.mark.django_db
 def test_get_local_does_not_cache_stale_self_after_mac_conflict(monkeypatch):
@@ -271,4 +426,3 @@ def test_get_local_logs_redacted_mac_values(monkeypatch, caplog):
     assert not hasattr(record, "stored_mac")
     assert "aa:bb:cc:dd:ee:ff" not in caplog.text
     assert "00:11:22:33:44:55" not in caplog.text
-
