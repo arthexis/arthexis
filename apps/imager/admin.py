@@ -1,13 +1,18 @@
 """Admin integration for Raspberry Pi image artifacts."""
 
+from ipaddress import ip_address
 from pathlib import Path
+from socket import getaddrinfo
+from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlparse
+from urllib.request import Request, urlopen
 
 from django import forms
 from django.conf import settings
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
@@ -15,6 +20,53 @@ from django_object_actions import DjangoObjectActions
 
 from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.services import ImagerBuildError, build_rpi4b_image
+
+
+def _probe_download_url(download_url: str) -> tuple[bool, str]:
+    """Check whether an artifact download URL appears reachable."""
+
+    parsed_url = urlparse(download_url)
+    hostname = parsed_url.hostname
+    if parsed_url.scheme not in {"http", "https"} or not hostname:
+        return False, _("Unsupported download URL.")
+
+    blocked_message = _("Refusing to probe local or private addresses.")
+    if hostname == "localhost":
+        return False, blocked_message
+
+    try:
+        ip_candidate = ip_address(hostname)
+    except ValueError:
+        ip_candidate = None
+
+    blocked_flags = ("is_link_local", "is_loopback", "is_multicast", "is_private", "is_unspecified")
+    if ip_candidate is not None:
+        if any(getattr(ip_candidate, flag) for flag in blocked_flags):
+            return False, blocked_message
+    else:
+        try:
+            resolved_hosts = {
+                ip_address(record[4][0]) for record in getaddrinfo(hostname, None, type=0)
+            }
+        except OSError as exc:
+            reason = getattr(exc, "strerror", str(exc))
+            return False, str(reason)
+        if any(any(getattr(ip_value, flag) for flag in blocked_flags) for ip_value in resolved_hosts):
+            return False, blocked_message
+
+    request = Request(download_url, method="HEAD")
+    try:
+        with urlopen(request, timeout=10) as response:  # noqa: S310 - staff-triggered verification flow
+            status = response.getcode()
+    except HTTPError as exc:
+        status = exc.code
+    except (URLError, ValueError) as exc:
+        reason = getattr(exc, "reason", str(exc))
+        return False, str(reason)
+
+    if 200 <= status < 400:
+        return True, f"HTTP {status}"
+    return False, f"HTTP {status}"
 
 
 class RaspberryPiImageBuildForm(forms.Form):
@@ -141,7 +193,12 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
                 "create-rpi-image/",
                 self.admin_site.admin_view(self.create_rpi_image_view),
                 name="imager_raspberrypiimageartifact_create_rpi_image",
-            )
+            ),
+            path(
+                "create-rpi-image/<int:artifact_id>/test-download/",
+                self.admin_site.admin_view(self.test_download_url_view),
+                name="imager_raspberrypiimageartifact_test_download_url",
+            ),
         ]
         return custom_urls + super().get_urls()
 
@@ -172,11 +229,16 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
             raise PermissionDenied
 
         form = RaspberryPiImageBuildForm(request.POST or None)
+        artifact: RaspberryPiImageArtifact | None = None
+        artifact_id = request.GET.get("artifact")
+        if artifact_id and artifact_id.isdigit():
+            artifact = RaspberryPiImageArtifact.objects.filter(pk=int(artifact_id)).first()
+
         changelist_url = reverse("admin:imager_raspberrypiimageartifact_changelist")
         if request.method == "POST" and form.is_valid():
             cleaned = form.cleaned_data
             try:
-                build_rpi4b_image(
+                build_result = build_rpi4b_image(
                     name=cleaned["name"],
                     base_image_uri=cleaned["base_image_uri"],
                     output_dir=Path(cleaned["output_dir"]),
@@ -188,6 +250,19 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
                 messages.error(request, str(exc))
             else:
                 messages.success(request, _("RPI image '%(name)s' was created.") % {"name": cleaned["name"]})
+                artifact = RaspberryPiImageArtifact.objects.filter(
+                    output_path=str(build_result.output_path),
+                ).first()
+                if artifact is None:
+                    artifact = (
+                        RaspberryPiImageArtifact.objects.filter(name=cleaned["name"])
+                        .order_by("-created_at")
+                        .first()
+                    )
+                if artifact is not None:
+                    return HttpResponseRedirect(
+                        f"{reverse('admin:imager_raspberrypiimageartifact_create_rpi_image')}?artifact={artifact.pk}"
+                    )
                 return HttpResponseRedirect(changelist_url)
 
         context = {
@@ -196,9 +271,41 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
             "opts": self.model._meta,
             "form": form,
             "changelist_url": changelist_url,
+            "artifact": artifact,
         }
         return TemplateResponse(
             request,
             "admin/imager/raspberrypiimageartifact/create_rpi_image.html",
             context,
         )
+
+    def test_download_url_view(self, request: HttpRequest, artifact_id: int) -> HttpResponse:
+        """Probe an artifact download URL from the admin wizard workflow."""
+
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+
+        artifact = get_object_or_404(RaspberryPiImageArtifact, pk=artifact_id)
+        redirect_url = (
+            f"{reverse('admin:imager_raspberrypiimageartifact_create_rpi_image')}"
+            f"?artifact={artifact.pk}"
+        )
+        if not artifact.download_uri:
+            messages.warning(request, _("Artifact has no download URL to test."))
+            return HttpResponseRedirect(redirect_url)
+
+        reachable, result = _probe_download_url(artifact.download_uri)
+        if reachable:
+            messages.success(
+                request,
+                _("Download URL check succeeded for %(name)s (%(result)s).")
+                % {"name": artifact.name, "result": result},
+            )
+        else:
+            messages.error(
+                request,
+                _("Download URL check failed for %(name)s (%(result)s).")
+                % {"name": artifact.name, "result": result},
+            )
+
+        return HttpResponseRedirect(redirect_url)
