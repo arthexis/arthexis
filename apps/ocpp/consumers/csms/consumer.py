@@ -1187,6 +1187,7 @@ class CSMSConsumer(
     async def _handle_data_transfer_action(self, payload, msg_id, raw, text_data):
         return await self._handle_data_transfer(msg_id, payload)
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "Authorize")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Authorize")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "Authorize")
     async def _handle_authorize_action(self, payload, msg_id, raw, text_data):
