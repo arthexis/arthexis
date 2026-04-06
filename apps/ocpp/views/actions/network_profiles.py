@@ -20,6 +20,7 @@ from .common import (
 )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "SetNetworkProfile")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetNetworkProfile")
 def _handle_set_network_profile(
     context: ActionContext, data: dict
