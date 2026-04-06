@@ -14,24 +14,30 @@ class DoctorTaskDefinition:
     group: str
     description: str
     command: tuple[str, ...]
+    supports_force: bool = False
+
+
+CORE_GROUP = "core"
+CORE_HEALTH_TARGET = "core.health"
 
 
 DOCTOR_TASKS: dict[str, DoctorTaskDefinition] = {
     "core.good": DoctorTaskDefinition(
         target="core.good",
-        group="core",
+        group=CORE_GROUP,
         description="Summarize suite readiness and highlight remediation priorities.",
         command=("good", "--details"),
     ),
-    "core.health": DoctorTaskDefinition(
-        target="core.health",
-        group="core",
+    CORE_HEALTH_TARGET: DoctorTaskDefinition(
+        target=CORE_HEALTH_TARGET,
+        group=CORE_GROUP,
         description="Run non-interactive core health checks.",
-        command=("health", "--group", "core"),
+        command=("health", "--group", CORE_GROUP),
+        supports_force=True,
     ),
     "core.migrations": DoctorTaskDefinition(
         target="core.migrations",
-        group="core",
+        group=CORE_GROUP,
         description="Verify migration files are in sync with models.",
         command=("migrations", "check"),
     ),
@@ -86,7 +92,7 @@ class Command(BaseCommand):
         if options.get("all"):
             groups.extend(sorted({item.group for item in DOCTOR_TASKS.values()}))
         if not groups and not targets:
-            groups = ["core"]
+            groups = [CORE_GROUP]
 
         tasks, unknown = self._resolve_tasks(groups=groups, targets=targets)
         if unknown:
@@ -107,27 +113,30 @@ class Command(BaseCommand):
         unknown: list[str] = []
         seen_targets: set[str] = set()
 
+        by_group: dict[str, list[DoctorTaskDefinition]] = {}
+        for definition in sorted(DOCTOR_TASKS.values(), key=lambda item: item.target):
+            by_group.setdefault(definition.group, []).append(definition)
+
+        def _append_if_new(definition: DoctorTaskDefinition) -> None:
+            if definition.target in seen_targets:
+                return
+            seen_targets.add(definition.target)
+            resolved.append(definition)
+
         for target in targets:
             definition = DOCTOR_TASKS.get(target)
             if definition is None:
                 unknown.append(target)
                 continue
-            if definition.target not in seen_targets:
-                seen_targets.add(definition.target)
-                resolved.append(definition)
+            _append_if_new(definition)
 
-        available_groups = {item.group for item in DOCTOR_TASKS.values()}
         for group in groups:
-            if group not in available_groups:
+            definitions = by_group.get(group)
+            if definitions is None:
                 unknown.append(group)
                 continue
-            for definition in sorted(DOCTOR_TASKS.values(), key=lambda item: item.target):
-                if definition.group != group:
-                    continue
-                if definition.target in seen_targets:
-                    continue
-                seen_targets.add(definition.target)
-                resolved.append(definition)
+            for definition in definitions:
+                _append_if_new(definition)
 
         return resolved, unknown
 
@@ -144,7 +153,7 @@ class Command(BaseCommand):
 
     def _run_task(self, definition: DoctorTaskDefinition, *, force: bool) -> bool:
         args = list(definition.command)
-        if force and definition.target == "core.health":
+        if force and definition.supports_force:
             args.append("--force")
 
         try:

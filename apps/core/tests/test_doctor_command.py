@@ -71,3 +71,40 @@ def test_doctor_lists_targets(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "core.health" in output
     assert "cards.rfid" in output
     assert "video.camera" in output
+
+
+def test_doctor_runs_selected_group(monkeypatch: pytest.MonkeyPatch) -> None:
+    invoked: list[tuple[str, ...]] = []
+
+    def _fake_call_command(*args, **kwargs):
+        del kwargs
+        invoked.append(tuple(args))
+
+    monkeypatch.setattr("apps.core.management.commands.doctor.call_command", _fake_call_command)
+
+    call_command("doctor", "--group", "peripherals")
+
+    assert invoked == [
+        ("rfid", "doctor"),
+        ("video", "doctor"),
+    ]
+
+
+def test_doctor_all_runs_all_targets_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    invoked: list[tuple[str, ...]] = []
+
+    def _fake_call_command(*args, **kwargs):
+        del kwargs
+        invoked.append(tuple(args))
+
+    monkeypatch.setattr("apps.core.management.commands.doctor.call_command", _fake_call_command)
+
+    call_command("doctor", "--all")
+
+    assert invoked == [
+        ("good", "--details"),
+        ("health", "--group", "core"),
+        ("migrations", "check"),
+        ("rfid", "doctor"),
+        ("video", "doctor"),
+    ]
