@@ -22,7 +22,9 @@ class MeteringHandlersMixin:
             evse_data = payload_data.get("evse")
             connector_id = None
             if isinstance(evse_data, dict):
-                connector_id = evse_data.get("connectorId") or evse_data.get("id")
+                connector_id = evse_data.get("connectorId")
+                if connector_id is None:
+                    connector_id = evse_data.get("id")
             if connector_id is None:
                 connector_id = payload_data.get("evseId")
             if connector_id is not None:

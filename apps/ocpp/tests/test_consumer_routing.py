@@ -2,13 +2,14 @@
 
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from apps.ocpp import store
 from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.consumers.base.routing import ActionRouter
+from apps.ocpp.consumers.csms import consumer as csms_consumer
 from apps.ocpp.models import Transaction
 
 
@@ -114,6 +115,26 @@ def test_meter_values_normalization_maps_ocpp21_evse_to_connector_id():
     assert normalized["connectorId"] == "4"
 
 
+def test_meter_values_normalization_preserves_zero_connector_id():
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+
+    normalized = consumer._normalized_meter_values_payload(
+        {"evse": {"connectorId": 0, "id": 9}, "evseId": 3, "meterValue": []}
+    )
+
+    assert normalized["connectorId"] == 0
+
+
+def test_status_notification_normalization_preserves_zero_connector_id():
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+
+    normalized = consumer._normalized_status_notification_payload(
+        {"evse": {"connectorId": 0, "id": 9}, "evseId": 3}
+    )
+
+    assert normalized["connectorId"] == 0
+
+
 @pytest.mark.anyio
 async def test_store_meter_values_resolves_non_numeric_transaction_id_from_db(monkeypatch):
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -133,3 +154,36 @@ async def test_store_meter_values_resolves_non_numeric_transaction_id_from_db(mo
 
     lookup.assert_awaited_once_with(consumer.charger, "tx-uuid-42")
     assert store.transactions[consumer.store_key] is resolved
+
+
+@pytest.mark.anyio
+async def test_store_meter_values_creates_non_numeric_transaction_id_when_missing(monkeypatch):
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CP-TX-MISS"
+    consumer.charger = SimpleNamespace(id=11)
+    consumer._assign_connector = AsyncMock()
+    consumer._ensure_ocpp_transaction_identifier = AsyncMock()
+    consumer._process_meter_value_entries = AsyncMock()
+
+    lookup = AsyncMock(return_value=None)
+    monkeypatch.setattr(Transaction, "aget_by_ocpp_id", lookup)
+
+    def fake_database_sync_to_async(sync_fn):
+        async def wrapped(*args, **kwargs):
+            return sync_fn(*args, **kwargs)
+
+        return wrapped
+
+    monkeypatch.setattr(csms_consumer, "database_sync_to_async", fake_database_sync_to_async)
+
+    created = SimpleNamespace(pk=501, ocpp_transaction_id="tx-uuid-501")
+    create_mock = Mock(return_value=created)
+    monkeypatch.setattr(Transaction.objects, "create", create_mock)
+
+    store.transactions.pop(consumer.store_key, None)
+    payload = {"connectorId": 1, "transactionId": "tx-uuid-501", "meterValue": []}
+    await consumer._store_meter_values(payload, raw_message='[2, "id", "MeterValues", {}]')
+
+    lookup.assert_awaited_once_with(consumer.charger, "tx-uuid-501")
+    create_mock.assert_called_once()
+    assert store.transactions[consumer.store_key] is created

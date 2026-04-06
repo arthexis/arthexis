@@ -477,12 +477,17 @@ class CSMSConsumer(
                 else:
                     tx_obj = await Transaction.aget_by_ocpp_id(self.charger, str(tx_id))
 
-            if tx_obj is None and tx_pk is not None:
+            tx_id_value = str(tx_id).strip()
+            if tx_obj is None and tx_id_value:
+                create_kwargs = {
+                    "charger": self.charger,
+                    "ocpp_transaction_id": tx_id_value,
+                    "start_time": timezone.now(),
+                }
+                if tx_pk is not None:
+                    create_kwargs["pk"] = tx_pk
                 tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                    pk=tx_pk,
-                    charger=self.charger,
-                    start_time=timezone.now(),
-                    ocpp_transaction_id=str(tx_id),
+                    **create_kwargs
                 )
                 store.start_session_log(self.store_key, tx_obj.pk)
                 store.add_session_message(self.store_key, raw_message)
