@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from django import forms
@@ -16,7 +16,13 @@ from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
 from apps.imager.models import RaspberryPiImageArtifact
-from apps.imager.services import ImagerBuildError, build_rpi4b_image
+from apps.imager.services import (
+    ImagerBuildError,
+    _validate_remote_base_image_url,
+    build_rpi4b_image,
+)
+
+_CREATE_RPI_IMAGE_URL_NAME = "admin:imager_raspberrypiimageartifact_create_rpi_image"
 
 
 def _probe_download_uri(
@@ -27,6 +33,10 @@ def _probe_download_uri(
     parsed = urlparse(download_uri)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         return False, _("Download URL must use http/https and include a valid host.")
+    try:
+        _validate_remote_base_image_url(download_uri)
+    except ImagerBuildError as exc:
+        return False, str(exc)
 
     request = Request(download_uri, method="HEAD")
     try:
@@ -45,7 +55,7 @@ def _probe_download_uri(
             try:
                 with urlopen(fallback, timeout=timeout_seconds):
                     return True, _("URL check succeeded with GET fallback.")
-            except (HTTPError, URLError) as fallback_exc:
+            except URLError as fallback_exc:
                 fallback_reason = getattr(fallback_exc, "reason", str(fallback_exc))
                 return False, _("URL check failed: %(reason)s.") % {
                     "reason": fallback_reason
@@ -219,9 +229,7 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
         return list(self.dashboard_actions)
 
     def create_rpi_image(self, request, queryset=None):
-        return HttpResponseRedirect(
-            reverse("admin:imager_raspberrypiimageartifact_create_rpi_image")
-        )
+        return HttpResponseRedirect(reverse(_CREATE_RPI_IMAGE_URL_NAME))
 
     create_rpi_image.label = _("Create RPI image")
     create_rpi_image.short_description = _("Create RPI image")
@@ -234,9 +242,58 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
     create_rpi_image_dashboard_action.label = _("Create RPI image")
     create_rpi_image_dashboard_action.short_description = _("Create RPI image")
     create_rpi_image_dashboard_action.requires_queryset = False
-    create_rpi_image_dashboard_action.dashboard_url = (
-        "admin:imager_raspberrypiimageartifact_create_rpi_image"
-    )
+    create_rpi_image_dashboard_action.dashboard_url = _CREATE_RPI_IMAGE_URL_NAME
+
+    def _handle_test_action(
+        self, request: HttpRequest, artifact: RaspberryPiImageArtifact | None
+    ) -> None:
+        """Handle the wizard action that tests a stored download URL."""
+
+        if not artifact or not artifact.download_uri:
+            messages.error(
+                request,
+                _("No download URL is available for this artifact yet."),
+            )
+            return
+
+        ok, detail = _probe_download_uri(artifact.download_uri)
+        (messages.success if ok else messages.error)(request, detail)
+
+    def _handle_build_action(
+        self,
+        request: HttpRequest,
+        form: RaspberryPiImageBuildForm,
+        changelist_url: str,
+    ) -> HttpResponseRedirect | None:
+        """Handle the wizard action that builds a new image artifact."""
+
+        if not form.is_valid():
+            return None
+
+        cleaned = form.cleaned_data
+        try:
+            result = build_rpi4b_image(
+                name=cleaned["name"],
+                base_image_uri=cleaned["base_image_uri"],
+                output_dir=Path(cleaned["output_dir"]),
+                download_base_uri=cleaned["download_base_uri"],
+                git_url=cleaned["git_url"],
+                customize=not cleaned["skip_customize"],
+            )
+        except (ImagerBuildError, OSError) as exc:
+            messages.error(request, str(exc))
+            return None
+
+        messages.success(
+            request,
+            _("RPI image '%(name)s' was created.") % {"name": result.name},
+        )
+        artifact = RaspberryPiImageArtifact.objects.filter(name=result.name).first()
+        if artifact:
+            wizard_url = reverse(_CREATE_RPI_IMAGE_URL_NAME)
+            query = urlencode({"artifact": artifact.pk})
+            return HttpResponseRedirect(f"{wizard_url}?{query}")
+        return HttpResponseRedirect(changelist_url)
 
     def create_rpi_image_view(self, request: HttpRequest) -> HttpResponse:
         if not self.has_add_permission(request):
@@ -254,43 +311,11 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
         if request.method == "POST":
             wizard_action = request.POST.get("wizard_action", "build")
             if wizard_action == "test":
-                if not artifact or not artifact.download_uri:
-                    messages.error(
-                        request,
-                        _("No download URL is available for this artifact yet."),
-                    )
-                else:
-                    ok, detail = _probe_download_uri(artifact.download_uri)
-                    (messages.success if ok else messages.error)(request, detail)
-            elif form.is_valid():
-                cleaned = form.cleaned_data
-                try:
-                    result = build_rpi4b_image(
-                        name=cleaned["name"],
-                        base_image_uri=cleaned["base_image_uri"],
-                        output_dir=Path(cleaned["output_dir"]),
-                        download_base_uri=cleaned["download_base_uri"],
-                        git_url=cleaned["git_url"],
-                        customize=not cleaned["skip_customize"],
-                    )
-                except (ImagerBuildError, OSError) as exc:
-                    messages.error(request, str(exc))
-                else:
-                    messages.success(
-                        request,
-                        _("RPI image '%(name)s' was created.") % {"name": result.name},
-                    )
-                    artifact = RaspberryPiImageArtifact.objects.filter(
-                        name=result.name
-                    ).first()
-                    if artifact:
-                        wizard_url = reverse(
-                            "admin:imager_raspberrypiimageartifact_create_rpi_image"
-                        )
-                        return HttpResponseRedirect(
-                            f"{wizard_url}?artifact={artifact.pk}"
-                        )
-                    return HttpResponseRedirect(changelist_url)
+                self._handle_test_action(request, artifact)
+            else:
+                redirect = self._handle_build_action(request, form, changelist_url)
+                if redirect:
+                    return redirect
 
         context = {
             **self.admin_site.each_context(request),

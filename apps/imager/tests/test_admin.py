@@ -1,6 +1,5 @@
 """Regression tests for Raspberry Pi imager admin UI actions."""
 
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -99,7 +98,6 @@ def test_imager_admin_create_rpi_image_view_redirects_to_wizard_result(
 def test_imager_admin_create_rpi_image_view_tests_download_url(
     mock_probe,
     admin_client,
-    tmp_path: Path,
 ) -> None:
     """Regression: wizard test action should validate the stored download URL."""
 
@@ -108,7 +106,7 @@ def test_imager_admin_create_rpi_image_view_tests_download_url(
         target="rpi-4b",
         base_image_uri="https://example.com/base.img",
         output_filename="stable-rpi-4b.img",
-        output_path=str(tmp_path / "stable-rpi-4b.img"),
+        output_path="/tmp/stable-rpi-4b.img",
         sha256="b" * 64,
         size_bytes=128,
         download_uri="https://downloads.example.com/stable-rpi-4b.img",
@@ -123,3 +121,40 @@ def test_imager_admin_create_rpi_image_view_tests_download_url(
     assert response.status_code == 200
     assert "URL check succeeded." in response.content.decode("utf-8")
     mock_probe.assert_called_once_with(artifact.download_uri)
+
+
+@pytest.mark.django_db
+@override_settings(IMAGER_BLOCK_PRIVATE_REMOTE_IMAGE_HOSTS=True)
+@patch("apps.imager.admin.urlopen")
+@patch("apps.imager.services.socket.getaddrinfo")
+def test_imager_admin_create_rpi_image_view_blocks_private_download_probe(
+    getaddrinfo_mock,
+    urlopen_mock,
+    admin_client,
+) -> None:
+    """Regression: wizard test action should block probing private/internal hosts."""
+
+    getaddrinfo_mock.return_value = [
+        (2, 1, 6, "", ("10.0.0.5", 443)),
+    ]
+
+    artifact = RaspberryPiImageArtifact.objects.create(
+        name="internal",
+        target="rpi-4b",
+        base_image_uri="https://example.com/base.img",
+        output_filename="internal-rpi-4b.img",
+        output_path="/tmp/internal-rpi-4b.img",
+        sha256="c" * 64,
+        size_bytes=256,
+        download_uri="https://internal.example.com/internal-rpi-4b.img",
+    )
+
+    response = admin_client.post(
+        f"{reverse('admin:imager_raspberrypiimageartifact_create_rpi_image')}?artifact={artifact.pk}",
+        data={"wizard_action": "test"},
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert "blocked non-public address" in response.content.decode("utf-8")
+    urlopen_mock.assert_not_called()
