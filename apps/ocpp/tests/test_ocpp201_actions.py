@@ -227,6 +227,13 @@ def test_ocpp201_cp_to_csms_calls_resolve_to_handlers():
     ) in reservation_calls
 
 
+def test_authorize_protocol_call_registration_supports_ocpp201_and_ocpp21():
+    protocol_calls = CSMSConsumer._handle_authorize_action.__protocol_calls__
+
+    assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Authorize") in protocol_calls
+    assert ("ocpp21", ProtocolCallModel.CP_TO_CSMS, "Authorize") in protocol_calls
+
+
 @pytest.mark.anyio
 async def test_authorize_translates_id_tag_info_to_id_token_info_for_ocpp2x():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -242,6 +249,56 @@ async def test_authorize_translates_id_tag_info_to_id_token_info_for_ocpp2x():
     result = await consumer._handle_authorize_action(
         {"idToken": {"idToken": "TAG-2X"}},
         "msg-auth-2x",
+        "",
+        "",
+    )
+
+    assert result == {"idTokenInfo": {"status": "Accepted"}}
+
+
+@pytest.mark.anyio
+async def test_authorize_translates_id_tag_info_to_id_token_info_with_extra_fields_for_ocpp2x():
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.ocpp_version = "ocpp2.0.1"
+
+    class Handler:
+        async def handle(self, payload, msg_id, raw, text_data):
+            assert payload["idTag"] == "TAG-2X-EXTRA"
+            return {
+                "certificateStatus": "Accepted",
+                "idTagInfo": {"status": "Accepted"},
+            }
+
+    consumer._action_handler = lambda action: Handler()
+
+    result = await consumer._handle_authorize_action(
+        {"idToken": {"idToken": "TAG-2X-EXTRA"}},
+        "msg-auth-2x-extra",
+        "",
+        "",
+    )
+
+    assert result == {
+        "certificateStatus": "Accepted",
+        "idTokenInfo": {"status": "Accepted"},
+    }
+
+
+@pytest.mark.anyio
+async def test_authorize_keeps_id_token_info_shape_for_ocpp2x():
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.ocpp_version = "ocpp2.1"
+
+    class Handler:
+        async def handle(self, payload, msg_id, raw, text_data):
+            assert payload["idTag"] == "TAG-2X-IDTOKEN"
+            return {"idTokenInfo": {"status": "Accepted"}}
+
+    consumer._action_handler = lambda action: Handler()
+
+    result = await consumer._handle_authorize_action(
+        {"idTag": "TAG-2X-IDTOKEN"},
+        "msg-auth-2x-idtoken",
         "",
         "",
     )
