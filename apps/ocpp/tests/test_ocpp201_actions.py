@@ -250,6 +250,33 @@ async def test_authorize_translates_id_tag_info_to_id_token_info_for_ocpp2x():
 
 
 @pytest.mark.anyio
+async def test_boot_notification_normalizes_ocpp2x_payload(caplog):
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.ocpp_version = "ocpp2.0.1"
+
+    with caplog.at_level("DEBUG"):
+        response = await consumer._handle_boot_notification_action(
+            {
+                "chargingStation": {"vendorName": "Acme", "model": "Fast-50"},
+                "reason": "PowerUp",
+            },
+            "msg-boot-2x",
+            "",
+            "",
+        )
+
+    assert response["status"] == "Accepted"
+    assert response["interval"] == 300
+    assert any(
+        "BootNotification payload normalized" in record.getMessage()
+        and record.payload["chargePointVendor"] == "Acme"
+        and record.payload["chargePointModel"] == "Fast-50"
+        and record.payload["bootReason"] == "PowerUp"
+        for record in caplog.records
+    )
+
+
+@pytest.mark.anyio
 async def test_authorize_keeps_id_tag_info_for_ocpp16():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.ocpp_version = "ocpp1.6"
@@ -690,3 +717,11 @@ def test_coverage_artifacts_match_decorator_cp_to_csms_reality(
 
     report = json.loads((app_dir.parent.parent / coverage_path).read_text(encoding="utf-8"))
     assert report["coverage"]["cp_to_csms"]["supported"] == expected_supported
+
+
+@pytest.mark.parametrize("coverage_path", (Path("apps/ocpp/coverage201.json"), Path("apps/ocpp/coverage21.json")))
+def test_coverage_artifacts_include_boot_notification_cp_to_csms(coverage_path):
+    app_dir = Path(__file__).resolve().parents[1]
+    report = json.loads((app_dir.parent.parent / coverage_path).read_text(encoding="utf-8"))
+    assert "BootNotification" in report["implemented"]["cp_to_csms"]
+    assert "BootNotification" in report["coverage"]["cp_to_csms"]["supported"]
