@@ -1,13 +1,13 @@
 import json
+from pathlib import Path
 
 import pytest
 
+from apps.ocpp.management.coverage_ocpp201_impl import _collect_real_decorated_actions
+from apps.ocpp.management.coverage_ocpp21_impl import run_coverage_ocpp21
 from apps.ocpp import store
-from apps.ocpp.consumers.csms.consumer import CSMSConsumer
-from apps.ocpp.consumers.csms.dispatch import build_action_registry
 from apps.ocpp.models import (
     CertificateOperation,
-    Charger,
     CPFirmware,
     CPFirmwareDeployment,
     InstalledCertificate,
@@ -495,3 +495,95 @@ def test_get_monitoring_report_registers_pending_request(ws):
     assert message_id in store.pending_calls
     request_id = store.pending_calls[message_id]["request_id"]
     assert request_id in store.monitoring_report_requests
+
+
+def test_collect_real_decorated_actions_excludes_stub_handlers(tmp_path):
+    app_dir = tmp_path / "apps" / "ocpp"
+    app_dir.mkdir(parents=True)
+    (app_dir / "coverage_stubs.py").write_text(
+        """
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
+
+@protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "StubFromCoverageModule")
+def stub_from_module():
+    raise NotImplementedError
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (app_dir / "handlers.py").write_text(
+        """
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
+
+@protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "RealCpToCsms")
+def real_cp_to_csms():
+    return {}
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "RealCsmsToCp")
+def real_csms_to_cp():
+    return {}
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "StubByBody")
+def stub_by_body():
+    raise NotImplementedError("todo")
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    tests_dir = app_dir / "tests"
+    tests_dir.mkdir(parents=True)
+    (tests_dir / "test_handlers.py").write_text(
+        """
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
+
+@protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "FromTests")
+def from_tests():
+    return {}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cp_to_csms, csms_to_cp = _collect_real_decorated_actions(Path(app_dir), "ocpp201")
+
+    assert "RealCpToCsms" in cp_to_csms
+    assert "RealCsmsToCp" in csms_to_cp
+    assert "StubFromCoverageModule" not in cp_to_csms
+    assert "FromTests" not in cp_to_csms
+    assert "StubByBody" not in csms_to_cp
+
+
+def test_run_coverage_ocpp21_keeps_shared_ocpp201_handlers(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "apps.ocpp.management.coverage_ocpp21_impl._load_spec",
+        lambda: {"cp_to_csms": ["Heartbeat"], "csms_to_cp": []},
+    )
+    monkeypatch.setattr(
+        "apps.ocpp.management.coverage_ocpp21_impl._implemented_cp_to_csms",
+        lambda _app_dir: {"Heartbeat"},
+    )
+    monkeypatch.setattr(
+        "apps.ocpp.management.coverage_ocpp21_impl._implemented_csms_to_cp",
+        lambda _app_dir: set(),
+    )
+
+    def _collect(_app_dir, slug):
+        if slug == "ocpp201":
+            return {"Heartbeat"}, set()
+        return set(), set()
+
+    monkeypatch.setattr(
+        "apps.ocpp.management.coverage_ocpp21_impl._collect_real_decorated_actions",
+        _collect,
+    )
+
+    json_path = tmp_path / "coverage21.json"
+    badge_path = tmp_path / "coverage21.svg"
+    run_coverage_ocpp21(json_path=str(json_path), badge_path=str(badge_path))
+    report = json.loads(json_path.read_text(encoding="utf-8"))
+
+    assert report["implemented"]["cp_to_csms"] == ["Heartbeat"]
+    assert report["coverage"]["overall"]["percent"] == 100.0
