@@ -1,16 +1,18 @@
 import json
+from pathlib import Path
 
 import pytest
 
+from apps.ocpp.management.coverage_ocpp201_impl import _collect_real_decorated_actions
 from apps.ocpp import store
-from apps.ocpp.tasks import request_charge_point_log
 from apps.ocpp.models import (
     Charger,
     CertificateOperation,
-    InstalledCertificate,
     CPFirmware,
     CPFirmwareDeployment,
+    InstalledCertificate,
 )
+from apps.ocpp.tasks import request_charge_point_log
 from apps.ocpp.views import actions
 from apps.ocpp.views.actions import charging_profiles
 from apps.ocpp.views.common import ActionContext, ActionCall
@@ -464,3 +466,47 @@ def test_get_monitoring_report_registers_pending_request(ws):
     assert message_id in store.pending_calls
     request_id = store.pending_calls[message_id]["request_id"]
     assert request_id in store.monitoring_report_requests
+
+
+def test_collect_real_decorated_actions_excludes_stub_handlers(tmp_path):
+    app_dir = tmp_path / "apps" / "ocpp"
+    app_dir.mkdir(parents=True)
+    (app_dir / "coverage_stubs.py").write_text(
+        """
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
+
+@protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "StubFromCoverageModule")
+def stub_from_module():
+    raise NotImplementedError
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (app_dir / "handlers.py").write_text(
+        """
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
+
+@protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "RealCpToCsms")
+def real_cp_to_csms():
+    return {}
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "RealCsmsToCp")
+def real_csms_to_cp():
+    return {}
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "StubByBody")
+def stub_by_body():
+    raise NotImplementedError("todo")
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cp_to_csms, csms_to_cp = _collect_real_decorated_actions(Path(app_dir), "ocpp201")
+
+    assert "RealCpToCsms" in cp_to_csms
+    assert "RealCsmsToCp" in csms_to_cp
+    assert "StubFromCoverageModule" not in cp_to_csms
+    assert "StubByBody" not in csms_to_cp
