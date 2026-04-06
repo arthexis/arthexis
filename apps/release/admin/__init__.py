@@ -6,8 +6,8 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import requests
-from django.contrib import admin, messages
 from django.conf import settings
+from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import redirect
 from django.templatetags.static import static
@@ -18,7 +18,10 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import EntityModelAdmin, SaveBeforeChangeAction
-from apps.core.views.reports.release_publish.context import load_release_context
+from apps.core.views.reports.release_publish.context import (
+    ReleaseContextState,
+    load_release_context,
+)
 from apps.core.views.reports.release_publish.views import PUBLISH_STEPS
 from apps.release.admin.package_actions import (
     PackageAdminActionsMixin,
@@ -40,6 +43,8 @@ class PackageAdmin(PackageAdminActionsMixin, SaveBeforeChangeAction, EntityModel
 
 
 class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
+    RELEASE_LOCKS_DIR = ".locks"
+
     change_list_template = "admin/core/packagerelease/change_list.html"
     list_display = (
         "version",
@@ -236,30 +241,27 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             return
         return redirect(reverse("release-progress", args=[release.pk, "publish"]))
 
-    @staticmethod
-    def _release_workflow_ongoing(request, release) -> bool:
+    @classmethod
+    def _release_workflow_ongoing(cls, request, release) -> bool:
         session_key = f"release_publish_{release.pk}"
         lock_path = (
-            Path(settings.BASE_DIR) / ".locks" / f"release_publish_{release.pk}.json"
+            Path(settings.BASE_DIR)
+            / cls.RELEASE_LOCKS_DIR
+            / f"release_publish_{release.pk}.json"
         )
         raw_ctx = load_release_context(request.session.get(session_key), lock_path)
         if not raw_ctx:
             return False
-        try:
-            step = int(raw_ctx.get("step", 0) or 0)
-        except (TypeError, ValueError):
-            step = 0
-        started = bool(raw_ctx.get("started"))
-        errored = bool(raw_ctx.get("error"))
-        done = step >= len(PUBLISH_STEPS) and not errored
-        return started and not done and not errored
+        state = ReleaseContextState.from_dict(raw_ctx)
+        done = state.step >= len(PUBLISH_STEPS) and not state.error
+        return state.started and not done
 
     def release_action(self, request, obj):
         if self._release_workflow_ongoing(request, obj):
             base = reverse("release-progress", args=[obj.pk, "publish"])
             resume_query = urlencode({"resume": 1})
             return redirect(f"{base}?{resume_query}")
-        return prepare_package_release(self, request, obj.package)
+        return self._publish_release(request, obj)
 
     release_action.label = "Release"
     release_action.short_description = "Release"
