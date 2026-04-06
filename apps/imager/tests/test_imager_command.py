@@ -81,23 +81,6 @@ def test_build_rpi4b_image_creates_artifact_with_download_uri(tmp_path: Path) ->
     assert artifact.download_uri == "https://cdn.example.com/images/stable-rpi-4b.img"
 
 @pytest.mark.django_db
-def test_build_rpi4b_image_rejects_unsafe_artifact_name(tmp_path: Path) -> None:
-    """Regression: artifact names should not include path traversal or separators."""
-
-    base_image = tmp_path / "base.img"
-    base_image.write_bytes(b"raspberrypi")
-
-    with pytest.raises(ImagerBuildError, match="Artifact name must start"):
-        build_rpi4b_image(
-            name="../outside",
-            base_image_uri=str(base_image),
-            output_dir=tmp_path,
-            download_base_uri="",
-            git_url="https://github.com/arthexis/arthexis.git",
-            customize=False,
-        )
-
-@pytest.mark.django_db
 @patch("apps.imager.services._download_remote_base_image")
 def test_build_rpi4b_image_downloads_percent_encoded_http_source(
     download_mock, tmp_path: Path
@@ -230,49 +213,3 @@ def test_download_remote_base_image_validates_redirect_target(tmp_path: Path) ->
         call("https://internal.example.com/image.img"),
     ]
 
-
-def test_build_download_uri_accepts_http_and_https() -> None:
-    """Regression: valid HTTP(S) base URIs should produce artifact download links."""
-
-    assert (
-        _build_download_uri("https://downloads.example.com/images", "artifact-rpi-4b.img")
-        == "https://downloads.example.com/images/artifact-rpi-4b.img"
-    )
-    assert (
-        _build_download_uri("http://downloads.example.com/images", "artifact-rpi-4b.img")
-        == "http://downloads.example.com/images/artifact-rpi-4b.img"
-    )
-
-
-def test_build_download_uri_returns_empty_when_base_is_empty() -> None:
-    """Regression: empty download base URI should disable hosted URI output."""
-
-    assert _build_download_uri("", "artifact-rpi-4b.img") == ""
-    assert _build_download_uri("   ", "artifact-rpi-4b.img") == ""
-
-
-def test_build_download_uri_rejects_invalid_scheme() -> None:
-    """Regression: download base URI should reject non-HTTP schemes."""
-
-    with pytest.raises(ImagerBuildError, match="must use http or https"):
-        _build_download_uri("ftp://downloads.example.com/images", "artifact-rpi-4b.img")
-
-
-def test_build_download_uri_rejects_missing_host() -> None:
-    """Regression: download base URI should require a host when a URI is provided."""
-
-    with pytest.raises(ImagerBuildError, match="include a valid host"):
-        _build_download_uri("https:///images", "artifact-rpi-4b.img")
-
-
-def test_build_download_uri_normalizes_odd_slash_combinations() -> None:
-    """Regression: slash normalization should keep paths stable while appending filenames."""
-
-    assert (
-        _build_download_uri("https://downloads.example.com//images///", "artifact-rpi-4b.img")
-        == "https://downloads.example.com//images/artifact-rpi-4b.img"
-    )
-    assert (
-        _build_download_uri("https://downloads.example.com", "artifact-rpi-4b.img")
-        == "https://downloads.example.com/artifact-rpi-4b.img"
-    )

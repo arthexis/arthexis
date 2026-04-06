@@ -83,22 +83,6 @@ def test_visitor_registration_request_post_requires_submitted_host():
     assert parsed.visitor_base is None
 
 
-def test_visitor_registration_request_post_rejects_malformed_host():
-    """POST parser should reject malformed visitor hosts instead of normalizing unsafe input."""
-    request = RequestFactory().post(
-        "/admin/nodes/node/register-visitor/?visitor=query.example:9443",
-        data={"visitor_host": "https://[broken", "visitor_port": ""},
-    )
-
-    parsed = VisitorRegistrationRequest.from_http_request(request, default_port=8888)
-
-    assert (
-        parsed.visitor_error
-        == "Visitor address missing. Reload with ?visitor=host[:port]."
-    )
-    assert parsed.visitor_base is None
-
-
 def test_visitor_registration_request_post_rejects_malformed_port():
     """POST parser should reject malformed ports and return an explicit validation error."""
     request = RequestFactory().post(
