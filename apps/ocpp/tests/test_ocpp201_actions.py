@@ -775,8 +775,10 @@ def test_coverage_artifacts_match_decorator_cp_to_csms_reality(
 
 
 @pytest.mark.parametrize("coverage_path", (Path("apps/ocpp/coverage201.json"), Path("apps/ocpp/coverage21.json")))
-def test_coverage_artifacts_include_boot_notification_cp_to_csms(coverage_path):
+def test_coverage_artifacts_include_core_cp_to_csms_notifications(coverage_path):
     app_dir = Path(__file__).resolve().parents[1]
     report = json.loads((app_dir.parent.parent / coverage_path).read_text(encoding="utf-8"))
     assert "BootNotification" in report["implemented"]["cp_to_csms"]
     assert "BootNotification" in report["coverage"]["cp_to_csms"]["supported"]
+    assert "CostUpdated" in report["implemented"]["cp_to_csms"]
+    assert "CostUpdated" in report["coverage"]["cp_to_csms"]["supported"]
