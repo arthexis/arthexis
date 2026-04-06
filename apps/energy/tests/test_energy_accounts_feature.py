@@ -196,6 +196,28 @@ def test_public_connector_page_create_account_rejects_authenticated_post(client)
 
 
 @pytest.mark.django_db
+def test_public_connector_page_create_account_rejects_password_failing_validators(client):
+    _enable_energy_accounts()
+    charger = Charger.objects.create(charger_id="CP-EA-WEAK-PASSWORD", connector_id=1)
+    page = PublicConnectorPage.objects.create(charger=charger, enabled=True)
+
+    response = client.post(
+        reverse("ocpp:public-connector-page-create-account", args=[page.slug]),
+        data={
+            "username": "weak-password-user",
+            "email": "weak@example.com",
+            "password": "123",
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert not get_user_model().objects.filter(username="weak-password-user").exists()
+    messages = [message.message for message in get_messages(response.wsgi_request)]
+    assert "Please provide valid account details." in messages
+
+
+@pytest.mark.django_db
 def test_charger_account_summary_excludes_null_account_sessions(client):
     user = get_user_model().objects.create_user(
         username="no-account-user",
