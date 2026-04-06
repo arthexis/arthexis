@@ -1174,6 +1174,27 @@ class CSMSConsumer(
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     async def _handle_boot_notification_action(self, payload, msg_id, raw, text_data):
+        payload_data = payload if isinstance(payload, dict) else {}
+        normalized_payload = payload_data
+        ocpp_version = str(getattr(self, "ocpp_version", "") or "")
+        if ocpp_version.startswith("ocpp2."):
+            normalized_payload = dict(payload_data)
+            charging_station = payload_data.get("chargingStation")
+            if isinstance(charging_station, dict):
+                charge_point_vendor = str(charging_station.get("vendorName") or "").strip()
+                charge_point_model = str(charging_station.get("model") or "").strip()
+                if charge_point_vendor and "chargePointVendor" not in normalized_payload:
+                    normalized_payload["chargePointVendor"] = charge_point_vendor
+                if charge_point_model and "chargePointModel" not in normalized_payload:
+                    normalized_payload["chargePointModel"] = charge_point_model
+            boot_reason = str(payload_data.get("reason") or "").strip()
+            if boot_reason and "bootReason" not in normalized_payload:
+                normalized_payload["bootReason"] = boot_reason
+        logger.debug(
+            "BootNotification payload normalized for %s.",
+            ocpp_version or "unknown",
+            extra={"payload": normalized_payload},
+        )
         current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
         return {
             "currentTime": current_time,
