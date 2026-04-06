@@ -12,8 +12,32 @@
 
 {% block content %}
 <div id="content-main">
+  {% if artifact %}
+    <div class="module">
+      <h2>{% translate "Latest artifact" %}</h2>
+      <p><strong>{% translate "Name" %}:</strong> {{ artifact.name }}</p>
+      <p><strong>{% translate "File" %}:</strong> {{ artifact.output_filename }}</p>
+      <p><strong>{% translate "SHA256" %}:</strong> <code>{{ artifact.sha256 }}</code></p>
+      <p><strong>{% translate "Download URL" %}:</strong>
+        {% if artifact.download_uri %}
+          <a href="{{ artifact.download_uri }}" target="_blank" rel="noopener">{{ artifact.download_uri }}</a>
+        {% else %}
+          {% translate "Not configured" %}
+        {% endif %}
+      </p>
+      <form method="post" style="margin-top: 1rem;">
+        {% csrf_token %}
+        <input type="hidden" name="wizard_action" value="test">
+        <button type="submit" class="button"{% if not artifact.download_uri %} disabled{% endif %}>
+          {% translate "Test download URL" %}
+        </button>
+      </form>
+    </div>
+  {% endif %}
+
   <form method="post" novalidate>
     {% csrf_token %}
+    <input type="hidden" name="wizard_action" value="build">
     <fieldset class="module aligned">
       {% for field in form %}
         <div class="form-row">

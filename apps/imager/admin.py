@@ -1,7 +1,9 @@
 """Admin integration for Raspberry Pi image artifacts."""
 
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlparse
+from urllib.request import Request, urlopen
 
 from django import forms
 from django.conf import settings
@@ -17,10 +19,49 @@ from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.services import ImagerBuildError, build_rpi4b_image
 
 
+def _probe_download_uri(
+    download_uri: str, timeout_seconds: int = 10
+) -> tuple[bool, str]:
+    """Probe the provided URI to validate image accessibility for operators."""
+
+    parsed = urlparse(download_uri)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return False, _("Download URL must use http/https and include a valid host.")
+
+    request = Request(download_uri, method="HEAD")
+    try:
+        with urlopen(request, timeout=timeout_seconds) as response:
+            status_code = getattr(response, "status", None)
+            if isinstance(status_code, int):
+                return True, _("URL check succeeded with HTTP %(status)s.") % {
+                    "status": status_code
+                }
+            return True, _("URL check succeeded.")
+    except HTTPError as exc:
+        if exc.code == 405:
+            fallback = Request(
+                download_uri, method="GET", headers={"Range": "bytes=0-0"}
+            )
+            try:
+                with urlopen(fallback, timeout=timeout_seconds):
+                    return True, _("URL check succeeded with GET fallback.")
+            except (HTTPError, URLError) as fallback_exc:
+                fallback_reason = getattr(fallback_exc, "reason", str(fallback_exc))
+                return False, _("URL check failed: %(reason)s.") % {
+                    "reason": fallback_reason
+                }
+        return False, _("URL check failed with HTTP %(status)s.") % {"status": exc.code}
+    except URLError as exc:
+        reason = getattr(exc, "reason", str(exc))
+        return False, _("URL check failed: %(reason)s.") % {"reason": reason}
+
+
 class RaspberryPiImageBuildForm(forms.Form):
     """Collect operator input for Raspberry Pi image generation from admin UI."""
 
-    name = forms.CharField(max_length=120, help_text=_("Artifact identifier, for example v0-5-0."))
+    name = forms.CharField(
+        max_length=120, help_text=_("Artifact identifier, for example v0-5-0.")
+    )
     base_image_uri = forms.CharField(
         max_length=500,
         help_text=_("Base image URI or local path (file://, local path, or https://)."),
@@ -42,7 +83,9 @@ class RaspberryPiImageBuildForm(forms.Form):
     )
     skip_customize = forms.BooleanField(
         required=False,
-        help_text=_("Copy the base image without injecting Arthexis bootstrap scripts."),
+        help_text=_(
+            "Copy the base image without injecting Arthexis bootstrap scripts."
+        ),
     )
 
     def clean_name(self) -> str:
@@ -50,13 +93,19 @@ class RaspberryPiImageBuildForm(forms.Form):
 
         name = self.cleaned_data["name"].strip()
         if not name or name in {".", ".."} or "/" in name or "\\" in name:
-            raise ValidationError(_("Artifact name must not contain path separators or traversal segments."))
+            raise ValidationError(
+                _(
+                    "Artifact name must not contain path separators or traversal segments."
+                )
+            )
         return name
 
     @staticmethod
     def _resolved_within(path: Path, roots: tuple[Path, ...]) -> bool:
         resolved_path = path.resolve(strict=False)
-        return any(root == resolved_path or root in resolved_path.parents for root in roots)
+        return any(
+            root == resolved_path or root in resolved_path.parents for root in roots
+        )
 
     @staticmethod
     def _clean_local_path(raw_path: str, *, allow_file_uri: bool) -> Path:
@@ -82,9 +131,14 @@ class RaspberryPiImageBuildForm(forms.Form):
 
     @staticmethod
     def _base_image_roots() -> tuple[Path, ...]:
-        configured_roots = getattr(settings, "IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS", None)
+        configured_roots = getattr(
+            settings, "IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS", None
+        )
         if configured_roots:
-            return tuple(Path(root).expanduser().resolve(strict=False) for root in configured_roots)
+            return tuple(
+                Path(root).expanduser().resolve(strict=False)
+                for root in configured_roots
+            )
 
         return (Path(settings.BASE_DIR).resolve(strict=False), Path("/tmp"))
 
@@ -92,7 +146,10 @@ class RaspberryPiImageBuildForm(forms.Form):
     def _output_roots() -> tuple[Path, ...]:
         configured_roots = getattr(settings, "IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS", None)
         if configured_roots:
-            return tuple(Path(root).expanduser().resolve(strict=False) for root in configured_roots)
+            return tuple(
+                Path(root).expanduser().resolve(strict=False)
+                for root in configured_roots
+            )
 
         return (Path(settings.BASE_DIR).resolve(strict=False),)
 
@@ -107,7 +164,9 @@ class RaspberryPiImageBuildForm(forms.Form):
         local_path = self._clean_local_path(base_image_uri, allow_file_uri=True)
 
         if not self._resolved_within(local_path, self._base_image_roots()):
-            raise ValidationError(_("Base image path is outside allowed image directories."))
+            raise ValidationError(
+                _("Base image path is outside allowed image directories.")
+            )
 
         return str(local_path)
 
@@ -118,7 +177,9 @@ class RaspberryPiImageBuildForm(forms.Form):
         output_path = self._clean_local_path(output_dir, allow_file_uri=False)
 
         if not self._resolved_within(output_path, self._output_roots()):
-            raise ValidationError(_("Output directory is outside allowed output directories."))
+            raise ValidationError(
+                _("Output directory is outside allowed output directories.")
+            )
 
         return str(output_path)
 
@@ -132,7 +193,13 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
     dashboard_actions = ("create_rpi_image_dashboard_action",)
     list_display = ("name", "target", "output_filename", "download_uri", "created_at")
     list_filter = ("target", "created_at")
-    search_fields = ("name", "target", "output_filename", "download_uri", "base_image_uri")
+    search_fields = (
+        "name",
+        "target",
+        "output_filename",
+        "download_uri",
+        "base_image_uri",
+    )
     readonly_fields = ("sha256", "size_bytes", "created_at", "updated_at")
 
     def get_urls(self):
@@ -152,7 +219,9 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
         return list(self.dashboard_actions)
 
     def create_rpi_image(self, request, queryset=None):
-        return HttpResponseRedirect(reverse("admin:imager_raspberrypiimageartifact_create_rpi_image"))
+        return HttpResponseRedirect(
+            reverse("admin:imager_raspberrypiimageartifact_create_rpi_image")
+        )
 
     create_rpi_image.label = _("Create RPI image")
     create_rpi_image.short_description = _("Create RPI image")
@@ -165,36 +234,70 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
     create_rpi_image_dashboard_action.label = _("Create RPI image")
     create_rpi_image_dashboard_action.short_description = _("Create RPI image")
     create_rpi_image_dashboard_action.requires_queryset = False
-    create_rpi_image_dashboard_action.dashboard_url = "admin:imager_raspberrypiimageartifact_create_rpi_image"
+    create_rpi_image_dashboard_action.dashboard_url = (
+        "admin:imager_raspberrypiimageartifact_create_rpi_image"
+    )
 
     def create_rpi_image_view(self, request: HttpRequest) -> HttpResponse:
         if not self.has_add_permission(request):
             raise PermissionDenied
 
+        artifact = None
+        artifact_id = request.GET.get("artifact")
+        if artifact_id and artifact_id.isdigit():
+            artifact = RaspberryPiImageArtifact.objects.filter(
+                pk=int(artifact_id)
+            ).first()
+
         form = RaspberryPiImageBuildForm(request.POST or None)
         changelist_url = reverse("admin:imager_raspberrypiimageartifact_changelist")
-        if request.method == "POST" and form.is_valid():
-            cleaned = form.cleaned_data
-            try:
-                build_rpi4b_image(
-                    name=cleaned["name"],
-                    base_image_uri=cleaned["base_image_uri"],
-                    output_dir=Path(cleaned["output_dir"]),
-                    download_base_uri=cleaned["download_base_uri"],
-                    git_url=cleaned["git_url"],
-                    customize=not cleaned["skip_customize"],
-                )
-            except (ImagerBuildError, OSError) as exc:
-                messages.error(request, str(exc))
-            else:
-                messages.success(request, _("RPI image '%(name)s' was created.") % {"name": cleaned["name"]})
-                return HttpResponseRedirect(changelist_url)
+        if request.method == "POST":
+            wizard_action = request.POST.get("wizard_action", "build")
+            if wizard_action == "test":
+                if not artifact or not artifact.download_uri:
+                    messages.error(
+                        request,
+                        _("No download URL is available for this artifact yet."),
+                    )
+                else:
+                    ok, detail = _probe_download_uri(artifact.download_uri)
+                    (messages.success if ok else messages.error)(request, detail)
+            elif form.is_valid():
+                cleaned = form.cleaned_data
+                try:
+                    result = build_rpi4b_image(
+                        name=cleaned["name"],
+                        base_image_uri=cleaned["base_image_uri"],
+                        output_dir=Path(cleaned["output_dir"]),
+                        download_base_uri=cleaned["download_base_uri"],
+                        git_url=cleaned["git_url"],
+                        customize=not cleaned["skip_customize"],
+                    )
+                except (ImagerBuildError, OSError) as exc:
+                    messages.error(request, str(exc))
+                else:
+                    messages.success(
+                        request,
+                        _("RPI image '%(name)s' was created.") % {"name": result.name},
+                    )
+                    artifact = RaspberryPiImageArtifact.objects.filter(
+                        name=result.name
+                    ).first()
+                    if artifact:
+                        wizard_url = reverse(
+                            "admin:imager_raspberrypiimageartifact_create_rpi_image"
+                        )
+                        return HttpResponseRedirect(
+                            f"{wizard_url}?artifact={artifact.pk}"
+                        )
+                    return HttpResponseRedirect(changelist_url)
 
         context = {
             **self.admin_site.each_context(request),
             "title": _("Create RPI image"),
             "opts": self.model._meta,
             "form": form,
+            "artifact": artifact,
             "changelist_url": changelist_url,
         }
         return TemplateResponse(

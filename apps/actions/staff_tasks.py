@@ -42,6 +42,13 @@ DEFAULT_STAFF_TASKS: tuple[dict[str, object], ...] = (
         "order": 55,
     },
     {
+        "slug": "imager",
+        "label": "Imager",
+        "description": "Open the Raspberry Pi image wizard.",
+        "action_name": "imager",
+        "order": 58,
+    },
+    {
         "slug": "logs",
         "label": "Logs",
         "description": "Browse system and application logs.",
@@ -131,7 +138,6 @@ def visible_staff_tasks_for_user(user) -> list[dict[str, str]]:
             continue
         visible.append({"slug": task.slug, "label": task.label, "url": url})
     return visible
-
 
 
 def ensure_default_staff_tasks_exist() -> None:

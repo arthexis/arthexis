@@ -8,7 +8,10 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 
 from apps.actions.models import DashboardAction, StaffTask
-from apps.actions.staff_tasks import ensure_default_staff_tasks_exist, visible_staff_tasks_for_user
+from apps.actions.staff_tasks import (
+    ensure_default_staff_tasks_exist,
+    visible_staff_tasks_for_user,
+)
 from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME
 from apps.groups.models import SecurityGroup
 
@@ -62,7 +65,15 @@ def test_staff_task_resolves_named_internal_action_for_visible_tasks():
     ensure_default_staff_tasks_exist()
     tasks = visible_staff_tasks_for_user(user)
 
-    assert any(task["slug"] == "groups" and task["url"] == "/actions/api/v1/security-groups/" for task in tasks)
+    assert any(
+        task["slug"] == "groups" and task["url"] == "/actions/api/v1/security-groups/"
+        for task in tasks
+    )
+    assert any(
+        task["slug"] == "imager"
+        and task["url"] == "/admin/imager/raspberrypiimageartifact/create-rpi-image/"
+        for task in tasks
+    )
     assert StaffTask.objects.filter(slug="actions").exists() is False
 
 

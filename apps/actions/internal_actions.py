@@ -61,6 +61,12 @@ INTERNAL_ACTION_SPECS: tuple[InternalActionSpec, ...] = (
         admin_url_name="actions-api-security-groups",
     ),
     InternalActionSpec(
+        name="imager",
+        label="Imager",
+        description="Open the Raspberry Pi image wizard.",
+        admin_url_name="admin:imager_raspberrypiimageartifact_create_rpi_image",
+    ),
+    InternalActionSpec(
         name="logs",
         label="Logs",
         description="Browse system and application logs.",
@@ -126,7 +132,6 @@ def get_internal_action_spec(action_name: str) -> InternalActionSpec | None:
     return _INTERNAL_ACTION_SPEC_MAP.get(action_name)
 
 
-
 def get_internal_action_choices() -> list[tuple[str, str]]:
     """Return model-field choices for supported internal actions.
 
@@ -135,7 +140,6 @@ def get_internal_action_choices() -> list[tuple[str, str]]:
     """
 
     return [(spec.name, spec.label) for spec in INTERNAL_ACTION_SPECS]
-
 
 
 def resolve_internal_action_url(action_name: str) -> str:
