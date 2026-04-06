@@ -185,6 +185,7 @@ CELERY_EMBEDDED=false
 CELERY_WORKER_PID=""
 CELERY_BEAT_PID=""
 LCD_PROCESS_PID=""
+LCD_STARTED=false
 DJANGO_SERVER_PID=""
 cleanup_background_processes() {
   if [ -n "$CELERY_WORKER_PID" ]; then
@@ -205,6 +206,17 @@ cleanup_background_processes() {
   clear_pid_files
 }
 trap cleanup_background_processes EXIT
+
+start_embedded_lcd_if_needed() {
+  if [ "$LCD_EMBEDDED" != true ] || [ "$LCD_STARTED" = true ]; then
+    return 0
+  fi
+
+  python -m apps.screens.lcd_screen.runner &
+  LCD_PROCESS_PID=$!
+  LCD_STARTED=true
+  record_pid_file "$LCD_PROCESS_PID" "$LCD_PID_FILE"
+}
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --port)
@@ -558,12 +570,6 @@ elif [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && \
   arthexis_start_systemd_unit_if_present "celery-beat-${SERVICE_NAME}.service"
 fi
 
-if [ "$LCD_EMBEDDED" = true ]; then
-  python -m apps.screens.lcd_screen.runner &
-  LCD_PROCESS_PID=$!
-  record_pid_file "$LCD_PROCESS_PID" "$LCD_PID_FILE"
-fi
-
 if [ "$AWAIT_START" = true ]; then
   if [ "$RELOAD" = true ]; then
     python manage.py runserver 0.0.0.0:"$PORT" "${RUNSERVER_EXTRA_ARGS[@]}" &
@@ -574,6 +580,7 @@ if [ "$AWAIT_START" = true ]; then
   record_pid_file "$DJANGO_SERVER_PID" "$DJANGO_PID_FILE"
 
   if wait_for_suite_startup "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
+    start_embedded_lcd_if_needed
     record_startup_duration 0
     arthexis_log_suite_uptime "$BASE_DIR" || true
     wait "$DJANGO_SERVER_PID"
@@ -591,6 +598,7 @@ else
   record_pid_file "$DJANGO_SERVER_PID" "$DJANGO_PID_FILE"
   (
     if wait_for_suite_startup "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
+      start_embedded_lcd_if_needed
       record_startup_duration 0
       arthexis_log_suite_uptime "$BASE_DIR" || true
     else
