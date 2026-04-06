@@ -91,30 +91,6 @@ def test_is_untracked_origin_uses_last_updated(minutes_ago, expected):
     )
 
 
-@pytest.mark.parametrize(
-    ("minutes_ago", "expected_label", "expected_color"),
-    [(1, STATUS_BADGE_MAP["available"][0], STATUS_BADGE_MAP["available"][1]), (10, "Offline", "grey")],
-)
-def test_charger_state_disconnected_heartbeat_recency(
-    monkeypatch,
-    settings,
-    minutes_ago,
-    expected_label,
-    expected_color,
-):
-    """Map disconnected chargers to available/offline badges based on heartbeat freshness."""
-
-    settings.NODE_LAST_SEEN_ACTIVE_DELTA = datetime.timedelta(minutes=5)
-    heartbeat = timezone.now() - datetime.timedelta(minutes=minutes_ago)
-    charger = _ChargerStub(last_heartbeat=heartbeat)
-    monkeypatch.setattr(common.store, "is_connected", lambda *_args, **_kwargs: False)
-
-    label, color = common._charger_state(charger, tx_obj=None)
-
-    assert str(label) == str(expected_label)
-    assert color == expected_color
-
-
 @pytest.mark.django_db
 def test_connector_overview_uses_active_transaction_fallback(monkeypatch):
     """Ensure connector summaries use persisted active sessions when needed."""

@@ -48,5 +48,3 @@ def test_version_marker_shell_ignores_missing_or_empty_version(tmp_path: Path) -
     _run_version_marker_helper(tmp_path)
 
     assert (tmp_path / "VERSION").read_text() == ""
-
-
