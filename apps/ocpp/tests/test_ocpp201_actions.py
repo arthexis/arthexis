@@ -216,6 +216,7 @@ def test_ocpp201_cp_to_csms_calls_resolve_to_handlers():
     reservation_calls = consumer._handle_reservation_status_update_action.__protocol_calls__
 
     assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "BootNotification") in boot_calls
+    assert ("ocpp21", ProtocolCallModel.CP_TO_CSMS, "Authorize") in authorize_calls
     assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Authorize") in authorize_calls
     assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "CostUpdated") in cost_calls
     assert (
@@ -223,6 +224,50 @@ def test_ocpp201_cp_to_csms_calls_resolve_to_handlers():
         ProtocolCallModel.CP_TO_CSMS,
         "ReservationStatusUpdate",
     ) in reservation_calls
+
+
+@pytest.mark.anyio
+async def test_authorize_translates_id_tag_info_to_id_token_info_for_ocpp2x():
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.ocpp_version = "ocpp2.1"
+
+    class Handler:
+        async def handle(self, payload, msg_id, raw, text_data):
+            assert payload["idTag"] == "TAG-2X"
+            return {"idTagInfo": {"status": "Accepted"}}
+
+    consumer._action_handler = lambda action: Handler()
+
+    result = await consumer._handle_authorize_action(
+        {"idToken": {"idToken": "TAG-2X"}},
+        "msg-auth-2x",
+        "",
+        "",
+    )
+
+    assert result == {"idTokenInfo": {"status": "Accepted"}}
+
+
+@pytest.mark.anyio
+async def test_authorize_keeps_id_tag_info_for_ocpp16():
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.ocpp_version = "ocpp1.6"
+
+    class Handler:
+        async def handle(self, payload, msg_id, raw, text_data):
+            assert payload["idTag"] == "TAG-16"
+            return {"idTagInfo": {"status": "Accepted"}}
+
+    consumer._action_handler = lambda action: Handler()
+
+    result = await consumer._handle_authorize_action(
+        {"idTag": "TAG-16"},
+        "msg-auth-16",
+        "",
+        "",
+    )
+
+    assert result == {"idTagInfo": {"status": "Accepted"}}
 
 
 def test_firmware_actions_register_ocpp201_and_ocpp21():
