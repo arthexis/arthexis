@@ -366,6 +366,54 @@ def test_firmware_actions_register_ocpp201_and_ocpp21():
     assert ("ocpp21", ProtocolCallModel.CSMS_TO_CP, "UnpublishFirmware") in unpublish_calls
 
 
+@pytest.mark.parametrize(
+    ("handler_name", "action"),
+    [
+        ("_handle_install_certificate", "InstallCertificate"),
+        ("_handle_delete_certificate", "DeleteCertificate"),
+        ("_handle_certificate_signed", "CertificateSigned"),
+        ("_handle_get_installed_certificate_ids", "GetInstalledCertificateIds"),
+        ("_handle_get_composite_schedule", "GetCompositeSchedule"),
+        ("_handle_get_charging_profiles", "GetChargingProfiles"),
+        ("_handle_get_variables", "GetVariables"),
+        ("_handle_set_variables", "SetVariables"),
+        ("_handle_get_base_report", "GetBaseReport"),
+        ("_handle_get_report", "GetReport"),
+        ("_handle_clear_display_message", "ClearDisplayMessage"),
+        ("_handle_get_display_messages", "GetDisplayMessages"),
+        ("_handle_set_display_message", "SetDisplayMessage"),
+        ("_handle_set_monitoring_base", "SetMonitoringBase"),
+        ("_handle_set_monitoring_level", "SetMonitoringLevel"),
+        ("_handle_set_variable_monitoring", "SetVariableMonitoring"),
+        ("_handle_clear_variable_monitoring", "ClearVariableMonitoring"),
+        ("_handle_get_monitoring_report", "GetMonitoringReport"),
+        ("_handle_set_network_profile", "SetNetworkProfile"),
+        ("_handle_request_start_transaction", "RequestStartTransaction"),
+        ("_handle_request_stop_transaction", "RequestStopTransaction"),
+        ("_handle_get_transaction_status", "GetTransactionStatus"),
+        ("_handle_change_availability", "ChangeAvailability"),
+        ("_handle_clear_cache", "ClearCache"),
+        ("_handle_get_log", "GetLog"),
+        ("_handle_unlock_connector", "UnlockConnector"),
+        ("_handle_data_transfer", "DataTransfer"),
+        ("_handle_reset", "Reset"),
+        ("_handle_trigger_message", "TriggerMessage"),
+        ("_handle_send_local_list", "SendLocalList"),
+        ("_handle_get_local_list_version", "GetLocalListVersion"),
+        ("_handle_customer_information", "CustomerInformation"),
+        ("_handle_reserve_now", "ReserveNow"),
+        ("_handle_cancel_reservation", "CancelReservation"),
+        ("_handle_set_charging_profile", "SetChargingProfile"),
+        ("_handle_clear_charging_profile", "ClearChargingProfile"),
+    ],
+)
+def test_csms_control_actions_register_ocpp21(handler_name, action):
+    protocol_calls = getattr(actions, handler_name).__protocol_calls__
+
+    assert ("ocpp201", ProtocolCallModel.CSMS_TO_CP, action) in protocol_calls
+    assert ("ocpp21", ProtocolCallModel.CSMS_TO_CP, action) in protocol_calls
+
+
 @pytest.mark.django_db
 def test_publish_firmware_supports_ocpp201(ws):
     charger = Charger.objects.create(charger_id="FW-CP-1")
@@ -775,7 +823,7 @@ def test_coverage_artifacts_match_decorator_cp_to_csms_reality(
 
 
 @pytest.mark.parametrize("coverage_path", (Path("apps/ocpp/coverage201.json"), Path("apps/ocpp/coverage21.json")))
-def test_coverage_artifacts_include_boot_notification_cp_to_csms(coverage_path):
+def test_coverage_artifacts_include_core_cp_to_csms_notifications(coverage_path):
     app_dir = Path(__file__).resolve().parents[1]
     report = json.loads((app_dir.parent.parent / coverage_path).read_text(encoding="utf-8"))
     assert "BootNotification" in report["implemented"]["cp_to_csms"]
