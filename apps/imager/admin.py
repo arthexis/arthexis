@@ -1,6 +1,8 @@
 """Admin integration for Raspberry Pi image artifacts."""
 
+from ipaddress import ip_address
 from pathlib import Path
+from socket import getaddrinfo
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlparse
 from urllib.request import Request, urlopen
@@ -23,13 +25,42 @@ from apps.imager.services import ImagerBuildError, build_rpi4b_image
 def _probe_download_url(download_url: str) -> tuple[bool, str]:
     """Check whether an artifact download URL appears reachable."""
 
+    parsed_url = urlparse(download_url)
+    hostname = parsed_url.hostname
+    if parsed_url.scheme not in {"http", "https"} or not hostname:
+        return False, _("Unsupported download URL.")
+
+    blocked_message = _("Refusing to probe local or private addresses.")
+    if hostname == "localhost":
+        return False, blocked_message
+
+    try:
+        ip_candidate = ip_address(hostname)
+    except ValueError:
+        ip_candidate = None
+
+    blocked_flags = ("is_link_local", "is_loopback", "is_multicast", "is_private", "is_unspecified")
+    if ip_candidate is not None:
+        if any(getattr(ip_candidate, flag) for flag in blocked_flags):
+            return False, blocked_message
+    else:
+        try:
+            resolved_hosts = {
+                ip_address(record[4][0]) for record in getaddrinfo(hostname, None, type=0)
+            }
+        except OSError as exc:
+            reason = getattr(exc, "strerror", str(exc))
+            return False, str(reason)
+        if any(any(getattr(ip_value, flag) for flag in blocked_flags) for ip_value in resolved_hosts):
+            return False, blocked_message
+
     request = Request(download_url, method="HEAD")
     try:
         with urlopen(request, timeout=10) as response:  # noqa: S310 - staff-triggered verification flow
             status = response.getcode()
     except HTTPError as exc:
         status = exc.code
-    except URLError as exc:
+    except (URLError, ValueError) as exc:
         reason = getattr(exc, "reason", str(exc))
         return False, str(reason)
 
@@ -223,9 +254,15 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
                     output_path=str(build_result.output_path),
                 ).first()
                 if artifact is None:
-                    artifact = RaspberryPiImageArtifact.objects.filter(name=cleaned["name"]).first()
+                    artifact = (
+                        RaspberryPiImageArtifact.objects.filter(name=cleaned["name"])
+                        .order_by("-created_at")
+                        .first()
+                    )
                 if artifact is not None:
-                    return HttpResponseRedirect(f"{request.path}?artifact={artifact.pk}")
+                    return HttpResponseRedirect(
+                        f"{reverse('admin:imager_raspberrypiimageartifact_create_rpi_image')}?artifact={artifact.pk}"
+                    )
                 return HttpResponseRedirect(changelist_url)
 
         context = {

@@ -6,6 +6,7 @@ import pytest
 from django.test import override_settings
 from django.urls import reverse
 
+from apps.imager.admin import _probe_download_url
 from apps.imager.models import RaspberryPiImageArtifact
 
 
@@ -124,3 +125,59 @@ def test_imager_admin_test_download_url_reports_probe_result(probe_mock, admin_c
     assert response.status_code == 200
     probe_mock.assert_called_once_with(artifact.download_uri)
     assert "Download URL check succeeded" in response.content.decode("utf-8")
+
+
+@pytest.mark.parametrize(
+    ("download_url", "expected_message"),
+    [
+        ("file:///tmp/stable-rpi-4b.img", "Unsupported download URL."),
+        ("http://127.0.0.1/admin", "Refusing to probe local or private addresses."),
+    ],
+)
+def test_probe_download_url_blocks_unsafe_targets(download_url, expected_message):
+    """Regression: URL probing should reject unsupported schemes and private hosts."""
+
+    reachable, result = _probe_download_url(download_url)
+    assert reachable is False
+    assert result == expected_message
+
+
+@pytest.mark.django_db
+@override_settings(
+    IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=("/tmp",),
+    IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS=("/tmp",),
+)
+@patch("apps.imager.admin.build_rpi4b_image")
+def test_imager_admin_create_rpi_image_view_uses_named_artifact_when_path_lookup_misses(
+    mock_build,
+    admin_client,
+):
+    """Regression: fallback artifact lookup should still resolve by artifact name."""
+
+    artifact = RaspberryPiImageArtifact.objects.create(
+        name="stable",
+        target="rpi-4b",
+        base_image_uri="/tmp/base-old.img",
+        output_filename="stable-old-rpi-4b.img",
+        output_path="/tmp/stable-old-rpi-4b.img",
+        sha256="abc123",
+        size_bytes=8,
+        download_uri="https://cdn.example.com/images/stable-old-rpi-4b.img",
+        metadata={},
+    )
+    mock_build.return_value = type("BuildResult", (), {"output_path": "/tmp/missing.img"})()
+
+    response = admin_client.post(
+        reverse("admin:imager_raspberrypiimageartifact_create_rpi_image"),
+        data={
+            "name": "stable",
+            "base_image_uri": "/tmp/base-new.img",
+            "output_dir": "/tmp",
+            "download_base_uri": "https://cdn.example.com/images",
+            "git_url": "https://github.com/arthexis/arthexis.git",
+        },
+        follow=False,
+    )
+
+    assert response.status_code == 302
+    assert response["Location"].endswith(f"?artifact={artifact.pk}")
