@@ -28,10 +28,11 @@ upgrade.
    files into the environment for downstream commands.
 3. Reuse `.locks/staticfiles.md5` together with `.locks/staticfiles.meta` to
    avoid re-hashing static assets when the recorded mtime snapshot matches the
-   current filesystem. When the metadata is stale (or
-   `--force-collectstatic` is provided), compute a new hash with
-   `scripts/staticfiles_md5.py`, refresh both lock files, and run
-   `manage.py collectstatic --noinput` if the hash differs.
+   current filesystem. Collectstatic behavior is controlled by
+   `ARTHEXIS_COLLECTSTATIC_POLICY=apply|check|skip` (`apply` is the default):
+   `apply` runs `manage.py collectstatic --noinput` when assets are stale,
+   `check` fails startup if assets are stale, and `skip` bypasses the static
+   assets preflight entirely. `--force-collectstatic` always forces `apply`.
 4. Invoke `manage.py startup_orchestrate` and consume its JSON contract to keep
    shell branching deterministic (`launch.celery_embedded`,
    `launch.lcd_embedded`, `launch.lcd_target_mode`, and structured check
@@ -53,6 +54,37 @@ upgrade.
 4. Queue LCD startup messaging when LCD is enabled.
 5. Write orchestration status metadata to
    `.locks/startup_orchestrate_status.lck` and emit a JSON launch contract.
+
+### Migration policy tuning by environment
+
+`run_runserver_preflight` supports `ARTHEXIS_MIGRATION_POLICY=apply|check|skip`.
+
+- `check`: verify migration state and fail fast when migrations are pending.
+- `apply`: apply pending migrations during startup.
+- `skip`: bypass migration preflight entirely (recommended only when your
+  deployment pipeline guarantees migrations have already been applied).
+
+Fresh installs continue to use role-based defaults (`satellite`/`watchtower`
+default to `check`; other roles default to `apply`). Existing installations are
+auto-defaulted to `ARTHEXIS_MIGRATION_POLICY=check` during install updates to
+reduce blocking startup time on routine app nodes. Reserve `apply` for
+nodes/environments that are explicitly responsible for schema rollout.
+
+### Collectstatic policy tuning by environment
+
+`scripts/service-start.sh` supports
+`ARTHEXIS_COLLECTSTATIC_POLICY=apply|check|skip`.
+
+- `apply`: run `collectstatic` when static assets are stale.
+- `check`: verify static assets are current and fail fast when they are stale.
+- `skip`: bypass static assets preflight entirely (recommended only when your
+  deployment pipeline guarantees static assets are already prepared).
+
+Fresh installs default to `apply` (with role-based behavior still applying
+where configured). Existing installations are auto-defaulted to
+`ARTHEXIS_COLLECTSTATIC_POLICY=check` during install updates to reduce blocking
+startup work on routine app nodes. Reserve `apply` for nodes/environments that
+are explicitly responsible for static asset rollout.
 
 ## Operational cleanup ownership
 
