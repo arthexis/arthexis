@@ -136,6 +136,7 @@ def test_connector_overview_uses_active_transaction_fallback(monkeypatch):
 
     assert overview[0]["status"] == STATUS_BADGE_MAP["charging"][0]
     assert overview[0]["color"] == STATUS_BADGE_MAP["charging"][1]
+    assert overview[0]["status_badge_class"] == "status-charging"
 
 
 @pytest.mark.django_db
@@ -213,3 +214,20 @@ def test_active_transaction_falls_back_to_db_open_session_when_cached_row_is_sup
 
     assert common._is_superseded_open_transaction(charger, stale_cached_tx) is True
     assert common._active_transaction_for_charger(charger) == fresh_open_tx
+
+
+@pytest.mark.parametrize(
+    ("state", "color", "expected"),
+    [
+        ("Unavailable", None, "status-offline"),
+        ("OutOfService", None, "status-offline"),
+        ("Verfügbar", "#6f42c1", "status-available"),
+        ("Ladung pausiert", "#fd7e14", "status-charging"),
+        ("Ocupado", "#20c997", "status-charging"),
+        ("Finalizando", "#0dcaf0", "status-charging"),
+    ],
+)
+def test_status_badge_class_handles_offline_states_and_color_fallbacks(state, color, expected):
+    """Classify localized and legacy status/color combinations into semantic badge classes."""
+
+    assert common._status_badge_class(state, color) == expected

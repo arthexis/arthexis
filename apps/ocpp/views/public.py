@@ -39,6 +39,7 @@ from .common import (
     _landing_visibility_params,
     _live_sessions,
     _reverse_connector_url,
+    _status_badge_class,
     _supported_language_codes,
     _transaction_rfid_details,
     _usage_timeline,
@@ -269,6 +270,7 @@ def charger_page(request, cid, connector=None):
             "preferred_language": preferred_language,
             "state": state,
             "color": color,
+            "status_badge_class": _status_badge_class(state, color),
             "charger_error_code": _visible_error_code(charger.last_error_code),
         },
     )
@@ -448,6 +450,7 @@ def charger_status(request, cid, connector=None):
             "tx_rfid_details": tx_rfid_details,
             "state": state,
             "color": color,
+            "status_badge_class": _status_badge_class(state, color),
             "transactions": transactions,
             "non_transaction_events": non_transaction_events,
             "page_obj": None,
