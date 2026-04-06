@@ -3,11 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from apps.ocpp.management.coverage_ocpp201_impl import _collect_real_decorated_actions
-from apps.ocpp.management.coverage_ocpp21_impl import run_coverage_ocpp21
 from apps.ocpp import store
+from apps.ocpp.consumers.csms.consumer import CSMSConsumer
+from apps.ocpp.consumers.csms.dispatch import build_action_registry
+from apps.ocpp.management.coverage_ocpp21_impl import run_coverage_ocpp21
+from apps.ocpp.management.coverage_ocpp201_impl import _collect_real_decorated_actions
 from apps.ocpp.models import (
     CertificateOperation,
+    Charger,
     CPFirmware,
     CPFirmwareDeployment,
     InstalledCertificate,
