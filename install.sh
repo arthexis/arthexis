@@ -170,6 +170,7 @@ clean_previous_installation_state() {
           "$LOCK_DIR/requirements.sha256" \
           "$LOCK_DIR/migrations.md5" \
           "$LOCK_DIR/fixtures.md5" \
+          "$BASE_DIR/collectstatic.env" \
           "$BASE_DIR/redis.env" \
           "$BASE_DIR/debug.env" \
           "$BASE_DIR/migration.env"
@@ -649,23 +650,15 @@ fi
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 
-if [ -z "${ARTHEXIS_MIGRATION_POLICY:-}" ]; then
-    case "${NODE_ROLE,,}" in
-        satellite|watchtower)
-            ARTHEXIS_MIGRATION_POLICY="check"
-            ;;
-        *)
-            ARTHEXIS_MIGRATION_POLICY="apply"
-            ;;
-    esac
+EXISTING_INSTALL=false
+if [ -f "$BASE_DIR/migration.env" ]; then
+    EXISTING_INSTALL=true
 fi
 
-case "${ARTHEXIS_MIGRATION_POLICY,,}" in
-    apply|check|skip)
-        ARTHEXIS_MIGRATION_POLICY="${ARTHEXIS_MIGRATION_POLICY,,}"
-        ;;
-    *)
-        echo "Warning: Invalid ARTHEXIS_MIGRATION_POLICY value '${ARTHEXIS_MIGRATION_POLICY}', using role default." >&2
+if [ -z "${ARTHEXIS_MIGRATION_POLICY:-}" ]; then
+    if [ "$EXISTING_INSTALL" = true ]; then
+        ARTHEXIS_MIGRATION_POLICY="check"
+    else
         case "${NODE_ROLE,,}" in
             satellite|watchtower)
                 ARTHEXIS_MIGRATION_POLICY="check"
@@ -674,10 +667,55 @@ case "${ARTHEXIS_MIGRATION_POLICY,,}" in
                 ARTHEXIS_MIGRATION_POLICY="apply"
                 ;;
         esac
+    fi
+fi
+
+case "${ARTHEXIS_MIGRATION_POLICY,,}" in
+    apply|check|skip)
+        ARTHEXIS_MIGRATION_POLICY="${ARTHEXIS_MIGRATION_POLICY,,}"
+        ;;
+    *)
+        echo "Warning: Invalid ARTHEXIS_MIGRATION_POLICY value '${ARTHEXIS_MIGRATION_POLICY}', using role default." >&2
+        if [ "$EXISTING_INSTALL" = true ]; then
+            ARTHEXIS_MIGRATION_POLICY="check"
+        else
+            case "${NODE_ROLE,,}" in
+                satellite|watchtower)
+                    ARTHEXIS_MIGRATION_POLICY="check"
+                    ;;
+                *)
+                    ARTHEXIS_MIGRATION_POLICY="apply"
+                    ;;
+            esac
+        fi
         ;;
 esac
 
 printf 'ARTHEXIS_MIGRATION_POLICY=%s\n' "$ARTHEXIS_MIGRATION_POLICY" > "$BASE_DIR/migration.env"
+
+if [ -z "${ARTHEXIS_COLLECTSTATIC_POLICY:-}" ]; then
+    if [ "$EXISTING_INSTALL" = true ]; then
+        ARTHEXIS_COLLECTSTATIC_POLICY="check"
+    else
+        ARTHEXIS_COLLECTSTATIC_POLICY="apply"
+    fi
+fi
+
+case "${ARTHEXIS_COLLECTSTATIC_POLICY,,}" in
+    apply|check|skip)
+        ARTHEXIS_COLLECTSTATIC_POLICY="${ARTHEXIS_COLLECTSTATIC_POLICY,,}"
+        ;;
+    *)
+        echo "Warning: Invalid ARTHEXIS_COLLECTSTATIC_POLICY value '${ARTHEXIS_COLLECTSTATIC_POLICY}', using install default." >&2
+        if [ "$EXISTING_INSTALL" = true ]; then
+            ARTHEXIS_COLLECTSTATIC_POLICY="check"
+        else
+            ARTHEXIS_COLLECTSTATIC_POLICY="apply"
+        fi
+        ;;
+esac
+
+printf 'ARTHEXIS_COLLECTSTATIC_POLICY=%s\n' "$ARTHEXIS_COLLECTSTATIC_POLICY" > "$BASE_DIR/collectstatic.env"
 
 source .venv/bin/activate
 arthexis_timing_start "pip_bootstrap"

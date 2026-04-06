@@ -287,6 +287,34 @@ STATIC_HASH=""
 STORED_HASH=""
 [ -f "$STATIC_MD5_FILE" ] && STORED_HASH=$(cat "$STATIC_MD5_FILE")
 
+resolve_collectstatic_policy() {
+  local configured_policy="${ARTHEXIS_COLLECTSTATIC_POLICY:-}"
+
+  if [ -z "$configured_policy" ]; then
+    echo "apply"
+    return 0
+  fi
+
+  case "${configured_policy,,}" in
+    apply|check|skip)
+      echo "${configured_policy,,}"
+      ;;
+    *)
+      echo "Unsupported ARTHEXIS_COLLECTSTATIC_POLICY value '${configured_policy}'. Expected one of: apply, check, skip." >&2
+      return 1
+      ;;
+  esac
+}
+
+COLLECTSTATIC_POLICY="$(resolve_collectstatic_policy)"
+if [ "$FORCE_COLLECTSTATIC" = true ] && [ "$COLLECTSTATIC_POLICY" != "apply" ]; then
+  echo "Forcing collectstatic due to --force-collectstatic (overriding ARTHEXIS_COLLECTSTATIC_POLICY=${COLLECTSTATIC_POLICY})."
+  COLLECTSTATIC_POLICY="apply"
+fi
+
+if [ "$COLLECTSTATIC_POLICY" = "skip" ]; then
+  echo "Skipping collectstatic (ARTHEXIS_COLLECTSTATIC_POLICY=skip)."
+else
 if [ "$FORCE_COLLECTSTATIC" = false ]; then
   set +e
   STATIC_HASH=$(arthexis_staticfiles_snapshot_check "$STATIC_MD5_FILE" "$STATIC_META_FILE")
@@ -305,6 +333,12 @@ fi
 
 if [ -z "$STATIC_HASH" ]; then
   if ! STATIC_HASH=$(arthexis_staticfiles_compute_hash "$STATIC_MD5_FILE" "$STATIC_META_FILE" "$FORCE_COLLECTSTATIC"); then
+    if [ "$COLLECTSTATIC_POLICY" = "check" ]; then
+      echo "Static files preflight failed: unable to compute hash while ARTHEXIS_COLLECTSTATIC_POLICY=check." >&2
+      arthexis_staticfiles_clear_staged_lock
+      exit 1
+    fi
+
     echo "Failed to compute static files hash; running collectstatic."
     arthexis_staticfiles_clear_staged_lock
     python manage.py collectstatic --noinput
@@ -313,6 +347,12 @@ if [ -z "$STATIC_HASH" ]; then
 fi
 
 if [ "$FORCE_COLLECTSTATIC" = true ] || [ -z "$STATIC_HASH" ] || [ "$STATIC_HASH" != "$STORED_HASH" ]; then
+  if [ "$COLLECTSTATIC_POLICY" = "check" ]; then
+    echo "Collectstatic preflight failed: static assets are stale and policy is check-only." >&2
+    arthexis_staticfiles_clear_staged_lock
+    exit 1
+  fi
+
   if python manage.py collectstatic --noinput; then
     arthexis_staticfiles_commit_staged_lock "$STATIC_MD5_FILE" "$STATIC_META_FILE"
   else
@@ -323,6 +363,7 @@ if [ "$FORCE_COLLECTSTATIC" = true ] || [ -z "$STATIC_HASH" ] || [ "$STATIC_HASH
 else
   arthexis_staticfiles_clear_staged_lock
   echo "Static files unchanged. Skipping collectstatic."
+fi
 fi
 
 arthexis_suite_reachable() {
