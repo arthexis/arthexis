@@ -1150,6 +1150,7 @@ class CSMSConsumer(
 
         return await database_sync_to_async(_apply)()
 
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     async def _handle_boot_notification_action(self, payload, msg_id, raw, text_data):
         current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
@@ -1164,11 +1165,32 @@ class CSMSConsumer(
     async def _handle_data_transfer_action(self, payload, msg_id, raw, text_data):
         return await self._handle_data_transfer(msg_id, payload)
 
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Authorize")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "Authorize")
     async def _handle_authorize_action(self, payload, msg_id, raw, text_data):
-        return await self._action_handler("Authorize").handle(
-            payload, msg_id, raw, text_data
+        payload_data = payload if isinstance(payload, dict) else {}
+        normalized_payload = payload_data
+        if "idTag" not in payload_data:
+            id_token = payload_data.get("idToken")
+            if isinstance(id_token, dict):
+                token_value = str(id_token.get("idToken") or "").strip()
+                if token_value:
+                    normalized_payload = {**payload_data, "idTag": token_value}
+
+        response = await self._action_handler("Authorize").handle(
+            normalized_payload, msg_id, raw, text_data
         )
+        if not isinstance(response, dict):
+            return response
+
+        ocpp_version = str(getattr(self, "ocpp_version", "") or "")
+        if not ocpp_version.startswith("ocpp2."):
+            return response
+
+        id_tag_info = response.get("idTagInfo")
+        if not isinstance(id_tag_info, dict):
+            return response
+        return {"idTokenInfo": id_tag_info}
 
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit")
@@ -1911,6 +1933,7 @@ class CSMSConsumer(
                     log_type="charger",
                 )
 
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "CostUpdated")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "CostUpdated")
     async def _handle_cost_updated_action(self, payload, msg_id, raw, text_data):
         self._log_ocpp201_notification("CostUpdated", payload)
@@ -1986,6 +2009,11 @@ class CSMSConsumer(
             )
         return {}
 
+    @protocol_call(
+        "ocpp201",
+        ProtocolCallModel.CP_TO_CSMS,
+        "ReservationStatusUpdate",
+    )
     @protocol_call(
         "ocpp21",
         ProtocolCallModel.CP_TO_CSMS,
