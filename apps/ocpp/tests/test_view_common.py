@@ -54,6 +54,8 @@ class _ChargerStub:
 @pytest.mark.parametrize(
     ("status_minutes", "heartbeat_minutes", "raise_attr", "expected_source"),
     [
+        (5, 10, False, "status"),
+        (None, 10, False, "heartbeat"),
         (None, 0, True, "heartbeat"),
     ],
 )
@@ -67,6 +69,26 @@ def test_charger_last_seen_fallbacks(status_minutes, heartbeat_minutes, raise_at
 
     expected = status_ts if expected_source == "status" else heartbeat
     assert common._charger_last_seen(charger) == expected
+
+
+@pytest.mark.parametrize(("minutes_ago", "expected"), [(1, False), (10, True)])
+def test_is_untracked_origin_uses_last_updated(minutes_ago, expected):
+    """Classify untracked origins as stale based on the configured activity window."""
+
+    reference_time = timezone.now()
+    active_delta = datetime.timedelta(minutes=5)
+    origin = _NodeStub(last_updated=reference_time - datetime.timedelta(minutes=minutes_ago))
+    connector = _ConnectorStub(node_origin=origin)
+
+    assert (
+        common._is_untracked_origin(
+            connector,
+            local_node=None,
+            reference_time=reference_time,
+            active_delta=active_delta,
+        )
+        is expected
+    )
 
 
 @pytest.mark.django_db
@@ -173,7 +195,12 @@ def test_active_transaction_falls_back_to_db_open_session_when_cached_row_is_sup
 @pytest.mark.parametrize(
     ("state", "color", "expected"),
     [
+        ("Unavailable", None, "status-offline"),
+        ("OutOfService", None, "status-offline"),
         ("Verfügbar", "#6f42c1", "status-available"),
+        ("Ladung pausiert", "#fd7e14", "status-charging"),
+        ("Ocupado", "#20c997", "status-charging"),
+        ("Finalizando", "#0dcaf0", "status-charging"),
     ],
 )
 def test_status_badge_class_handles_offline_states_and_color_fallbacks(state, color, expected):

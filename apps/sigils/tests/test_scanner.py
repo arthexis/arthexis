@@ -6,7 +6,11 @@ from apps.sigils import scanner
 @pytest.mark.parametrize(
     "text, expected",
     [
+        ("plain-text", []),
+        ("[ENV.VALUE]", [(0, 11)]),
         ("hello [ENV.VALUE] world [USR.name]", [(6, 17), (24, 34)]),
+        ("nested [ENV=[ENV.KEY]] done", [(7, 22)]),
+        ("[ENV.VALUE", []),
     ],
 )
 def test_python_scanner_finds_expected_token_spans(text, expected):
