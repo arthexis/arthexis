@@ -643,5 +643,5 @@ def test_coverage_artifacts_match_decorator_cp_to_csms_reality(
         decorated_cp_to_csms |= decorated_cp_to_csms_201
     expected_supported = sorted(spec_cp_to_csms & decorated_cp_to_csms)
 
-    report = json.loads(coverage_path.read_text(encoding="utf-8"))
+    report = json.loads((app_dir.parent.parent / coverage_path).read_text(encoding="utf-8"))
     assert report["coverage"]["cp_to_csms"]["supported"] == expected_supported
