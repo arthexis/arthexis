@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from apps.release import DEFAULT_PACKAGE
-from apps.release.services.builder import build
+from apps.release.services.builder import _pep639_license_metadata, build
 from apps.release.services.models import Credentials
 
 
@@ -68,3 +68,25 @@ def test_builder_release_uploads_before_pushing_git_state(
 
     assert upload_index < branch_push_index
     assert upload_index < tag_push_index
+
+
+@pytest.mark.parametrize(
+    ("license_name", "expected_license"),
+    (
+        ("Arthexis Reciprocity General License 1.0", "LicenseRef-ARG-1.0"),
+        ("Arthexis Reciprocity License 1.0", "LicenseRef-ARG-1.0"),
+        ("MIT", "MIT"),
+    ),
+)
+def test_pep639_license_metadata_handles_current_and_legacy_arg_names(
+    license_name: str, expected_license: str
+) -> None:
+    """PEP 639 mapping should preserve ARG compatibility for upgraded records."""
+
+    metadata = _pep639_license_metadata(license_name)
+
+    assert metadata["license"] == expected_license
+    if expected_license == "LicenseRef-ARG-1.0":
+        assert metadata["license-files"] == ["LICENSE"]
+    else:
+        assert "license-files" not in metadata
