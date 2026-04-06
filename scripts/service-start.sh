@@ -306,10 +306,13 @@ resolve_collectstatic_policy() {
   esac
 }
 
-COLLECTSTATIC_POLICY="$(resolve_collectstatic_policy)"
-if [ "$FORCE_COLLECTSTATIC" = true ] && [ "$COLLECTSTATIC_POLICY" != "apply" ]; then
-  echo "Forcing collectstatic due to --force-collectstatic (overriding ARTHEXIS_COLLECTSTATIC_POLICY=${COLLECTSTATIC_POLICY})."
+if [ "$FORCE_COLLECTSTATIC" = true ]; then
+  if [ -n "${ARTHEXIS_COLLECTSTATIC_POLICY:-}" ] && [ "${ARTHEXIS_COLLECTSTATIC_POLICY,,}" != "apply" ]; then
+    echo "Forcing collectstatic due to --force-collectstatic (overriding ARTHEXIS_COLLECTSTATIC_POLICY=${ARTHEXIS_COLLECTSTATIC_POLICY})."
+  fi
   COLLECTSTATIC_POLICY="apply"
+else
+  COLLECTSTATIC_POLICY="$(resolve_collectstatic_policy)"
 fi
 
 if [ "$COLLECTSTATIC_POLICY" = "skip" ]; then

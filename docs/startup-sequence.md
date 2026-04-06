@@ -64,11 +64,11 @@ upgrade.
 - `skip`: bypass migration preflight entirely (recommended only when your
   deployment pipeline guarantees migrations have already been applied).
 
-Default behavior remains role-based (`satellite`/`watchtower` default to
-`check`; other roles default to `apply`). For upgrades of existing
-installations, set `ARTHEXIS_MIGRATION_POLICY=check` on routine app nodes to
-reduce blocking startup time. Reserve `apply` for nodes/environments that are
-explicitly responsible for schema rollout.
+Fresh installs continue to use role-based defaults (`satellite`/`watchtower`
+default to `check`; other roles default to `apply`). Existing installations are
+auto-defaulted to `ARTHEXIS_MIGRATION_POLICY=check` during install updates to
+reduce blocking startup time on routine app nodes. Reserve `apply` for
+nodes/environments that are explicitly responsible for schema rollout.
 
 ### Collectstatic policy tuning by environment
 
@@ -80,10 +80,11 @@ explicitly responsible for schema rollout.
 - `skip`: bypass static assets preflight entirely (recommended only when your
   deployment pipeline guarantees static assets are already prepared).
 
-Fresh installs default to `apply`. For upgrades of existing installations, set
-`ARTHEXIS_COLLECTSTATIC_POLICY=check` on routine app nodes to reduce blocking
-startup work. Reserve `apply` for nodes/environments that are explicitly
-responsible for static asset rollout.
+Fresh installs default to `apply` (with role-based behavior still applying
+where configured). Existing installations are auto-defaulted to
+`ARTHEXIS_COLLECTSTATIC_POLICY=check` during install updates to reduce blocking
+startup work on routine app nodes. Reserve `apply` for nodes/environments that
+are explicitly responsible for static asset rollout.
 
 ## Operational cleanup ownership
 
