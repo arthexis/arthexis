@@ -19,6 +19,12 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # pragma: no cover - fallback when missing
     toml = None  # type: ignore
 
+ARG_LICENSE_NAMES = (
+    "Arthexis Reciprocity General License 1.0",
+    "Arthexis Reciprocity License 1.0",
+)
+ARG_LICENSE_REF = "LicenseRef-ARG-1.0"
+
 
 class TestsFailed(ReleaseError):
     """Raised when the test suite fails.
@@ -235,9 +241,9 @@ def _pep639_license_metadata(license_name: str) -> dict[str, object]:
         Mapping of ``project`` metadata keys for the license declaration.
     """
 
-    if license_name == "Arthexis Reciprocity License 1.0":
+    if license_name in ARG_LICENSE_NAMES:
         return {
-            "license": "LicenseRef-ARL-1.0",
+            "license": ARG_LICENSE_REF,
             "license-files": ["LICENSE"],
         }
     return {"license": license_name}

@@ -1,7 +1,7 @@
 # Constellation
 
 [![Copertura OCPP 1.6](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Copertura OCPP 2.0.1](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp201_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Copertura OCPP 2.1](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md)
-[![Install CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/install-hourly.yml?branch=main&label=Install%20CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/install-hourly.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![Licenza: ARL 1.0](https://raw.githubusercontent.com/arthexis/arthexis/main/static/docs/badges/license-arthexis-reciprocity.svg)](https://github.com/arthexis/arthexis/blob/main/LICENSE)
+[![Install CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/install-hourly.yml?branch=main&label=Install%20CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/install-hourly.yml) [![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/) [![Licenza: ARG 1.0](https://raw.githubusercontent.com/arthexis/arthexis/main/static/docs/badges/license-arthexis-reciprocity.svg)](https://github.com/arthexis/arthexis/blob/main/LICENSE)
 
 
 ## Scopo
@@ -153,6 +153,6 @@ Se decidi di utilizzare la nostra suite per i tuoi progetti energetici, puoi con
 
 ## Licenza e sponsorizzazione
 
-Arthexis è distribuito secondo la Arthexis Reciprocity License 1.0. Oltre a codice, documentazione, revisioni e manutenzione, consideriamo anche il sostegno economico ad Arthexis e il lavoro retribuito o volontario a favore delle dipendenze open source su cui ci basiamo come una forma di contributo valida e importante.
+Arthexis è distribuito secondo la Arthexis Reciprocity General License 1.0. Oltre a codice, documentazione, revisioni e manutenzione, consideriamo anche il sostegno economico ad Arthexis e il lavoro retribuito o volontario a favore delle dipendenze open source su cui ci basiamo come una forma di contributo valida e importante.
 
 Se Arthexis aiuta il tuo team, consulta i termini della licenza in [`LICENSE`](../../../LICENSE) e valuta la possibilità di sponsorizzare o sostenere direttamente chi mantiene le librerie, i framework e i progetti infrastrutturali che rendono possibile questa suite. Sostenere queste dipendenze aiuta a mantenere sano l'intero ecosistema Arthexis.
