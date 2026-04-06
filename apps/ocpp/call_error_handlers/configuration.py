@@ -404,10 +404,10 @@ async def handle_set_monitoring_level_error(consumer: CallErrorContext, message_
 async def handle_set_variable_monitoring_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle SetVariableMonitoring errors."""
     parts: list[str] = []
-    if error_code:
-        parts.append(f"code={str(error_code).strip()}")
-    if description:
-        parts.append(f"description={str(description).strip()}")
+    if (code_text := (error_code or "").strip()):
+        parts.append(f"code={code_text}")
+    if (description_text := (description or "").strip()):
+        parts.append(f"description={description_text}")
     if (details_text := _json_details(details)):
         parts.append(f"details={details_text}")
     message = "SetVariableMonitoring error" + ((": " + ", ".join(parts)) if parts else "")
@@ -419,10 +419,10 @@ async def handle_set_variable_monitoring_error(consumer: CallErrorContext, messa
 async def handle_clear_variable_monitoring_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle ClearVariableMonitoring errors."""
     parts: list[str] = []
-    if error_code:
-        parts.append(f"code={str(error_code).strip()}")
-    if description:
-        parts.append(f"description={str(description).strip()}")
+    if (code_text := (error_code or "").strip()):
+        parts.append(f"code={code_text}")
+    if (description_text := (description or "").strip()):
+        parts.append(f"description={description_text}")
     if (details_text := _json_details(details)):
         parts.append(f"details={details_text}")
     message = "ClearVariableMonitoring error" + ((": " + ", ".join(parts)) if parts else "")
@@ -434,10 +434,10 @@ async def handle_clear_variable_monitoring_error(consumer: CallErrorContext, mes
 async def handle_get_monitoring_report_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle GetMonitoringReport errors."""
     parts: list[str] = []
-    if error_code:
-        parts.append(f"code={str(error_code).strip()}")
-    if description:
-        parts.append(f"description={str(description).strip()}")
+    if (code_text := (error_code or "").strip()):
+        parts.append(f"code={code_text}")
+    if (description_text := (description or "").strip()):
+        parts.append(f"description={description_text}")
     if (details_text := _json_details(details)):
         parts.append(f"details={details_text}")
     message = "GetMonitoringReport error" + ((": " + ", ".join(parts)) if parts else "")

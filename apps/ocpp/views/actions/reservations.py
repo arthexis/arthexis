@@ -46,7 +46,7 @@ def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | Ac
         "idTag": id_tag,
         "reservationId": reservation.pk,
     }
-    if ocpp_version.startswith("ocpp2.0"):
+    if ocpp_version.startswith("ocpp2"):
         payload = {
             "id": reservation.pk,
             "expiryDateTime": expiry.isoformat(),
@@ -115,7 +115,7 @@ def _handle_cancel_reservation(context: ActionContext, data: dict) -> JsonRespon
     ocpp_version = str(getattr(context.ws, "ocpp_version", "") or "")
     payload = {"reservationId": reservation.pk}
     ocpp_action = "CancelReservation"
-    if ocpp_version.startswith("ocpp2.0"):
+    if ocpp_version.startswith("ocpp2"):
         payload = {"id": reservation.pk}
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
     msg = json.dumps([2, message_id, ocpp_action, payload])

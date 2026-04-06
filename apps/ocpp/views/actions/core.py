@@ -30,7 +30,7 @@ def _handle_remote_stop(context: ActionContext, _data: dict) -> JsonResponse | A
     ocpp_version = str(getattr(context.ws, "ocpp_version", "") or "")
     ocpp_action = "RemoteStopTransaction"
     payload: dict[str, object] = {"transactionId": tx_obj.pk}
-    if ocpp_version.startswith("ocpp2.0"):
+    if ocpp_version.startswith("ocpp2"):
         tx_identifier = tx_obj.ocpp_transaction_id or str(tx_obj.pk)
         payload = {"transactionId": str(tx_identifier)}
         ocpp_action = "RequestStopTransaction"
@@ -65,7 +65,7 @@ def _handle_remote_start(context: ActionContext, data: dict) -> JsonResponse | A
     ocpp_version = str(getattr(context.ws, "ocpp_version", "") or "")
     payload: dict[str, object]
     ocpp_action = "RemoteStartTransaction"
-    if ocpp_version.startswith("ocpp2.0"):
+    if ocpp_version.startswith("ocpp2"):
         remote_start_id = data.get("remoteStartId")
         try:
             remote_start_id_int = int(remote_start_id)
@@ -362,7 +362,7 @@ def _handle_change_availability(context: ActionContext, data: dict) -> JsonRespo
     ocpp_action = "ChangeAvailability"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
     payload = {"connectorId": connector_payload, "type": availability_type}
-    if ocpp_version.startswith("ocpp2.0"):
+    if ocpp_version.startswith("ocpp2"):
         payload = {"operationalStatus": availability_type}
         if connector_payload not in (None, ""):
             payload["evseId"] = connector_payload
@@ -509,7 +509,7 @@ def _handle_unlock_connector(context: ActionContext, data: dict) -> JsonResponse
     payload = {"connectorId": connector_id}
     ocpp_version = str(getattr(context.ws, "ocpp_version", "") or "")
     ocpp_action = "UnlockConnector"
-    if ocpp_version.startswith("ocpp2.0"):
+    if ocpp_version.startswith("ocpp2"):
         payload = {"evseId": connector_id, "connectorId": 1}
         ocpp_action = "UnlockConnector"
     message_id = uuid.uuid4().hex

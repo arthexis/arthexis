@@ -282,6 +282,32 @@ async def test_set_monitoring_level_error_clears_pending_call_from_action():
 
 
 @pytest.mark.anyio
+@pytest.mark.integration
+async def test_monitoring_call_error_logs_skip_blank_error_code():
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CP-MON-ERR-BLANK"
+    message_id = "msg-monitoring-error-blank"
+    metadata = {"action": "SetVariableMonitoring", "log_key": consumer.store_key}
+
+    result = await call_error_handlers.handle_set_variable_monitoring_error(
+        consumer,
+        message_id,
+        metadata,
+        "   ",
+        " rejected ",
+        {"reason": "test"},
+        consumer.store_key,
+    )
+
+    assert result is True
+    entries = list(store.logs["charger"].get(consumer.store_key, []))
+    assert entries
+    assert "SetVariableMonitoring error:" in entries[-1]
+    assert "code=" not in entries[-1]
+    assert "description=rejected" in entries[-1]
+
+
+@pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.integration
 async def test_unlock_connector_result_updates_state():

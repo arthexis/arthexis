@@ -1,18 +1,19 @@
 import json
 
 import pytest
+from django.utils import timezone
 
 from apps.ocpp import store
-from apps.ocpp.tasks import request_charge_point_log
 from apps.ocpp.models import (
     Charger,
     CertificateOperation,
-    InstalledCertificate,
     CPFirmware,
     CPFirmwareDeployment,
+    InstalledCertificate,
 )
+from apps.ocpp.tasks import request_charge_point_log
 from apps.ocpp.views import actions
-from apps.ocpp.views.actions import charging_profiles
+from apps.ocpp.views.actions import charging_profiles, core, reservations
 from apps.ocpp.views.common import ActionContext, ActionCall
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
@@ -81,6 +82,104 @@ def test_unlock_connector_supports_ocpp201(ws):
     assert message_id in store.pending_calls
     assert store.pending_calls[message_id]["log_key"] == log_key
     assert message_id in store._pending_call_handles
+
+
+def test_unlock_connector_supports_ocpp21_payload_shape(ws):
+    ws.ocpp_version = "ocpp2.1"
+    log_key = store.identity_key("CID", 2)
+    context = ActionContext("CID", 2, charger=None, ws=ws, log_key=log_key)
+
+    result = core._handle_unlock_connector(context, {})
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "UnlockConnector"
+    assert message[3] == {"evseId": 2, "connectorId": 1}
+
+
+def test_change_availability_supports_ocpp21_payload_shape(ws):
+    ws.ocpp_version = "ocpp2.1"
+    log_key = store.identity_key("CID", 2)
+    context = ActionContext("CID", 2, charger=None, ws=ws, log_key=log_key)
+
+    result = core._handle_change_availability(context, {"type": "Operative"})
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "ChangeAvailability"
+    assert message[3] == {"operationalStatus": "Operative", "evseId": 2}
+
+
+def test_reserve_now_supports_ocpp21_payload_shape(monkeypatch, ws):
+    ws.ocpp_version = "ocpp2.1"
+
+    class ReservationStub:
+        pk = 7
+        id_tag_value = "TAG-1"
+        connector = type("ConnectorStub", (), {"connector_id": 3})()
+        end_time = timezone.now()
+        ocpp_message_id = ""
+        evcs_status = ""
+        evcs_error = ""
+        evcs_confirmed = False
+        evcs_confirmed_at = None
+
+        def save(self, **_kwargs):
+            return None
+
+    class QueryStub:
+        def filter(self, **_kwargs):
+            return self
+
+        def first(self):
+            return ReservationStub()
+
+    monkeypatch.setattr(reservations, "CPReservation", type("ReservationModel", (), {"objects": QueryStub()}))
+    monkeypatch.setattr(store, "get_connection", lambda _cid, _connector: ws)
+
+    context = ActionContext("CID", 3, charger=None, ws=ws, log_key=store.identity_key("CID", 3))
+    result = reservations._handle_reserve_now(context, {"reservation": 7})
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "ReserveNow"
+    expected_expiry = timezone.localtime(ReservationStub.end_time).isoformat()
+    assert message[3] == {
+        "id": 7,
+        "expiryDateTime": expected_expiry,
+        "idToken": {"idToken": "TAG-1", "type": "Central"},
+        "evseId": 3,
+    }
+
+
+def test_cancel_reservation_supports_ocpp21_payload_shape(monkeypatch, ws):
+    ws.ocpp_version = "ocpp2.1"
+
+    class ReservationStub:
+        pk = 11
+        ocpp_message_id = ""
+        evcs_status = ""
+        evcs_error = ""
+
+        def save(self, **_kwargs):
+            return None
+
+    class QueryStub:
+        def filter(self, **_kwargs):
+            return self
+
+        def first(self):
+            return ReservationStub()
+
+    monkeypatch.setattr(reservations, "CPReservation", type("ReservationModel", (), {"objects": QueryStub()}))
+
+    context = ActionContext("CID", 3, charger=None, ws=ws, log_key=store.identity_key("CID", 3))
+    result = reservations._handle_cancel_reservation(context, {"reservation": 11})
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "CancelReservation"
+    assert message[3] == {"id": 11}
 
 
 def test_send_local_list_supports_ocpp201(ws):
