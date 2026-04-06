@@ -25,8 +25,8 @@ def run_coverage_ocpp21(*, badge_path=None, json_path=None, stdout=None, stderr=
     implemented_csms_to_cp = _implemented_csms_to_cp(app_dir)
     real_cp_to_csms_201, real_csms_to_cp_201 = _collect_real_decorated_actions(app_dir, "ocpp201")
     real_cp_to_csms_21, real_csms_to_cp_21 = _collect_real_decorated_actions(app_dir, "ocpp21")
-    implemented_cp_to_csms &= real_cp_to_csms_201 | real_cp_to_csms_21
-    implemented_csms_to_cp &= real_csms_to_cp_201 | real_csms_to_cp_21
+    implemented_cp_to_csms |= real_cp_to_csms_201 | real_cp_to_csms_21
+    implemented_csms_to_cp |= real_csms_to_cp_201 | real_csms_to_cp_21
     spec_cp_to_csms = set(spec["cp_to_csms"])
     spec_csms_to_cp = set(spec["csms_to_cp"])
     cp_to_csms_coverage = sorted(spec_cp_to_csms & implemented_cp_to_csms)

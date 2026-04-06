@@ -101,8 +101,8 @@ def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr
     implemented_cp_to_csms = _implemented_cp_to_csms(app_dir)
     implemented_csms_to_cp = _implemented_csms_to_cp(app_dir)
     real_cp_to_csms, real_csms_to_cp = _collect_real_decorated_actions(app_dir, "ocpp201")
-    implemented_cp_to_csms &= real_cp_to_csms
-    implemented_csms_to_cp &= real_csms_to_cp
+    implemented_cp_to_csms |= real_cp_to_csms
+    implemented_csms_to_cp |= real_csms_to_cp
     spec_cp_to_csms = set(spec["cp_to_csms"])
     spec_csms_to_cp = set(spec["csms_to_cp"])
     cp_to_csms_coverage = sorted(spec_cp_to_csms & implemented_cp_to_csms)

@@ -6,6 +6,7 @@ import pytest
 from apps.ocpp import store
 from apps.ocpp.consumers.csms.consumer import CSMSConsumer
 from apps.ocpp.consumers.csms.dispatch import build_action_registry
+from apps.ocpp.management import coverage_ocpp201_impl, coverage_ocpp21_impl
 from apps.ocpp.management.coverage_ocpp21_impl import run_coverage_ocpp21
 from apps.ocpp.management.coverage_ocpp201_impl import _collect_real_decorated_actions
 from apps.ocpp.models import (
@@ -590,3 +591,57 @@ def test_run_coverage_ocpp21_keeps_shared_ocpp201_handlers(monkeypatch, tmp_path
 
     assert report["implemented"]["cp_to_csms"] == ["Heartbeat"]
     assert report["coverage"]["overall"]["percent"] == 100.0
+
+
+def test_run_coverage_ocpp201_keeps_decorator_only_cp_to_csms(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "apps.ocpp.management.coverage_ocpp201_impl._load_spec",
+        lambda: {"cp_to_csms": ["Heartbeat"], "csms_to_cp": []},
+    )
+    monkeypatch.setattr(
+        "apps.ocpp.management.coverage_ocpp201_impl._implemented_cp_to_csms",
+        lambda _app_dir: set(),
+    )
+    monkeypatch.setattr(
+        "apps.ocpp.management.coverage_ocpp201_impl._implemented_csms_to_cp",
+        lambda _app_dir: set(),
+    )
+    monkeypatch.setattr(
+        "apps.ocpp.management.coverage_ocpp201_impl._collect_real_decorated_actions",
+        lambda _app_dir, _slug: ({"Heartbeat"}, set()),
+    )
+
+    json_path = tmp_path / "coverage201.json"
+    badge_path = tmp_path / "coverage201.svg"
+    coverage_ocpp201_impl.run_coverage_ocpp201(
+        json_path=str(json_path),
+        badge_path=str(badge_path),
+    )
+    report = json.loads(json_path.read_text(encoding="utf-8"))
+
+    assert report["implemented"]["cp_to_csms"] == ["Heartbeat"]
+    assert report["coverage"]["cp_to_csms"]["supported"] == ["Heartbeat"]
+
+
+@pytest.mark.parametrize(
+    ("protocol_slug", "coverage_path", "load_spec"),
+    (
+        ("ocpp201", Path("apps/ocpp/coverage201.json"), coverage_ocpp201_impl._load_spec),
+        ("ocpp21", Path("apps/ocpp/coverage21.json"), coverage_ocpp21_impl._load_spec),
+    ),
+)
+def test_coverage_artifacts_match_decorator_cp_to_csms_reality(
+    protocol_slug,
+    coverage_path,
+    load_spec,
+):
+    app_dir = Path(__file__).resolve().parents[1]
+    spec_cp_to_csms = set(load_spec()["cp_to_csms"])
+    decorated_cp_to_csms, _ = _collect_real_decorated_actions(app_dir, protocol_slug)
+    if protocol_slug == "ocpp21":
+        decorated_cp_to_csms_201, _ = _collect_real_decorated_actions(app_dir, "ocpp201")
+        decorated_cp_to_csms |= decorated_cp_to_csms_201
+    expected_supported = sorted(spec_cp_to_csms & decorated_cp_to_csms)
+
+    report = json.loads(coverage_path.read_text(encoding="utf-8"))
+    assert report["coverage"]["cp_to_csms"]["supported"] == expected_supported
