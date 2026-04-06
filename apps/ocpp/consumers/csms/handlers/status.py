@@ -24,6 +24,46 @@ logger = logging.getLogger(__name__)
 class StatusHandlersMixin:
     """Handle heartbeat and status notification actions."""
 
+    def _normalized_status_notification_payload(self, payload: object) -> dict:
+        """Return legacy-compatible status payload keys for OCPP 2.1 parity."""
+
+        payload_data = payload if isinstance(payload, dict) else {}
+        normalized = dict(payload_data)
+
+        connector_id = payload_data.get("connectorId")
+        if connector_id is None:
+            evse_data = payload_data.get("evse")
+            if isinstance(evse_data, dict):
+                connector_id = evse_data.get("connectorId")
+                if connector_id is None:
+                    connector_id = evse_data.get("id")
+        if connector_id is None:
+            connector_id = payload_data.get("evseId")
+        if connector_id is not None:
+            normalized["connectorId"] = connector_id
+
+        status_value = payload_data.get("status")
+        if status_value is None:
+            status_value = payload_data.get("connectorStatus")
+        if status_value is not None:
+            normalized["status"] = status_value
+
+        if (
+            normalized.get("errorCode") is None
+            and payload_data.get("connectorStatus") is not None
+        ):
+            normalized["errorCode"] = "NoError"
+
+        status_info = payload_data.get("statusInfo")
+        if isinstance(status_info, dict):
+            if not normalized.get("info"):
+                normalized["info"] = status_info.get("additionalInfo")
+            if not normalized.get("vendorId"):
+                normalized["vendorId"] = status_info.get("reasonCode")
+
+        return normalized
+
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "Heartbeat")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Heartbeat")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "Heartbeat")
     async def _handle_heartbeat_action(self, payload, msg_id, raw, text_data):
@@ -38,19 +78,24 @@ class StatusHandlersMixin:
         )
         return reply_payload
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "StatusNotification")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "StatusNotification")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StatusNotification")
     async def _handle_status_notification_action(self, payload, msg_id, raw, text_data):
-        await self._assign_connector(payload.get("connectorId"))
-        status = (payload.get("status") or "").strip()
-        error_code = (payload.get("errorCode") or "").strip()
+        payload_data = self._normalized_status_notification_payload(payload)
+        await self._assign_connector(payload_data.get("connectorId"))
+        status = (payload_data.get("status") or "").strip()
+        error_code = (payload_data.get("errorCode") or "").strip()
         vendor_info = {
             key: value
-            for key, value in (("info", payload.get("info")), ("vendorId", payload.get("vendorId")))
+            for key, value in (
+                ("info", payload_data.get("info")),
+                ("vendorId", payload_data.get("vendorId")),
+            )
             if value
         }
         vendor_value = vendor_info or None
-        timestamp_raw = payload.get("timestamp")
+        timestamp_raw = payload_data.get("timestamp")
         status_timestamp = parse_datetime(timestamp_raw) if timestamp_raw else None
         if status_timestamp is None:
             status_timestamp = timezone.now()
@@ -62,7 +107,7 @@ class StatusHandlersMixin:
             "last_status_vendor_info": vendor_value,
             "last_status_timestamp": status_timestamp,
         }
-        connector_value = payload.get("connectorId")
+        connector_value = payload_data.get("connectorId")
         await database_sync_to_async(persistence.update_status_notification_records)(
             charger_id=self.charger_id,
             connector_value=connector_value,
@@ -93,7 +138,7 @@ class StatusHandlersMixin:
                 store.stop_session_lock()
         store.add_log(
             self.store_key,
-            f"StatusNotification processed: {json.dumps(payload, sort_keys=True)}",
+            f"StatusNotification processed: {json.dumps(payload_data, sort_keys=True)}",
             log_type="charger",
         )
         availability_state = Charger.availability_state_from_status(status)
