@@ -1,6 +1,7 @@
 """Tests for OCPP consumer action dispatch and extracted handler adapters."""
 
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from apps.ocpp import store
 from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.consumers.base.routing import ActionRouter
+from apps.ocpp.models import Transaction
 
 
 @pytest.fixture(autouse=True)
@@ -110,3 +112,24 @@ def test_meter_values_normalization_maps_ocpp21_evse_to_connector_id():
     )
 
     assert normalized["connectorId"] == "4"
+
+
+@pytest.mark.anyio
+async def test_store_meter_values_resolves_non_numeric_transaction_id_from_db(monkeypatch):
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CP-TX"
+    consumer.charger = SimpleNamespace(id=10)
+    consumer._assign_connector = AsyncMock()
+    consumer._ensure_ocpp_transaction_identifier = AsyncMock()
+    consumer._process_meter_value_entries = AsyncMock()
+
+    resolved = SimpleNamespace(pk=42, ocpp_transaction_id="tx-uuid-42")
+    lookup = AsyncMock(return_value=resolved)
+    monkeypatch.setattr(Transaction, "aget_by_ocpp_id", lookup)
+
+    store.transactions.pop(consumer.store_key, None)
+    payload = {"connectorId": 1, "transactionId": "tx-uuid-42", "meterValue": []}
+    await consumer._store_meter_values(payload, raw_message='[2, "id", "MeterValues", {}]')
+
+    lookup.assert_awaited_once_with(consumer.charger, "tx-uuid-42")
+    assert store.transactions[consumer.store_key] is resolved

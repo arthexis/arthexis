@@ -460,13 +460,23 @@ class CSMSConsumer(
                 tx_pk = int(tx_id)
             except (TypeError, ValueError):
                 tx_pk = None
-        tx_obj = None
+        tx_obj = store.transactions.get(self.store_key)
         if tx_id is not None:
-            tx_obj = store.transactions.get(self.store_key)
-            if tx_pk is not None and (not tx_obj or tx_obj.pk != tx_pk):
-                tx_obj = await database_sync_to_async(
-                    Transaction.objects.filter(pk=tx_pk, charger=self.charger).first
-                )()
+            needs_lookup = False
+            if tx_pk is not None:
+                if not tx_obj or tx_obj.pk != tx_pk:
+                    needs_lookup = True
+            elif not tx_obj or tx_obj.ocpp_transaction_id != str(tx_id):
+                needs_lookup = True
+
+            if needs_lookup:
+                if tx_pk is not None:
+                    tx_obj = await database_sync_to_async(
+                        Transaction.objects.filter(pk=tx_pk, charger=self.charger).first
+                    )()
+                else:
+                    tx_obj = await Transaction.aget_by_ocpp_id(self.charger, str(tx_id))
+
             if tx_obj is None and tx_pk is not None:
                 tx_obj = await database_sync_to_async(Transaction.objects.create)(
                     pk=tx_pk,
@@ -478,8 +488,6 @@ class CSMSConsumer(
                 store.add_session_message(self.store_key, raw_message)
             if tx_obj is not None:
                 store.transactions[self.store_key] = tx_obj
-        else:
-            tx_obj = store.transactions.get(self.store_key)
 
         await self._ensure_ocpp_transaction_identifier(
             tx_obj, str(tx_id) if tx_id else None
