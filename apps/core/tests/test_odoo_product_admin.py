@@ -7,10 +7,11 @@ from django.utils import timezone
 import pytest
 
 from apps.features.models import Feature
-from apps.odoo.models import OdooEmployee, OdooProduct
+from apps.odoo.models import OdooEmployee
 from apps.odoo.sync_features import ODOO_CRM_SYNC_SUITE_FEATURE_SLUG
 from apps.odoo.tests.helpers import odoo_sync_metadata
 from apps.users.models import User
+
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("disable_suite", [True, False])
@@ -52,6 +53,7 @@ def test_load_employees_action_respects_sync_feature_toggle(
     assert response.status_code == 302
     assert OdooEmployee.objects.count() == 1
 
+
 @pytest.mark.integration
 @pytest.mark.django_db
 def test_load_employees_action_requires_verified_profile(admin_client, admin_user, monkeypatch):
@@ -73,6 +75,7 @@ def test_load_employees_action_requires_verified_profile(admin_client, admin_use
     response = admin_client.post(reverse("admin:odoo_odooemployee_load_employees"))
     assert response.status_code == 302
     assert OdooEmployee.objects.count() == 1
+
 
 @pytest.mark.django_db
 def test_load_employees_action_requires_change_permission(client, monkeypatch):

@@ -1,19 +1,21 @@
 import json
+from pathlib import Path
 
 import pytest
 
+from apps.ocpp.management.coverage_ocpp201_impl import _collect_real_decorated_actions
+from apps.ocpp.management.coverage_ocpp21_impl import run_coverage_ocpp21
 from apps.ocpp import store
-from apps.ocpp.tasks import request_charge_point_log
 from apps.ocpp.models import (
-    Charger,
     CertificateOperation,
-    InstalledCertificate,
     CPFirmware,
     CPFirmwareDeployment,
+    InstalledCertificate,
 )
+from apps.ocpp.tasks import request_charge_point_log
 from apps.ocpp.views import actions
 from apps.ocpp.views.actions import charging_profiles
-from apps.ocpp.views.common import ActionContext, ActionCall
+from apps.ocpp.views.common import ActionCall, ActionContext
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 
@@ -191,6 +193,35 @@ def test_clear_charging_profile_registers_pending_call(ws):
     assert store.pending_calls[message_id]["charging_profile_id"] == 7
     assert store.pending_calls[message_id]["evse_id"] == 2
     assert message_id in store._pending_call_handles
+
+
+def test_ocpp201_cp_to_csms_calls_resolve_to_handlers():
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    action_registry = build_action_registry(consumer)
+
+    assert action_registry["BootNotification"] == consumer._handle_boot_notification_action
+    assert action_registry["Authorize"] == consumer._handle_authorize_action
+    assert action_registry["CostUpdated"] == consumer._handle_cost_updated_action
+    assert (
+        action_registry["ReservationStatusUpdate"]
+        == consumer._handle_reservation_status_update_action
+    )
+
+    boot_calls = consumer._handle_boot_notification_action.__protocol_calls__
+    authorize_calls = consumer._handle_authorize_action.__protocol_calls__
+    cost_calls = consumer._handle_cost_updated_action.__protocol_calls__
+    reservation_calls = consumer._handle_reservation_status_update_action.__protocol_calls__
+
+    assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "BootNotification") in boot_calls
+    assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Authorize") in authorize_calls
+    assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "CostUpdated") in cost_calls
+    assert (
+        "ocpp201",
+        ProtocolCallModel.CP_TO_CSMS,
+        "ReservationStatusUpdate",
+    ) in reservation_calls
+
+
 def test_firmware_actions_register_ocpp201_and_ocpp21():
     update_calls = actions._handle_update_firmware.__protocol_calls__
     publish_calls = actions._handle_publish_firmware.__protocol_calls__
@@ -464,3 +495,95 @@ def test_get_monitoring_report_registers_pending_request(ws):
     assert message_id in store.pending_calls
     request_id = store.pending_calls[message_id]["request_id"]
     assert request_id in store.monitoring_report_requests
+
+
+def test_collect_real_decorated_actions_excludes_stub_handlers(tmp_path):
+    app_dir = tmp_path / "apps" / "ocpp"
+    app_dir.mkdir(parents=True)
+    (app_dir / "coverage_stubs.py").write_text(
+        """
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
+
+@protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "StubFromCoverageModule")
+def stub_from_module():
+    raise NotImplementedError
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (app_dir / "handlers.py").write_text(
+        """
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
+
+@protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "RealCpToCsms")
+def real_cp_to_csms():
+    return {}
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "RealCsmsToCp")
+def real_csms_to_cp():
+    return {}
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "StubByBody")
+def stub_by_body():
+    raise NotImplementedError("todo")
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    tests_dir = app_dir / "tests"
+    tests_dir.mkdir(parents=True)
+    (tests_dir / "test_handlers.py").write_text(
+        """
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
+
+@protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "FromTests")
+def from_tests():
+    return {}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cp_to_csms, csms_to_cp = _collect_real_decorated_actions(Path(app_dir), "ocpp201")
+
+    assert "RealCpToCsms" in cp_to_csms
+    assert "RealCsmsToCp" in csms_to_cp
+    assert "StubFromCoverageModule" not in cp_to_csms
+    assert "FromTests" not in cp_to_csms
+    assert "StubByBody" not in csms_to_cp
+
+
+def test_run_coverage_ocpp21_keeps_shared_ocpp201_handlers(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "apps.ocpp.management.coverage_ocpp21_impl._load_spec",
+        lambda: {"cp_to_csms": ["Heartbeat"], "csms_to_cp": []},
+    )
+    monkeypatch.setattr(
+        "apps.ocpp.management.coverage_ocpp21_impl._implemented_cp_to_csms",
+        lambda _app_dir: {"Heartbeat"},
+    )
+    monkeypatch.setattr(
+        "apps.ocpp.management.coverage_ocpp21_impl._implemented_csms_to_cp",
+        lambda _app_dir: set(),
+    )
+
+    def _collect(_app_dir, slug):
+        if slug == "ocpp201":
+            return {"Heartbeat"}, set()
+        return set(), set()
+
+    monkeypatch.setattr(
+        "apps.ocpp.management.coverage_ocpp21_impl._collect_real_decorated_actions",
+        _collect,
+    )
+
+    json_path = tmp_path / "coverage21.json"
+    badge_path = tmp_path / "coverage21.svg"
+    run_coverage_ocpp21(json_path=str(json_path), badge_path=str(badge_path))
+    report = json.loads(json_path.read_text(encoding="utf-8"))
+
+    assert report["implemented"]["cp_to_csms"] == ["Heartbeat"]
+    assert report["coverage"]["overall"]["percent"] == 100.0
