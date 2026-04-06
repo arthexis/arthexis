@@ -694,9 +694,17 @@ async def test_cost_updated_persists_and_forwards():
     assert cost_update.ocpp_transaction_id == "TX-1"
     assert str(cost_update.total_cost) == "15.750"
     assert cost_update.currency == "USD"
-    assert any(
-        entry.get("cost_update_id") == cost_update.pk for entry in store.billing_updates
-    )
+    assert list(store.billing_updates) == [
+        {
+            "charger_id": charger.charger_id,
+            "connector_id": 1,
+            "transaction_id": "TX-1",
+            "cost_update_id": cost_update.pk,
+            "total_cost": "15.75",
+            "currency": "USD",
+            "reported_at": cost_update.reported_at,
+        }
+    ]
 
 
 @pytest.mark.anyio
@@ -720,6 +728,34 @@ async def test_cost_updated_rejects_invalid_payload():
     assert result == {}
     exists = await database_sync_to_async(CostUpdate.objects.filter)(charger=charger)
     assert not await database_sync_to_async(exists.exists)()
+    entries = list(store.logs["charger"].get(consumer.store_key, []))
+    assert any("CostUpdated ignored: invalid totalCost" in entry for entry in entries)
+    assert not store.billing_updates
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
+@pytest.mark.integration
+async def test_cost_updated_requires_transaction_id():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="COST-3"
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, 1)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.connector_value = 1
+
+    result = await consumer._handle_cost_updated_action(
+        {"totalCost": "9.50", "currency": "USD"}, "msg-missing-tx", "", ""
+    )
+
+    assert result == {}
+    exists = await database_sync_to_async(CostUpdate.objects.filter)(charger=charger)
+    assert not await database_sync_to_async(exists.exists)()
+    entries = list(store.logs["charger"].get(consumer.store_key, []))
+    assert any("CostUpdated ignored: missing transactionId" in entry for entry in entries)
     assert not store.billing_updates
 
 
