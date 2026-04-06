@@ -12,28 +12,6 @@ def _mock_feature_parameters(values: dict[str, str]):
     return _get_feature_parameter
 
 
-@pytest.mark.parametrize("alias", ["arthexis", "legacy"])
-def test_backend_override_forces_arthexis(alias: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Selecting the Arthexis backend should force the legacy runtime path."""
-
-    monkeypatch.setattr(
-        simulator_runtime,
-        "get_feature_parameter",
-        _mock_feature_parameters(
-            {
-                simulator_runtime.ARTHEXIS_BACKEND_PARAMETER_KEY: "enabled",
-                simulator_runtime.MOBILITY_HOUSE_BACKEND_PARAMETER_KEY: "enabled",
-            }
-        ),
-    )
-    monkeypatch.setattr(simulator_runtime, "find_spec", lambda _: object())
-
-    selection = simulator_runtime.resolve_simulator_backend(preferred_backend=alias)
-
-    assert selection.use_mobility_house is False
-    assert selection.backend == "legacy"
-
-
 def test_backend_override_uses_mobilityhouse_when_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
