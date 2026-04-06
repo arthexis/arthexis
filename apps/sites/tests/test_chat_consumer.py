@@ -86,6 +86,28 @@ class ChatConsumerPresenceDebounceTests(TestCase):
 class ChatConsumerAccessControlTests(TestCase):
     """Coverage for server-side chat access control checks."""
 
+    def test_chat_access_denied_without_site_or_profile_opt_in(self):
+        """Regression: anonymous users should be denied when site public chat is disabled."""
+
+        consumer = ChatConsumer()
+
+        with (
+            mock.patch("apps.sites.consumers.settings.PAGES_CHAT_ENABLED", True),
+            mock.patch(
+                "apps.sites.consumers.is_suite_feature_enabled", return_value=True
+            ),
+            mock.patch.object(
+                consumer,
+                "_current_site",
+                return_value=SimpleNamespace(
+                    profile=SimpleNamespace(enable_public_chat=False)
+                ),
+            ),
+        ):
+            allowed = consumer._is_chat_access_allowed_sync(user=SimpleNamespace())
+
+        self.assertFalse(allowed)
+
     def test_chat_access_allowed_when_site_public_chat_enabled(self):
         """Visitors should be able to connect when site-level public chat is enabled."""
 
@@ -105,6 +127,93 @@ class ChatConsumerAccessControlTests(TestCase):
             ),
         ):
             allowed = consumer._is_chat_access_allowed_sync(user=SimpleNamespace())
+
+        self.assertTrue(allowed)
+
+    def test_chat_access_allowed_when_authenticated_user_opted_in(self):
+        """Authenticated users with chat opt-in should be allowed even without site public chat."""
+
+        consumer = ChatConsumer()
+        user = SimpleNamespace(
+            is_authenticated=True,
+            is_staff=False,
+            is_superuser=False,
+            pk=123,
+            get_profile=lambda _profile_cls: SimpleNamespace(contact_via_chat=True),
+        )
+
+        with (
+            mock.patch("apps.sites.consumers.settings.PAGES_CHAT_ENABLED", True),
+            mock.patch(
+                "apps.sites.consumers.is_suite_feature_enabled", return_value=True
+            ),
+            mock.patch.object(
+                consumer,
+                "_current_site",
+                return_value=SimpleNamespace(
+                    profile=SimpleNamespace(enable_public_chat=False)
+                ),
+            ),
+        ):
+            allowed = consumer._is_chat_access_allowed_sync(user=user)
+
+        self.assertTrue(allowed)
+
+    def test_chat_access_allowed_for_staff_without_site_or_profile_opt_in(self):
+        """Staff should retain chat access even when public chat and opt-in are off."""
+
+        consumer = ChatConsumer()
+        user = SimpleNamespace(
+            is_authenticated=True,
+            is_staff=True,
+            is_superuser=False,
+            pk=456,
+            get_profile=lambda _profile_cls: SimpleNamespace(contact_via_chat=False),
+        )
+
+        with (
+            mock.patch("apps.sites.consumers.settings.PAGES_CHAT_ENABLED", True),
+            mock.patch(
+                "apps.sites.consumers.is_suite_feature_enabled", return_value=True
+            ),
+            mock.patch.object(
+                consumer,
+                "_current_site",
+                return_value=SimpleNamespace(
+                    profile=SimpleNamespace(enable_public_chat=False)
+                ),
+            ),
+        ):
+            allowed = consumer._is_chat_access_allowed_sync(user=user)
+
+        self.assertTrue(allowed)
+
+    def test_chat_access_allowed_for_superuser_without_site_or_profile_opt_in(self):
+        """Superusers should retain chat access even when public chat and opt-in are off."""
+
+        consumer = ChatConsumer()
+        user = SimpleNamespace(
+            is_authenticated=True,
+            is_staff=False,
+            is_superuser=True,
+            pk=789,
+            get_profile=lambda _profile_cls: SimpleNamespace(contact_via_chat=False),
+        )
+
+        with (
+            mock.patch("apps.sites.consumers.settings.PAGES_CHAT_ENABLED", True),
+            mock.patch(
+                "apps.sites.consumers.is_suite_feature_enabled", return_value=True
+            ),
+            mock.patch.object(
+                consumer,
+                "_current_site",
+                return_value=SimpleNamespace(
+                    profile=SimpleNamespace(enable_public_chat=False)
+                ),
+            ),
+        ):
+            allowed = consumer._is_chat_access_allowed_sync(user=user)
 
         self.assertTrue(allowed)
 
@@ -132,3 +241,48 @@ class ChatConsumerAccessControlTests(TestCase):
         self.assertIs(site, resolved_site)
         mock_select_related.assert_called_once_with("profile")
         mock_get_current.assert_not_called()
+
+    def test_chat_access_denied_when_pages_chat_feature_disabled(self):
+        """Regression: websocket access must honor the pages-chat runtime gate."""
+
+        consumer = ChatConsumer()
+
+        with (
+            mock.patch("apps.sites.consumers.settings.PAGES_CHAT_ENABLED", True),
+            mock.patch(
+                "apps.sites.consumers.is_suite_feature_enabled",
+                side_effect=lambda slug, default=False: slug == "staff-chat-bridge",
+            ),
+            mock.patch.object(
+                consumer,
+                "_current_site",
+                return_value=SimpleNamespace(
+                    profile=SimpleNamespace(enable_public_chat=True)
+                ),
+            ),
+        ):
+            allowed = consumer._is_chat_access_allowed_sync(user=SimpleNamespace())
+
+        self.assertFalse(allowed)
+
+    def test_chat_access_denied_when_staff_chat_bridge_feature_disabled(self):
+        """Chat must be disabled when the bridge feature flag is off."""
+
+        consumer = ChatConsumer()
+
+        with (
+            mock.patch("apps.sites.consumers.settings.PAGES_CHAT_ENABLED", True),
+            mock.patch(
+                "apps.sites.consumers.is_suite_feature_enabled", return_value=False
+            ),
+            mock.patch.object(
+                consumer,
+                "_current_site",
+                return_value=SimpleNamespace(
+                    profile=SimpleNamespace(enable_public_chat=True)
+                ),
+            ),
+        ):
+            allowed = consumer._is_chat_access_allowed_sync(user=SimpleNamespace())
+
+        self.assertFalse(allowed)
