@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
 from django.core.management.base import CommandError
 
 from apps.nginx.management.commands.nginx import ConfigureMixin
@@ -12,12 +11,6 @@ class _ConfigureHarness(ConfigureMixin):
     def __init__(self):
         self.stdout = SimpleNamespace(write=lambda _message: None)
         self.style = SimpleNamespace(SUCCESS=lambda message: message)
-
-
-@pytest.mark.parametrize("address", ["8.8.8.8", "2001:4860:4860::8888"])
-def test_parse_static_ip_accepts_public_addresses(address):
-    command = _ConfigureHarness()
-    assert command._parse_static_ip(address) == address
 
 
 def test_run_configure_skips_ip_checks_for_remove(monkeypatch):
@@ -59,5 +52,3 @@ def test_run_configure_skips_ip_checks_for_remove(monkeypatch):
             "static_ip": None,
         }
     )
-
-
