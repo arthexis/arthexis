@@ -3,17 +3,19 @@ import json
 import pytest
 
 from apps.ocpp import store
-from apps.ocpp.tasks import request_charge_point_log
+from apps.ocpp.consumers.csms.consumer import CSMSConsumer
+from apps.ocpp.consumers.csms.dispatch import build_action_registry
 from apps.ocpp.models import (
-    Charger,
     CertificateOperation,
-    InstalledCertificate,
+    Charger,
     CPFirmware,
     CPFirmwareDeployment,
+    InstalledCertificate,
 )
+from apps.ocpp.tasks import request_charge_point_log
 from apps.ocpp.views import actions
 from apps.ocpp.views.actions import charging_profiles
-from apps.ocpp.views.common import ActionContext, ActionCall
+from apps.ocpp.views.common import ActionCall, ActionContext
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 
@@ -191,6 +193,38 @@ def test_clear_charging_profile_registers_pending_call(ws):
     assert store.pending_calls[message_id]["charging_profile_id"] == 7
     assert store.pending_calls[message_id]["evse_id"] == 2
     assert message_id in store._pending_call_handles
+
+
+def test_ocpp201_cp_to_csms_calls_resolve_to_handlers():
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    action_registry = build_action_registry(consumer)
+
+    assert action_registry["BootNotification"] == consumer._handle_boot_notification_action
+    authorize_handler = action_registry["Authorize"]
+    assert authorize_handler.__name__ == "handle"
+    assert authorize_handler.__self__.__class__.__name__ == "AuthorizationActionHandler"
+    assert authorize_handler.__self__.consumer is consumer
+    assert action_registry["CostUpdated"] == consumer._handle_cost_updated_action
+    assert (
+        action_registry["ReservationStatusUpdate"]
+        == consumer._handle_reservation_status_update_action
+    )
+
+    boot_calls = consumer._handle_boot_notification_action.__protocol_calls__
+    authorize_calls = consumer._handle_authorize_action.__protocol_calls__
+    cost_calls = consumer._handle_cost_updated_action.__protocol_calls__
+    reservation_calls = consumer._handle_reservation_status_update_action.__protocol_calls__
+
+    assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "BootNotification") in boot_calls
+    assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Authorize") in authorize_calls
+    assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "CostUpdated") in cost_calls
+    assert (
+        "ocpp201",
+        ProtocolCallModel.CP_TO_CSMS,
+        "ReservationStatusUpdate",
+    ) in reservation_calls
+
+
 def test_firmware_actions_register_ocpp201_and_ocpp21():
     update_calls = actions._handle_update_firmware.__protocol_calls__
     publish_calls = actions._handle_publish_firmware.__protocol_calls__
