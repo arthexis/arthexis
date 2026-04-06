@@ -42,6 +42,13 @@ DEFAULT_STAFF_TASKS: tuple[dict[str, object], ...] = (
         "order": 55,
     },
     {
+        "slug": "imager",
+        "label": "Imager",
+        "description": "Open the Raspberry Pi image builder wizard.",
+        "action_name": "imager",
+        "order": 58,
+    },
+    {
         "slug": "logs",
         "label": "Logs",
         "description": "Browse system and application logs.",

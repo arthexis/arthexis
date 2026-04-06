@@ -6,6 +6,8 @@ import pytest
 from django.test import override_settings
 from django.urls import reverse
 
+from apps.imager.models import RaspberryPiImageArtifact
+
 
 @pytest.mark.django_db
 @pytest.mark.integration
@@ -47,3 +49,78 @@ def test_imager_admin_create_rpi_image_view_rejects_disallowed_paths(
         in response.content.decode("utf-8")
     )
     mock_build.assert_not_called()
+
+
+@pytest.mark.django_db
+@override_settings(
+    IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=("/tmp",),
+    IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS=("/tmp",),
+)
+@patch("apps.imager.admin.build_rpi4b_image")
+def test_imager_admin_create_rpi_image_view_shows_artifact_download_actions(mock_build, admin_client, tmp_path):
+    """Regression: successful builds should return to the wizard with artifact URL actions."""
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    output_path = output_dir / "stable-rpi-4b.img"
+    output_path.write_bytes(b"artifact")
+
+    artifact = RaspberryPiImageArtifact.objects.create(
+        name="stable",
+        target="rpi-4b",
+        base_image_uri=str(tmp_path / "base.img"),
+        output_filename=output_path.name,
+        output_path=str(output_path),
+        sha256="abc123",
+        size_bytes=8,
+        download_uri="https://cdn.example.com/images/stable-rpi-4b.img",
+        metadata={},
+    )
+
+    mock_build.return_value = type("BuildResult", (), {"output_path": output_path})()
+
+    response = admin_client.post(
+        reverse("admin:imager_raspberrypiimageartifact_create_rpi_image"),
+        data={
+            "name": "stable",
+            "base_image_uri": str(tmp_path / "base.img"),
+            "output_dir": str(output_dir),
+            "download_base_uri": "https://cdn.example.com/images",
+            "git_url": "https://github.com/arthexis/arthexis.git",
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert any(f"?artifact={artifact.pk}" in url for url, _status in response.redirect_chain)
+    body = response.content.decode("utf-8")
+    assert "Latest build artifact" in body
+    assert "Test URL" in body
+    assert artifact.download_uri in body
+
+
+@pytest.mark.django_db
+@patch("apps.imager.admin._probe_download_url", return_value=(True, "HTTP 200"))
+def test_imager_admin_test_download_url_reports_probe_result(probe_mock, admin_client):
+    """Regression: wizard URL-test action should probe and report the download endpoint status."""
+
+    artifact = RaspberryPiImageArtifact.objects.create(
+        name="stable",
+        target="rpi-4b",
+        base_image_uri="https://example.com/base.img",
+        output_filename="stable-rpi-4b.img",
+        output_path="/tmp/stable-rpi-4b.img",
+        sha256="abc123",
+        size_bytes=8,
+        download_uri="https://cdn.example.com/images/stable-rpi-4b.img",
+        metadata={},
+    )
+
+    response = admin_client.get(
+        reverse("admin:imager_raspberrypiimageartifact_test_download_url", args=[artifact.pk]),
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    probe_mock.assert_called_once_with(artifact.download_uri)
+    assert "Download URL check succeeded" in response.content.decode("utf-8")
