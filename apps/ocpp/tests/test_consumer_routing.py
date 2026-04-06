@@ -9,6 +9,7 @@ from apps.ocpp import store
 from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.consumers.base.routing import ActionRouter
 
+
 @pytest.fixture(autouse=True)
 def reset_store_state():
     """Reset in-memory store state used by dispatch tests."""
@@ -50,3 +51,62 @@ async def test_dispatch_routes_via_registry_for_transaction_event():
     consumer._handle_transaction_event_action.assert_awaited_once()
     consumer.send.assert_awaited_once()
 
+
+@pytest.mark.anyio
+async def test_ocpp21_cp_to_csms_actions_resolve_to_concrete_handlers():
+    """OCPP 2.1 CP->CSMS actions should resolve via router, not empty fallthrough."""
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    router = ActionRouter(consumer)
+
+    expected_bindings = {
+        "BootNotification": consumer._handle_boot_notification_action,
+        "DataTransfer": consumer._handle_data_transfer_action,
+        "Heartbeat": consumer._handle_heartbeat_action,
+        "LogStatusNotification": consumer._handle_log_status_notification_action,
+        "MeterValues": consumer._handle_meter_values_action,
+        "NotifyChargingLimit": consumer._action_handler("NotifyChargingLimit").handle,
+        "NotifyCustomerInformation": consumer._handle_notify_customer_information_action,
+        "NotifyDisplayMessages": consumer._action_handler("NotifyDisplayMessages").handle,
+        "NotifyEVChargingNeeds": consumer._handle_notify_ev_charging_needs_action,
+        "NotifyEVChargingSchedule": consumer._handle_notify_ev_charging_schedule_action,
+        "PublishFirmwareStatusNotification": consumer._handle_publish_firmware_status_notification_action,
+        "ReportChargingProfiles": consumer._handle_report_charging_profiles_action,
+        "SecurityEventNotification": consumer._handle_security_event_notification_action,
+        "StatusNotification": consumer._handle_status_notification_action,
+    }
+
+    for action, handler in expected_bindings.items():
+        resolved = router.resolve(action)
+        assert resolved is not None
+        assert getattr(resolved, "__name__", "") == getattr(handler, "__name__", "")
+        assert "stub" not in getattr(resolved, "__qualname__", "").casefold()
+
+
+def test_status_notification_normalization_maps_ocpp21_fields():
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+
+    payload = {
+        "connectorStatus": "Occupied",
+        "evse": {"id": 3},
+        "statusInfo": {"reasonCode": "InternalError", "additionalInfo": "door-open"},
+        "timestamp": "2026-01-01T00:00:00Z",
+    }
+
+    normalized = consumer._normalized_status_notification_payload(payload)
+
+    assert normalized["status"] == "Occupied"
+    assert normalized["connectorId"] == 3
+    assert normalized["errorCode"] == "NoError"
+    assert normalized["vendorId"] == "InternalError"
+    assert normalized["info"] == "door-open"
+
+
+def test_meter_values_normalization_maps_ocpp21_evse_to_connector_id():
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+
+    normalized = consumer._normalized_meter_values_payload(
+        {"evse": {"id": "4"}, "meterValue": []}
+    )
+
+    assert normalized["connectorId"] == "4"

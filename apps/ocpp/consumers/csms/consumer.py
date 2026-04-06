@@ -454,23 +454,30 @@ class CSMSConsumer(
                 connector_value = None
         await self._assign_connector(connector_value)
         tx_id = payload.get("transactionId")
+        tx_pk: int | None = None
+        if tx_id is not None:
+            try:
+                tx_pk = int(tx_id)
+            except (TypeError, ValueError):
+                tx_pk = None
         tx_obj = None
         if tx_id is not None:
             tx_obj = store.transactions.get(self.store_key)
-            if not tx_obj or tx_obj.pk != int(tx_id):
+            if tx_pk is not None and (not tx_obj or tx_obj.pk != tx_pk):
                 tx_obj = await database_sync_to_async(
-                    Transaction.objects.filter(pk=tx_id, charger=self.charger).first
+                    Transaction.objects.filter(pk=tx_pk, charger=self.charger).first
                 )()
-            if tx_obj is None:
+            if tx_obj is None and tx_pk is not None:
                 tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                    pk=tx_id,
+                    pk=tx_pk,
                     charger=self.charger,
                     start_time=timezone.now(),
                     ocpp_transaction_id=str(tx_id),
                 )
                 store.start_session_log(self.store_key, tx_obj.pk)
                 store.add_session_message(self.store_key, raw_message)
-            store.transactions[self.store_key] = tx_obj
+            if tx_obj is not None:
+                store.transactions[self.store_key] = tx_obj
         else:
             tx_obj = store.transactions.get(self.store_key)
 
@@ -1150,6 +1157,8 @@ class CSMSConsumer(
 
         return await database_sync_to_async(_apply)()
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     async def _handle_boot_notification_action(self, payload, msg_id, raw, text_data):
         current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
@@ -1159,6 +1168,7 @@ class CSMSConsumer(
             "status": "Accepted",
         }
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "DataTransfer")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "DataTransfer")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "DataTransfer")
     async def _handle_data_transfer_action(self, payload, msg_id, raw, text_data):
@@ -2058,6 +2068,7 @@ class CSMSConsumer(
 
         return {}
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyChargingLimit")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyChargingLimit")
     async def _handle_notify_charging_limit_action(
         self, payload, msg_id, raw, text_data
@@ -2067,6 +2078,11 @@ class CSMSConsumer(
         )
 
 
+    @protocol_call(
+        "ocpp21",
+        ProtocolCallModel.CP_TO_CSMS,
+        "NotifyCustomerInformation",
+    )
     @protocol_call(
         "ocpp201",
         ProtocolCallModel.CP_TO_CSMS,
@@ -2205,6 +2221,7 @@ class CSMSConsumer(
         except Exception:  # pragma: no cover - defensive safeguard
             logger.exception("Unable to route customer-care acknowledgement")
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyDisplayMessages")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyDisplayMessages")
     async def _handle_notify_display_messages_action(
         self, payload, msg_id, raw, text_data
@@ -2214,6 +2231,7 @@ class CSMSConsumer(
         )
 
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingNeeds")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingNeeds")
     async def _handle_notify_ev_charging_needs_action(
         self, payload, msg_id, raw, text_data
@@ -2280,6 +2298,7 @@ class CSMSConsumer(
         )
         return {}
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingSchedule")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingSchedule")
     async def _handle_notify_ev_charging_schedule_action(
         self, payload, msg_id, raw, text_data
@@ -2395,6 +2414,11 @@ class CSMSConsumer(
         )
 
     @protocol_call(
+        "ocpp21",
+        ProtocolCallModel.CP_TO_CSMS,
+        "PublishFirmwareStatusNotification",
+    )
+    @protocol_call(
         "ocpp201",
         ProtocolCallModel.CP_TO_CSMS,
         "PublishFirmwareStatusNotification",
@@ -2448,6 +2472,7 @@ class CSMSConsumer(
         self._log_ocpp201_notification("PublishFirmwareStatusNotification", payload)
         return {}
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "ReportChargingProfiles")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ReportChargingProfiles")
     async def _handle_report_charging_profiles_action(
         self, payload, msg_id, raw, text_data
@@ -2606,6 +2631,7 @@ class CSMSConsumer(
                 store.add_log(aggregate_key, log_message, log_type="charger")
         return {}
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "LogStatusNotification")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "LogStatusNotification")
     async def _handle_log_status_notification_action_legacy(
         self, payload, msg_id, raw, text_data
