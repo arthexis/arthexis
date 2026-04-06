@@ -1231,10 +1231,14 @@ class CSMSConsumer(
         if not ocpp_version.startswith("ocpp2."):
             return response
 
+        if isinstance(response.get("idTokenInfo"), dict):
+            return response
         id_tag_info = response.get("idTagInfo")
         if not isinstance(id_tag_info, dict):
             return response
-        return {"idTokenInfo": id_tag_info}
+        return {
+            key: value for key, value in response.items() if key != "idTagInfo"
+        } | {"idTokenInfo": id_tag_info}
 
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit")
