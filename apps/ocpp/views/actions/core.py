@@ -117,6 +117,7 @@ def _handle_remote_start(context: ActionContext, data: dict) -> JsonResponse | A
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "RequestStartTransaction")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "RequestStartTransaction")
 def _handle_request_start_transaction(
     context: ActionContext, data: dict
@@ -186,6 +187,7 @@ def _handle_request_start_transaction(
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "RequestStopTransaction")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "RequestStopTransaction")
 def _handle_request_stop_transaction(
     context: ActionContext, data: dict
@@ -228,6 +230,7 @@ def _handle_request_stop_transaction(
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetTransactionStatus")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetTransactionStatus")
 def _handle_get_transaction_status(
     context: ActionContext, data: dict
@@ -332,6 +335,7 @@ def _handle_get_diagnostics(
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "ChangeAvailability")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ChangeAvailability")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ChangeAvailability")
 def _handle_change_availability(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
@@ -394,6 +398,7 @@ def _handle_change_availability(context: ActionContext, data: dict) -> JsonRespo
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "ClearCache")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ClearCache")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ClearCache")
 def _handle_clear_cache(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
@@ -420,6 +425,7 @@ def _handle_clear_cache(context: ActionContext, _data: dict) -> JsonResponse | A
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetLog")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetLog")
 def _handle_get_log(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     if context.charger is None:
@@ -485,6 +491,7 @@ def _handle_get_log(context: ActionContext, data: dict) -> JsonResponse | Action
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "UnlockConnector")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "UnlockConnector")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "UnlockConnector")
 def _handle_unlock_connector(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
@@ -533,6 +540,7 @@ def _handle_unlock_connector(context: ActionContext, data: dict) -> JsonResponse
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "DataTransfer")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "DataTransfer")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "DataTransfer")
 def _handle_data_transfer(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
@@ -580,6 +588,7 @@ def _handle_data_transfer(context: ActionContext, data: dict) -> JsonResponse | 
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "Reset")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "Reset")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "Reset")
 def _handle_reset(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
@@ -606,6 +615,7 @@ def _handle_reset(context: ActionContext, _data: dict) -> JsonResponse | ActionC
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "TriggerMessage")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "TriggerMessage")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "TriggerMessage")
 def _handle_trigger_message(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
@@ -663,6 +673,7 @@ def _handle_trigger_message(context: ActionContext, data: dict) -> JsonResponse 
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "SendLocalList")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SendLocalList")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "SendLocalList")
 def _handle_send_local_list(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
@@ -725,6 +736,7 @@ def _handle_send_local_list(context: ActionContext, data: dict) -> JsonResponse 
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetLocalListVersion")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetLocalListVersion")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetLocalListVersion")
 def _handle_get_local_list_version(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
@@ -771,6 +783,7 @@ def _coerce_bool(value: object, field_name: str) -> tuple[bool | None, str | Non
     return None, f"{field_name} must be a boolean"
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "CustomerInformation")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "CustomerInformation")
 def _handle_customer_information(
     context: ActionContext, data: dict

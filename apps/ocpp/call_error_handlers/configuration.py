@@ -51,6 +51,40 @@ async def handle_clear_cache_error(consumer: CallErrorContext, message_id: str, 
     return True
 
 
+async def handle_send_local_list_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
+    """Handle SendLocalList errors."""
+    parts: list[str] = []
+    if (code_text := (error_code or "").strip()):
+        parts.append(f"code={code_text}")
+    if (description_text := (description or "").strip()):
+        parts.append(f"description={description_text}")
+    if (details_text := _json_details(details)):
+        parts.append(f"details={details_text}")
+    message = "SendLocalList error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
+    return True
+
+
+async def handle_get_local_list_version_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
+    """Handle GetLocalListVersion errors."""
+    parts: list[str] = []
+    if (code_text := (error_code or "").strip()):
+        parts.append(f"code={code_text}")
+    if (description_text := (description or "").strip()):
+        parts.append(f"description={description_text}")
+    if (details_text := _json_details(details)):
+        parts.append(f"details={details_text}")
+    message = "GetLocalListVersion error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
+    return True
+
+
 async def handle_get_configuration_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
     """Handle GetConfiguration errors."""
     parts = []
@@ -61,6 +95,40 @@ async def handle_get_configuration_error(consumer: CallErrorContext, message_id:
     if (details_text := _json_details(details)):
         parts.append(f"details={details_text}")
     message = "GetConfiguration error" + (": " + ", ".join(parts) if parts else "")
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
+    return True
+
+
+async def handle_get_variables_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
+    """Handle GetVariables errors."""
+    parts: list[str] = []
+    if (code_text := (error_code or "").strip()):
+        parts.append(f"code={code_text}")
+    if (description_text := (description or "").strip()):
+        parts.append(f"description={description_text}")
+    if (details_text := _json_details(details)):
+        parts.append(f"details={details_text}")
+    message = "GetVariables error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
+    return True
+
+
+async def handle_set_variables_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
+    """Handle SetVariables errors."""
+    parts: list[str] = []
+    if (code_text := (error_code or "").strip()):
+        parts.append(f"code={code_text}")
+    if (description_text := (description or "").strip()):
+        parts.append(f"description={description_text}")
+    if (details_text := _json_details(details)):
+        parts.append(f"details={details_text}")
+    message = "SetVariables error"
+    if parts:
+        message += ": " + ", ".join(parts)
     store.add_log(log_key, message, log_type="charger")
     store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
     return True
@@ -330,6 +398,51 @@ async def handle_set_monitoring_level_error(consumer: CallErrorContext, message_
     if monitoring_level not in (None, ""):
         result_metadata["monitoring_level"] = monitoring_level
     store.record_pending_call_result(message_id, metadata=result_metadata, success=False, error_code=error_code, error_description=description, error_details=details)
+    return True
+
+
+async def handle_set_variable_monitoring_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
+    """Handle SetVariableMonitoring errors."""
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
+    if description:
+        parts.append(f"description={str(description).strip()}")
+    if (details_text := _json_details(details)):
+        parts.append(f"details={details_text}")
+    message = "SetVariableMonitoring error" + ((": " + ", ".join(parts)) if parts else "")
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
+    return True
+
+
+async def handle_clear_variable_monitoring_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
+    """Handle ClearVariableMonitoring errors."""
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
+    if description:
+        parts.append(f"description={str(description).strip()}")
+    if (details_text := _json_details(details)):
+        parts.append(f"details={details_text}")
+    message = "ClearVariableMonitoring error" + ((": " + ", ".join(parts)) if parts else "")
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
+    return True
+
+
+async def handle_get_monitoring_report_error(consumer: CallErrorContext, message_id: str, metadata: dict, error_code: str | None, description: str | None, details: dict | None, log_key: str) -> bool:
+    """Handle GetMonitoringReport errors."""
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
+    if description:
+        parts.append(f"description={str(description).strip()}")
+    if (details_text := _json_details(details)):
+        parts.append(f"details={details_text}")
+    message = "GetMonitoringReport error" + ((": " + ", ".join(parts)) if parts else "")
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(message_id, metadata=metadata, success=False, error_code=error_code, error_description=description, error_details=details)
     return True
 
 
