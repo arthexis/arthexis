@@ -15,6 +15,7 @@ from ...models import CPReservation
 from .common import CALL_EXPECTED_STATUSES, ActionCall, ActionContext
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "ReserveNow")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ReserveNow")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ReserveNow")
 def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
@@ -45,7 +46,15 @@ def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | Ac
         "idTag": id_tag,
         "reservationId": reservation.pk,
     }
-    if ocpp_version.startswith("ocpp2.0"):
+    if ocpp_version == "ocpp2.1":
+        payload = {
+            "id": reservation.pk,
+            "expiryDateTime": expiry.isoformat(),
+            "idToken": {"idToken": id_tag, "type": "Central"},
+        }
+        if connector_value not in (None, ""):
+            payload["evseId"] = connector_value
+    elif ocpp_version.startswith("ocpp2.0"):
         payload = {
             "id": reservation.pk,
             "expiryDateTime": expiry.isoformat(),
@@ -100,6 +109,7 @@ def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | Ac
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "CancelReservation")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "CancelReservation")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "CancelReservation")
 def _handle_cancel_reservation(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
@@ -113,7 +123,9 @@ def _handle_cancel_reservation(context: ActionContext, data: dict) -> JsonRespon
     ocpp_version = str(getattr(context.ws, "ocpp_version", "") or "")
     payload = {"reservationId": reservation.pk}
     ocpp_action = "CancelReservation"
-    if ocpp_version.startswith("ocpp2.0"):
+    if ocpp_version == "ocpp2.1":
+        payload = {"id": reservation.pk}
+    elif ocpp_version.startswith("ocpp2.0"):
         payload = {"id": reservation.pk}
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
     msg = json.dumps([2, message_id, ocpp_action, payload])

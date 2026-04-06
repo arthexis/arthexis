@@ -18,6 +18,7 @@ from .common import (
 )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "SetMonitoringBase")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetMonitoringBase")
 def _handle_set_monitoring_base(
     context: ActionContext, data: dict
@@ -56,6 +57,7 @@ def _handle_set_monitoring_base(
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "SetMonitoringLevel")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetMonitoringLevel")
 def _handle_set_monitoring_level(
     context: ActionContext, data: dict
@@ -96,6 +98,7 @@ def _handle_set_monitoring_level(
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "SetVariableMonitoring")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetVariableMonitoring")
 def _handle_set_variable_monitoring(
     context: ActionContext, data: dict
@@ -149,6 +152,7 @@ def _handle_set_variable_monitoring(
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "ClearVariableMonitoring")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ClearVariableMonitoring")
 def _handle_clear_variable_monitoring(
     context: ActionContext, data: dict
@@ -199,6 +203,7 @@ def _handle_clear_variable_monitoring(
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetMonitoringReport")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetMonitoringReport")
 def _handle_get_monitoring_report(
     context: ActionContext, data: dict
