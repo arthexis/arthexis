@@ -2650,10 +2650,8 @@ async def test_reservation_status_update_persists_and_notifies(status, confirmed
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.slow
 async def test_reservation_status_update_tracks_accepted_to_rejected_transition():
-    from apps.ocpp.models import Charger as ChargerModel
-
     location = await database_sync_to_async(Location.objects.create)(name="Depot")
-    charger = await database_sync_to_async(ChargerModel.objects.create)(
+    charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="CP-RES-TRANSITION", connector_id=1, location=location
     )
     reservation = await database_sync_to_async(CPReservation.objects.create)(
