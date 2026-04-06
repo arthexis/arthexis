@@ -1,5 +1,5 @@
-import json
 import ast
+import json
 from pathlib import Path
 
 from apps.ocpp.management.coverage_ocpp16_impl import (
@@ -42,19 +42,13 @@ def _collect_real_decorated_actions(app_dir: Path, protocol_slug: str) -> tuple[
 
     for path in app_dir.rglob("*.py"):
         module_name = ".".join(path.relative_to(app_dir.parent.parent).with_suffix("").parts)
-        if module_name in excluded_modules:
+        if module_name in excluded_modules or "tests" in path.parts:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        stub_functions: set[str] = set()
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             if _is_not_implemented_stub(node):
-                stub_functions.add(node.name)
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            if node.name in stub_functions:
                 continue
             for decorator in node.decorator_list:
                 if not isinstance(decorator, ast.Call):
