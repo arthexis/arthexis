@@ -200,10 +200,7 @@ def test_ocpp201_cp_to_csms_calls_resolve_to_handlers():
     action_registry = build_action_registry(consumer)
 
     assert action_registry["BootNotification"] == consumer._handle_boot_notification_action
-    authorize_handler = action_registry["Authorize"]
-    assert authorize_handler.__name__ == "handle"
-    assert authorize_handler.__self__.__class__.__name__ == "AuthorizationActionHandler"
-    assert authorize_handler.__self__.consumer is consumer
+    assert action_registry["Authorize"] == consumer._handle_authorize_action
     assert action_registry["CostUpdated"] == consumer._handle_cost_updated_action
     assert (
         action_registry["ReservationStatusUpdate"]
