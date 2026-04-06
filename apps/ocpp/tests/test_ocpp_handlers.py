@@ -2634,7 +2634,7 @@ async def test_report_charging_profiles_resolves_evse_row_from_aggregate_charger
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize(
     "status,confirmed",
-    [("Accepted", True), ("Cancelled", False), ("Expired", False)],
+    [("Accepted", True), ("Rejected", False), ("Cancelled", False), ("Expired", False)],
 )
 @pytest.mark.slow
 async def test_reservation_status_update_persists_and_notifies(status, confirmed):
@@ -2679,6 +2679,71 @@ async def test_reservation_status_update_persists_and_notifies(status, confirmed
         "connector_id": charger.connector_id,
         "reservation_id": reservation.pk,
         "status": status,
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
+async def test_reservation_status_update_tracks_accepted_to_rejected_transition():
+    location = await database_sync_to_async(Location.objects.create)(name="Depot")
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CP-RES-TRANSITION", connector_id=1, location=location
+    )
+    reservation = await database_sync_to_async(CPReservation.objects.create)(
+        location=location,
+        connector=charger,
+        start_time=timezone.now(),
+        duration_minutes=30,
+    )
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+    consumer.connector_value = charger.connector_id
+
+    accepted_payload = {
+        "reservationId": reservation.pk,
+        "reservationUpdateStatus": "Accepted",
+    }
+    rejected_payload = {
+        "reservationId": reservation.pk,
+        "reservationUpdateStatus": "Rejected",
+    }
+
+    accepted_result = await consumer._handle_reservation_status_update_action(
+        accepted_payload, "resv-transition-1", "", ""
+    )
+    accepted_state = await database_sync_to_async(CPReservation.objects.get)(pk=reservation.pk)
+
+    rejected_result = await consumer._handle_reservation_status_update_action(
+        rejected_payload, "resv-transition-2", "", ""
+    )
+    rejected_state = await database_sync_to_async(CPReservation.objects.get)(pk=reservation.pk)
+
+    assert accepted_result == {}
+    assert accepted_state.evcs_status == "Accepted"
+    assert accepted_state.evcs_confirmed is True
+    assert accepted_state.evcs_confirmed_at is not None
+
+    assert rejected_result == {}
+    assert rejected_state.evcs_status == "Rejected"
+    assert rejected_state.evcs_confirmed is False
+    assert rejected_state.evcs_confirmed_at is None
+
+    assert len(store.connector_release_notifications) == 2
+    assert store.connector_release_notifications[0] == {
+        "charger_id": charger.charger_id,
+        "connector_id": charger.connector_id,
+        "reservation_id": reservation.pk,
+        "status": "Accepted",
+    }
+    assert store.connector_release_notifications[1] == {
+        "charger_id": charger.charger_id,
+        "connector_id": charger.connector_id,
+        "reservation_id": reservation.pk,
+        "status": "Rejected",
     }
 
 

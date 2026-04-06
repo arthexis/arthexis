@@ -828,5 +828,17 @@ def test_coverage_artifacts_include_core_cp_to_csms_notifications(coverage_path)
     report = json.loads((app_dir.parent.parent / coverage_path).read_text(encoding="utf-8"))
     assert "BootNotification" in report["implemented"]["cp_to_csms"]
     assert "BootNotification" in report["coverage"]["cp_to_csms"]["supported"]
-    assert "CostUpdated" in report["implemented"]["cp_to_csms"]
-    assert "CostUpdated" in report["coverage"]["cp_to_csms"]["supported"]
+
+
+def test_ocpp201_coverage_accounts_for_reservation_status_update_cp_to_csms():
+    app_dir = Path(__file__).resolve().parents[1]
+    decorated_cp_to_csms, _ = _collect_real_decorated_actions(app_dir, "ocpp201")
+    report = json.loads(
+        (app_dir.parent.parent / Path("apps/ocpp/coverage201.json")).read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert "ReservationStatusUpdate" in decorated_cp_to_csms
+    assert "ReservationStatusUpdate" in report["implemented"]["cp_to_csms"]
+    assert "ReservationStatusUpdate" in report["coverage"]["cp_to_csms"]["supported"]
