@@ -45,6 +45,26 @@ upgrade.
 7. Launch the Django server on `0.0.0.0:<port>`, using `--noreload` unless
    `--reload` was requested.
 
+## Boot upgrade prestart throttle (`scripts/boot-upgrade-prestart.sh`)
+
+Systemd-managed service starts can run the boot upgrade prestart helper before
+`service-start.sh`. The helper keeps startup fast on already-current nodes:
+
+1. Check the existing failure backoff lock
+   `.locks/<service>-boot-upgrade-backoff-until.lck`; when active, skip
+   `upgrade.sh`.
+2. Resolve the current local git revision and compare it with
+   `.locks/<service>-boot-upgrade-last-check.lck` (`<epoch>|<revision>`).
+3. If the last successful check is recent (within
+   `ARTHEXIS_BOOT_UPGRADE_CHECK_TTL_SECONDS`, default `300`) and the revision is
+   unchanged, skip invoking `upgrade.sh`.
+4. Otherwise invoke `upgrade.sh` (stable/latest channel rules unchanged). On
+   success, refresh the recency lock; on failure, preserve existing behavior by
+   writing backoff to `.locks/<service>-boot-upgrade-backoff-until.lck`.
+
+Set `ARTHEXIS_BOOT_UPGRADE_FORCE_CHECK=1` to bypass recency throttle and force
+a fresh check (while still honoring active failure backoff).
+
 ## Startup orchestration (`manage.py startup_orchestrate`)
 1. Evaluate lock/feature state for service mode, Celery units, and LCD feature
    enablement.
