@@ -18,6 +18,11 @@ delegated systemd unit is launched, and what to check if something fails.
 - Stable auto-upgrades run once per week on Thursday mornings before 5:00 AM,
   while latest runs daily at the same hour unless overridden with
   `ARTHEXIS_UPGRADE_FREQ`.
+- Boot-time prestart checks (`scripts/boot-upgrade-prestart.sh`) keep a per-service
+  recency lock at `.locks/<service>-boot-upgrade-last-check.lck` after a
+  successful run. If the local revision is unchanged and the recency TTL has
+  not expired, startup skips launching `upgrade.sh` to reduce repeated no-op
+  checks on already-current nodes.
 
 ## How delegation works
 
@@ -52,6 +57,21 @@ You can also request the Celery task:
 from apps.core.tasks.auto_upgrade import check_github_updates
 check_github_updates.delay()
 ```
+
+## Boot-time throttle knobs
+
+Boot-time prestart upgrades still honor failure backoff in
+`.locks/<service>-boot-upgrade-backoff-until.lck`, and now also support a
+lightweight success recency throttle:
+
+- `ARTHEXIS_BOOT_UPGRADE_CHECK_TTL_SECONDS` (default `300`) sets how long a
+  successful boot-time check can be reused when the local revision is unchanged.
+  Set to `0` to disable throttle reuse.
+- `ARTHEXIS_BOOT_UPGRADE_FORCE_CHECK=1` bypasses recency throttle and forces a
+  fresh `upgrade.sh` invocation (unless failure backoff is active).
+
+The throttle is bypassed automatically when the revision changes or the TTL
+expires.
 
 ## Observing progress
 
