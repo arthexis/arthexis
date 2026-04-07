@@ -54,7 +54,7 @@ python-dotenv==1.2.2
 PyYAML==6.0.3
 redis==7.4.0
 reportlab==4.4.10
-requests==2.33.0
+requests==2.33.1
 setuptools==82.0.1
 sqlparse==0.5.5
 tablib==3.9.0
