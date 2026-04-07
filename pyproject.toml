@@ -126,6 +126,7 @@ preview = [
   "selenium==4.41.0",
 ]
 qa = [
+  "pytest-asyncio==1.3.0",  # pytest>=9 compatible series
   "pytest-django==4.12.0",
   "pytest-timeout==2.4.0",
   "pytest-xdist==3.8.0",
