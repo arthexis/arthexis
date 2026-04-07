@@ -6,7 +6,26 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
+from .apps import ARTHEXIS_EXTERNAL_APPS
 from .base import BASE_DIR
+from .external_dbs import external_app_database_alias_mapping
+
+
+def build_external_sqlite_databases(external_apps: list[str]) -> dict[str, dict[str, Path | str]]:
+    """Return external-app SQLite database entries rooted in ``work/dbs``."""
+
+    external_dbs_dir = BASE_DIR / "work" / "dbs"
+    external_dbs_dir.mkdir(parents=True, exist_ok=True)
+
+    configs: dict[str, dict[str, Path | str]] = {}
+    for alias in external_app_database_alias_mapping(external_apps).values():
+        configs[alias] = {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": external_dbs_dir / f"{alias}.sqlite3",
+            "OPTIONS": {"timeout": 60},
+        }
+
+    return configs
 
 FORCED_DB_BACKEND = os.environ.get("ARTHEXIS_DB_BACKEND", "").strip().lower()
 if FORCED_DB_BACKEND and FORCED_DB_BACKEND not in {"sqlite", "postgres"}:
@@ -36,6 +55,7 @@ if _use_postgres:
             },
         }
     }
+    DATABASES.update(build_external_sqlite_databases(list(ARTHEXIS_EXTERNAL_APPS)))
 else:
     _sqlite_override = os.environ.get("ARTHEXIS_SQLITE_PATH")
     if _sqlite_override:
@@ -77,3 +97,6 @@ else:
             "TEST": {"NAME": SQLITE_TEST_DB_PATH},
         }
     }
+    DATABASES.update(build_external_sqlite_databases(list(ARTHEXIS_EXTERNAL_APPS)))
+
+DATABASE_ROUTERS = ["apps.core.dbrouters.ExternalAppDatabaseRouter"]
