@@ -8,7 +8,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 from .apps import ARTHEXIS_EXTERNAL_APPS
 from .base import BASE_DIR
-from .external_dbs import external_app_database_alias
+from .external_dbs import external_app_database_alias_mapping
 
 
 def build_external_sqlite_databases(external_apps: list[str]) -> dict[str, dict[str, Path | str]]:
@@ -18,12 +18,7 @@ def build_external_sqlite_databases(external_apps: list[str]) -> dict[str, dict[
     external_dbs_dir.mkdir(parents=True, exist_ok=True)
 
     configs: dict[str, dict[str, Path | str]] = {}
-    seen_aliases: set[str] = set()
-    for index, app_path in enumerate(external_apps, start=1):
-        alias = external_app_database_alias(app_path, fallback_index=index)
-        while alias in seen_aliases:
-            alias = f"{alias}_{index}"
-        seen_aliases.add(alias)
+    for alias in external_app_database_alias_mapping(external_apps).values():
         configs[alias] = {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": external_dbs_dir / f"{alias}.sqlite3",

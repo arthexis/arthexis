@@ -9,6 +9,8 @@ from django.core.exceptions import ImproperlyConfigured
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
+from config.settings.external_dbs import external_app_module
+
 
 APPS_REGISTRY_ENTRY_NOT_IMPORTABLE_ID = "core.E001"
 APPS_REGISTRY_UNLISTED_LOCAL_APP_ID = "core.E002"
@@ -61,12 +63,7 @@ def _resolve_class(import_path: str) -> type:
 def _get_base_module(app_path: str) -> str:
     """Return the module path that should be importable for a settings app entry."""
 
-    has_app_config_class = app_path.rsplit(".", maxsplit=1)[-1][:1].isupper()
-    if ".apps." in app_path:
-        return app_path.rsplit(".apps.", maxsplit=1)[0]
-    if has_app_config_class:
-        return app_path.rsplit(".", maxsplit=1)[0]
-    return app_path
+    return external_app_module(app_path)
 
 
 def _get_external_app_compatibility_errors(external_apps: list[str]) -> list[Error]:

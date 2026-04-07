@@ -17,7 +17,11 @@ Arthexis app settings append `ARTHEXIS_EXTERNAL_APPS` to `INSTALLED_APPS` during
 
 When external plugins are configured, Arthexis also provisions one SQLite
 database alias per plugin under `work/dbs/` using the naming pattern
-`external_<app>.sqlite3`.
+`external_<module_last_segment>.sqlite3`, where `<module_last_segment>` is
+derived from the plugin module path. For
+`arthexis_plugin_sample.apps.ArthexisPluginSampleConfig`, the alias and file
+name are `external_arthexis_plugin_sample` and
+`external_arthexis_plugin_sample.sqlite3`.
 
 ## Compatibility contract
 
@@ -73,7 +77,7 @@ A reference standalone package is included in `examples/external_plugin_referenc
 
 ```bash
 .venv/bin/python manage.py migrate
-.venv/bin/python manage.py migrate --database external_<plugin>
+.venv/bin/python manage.py migrate --database external_arthexis_plugin_sample
 ```
 
 4. Validate startup checks:
