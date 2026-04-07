@@ -36,13 +36,11 @@ def _is_not_implemented_stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bo
 def _collect_real_decorated_actions(app_dir: Path, protocol_slug: str) -> tuple[set[str], set[str]]:
     """Collect protocol actions mapped to non-stub handlers for the target protocol."""
 
-    excluded_modules = {"apps.ocpp.coverage_stubs"}
     cp_to_csms: set[str] = set()
     csms_to_cp: set[str] = set()
 
     for path in app_dir.rglob("*.py"):
-        module_name = ".".join(path.relative_to(app_dir.parent.parent).with_suffix("").parts)
-        if module_name in excluded_modules or "tests" in path.parts:
+        if "tests" in path.parts:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
