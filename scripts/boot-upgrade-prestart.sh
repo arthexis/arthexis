@@ -108,7 +108,8 @@ if "$BASE_DIR/upgrade.sh" "$channel_flag" --no-start --no-warn; then
   rm -f "$BACKOFF_LOCK"
   local_revision="$(resolve_local_revision)" || local_revision=""
   if [ -n "$local_revision" ]; then
-    printf '%s|%s\n' "$now_epoch" "$local_revision" > "$RECENCY_LOCK"
+    completion_epoch="$(date +%s)"
+    printf '%s|%s\n' "$completion_epoch" "$local_revision" > "$RECENCY_LOCK"
   fi
   echo "Boot upgrade completed for ${SERVICE_NAME}."
   exit 0
