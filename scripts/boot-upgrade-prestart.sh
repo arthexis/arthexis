@@ -87,10 +87,7 @@ if [ -f "$BASE_DIR/$LOCK_SUBDIR/auto_upgrade.lck" ]; then
   fi
 fi
 
-local_revision=""
-if local_revision="$(resolve_local_revision)"; then
-  :
-fi
+local_revision="$(resolve_local_revision)" || local_revision=""
 
 if [ "$FORCE_CHECK_ENABLED" -ne 1 ] && [ "$CHECK_TTL_SECONDS" -gt 0 ] && [ -n "$local_revision" ] && [ -f "$RECENCY_LOCK" ]; then
   recency_epoch=""
@@ -109,6 +106,7 @@ fi
 echo "Attempting boot upgrade for ${SERVICE_NAME} (${channel_flag#--} channel)."
 if "$BASE_DIR/upgrade.sh" "$channel_flag" --no-start --no-warn; then
   rm -f "$BACKOFF_LOCK"
+  local_revision="$(resolve_local_revision)" || local_revision=""
   if [ -n "$local_revision" ]; then
     printf '%s|%s\n' "$now_epoch" "$local_revision" > "$RECENCY_LOCK"
   fi
@@ -117,6 +115,7 @@ if "$BASE_DIR/upgrade.sh" "$channel_flag" --no-start --no-warn; then
 fi
 
 backoff_until=$((now_epoch + BACKOFF_SECONDS))
+rm -f "$RECENCY_LOCK"
 printf '%s\n' "$backoff_until" > "$BACKOFF_LOCK"
 echo "Boot upgrade failed for ${SERVICE_NAME}; backing off until $(date -d "@$backoff_until" -u +'%Y-%m-%dT%H:%M:%SZ')."
 exit 0
