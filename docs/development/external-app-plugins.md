@@ -15,6 +15,10 @@ ARTHEXIS_EXTERNAL_APPS = [
 
 Arthexis app settings append `ARTHEXIS_EXTERNAL_APPS` to `INSTALLED_APPS` during startup, so external plugins boot with the rest of the suite.
 
+When external plugins are configured, Arthexis also provisions one SQLite
+database alias per plugin under `work/dbs/` using the naming pattern
+`external_<app>.sqlite3`.
+
 ## Compatibility contract
 
 Each plugin `AppConfig` must declare:
@@ -69,6 +73,7 @@ A reference standalone package is included in `examples/external_plugin_referenc
 
 ```bash
 .venv/bin/python manage.py migrate
+.venv/bin/python manage.py migrate --database external_<plugin>
 ```
 
 4. Validate startup checks:
