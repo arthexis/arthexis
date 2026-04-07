@@ -78,6 +78,15 @@ def _extract_response_detail(response) -> str:
     return decoded_body
 
 
+def _parse_json_response_mapping(response) -> Mapping[str, object]:
+    """Parse a JSON response body as a mapping."""
+
+    payload = json.loads(response.content.decode() or "{}")
+    if not isinstance(payload, Mapping):
+        raise ValueError("expected JSON object")
+    return payload
+
+
 def _sign_token_for_node(data: dict[str, object], node: Node, token: str):
     """Attach token signature to node info payload when signing succeeds."""
 
@@ -922,7 +931,10 @@ def register_visitor_proxy(request):
     host_info_request = factory.get("/nodes/info/", {"token": token} if token else {})
     host_info_request.user = request.user
     host_info_request._cached_user = request.user
-    host_info = json.loads(node_info(host_info_request).content.decode() or "{}")
+    try:
+        host_info = _parse_json_response_mapping(node_info(host_info_request))
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return JsonResponse({"detail": "host info unavailable"}, status=502)
 
     session = requests.Session()
     timeout_seconds = 45
@@ -961,7 +973,10 @@ def register_visitor_proxy(request):
     host_register_request.user = request.user
     host_register_request._cached_user = request.user
     host_register_response = register_node(host_register_request)
-    host_register_body = json.loads(host_register_response.content.decode() or "{}")
+    try:
+        host_register_body = _parse_json_response_mapping(host_register_response)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return JsonResponse({"detail": "host registration failed"}, status=502)
     if host_register_response.status_code != 200 or not host_register_body.get("id"):
         status_code = host_register_response.status_code or 400
         if 200 <= status_code < 300:
