@@ -171,6 +171,7 @@ jobs:
             let runData = null;
             let failedSteps = '';
             let failedRoles = '';
+            let failedJobCount = 0;
 
             try {
               const { data: fetchedRunData } = await github.rest.actions.getWorkflowRun({
@@ -196,13 +197,18 @@ jobs:
                 }
               });
               failedRoles = Array.from(failedRoleSet).sort().join(', ');
+              failedJobCount = failedJobs.length;
               failedSteps = failedJobs
                 .map((job) => {
                   const failedStep = (job.steps || []).find((step) => step.conclusion === 'failure');
+                  const jobUrl = job.html_url ? ` [job logs](${job.html_url})` : '';
+                  const timing = job.started_at && job.completed_at
+                    ? ` (started: ${job.started_at}, completed: ${job.completed_at})`
+                    : '';
                   if (!failedStep) {
-                    return `- ${job.name}`;
+                    return `- ${job.name}${jobUrl}${timing}`;
                   }
-                  return `- ${job.name}: ${failedStep.name}`;
+                  return `- ${job.name}: ${failedStep.name}${jobUrl}${timing}`;
                 })
                 .join('\n');
             } catch (error) {
@@ -219,14 +225,15 @@ jobs:
               `- Branch/ref: ${context.ref}`,
               `- Commit: ${context.sha}`,
               `- Triggered by: ${runData?.event ?? context.eventName}`,
+              `- Run attempt: ${runData?.run_attempt ?? 1}`,
+              `- Actor: ${runData?.actor?.login ?? context.actor}`,
               '',
               '## Failure details',
               '',
               failedRoles ? `- Failed roles: ${failedRoles}` : '- Failed roles: Unable to determine failed roles from workflow metadata.',
+              failedJobCount ? `- Failed jobs: ${failedJobCount}` : '- Failed jobs: Unable to determine failed jobs from workflow metadata.',
               '',
               failedSteps ? failedSteps : '- Unable to identify failed steps from workflow metadata.',
-              '',
-              'Please investigate and close this issue once resolved.'
             ].join('\n');
 
             const openIssues = await github.paginate(github.rest.issues.listForRepo, {
@@ -247,8 +254,10 @@ jobs:
                   '',
                   `- Workflow run: ${runUrl}`,
                   `- Commit: ${context.sha}`,
+                  `- Run attempt: ${runData?.run_attempt ?? 1}`,
                   '',
                   failedRoles ? `### Failed roles\n- ${failedRoles}` : '### Failed roles\n- Unable to determine failed roles from workflow metadata.',
+                  failedJobCount ? `### Failed jobs\n- ${failedJobCount}` : '### Failed jobs\n- Unable to determine failed jobs from workflow metadata.',
                   '',
                   failedSteps ? '### Failed steps\n' + failedSteps : '### Failed steps\n- Unable to identify failed steps from workflow metadata.'
                 ].join('\n')
