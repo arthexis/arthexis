@@ -40,21 +40,27 @@ class _BusWrapper:
 
     channel: int
 
+    def _open_bus(self):
+        if smbus is None:
+            raise LCDUnavailableError(SMBUS_HINT)
+        try:
+            return smbus.SMBus(self.channel)
+        except FileNotFoundError as exc:
+            raise LCDUnavailableError(
+                f"I2C bus device for channel {self.channel} is unavailable"
+            ) from exc
+
     def write_byte(
         self, addr: int, data: int
     ) -> None:  # pragma: no cover - thin wrapper
-        if smbus is None:
-            raise LCDUnavailableError(SMBUS_HINT)
-        bus = smbus.SMBus(self.channel)
+        bus = self._open_bus()
         bus.write_byte(addr, data)
         bus.close()
 
     def write_byte_data(
         self, addr: int, cmd: int, data: int
     ) -> None:  # pragma: no cover - thin wrapper
-        if smbus is None:
-            raise LCDUnavailableError(SMBUS_HINT)
-        bus = smbus.SMBus(self.channel)
+        bus = self._open_bus()
         bus.write_byte_data(addr, cmd, data)
         bus.close()
 
