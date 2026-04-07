@@ -44,9 +44,10 @@ def _run_preflight(tmp_path: Path, *, fingerprint: str, metadata: str, db_identi
     (apps_dir / "0001_initial.py").write_text("# migration fixture\n", encoding="utf-8")
     _write_fake_manage(base_dir / "manage.py")
 
+    script_path = Path(__file__).resolve().parents[3] / "scripts" / "helpers" / "runserver_preflight.sh"
     script = f"""
 set -euo pipefail
-source /workspace/arthexis/scripts/helpers/runserver_preflight.sh
+source {script_path}
 compute_migration_fingerprint() {{ printf '%s\\n' \"{fingerprint}\"; }}
 compute_migration_metadata_snapshot() {{ printf '%s\\n' '{metadata}'; }}
 compute_database_identity() {{ printf '%s\\n' \"{db_identity}\"; }}
@@ -82,7 +83,7 @@ def _manage_calls(lock_dir: Path) -> list[str]:
     return [line.strip() for line in log_file.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def test_preflight_skips_migrate_when_verified_state_matches(tmp_path: Path) -> None:
+def test_preflight_revalidates_migrate_when_verified_state_matches(tmp_path: Path) -> None:
     base_dir = tmp_path / "project"
     lock_dir = base_dir / ".locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
@@ -111,7 +112,7 @@ def test_preflight_skips_migrate_when_verified_state_matches(tmp_path: Path) -> 
     result = _run_preflight(tmp_path, fingerprint=fingerprint, metadata=metadata, db_identity=db_identity)
 
     assert result.returncode == 0, result.stderr
-    assert _manage_calls(lock_dir) == []
+    assert _manage_calls(lock_dir) == ["check"]
 
 
 def test_preflight_runs_migrate_check_when_fingerprint_changes(tmp_path: Path) -> None:

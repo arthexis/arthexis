@@ -160,12 +160,15 @@ elif backend == "postgres":
         f"name={os.environ.get('POSTGRES_DB', 'postgres')};"
         f"host={os.environ.get('POSTGRES_HOST', 'localhost')};"
         f"port={os.environ.get('POSTGRES_PORT', '5432')};"
-        f"user={os.environ.get('POSTGRES_USER', 'postgres')}"
+        f"user={os.environ.get('POSTGRES_USER', 'postgres')};"
+        f"password={os.environ.get('POSTGRES_PASSWORD', '')}"
     )
 else:
     sqlite_path = os.environ.get("ARTHEXIS_SQLITE_PATH", "").strip()
     if sqlite_path:
         resolved = pathlib.Path(sqlite_path)
+        if not resolved.is_absolute():
+            resolved = base_dir / resolved
     else:
         resolved = base_dir / "db.sqlite3"
     raw_identity = f"sqlite:engine=django.db.backends.sqlite3;name={resolved}"
@@ -427,24 +430,32 @@ PY
       local verified_fingerprint=""
       local verified_db_identity=""
       local verified_status=""
-      verified_fingerprint=$(printf '%s' "$verified_state" | "$python_bin" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("fingerprint", ""))')
-      verified_db_identity=$(printf '%s' "$verified_state" | "$python_bin" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("db_identity", ""))')
-      verified_status=$(printf '%s' "$verified_state" | "$python_bin" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("status", ""))')
+      read -r verified_fingerprint verified_db_identity verified_status < <(
+        printf '%s' "$verified_state" | "$python_bin" -c 'import json,sys; payload=json.loads(sys.stdin.read()); print(payload.get("fingerprint", ""), payload.get("db_identity", ""), payload.get("status", ""))'
+      )
 
       if [ "$verified_status" = "success" ] \
         && [ "$verified_fingerprint" = "$fingerprint" ] \
         && [ "$verified_db_identity" = "$db_identity" ]; then
-        echo "Migrations and database identity unchanged since last verified preflight; skipping migration check."
-        if ! write_migration_fingerprint "$fingerprint"; then
-          return 1
+        echo "Migrations and database identity unchanged since last verified preflight; verifying migration state..."
+        if "$python_bin" manage.py migrate --check; then
+          echo "Verified-state cache confirmed against database; skipping migration apply fallback."
+          if ! write_migration_fingerprint "$fingerprint"; then
+            return 1
+          fi
+          if ! write_migration_metadata "$metadata_snapshot"; then
+            return 1
+          fi
+          if ! write_verified_state "$fingerprint" "$db_identity" "success"; then
+            return 1
+          fi
+          RUNSERVER_PREFLIGHT_DONE=true
+          export DJANGO_SUPPRESS_MIGRATION_CHECK=1
+          RUNSERVER_EXTRA_ARGS+=("--skip-checks")
+          return 0
         fi
-        if ! write_migration_metadata "$metadata_snapshot"; then
-          return 1
-        fi
-        RUNSERVER_PREFLIGHT_DONE=true
-        export DJANGO_SUPPRESS_MIGRATION_CHECK=1
-        RUNSERVER_EXTRA_ARGS+=("--skip-checks")
-        return 0
+
+        echo "Verified-state cache did not validate cleanly; running fallback migration preflight..."
       fi
     fi
   fi
