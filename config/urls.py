@@ -30,9 +30,6 @@ urlpatterns += [
     path("admindocs/", include("django.contrib.admindocs.urls")),
 ]
 
-# Backward-compatible alias expected by legacy tests/imports.
-autodiscovered_urlpatterns = autodiscovered_route_patterns
-
 if settings.DEBUG:
     if settings.HAS_DEBUG_TOOLBAR:
         urlpatterns = [
