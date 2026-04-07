@@ -12,6 +12,7 @@ LOCK_DIR="$(normalize_path "$LOCK_DIR")"
 MIGRATIONS_SHA_FILE="${LOCK_DIR}/migrations.sha"
 MIGRATIONS_META_FILE="${LOCK_DIR}/migrations.meta"
 PREDEPLOY_MIGRATIONS_MARKER_FILE="${LOCK_DIR}/predeploy_migrate_success.json"
+MIGRATIONS_VERIFIED_STATE_FILE="${LOCK_DIR}/migrations.verified.json"
 
 # Default behavior: Satellite/Watchtower nodes run in check-only mode, while all
 # other roles default to apply. Set ARTHEXIS_MIGRATION_POLICY explicitly to avoid
@@ -122,6 +123,58 @@ print(json.dumps({"version": 1, "entries": entries}, sort_keys=True, separators=
 PY
 }
 
+compute_database_identity() {
+  local base_dir
+  local python_bin
+  base_dir="${1:-${BASE_DIR:-$(pwd)}}"
+  base_dir="$(normalize_path "$base_dir")"
+  if [ -z "$base_dir" ]; then
+    echo "" >&2
+    return 1
+  fi
+
+  if ! python_bin="$(arthexis_python_bin)"; then
+    echo "python3 or python not available" >&2
+    return 1
+  fi
+
+  "$python_bin" - "$base_dir" <<'PY'
+import hashlib
+import os
+import pathlib
+import sys
+
+base_dir = pathlib.Path(sys.argv[1])
+backend = os.environ.get("ARTHEXIS_DB_BACKEND", "").strip().lower()
+
+if backend not in {"postgres", "sqlite"}:
+    backend = "sqlite"
+
+database_url = os.environ.get("DATABASE_URL", "").strip()
+if database_url:
+    raw_identity = f"dsn:{database_url}"
+elif backend == "postgres":
+    raw_identity = (
+        "postgres:"
+        f"engine=django.db.backends.postgresql;"
+        f"name={os.environ.get('POSTGRES_DB', 'postgres')};"
+        f"host={os.environ.get('POSTGRES_HOST', 'localhost')};"
+        f"port={os.environ.get('POSTGRES_PORT', '5432')};"
+        f"user={os.environ.get('POSTGRES_USER', 'postgres')}"
+    )
+else:
+    sqlite_path = os.environ.get("ARTHEXIS_SQLITE_PATH", "").strip()
+    if sqlite_path:
+        resolved = pathlib.Path(sqlite_path)
+    else:
+        resolved = base_dir / "db.sqlite3"
+    raw_identity = f"sqlite:engine=django.db.backends.sqlite3;name={resolved}"
+
+fingerprint = hashlib.sha256(raw_identity.encode("utf-8")).hexdigest()
+print(fingerprint)
+PY
+}
+
 read_migration_metadata_snapshot() {
   local metadata_file="${1:-$MIGRATIONS_META_FILE}"
   local python_bin
@@ -201,6 +254,50 @@ print(fingerprint)
 PY
 }
 
+read_verified_state() {
+  local state_file="${1:-$MIGRATIONS_VERIFIED_STATE_FILE}"
+  local python_bin
+
+  if [ ! -f "$state_file" ]; then
+    return 1
+  fi
+
+  if ! python_bin="$(arthexis_python_bin)"; then
+    return 1
+  fi
+
+  "$python_bin" - "$state_file" <<'PY'
+import json
+import pathlib
+import sys
+
+state_file = pathlib.Path(sys.argv[1])
+try:
+    payload = json.loads(state_file.read_text(encoding="utf-8"))
+except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    raise SystemExit(1)
+
+if payload.get("version") != 1:
+    raise SystemExit(1)
+
+fingerprint = payload.get("fingerprint")
+db_identity = payload.get("db_identity")
+status = payload.get("status")
+verified_at = payload.get("verified_at")
+
+if not isinstance(fingerprint, str) or not fingerprint:
+    raise SystemExit(1)
+if not isinstance(db_identity, str) or not db_identity:
+    raise SystemExit(1)
+if status not in {"success", "failed"}:
+    raise SystemExit(1)
+if not isinstance(verified_at, int):
+    raise SystemExit(1)
+
+print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+PY
+}
+
 run_runserver_preflight() {
   if [ "${RUNSERVER_PREFLIGHT_DONE:-false}" = true ]; then
     return 0
@@ -239,6 +336,41 @@ run_runserver_preflight() {
     return 0
   }
 
+  write_verified_state() {
+    local fingerprint_value="$1"
+    local db_identity_value="$2"
+    local status_value="$3"
+    local python_bin_write
+
+    if ! python_bin_write="$(arthexis_python_bin)"; then
+      echo "python3 or python not available" >&2
+      return 1
+    fi
+
+    if ! "$python_bin_write" - "$MIGRATIONS_VERIFIED_STATE_FILE" "$fingerprint_value" "$db_identity_value" "$status_value" <<'PY'; then
+import json
+import pathlib
+import sys
+import time
+
+state_file = pathlib.Path(sys.argv[1])
+payload = {
+    "version": 1,
+    "fingerprint": sys.argv[2],
+    "db_identity": sys.argv[3],
+    "status": sys.argv[4],
+    "verified_at": int(time.time()),
+}
+
+state_file.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+PY
+      echo "Failed to write migration verified-state cache '$MIGRATIONS_VERIFIED_STATE_FILE'." >&2
+      return 1
+    fi
+
+    return 0
+  }
+
   if [ "$migration_policy" = "skip" ]; then
     echo "Skipping runserver migration preflight (ARTHEXIS_MIGRATION_POLICY=skip)."
     RUNSERVER_PREFLIGHT_DONE=true
@@ -253,6 +385,12 @@ run_runserver_preflight() {
   local metadata_snapshot=""
   if ! metadata_snapshot=$(compute_migration_metadata_snapshot); then
     echo "Failed to compute migration metadata snapshot." >&2
+    return 1
+  fi
+
+  local db_identity=""
+  if ! db_identity=$(compute_database_identity); then
+    echo "Failed to compute database identity." >&2
     return 1
   fi
 
@@ -283,6 +421,34 @@ run_runserver_preflight() {
     fi
   fi
 
+  if [ "${RUNSERVER_PREFLIGHT_FORCE_REFRESH:-false}" != true ]; then
+    local verified_state=""
+    if verified_state=$(read_verified_state); then
+      local verified_fingerprint=""
+      local verified_db_identity=""
+      local verified_status=""
+      verified_fingerprint=$(printf '%s' "$verified_state" | "$python_bin" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("fingerprint", ""))')
+      verified_db_identity=$(printf '%s' "$verified_state" | "$python_bin" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("db_identity", ""))')
+      verified_status=$(printf '%s' "$verified_state" | "$python_bin" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("status", ""))')
+
+      if [ "$verified_status" = "success" ] \
+        && [ "$verified_fingerprint" = "$fingerprint" ] \
+        && [ "$verified_db_identity" = "$db_identity" ]; then
+        echo "Migrations and database identity unchanged since last verified preflight; skipping migration check."
+        if ! write_migration_fingerprint "$fingerprint"; then
+          return 1
+        fi
+        if ! write_migration_metadata "$metadata_snapshot"; then
+          return 1
+        fi
+        RUNSERVER_PREFLIGHT_DONE=true
+        export DJANGO_SUPPRESS_MIGRATION_CHECK=1
+        RUNSERVER_EXTRA_ARGS+=("--skip-checks")
+        return 0
+      fi
+    fi
+  fi
+
   local marker_fingerprint=""
   if [ "${RUNSERVER_PREFLIGHT_FORCE_REFRESH:-false}" != true ] && marker_fingerprint=$(read_predeploy_marker_fingerprint); then
     if [ "$marker_fingerprint" = "$fingerprint" ]; then
@@ -293,6 +459,9 @@ run_runserver_preflight() {
           return 1
         fi
         if ! write_migration_metadata "$metadata_snapshot"; then
+          return 1
+        fi
+        if ! write_verified_state "$fingerprint" "$db_identity" "success"; then
           return 1
         fi
         RUNSERVER_PREFLIGHT_DONE=true
@@ -313,6 +482,9 @@ run_runserver_preflight() {
         return 1
       fi
       if ! write_migration_metadata "$metadata_snapshot"; then
+        return 1
+      fi
+      if ! write_verified_state "$fingerprint" "$db_identity" "success"; then
         return 1
       fi
       RUNSERVER_PREFLIGHT_DONE=true
@@ -373,6 +545,9 @@ run_runserver_preflight() {
     return 1
   fi
   if ! write_migration_metadata "$metadata_snapshot"; then
+    return 1
+  fi
+  if ! write_verified_state "$fingerprint" "$db_identity" "success"; then
     return 1
   fi
   RUNSERVER_PREFLIGHT_DONE=true
