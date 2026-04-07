@@ -220,18 +220,11 @@ if [ "$CAMERA_SERVICE_CONFIGURED" = true ]; then
   arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "camera-status" "initial_status=$CAMERA_INITIAL_STATUS"
 fi
 
-if [ "$DEBUG_MODE" = false ] && [ -z "$SHOW_LEVEL" ] && [ "$RELOAD_REQUESTED" = false ] \
-  && [ -n "$SERVICE_NAME" ] && [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] \
-  && _arthexis_systemd_unit_present "${SERVICE_NAME}.service"; then
-  MAIN_INITIAL_STATUS=$("${SYSTEMCTL_CMD[@]}" is-active "$SERVICE_NAME" 2>/dev/null || echo "unknown")
-  if [ "$MAIN_INITIAL_STATUS" = "active" ]; then
-    refresh_suite_uptime_lock_safe
-    exit 0
-  fi
-
-  "${SYSTEMCTL_CMD[@]}" restart "$SERVICE_NAME"
+reconcile_companion_units() {
   if [ "$RFID_SERVICE_CONFIGURED" = true ] && [ "$RFID_UNIT_PRESENT" = true ]; then
-    RFID_INITIAL_STATUS=$("${SYSTEMCTL_CMD[@]}" is-active "$RFID_SERVICE_UNIT" 2>/dev/null || echo "unknown")
+    if ! RFID_INITIAL_STATUS=$("${SYSTEMCTL_CMD[@]}" is-active "$RFID_SERVICE_UNIT" 2>/dev/null); then
+      RFID_INITIAL_STATUS="${RFID_INITIAL_STATUS:-unknown}"
+    fi
     if [ "$RFID_INITIAL_STATUS" = "failed" ]; then
       "${SYSTEMCTL_CMD[@]}" restart "$RFID_SERVICE_UNIT"
     elif [ "$RFID_INITIAL_STATUS" != "active" ]; then
@@ -239,13 +232,30 @@ if [ "$DEBUG_MODE" = false ] && [ -z "$SHOW_LEVEL" ] && [ "$RELOAD_REQUESTED" = 
     fi
   fi
   if [ "$CAMERA_SERVICE_CONFIGURED" = true ] && [ "$CAMERA_UNIT_PRESENT" = true ]; then
-    CAMERA_INITIAL_STATUS=$("${SYSTEMCTL_CMD[@]}" is-active "$CAMERA_SERVICE_UNIT" 2>/dev/null || echo "unknown")
+    if ! CAMERA_INITIAL_STATUS=$("${SYSTEMCTL_CMD[@]}" is-active "$CAMERA_SERVICE_UNIT" 2>/dev/null); then
+      CAMERA_INITIAL_STATUS="${CAMERA_INITIAL_STATUS:-unknown}"
+    fi
     if [ "$CAMERA_INITIAL_STATUS" = "failed" ]; then
       "${SYSTEMCTL_CMD[@]}" restart "$CAMERA_SERVICE_UNIT"
     elif [ "$CAMERA_INITIAL_STATUS" != "active" ]; then
       "${SYSTEMCTL_CMD[@]}" start "$CAMERA_SERVICE_UNIT"
     fi
   fi
+}
+
+if [ "$DEBUG_MODE" = false ] && [ -z "$SHOW_LEVEL" ] && [ "$RELOAD_REQUESTED" = false ] \
+  && [ -n "$SERVICE_NAME" ] && [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] \
+  && _arthexis_systemd_unit_present "${SERVICE_NAME}.service"; then
+  if ! MAIN_INITIAL_STATUS=$("${SYSTEMCTL_CMD[@]}" is-active "$SERVICE_NAME" 2>/dev/null); then
+    MAIN_INITIAL_STATUS="${MAIN_INITIAL_STATUS:-unknown}"
+  fi
+  if [ "$MAIN_INITIAL_STATUS" = "active" ]; then
+    reconcile_companion_units
+    exit 0
+  fi
+
+  "${SYSTEMCTL_CMD[@]}" restart "$SERVICE_NAME"
+  reconcile_companion_units
   if [ "$SILENT" = true ]; then
     exit 0
   fi

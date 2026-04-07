@@ -34,6 +34,8 @@ echo "called" > "${ARTHEXIS_SERVICE_START_CALLED_FILE:-/tmp/arthexis-service-sta
     locks_dir = runtime_root / ".locks"
     locks_dir.mkdir(parents=True, exist_ok=True)
     (locks_dir / "service.lck").write_text("demo\n", encoding="utf-8")
+    (locks_dir / "rfid-service.lck").write_text("configured\n", encoding="utf-8")
+    (locks_dir / "camera-service.lck").write_text("configured\n", encoding="utf-8")
 
     fake_bin = runtime_root / "fakebin"
     fake_bin.mkdir(parents=True, exist_ok=True)
@@ -64,10 +66,11 @@ unit_status() {
   local key
   key="$(unit_var_name "$1")"
   local value="${!key:-inactive}"
-  if [ "$value" = "failed" ]; then
-    return 1
-  fi
   echo "$value"
+  if [ "$value" = "active" ]; then
+    return 0
+  fi
+  return 1
 }
 
 printf '%s %s\\n' "$cmd" "$*" >> "$log_file"
@@ -145,7 +148,7 @@ def test_start_sh_skips_restart_when_main_service_is_active(tmp_path: Path) -> N
     calls = systemctl_log.read_text(encoding="utf-8")
     assert "restart demo" not in calls
     assert "is-active demo" in calls
-    assert (runtime_root / ".locks" / "suite_uptime.lck").exists()
+    assert not (runtime_root / ".locks" / "suite_uptime.lck").exists()
 
 
 def test_start_sh_restarts_when_main_service_is_inactive(tmp_path: Path) -> None:
@@ -199,4 +202,61 @@ def test_start_sh_reload_path_preserves_service_start_flow(tmp_path: Path) -> No
     assert service_start_called.exists()
     assert service_start_args.read_text(encoding="utf-8").strip() == "--reload"
     calls = systemctl_log.read_text(encoding="utf-8")
+    assert "restart demo" not in calls
+
+
+def test_start_sh_restarts_failed_companion_when_main_is_active(tmp_path: Path) -> None:
+    runtime_root, fake_bin = _setup_start_runtime(tmp_path)
+    systemctl_log = tmp_path / "systemctl.log"
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["SYSTEMCTL_LOG_FILE"] = str(systemctl_log)
+    env["DEMO"] = "active"
+    env["RFID_DEMO"] = "failed"
+    env["CAMERA_DEMO"] = "active"
+
+    result = subprocess.run(
+        ["bash", "start.sh"],
+        cwd=runtime_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    calls = systemctl_log.read_text(encoding="utf-8")
+    assert "is-active demo" in calls
+    assert "is-active rfid-demo" in calls
+    assert "restart rfid-demo" in calls
+    assert "\nstart rfid-demo\n" not in f"\n{calls}\n"
+    assert "restart demo" not in calls
+
+
+def test_start_sh_starts_inactive_companion_when_main_is_active(tmp_path: Path) -> None:
+    runtime_root, fake_bin = _setup_start_runtime(tmp_path)
+    systemctl_log = tmp_path / "systemctl.log"
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["SYSTEMCTL_LOG_FILE"] = str(systemctl_log)
+    env["DEMO"] = "active"
+    env["RFID_DEMO"] = "inactive"
+    env["CAMERA_DEMO"] = "active"
+
+    result = subprocess.run(
+        ["bash", "start.sh"],
+        cwd=runtime_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    calls = systemctl_log.read_text(encoding="utf-8")
+    assert "is-active rfid-demo" in calls
+    assert "start rfid-demo" in calls
+    assert "\nrestart rfid-demo\n" not in f"\n{calls}\n"
     assert "restart demo" not in calls
