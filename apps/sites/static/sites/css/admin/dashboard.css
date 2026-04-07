@@ -6,7 +6,7 @@
     }
     #admin-home-header {
         display: grid;
-        grid-template-columns: auto minmax(14rem, 30%) minmax(0, 1fr);
+        grid-template-columns: auto minmax(var(--admin-ui-dashboard-net-message-min-width, 18rem), 30%) minmax(0, 1fr);
         align-items: center;
         gap: 1rem;
         margin-bottom: 1.25rem;
@@ -27,8 +27,8 @@
         color: var(--body-fg);
         --net-message-text-color: #3f3f3f;
         min-height: 2.25rem;
-        min-width: min(18rem, 100%);
-        max-width: min(30vw, 30rem);
+        min-width: min(var(--admin-ui-dashboard-net-message-min-width, 18rem), 100%);
+        max-width: var(--admin-ui-dashboard-net-message-max-width, 30rem);
         width: 100%;
         box-sizing: border-box;
     }
