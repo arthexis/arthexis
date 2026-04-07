@@ -109,6 +109,16 @@ If external integrations still import the legacy module path, update imports to 
 | --- | --- |
 | `from apps.ocpp.simulator import ChargePointSimulator, SimulatorConfig` | `from apps.simulators import ChargePointSimulator, SimulatorConfig` |
 
+### Release migration notes (EVCS wrapper removal)
+The compatibility wrapper module at `apps.ocpp.evcs` has been removed.
+
+External plugin maintainers should update imports to use `apps.simulators.evcs` directly:
+
+| Removed import path | Replacement import path |
+| --- | --- |
+| `from apps.ocpp.evcs import simulate, simulate_cp, view_simulator, view_cp_simulator` | `from apps.simulators.evcs import simulate, simulate_cp, view_simulator, view_cp_simulator` |
+| `from apps.ocpp.evcs import _start_simulator, _stop_simulator, get_simulator_state, parse_repeat` | `from apps.simulators.evcs import _start_simulator, _stop_simulator, get_simulator_state, parse_repeat` |
+
 For shell migration, a direct one-time update can be done with substitutions like:
 
 ```bash
