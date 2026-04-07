@@ -147,7 +147,8 @@ def test_sync_forwarded_charge_points_respects_existing_sessions(monkeypatch):
     monkeypatch.setattr("apps.forwarder.ocpp.logger", fake_logger)
     monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_create_connection)
 
-    from apps.ocpp import forwarder as forwarder_module, forwarding_utils
+    from apps.forwarder import ocpp as forwarder_module
+    from apps.ocpp import forwarding_utils
 
     monkeypatch.setitem(sys.modules, "apps.ocpp.models.forwarder", forwarder_module)
 

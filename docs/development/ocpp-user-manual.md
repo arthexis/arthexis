@@ -100,6 +100,18 @@ If your automation still calls legacy entrypoints, update scripts to the canonic
 | `.venv/bin/python manage.py export_transactions <output.json> [--start ... --end ... --chargers ...]` | `.venv/bin/python manage.py ocpp transactions export <output.json> [--start ... --end ... --chargers ...]` |
 | `.venv/bin/python manage.py ocpp_replay <extract.json>` | `.venv/bin/python manage.py ocpp trace replay <extract.json>` |
 
+
+### Release migration notes (forwarder import path removal)
+The compatibility shim at `apps.ocpp.forwarder` has been removed.
+
+If integration code still imports the legacy path, switch to `apps.forwarder.ocpp`:
+
+```python
+# old → new
+from apps.ocpp.forwarder import Forwarder, ForwardingSession, forwarder
+from apps.forwarder.ocpp import Forwarder, ForwardingSession, forwarder
+```
+
 ### Release migration notes (simulator import path removal)
 The compatibility package at `apps.ocpp.simulator` has been removed.
 

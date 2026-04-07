@@ -11,7 +11,7 @@ from apps.features.models import Feature
 from apps.nodes.models import Node
 
 from ... import store
-from ...forwarder import forwarder
+from apps.forwarder.ocpp import forwarder
 from ...forwarder_feature import ocpp_forwarder_enabled
 from ...models import Charger, ChargingStation, Transaction
 from ..connection import RateLimitedConnectionMixin
