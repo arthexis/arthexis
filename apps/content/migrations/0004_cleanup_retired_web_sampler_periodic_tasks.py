@@ -7,11 +7,7 @@ RETIRED_WEB_SAMPLER_TASK_NAME = "apps.content.tasks.run_scheduled_web_samplers"
 def _cleanup_retired_web_sampler_periodic_tasks(apps, schema_editor):
     del schema_editor
 
-    try:
-        PeriodicTask = apps.get_model("django_celery_beat", "PeriodicTask")
-    except LookupError:
-        return
-
+    PeriodicTask = apps.get_model("django_celery_beat", "PeriodicTask")
     PeriodicTask.objects.filter(task=RETIRED_WEB_SAMPLER_TASK_NAME).delete()
 
 
