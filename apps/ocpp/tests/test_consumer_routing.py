@@ -113,6 +113,32 @@ async def test_status_notification_available_routes_through_availability_handler
 
 
 @pytest.mark.anyio
+async def test_heartbeat_updates_last_heartbeat_without_name_error(monkeypatch):
+    """Heartbeat updates persisted last_heartbeat using the Charger model."""
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.charger_id = "CP-HB"
+    consumer.charger = SimpleNamespace(last_heartbeat=None)
+    consumer.aggregate_charger = SimpleNamespace(last_heartbeat=None)
+
+    update_mock = Mock(return_value=1)
+    filter_mock = Mock(return_value=SimpleNamespace(update=update_mock))
+    monkeypatch.setattr(
+        status_handlers.Charger,
+        "objects",
+        SimpleNamespace(filter=filter_mock),
+    )
+
+    reply = await consumer._handle_heartbeat_action({}, "msg-hb-1", "", "")
+
+    assert "currentTime" in reply
+    filter_mock.assert_called_once_with(charger_id="CP-HB")
+    update_mock.assert_called_once()
+    assert consumer.charger.last_heartbeat is not None
+    assert consumer.aggregate_charger.last_heartbeat is not None
+
+
+@pytest.mark.anyio
 async def test_ocpp21_cp_to_csms_actions_resolve_to_concrete_handlers():
     """OCPP 2.1 CP->CSMS actions should resolve via router, not empty fallthrough."""
 

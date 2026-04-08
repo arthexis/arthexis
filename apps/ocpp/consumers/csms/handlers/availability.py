@@ -20,9 +20,14 @@ class AvailabilityHandlersMixin:
             return
         tx_obj = store.transactions.pop(self.store_key, None)
         if tx_obj:
-            await self._cancel_consumption_message()
-            store.end_session_log(self.store_key)
-            store.stop_session_lock()
+            await self._close_cached_session_state()
+
+    async def _close_cached_session_state(self) -> None:
+        """Finalize all in-memory session state for the current store key."""
+
+        await self._cancel_consumption_message()
+        store.end_session_log(self.store_key)
+        store.stop_session_lock()
 
     async def _sync_availability_state_from_status(
         self,
@@ -59,10 +64,13 @@ class AvailabilityHandlersMixin:
             "availability_state": state,
             "availability_state_updated_at": timestamp,
         }
+        target_map = {
+            getattr(self.charger, "pk", None): self.charger,
+            getattr(self.aggregate_charger, "pk", None): self.aggregate_charger,
+        }
         for target in targets:
-            if self.charger and self.charger.pk == target.pk:
-                for field, value in updates.items():
-                    setattr(self.charger, field, value)
-            if self.aggregate_charger and self.aggregate_charger.pk == target.pk:
-                for field, value in updates.items():
-                    setattr(self.aggregate_charger, field, value)
+            cached_target = target_map.get(target.pk)
+            if cached_target is None:
+                continue
+            for field, value in updates.items():
+                setattr(cached_target, field, value)
