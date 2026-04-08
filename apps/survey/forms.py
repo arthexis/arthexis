@@ -10,13 +10,11 @@ class SurveySubmissionForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.survey = survey
         self.questions = list(survey.questions.prefetch_related("options").all())
-        self.question_fields: list[tuple[SurveyQuestion, str]] = []
+        self.question_fields: list[tuple[SurveyQuestion, str, forms.BoundField]] = []
 
         for question in self.questions:
             choices = [(str(option.pk), option.label) for option in question.options.all()]
-            field_class = (
-                forms.MultipleChoiceField if question.allow_multiple else forms.ChoiceField
-            )
+            field_class = forms.MultipleChoiceField if question.allow_multiple else forms.ChoiceField
             widget_class = (
                 forms.CheckboxSelectMultiple if question.allow_multiple else forms.RadioSelect
             )
@@ -26,7 +24,12 @@ class SurveySubmissionForm(forms.Form):
                 label=question.prompt,
                 widget=widget_class,
             )
-            self.question_fields.append((question, field_name))
+
+        for question in self.questions:
+            field_name = self._field_name(question.pk)
+            self.question_fields.append((question, field_name, self[field_name]))
+
+        self.first_error_field = next(iter(self.errors), "")
 
     @staticmethod
     def _field_name(question_id: int) -> str:

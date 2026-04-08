@@ -46,7 +46,12 @@ class SurveyOption(models.Model):
     class Meta:
         app_label = "survey"
         ordering = ("display_order", "id")
-        unique_together = ("question", "label")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("question", "label"),
+                name="survey_option_question_label_uniq",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.label
@@ -80,10 +85,17 @@ class SurveyResponse(models.Model):
                 condition=models.Q(participant_token__gt=""),
                 name="survey_unique_participant_response",
             ),
+            models.CheckConstraint(
+                condition=(
+                    (models.Q(user__isnull=False) & models.Q(participant_token=""))
+                    | (models.Q(user__isnull=True) & models.Q(participant_token__gt=""))
+                ),
+                name="survey_response_exactly_one_respondent",
+            ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.survey} by {self.user}"
+        return f"{self.survey} by {self.user or 'anonymous'}"
 
 
 class SurveyAnswer(models.Model):
@@ -96,7 +108,12 @@ class SurveyAnswer(models.Model):
     class Meta:
         app_label = "survey"
         ordering = ("question__display_order", "question_id")
-        unique_together = ("response", "question")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("response", "question"),
+                name="survey_answer_response_question_uniq",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.question}"
@@ -108,3 +125,10 @@ class SurveyAnswer(models.Model):
 
         if self.question.survey_id != self.response.survey_id:
             raise ValidationError({"question": "Question must belong to the response survey."})
+
+        if not self.pk:
+            return
+
+        invalid_options = self.selected_options.exclude(question_id=self.question_id)
+        if invalid_options.exists():
+            raise ValidationError({"selected_options": "Selected options must belong to the answer question."})

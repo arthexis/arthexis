@@ -39,7 +39,6 @@ class SurveyOptionAdmin(admin.ModelAdmin):
 class SurveyAnswerInline(admin.TabularInline):
     model = SurveyAnswer
     extra = 0
-    filter_horizontal = ("selected_options",)
 
 
 @admin.register(SurveyResponse)

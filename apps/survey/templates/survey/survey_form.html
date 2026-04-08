@@ -26,34 +26,34 @@
               </div>
             {% endif %}
 
-            {% for question, field_name in form.question_fields %}
-              <section class="question-step{% if forloop.first %} is-active{% endif %}" data-step="{{ forloop.counter0 }}">
-                <p class="text-muted mb-2">Question {{ forloop.counter }} of {{ form.questions|length }}</p>
-                <h2 class="h4 mb-3">{{ question.prompt }}</h2>
+            {% for question, field_name, bound_field in form.question_fields %}
+                <section class="question-step{% if field_name == form.first_error_field or forloop.first and not form.first_error_field %} is-active{% endif %}" data-step="{{ forloop.counter0 }}">
+                  <p class="text-muted mb-2">Question {{ forloop.counter }} of {{ form.questions|length }}</p>
+                  <h2 class="h4 mb-3">{{ question.prompt }}</h2>
 
-                <div class="d-grid gap-2 mb-4">
-                  {% for option in question.options.all %}
-                    <label class="choice-tile">
-                      <input
-                        type="{% if question.allow_multiple %}checkbox{% else %}radio{% endif %}"
-                        name="question_{{ question.pk }}"
-                        value="{{ option.pk }}"
-                      >
-                      <span>{{ option.label }}</span>
-                    </label>
-                  {% endfor %}
-                </div>
+                  <div class="d-grid gap-2 mb-4">
+                    {% for option in question.options.all %}
+                      <label class="choice-tile">
+                        <input
+                          type="{% if question.allow_multiple %}checkbox{% else %}radio{% endif %}"
+                          name="question_{{ question.pk }}"
+                          value="{{ option.pk }}"
+                        >
+                        <span>{{ option.label }}</span>
+                      </label>
+                    {% endfor %}
+                  </div>
 
-                {% if form.errors and field_name in form.errors %}
-                  <div class="alert alert-danger">{{ form.errors[field_name]|join:', ' }}</div>
-                {% endif %}
-              </section>
-            {% endfor %}
+                  {% if bound_field.errors %}
+                    <div class="alert alert-danger">{{ bound_field.errors|join:", " }}</div>
+                  {% endif %}
+                </section>
+              {% endfor %}
 
             <div class="d-flex justify-content-between gap-2 mt-3">
-              <button type="button" id="prev-question" class="btn btn-outline-secondary" disabled>Back</button>
-              <button type="button" id="next-question" class="btn btn-primary">Next</button>
-              <button type="submit" id="submit-survey" class="btn btn-success d-none">Submit survey</button>
+              <button type="button" id="prev-question" class="btn btn-outline-secondary d-none" disabled>Back</button>
+              <button type="button" id="next-question" class="btn btn-primary d-none">Next</button>
+              <button type="submit" id="submit-survey" class="btn btn-success">Submit survey</button>
             </div>
           </form>
         </div>
@@ -63,8 +63,9 @@
 </div>
 
 <style>
-  .question-step { display: none; }
-  .question-step.is-active { display: block; }
+  .question-step { display: block; }
+  .js .question-step { display: none; }
+  .js .question-step.is-active { display: block; }
   .choice-tile {
     border: 1px solid #d1d5db;
     border-radius: 0.75rem;
@@ -84,11 +85,20 @@
 <script>
   (() => {
     const steps = [...document.querySelectorAll('.question-step')];
+    if (!steps.length) {
+      return;
+    }
+
+    document.documentElement.classList.add('js');
     const prevBtn = document.getElementById('prev-question');
     const nextBtn = document.getElementById('next-question');
     const submitBtn = document.getElementById('submit-survey');
     const progressBar = document.getElementById('survey-progress');
-    let current = 0;
+    let current = Math.max(0, steps.findIndex((step) => step.querySelector('.alert-danger')));
+
+    prevBtn.classList.remove('d-none');
+    nextBtn.classList.remove('d-none');
+    submitBtn.classList.add('d-none');
 
     const update = () => {
       steps.forEach((step, idx) => step.classList.toggle('is-active', idx === current));

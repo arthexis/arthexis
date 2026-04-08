@@ -49,4 +49,17 @@ class Migration(migrations.Migration):
                 name="survey_unique_participant_response",
             ),
         ),
+        migrations.AddConstraint(
+            model_name="surveyresponse",
+            constraint=models.CheckConstraint(
+                condition=(
+                    (models.Q(("user__isnull", False)) & models.Q(("participant_token", "")))
+                    | (
+                        models.Q(("user__isnull", True))
+                        & models.Q(("participant_token__gt", ""))
+                    )
+                ),
+                name="survey_response_exactly_one_respondent",
+            ),
+        ),
     ]

@@ -89,7 +89,12 @@ class Migration(migrations.Migration):
             ],
             options={
                 "ordering": ("display_order", "id"),
-                "unique_together": {("question", "label")},
+                "constraints": [
+                    models.UniqueConstraint(
+                        fields=("question", "label"),
+                        name="survey_option_question_label_uniq",
+                    ),
+                ],
             },
         ),
         migrations.CreateModel(
@@ -164,7 +169,12 @@ class Migration(migrations.Migration):
             ],
             options={
                 "ordering": ("question__display_order", "question_id"),
-                "unique_together": {("response", "question")},
+                "constraints": [
+                    models.UniqueConstraint(
+                        fields=("response", "question"),
+                        name="survey_answer_response_question_uniq",
+                    ),
+                ],
             },
         ),
     ]
