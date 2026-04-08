@@ -10,6 +10,7 @@ from apps.ocpp import store
 from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.consumers.base.routing import ActionRouter
 from apps.ocpp.consumers.csms import consumer as csms_consumer
+from apps.ocpp.consumers.csms.handlers import status as status_handlers
 from apps.ocpp.models import Transaction
 
 
@@ -53,6 +54,62 @@ async def test_dispatch_routes_via_registry_for_transaction_event():
 
     consumer._handle_transaction_event_action.assert_awaited_once()
     consumer.send.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_dispatch_registry_keeps_status_notification_binding():
+    """StatusNotification should continue dispatching to the consumer handler."""
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CP-STATUS"
+    consumer.charger_id = "CP-STATUS"
+    consumer._log_triggered_follow_up = lambda *_args, **_kwargs: None
+    consumer._assign_connector = AsyncMock()
+    consumer._forward_charge_point_message = AsyncMock()
+    consumer._handle_status_notification_action = AsyncMock(return_value={})
+    consumer.send = AsyncMock()
+
+    msg = [2, "msg-status-1", "StatusNotification", {"connectorId": 1, "status": "Available"}]
+    await consumer._handle_call_message(msg, json.dumps(msg), json.dumps(msg))
+
+    consumer._handle_status_notification_action.assert_awaited_once()
+    consumer.send.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_status_notification_available_routes_through_availability_handlers(monkeypatch):
+    """Availability transitions should be delegated to the dedicated mixin methods."""
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer._assign_connector = AsyncMock()
+    consumer._handle_available_status_transition = AsyncMock()
+    consumer._sync_availability_state_from_status = AsyncMock()
+    consumer.charger_id = "CP-AVAIL"
+    consumer.store_key = "CP-AVAIL"
+    consumer.connector_value = 7
+    consumer.charger = SimpleNamespace()
+    consumer.aggregate_charger = None
+
+    monkeypatch.setattr(
+        status_handlers.persistence,
+        "update_status_notification_records",
+        Mock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        status_handlers.persistence,
+        "sync_charger_error_security_event",
+        Mock(return_value=None),
+    )
+
+    await consumer._handle_status_notification_action(
+        {"connectorId": 7, "status": "Available", "errorCode": "NoError"},
+        "msg-status-2",
+        "",
+        "",
+    )
+
+    consumer._handle_available_status_transition.assert_awaited_once_with(7)
+    consumer._sync_availability_state_from_status.assert_awaited_once()
 
 
 @pytest.mark.anyio

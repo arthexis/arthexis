@@ -11,7 +11,6 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from apps.ocpp import store
-from apps.ocpp.models import Charger
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
@@ -130,43 +129,16 @@ class StatusHandlersMixin:
                 self.charger_id,
                 connector_value,
             )
-        if connector_value is not None and status.lower() == "available":
-            tx_obj = store.transactions.pop(self.store_key, None)
-            if tx_obj:
-                await self._cancel_consumption_message()
-                store.end_session_log(self.store_key)
-                store.stop_session_lock()
+        if status.lower() == "available":
+            await self._handle_available_status_transition(self.connector_value)
         store.add_log(
             self.store_key,
             f"StatusNotification processed: {json.dumps(payload_data, sort_keys=True)}",
             log_type="charger",
         )
-        availability_state = Charger.availability_state_from_status(status)
-        if availability_state:
-            await self._update_availability_state(
-                availability_state,
-                status_timestamp,
-                self.connector_value,
-            )
-        return {}
-
-    async def _update_availability_state(self, state: str, timestamp, connector_value: int | None) -> None:
-        """Persist availability state for the current charger and cached references."""
-
-        targets = await database_sync_to_async(persistence.update_availability_state_records)(
-            charger_id=self.charger_id,
-            connector_value=connector_value,
-            state=state,
-            timestamp=timestamp,
+        await self._sync_availability_state_from_status(
+            status,
+            status_timestamp,
+            self.connector_value,
         )
-        updates = {
-            "availability_state": state,
-            "availability_state_updated_at": timestamp,
-        }
-        for target in targets:
-            if self.charger and self.charger.pk == target.pk:
-                for field, value in updates.items():
-                    setattr(self.charger, field, value)
-            if self.aggregate_charger and self.aggregate_charger.pk == target.pk:
-                for field, value in updates.items():
-                    setattr(self.aggregate_charger, field, value)
+        return {}

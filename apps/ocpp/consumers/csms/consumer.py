@@ -97,6 +97,7 @@ from apps.ocpp.consumers.base.legacy_transactions import LegacyTransactionHandle
 from apps.ocpp.consumers.base.rfid import RfidMixin
 from apps.ocpp.consumers.base.connection import ConnectionHandler
 from apps.ocpp.consumers.base.forwarding import ForwardingHandler
+from apps.ocpp.consumers.csms.handlers.availability import AvailabilityHandlersMixin
 from apps.ocpp.consumers.csms.handlers.metering import MeteringHandlersMixin
 from apps.ocpp.consumers.csms.handlers.notifications import (
     NotificationHandlersMixin as CsmsNotificationHandlersMixin,
@@ -191,6 +192,7 @@ class SinkConsumer(AsyncWebsocketConsumer):
 
 class CSMSConsumer(
     CSMSTransportMixin,
+    AvailabilityHandlersMixin,
     StatusHandlersMixin,
     MeteringHandlersMixin,
     CsmsNotificationHandlersMixin,
