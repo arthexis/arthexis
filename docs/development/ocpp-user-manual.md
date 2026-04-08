@@ -117,7 +117,7 @@ External plugin maintainers should update imports to use `apps.simulators.evcs` 
 | Removed import path | Replacement import path |
 | --- | --- |
 | `from apps.ocpp.evcs import simulate, simulate_cp, view_simulator, view_cp_simulator` | `from apps.simulators.evcs import simulate, simulate_cp, view_simulator, view_cp_simulator` |
-| `from apps.ocpp.evcs import _start_simulator, _stop_simulator, get_simulator_state, parse_repeat` | `from apps.simulators.evcs import _start_simulator, _stop_simulator, get_simulator_state, parse_repeat` |
+| `from apps.ocpp.evcs import _simulator_status_json, _start_simulator, _stop_simulator, get_simulator_state, parse_repeat` | `from apps.simulators.evcs import _simulator_status_json, _start_simulator, _stop_simulator, get_simulator_state, parse_repeat` |
 
 For shell migration, a direct one-time update can be done with substitutions like:
 
