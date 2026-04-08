@@ -277,6 +277,65 @@ async def test_boot_notification_normalizes_ocpp2x_payload(caplog):
 
 
 @pytest.mark.anyio
+async def test_boot_notification_preserves_existing_canonical_ocpp2x_fields(caplog):
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.ocpp_version = "ocpp2.1"
+
+    with caplog.at_level("DEBUG"):
+        response = await consumer._handle_boot_notification_action(
+            {
+                "chargePointVendor": "Canonical Vendor",
+                "chargePointModel": "Canonical Model",
+                "bootReason": "ApplicationReset",
+                "chargingStation": {"vendorName": "Ignored Vendor", "model": "Ignored Model"},
+                "reason": "IgnoredReason",
+            },
+            "msg-boot-preserve",
+            "",
+            "",
+        )
+
+    assert response["status"] == "Accepted"
+    assert any(
+        "BootNotification payload normalized" in record.getMessage()
+        and record.payload["chargePointVendor"] == "Canonical Vendor"
+        and record.payload["chargePointModel"] == "Canonical Model"
+        and record.payload["bootReason"] == "ApplicationReset"
+        for record in caplog.records
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("ocpp_version", "payload", "expected_payload"),
+    [
+        ("ocpp2.0.1", None, {}),
+        ("ocpp1.6", {"chargingStation": {"vendorName": "Acme"}, "reason": "PowerUp"}, {"chargingStation": {"vendorName": "Acme"}, "reason": "PowerUp"}),
+    ],
+)
+async def test_boot_notification_logs_without_normalization_outside_supported_shape(
+    caplog, ocpp_version, payload, expected_payload
+):
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.ocpp_version = ocpp_version
+
+    with caplog.at_level("DEBUG"):
+        response = await consumer._handle_boot_notification_action(
+            payload,
+            "msg-boot-shape",
+            "",
+            "",
+        )
+
+    assert response["status"] == "Accepted"
+    assert any(
+        "BootNotification payload normalized" in record.getMessage()
+        and record.payload == expected_payload
+        for record in caplog.records
+    )
+
+
+@pytest.mark.anyio
 async def test_authorize_keeps_id_tag_info_for_ocpp16():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.ocpp_version = "ocpp1.6"
