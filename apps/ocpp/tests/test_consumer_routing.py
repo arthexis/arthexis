@@ -34,6 +34,10 @@ async def test_action_router_resolves_transaction_and_notification_handlers():
         router.resolve("PublishFirmwareStatusNotification")
         == consumer._handle_publish_firmware_status_notification_action
     )
+    assert (
+        router.resolve("FirmwareStatusNotification")
+        == consumer._handle_firmware_status_notification_action
+    )
 
 @pytest.mark.anyio
 async def test_dispatch_routes_via_registry_for_transaction_event():
@@ -68,6 +72,7 @@ async def test_ocpp21_cp_to_csms_actions_resolve_to_concrete_handlers():
         "Heartbeat": consumer._handle_heartbeat_action,
         "LogStatusNotification": consumer._handle_log_status_notification_action,
         "MeterValues": consumer._handle_meter_values_action,
+        "FirmwareStatusNotification": consumer._handle_firmware_status_notification_action,
         "NotifyChargingLimit": consumer._action_handler("NotifyChargingLimit").handle,
         "NotifyCustomerInformation": consumer._handle_notify_customer_information_action,
         "NotifyDisplayMessages": consumer._action_handler("NotifyDisplayMessages").handle,

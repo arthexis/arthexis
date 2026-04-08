@@ -1,5 +1,6 @@
 import json
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime
+from datetime import timezone as dt_timezone
 from functools import partial
 from unittest.mock import AsyncMock
 
@@ -8,40 +9,40 @@ import pytest
 from channels.db import database_sync_to_async
 from django.test import override_settings
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
-from apps.ocpp import store, call_error_handlers, call_result_handlers
+from apps.flows.models import Transition
+from apps.ocpp import call_error_handlers, call_result_handlers, store
 from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.consumers import base as consumers_base
-from apps.flows.models import Transition
-from apps.ocpp.views import actions
-from apps.ocpp.views.common import ActionContext
 from apps.ocpp.models import (
-    Charger,
-    CPReservation,
-    CertificateRequest,
     CertificateOperation,
+    CertificateRequest,
     CertificateStatusCheck,
-    InstalledCertificate,
-    CostUpdate,
+    Charger,
     ChargingProfile,
     ChargingSchedule,
-    Transaction,
-    Variable,
-    MonitoringRule,
-    MonitoringReport,
-    DeviceInventorySnapshot,
-    DeviceInventoryItem,
-    CustomerInformationRequest,
-    CustomerInformationChunk,
-    DisplayMessageNotification,
-    DisplayMessage,
     ClearedChargingLimitEvent,
+    CostUpdate,
     CPFirmware,
     CPFirmwareDeployment,
+    CPReservation,
+    CustomerInformationChunk,
+    CustomerInformationRequest,
+    DeviceInventoryItem,
+    DeviceInventorySnapshot,
+    DisplayMessage,
+    DisplayMessageNotification,
+    InstalledCertificate,
+    MonitoringReport,
+    MonitoringRule,
+    Transaction,
+    Variable,
 )
-from apps.protocols.models import ProtocolCall as ProtocolCallModel
 from apps.ocpp.models.location import Location
-from django.utils.dateparse import parse_datetime
+from apps.ocpp.views import actions
+from apps.ocpp.views.common import ActionContext
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 
 @pytest.fixture(autouse=True)
@@ -636,6 +637,49 @@ async def test_publish_firmware_status_updates_deployment():
     )
     assert deployment.status == "Published"
     assert deployment.completed_at is not None
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.integration
+async def test_firmware_status_notification_updates_chargers_and_logs():
+    aggregate = await database_sync_to_async(Charger.objects.create)(
+        charger_id="FW-16",
+        connector_id=None,
+    )
+    connector = await database_sync_to_async(Charger.objects.create)(
+        charger_id="FW-16",
+        connector_id=1,
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.charger_id = "FW-16"
+    consumer.store_key = store.identity_key("FW-16", 1)
+    consumer.charger = connector
+    consumer.aggregate_charger = aggregate
+
+    payload = {
+        "status": "Downloaded",
+        "statusInfo": "checksum-ok",
+        "timestamp": "2024-01-01T03:00:00Z",
+    }
+    result = await consumer._handle_firmware_status_notification_action(
+        payload, "msg-fw", "", ""
+    )
+
+    assert result == {}
+    connector = await database_sync_to_async(Charger.objects.get)(pk=connector.pk)
+    aggregate = await database_sync_to_async(Charger.objects.get)(pk=aggregate.pk)
+    assert connector.firmware_status == "Downloaded"
+    assert aggregate.firmware_status == "Downloaded"
+    assert connector.firmware_status_info == "checksum-ok"
+    assert aggregate.firmware_status_info == "checksum-ok"
+    assert connector.firmware_timestamp.isoformat() == "2024-01-01T03:00:00+00:00"
+    assert aggregate.firmware_timestamp.isoformat() == "2024-01-01T03:00:00+00:00"
+
+    connector_logs = list(store.logs["charger"].get(store.identity_key("FW-16", 1), []))
+    aggregate_logs = list(store.logs["charger"].get(store.identity_key("FW-16", None), []))
+    assert any("FirmwareStatusNotification:" in entry for entry in connector_logs)
+    assert any("FirmwareStatusNotification:" in entry for entry in aggregate_logs)
 
 
 @pytest.mark.anyio

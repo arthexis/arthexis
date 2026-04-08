@@ -1,73 +1,49 @@
-from datetime import datetime, timedelta, timezone as dt_timezone
 import asyncio
-from collections import deque
-from dataclasses import dataclass
 import inspect
 import json
 import logging
 import re
 import uuid
+from collections import deque
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
+from decimal import Decimal, InvalidOperation
 
+from asgiref.sync import sync_to_async
+from channels.db import database_sync_to_async
+from channels.generic.websocket import AsyncWebsocketConsumer
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
-from apps.energy.models import CustomerAccount
-from apps.links.models import Reference
-from apps.cards.models import RFID as CoreRFID, RFIDAttempt
-from apps.core.notifications import LcdChannel
-from apps.nodes.models import NetMessage
-from apps.protocols.decorators import protocol_call
-from apps.protocols.models import ProtocolCall as ProtocolCallModel
-
-from channels.generic.websocket import AsyncWebsocketConsumer
-from channels.db import database_sync_to_async
-from asgiref.sync import sync_to_async
-from apps.rates.mixins import RateLimitedConsumerMixin
-from config.offline import requires_network
-
-from decimal import Decimal, InvalidOperation
 from django.utils.dateparse import parse_datetime
-from apps.ocpp import store
+
+from apps.cards.models import RFID as CoreRFID
+from apps.cards.models import RFIDAttempt
+from apps.core.notifications import LcdChannel
+from apps.energy.models import CustomerAccount
 from apps.forwarder.ocpp import forwarder
-from apps.ocpp.status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
-from apps.ocpp.models import (
-    Transaction,
-    Charger,
-    ChargingStation,
-    ChargerConfiguration,
-    MeterValue,
-    CostUpdate,
-    DataTransferMessage,
-    CPReservation,
-    CPFirmware,
-    CPFirmwareDeployment,
-    CPFirmwareRequest,
-    SecurityEvent,
-    ChargerLogRequest,
-    PowerProjection,
-    ChargingProfile,
-    ChargingSchedule,
-    Variable,
-    MonitoringRule,
-    MonitoringReport,
-    DeviceInventorySnapshot,
-    DeviceInventoryItem,
-    CustomerInformationRequest,
-    CustomerInformationChunk,
-    DisplayMessageNotification,
-    DisplayMessage,
-    ClearedChargingLimitEvent,
-)
+from apps.links.models import Reference
 from apps.links.reference_utils import host_is_local_loopback
-from apps.screens.startup_notifications import format_lcd_lines
-from apps.ocpp.evcs_discovery import (
-    DEFAULT_CONSOLE_PORT,
-    HTTPS_PORTS,
-    build_console_url,
-    prioritise_ports,
-    scan_open_ports,
+from apps.nodes.models import NetMessage
+from apps.ocpp import store
+from apps.ocpp.consumers.base.actions_metering import MeteringActionsMixin
+from apps.ocpp.consumers.base.actions_notifications import NotificationActionsMixin
+from apps.ocpp.consumers.base.actions_transactions import TransactionActionsMixin
+from apps.ocpp.consumers.base.certificates import CertificatesMixin
+from apps.ocpp.consumers.base.connection import ConnectionHandler
+from apps.ocpp.consumers.base.connection_flow import ConnectionFlowMixin
+from apps.ocpp.consumers.base.dispatch import DispatchMixin
+from apps.ocpp.consumers.base.forwarding import ForwardingHandler
+from apps.ocpp.consumers.base.identity import (
+    IdentityMixin,
+    _extract_vehicle_identifier,
+    _register_log_names_for_identity,
+    _resolve_client_ip,
 )
+from apps.ocpp.consumers.base.legacy_transactions import LegacyTransactionHandlersMixin
+from apps.ocpp.consumers.base.rfid import RfidMixin
 from apps.ocpp.consumers.connection import (
     RateLimitedConnectionMixin,
     SubprotocolConnectionMixin,
@@ -77,33 +53,58 @@ from apps.ocpp.consumers.constants import (
     OCPP_CONNECT_RATE_LIMIT_FALLBACK,
     OCPP_CONNECT_RATE_LIMIT_WINDOW_SECONDS,
     OCPP_VERSION_16,
-    OCPP_VERSION_201,
     OCPP_VERSION_21,
+    OCPP_VERSION_201,
 )
-from apps.ocpp.consumers.base.certificates import CertificatesMixin
-from apps.ocpp.consumers.base.dispatch import DispatchMixin
-from apps.ocpp.consumers.base.identity import (
-    IdentityMixin,
-    _extract_vehicle_identifier,
-    _register_log_names_for_identity,
-    _resolve_client_ip,
-)
-from apps.ocpp.utils import _parse_ocpp_timestamp
-from apps.ocpp.consumers.base.actions_metering import MeteringActionsMixin
-from apps.ocpp.consumers.base.actions_notifications import NotificationActionsMixin
-from apps.ocpp.consumers.base.actions_transactions import TransactionActionsMixin
-from apps.ocpp.consumers.base.connection_flow import ConnectionFlowMixin
-from apps.ocpp.consumers.base.legacy_transactions import LegacyTransactionHandlersMixin
-from apps.ocpp.consumers.base.rfid import RfidMixin
-from apps.ocpp.consumers.base.connection import ConnectionHandler
-from apps.ocpp.consumers.base.forwarding import ForwardingHandler
+from apps.ocpp.consumers.csms.actions import build_action_handlers
+from apps.ocpp.consumers.csms.handlers.firmware import FirmwareHandlersMixin
 from apps.ocpp.consumers.csms.handlers.metering import MeteringHandlersMixin
 from apps.ocpp.consumers.csms.handlers.notifications import (
     NotificationHandlersMixin as CsmsNotificationHandlersMixin,
 )
 from apps.ocpp.consumers.csms.handlers.status import StatusHandlersMixin
 from apps.ocpp.consumers.csms.transport import CSMSTransportMixin
-from apps.ocpp.consumers.csms.actions import build_action_handlers
+from apps.ocpp.evcs_discovery import (
+    DEFAULT_CONSOLE_PORT,
+    HTTPS_PORTS,
+    build_console_url,
+    prioritise_ports,
+    scan_open_ports,
+)
+from apps.ocpp.models import (
+    Charger,
+    ChargerConfiguration,
+    ChargerLogRequest,
+    ChargingProfile,
+    ChargingSchedule,
+    ChargingStation,
+    ClearedChargingLimitEvent,
+    CostUpdate,
+    CPFirmware,
+    CPFirmwareRequest,
+    CPReservation,
+    CustomerInformationChunk,
+    CustomerInformationRequest,
+    DataTransferMessage,
+    DeviceInventoryItem,
+    DeviceInventorySnapshot,
+    DisplayMessage,
+    DisplayMessageNotification,
+    MeterValue,
+    MonitoringReport,
+    MonitoringRule,
+    PowerProjection,
+    SecurityEvent,
+    Transaction,
+    Variable,
+)
+from apps.ocpp.status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
+from apps.ocpp.utils import _parse_ocpp_timestamp
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
+from apps.rates.mixins import RateLimitedConsumerMixin
+from apps.screens.startup_notifications import format_lcd_lines
+from config.offline import requires_network
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +193,7 @@ class SinkConsumer(AsyncWebsocketConsumer):
 class CSMSConsumer(
     CSMSTransportMixin,
     StatusHandlersMixin,
+    FirmwareHandlersMixin,
     MeteringHandlersMixin,
     CsmsNotificationHandlersMixin,
     ConnectionFlowMixin,
@@ -586,56 +588,6 @@ class CSMSConsumer(
             await database_sync_to_async(self.charger.save)(
                 update_fields=["temperature", "temperature_unit"]
             )
-
-    async def _update_firmware_state(
-        self, status: str, status_info: str, timestamp: datetime | None
-    ) -> None:
-        """Persist firmware status fields for the active charger identities."""
-
-        targets: list[Charger] = []
-        seen_ids: set[int] = set()
-        for charger in (self.charger, self.aggregate_charger):
-            if not charger or charger.pk is None:
-                continue
-            if charger.pk in seen_ids:
-                continue
-            targets.append(charger)
-            seen_ids.add(charger.pk)
-
-        if not targets:
-            return
-
-        def _persist(ids: list[int]) -> None:
-            Charger.objects.filter(pk__in=ids).update(
-                firmware_status=status,
-                firmware_status_info=status_info,
-                firmware_timestamp=timestamp,
-            )
-
-        await database_sync_to_async(_persist)([target.pk for target in targets])
-        for target in targets:
-            target.firmware_status = status
-            target.firmware_status_info = status_info
-            target.firmware_timestamp = timestamp
-
-        def _update_deployments(ids: list[int]) -> None:
-            deployments = list(
-                CPFirmwareDeployment.objects.filter(
-                    charger_id__in=ids, completed_at__isnull=True
-                )
-            )
-            payload = {"status": status, "statusInfo": status_info}
-            for deployment in deployments:
-                deployment.mark_status(
-                    status,
-                    status_info,
-                    timestamp,
-                    response=payload,
-                )
-
-        await database_sync_to_async(_update_deployments)(
-            [target.pk for target in targets]
-        )
 
     async def _cancel_consumption_message(self) -> None:
         """Stop any scheduled consumption message updates."""
@@ -2479,65 +2431,6 @@ class CSMSConsumer(
             payload, msg_id, raw, text_data
         )
 
-    @protocol_call(
-        "ocpp21",
-        ProtocolCallModel.CP_TO_CSMS,
-        "PublishFirmwareStatusNotification",
-    )
-    @protocol_call(
-        "ocpp201",
-        ProtocolCallModel.CP_TO_CSMS,
-        "PublishFirmwareStatusNotification",
-    )
-    async def _handle_publish_firmware_status_notification_action_legacy(
-        self, payload, msg_id, raw, text_data
-    ):
-        status_raw = payload.get("status")
-        status_value = str(status_raw or "").strip()
-        info_value = payload.get("statusInfo")
-        if not isinstance(info_value, str):
-            info_value = payload.get("info")
-        status_info = str(info_value or "").strip()
-        request_id_value = payload.get("requestId")
-        timestamp_value = _parse_ocpp_timestamp(payload.get("publishTimestamp"))
-        if timestamp_value is None:
-            timestamp_value = _parse_ocpp_timestamp(payload.get("timestamp"))
-        if timestamp_value is None:
-            timestamp_value = timezone.now()
-
-        def _persist_status():
-            deployment = None
-            try:
-                deployment_pk = int(request_id_value)
-            except (TypeError, ValueError, OverflowError):
-                deployment_pk = None
-            if deployment_pk:
-                deployment = CPFirmwareDeployment.objects.filter(
-                    pk=deployment_pk
-                ).first()
-            if deployment is None and self.charger:
-                deployment = (
-                    CPFirmwareDeployment.objects.filter(
-                        charger=self.charger, completed_at__isnull=True
-                    )
-                    .order_by("-requested_at")
-                    .first()
-                )
-            if deployment is None:
-                return
-            if status_value == "Downloaded" and deployment.downloaded_at is None:
-                deployment.downloaded_at = timestamp_value
-            deployment.mark_status(
-                status_value,
-                status_info,
-                timestamp_value,
-                response=payload,
-            )
-
-        await database_sync_to_async(_persist_status)()
-        self._log_ocpp201_notification("PublishFirmwareStatusNotification", payload)
-        return {}
-
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "ReportChargingProfiles")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ReportChargingProfiles")
     async def _handle_report_charging_profiles_action(
@@ -2779,42 +2672,4 @@ class CSMSConsumer(
             "idle",
         }:
             store.finalize_log_capture(session_capture)
-        return {}
-
-    async def _handle_firmware_status_notification_action_legacy(
-        self, payload, msg_id, raw, text_data
-    ):
-        status_raw = payload.get("status")
-        status = str(status_raw or "").strip()
-        info_value = payload.get("statusInfo")
-        if not isinstance(info_value, str):
-            info_value = payload.get("info")
-        status_info = str(info_value or "").strip()
-        timestamp_raw = payload.get("timestamp")
-        timestamp_value = None
-        if timestamp_raw:
-            timestamp_value = parse_datetime(str(timestamp_raw))
-            if timestamp_value and timezone.is_naive(timestamp_value):
-                timestamp_value = timezone.make_aware(
-                    timestamp_value, timezone.get_current_timezone()
-                )
-        if timestamp_value is None:
-            timestamp_value = timezone.now()
-        await self._update_firmware_state(status, status_info, timestamp_value)
-        store.add_log(
-            self.store_key,
-            "FirmwareStatusNotification: " + json.dumps(payload, separators=(",", ":")),
-            log_type="charger",
-        )
-        if self.aggregate_charger and self.aggregate_charger.connector_id is None:
-            aggregate_key = store.identity_key(
-                self.charger_id, self.aggregate_charger.connector_id
-            )
-            if aggregate_key != self.store_key:
-                store.add_log(
-                    aggregate_key,
-                    "FirmwareStatusNotification: "
-                    + json.dumps(payload, separators=(",", ":")),
-                    log_type="charger",
-                )
         return {}
