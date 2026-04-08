@@ -108,6 +108,12 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
     order_numbers = forms.CharField(
         required=False,
         label="Optional order numbers",
+        widget=forms.Textarea(
+            attrs={
+                "rows": 3,
+                "style": "padding: 8px 10px;",
+            }
+        ),
         help_text="When full load is disabled, enter one or more order numbers separated by spaces or commas.",
     )
 
@@ -142,12 +148,19 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
 
         if getattr(self.request_user, "is_authenticated", False):
             cleaned_data["user"] = self.request_user
+            self.instance.group = None
+            self.instance.avatar = None
         if cleaned_data.get("user") is None:
             raise ValidationError("Could not resolve the current user for this contractor.")
         if cleaned_data.get("load_all_customers") and not cleaned_data.get("validate_credentials"):
             self.add_error(
                 "load_all_customers",
                 "Enable credential validation before running the initial customer load.",
+            )
+        if cleaned_data.get("order_numbers") and not cleaned_data.get("validate_credentials"):
+            self.add_error(
+                "order_numbers",
+                "Enable credential validation before loading specific order numbers.",
             )
         if cleaned_data.get("load_all_customers"):
             cleaned_data["order_numbers"] = ""
