@@ -107,8 +107,7 @@ The compatibility shim at `apps.ocpp.forwarder` has been removed.
 If integration code still imports the legacy path, switch to `apps.forwarder.ocpp`:
 
 ```python
-# old → new
-from apps.ocpp.forwarder import Forwarder, ForwardingSession, forwarder
+# from apps.ocpp.forwarder import Forwarder, ForwardingSession, forwarder
 from apps.forwarder.ocpp import Forwarder, ForwardingSession, forwarder
 ```
 
