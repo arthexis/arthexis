@@ -1,37 +1,53 @@
 name: MyPy
 
-x-mypy-paths: &mypy-paths
-  - '.github/workflows/mypy.yml'
-  - '.pre-commit-config.yaml'
-  - 'CONTRIBUTING.md'
-  - 'Makefile'
-  - 'docs/development/mypy-adoption-checklist.md'
-  - 'pyproject.toml'
-  - 'scripts/run_mypy.sh'
-  - 'scripts/generate_requirements.py'
-  - 'scripts/sort_pyproject_deps.py'
-  - 'apps/protocols/**'
-  - 'apps/repos/github.py'
-  - 'apps/repos/services/github.py'
-  - 'apps/repos/release_management.py'
-  - 'apps/repos/views/webhooks.py'
-  - 'apps/core/services/health.py'
-  - 'apps/core/services/health_checks.py'
-  - 'apps/core/modeling/**'
-  - 'apps/core/system_ui.py'
-
 env:
   PYTHONDONTWRITEBYTECODE: '1'
   NODE_OPTIONS: '--no-deprecation'
 
 on:
   pull_request:
-    paths: *mypy-paths
+    paths:
+      - '.github/workflows/mypy.yml'
+      - '.pre-commit-config.yaml'
+      - 'CONTRIBUTING.md'
+      - 'Makefile'
+      - 'docs/development/mypy-adoption-checklist.md'
+      - 'pyproject.toml'
+      - 'scripts/run_mypy.sh'
+      - 'scripts/generate_requirements.py'
+      - 'scripts/sort_pyproject_deps.py'
+      - 'apps/protocols/**'
+      - 'apps/repos/github.py'
+      - 'apps/repos/services/github.py'
+      - 'apps/repos/release_management.py'
+      - 'apps/repos/views/webhooks.py'
+      - 'apps/core/services/health.py'
+      - 'apps/core/services/health_checks.py'
+      - 'apps/core/modeling/**'
+      - 'apps/core/system_ui.py'
   push:
     branches:
       - main
       - 'release/**'
-    paths: *mypy-paths
+    paths:
+      - '.github/workflows/mypy.yml'
+      - '.pre-commit-config.yaml'
+      - 'CONTRIBUTING.md'
+      - 'Makefile'
+      - 'docs/development/mypy-adoption-checklist.md'
+      - 'pyproject.toml'
+      - 'scripts/run_mypy.sh'
+      - 'scripts/generate_requirements.py'
+      - 'scripts/sort_pyproject_deps.py'
+      - 'apps/protocols/**'
+      - 'apps/repos/github.py'
+      - 'apps/repos/services/github.py'
+      - 'apps/repos/release_management.py'
+      - 'apps/repos/views/webhooks.py'
+      - 'apps/core/services/health.py'
+      - 'apps/core/services/health_checks.py'
+      - 'apps/core/modeling/**'
+      - 'apps/core/system_ui.py'
   workflow_dispatch:
 
 permissions:
