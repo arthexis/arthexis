@@ -103,28 +103,9 @@ nav.toc a:hover {
   display: none;
 }
 
-
-.navbar .module-pill-nav {
-  display: flex;
-  flex-direction: row;
+.navbar-nav-wrap {
   flex-wrap: wrap;
-  align-items: center;
   gap: 0.35rem 0.3rem;
-}
-
-.module-pill-nav .nav-item {
-  flex: 0 0 auto;
-}
-
-.module-pill-nav .nav-link {
-  display: inline-flex;
-  align-items: center;
-  padding-left: 0;
-  padding-right: 0;
-}
-
-.module-pill-nav .badge {
-  display: inline-flex;
 }
 
 @media (min-width: 992px) {
