@@ -100,6 +100,33 @@ def test_wait_for_publish_step_records_url_on_completion(monkeypatch, tmp_path: 
     assert ctx.get("publish_workflow_url") == "https://example/run/3"
 
 
+def test_migrate_publish_step_index_translates_legacy_positions():
+    ctx = ReleasePublishContext(step=7, extras={})
+
+    migrated, changed = pipeline._migrate_publish_step_index(ctx)
+
+    assert changed is True
+    assert migrated.step == 9
+    assert (
+        migrated.extras["publish_step_sequence_version"]
+        == pipeline.PUBLISH_STEP_SEQUENCE_VERSION
+    )
+
+
+def test_migrate_publish_step_index_skips_current_sequence_version():
+    ctx = ReleasePublishContext(
+        step=5,
+        extras={
+            "publish_step_sequence_version": pipeline.PUBLISH_STEP_SEQUENCE_VERSION
+        },
+    )
+
+    migrated, changed = pipeline._migrate_publish_step_index(ctx)
+
+    assert changed is False
+    assert migrated.step == 5
+
+
 def test_release_artifact_collection_finds_wheel_and_sdist(tmp_path: Path, monkeypatch):
     dist = tmp_path / "dist"
     dist.mkdir()

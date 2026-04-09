@@ -2024,6 +2024,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
 BUILD_RELEASE_ARTIFACTS_STEP_NAME = "Build release artifacts"
 FIXTURE_REVIEW_STEP_NAME = "Freeze, squash and approve migrations"
 RECORD_PUBLISH_METADATA_STEP_NAME = "Record publish URLs & update fixtures"
+PUBLISH_STEP_SEQUENCE_VERSION = 2
 
 
 PUBLISH_STEPS = [
@@ -2045,6 +2046,43 @@ PUBLISH_STEPS = [
     (RECORD_PUBLISH_METADATA_STEP_NAME, _step_record_publish_metadata),
     ("Capture PyPI publish logs", _step_capture_publish_logs),
 ]
+
+
+def _migrate_publish_step_index(
+    ctx: ReleasePublishContext,
+) -> tuple[ReleasePublishContext, bool]:
+    sequence_version = int(ctx.extras.get("publish_step_sequence_version") or 1)
+    if sequence_version >= PUBLISH_STEP_SEQUENCE_VERSION:
+        return ctx, False
+
+    legacy_to_current_index = {
+        0: 0,
+        1: 1,
+        2: 2,
+        3: 3,
+        4: 4,
+        5: 6,
+        6: 7,
+        7: 9,
+        8: 10,
+        9: 11,
+    }
+    migrated_step = legacy_to_current_index.get(ctx.step, ctx.step)
+    migrated_step = min(max(0, migrated_step), len(PUBLISH_STEPS))
+
+    migrated_ctx = ReleasePublishContext(
+        step=migrated_step,
+        started=ctx.started,
+        paused=ctx.paused,
+        dry_run=ctx.dry_run,
+        error=ctx.error,
+        extras=dict(ctx.extras),
+    )
+    migrated_ctx.extras["publish_step_sequence_version"] = PUBLISH_STEP_SEQUENCE_VERSION
+    return (
+        migrated_ctx,
+        migrated_step != ctx.step or sequence_version != PUBLISH_STEP_SEQUENCE_VERSION,
+    )
 
 
 def release_progress_impl(request, pk: int, action: str):
@@ -2114,6 +2152,14 @@ def release_progress_impl(request, pk: int, action: str):
         append_log=_append_log,
     )
     typed_ctx, log_dir_warning_message = workflow.load(log_dir_warning_message)
+    typed_ctx, migrated_step = _migrate_publish_step_index(typed_ctx)
+    if migrated_step and hasattr(request, "session"):
+        _persist_release_context(
+            request,
+            session_key,
+            typed_ctx.to_dict(),
+            lock_path,
+        )
     ctx = workflow.template_state(typed_ctx)
 
     steps = PUBLISH_STEPS
