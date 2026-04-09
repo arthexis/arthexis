@@ -5,7 +5,8 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
 from apps.cards import mse
-from apps.cards.models import CardFace, CardSet, get_cardface_bucket
+from apps.cards.models import CardFace, CardSet, OfferingSoul, get_cardface_bucket
+from apps.cards.soul import SoulDerivationError
 from apps.media.models import MediaFile
 from apps.media.utils import create_media_file
 
@@ -127,3 +128,38 @@ class CardSetUploadForm(forms.Form):
         parsed_data = self.cleaned_data["parsed_data"]
         filename = getattr(uploaded, "name", "") or ""
         return CardSet.create_from_parsed(parsed_data, set_text, filename=filename)
+
+
+class OfferingSoulUploadForm(forms.Form):
+    offering_file = forms.FileField(
+        label=_("Offering file"),
+        help_text=_("Upload any file up to 25 MB. 10 MB or less is recommended."),
+    )
+    issuance_marker = forms.CharField(
+        required=False,
+        max_length=64,
+        label=_("Issuance marker"),
+        help_text=_("Optional deterministic marker to version card issuance behavior."),
+    )
+
+    def clean_offering_file(self):
+        uploaded_file = self.cleaned_data.get("offering_file")
+        if not uploaded_file:
+            return uploaded_file
+        size_bytes = int(getattr(uploaded_file, "size", 0) or 0)
+        if size_bytes <= 0:
+            raise ValidationError(_("Uploaded file is empty."))
+        if size_bytes > 25 * 1024 * 1024:
+            raise ValidationError(_("Uploaded file exceeds the 25 MB limit."))
+        return uploaded_file
+
+    def save(self) -> OfferingSoul:
+        uploaded_file = self.cleaned_data["offering_file"]
+        issuance_marker = self.cleaned_data.get("issuance_marker", "")
+        try:
+            return OfferingSoul.create_from_upload(
+                uploaded_file=uploaded_file,
+                issuance_marker=issuance_marker,
+            )
+        except SoulDerivationError as exc:
+            raise ValidationError(str(exc)) from exc
