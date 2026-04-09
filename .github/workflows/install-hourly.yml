@@ -64,7 +64,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
+          key: venv-${{ runner.os }}-${{ matrix.role }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
+          restore-keys: |
+            venv-${{ runner.os }}-${{ matrix.role }}-${{ steps.setup-python.outputs.python-version }}-
       - name: Validate pyproject dependency ordering
         run: |
           python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
