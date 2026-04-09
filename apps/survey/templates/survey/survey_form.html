@@ -33,14 +33,18 @@
 
                   <div class="d-grid gap-2 mb-4">
                     {% for option in question.options.all %}
+                      {% with current_value=bound_field.value %}
                       <label class="choice-tile">
                         <input
                           type="{% if question.allow_multiple %}checkbox{% else %}radio{% endif %}"
-                          name="question_{{ question.pk }}"
+                          name="{{ field_name }}"
                           value="{{ option.pk }}"
+                          {% if question.allow_multiple and current_value and option.pk|stringformat:"s" in current_value %}checked{% endif %}
+                          {% if not question.allow_multiple and current_value == option.pk|stringformat:"s" %}checked{% endif %}
                         >
                         <span>{{ option.label }}</span>
                       </label>
+                      {% endwith %}
                     {% endfor %}
                   </div>
 

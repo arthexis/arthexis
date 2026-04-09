@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.signals import m2m_changed
+from django.dispatch import receiver
 
 
 class Survey(models.Model):
@@ -126,9 +128,41 @@ class SurveyAnswer(models.Model):
         if self.question.survey_id != self.response.survey_id:
             raise ValidationError({"question": "Question must belong to the response survey."})
 
-        if not self.pk:
-            return
+        if self.pk:
+            _validate_selected_options_for_answer(
+                answer=self,
+                selected_option_ids=set(self.selected_options.values_list("id", flat=True)),
+            )
 
-        invalid_options = self.selected_options.exclude(question_id=self.question_id)
-        if invalid_options.exists():
-            raise ValidationError({"selected_options": "Selected options must belong to the answer question."})
+
+def _validate_selected_options_for_answer(*, answer: SurveyAnswer, selected_option_ids: set[int]) -> None:
+    """Validate selected option ownership and cardinality for an answer."""
+
+    if not selected_option_ids:
+        return
+
+    invalid_options = SurveyOption.objects.filter(pk__in=selected_option_ids).exclude(
+        question_id=answer.question_id
+    )
+    if invalid_options.exists():
+        raise ValidationError({"selected_options": "Selected options must belong to the answer question."})
+
+    if not answer.question.allow_multiple and len(selected_option_ids) > 1:
+        raise ValidationError({"selected_options": "Only one option may be selected for this question."})
+
+
+@receiver(m2m_changed, sender=SurveyAnswer.selected_options.through)
+def validate_survey_answer_selected_options(
+    sender, instance: SurveyAnswer, action: str, reverse: bool, model, pk_set, **kwargs
+) -> None:
+    """Enforce option ownership and single-select cardinality on M2M updates."""
+
+    if reverse or action != "pre_add":
+        return
+
+    existing_ids: set[int] = set()
+    if instance.pk:
+        existing_ids = set(instance.selected_options.values_list("id", flat=True))
+
+    selected_option_ids = existing_ids | set(pk_set or ())
+    _validate_selected_options_for_answer(answer=instance, selected_option_ids=selected_option_ids)

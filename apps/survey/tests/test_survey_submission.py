@@ -1,5 +1,7 @@
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.test import Client
 from django.urls import reverse
 
@@ -120,3 +122,35 @@ def test_duplicate_submission_does_not_create_extra_responses(client):
     assert second_anon.status_code == 302
     assert SurveyResponse.objects.filter(survey=anon_survey, user=None).count() == 1
     assert SurveyAnswer.objects.filter(response__survey=anon_survey).count() == 1
+
+
+@pytest.mark.django_db
+def test_answer_selected_options_validation_enforced_on_set():
+    survey = Survey.objects.create(title="Validation Survey", is_active=True)
+    single_question = SurveyQuestion.objects.create(
+        survey=survey,
+        prompt="Pick one option",
+        allow_multiple=False,
+        display_order=1,
+    )
+    other_question = SurveyQuestion.objects.create(
+        survey=survey,
+        prompt="Different question",
+        allow_multiple=True,
+        display_order=2,
+    )
+    option_a = SurveyOption.objects.create(question=single_question, label="A")
+    option_b = SurveyOption.objects.create(question=single_question, label="B")
+    invalid_option = SurveyOption.objects.create(question=other_question, label="Wrong question")
+
+    response = SurveyResponse.objects.create(survey=survey, participant_token="anon-token")
+    answer = SurveyAnswer.objects.create(response=response, question=single_question)
+
+    with pytest.raises(ValidationError), transaction.atomic():
+        answer.selected_options.set([option_a, option_b])
+
+    with pytest.raises(ValidationError), transaction.atomic():
+        answer.selected_options.set([invalid_option])
+
+    answer.selected_options.set([option_a])
+    answer.full_clean()
