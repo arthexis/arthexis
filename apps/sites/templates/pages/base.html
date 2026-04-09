@@ -36,7 +36,7 @@
             <span class="visually-hidden">{% trans "Toggle navigation" %}</span>
           </button>
           <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <ul class="navbar-nav navbar-nav-wrap me-auto mb-2 mb-lg-0">
               {% if nav_modules %}
                 {% for module in nav_modules %}
                   {% with landings=module.enabled_landings %}
@@ -129,7 +129,8 @@
               {% if header_references %}
                 <li class="nav-item dropdown">
                   <a class="nav-link" href="#" role="button">
-                    CONSOLES
+                    {% trans "Consoles" as consoles_label %}
+                    {{ consoles_label|upper }}
                   </a>
                   <ul class="dropdown-menu">
                     {% for reference in header_references %}

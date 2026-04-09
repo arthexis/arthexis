@@ -103,6 +103,10 @@ nav.toc a:hover {
   display: none;
 }
 
+.navbar-nav-wrap {
+  flex-wrap: wrap;
+  gap: 0.35rem 0.3rem;
+}
 
 @media (min-width: 992px) {
   .reader-sidebar {
