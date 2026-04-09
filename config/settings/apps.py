@@ -88,6 +88,7 @@ PROJECT_LOCAL_APPS = [
     "apps.sites",
     "apps.special",
     "apps.summary",
+    "apps.survey",
     "apps.tasks",
     "apps.teams",
     "apps.terms",
