@@ -36,7 +36,7 @@
             <span class="visually-hidden">{% trans "Toggle navigation" %}</span>
           </button>
           <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav module-pill-nav me-auto mb-2 mb-lg-0">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
               {% if nav_modules %}
                 {% for module in nav_modules %}
                   {% with landings=module.enabled_landings %}
@@ -44,7 +44,7 @@
                       {% if module.enabled_landings_all_invalid %}
                         <li class="nav-item dropdown">
                           <a class="nav-link" href="#" role="button">
-                            <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
+                            {{ module.menu_label|upper }}
                             {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
                           </a>
                           <ul class="dropdown-menu">
@@ -80,7 +80,7 @@
                       {% else %}
                         <li class="nav-item">
                           <a class="nav-link" href="{{ landings.0.path }}">
-                            <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
+                            {{ module.menu_label|upper }}
                             {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
                             {% include "pages/_agent_notes.html" with notes=landings.0.agent_notes role="landing" %}
                           </a>
@@ -89,7 +89,7 @@
                     {% else %}
                       <li class="nav-item dropdown">
                         <a class="nav-link" href="#" role="button">
-                          <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
+                          {{ module.menu_label|upper }}
                           {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
                         </a>
                         <ul class="dropdown-menu">
@@ -129,7 +129,7 @@
               {% if header_references %}
                 <li class="nav-item dropdown">
                   <a class="nav-link" href="#" role="button">
-                    <span class="badge rounded-pill text-bg-secondary">CONSOLES</span>
+                    CONSOLES
                   </a>
                   <ul class="dropdown-menu">
                     {% for reference in header_references %}
