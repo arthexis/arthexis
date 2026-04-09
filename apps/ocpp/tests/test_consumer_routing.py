@@ -10,6 +10,7 @@ from apps.ocpp import store
 from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.consumers.base.routing import ActionRouter
 from apps.ocpp.consumers.csms import consumer as csms_consumer
+from apps.ocpp.consumers.csms.handlers import availability as availability_handlers
 from apps.ocpp.consumers.csms.handlers import status as status_handlers
 from apps.ocpp.models import Transaction
 
@@ -110,6 +111,26 @@ async def test_status_notification_available_routes_through_availability_handler
 
     consumer._handle_available_status_transition.assert_awaited_once_with(7)
     consumer._sync_availability_state_from_status.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_available_transition_closes_cached_session_state_for_falsy_transaction():
+    """Availability transition should close session state when transaction key exists."""
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CP-FALSY-TX"
+    consumer._close_cached_session_state = AsyncMock()
+    store.transactions[consumer.store_key] = 0
+
+    try:
+        await availability_handlers.AvailabilityHandlersMixin._handle_available_status_transition(
+            consumer,
+            connector_value=1,
+        )
+    finally:
+        store.transactions.pop(consumer.store_key, None)
+
+    consumer._close_cached_session_state.assert_awaited_once()
 
 
 @pytest.mark.anyio
