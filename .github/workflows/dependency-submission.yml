@@ -24,6 +24,7 @@ jobs:
   dependency-submission:
     name: Submit dependencies
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -65,3 +66,8 @@ jobs:
         if: steps.submit_snapshot_attempt_3.outcome == 'failure'
         run: |
           echo "::warning title=Dependency submission failed after retries::GitHub dependency snapshot submission appears to be temporarily unavailable; continuing without blocking this workflow."
+
+      - name: Confirm non-blocking outcome
+        if: always()
+        run: |
+          echo "Dependency submission workflow is configured as non-blocking to tolerate transient GitHub Dependency Graph API errors."
