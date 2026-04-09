@@ -18,8 +18,9 @@ class AvailabilityHandlersMixin:
 
         if connector_value is None:
             return
-        tx_obj = store.transactions.pop(self.store_key, None)
-        if tx_obj:
+        missing = object()
+        tx_obj = store.transactions.pop(self.store_key, missing)
+        if tx_obj is not missing:
             await self._close_cached_session_state()
 
     async def _close_cached_session_state(self) -> None:
@@ -60,10 +61,6 @@ class AvailabilityHandlersMixin:
             state=state,
             timestamp=timestamp,
         )
-        updates = {
-            "availability_state": state,
-            "availability_state_updated_at": timestamp,
-        }
         target_map = {
             getattr(self.charger, "pk", None): self.charger,
             getattr(self.aggregate_charger, "pk", None): self.aggregate_charger,
@@ -72,5 +69,5 @@ class AvailabilityHandlersMixin:
             cached_target = target_map.get(target.pk)
             if cached_target is None:
                 continue
-            for field, value in updates.items():
-                setattr(cached_target, field, value)
+            cached_target.availability_state = target.availability_state
+            cached_target.availability_state_updated_at = target.availability_state_updated_at
