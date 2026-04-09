@@ -6,7 +6,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.cards import mse
 from apps.cards.models import CardFace, CardSet, OfferingSoul, get_cardface_bucket
-from apps.cards.soul import SoulDerivationError
+from apps.cards.soul import MAX_UPLOAD_BYTES, SoulDerivationError
 from apps.media.models import MediaFile
 from apps.media.utils import create_media_file
 
@@ -149,7 +149,7 @@ class OfferingSoulUploadForm(forms.Form):
         size_bytes = int(getattr(uploaded_file, "size", 0) or 0)
         if size_bytes <= 0:
             raise ValidationError(_("Uploaded file is empty."))
-        if size_bytes > 25 * 1024 * 1024:
+        if size_bytes > MAX_UPLOAD_BYTES:
             raise ValidationError(_("Uploaded file exceeds the 25 MB limit."))
         return uploaded_file
 

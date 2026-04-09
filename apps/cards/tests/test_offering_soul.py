@@ -39,6 +39,16 @@ class OfferingSoulDerivationTests(TestCase):
         self.assertIn("image", soul.type_traits)
         self.assertNotIn("raw", soul.package)
 
+
+    def test_duplicate_upload_reuses_existing_record(self):
+        payload = b"duplicate-offering" * 64
+
+        first = OfferingSoul.create_from_upload(SimpleUploadedFile("dup.bin", payload))
+        second = OfferingSoul.create_from_upload(SimpleUploadedFile("dup.bin", payload))
+
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(OfferingSoul.objects.count(), 1)
+
     def test_form_rejects_file_over_25mb(self):
         oversized = SimpleUploadedFile("too-big.bin", b"x" * (25 * 1024 * 1024 + 1))
         form = OfferingSoulUploadForm(data={}, files={"offering_file": oversized})
