@@ -6,7 +6,7 @@ env:
 
 on:
   pull_request:
-    paths:
+    paths: &mypy_paths
       - '.github/workflows/mypy.yml'
       - '.pre-commit-config.yaml'
       - 'CONTRIBUTING.md'
@@ -29,25 +29,7 @@ on:
     branches:
       - main
       - 'release/**'
-    paths:
-      - '.github/workflows/mypy.yml'
-      - '.pre-commit-config.yaml'
-      - 'CONTRIBUTING.md'
-      - 'Makefile'
-      - 'docs/development/mypy-adoption-checklist.md'
-      - 'pyproject.toml'
-      - 'scripts/run_mypy.sh'
-      - 'scripts/generate_requirements.py'
-      - 'scripts/sort_pyproject_deps.py'
-      - 'apps/protocols/**'
-      - 'apps/repos/github.py'
-      - 'apps/repos/services/github.py'
-      - 'apps/repos/release_management.py'
-      - 'apps/repos/views/webhooks.py'
-      - 'apps/core/services/health.py'
-      - 'apps/core/services/health_checks.py'
-      - 'apps/core/modeling/**'
-      - 'apps/core/system_ui.py'
+    paths: *mypy_paths
   workflow_dispatch:
 
 permissions:
