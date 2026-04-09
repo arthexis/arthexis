@@ -12,7 +12,9 @@ from apps.core.views.reports.release_publish.exceptions import PublishPending
 from apps.core.views.reports.release_publish.workflow import ReleasePublishContext
 
 
-def test_publish_workflow_polling_pauses_when_run_in_progress(monkeypatch, tmp_path: Path):
+def test_publish_workflow_polling_pauses_when_run_in_progress(
+    monkeypatch, tmp_path: Path
+):
     class DummyRelease:
         pk = 1
         version = "1.2.3"
@@ -20,12 +22,20 @@ def test_publish_workflow_polling_pauses_when_run_in_progress(monkeypatch, tmp_p
     ctx: dict[str, object] = {}
     log_path = tmp_path / "publish.log"
 
-    monkeypatch.setattr(pipeline, "_resolve_github_token", lambda *_args, **_kwargs: "token")
-    monkeypatch.setattr(pipeline, "_resolve_github_repository", lambda _release: ("acme", "widget"))
+    monkeypatch.setattr(
+        pipeline, "_resolve_github_token", lambda *_args, **_kwargs: "token"
+    )
+    monkeypatch.setattr(
+        pipeline, "_resolve_github_repository", lambda _release: ("acme", "widget")
+    )
     monkeypatch.setattr(
         pipeline,
         "_fetch_publish_workflow_run",
-        lambda **_kwargs: {"id": 1, "status": "in_progress", "html_url": "https://example/run/1"},
+        lambda **_kwargs: {
+            "id": 1,
+            "status": "in_progress",
+            "html_url": "https://example/run/1",
+        },
     )
 
     with pytest.raises(PublishPending):
@@ -33,6 +43,61 @@ def test_publish_workflow_polling_pauses_when_run_in_progress(monkeypatch, tmp_p
 
     assert ctx.get("publish_pending") is True
     assert ctx.get("publish_workflow_url") == "https://example/run/1"
+
+
+def test_wait_for_publish_step_pauses_until_workflow_completes(
+    monkeypatch, tmp_path: Path
+):
+    class DummyRelease:
+        version = "1.2.3"
+
+    ctx: dict[str, object] = {}
+    log_path = tmp_path / "publish.log"
+
+    monkeypatch.setattr(
+        pipeline, "_require_github_token", lambda *_args, **_kwargs: "token"
+    )
+    monkeypatch.setattr(
+        pipeline, "_resolve_github_repository", lambda _release: ("acme", "widget")
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_fetch_publish_workflow_run",
+        lambda **_kwargs: {
+            "status": "in_progress",
+            "html_url": "https://example/run/2",
+        },
+    )
+
+    with pytest.raises(PublishPending):
+        pipeline._step_wait_for_github_actions_publish(DummyRelease(), ctx, log_path)
+
+    assert ctx.get("publish_pending") is True
+    assert ctx.get("publish_workflow_url") == "https://example/run/2"
+
+
+def test_wait_for_publish_step_records_url_on_completion(monkeypatch, tmp_path: Path):
+    class DummyRelease:
+        version = "1.2.3"
+
+    ctx: dict[str, object] = {}
+    log_path = tmp_path / "publish.log"
+
+    monkeypatch.setattr(
+        pipeline, "_require_github_token", lambda *_args, **_kwargs: "token"
+    )
+    monkeypatch.setattr(
+        pipeline, "_resolve_github_repository", lambda _release: ("acme", "widget")
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_fetch_publish_workflow_run",
+        lambda **_kwargs: {"status": "completed", "html_url": "https://example/run/3"},
+    )
+
+    pipeline._step_wait_for_github_actions_publish(DummyRelease(), ctx, log_path)
+
+    assert ctx.get("publish_workflow_url") == "https://example/run/3"
 
 
 def test_release_artifact_collection_finds_wheel_and_sdist(tmp_path: Path, monkeypatch):
@@ -67,7 +132,9 @@ def test_prepare_step_progress_invalid_restart_counter_defaults_to_zero(tmp_path
 
 def test_current_git_revision_returns_empty_on_subprocess_failure(monkeypatch):
     def boom(_args):
-        raise subprocess.CalledProcessError(returncode=2, cmd=["git", "rev-parse", "HEAD"])
+        raise subprocess.CalledProcessError(
+            returncode=2, cmd=["git", "rev-parse", "HEAD"]
+        )
 
     monkeypatch.setattr(pipeline, "_git_stdout", boom)
 
@@ -149,16 +216,26 @@ def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path
             assert done is False
 
     monkeypatch.setattr(pipeline, "ReleasePublishWorkflow", FakeWorkflow)
-    monkeypatch.setattr(pipeline, "_get_release_or_response", lambda *_args: (DummyRelease(), None))
-    monkeypatch.setattr(pipeline, "_resolve_release_log_dir", lambda _path: (tmp_path, None))
-    monkeypatch.setattr(pipeline, "_handle_release_sync", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(pipeline, "_handle_release_restart", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        pipeline, "_get_release_or_response", lambda *_args: (DummyRelease(), None)
+    )
+    monkeypatch.setattr(
+        pipeline, "_resolve_release_log_dir", lambda _path: (tmp_path, None)
+    )
+    monkeypatch.setattr(
+        pipeline, "_handle_release_sync", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        pipeline, "_handle_release_restart", lambda *_args, **_kwargs: None
+    )
     monkeypatch.setattr(
         pipeline,
         "_prepare_logging",
         lambda ctx, *_args, **_kwargs: (ctx, tmp_path / "publish.log", ctx["step"]),
     )
-    monkeypatch.setattr(pipeline, "_build_artifacts_stale", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(
+        pipeline, "_build_artifacts_stale", lambda *_args, **_kwargs: False
+    )
     monkeypatch.setattr(
         pipeline,
         "_handle_dirty_repository_action",
@@ -173,13 +250,19 @@ def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path
         "_handle_manual_git_push_action",
         lambda _request, ctx, _log_path: ctx,
     )
-    monkeypatch.setattr(pipeline, "_resolve_release_log_display", lambda *_args, **_kwargs: (False, ""))
+    monkeypatch.setattr(
+        pipeline, "_resolve_release_log_display", lambda *_args, **_kwargs: (False, "")
+    )
     monkeypatch.setattr(pipeline, "_resolve_next_step", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(pipeline, "_build_release_step_states", lambda **_kwargs: [])
     monkeypatch.setattr(pipeline, "_get_user_github_token", lambda _user: None)
-    monkeypatch.setattr(pipeline, "_resolve_github_token", lambda *_args, **_kwargs: "token")
+    monkeypatch.setattr(
+        pipeline, "_resolve_github_token", lambda *_args, **_kwargs: "token"
+    )
     monkeypatch.setattr(pipeline, "build_release_guidance", lambda **_kwargs: {})
-    monkeypatch.setattr(pipeline, "_build_release_progress_context", lambda **_kwargs: {})
+    monkeypatch.setattr(
+        pipeline, "_build_release_progress_context", lambda **_kwargs: {}
+    )
     monkeypatch.setattr(
         pipeline,
         "_finalize_release_progress_response",
@@ -207,7 +290,9 @@ def test_release_progress_returns_400_for_invalid_state_path(monkeypatch):
     def raise_unsafe_path(*_args, **_kwargs):
         raise ValueError("unsafe")
 
-    monkeypatch.setattr(pipeline, "_get_release_or_response", lambda *_args: (DummyRelease(), None))
+    monkeypatch.setattr(
+        pipeline, "_get_release_or_response", lambda *_args: (DummyRelease(), None)
+    )
     monkeypatch.setattr(
         pipeline,
         "_resolve_safe_child_path",
