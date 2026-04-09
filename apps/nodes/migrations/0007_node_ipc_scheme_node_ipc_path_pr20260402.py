@@ -5,6 +5,10 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
+    replaces = [
+        ("nodes", "0007_node_ipc_scheme_node_ipc_path"),
+    ]
+
     dependencies = [
         ("nodes", "0006_alter_netmessage_filter_current_relation_and_more"),
     ]

@@ -5,6 +5,10 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
+    replaces = [
+        ("nodes", "0007_node_host_instance_id_and_more"),
+    ]
+
     dependencies = [
         ("nodes", "0006_alter_netmessage_filter_current_relation_and_more"),
         ("sites", "0001_initial"),
