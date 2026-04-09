@@ -24,9 +24,51 @@ permissions:
   issues: write
 
 jobs:
+  validate-pr-security-scan-target:
+    name: Validate PR Security Scan Target
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      target_configured: ${{ steps.validate.outputs.target_configured }}
+      validated_target: ${{ steps.validate.outputs.validated_target }}
+    steps:
+      - name: Validate PR scan target configuration
+        id: validate
+        env:
+          TARGET_URL: ${{ vars.PR_SECURITY_SCAN_TARGET }}
+        run: |
+          set -euo pipefail
+
+          trimmed_target=$(printf '%s' "${TARGET_URL}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+          if [ -z "${trimmed_target}" ]; then
+            echo "target_configured=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### PR security scan configuration is missing"
+              echo ""
+              echo "Set repository variable \`PR_SECURITY_SCAN_TARGET\` (Settings → Secrets and variables → Actions → Variables) to a safe non-production URL, such as \`https://staging.example.com\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "PR_SECURITY_SCAN_TARGET is missing or empty." >&2
+            exit 1
+          fi
+
+          echo "target_configured=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "validated_target<<EOF"
+            echo "${trimmed_target}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### PR security scan configuration detected"
+            echo ""
+            echo "\`PR_SECURITY_SCAN_TARGET\` is configured. To update it, use Settings → Secrets and variables → Actions → Variables."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   zap-baseline-pr:
     name: OWASP ZAP Baseline Scan
-    if: github.event_name == 'pull_request' && vars.PR_SECURITY_SCAN_TARGET != ''
+    needs:
+      - validate-pr-security-scan-target
+    if: github.event_name == 'pull_request' && needs.validate-pr-security-scan-target.outputs.target_configured == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -38,7 +80,7 @@ jobs:
 
       - name: Validate PR scan target
         env:
-          TARGET_URL: ${{ vars.PR_SECURITY_SCAN_TARGET }}
+          TARGET_URL: ${{ needs.validate-pr-security-scan-target.outputs.validated_target }}
         run: |
           set -euo pipefail
 
@@ -60,7 +102,7 @@ jobs:
         id: zap_scan
         uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
-          target: ${{ vars.PR_SECURITY_SCAN_TARGET }}
+          target: ${{ needs.validate-pr-security-scan-target.outputs.validated_target }}
           cmd_options: >-
             -m 5
             -J zap-pr-report.json
