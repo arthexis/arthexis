@@ -17,7 +17,6 @@ on:
 
 permissions:
   contents: read
-  dependency-graph: write
   id-token: write
   issues: write
 
