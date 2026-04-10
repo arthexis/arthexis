@@ -4,8 +4,8 @@ from ipaddress import ip_address
 from pathlib import Path
 from socket import getaddrinfo
 from urllib.error import HTTPError, URLError
-from urllib.parse import unquote, urlparse
-from urllib.request import Request, urlopen
+from urllib.parse import unquote, urljoin, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from django import forms
 from django.conf import settings
@@ -22,51 +22,68 @@ from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.services import ImagerBuildError, build_rpi4b_image
 
 
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Disable automatic redirects so each target can be validated."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def _probe_download_url(download_url: str) -> tuple[bool, str]:
     """Check whether an artifact download URL appears reachable."""
 
-    parsed_url = urlparse(download_url)
-    hostname = parsed_url.hostname
-    if parsed_url.scheme not in {"http", "https"} or not hostname:
-        return False, _("Unsupported download URL.")
-
     blocked_message = _("Refusing to probe local or private addresses.")
-    if hostname == "localhost":
-        return False, blocked_message
-
-    try:
-        ip_candidate = ip_address(hostname)
-    except ValueError:
-        ip_candidate = None
-
     blocked_flags = ("is_link_local", "is_loopback", "is_multicast", "is_private", "is_unspecified")
-    if ip_candidate is not None:
-        if any(getattr(ip_candidate, flag) for flag in blocked_flags):
+    redirect_codes = {301, 302, 303, 307, 308}
+    opener = build_opener(_NoRedirectHandler())
+    current_url = download_url
+
+    for _redirect_count in range(5):
+        parsed_url = urlparse(current_url)
+        hostname = parsed_url.hostname
+        if parsed_url.scheme not in {"http", "https"} or not hostname:
+            return False, _("Unsupported download URL.")
+        if hostname == "localhost":
             return False, blocked_message
-    else:
+
         try:
-            resolved_hosts = {
-                ip_address(record[4][0]) for record in getaddrinfo(hostname, None, type=0)
-            }
-        except OSError as exc:
-            reason = getattr(exc, "strerror", str(exc))
+            ip_candidate = ip_address(hostname)
+        except ValueError:
+            ip_candidate = None
+
+        if ip_candidate is not None:
+            if any(getattr(ip_candidate, flag) for flag in blocked_flags):
+                return False, blocked_message
+        else:
+            try:
+                resolved_hosts = {
+                    ip_address(record[4][0]) for record in getaddrinfo(hostname, None, type=0)
+                }
+            except OSError as exc:
+                reason = getattr(exc, "strerror", str(exc))
+                return False, str(reason)
+            if any(any(getattr(ip_value, flag) for flag in blocked_flags) for ip_value in resolved_hosts):
+                return False, blocked_message
+
+        request = Request(current_url, method="HEAD")
+        try:
+            with opener.open(request, timeout=10) as response:  # noqa: S310 - staff-triggered verification flow
+                status = response.getcode()
+        except HTTPError as exc:
+            location = exc.headers.get("Location")
+            if exc.code in redirect_codes and location:
+                current_url = urljoin(current_url, location)
+                continue
+            status = exc.code
+        except (URLError, ValueError) as exc:
+            reason = getattr(exc, "reason", str(exc))
             return False, str(reason)
-        if any(any(getattr(ip_value, flag) for flag in blocked_flags) for ip_value in resolved_hosts):
-            return False, blocked_message
 
-    request = Request(download_url, method="HEAD")
-    try:
-        with urlopen(request, timeout=10) as response:  # noqa: S310 - staff-triggered verification flow
-            status = response.getcode()
-    except HTTPError as exc:
-        status = exc.code
-    except (URLError, ValueError) as exc:
-        reason = getattr(exc, "reason", str(exc))
-        return False, str(reason)
+        if 200 <= status < 400:
+            return True, f"HTTP {status}"
+        return False, f"HTTP {status}"
 
-    if 200 <= status < 400:
-        return True, f"HTTP {status}"
-    return False, f"HTTP {status}"
+    return False, _("Too many redirects.")
 
 
 class RaspberryPiImageBuildForm(forms.Form):

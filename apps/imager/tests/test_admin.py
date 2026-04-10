@@ -1,6 +1,7 @@
 """Regression tests for Raspberry Pi imager admin UI actions."""
 
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 import pytest
 from django.test import override_settings
@@ -140,6 +141,27 @@ def test_probe_download_url_blocks_unsafe_targets(download_url, expected_message
     reachable, result = _probe_download_url(download_url)
     assert reachable is False
     assert result == expected_message
+
+
+@patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
+@patch("apps.imager.admin.build_opener")
+def test_probe_download_url_revalidates_redirect_targets(build_opener_mock, _getaddrinfo_mock):
+    """Regression: redirect responses must not allow probes to private hosts."""
+
+    build_opener_mock.return_value.open.side_effect = [
+        HTTPError(
+            "https://cdn.example.com/images/stable-rpi-4b.img",
+            302,
+            "Found",
+            {"Location": "http://127.0.0.1/secret"},
+            None,
+        )
+    ]
+
+    reachable, result = _probe_download_url("https://cdn.example.com/images/stable-rpi-4b.img")
+
+    assert reachable is False
+    assert result == "Refusing to probe local or private addresses."
 
 
 @pytest.mark.django_db
