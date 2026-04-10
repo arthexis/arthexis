@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n static admin_extras staff_tasks tz widgets %}
+{% load i18n static admin_extras operator_journey staff_tasks tz widgets %}
 
 {% block extrastyle %}
   {{ block.super }}
@@ -37,6 +37,16 @@
       <span class="admin-home-net-message__content admin-home-net-message__content--empty" title="{{ no_message_text }}">{{ no_message_text }}</span>
     {% endif %}
   </div>
+  {% operator_journey_status as operator_journey %}
+  {% if operator_journey.has_journey %}
+    <div class="admin-home-operator-journey" role="status" aria-live="polite">
+      {% if operator_journey.url %}
+        <a class="admin-home-operator-journey__link" href="{{ operator_journey.url }}">{{ operator_journey.message }}</a>
+      {% else %}
+        <span class="admin-home-operator-journey__text">{{ operator_journey.message }}</span>
+      {% endif %}
+    </div>
+  {% endif %}
   <div class="admin-home-actions">
     {% if perms.features.view_feature %}
       <a class="button" href="{% url 'admin:features_feature_changelist' %}">
