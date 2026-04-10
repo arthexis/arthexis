@@ -58,3 +58,16 @@ def test_prefixed_pages_path_redirects_to_selected_language(settings):
 
     assert response.status_code == 302
     assert response["Location"] == "/de/changelog/?v=1"
+
+
+@pytest.mark.django_db
+def test_prefixed_pages_path_ignores_unsupported_selected_language(settings):
+    settings.LANGUAGES = [("en", "English"), ("de", "German")]
+    request = RequestFactory().get("/en/changelog/?v=1")
+    request.resolver_match = resolve("/en/changelog/")
+    request.COOKIES["django_language"] = "pt"
+
+    middleware = LanguagePreferenceMiddleware(lambda _request: HttpResponse("ok"))
+    response = middleware(request)
+
+    assert response.status_code == 200

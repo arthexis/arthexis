@@ -35,14 +35,12 @@ class LanguagePreferenceMiddleware:
         self._supported_language_codes = get_supported_language_codes()
 
     def __call__(self, request):
+        raw_language_code = get_request_language_code(request)
+        preferred_language_code = normalize_language_code(raw_language_code)
         language_code = self._language_from_path(request.path_info)
-        preferred_language_code = ""
         if not language_code:
-            raw_language_code = get_request_language_code(request)
-            language_code = normalize_language_code(raw_language_code)
-        else:
-            raw_language_code = get_request_language_code(request)
-            preferred_language_code = normalize_language_code(raw_language_code)
+            language_code = preferred_language_code
+            preferred_language_code = ""
 
         if language_code:
             activate(language_code)
@@ -91,6 +89,7 @@ class LanguagePreferenceMiddleware:
         if resolver_match is None:
             try:
                 resolver_match = resolve(request.path_info)
+                request.resolver_match = resolver_match
             except Resolver404:
                 return False
 
@@ -111,6 +110,8 @@ class LanguagePreferenceMiddleware:
             return None
         if language_code == preferred_language_code:
             return None
+        if preferred_language_code not in self._supported_language_codes:
+            return None
         if request.path_info.startswith("/admin"):
             return None
         if request.path_info.startswith("/i18n/"):
@@ -120,6 +121,7 @@ class LanguagePreferenceMiddleware:
         if resolver_match is None:
             try:
                 resolver_match = resolve(request.path_info)
+                request.resolver_match = resolver_match
             except Resolver404:
                 return None
         if resolver_match.namespace not in {"pages", "pages-lang"}:
@@ -127,8 +129,6 @@ class LanguagePreferenceMiddleware:
 
         trimmed = request.path_info.lstrip("/")
         segments = trimmed.split("/", maxsplit=1)
-        if not segments:
-            return None
 
         remainder = f"/{segments[1]}" if len(segments) > 1 else "/"
         replacement = f"/{preferred_language_code}{remainder}"
