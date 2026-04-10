@@ -1,16 +1,23 @@
 from datetime import timedelta
 import ipaddress
 
-from django.contrib.auth.views import redirect_to_login
-from django.shortcuts import resolve_url
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from ..utils import resolve_ws_scheme
 from apps.core.notifications import LcdChannel
 from apps.screens.startup_notifications import format_lcd_lines
+from apps.sites.utils import (
+    landing,
+    module_pill_link_validation,
+    require_site_operator_or_staff,
+)
 
 from .common import *  # noqa: F401,F403
+from .common import (
+    _landing_requires_site_operator_or_staff,
+    _landing_visibility_params,
+)
 from apps.simulators.evcs import _start_simulator, _stop_simulator, parse_repeat
 from apps.simulators.simulator_runtime import (
     ARTHEXIS_BACKEND,
@@ -29,11 +36,16 @@ REPEAT_TRUE_STRINGS = {
 }
 
 @landing("OCPP Simulator")
+@module_pill_link_validation(
+    _landing_requires_site_operator_or_staff,
+    parameter_getter=_landing_visibility_params,
+)
 def cp_simulator(request):
-    """Public landing page to control the OCPP charge point simulator."""
-    user = getattr(request, "user", None)
-    if not getattr(user, "is_authenticated", False):
-        return redirect_to_login(request.get_full_path(), resolve_url("pages:login"))
+    """Landing page to control the OCPP charge point simulator."""
+    auth_response = require_site_operator_or_staff(request)
+    if auth_response is not None:
+        return auth_response
+    user = request.user
     if request.method == "POST" and not getattr(user, "is_staff", False):
         return HttpResponse("Forbidden", status=403)
 

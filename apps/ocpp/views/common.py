@@ -52,7 +52,7 @@ from apps.simulators.evcs import (
     _stop_simulator,
     get_simulator_state,
 )
-from apps.sites.utils import landing
+from apps.sites.utils import landing, user_in_site_operator_group
 from utils.api import api_login_required
 
 from .. import store
@@ -427,6 +427,20 @@ def _landing_visibility_params(*, request, landing) -> dict[str, object]:
 
     user = getattr(request, "user", None)
     return {"user_id": getattr(user, "pk", "anon") or "anon"}
+
+
+def _landing_requires_site_operator_or_staff(*, request, landing, **kwargs) -> bool:
+    """Return ``True`` when the user is a site operator or a staff member."""
+
+    user = getattr(request, "user", None)
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
+        return True
+    try:
+        return user_in_site_operator_group(user)
+    except (OperationalError, ProgrammingError):
+        return False
 
 
 def _charger_last_seen(charger: Charger | object):

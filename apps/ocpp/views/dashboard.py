@@ -11,7 +11,11 @@ from django.utils.encoding import force_str
 from django.utils.translation import gettext_lazy as _
 
 from apps.nodes.models import Node
-from apps.sites.utils import landing
+from apps.sites.utils import (
+    landing,
+    module_pill_link_validation,
+    require_site_operator_or_staff,
+)
 from config.request_utils import is_https_request
 
 from .. import store
@@ -20,12 +24,21 @@ from ..status_display import STATUS_BADGE_MAP
 from . import common as view_common
 from .common import (_charger_last_seen, _charger_state,
                      _charging_limit_details, _clear_stale_statuses_for_view,
+                     _landing_requires_site_operator_or_staff,
+                     _landing_visibility_params,
                      _has_active_session, _reverse_connector_url)
 
 
 @landing("CPMS Online Dashboard")
+@module_pill_link_validation(
+    _landing_requires_site_operator_or_staff,
+    parameter_getter=_landing_visibility_params,
+)
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
+    auth_response = require_site_operator_or_staff(request)
+    if auth_response is not None:
+        return auth_response
     is_htmx = request.headers.get("HX-Request") == "true"
     node = Node.get_local()
     role = node.role if node else None

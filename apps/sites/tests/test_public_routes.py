@@ -179,13 +179,28 @@ def test_require_site_operator_or_staff_enforces_admin_operator_boundary(rf):
     assert require_site_operator_or_staff(request) is None
 
 
-def test_public_charge_point_dashboard_is_available_to_anonymous_users(client):
+def test_public_charge_point_dashboard_redirects_anonymous_users_to_login(client):
     response = client.get(reverse("ocpp:ocpp-dashboard"))
 
-    assert response.status_code == 200
+    assert response.status_code == 302
+    assert response.url.startswith(f"{reverse('pages:login')}?next=")
 
 
-def test_charge_points_module_shows_dashboard_and_simulator_links_to_anonymous_users():
+@pytest.mark.parametrize("path_name", ["ocpp:ocpp-dashboard", "ocpp:cp-simulator"])
+def test_charge_point_views_forbid_authenticated_non_operator_users(client, path_name):
+    user = get_user_model().objects.create_user(
+        username=f"charge-point-regular-{path_name.split(':')[-1]}",
+        email=f"{path_name.split(':')[-1]}@example.com",
+        password="secret",
+    )
+    client.force_login(user)
+
+    response = client.get(reverse(path_name))
+
+    assert response.status_code == 403
+
+
+def test_charge_points_module_hides_dashboard_and_simulator_links_from_anonymous_users():
     module = Module.objects.create(path="/charge-points/", menu="Charge Points")
     Landing.objects.create(
         module=module,
@@ -199,6 +214,32 @@ def test_charge_points_module_shows_dashboard_and_simulator_links_to_anonymous_u
     )
     request = RequestFactory().get("/")
     request.user = AnonymousUser()
+
+    nav_context = context_processors.nav_links(request)
+    nav_modules = nav_context["nav_modules"]
+    assert not any(module.path == "/charge-points/" for module in nav_modules)
+
+
+def test_charge_points_module_shows_dashboard_and_simulator_links_to_site_operators():
+    module = Module.objects.create(path="/charge-points/", menu="Charge Points")
+    Landing.objects.create(
+        module=module,
+        path=reverse("ocpp:ocpp-dashboard"),
+        label="Charging Station Dashboards",
+    )
+    Landing.objects.create(
+        module=module,
+        path=reverse("ocpp:cp-simulator"),
+        label="EVCS Online Simulator",
+    )
+    operator = get_user_model().objects.create_user(
+        username="charge-points-operator",
+        email="charge-points-operator@example.com",
+        password="secret",
+    )
+    Group.objects.get_or_create(name=SITE_OPERATOR_GROUP_NAME)[0].user_set.add(operator)
+    request = RequestFactory().get("/")
+    request.user = operator
 
     nav_context = context_processors.nav_links(request)
     nav_modules = nav_context["nav_modules"]
