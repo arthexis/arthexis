@@ -417,9 +417,9 @@ def _visible_chargers(user):
 
 
 def _landing_requires_chargers(*, request, landing, **kwargs) -> bool:
-    """Return ``True`` so dashboard landings stay visible to all users."""
+    """Return ``True`` when at least one charger exists for this user."""
 
-    return True
+    return _visible_chargers(request.user).exists()
 
 
 def _landing_visibility_params(*, request, landing) -> dict[str, object]:

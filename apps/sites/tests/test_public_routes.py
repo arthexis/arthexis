@@ -209,3 +209,23 @@ def test_charge_points_module_shows_dashboard_and_simulator_links_to_anonymous_u
         reverse("ocpp:ocpp-dashboard"),
         reverse("ocpp:cp-simulator"),
     }.issubset(visible_paths)
+
+
+def test_charge_points_module_hides_operator_only_map_link_from_anonymous_users():
+    module = Module.objects.create(path="/charge-points/", menu="Charge Points")
+    Landing.objects.create(
+        module=module,
+        path=reverse("ocpp:charging-station-map"),
+        label="Charging Station Map",
+    )
+    request = RequestFactory().get("/")
+    request.user = AnonymousUser()
+
+    nav_context = context_processors.nav_links(request)
+    nav_modules = nav_context["nav_modules"]
+    charge_point_module = next(
+        (module for module in nav_modules if module.path == "/charge-points/"),
+        None,
+    )
+
+    assert charge_point_module is None
