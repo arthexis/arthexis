@@ -7,7 +7,7 @@ import socket
 from socket import getaddrinfo
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urljoin, urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from django import forms
 from django.conf import settings
@@ -62,7 +62,7 @@ def _probe_download_url(download_url: str) -> tuple[bool, str]:
 
     blocked_message = _("Refusing to probe local or private addresses.")
     redirect_codes = {301, 302, 303, 307, 308}
-    opener = build_opener(_NoRedirectHandler())
+    opener = build_opener(ProxyHandler({}), _NoRedirectHandler())
     current_url = download_url
     redirects_followed = 0
 

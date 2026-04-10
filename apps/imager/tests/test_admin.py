@@ -200,6 +200,26 @@ def test_probe_download_url_allows_five_redirect_hops(build_opener_mock, _getadd
 
 @patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
 @patch("apps.imager.admin.build_opener")
+def test_probe_download_url_fails_after_sixth_redirect(build_opener_mock, _getaddrinfo_mock):
+    """Regression: sixth redirect hop should fail with an explicit limit error."""
+
+    build_opener_mock.return_value.open.side_effect = [
+        HTTPError("https://cdn.example.com/images/stable.img", 302, "Found", {"Location": "/hop-1"}, None),
+        HTTPError("https://cdn.example.com/hop-1", 302, "Found", {"Location": "/hop-2"}, None),
+        HTTPError("https://cdn.example.com/hop-2", 302, "Found", {"Location": "/hop-3"}, None),
+        HTTPError("https://cdn.example.com/hop-3", 302, "Found", {"Location": "/hop-4"}, None),
+        HTTPError("https://cdn.example.com/hop-4", 302, "Found", {"Location": "/hop-5"}, None),
+        HTTPError("https://cdn.example.com/hop-5", 302, "Found", {"Location": "/hop-6"}, None),
+    ]
+
+    reachable, result = _probe_download_url("https://cdn.example.com/images/stable.img")
+
+    assert reachable is False
+    assert result == "Too many redirects."
+
+
+@patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
+@patch("apps.imager.admin.build_opener")
 def test_probe_download_url_fails_redirect_without_location(build_opener_mock, _getaddrinfo_mock):
     """Regression: redirects without Location should fail probing."""
 
