@@ -52,6 +52,19 @@ When new apps are created:
 
 * Always create the **admin configuration** for the app using suite commands.
 * Prefer short application names, ideally a single word whenever possible.
+* Use the canonical scaffold commands:
+
+  * `.venv/bin/python manage.py create app <app_name>`
+  * `.venv/bin/python manage.py create app <app_name> --backend-only`
+* Every new app must include `manifest.py`.
+* Backend-only apps that intentionally omit `views.py`, `urls.py`, and `routes.py` must include this marker comment:
+
+  * `# APP_STRUCTURE: backend-only (intentionally omits views.py, urls.py, and routes.py)`
+* Web-capable apps should include `views.py`, `urls.py`, and `routes.py` unless they are intentionally backend-only.
+* Follow and keep this policy aligned with:
+
+  * `docs/development/create-local-app.md`
+  * `docs/development/app-structure-policy.md`
 
 ## Retiring legacy apps
 
