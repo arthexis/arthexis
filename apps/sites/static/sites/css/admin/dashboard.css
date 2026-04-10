@@ -79,6 +79,18 @@
     .admin-home-net-message {
         justify-self: start;
     }
+    .admin-home-operator-journey {
+        grid-column: 2;
+        margin-top: -0.35rem;
+        font-size: 0.9rem;
+    }
+    .admin-home-operator-journey__link {
+        font-weight: 600;
+        text-decoration: underline;
+    }
+    .admin-home-operator-journey__text {
+        color: var(--body-quiet-color);
+    }
     .admin-home-actions {
         display: flex;
         align-items: center;
@@ -141,6 +153,10 @@
             justify-content: flex-start;
             max-width: none;
         }
+        .admin-home-operator-journey {
+            grid-column: 2;
+            margin-top: 0;
+        }
     }
     @media (max-width: 992px) {
         #admin-home-header {
@@ -154,6 +170,9 @@
         .admin-home-net-message {
             width: 100%;
             min-width: 0;
+        }
+        .admin-home-operator-journey {
+            grid-column: auto;
         }
     }
     .dashboard-main {

@@ -1,0 +1,21 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <div class="module aligned">
+    <h1>{{ step.title }}</h1>
+    <p>{{ step.instruction }}</p>
+    {% if step.help_text %}
+      <p><strong>{% translate "Manual help:" %}</strong> {{ step.help_text }}</p>
+    {% endif %}
+    <iframe
+      src="{{ step.iframe_url }}"
+      title="{{ step.title }}"
+      style="width: 100%; min-height: 60vh; border: 1px solid #d5d5d5; border-radius: 8px;"
+    ></iframe>
+    <form method="post" action="{% url 'ops:operator-journey-step-complete' step.pk %}" style="margin-top: 1rem;">
+      {% csrf_token %}
+      <button type="submit" class="button default">{% translate "Mark this step complete" %}</button>
+    </form>
+  </div>
+{% endblock %}

@@ -10,6 +10,9 @@ from .models import (
     OperationExecution,
     OperationLink,
     OperationScreen,
+    OperatorJourney,
+    OperatorJourneyStep,
+    OperatorJourneyStepCompletion,
     SecurityAlertEvent,
     validate_local_absolute_path_url,
 )
@@ -112,3 +115,40 @@ class SecurityAlertEventAdmin(admin.ModelAdmin):
     list_filter = ("severity", "is_active", "last_occurred_at")
     search_fields = ("key", "message", "detail")
     readonly_fields = ("occurrence_count", "last_occurred_at", "created_at", "updated_at")
+
+
+class OperatorJourneyStepInline(admin.TabularInline):
+    """Manage linear journey steps inline."""
+
+    model = OperatorJourneyStep
+    extra = 1
+
+
+@admin.register(OperatorJourney)
+class OperatorJourneyAdmin(admin.ModelAdmin):
+    """Admin for operator journey workflow definitions."""
+
+    list_display = ("name", "security_group", "priority", "is_active")
+    list_filter = ("is_active", "security_group")
+    search_fields = ("name", "slug", "description")
+    prepopulated_fields = {"slug": ("name",)}
+    inlines = [OperatorJourneyStepInline]
+
+
+@admin.register(OperatorJourneyStep)
+class OperatorJourneyStepAdmin(admin.ModelAdmin):
+    """Admin for individual operator journey steps."""
+
+    list_display = ("title", "journey", "order", "is_active")
+    list_filter = ("is_active", "journey")
+    search_fields = ("title", "slug", "instruction", "help_text")
+    ordering = ("journey__priority", "journey__name", "order")
+
+
+@admin.register(OperatorJourneyStepCompletion)
+class OperatorJourneyStepCompletionAdmin(admin.ModelAdmin):
+    """Admin for per-user journey progress markers."""
+
+    list_display = ("user", "step", "completed_at")
+    list_filter = ("step__journey", "completed_at")
+    search_fields = ("user__username", "step__title", "step__journey__name")

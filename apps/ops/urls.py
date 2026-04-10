@@ -8,6 +8,16 @@ app_name = "ops"
 
 urlpatterns = [
     path("clear-active/", views.clear_active_operation, name="clear-active"),
+    path(
+        "operator-journey/steps/<int:step_id>/",
+        views.operator_journey_step,
+        name="operator-journey-step",
+    ),
+    path(
+        "operator-journey/steps/<int:step_id>/complete/",
+        views.complete_operator_journey_step,
+        name="operator-journey-step-complete",
+    ),
     path("status/surface/", views.status_surface, name="status-surface"),
     path("status/logs/", views.status_log_excerpts, name="status-logs"),
 ]
