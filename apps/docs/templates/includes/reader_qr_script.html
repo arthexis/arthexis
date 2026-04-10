@@ -6,6 +6,11 @@
     let lastQrUrl = "";
     let activeHeadingId = window.location.hash.replace(/^#/, "");
     let allowImplicitHashUpdates = Boolean(activeHeadingId);
+    const collapseLabel = "{% trans 'Expand table' %}";
+    const expandLabel = "{% trans 'Collapse table' %}";
+    const rowLabelSingular = "{% trans 'row' %}";
+    const rowLabelPlural = "{% trans 'rows' %}";
+    const tableLabel = "{% trans 'Table' %}";
 
     const buildQrUrl = () => {
       try {
@@ -121,8 +126,85 @@
       requestAnimationFrame(selectActiveHeading);
     };
 
+    const getBodyRows = (table) => {
+      const tbody = table.tBodies[0];
+      if (tbody) {
+        return tbody.rows.length;
+      }
+
+      return Math.max(0, table.rows.length - 1);
+    };
+
+    const buildTableToggleLabel = (table, rowCount) => {
+      const captionText = table.caption ? table.caption.textContent.trim() : "";
+      const tableName = captionText || tableLabel;
+      const rowLabel = rowCount === 1 ? rowLabelSingular : rowLabelPlural;
+      return `${tableName} (${rowCount} ${rowLabel})`;
+    };
+
+    const enhanceReaderTables = () => {
+      const container = document.getElementById("reader-content");
+      if (!container) {
+        return;
+      }
+
+      const tables = Array.from(container.querySelectorAll("table"));
+      tables.forEach((table, index) => {
+        if (table.dataset.tableToggleReady === "true") {
+          return;
+        }
+
+        const rowCount = getBodyRows(table);
+        const headingButton = document.createElement("button");
+        const tableId = table.id || `reader-table-${index + 1}`;
+        const headingText = buildTableToggleLabel(table, rowCount);
+
+        table.id = tableId;
+        table.classList.add("reader-collapsible-table");
+        table.setAttribute("hidden", "");
+        table.dataset.tableToggleReady = "true";
+
+        headingButton.type = "button";
+        headingButton.className = "reader-table-toggle";
+        headingButton.setAttribute("aria-expanded", "false");
+        headingButton.setAttribute("aria-controls", tableId);
+        headingButton.setAttribute("title", collapseLabel);
+        headingButton.innerHTML = `<span class="reader-table-toggle-text">${headingText}</span><span class="reader-table-toggle-icon" aria-hidden="true">▸</span>`;
+
+        headingButton.addEventListener("click", () => {
+          const expanded = headingButton.getAttribute("aria-expanded") === "true";
+          const nextExpanded = !expanded;
+          headingButton.setAttribute("aria-expanded", String(nextExpanded));
+          headingButton.setAttribute("title", nextExpanded ? expandLabel : collapseLabel);
+
+          if (nextExpanded) {
+            table.removeAttribute("hidden");
+          } else {
+            table.setAttribute("hidden", "");
+          }
+        });
+
+        table.parentNode.insertBefore(headingButton, table);
+      });
+    };
+
     const onReady = () => {
       observeHeadings();
+      enhanceReaderTables();
+      document.body.addEventListener("htmx:afterSwap", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+
+        if (
+          target.id === "reader-content" ||
+          target.closest("#reader-content") ||
+          target.querySelector("#reader-content")
+        ) {
+          enhanceReaderTables();
+        }
+      });
 
       if (typeof window.QRCode === "undefined") {
         if (qrContainer) {
