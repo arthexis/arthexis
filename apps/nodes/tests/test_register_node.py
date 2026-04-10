@@ -667,6 +667,50 @@ def test_register_visitor_proxy_marks_visitor_confirmation_failed_without_id(
 
 
 @pytest.mark.django_db
+def test_register_visitor_proxy_masks_unexpected_proxy_exception(
+    monkeypatch, admin_user
+):
+    factory = RequestFactory()
+    request = factory.post(
+        "/nodes/register-visitor-proxy/",
+        data=json.dumps(
+            {
+                "visitor_info_url": "https://visitor.example/nodes/info/",
+                "visitor_register_url": "https://visitor.example/nodes/register/",
+            }
+        ),
+        content_type="application/json",
+    )
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    target = SimpleNamespace(
+        url="https://visitor.example/nodes/info/",
+        server_hostname="visitor.example",
+        host_header="visitor.example",
+    )
+    monkeypatch.setattr(handlers, "is_allowed_visitor_url", lambda _: True)
+    monkeypatch.setattr(handlers, "get_public_targets", lambda _: [target])
+    monkeypatch.setattr(
+        handlers,
+        "node_info",
+        lambda _request: JsonResponse({"hostname": "host-node"}),
+    )
+    monkeypatch.setattr(
+        handlers,
+        "_try_proxy_json_request",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("internal traceback")),
+    )
+
+    response = handlers.register_visitor_proxy(request)
+
+    assert response.status_code == 502
+    data = json.loads(response.content.decode())
+    assert data["detail"] == "visitor info unavailable"
+    assert "traceback" not in data["detail"].lower()
+
+
+@pytest.mark.django_db
 def test_get_local_does_not_cache_stale_self_after_mac_conflict(monkeypatch):
     self_node = Node.objects.create(
         hostname="self-node",
