@@ -5,6 +5,10 @@ on:
     tags:
       - "v*"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -128,6 +132,50 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+
+      - name: Preflight PyPI version availability
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.error import HTTPError, URLError
+          from urllib.request import urlopen
+
+          package_name = "arthexis"
+          package_version = Path("VERSION").read_text(encoding="utf-8").strip()
+          pypi_url = f"https://pypi.org/pypi/{package_name}/json"
+
+          try:
+              with urlopen(pypi_url, timeout=15) as response:
+                  payload = json.load(response)
+          except HTTPError as exc:
+              if exc.code == 404:
+                  payload = {"releases": {}}
+              else:
+                  raise SystemExit(
+                      "Release publish blocked: unable to verify existing PyPI versions "
+                      f"(HTTP {exc.code} from {pypi_url}). "
+                      "Check Arthexis release UI/headless logs, then rerun intentionally."
+                  ) from exc
+          except URLError as exc:
+              raise SystemExit(
+                  "Release publish blocked: network failure while checking PyPI for an existing release "
+                  f"({exc.reason}). Check Arthexis release UI/headless logs, then rerun intentionally."
+              ) from exc
+
+          releases = payload.get("releases", {})
+          if package_version in releases:
+              raise SystemExit(
+                  f"Release publish blocked: {package_name} {package_version} is already available on PyPI. "
+                  "Use a new VERSION/tag before publishing again, and confirm the rerun intent in "
+                  "Arthexis release UI/headless logs for traceability."
+              )
+
+          print(
+              f"Preflight passed: {package_name} {package_version} is not yet published on PyPI; "
+              "continuing with build and publish workflow."
+          )
+          PY
 
       - name: Install build backend
         run: |
