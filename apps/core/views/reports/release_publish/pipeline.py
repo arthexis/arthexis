@@ -14,6 +14,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import shlex
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -21,6 +22,7 @@ from typing import NoReturn
 from urllib.parse import urlencode, urlparse
 
 import requests
+import yaml
 from django.conf import settings
 from django.contrib import messages
 from django.db import DatabaseError
@@ -115,6 +117,10 @@ from .workflow import ReleasePublishContext, ReleasePublishWorkflow
 
 logger = logging.getLogger(__name__)
 GIT_ADAPTER = SubprocessGitAdapter()
+EXPECTED_PUBLISH_WORKFLOW_FILE = "publish.yml"
+EXPECTED_PUBLISH_REF_PATTERN = "refs/tags/v*"
+EXPECTED_PUBLISH_ENVIRONMENT = "pypi"
+RELEASE_VALIDATION_COMMAND_SETTING = "RELEASE_PUBLISH_VALIDATION_COMMAND"
 
 
 def _resolve_github_token(
@@ -1518,8 +1524,51 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
     Side effects: writes test output to release log.
     Rollback expectations: no rollback; failures pause progression.
     """
+    _ = release, user
     _append_log(log_path, "Complete test suite with --all flag")
-    _append_log(log_path, "Test suite completion acknowledged")
+    tests_result = ctx.get("tests_result")
+    if isinstance(tests_result, dict) and tests_result.get("success") is True:
+        _append_log(
+            log_path,
+            "Test gate passed using recorded test evidence "
+            f"(command={ctx.get('tests_command') or 'unknown'}, "
+            f"verified_at={ctx.get('tests_verified_at') or 'unknown'})",
+        )
+        return
+
+    validation_command = getattr(settings, RELEASE_VALIDATION_COMMAND_SETTING, None)
+    if not validation_command:
+        _fail_release_gate(
+            ctx,
+            log_path,
+            "Release test gate failed: provide successful test evidence "
+            "(tests_verified_at, tests_command, tests_result.success=true) "
+            f"or configure {RELEASE_VALIDATION_COMMAND_SETTING} to run tests automatically.",
+        )
+
+    command = _normalize_validation_command(validation_command)
+    _append_log(log_path, f"Running release validation command: {shlex.join(command)}")
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.stdout.strip():
+        _append_log(log_path, "Validation command stdout:\n" + result.stdout.strip())
+    if result.stderr.strip():
+        _append_log(log_path, "Validation command stderr:\n" + result.stderr.strip())
+    if result.returncode != 0:
+        _fail_release_gate(
+            ctx,
+            log_path,
+            "Release test gate failed: configured validation command exited "
+            f"with status {result.returncode}. Fix the failing tests and rerun the step.",
+        )
+
+    ctx["tests_verified_at"] = timezone.now().isoformat()
+    ctx["tests_command"] = shlex.join(command)
+    ctx["tests_result"] = {
+        "success": True,
+        "returncode": result.returncode,
+        "source": "pipeline_command",
+    }
+    _append_log(log_path, "Release test gate passed")
 
 
 def _step_confirm_pypi_trusted_publisher_settings(
@@ -1531,9 +1580,94 @@ def _step_confirm_pypi_trusted_publisher_settings(
     Side effects: records confirmation message in release logs.
     Rollback expectations: no rollback; this is a publish gate acknowledgement.
     """
-    _ = release, ctx, user
+    _ = release, user
     _append_log(log_path, "Confirm PyPI Trusted Publisher settings")
-    _append_log(log_path, "Trusted Publisher settings confirmation acknowledged")
+    workflow_path = Path(".github/workflows") / EXPECTED_PUBLISH_WORKFLOW_FILE
+    if not workflow_path.exists():
+        _fail_release_gate(
+            ctx,
+            log_path,
+            f"Trusted Publisher gate failed: {workflow_path} is missing. "
+            "Add the publish workflow before publishing.",
+        )
+
+    workflow_data: dict = {}
+    yaml_error = False
+    try:
+        loaded_workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        if isinstance(loaded_workflow, dict):
+            workflow_data = loaded_workflow
+    except yaml.YAMLError:
+        yaml_error = True
+
+    mismatches: list[str] = []
+    if yaml_error:
+        mismatches.append(
+            f"workflow YAML in {workflow_path} must be valid and parseable"
+        )
+
+    on_section = workflow_data.get("on", workflow_data.get(True, {}))
+    push_section = on_section.get("push", {}) if isinstance(on_section, dict) else {}
+    tags = push_section.get("tags", []) if isinstance(push_section, dict) else []
+    if isinstance(tags, str):
+        tags = [tags]
+    expected_tag = EXPECTED_PUBLISH_REF_PATTERN.removeprefix("refs/tags/")
+    if expected_tag not in {str(tag).strip() for tag in tags if str(tag).strip()}:
+        mismatches.append(
+            f"workflow tag pattern must be {EXPECTED_PUBLISH_REF_PATTERN} "
+            f"(check tags trigger in {workflow_path})"
+        )
+
+    jobs = workflow_data.get("jobs", {})
+    publish_job = jobs.get("publish-to-pypi", {}) if isinstance(jobs, dict) else {}
+    environment = (
+        publish_job.get("environment", "") if isinstance(publish_job, dict) else ""
+    )
+    observed_environment_name = ""
+    if isinstance(environment, str):
+        observed_environment_name = environment.strip()
+    elif isinstance(environment, dict):
+        observed_environment_name = str(environment.get("name", "")).strip()
+    if observed_environment_name != EXPECTED_PUBLISH_ENVIRONMENT:
+        mismatches.append(
+            f"workflow environment must be {EXPECTED_PUBLISH_ENVIRONMENT} "
+            f"(check publish job environment.name in {workflow_path})"
+        )
+
+    if mismatches:
+        _fail_release_gate(
+            ctx,
+            log_path,
+            "Trusted Publisher gate failed: " + "; ".join(mismatches) + ".",
+        )
+
+    ctx["trusted_publisher_verified_at"] = timezone.now().isoformat()
+    ctx["trusted_publisher_workflow_file"] = EXPECTED_PUBLISH_WORKFLOW_FILE
+    ctx["trusted_publisher_ref"] = EXPECTED_PUBLISH_REF_PATTERN
+    ctx["trusted_publisher_environment"] = EXPECTED_PUBLISH_ENVIRONMENT
+    _append_log(
+        log_path,
+        "Trusted Publisher gate passed "
+        f"(workflow={EXPECTED_PUBLISH_WORKFLOW_FILE}, "
+        f"ref={EXPECTED_PUBLISH_REF_PATTERN}, environment={EXPECTED_PUBLISH_ENVIRONMENT})",
+    )
+
+
+def _normalize_validation_command(command: str | Sequence[str]) -> list[str]:
+    if isinstance(command, str):
+        parts = shlex.split(command)
+    else:
+        parts = [str(part) for part in command if str(part).strip()]
+    if not parts:
+        raise ValueError("Validation command is empty")
+    return parts
+
+
+def _fail_release_gate(ctx: dict, log_path: Path, message: str) -> NoReturn:
+    ctx["paused"] = True
+    ctx["error"] = _(message)
+    _append_log(log_path, message)
+    raise PublishPending()
 
 
 def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:

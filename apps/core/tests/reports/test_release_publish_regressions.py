@@ -275,3 +275,131 @@ def test_release_progress_returns_400_for_invalid_state_path(monkeypatch):
     response = pipeline.release_progress_impl(request, pk=1, action="publish")
 
     assert response.status_code == 400
+
+
+def test_step_run_tests_accepts_recorded_successful_test_evidence(tmp_path: Path):
+    ctx = {
+        "tests_verified_at": "2026-04-10T00:00:00+00:00",
+        "tests_command": "python manage.py test run -- --all",
+        "tests_result": {"success": True},
+    }
+
+    pipeline._step_run_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert ctx["tests_result"]["success"] is True
+
+
+def test_step_run_tests_requires_evidence_or_configured_command(
+    monkeypatch, settings, tmp_path: Path
+):
+    ctx: dict[str, object] = {}
+    settings.RELEASE_PUBLISH_VALIDATION_COMMAND = ""
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+
+    with pytest.raises(PublishPending):
+        pipeline._step_run_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert "tests_verified_at" in ctx["error"]
+
+
+def test_step_run_tests_executes_configured_validation_command(
+    monkeypatch, settings, tmp_path: Path
+):
+    ctx: dict[str, object] = {}
+    settings.RELEASE_PUBLISH_VALIDATION_COMMAND = "echo 'release tests ok'"
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+
+    pipeline._step_run_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert ctx["tests_result"]["success"] is True
+    assert ctx["tests_result"]["source"] == "pipeline_command"
+    assert ctx["tests_command"] == "echo 'release tests ok'"
+    assert "tests_verified_at" in ctx
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_validates_expected_workflow_metadata(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "v*"\n'
+        "jobs:\n  publish-to-pypi:\n    environment:\n      name: pypi\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+
+    ctx: dict[str, object] = {}
+    pipeline._step_confirm_pypi_trusted_publisher_settings(
+        object(), ctx, tmp_path / "publish.log"
+    )
+
+    assert ctx["trusted_publisher_workflow_file"] == "publish.yml"
+    assert ctx["trusted_publisher_ref"] == "refs/tags/v*"
+    assert ctx["trusted_publisher_environment"] == "pypi"
+    assert "trusted_publisher_verified_at" in ctx
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_accepts_yaml_variants(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        "on:\n  push:\n    tags: ['v*']\n"
+        "jobs:\n  publish-to-pypi:\n    environment: pypi\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+
+    ctx: dict[str, object] = {}
+    pipeline._step_confirm_pypi_trusted_publisher_settings(
+        object(), ctx, tmp_path / "publish.log"
+    )
+
+    assert ctx["trusted_publisher_ref"] == "refs/tags/v*"
+    assert ctx["trusted_publisher_environment"] == "pypi"
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_fails_on_mismatch(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "release-*"\n'
+        "jobs:\n  publish-to-pypi:\n    environment:\n      name: production\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    with pytest.raises(PublishPending):
+        pipeline._step_confirm_pypi_trusted_publisher_settings(
+            object(), ctx, tmp_path / "publish.log"
+        )
+
+    assert "workflow tag pattern must be refs/tags/v*" in ctx["error"]
