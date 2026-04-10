@@ -16,7 +16,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  dependency-graph: write
   id-token: write
   issues: write
 
