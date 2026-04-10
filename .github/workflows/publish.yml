@@ -118,7 +118,9 @@ jobs:
           module_version = getattr(arthexis, "__version__", None)
           print(f"Installed package version: {package_version}")
           print(f"arthexis.__version__: {module_version}")
-          if module_version and module_version != package_version:
+          if module_version is None:
+              raise SystemExit("arthexis.__version__ is missing")
+          if module_version != package_version:
               raise SystemExit(
                   f"Version mismatch between module ({module_version}) and metadata ({package_version})"
               )
