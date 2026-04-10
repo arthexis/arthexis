@@ -45,11 +45,6 @@ def register_start(request: HttpRequest) -> HttpResponse:
         return redirect("souls:register_landing")
 
     email = form.cleaned_data["email"].strip().lower()
-    user_model = get_user_model()
-    if user_model.objects.filter(email__iexact=email).exists():
-        messages.error(request, "That email already has an account. Please sign in.")
-        return redirect("pages:login")
-
     ip = request.META.get("REMOTE_ADDR", "")
     user_agent = request.META.get("HTTP_USER_AGENT", "")
     session = SoulRegistrationSession.objects.create(
@@ -82,7 +77,7 @@ def register_offering(request: HttpRequest) -> HttpResponse:
         offering_soul = OfferingSoul.create_from_upload(offering_file)
         registration.offering_soul = offering_soul
         registration.state = SoulRegistrationSession.State.OFFERING_DONE
-        registration.save(update_fields=["offering_soul", "state", "updated_at"])
+        registration.save(update_fields=["offering_soul", "state"])
         return redirect("souls:register_survey")
 
     return render(request, "souls/register_offering.html", {"form": form, "registration": registration})
@@ -104,7 +99,7 @@ def register_survey(request: HttpRequest) -> HttpResponse:
     participant_token = registration.participant_token or uuid4().hex
     if registration.participant_token != participant_token:
         registration.participant_token = participant_token
-        registration.save(update_fields=["participant_token", "updated_at"])
+        registration.save(update_fields=["participant_token"])
 
     existing = registration.survey_response or SurveyResponse.objects.filter(
         survey=survey,
@@ -114,7 +109,7 @@ def register_survey(request: HttpRequest) -> HttpResponse:
         if existing:
             registration.survey_response = existing
             registration.state = SoulRegistrationSession.State.SURVEY_DONE
-            registration.save(update_fields=["survey_response", "state", "updated_at"])
+            registration.save(update_fields=["survey_response", "state"])
             _send_verification_email(request, registration)
             return redirect("souls:register_complete")
         form = SurveySubmissionForm(survey=survey)
@@ -140,7 +135,7 @@ def register_survey(request: HttpRequest) -> HttpResponse:
 
         registration.survey_response = response
         registration.state = SoulRegistrationSession.State.SURVEY_DONE
-        registration.save(update_fields=["survey_response", "state", "updated_at"])
+        registration.save(update_fields=["survey_response", "state"])
 
     _send_verification_email(request, registration)
     return redirect("souls:register_complete")
@@ -159,7 +154,6 @@ def _send_verification_email(request: HttpRequest, registration: SoulRegistratio
             "verification_token_hash",
             "verification_sent_at",
             "state",
-            "updated_at",
         ]
     )
 
@@ -228,21 +222,30 @@ def register_verify(request: HttpRequest, session_id: int, token: str) -> HttpRe
             registration_session=registration,
             user=user,
         )
-        soul, _ = Soul.objects.update_or_create(
-            user=user,
-            defaults={
-                "offering_soul": registration.offering_soul,
-                "survey_response": registration.survey_response,
-                "soul_id": soul_id,
-                "survey_digest": survey_digest,
-                "package": package,
-                "package_bytes": None,
-                "email_hash": email_hash,
-                "email_verified_at": timezone.now(),
-            },
-        )
+        existing_soul = Soul.objects.filter(user=user).first()
+        if existing_soul and existing_soul.soul_id != soul_id:
+            messages.error(request, "Registration could not be completed for this submission.")
+            request.session.pop(REG_SESSION_KEY, None)
+            return redirect("souls:register_complete")
+
+        soul_defaults = {
+            "offering_soul": registration.offering_soul,
+            "survey_response": registration.survey_response,
+            "soul_id": soul_id,
+            "survey_digest": survey_digest,
+            "package": package,
+            "package_bytes": None,
+            "email_hash": email_hash,
+            "email_verified_at": timezone.now(),
+        }
+        if existing_soul:
+            for field, value in soul_defaults.items():
+                setattr(existing_soul, field, value)
+            existing_soul.save(update_fields=list(soul_defaults.keys()))
+        else:
+            Soul.objects.create(user=user, **soul_defaults)
         registration.state = SoulRegistrationSession.State.COMPLETED
-        registration.save(update_fields=["state", "updated_at"])
+        registration.save(update_fields=["state"])
 
     backend = _registration_auth_backend()
     if backend:
