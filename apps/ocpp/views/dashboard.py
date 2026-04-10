@@ -1,18 +1,17 @@
 from datetime import datetime, time, timedelta
 
-from django.contrib.auth.views import redirect_to_login
 from django.db.models import (ExpressionWrapper, F, FloatField, OuterRef,
                               Subquery, Sum, Value)
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render, resolve_url
+from django.shortcuts import render
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.encoding import force_str
 from django.utils.translation import gettext_lazy as _
 
 from apps.nodes.models import Node
-from apps.sites.utils import landing, module_pill_link_validation
+from apps.sites.utils import landing
 from config.request_utils import is_https_request
 
 from .. import store
@@ -21,14 +20,9 @@ from ..status_display import STATUS_BADGE_MAP
 from . import common as view_common
 from .common import (_charger_last_seen, _charger_state,
                      _charging_limit_details, _clear_stale_statuses_for_view,
-                     _has_active_session, _landing_requires_chargers,
-                     _landing_visibility_params, _reverse_connector_url)
+                     _has_active_session, _reverse_connector_url)
 
 
-@module_pill_link_validation(
-    _landing_requires_chargers,
-    parameter_getter=_landing_visibility_params,
-)
 @landing("CPMS Online Dashboard")
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
@@ -36,13 +30,6 @@ def dashboard(request):
     node = Node.get_local()
     role = node.role if node else None
     role_name = role.name if role else ""
-    if role_name != "Terminal":
-        user = getattr(request, "user", None)
-        if not getattr(user, "is_authenticated", False):
-            return redirect_to_login(
-                request.get_full_path(),
-                resolve_url("pages:login"),
-            )
     _clear_stale_statuses_for_view()
     is_watchtower = role_name in {"Watchtower", "Constellation"}
     latest_tx_subquery = (

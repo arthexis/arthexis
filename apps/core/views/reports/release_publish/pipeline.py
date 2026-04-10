@@ -38,6 +38,13 @@ from packaging.version import InvalidVersion, Version
 import apps.release as release_utils
 from apps.nodes.models import NetMessage, Node
 from apps.release import git_utils
+from apps.release.domain import (
+    BUILD_RELEASE_ARTIFACTS_STEP_NAME,
+    FIXTURE_REVIEW_STEP_NAME,
+)
+from apps.release.domain import (
+    PUBLISH_STEPS as DOMAIN_PUBLISH_STEPS,
+)
 from apps.release.models import PackageRelease
 from apps.release.services import builder as release_builder
 from apps.release.services import uploader as release_uploader
@@ -121,6 +128,8 @@ EXPECTED_PUBLISH_WORKFLOW_FILE = "publish.yml"
 EXPECTED_PUBLISH_REF_PATTERN = "refs/tags/v*"
 EXPECTED_PUBLISH_ENVIRONMENT = "pypi"
 RELEASE_VALIDATION_COMMAND_SETTING = "RELEASE_PUBLISH_VALIDATION_COMMAND"
+RELEASE_VALIDATION_TIMEOUT_SETTING = "RELEASE_PUBLISH_VALIDATION_TIMEOUT_SECONDS"
+DEFAULT_RELEASE_VALIDATION_TIMEOUT_SECONDS = 900
 
 
 def _resolve_github_token(
@@ -1547,8 +1556,42 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
         )
 
     command = _normalize_validation_command(validation_command)
-    _append_log(log_path, f"Running release validation command: {shlex.join(command)}")
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    command_text = shlex.join(command)
+    configured_timeout = int(
+        getattr(
+            settings,
+            RELEASE_VALIDATION_TIMEOUT_SETTING,
+            DEFAULT_RELEASE_VALIDATION_TIMEOUT_SECONDS,
+        )
+    )
+    _append_log(
+        log_path,
+        "Running release validation command: "
+        f"{command_text} (timeout={configured_timeout}s)",
+    )
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=configured_timeout,
+        )
+    except subprocess.TimeoutExpired:
+        ctx["tests_command"] = command_text
+        ctx["tests_result"] = {
+            "success": False,
+            "reason": "timeout",
+            "source": "pipeline_command",
+            "timeout_seconds": configured_timeout,
+        }
+        _fail_release_gate(
+            ctx,
+            log_path,
+            "Release test gate failed: configured validation command "
+            f"'{command_text}' timed out after {configured_timeout} seconds. "
+            "Fix the stalled tests and rerun the step.",
+        )
     if result.stdout.strip():
         _append_log(log_path, "Validation command stdout:\n" + result.stdout.strip())
     if result.stderr.strip():
@@ -1562,7 +1605,7 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
         )
 
     ctx["tests_verified_at"] = timezone.now().isoformat()
-    ctx["tests_command"] = shlex.join(command)
+    ctx["tests_command"] = command_text
     ctx["tests_result"] = {
         "success": True,
         "returncode": result.returncode,
@@ -2259,29 +2302,25 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
         _append_log(log_path, "Publish logs already recorded")
 
 
-BUILD_RELEASE_ARTIFACTS_STEP_NAME = "Build release artifacts"
-FIXTURE_REVIEW_STEP_NAME = "Freeze, squash and approve migrations"
-
+_STEP_HANDLER_MAP = {
+    "_step_capture_publish_logs": _step_capture_publish_logs,
+    "_step_check_version": _step_check_version,
+    "_step_confirm_pypi_trusted_publisher_settings": _step_confirm_pypi_trusted_publisher_settings,
+    "_step_export_and_dispatch": _step_export_and_dispatch,
+    "_step_handle_migrations": _step_handle_migrations,
+    "_step_pre_release_actions": _step_pre_release_actions,
+    "_step_promote_build": _step_promote_build,
+    "_step_record_publish_metadata": _step_record_publish_metadata,
+    "_step_run_tests": _step_run_tests,
+    "_step_verify_release_environment": _step_verify_release_environment,
+    "_step_wait_for_github_actions_publish": _step_wait_for_github_actions_publish,
+}
 
 PUBLISH_STEPS = [
-    ("Check version number availability", _step_check_version),
-    (FIXTURE_REVIEW_STEP_NAME, _step_handle_migrations),
-    ("Execute pre-release actions", _step_pre_release_actions),
-    (BUILD_RELEASE_ARTIFACTS_STEP_NAME, _step_promote_build),
-    ("Complete test suite with --all flag", _step_run_tests),
-    (
-        "Confirm PyPI Trusted Publisher settings",
-        _step_confirm_pypi_trusted_publisher_settings,
-    ),
-    ("Verify release environment", _step_verify_release_environment),
-    (
-        "Export artifacts and push release tag",
-        _step_export_and_dispatch,
-    ),
-    ("Wait for GitHub Actions publish", _step_wait_for_github_actions_publish),
-    ("Record publish URLs & update fixtures", _step_record_publish_metadata),
-    ("Capture PyPI publish logs", _step_capture_publish_logs),
+    (name, _STEP_HANDLER_MAP[handler_name])
+    for name, handler_name in DOMAIN_PUBLISH_STEPS
 ]
+
 
 def _ensure_publish_step_compatibility(
     typed_ctx: ReleasePublishContext,

@@ -28,7 +28,7 @@ REPEAT_TRUE_STRINGS = {
     "loop",
 }
 
-@landing("Charge Point Simulator")
+@landing("OCPP Simulator")
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
     user = getattr(request, "user", None)

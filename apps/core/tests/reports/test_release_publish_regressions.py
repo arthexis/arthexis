@@ -325,6 +325,72 @@ def test_step_run_tests_executes_configured_validation_command(
     assert "tests_verified_at" in ctx
 
 
+def test_step_run_tests_passes_configured_timeout_to_subprocess_run(
+    monkeypatch, settings, tmp_path: Path
+):
+    ctx: dict[str, object] = {}
+    settings.RELEASE_PUBLISH_VALIDATION_COMMAND = "echo release tests ok"
+    settings.RELEASE_PUBLISH_VALIDATION_TIMEOUT_SECONDS = 42
+    call: dict[str, object] = {}
+
+    class Completed:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(command, **kwargs):
+        call["command"] = command
+        call["kwargs"] = kwargs
+        return Completed()
+
+    monkeypatch.setattr(pipeline.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+
+    pipeline._step_run_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert call["command"] == ["echo", "release", "tests", "ok"]
+    assert call["kwargs"]["timeout"] == 42
+    assert ctx["tests_result"]["success"] is True
+
+
+def test_step_run_tests_records_timeout_result_and_logs_gate_failure(
+    monkeypatch, settings, tmp_path: Path
+):
+    ctx: dict[str, object] = {}
+    settings.RELEASE_PUBLISH_VALIDATION_COMMAND = "echo timeout"
+    settings.RELEASE_PUBLISH_VALIDATION_TIMEOUT_SECONDS = 15
+    logged_messages: list[str] = []
+
+    def fake_run(command, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=command, timeout=kwargs["timeout"])
+
+    monkeypatch.setattr(pipeline.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda _path, message: logged_messages.append(message),
+    )
+
+    with pytest.raises(PublishPending):
+        pipeline._step_run_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert ctx["paused"] is True
+    assert ctx["tests_result"] == {
+        "success": False,
+        "reason": "timeout",
+        "source": "pipeline_command",
+        "timeout_seconds": 15,
+    }
+    assert "echo timeout" in ctx["error"]
+    assert "15 seconds" in ctx["error"]
+    assert any("timeout=15s" in message for message in logged_messages)
+    assert any("timed out after 15 seconds" in message for message in logged_messages)
+
+
 def test_step_confirm_pypi_trusted_publisher_settings_validates_expected_workflow_metadata(
     monkeypatch, tmp_path: Path
 ):
