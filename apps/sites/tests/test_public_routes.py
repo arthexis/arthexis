@@ -3,10 +3,12 @@ import json
 from pathlib import Path
 
 import pytest
+from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.contrib.sites.models import Site
 from django.core.exceptions import PermissionDenied
+from django.test import RequestFactory
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -15,6 +17,7 @@ from apps.energy.models import ClientReport
 from apps.features.models import Feature
 from apps.groups.constants import SITE_OPERATOR_GROUP_NAME
 from apps.modules.models import Module
+from apps.sites import context_processors
 from apps.sites.models import Landing, SiteProfile
 from apps.sites.utils import require_site_operator_or_staff
 
@@ -172,3 +175,57 @@ def test_require_site_operator_or_staff_enforces_admin_operator_boundary(rf):
     )
     request.user = operator_user
     assert require_site_operator_or_staff(request) is None
+
+
+def test_public_charge_point_dashboard_is_available_to_anonymous_users(client):
+    response = client.get(reverse("ocpp:ocpp-dashboard"))
+
+    assert response.status_code == 200
+
+
+def test_charge_points_module_shows_dashboard_and_simulator_links_to_anonymous_users():
+    module = Module.objects.create(path="/charge-points/", menu="Charge Points")
+    Landing.objects.create(
+        module=module,
+        path=reverse("ocpp:ocpp-dashboard"),
+        label="Charging Station Dashboards",
+    )
+    Landing.objects.create(
+        module=module,
+        path=reverse("ocpp:cp-simulator"),
+        label="EVCS Online Simulator",
+    )
+    request = RequestFactory().get("/")
+    request.user = AnonymousUser()
+
+    nav_context = context_processors.nav_links(request)
+    nav_modules = nav_context["nav_modules"]
+    charge_point_module = next(
+        module for module in nav_modules if module.path == "/charge-points/"
+    )
+    visible_paths = {landing.path for landing in charge_point_module.enabled_landings}
+
+    assert {
+        reverse("ocpp:ocpp-dashboard"),
+        reverse("ocpp:cp-simulator"),
+    }.issubset(visible_paths)
+
+
+def test_charge_points_module_hides_operator_only_map_link_from_anonymous_users():
+    module = Module.objects.create(path="/charge-points/", menu="Charge Points")
+    Landing.objects.create(
+        module=module,
+        path=reverse("ocpp:charging-station-map"),
+        label="Charging Station Map",
+    )
+    request = RequestFactory().get("/")
+    request.user = AnonymousUser()
+
+    nav_context = context_processors.nav_links(request)
+    nav_modules = nav_context["nav_modules"]
+    charge_point_module = next(
+        (module for module in nav_modules if module.path == "/charge-points/"),
+        None,
+    )
+
+    assert charge_point_module is None
