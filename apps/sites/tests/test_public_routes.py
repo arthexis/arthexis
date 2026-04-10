@@ -49,19 +49,19 @@ def test_client_report_download_enforces_login_and_ownership(client, monkeypatch
     assert client.get(download_url).status_code == 302
 
     client.force_login(other_user)
-    assert client.get(download_url).status_code == 403
+    assert client.get(download_url, follow=True).status_code == 403
 
     pdf_file = tmp_path / "report.pdf"
     pdf_file.write_bytes(b"%PDF-1.4\n%EOF")
     monkeypatch.setattr(ClientReport, "ensure_pdf", lambda self: Path(pdf_file))
 
     client.force_login(owner)
-    owner_response = client.get(download_url)
+    owner_response = client.get(download_url, follow=True)
     assert owner_response.status_code == 200
     assert owner_response["Content-Type"] == "application/pdf"
 
     client.force_login(staff_user)
-    staff_response = client.get(download_url)
+    staff_response = client.get(download_url, follow=True)
     assert staff_response.status_code == 200
     assert staff_response["Content-Type"] == "application/pdf"
 
@@ -74,13 +74,14 @@ def test_invitation_login_invalid_tokens_are_handled_safely(client):
     uid = urlsafe_base64_encode(force_bytes(user.pk))
 
     invalid_token_response = client.get(
-        reverse("pages:invitation-login", args=[uid, "bad-token"])
+        reverse("pages:invitation-login", args=[uid, "bad-token"]), follow=True
     )
     assert invalid_token_response.status_code == 400
     assert "Invalid invitation link" in invalid_token_response.content.decode()
 
     malformed_uid_response = client.get(
-        reverse("pages:invitation-login", args=["!!invalid!!", "bad-token"])
+        reverse("pages:invitation-login", args=["!!invalid!!", "bad-token"]),
+        follow=True,
     )
     assert malformed_uid_response.status_code == 400
 
@@ -89,7 +90,8 @@ def test_invitation_login_invalid_tokens_are_handled_safely(client):
 def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
     url = reverse("pages:whatsapp-webhook")
 
-    assert client.get(url).status_code == 405
+    assert client.get(url).status_code == 302
+    assert client.get(f"/en{url}").status_code == 405
 
     settings.PAGES_WHATSAPP_ENABLED = False
     disabled = client.post(
@@ -145,7 +147,7 @@ def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
         defaults={"interface_landing": landing},
     )
 
-    response = client.get(reverse("pages:index"))
+    response = client.get(reverse("pages:index"), follow=True)
 
     assert response.status_code == 200
     assert 'id="operator-interface-title"' in response.content.decode()
