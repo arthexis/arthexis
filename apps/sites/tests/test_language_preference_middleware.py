@@ -44,3 +44,17 @@ def test_language_with_region_in_path_does_not_loop(settings):
 
     assert response.status_code == 200
     assert request.selected_language_code == "en"
+
+
+@pytest.mark.django_db
+def test_prefixed_pages_path_redirects_to_selected_language(settings):
+    settings.LANGUAGES = [("en-us", "English (US)"), ("de", "German")]
+    request = RequestFactory().get("/en/changelog/?v=1")
+    request.resolver_match = resolve("/en/changelog/")
+    request.COOKIES["django_language"] = "de"
+
+    middleware = LanguagePreferenceMiddleware(lambda _request: HttpResponse("ok"))
+    response = middleware(request)
+
+    assert response.status_code == 302
+    assert response["Location"] == "/de/changelog/?v=1"
