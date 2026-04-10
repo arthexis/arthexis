@@ -1322,6 +1322,7 @@ def _commit_release_prep_changes(
     _append_log(log_path, f"Release prep changes committed ({commit_message})")
     ctx.pop("dirty_files", None)
     ctx.pop("dirty_commit_error", None)
+    ctx.pop("dirty_log_message", None)
 
 
 def _handle_version_step_dirty_repository(ctx: dict, log_path: Path) -> bool:
@@ -1409,20 +1410,14 @@ def _check_release_version_not_on_pypi(release, log_path: Path) -> None:
             target_version = None
 
         for candidate, files in releases.items():
-            same_version = candidate == release.version
-            if target_version is not None and not same_version:
-                try:
-                    same_version = Version(candidate) == target_version
-                except InvalidVersion:
-                    same_version = False
-            if not same_version:
+            if not _versions_match(
+                candidate=candidate,
+                release_version=release.version,
+                target_version=target_version,
+            ):
                 continue
 
-            has_available_files = any(
-                isinstance(file_data, dict) and not file_data.get("yanked", False)
-                for file_data in files or []
-            )
-            if has_available_files:
+            if _has_non_yanked_files(files):
                 raise RuntimeError(f"Version {release.version} already on PyPI")
     except RuntimeError:
         raise
@@ -1433,10 +1428,31 @@ def _check_release_version_not_on_pypi(release, log_path: Path) -> None:
         _append_log(log_path, f"Version {release.version} not published on PyPI")
     finally:
         if resp is not None:
-            close = getattr(resp, "close", None)
-            if callable(close):
-                with contextlib.suppress(Exception):
-                    close()
+            resp.close()
+
+
+def _versions_match(
+    *,
+    candidate: str,
+    release_version: str,
+    target_version: Version | None,
+) -> bool:
+    if candidate == release_version:
+        return True
+    if target_version is None:
+        return False
+
+    try:
+        return Version(candidate) == target_version
+    except InvalidVersion:
+        return False
+
+
+def _has_non_yanked_files(files: object) -> bool:
+    return any(
+        isinstance(file_data, dict) and not file_data.get("yanked", False)
+        for file_data in files or []
+    )
 
 
 def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
