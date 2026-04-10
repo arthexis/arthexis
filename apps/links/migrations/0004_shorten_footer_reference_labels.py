@@ -17,7 +17,7 @@ FOOTER_REFERENCE_LABEL_RENAMES = [
     (
         "GitHub Repositories",
         "https://github.com/orgs/arthexis/repositories",
-        "Github repos",
+        "GitHub Repos",
     ),
     (
         "ARG 1.0 (The Arthexis Reciprocity License)",
@@ -36,35 +36,37 @@ def shorten_footer_seed_reference_labels(apps, schema_editor) -> None:
     Reference = apps.get_model("links", "Reference")
 
     for old_alt, value, new_alt in FOOTER_REFERENCE_LABEL_RENAMES:
-        old_rows = list(
+        old_seed_rows = list(
             Reference.objects.filter(
                 alt_text=old_alt,
                 value=value,
                 is_seed_data=True,
             ).order_by("pk")
         )
-        new_rows = list(
+        target_rows = list(
             Reference.objects.filter(
                 alt_text=new_alt,
                 value=value,
-                is_seed_data=True,
             ).order_by("pk")
         )
-        if not old_rows and not new_rows:
+        if not old_seed_rows and not target_rows:
             continue
 
-        keep = old_rows[0] if old_rows else new_rows[0]
+        keep = next((row for row in target_rows if not row.is_seed_data), None)
+        if keep is None and old_seed_rows:
+            keep = old_seed_rows[0]
+        if keep is None:
+            keep = target_rows[0]
 
-        duplicate_pks = [row.pk for row in old_rows[1:] + new_rows]
-        if keep.pk in duplicate_pks:
-            duplicate_pks.remove(keep.pk)
+        duplicate_pks = [row.pk for row in old_seed_rows + target_rows if row.pk != keep.pk]
         if duplicate_pks:
             Reference.all_objects.filter(pk__in=duplicate_pks)._raw_delete(
                 schema_editor.connection.alias
             )
 
-        keep.alt_text = new_alt
-        keep.save(update_fields=["alt_text"])
+        if keep.alt_text != new_alt:
+            keep.alt_text = new_alt
+            keep.save(update_fields=["alt_text"])
 
 
 def noop_reverse(apps, schema_editor) -> None:
