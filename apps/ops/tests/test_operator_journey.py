@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from apps.groups.constants import SITE_OPERATOR_GROUP_NAME
 from apps.groups.models import SecurityGroup
 from apps.ops.models import OperatorJourney, OperatorJourneyStep
 from apps.ops.operator_journey import complete_step_for_user, status_for_user
@@ -139,3 +140,34 @@ class OperatorJourneyViewTests(TestCase):
             dashboard_response,
             "All Operator tasks completed to date. Keep coming back for more.",
         )
+
+    def test_dashboard_shows_operator_journey_for_admin_user_without_group_assignment(self):
+        site_operator_group = SecurityGroup.objects.create(name=SITE_OPERATOR_GROUP_NAME)
+        admin_user = get_user_model().objects.create_user(
+            username="admin",
+            password="x",
+            is_staff=True,
+            is_superuser=True,
+        )
+        admin_user.groups.clear()
+
+        admin_journey = OperatorJourney.objects.create(
+            name="Admin Journey",
+            slug="admin-journey",
+            security_group=site_operator_group,
+            is_active=True,
+        )
+        OperatorJourneyStep.objects.create(
+            journey=admin_journey,
+            title="Run admin setup",
+            slug="run-admin-setup",
+            instruction="Run setup.",
+            iframe_url="/admin/",
+            order=1,
+        )
+
+        self.client.force_login(admin_user)
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertContains(response, "Next Operator task: Run admin setup")
+        self.assertTrue(admin_user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).exists())
