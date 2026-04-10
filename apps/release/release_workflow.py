@@ -11,13 +11,13 @@ from django.db import DatabaseError, models
 
 from apps.core.views import (
     DirtyRepository,
-    PUBLISH_STEPS,
     PublishPending,
     _append_log,
     _release_log_name,
     _resolve_release_log_dir,
 )
 from apps.flows import NodeWorkflow, NodeWorkflowStep
+from apps.release.domain import PUBLISH_STEPS
 
 logger = logging.getLogger(__name__)
 

@@ -38,6 +38,11 @@ from packaging.version import InvalidVersion, Version
 import apps.release as release_utils
 from apps.nodes.models import NetMessage, Node
 from apps.release import git_utils
+from apps.release.domain import (
+    BUILD_RELEASE_ARTIFACTS_STEP_NAME,
+    FIXTURE_REVIEW_STEP_NAME,
+    PUBLISH_STEPS,
+)
 from apps.release.models import PackageRelease
 from apps.release.services import builder as release_builder
 from apps.release.services import uploader as release_uploader
@@ -2148,30 +2153,6 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
     else:
         _append_log(log_path, "Publish logs already recorded")
 
-
-BUILD_RELEASE_ARTIFACTS_STEP_NAME = "Build release artifacts"
-FIXTURE_REVIEW_STEP_NAME = "Freeze, squash and approve migrations"
-
-
-PUBLISH_STEPS = [
-    ("Check version number availability", _step_check_version),
-    (FIXTURE_REVIEW_STEP_NAME, _step_handle_migrations),
-    ("Execute pre-release actions", _step_pre_release_actions),
-    (BUILD_RELEASE_ARTIFACTS_STEP_NAME, _step_promote_build),
-    ("Complete test suite with --all flag", _step_run_tests),
-    (
-        "Confirm PyPI Trusted Publisher settings",
-        _step_confirm_pypi_trusted_publisher_settings,
-    ),
-    ("Verify release environment", _step_verify_release_environment),
-    (
-        "Export artifacts and push release tag",
-        _step_export_and_dispatch,
-    ),
-    ("Wait for GitHub Actions publish", _step_wait_for_github_actions_publish),
-    ("Record publish URLs & update fixtures", _step_record_publish_metadata),
-    ("Capture PyPI publish logs", _step_capture_publish_logs),
-]
 
 def _ensure_publish_step_compatibility(
     typed_ctx: ReleasePublishContext,
