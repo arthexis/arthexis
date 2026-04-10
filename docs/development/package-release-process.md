@@ -66,7 +66,7 @@ To remove long-lived PyPI API tokens from the release workflow, publishing is de
 - The new `publish.yml` workflow is designed to build from a release tag and publish to PyPI using OIDC.
 - Configure the PyPI trusted publisher to match the repository, workflow path, and tag patterns (for example, `v*`).
 - Use the `pypi` environment in GitHub with required reviewers if a human approval gate is required before the job publishes.
-- Before pushing a release tag, ensure `VERSION` and any dynamic version source file configured in `pyproject.toml` contain the exact same version as the tag (`vX.Y.Z`). The publish workflow now enforces this and will stop before build if they are out of sync.
+- Before pushing a release tag, ensure `VERSION` and any dynamic version source file configured in `pyproject.toml` contain the exact same version string as the tag (e.g., `X.Y.Z`, without the `v` prefix). The publish workflow now enforces this and will stop before build if they are out of sync.
 
 ### PyPI Trusted Publisher configuration (required)
 
