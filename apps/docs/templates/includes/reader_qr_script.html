@@ -1,7 +1,6 @@
 <script>
   (function () {
     const qrContainer = document.getElementById("reader-qr");
-    const readerContent = document.getElementById("reader-content");
 
     const baseUrlString = (qrContainer && qrContainer.dataset.url) || window.location.href;
     let lastQrUrl = "";
@@ -129,15 +128,11 @@
 
     const getBodyRows = (table) => {
       const tbody = table.tBodies[0];
-      if (tbody && tbody.rows.length) {
+      if (tbody) {
         return tbody.rows.length;
       }
 
-      if (table.rows.length > 1) {
-        return table.rows.length - 1;
-      }
-
-      return table.rows.length;
+      return Math.max(0, table.rows.length - 1);
     };
 
     const buildTableToggleLabel = (table, rowCount) => {
@@ -148,11 +143,12 @@
     };
 
     const enhanceReaderTables = () => {
-      if (!readerContent) {
+      const container = document.getElementById("reader-content");
+      if (!container) {
         return;
       }
 
-      const tables = Array.from(readerContent.querySelectorAll("table"));
+      const tables = Array.from(container.querySelectorAll("table"));
       tables.forEach((table, index) => {
         if (table.dataset.tableToggleReady === "true") {
           return;
@@ -195,6 +191,20 @@
     const onReady = () => {
       observeHeadings();
       enhanceReaderTables();
+      document.body.addEventListener("htmx:afterSwap", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+
+        if (
+          target.id === "reader-content" ||
+          target.closest("#reader-content") ||
+          target.querySelector("#reader-content")
+        ) {
+          enhanceReaderTables();
+        }
+      });
 
       if (typeof window.QRCode === "undefined") {
         if (qrContainer) {
