@@ -80,6 +80,50 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Validate release tag matches package version
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import tomllib
+
+          root = Path(".")
+          ref_name = os.environ["GITHUB_REF_NAME"].strip()
+          tag_version = ref_name[1:] if ref_name.startswith("v") else ref_name
+
+          version_path = root / "VERSION"
+          expected_version = version_path.read_text(encoding="utf-8").strip()
+
+          pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+          dynamic_version_files = (
+              pyproject.get("tool", {})
+              .get("setuptools", {})
+              .get("dynamic", {})
+              .get("version", {})
+              .get("file", [])
+          )
+          if isinstance(dynamic_version_files, str):
+              dynamic_version_files = [dynamic_version_files]
+
+          if dynamic_version_files:
+              dynamic_path = root / dynamic_version_files[0]
+              dynamic_version = dynamic_path.read_text(encoding="utf-8").strip()
+              if dynamic_version != expected_version:
+                  raise SystemExit(
+                      "Release publish blocked: VERSION and setuptools dynamic version file differ. "
+                      f"VERSION={expected_version!r}; {dynamic_path}={dynamic_version!r}."
+                  )
+
+          if tag_version != expected_version:
+              raise SystemExit(
+                  "Release publish blocked: tag and package version differ. "
+                  f"Tag {ref_name!r} resolves to {tag_version!r}, but VERSION is {expected_version!r}. "
+                  "Update VERSION (and dynamic version source) or retag before publishing."
+              )
+
+          print(f"Version gate passed: tag {ref_name!r} matches package version {expected_version!r}.")
+          PY
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
