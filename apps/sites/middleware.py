@@ -35,10 +35,12 @@ class LanguagePreferenceMiddleware:
         self._supported_language_codes = get_supported_language_codes()
 
     def __call__(self, request):
+        raw_language_code = get_request_language_code(request)
+        preferred_language_code = normalize_language_code(raw_language_code)
         language_code = self._language_from_path(request.path_info)
         if not language_code:
-            raw_language_code = get_request_language_code(request)
-            language_code = normalize_language_code(raw_language_code)
+            language_code = preferred_language_code
+            preferred_language_code = ""
 
         if language_code:
             activate(language_code)
@@ -46,6 +48,14 @@ class LanguagePreferenceMiddleware:
 
         request.selected_language_code = language_code
         request.selected_language = language_code
+
+        prefixed_redirect = self._prefixed_language_redirect(
+            request,
+            language_code=language_code,
+            preferred_language_code=preferred_language_code,
+        )
+        if prefixed_redirect is not None:
+            return prefixed_redirect
 
         if self._should_redirect_to_language_path(request, language_code):
             return HttpResponseRedirect(f"/{language_code}{request.get_full_path()}")
@@ -79,10 +89,53 @@ class LanguagePreferenceMiddleware:
         if resolver_match is None:
             try:
                 resolver_match = resolve(request.path_info)
+                request.resolver_match = resolver_match
             except Resolver404:
                 return False
 
         return resolver_match.namespace in {"pages", "pages-lang"}
+
+    def _prefixed_language_redirect(
+        self,
+        request,
+        *,
+        language_code: str,
+        preferred_language_code: str,
+    ):
+        """Redirect ``/xx/...`` paths when users changed language preferences."""
+
+        if request.method.upper() not in {"GET", "HEAD"}:
+            return None
+        if not language_code or not preferred_language_code:
+            return None
+        if language_code == preferred_language_code:
+            return None
+        if preferred_language_code not in self._supported_language_codes:
+            return None
+        if request.path_info.startswith("/admin"):
+            return None
+        if request.path_info.startswith("/i18n/"):
+            return None
+
+        resolver_match = getattr(request, "resolver_match", None)
+        if resolver_match is None:
+            try:
+                resolver_match = resolve(request.path_info)
+                request.resolver_match = resolver_match
+            except Resolver404:
+                return None
+        if resolver_match.namespace not in {"pages", "pages-lang"}:
+            return None
+
+        trimmed = request.path_info.lstrip("/")
+        segments = trimmed.split("/", maxsplit=1)
+
+        remainder = f"/{segments[1]}" if len(segments) > 1 else "/"
+        replacement = f"/{preferred_language_code}{remainder}"
+        query = request.META.get("QUERY_STRING", "")
+        if query:
+            replacement = f"{replacement}?{query}"
+        return HttpResponseRedirect(replacement)
 
 
 class ViewHistoryMiddleware:
