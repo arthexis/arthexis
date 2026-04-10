@@ -398,7 +398,9 @@ def test_step_confirm_pypi_trusted_publisher_settings_validates_expected_workflo
     workflows_dir.mkdir(parents=True)
     (workflows_dir / "publish.yml").write_text(
         'on:\n  push:\n    tags:\n      - "v*"\n'
-        "jobs:\n  publish-to-pypi:\n    environment:\n      name: pypi\n",
+        "jobs:\n  publish-to-pypi:\n    permissions:\n      id-token: write\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n      - uses: pypa/gh-action-pypi-publish@release/v1\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -426,7 +428,9 @@ def test_step_confirm_pypi_trusted_publisher_settings_accepts_yaml_variants(
     workflows_dir.mkdir(parents=True)
     (workflows_dir / "publish.yml").write_text(
         "on:\n  push:\n    tags: ['v*']\n"
-        "jobs:\n  publish-to-pypi:\n    environment: pypi\n",
+        "jobs:\n  publish-to-pypi:\n    permissions:\n      id-token: write\n"
+        "    environment: pypi\n"
+        "    steps:\n      - uses: pypa/gh-action-pypi-publish\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -452,7 +456,9 @@ def test_step_confirm_pypi_trusted_publisher_settings_fails_on_mismatch(
     workflows_dir.mkdir(parents=True)
     (workflows_dir / "publish.yml").write_text(
         'on:\n  push:\n    tags:\n      - "release-*"\n'
-        "jobs:\n  publish-to-pypi:\n    environment:\n      name: production\n",
+        "jobs:\n  publish-to-pypi:\n    permissions:\n      id-token: write\n"
+        "    environment:\n      name: production\n"
+        "    steps:\n      - uses: pypa/gh-action-pypi-publish@release/v1\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -469,3 +475,185 @@ def test_step_confirm_pypi_trusted_publisher_settings_fails_on_mismatch(
         )
 
     assert "workflow tag pattern must be refs/tags/v*" in ctx["error"]
+    assert "jobs.publish-to-pypi.environment.name" in ctx["error"]
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_rejects_mixed_tag_patterns(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        "on:\n  push:\n    tags: ['v*', 'release-*']\n"
+        "jobs:\n  publish-to-pypi:\n    permissions:\n      id-token: write\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n      - uses: pypa/gh-action-pypi-publish@release/v1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    with pytest.raises(PublishPending):
+        pipeline._step_confirm_pypi_trusted_publisher_settings(
+            object(), ctx, tmp_path / "publish.log"
+        )
+
+    assert "workflow tag pattern must be refs/tags/v*" in ctx["error"]
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_requires_oidc_permissions_and_action(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "v*"\n'
+        "jobs:\n  publish-to-pypi:\n"
+        "    permissions:\n      id-token: read\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n      - uses: actions/checkout@v4\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    with pytest.raises(PublishPending):
+        pipeline._step_confirm_pypi_trusted_publisher_settings(
+            object(), ctx, tmp_path / "publish.log"
+        )
+
+    assert "jobs.publish-to-pypi.permissions.id-token" in ctx["error"]
+    assert "jobs.publish-to-pypi.steps[*].uses" in ctx["error"]
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_rejects_static_publish_tokens(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "v*"\n'
+        "jobs:\n  publish-to-pypi:\n"
+        "    permissions:\n      id-token: write\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n"
+        "      - uses: pypa/gh-action-pypi-publish@release/v1\n"
+        "        with:\n"
+        "          password: ${{ secrets.PYPI_API_TOKEN }}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    with pytest.raises(PublishPending):
+        pipeline._step_confirm_pypi_trusted_publisher_settings(
+            object(), ctx, tmp_path / "publish.log"
+        )
+
+    assert "must not set static token credentials" in ctx["error"]
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_allows_non_publish_step_tokens(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "v*"\n'
+        "jobs:\n  publish-to-pypi:\n"
+        "    permissions:\n      id-token: write\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "        with:\n"
+        "          token: ${{ secrets.GITHUB_TOKEN }}\n"
+        "      - uses: pypa/gh-action-pypi-publish@release/v1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    pipeline._step_confirm_pypi_trusted_publisher_settings(
+        object(), ctx, tmp_path / "publish.log"
+    )
+
+    assert "trusted_publisher_verified_at" in ctx
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_rejects_twine_upload_path(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "v*"\n'
+        "jobs:\n  publish-to-pypi:\n"
+        "    permissions:\n      id-token: write\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n"
+        "      - run: python -m twine upload dist/*\n"
+        "      - uses: pypa/gh-action-pypi-publish@release/v1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    with pytest.raises(PublishPending):
+        pipeline._step_confirm_pypi_trusted_publisher_settings(
+            object(), ctx, tmp_path / "publish.log"
+        )
+
+    assert "must use only pypa/gh-action-pypi-publish for package upload" in ctx["error"]
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_accepts_workflow_permissions(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "v*"\n'
+        "permissions:\n  id-token: write\n"
+        "jobs:\n  publish-to-pypi:\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n      - uses: pypa/gh-action-pypi-publish@release/v1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    pipeline._step_confirm_pypi_trusted_publisher_settings(
+        object(), ctx, tmp_path / "publish.log"
+    )
+
+    assert "trusted_publisher_verified_at" in ctx

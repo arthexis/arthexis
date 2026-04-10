@@ -1651,18 +1651,34 @@ def _step_confirm_pypi_trusted_publisher_settings(
 
     on_section = workflow_data.get("on", workflow_data.get(True, {}))
     push_section = on_section.get("push", {}) if isinstance(on_section, dict) else {}
-    tags = push_section.get("tags", []) if isinstance(push_section, dict) else []
-    if isinstance(tags, str):
-        tags = [tags]
+    raw_tags = push_section.get("tags") if isinstance(push_section, dict) else None
+    tags: list[str] = []
+    if isinstance(raw_tags, str):
+        tags = [raw_tags]
+    elif isinstance(raw_tags, list):
+        tags = [str(tag).strip() for tag in raw_tags if str(tag).strip()]
+    elif raw_tags is not None:
+        tags = [str(raw_tags).strip()] if str(raw_tags).strip() else []
+    if raw_tags is None or not tags:
+        mismatches.append(
+            f"{workflow_path} must define non-empty on.push.tags"
+            " (missing key: on.push.tags)"
+        )
     expected_tag = EXPECTED_PUBLISH_REF_PATTERN.removeprefix("refs/tags/")
-    if expected_tag not in {str(tag).strip() for tag in tags if str(tag).strip()}:
+    if tags and set(tags) != {expected_tag}:
         mismatches.append(
             f"workflow tag pattern must be {EXPECTED_PUBLISH_REF_PATTERN} "
-            f"(check tags trigger in {workflow_path})"
+            f"(check key: on.push.tags in {workflow_path})"
         )
 
     jobs = workflow_data.get("jobs", {})
     publish_job = jobs.get("publish-to-pypi", {}) if isinstance(jobs, dict) else {}
+    if not isinstance(publish_job, dict) or not publish_job:
+        mismatches.append(
+            f"{workflow_path} must define jobs.publish-to-pypi"
+            " (missing key: jobs.publish-to-pypi)"
+        )
+
     environment = (
         publish_job.get("environment", "") if isinstance(publish_job, dict) else ""
     )
@@ -1671,10 +1687,104 @@ def _step_confirm_pypi_trusted_publisher_settings(
         observed_environment_name = environment.strip()
     elif isinstance(environment, dict):
         observed_environment_name = str(environment.get("name", "")).strip()
-    if observed_environment_name != EXPECTED_PUBLISH_ENVIRONMENT:
+    if not observed_environment_name:
+        mismatches.append(
+            f"{workflow_path} must define non-empty publish job environment.name"
+            " (missing key: jobs.publish-to-pypi.environment.name)"
+        )
+    elif observed_environment_name != EXPECTED_PUBLISH_ENVIRONMENT:
         mismatches.append(
             f"workflow environment must be {EXPECTED_PUBLISH_ENVIRONMENT} "
-            f"(check publish job environment.name in {workflow_path})"
+            f"(check key: jobs.publish-to-pypi.environment.name in {workflow_path})"
+        )
+
+    job_permissions = (
+        publish_job.get("permissions") if isinstance(publish_job, dict) else None
+    )
+    permissions = (
+        job_permissions
+        if job_permissions is not None
+        else workflow_data.get("permissions", {})
+    )
+    id_token_permission = ""
+    if isinstance(permissions, dict):
+        id_token_permission = str(permissions.get("id-token", "")).strip()
+    elif isinstance(permissions, str) and permissions == "write-all":
+        id_token_permission = "write"
+    if id_token_permission != "write":
+        mismatches.append(
+            f"{workflow_path} must set jobs.publish-to-pypi.permissions.id-token to"
+            " 'write' (missing/invalid key: jobs.publish-to-pypi.permissions.id-token)"
+        )
+
+    steps = publish_job.get("steps", []) if isinstance(publish_job, dict) else []
+    uses_entries = []
+    if isinstance(steps, list):
+        uses_entries = [
+            str(step.get("uses", "")).strip()
+            for step in steps
+            if isinstance(step, dict) and str(step.get("uses", "")).strip()
+        ]
+    has_publish_action = any(
+        action.startswith("pypa/gh-action-pypi-publish@")
+        or action == "pypa/gh-action-pypi-publish"
+        for action in uses_entries
+    )
+    if not has_publish_action:
+        mismatches.append(
+            f"{workflow_path} must include pypa/gh-action-pypi-publish in"
+            " jobs.publish-to-pypi.steps[*].uses"
+            " (missing key family: jobs.publish-to-pypi.steps[*].uses)"
+        )
+
+    static_token_keys = (
+        "password",
+        "token",
+        "api_token",
+        "repository_password",
+        "user",
+        "username",
+    )
+    has_static_token_field = False
+    has_non_oidc_publish_path = False
+    for step in steps if isinstance(steps, list) else []:
+        if not isinstance(step, dict):
+            continue
+        uses = str(step.get("uses", "")).strip()
+        if uses:
+            normalized_uses = uses.lower()
+            if (
+                "pypa/gh-action-pypi-publish" not in normalized_uses
+                and "pypi-publish" in normalized_uses
+            ):
+                has_non_oidc_publish_path = True
+                break
+        run_command = str(step.get("run", "")).strip().lower()
+        if "twine upload" in run_command:
+            has_non_oidc_publish_path = True
+            break
+        if not (
+            uses.startswith("pypa/gh-action-pypi-publish@")
+            or uses == "pypa/gh-action-pypi-publish"
+        ):
+            continue
+        step_with = step.get("with", {})
+        if not isinstance(step_with, dict):
+            continue
+        if any(str(step_with.get(key, "")).strip() for key in static_token_keys):
+            has_static_token_field = True
+            break
+    if has_static_token_field:
+        mismatches.append(
+            f"{workflow_path} must not set static token credentials in"
+            " jobs.publish-to-pypi.steps[*].with when Trusted Publisher OIDC is expected"
+            " (remove keys like password/token/api_token)"
+        )
+    if has_non_oidc_publish_path:
+        mismatches.append(
+            f"{workflow_path} jobs.publish-to-pypi.steps must use only"
+            " pypa/gh-action-pypi-publish for package upload"
+            " (remove twine upload and other publish actions)"
         )
 
     if mismatches:
