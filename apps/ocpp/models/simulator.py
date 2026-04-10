@@ -101,8 +101,8 @@ class Simulator(Entity):
         super().save(*args, **kwargs)
 
     class Meta:
-        verbose_name = _("CP Simulator")
-        verbose_name_plural = _("CP Simulators")
+        verbose_name = _("OCPP Simulator")
+        verbose_name_plural = _("OCPP Simulators")
         constraints = [
             models.UniqueConstraint(
                 fields=["default"],
