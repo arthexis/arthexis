@@ -195,6 +195,22 @@ def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path
     assert captured["ctx"].extras["pending_git_push"] == {"branch": "main"}
 
 
+def test_publish_steps_match_documented_release_flow():
+    assert [name for name, _func in pipeline.PUBLISH_STEPS] == [
+        "Check version number availability",
+        "Freeze, squash and approve migrations",
+        "Execute pre-release actions",
+        "Build release artifacts",
+        "Complete test suite with --all flag",
+        "Confirm PyPI Trusted Publisher settings",
+        "Verify release environment",
+        "Export artifacts and push release tag",
+        "Wait for GitHub Actions publish",
+        "Record publish URLs & update fixtures",
+        "Capture PyPI publish logs",
+    ]
+
+
 def test_resolve_safe_child_path_rejects_parent_traversal(tmp_path: Path):
     with pytest.raises(ValueError):
         pipeline._resolve_safe_child_path(tmp_path, "../escape.txt")

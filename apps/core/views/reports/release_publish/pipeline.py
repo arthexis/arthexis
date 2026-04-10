@@ -1522,6 +1522,20 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
     _append_log(log_path, "Test suite completion acknowledged")
 
 
+def _step_confirm_pypi_trusted_publisher_settings(
+    release, ctx, log_path: Path, *, user=None
+) -> None:
+    """Confirm PyPI Trusted Publisher release prerequisites.
+
+    Prerequisites: full release test suite acknowledgement complete.
+    Side effects: records confirmation message in release logs.
+    Rollback expectations: no rollback; this is a publish gate acknowledgement.
+    """
+    _ = release, ctx, user
+    _append_log(log_path, "Confirm PyPI Trusted Publisher settings")
+    _append_log(log_path, "Trusted Publisher settings confirmation acknowledged")
+
+
 def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
     """Promote build artifacts into releasable state.
 
@@ -1726,6 +1740,97 @@ def _step_export_and_dispatch(release, ctx, log_path: Path, *, user=None) -> Non
     )
 
 
+def _wait_for_publish_workflow_completion(
+    release,
+    ctx: dict[str, object],
+    log_path: Path,
+    *,
+    token: str | None,
+) -> dict[str, object]:
+    owner, repo = _resolve_github_repository(release)
+    tag_name = f"v{release.version}"
+    run = _fetch_publish_workflow_run(
+        owner=owner,
+        repo=repo,
+        tag_name=tag_name,
+        token=token,
+    )
+    if not run:
+        _pause_for_publish_pending(
+            release,
+            ctx,
+            log_path,
+            token=token,
+            message=(
+                "Publish workflow run not found yet; resume after GitHub Actions completes."
+            ),
+        )
+
+    run_url = run.get("html_url") if isinstance(run.get("html_url"), str) else ""
+    run_id = run.get("id")
+    if isinstance(run_id, int):
+        ctx["publish_workflow_run_id"] = run_id
+    if run_url:
+        ctx["publish_workflow_url"] = run_url
+
+    status = run.get("status")
+    if status != "completed":
+        if run_url:
+            message = "Publish workflow still running; monitor at"
+        else:
+            message = (
+                "Publish workflow still running; resume after GitHub Actions completes."
+            )
+        _pause_for_publish_pending(
+            release,
+            ctx,
+            log_path,
+            token=token,
+            message=message,
+            run_url=run_url,
+        )
+
+    ctx["publish_workflow_status"] = status
+    conclusion = run.get("conclusion")
+    if isinstance(conclusion, str) and conclusion:
+        ctx["publish_workflow_conclusion"] = conclusion
+    return run
+
+
+def _step_wait_for_github_actions_publish(
+    release, ctx, log_path: Path, *, user=None
+) -> None:
+    """Pause until GitHub Actions publish workflow completes.
+
+    Prerequisites: release artifacts exported and tag pushed.
+    Side effects: stores workflow run details in context/logs.
+    Rollback expectations: no rollback; retries continue polling.
+    """
+    if ctx.get("dry_run"):
+        _append_log(log_path, "Dry run: skipping GitHub Actions publish wait")
+        return
+    token = _require_github_token(
+        release,
+        ctx,
+        log_path,
+        message=_(
+            "GitHub token missing. Provide a token to continue publishing."
+        ),
+        user=user,
+    )
+    run = _wait_for_publish_workflow_completion(
+        release,
+        ctx,
+        log_path,
+        token=token,
+    )
+    run_url = run.get("html_url") if isinstance(run.get("html_url"), str) else ""
+    if run_url:
+        _append_log(log_path, f"Publish workflow completed: {run_url}")
+    else:
+        _append_log(log_path, "Publish workflow completed")
+
+
 def _pypi_release_available(release) -> bool:
     if not release_utils.network_available():
         return False
@@ -1770,7 +1875,7 @@ def _pypi_release_available(release) -> bool:
 def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) -> None:
     """Persist publish metadata after external publish completion.
 
-    Prerequisites: package is visible on distribution channel.
+    Prerequisites: GitHub Actions publish workflow completion.
     Side effects: updates PackageRelease timestamps/urls and commits fixtures.
     Rollback expectations: metadata commits can be reverted with standard git workflow.
     """
@@ -1820,7 +1925,7 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
         skipped_message=(
             "No release metadata updates detected after publish; skipping commit"
         ),
-        step_name="Record publish metadata",
+        step_name="Record publish URLs & update fixtures",
     )
     _append_log(log_path, "Publish metadata recorded")
 
@@ -1853,46 +1958,18 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
         _append_log(log_path, "GitHub token missing; skipping publish log capture")
         return
 
-    owner, repo = _resolve_github_repository(release)
-    tag_name = f"v{release.version}"
-    run = _fetch_publish_workflow_run(
-        owner=owner,
-        repo=repo,
-        tag_name=tag_name,
+    run = _wait_for_publish_workflow_completion(
+        release,
+        ctx,
+        log_path,
         token=token,
     )
-    if not run:
-        _pause_for_publish_pending(
-            release,
-            ctx,
-            log_path,
-            token=token,
-            message=(
-                "Publish workflow run not found yet; resume after GitHub Actions completes."
-            ),
-        )
-
-    status = run.get("status")
-    if status != "completed":
-        run_url = run.get("html_url") if isinstance(run.get("html_url"), str) else ""
-        if run_url:
-            message = "Publish workflow still running; monitor at"
-        else:
-            message = (
-                "Publish workflow still running; resume after GitHub Actions completes."
-            )
-        _pause_for_publish_pending(
-            release,
-            ctx,
-            log_path,
-            token=token,
-            message=message,
-            run_url=run_url,
-        )
 
     run_id = run.get("id")
     if not isinstance(run_id, int):
         raise ValueError("Publish workflow run ID missing")
+    owner, repo = _resolve_github_repository(release)
+    status = run.get("status")
 
     raw_log = _download_publish_workflow_logs(
         owner=owner, repo=repo, run_id=run_id, token=token
@@ -1945,12 +2022,17 @@ PUBLISH_STEPS = [
     ("Execute pre-release actions", _step_pre_release_actions),
     (BUILD_RELEASE_ARTIFACTS_STEP_NAME, _step_promote_build),
     ("Complete test suite with --all flag", _step_run_tests),
+    (
+        "Confirm PyPI Trusted Publisher settings",
+        _step_confirm_pypi_trusted_publisher_settings,
+    ),
     ("Verify release environment", _step_verify_release_environment),
     (
-        "Export artifacts and trigger GitHub Actions publish",
+        "Export artifacts and push release tag",
         _step_export_and_dispatch,
     ),
-    ("Record publish metadata", _step_record_publish_metadata),
+    ("Wait for GitHub Actions publish", _step_wait_for_github_actions_publish),
+    ("Record publish URLs & update fixtures", _step_record_publish_metadata),
     ("Capture PyPI publish logs", _step_capture_publish_logs),
 ]
 
