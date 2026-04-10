@@ -13,7 +13,30 @@ from apps.survey.models import Survey, SurveyAnswer, SurveyOption, SurveyQuestio
 class SoulRegistrationViewsTests(TestCase):
     def test_register_start_uses_same_redirect_for_existing_and_new_email(self):
         user_model = get_user_model()
-        user_model.objects.create_user(username="existing-user", email="existing@example.com", password="x")
+        user = user_model.objects.create_user(username="existing-user", email="existing@example.com", password="x")
+        offering = OfferingSoul.objects.create(
+            core_hash="a" * 64,
+            package={
+                "schema_version": "1.0",
+                "core_hash": "a" * 64,
+                "issuance_marker": "start",
+                "metadata": {"size_bytes": 2},
+                "traits": {"structural": {}, "type_aware": {}},
+            },
+            structural_traits={},
+            type_traits={},
+        )
+        survey = Survey.objects.create(title="Soul Registration", is_active=True)
+        response = SurveyResponse.objects.create(survey=survey, participant_token="existing-token")
+        Soul.objects.create(
+            user=user,
+            offering_soul=offering,
+            survey_response=response,
+            soul_id="existing-soul-id",
+            survey_digest="digest",
+            package={"schema_version": "1.0"},
+            email_hash="hash",
+        )
 
         existing_response = self.client.post(
             reverse("souls:register_start"),
@@ -82,13 +105,59 @@ class SoulRegistrationViewsTests(TestCase):
             email_hash="hash",
         )
 
-        self.client.get(reverse("souls:register_complete"))
         verify_response = self.client.get(
             reverse("souls:register_verify", kwargs={"session_id": registration.id, "token": token})
         )
 
-        self.assertRedirects(verify_response, reverse("souls:register_complete"), fetch_redirect_response=False)
+        self.assertRedirects(verify_response, reverse("souls:register_landing"), fetch_redirect_response=False)
         self.assertFalse(verify_response.wsgi_request.user.is_authenticated)
+        registration.refresh_from_db()
+        self.assertEqual(registration.state, SoulRegistrationSession.State.EMAIL_SENT)
+
+    def test_register_verify_blocks_claim_when_email_matches_multiple_users(self):
+        user_model = get_user_model()
+        first_user = user_model.objects.create_user(username="dupe-a", email="dupe@example.com", password="x")
+        user_model.objects.create_user(username="dupe-b", email="dupe@example.com", password="x")
+        survey = Survey.objects.create(title="Soul Registration", is_active=True)
+        question = SurveyQuestion.objects.create(
+            survey=survey,
+            prompt="Axis",
+            allow_multiple=False,
+            display_order=1,
+        )
+        option = SurveyOption.objects.create(question=question, label="As Above", display_order=1)
+        response = SurveyResponse.objects.create(survey=survey, participant_token="token-dup")
+        answer = SurveyAnswer.objects.create(response=response, question=question)
+        answer.selected_options.set([option])
+        offering = OfferingSoul.objects.create(
+            core_hash="e" * 64,
+            package={
+                "schema_version": "1.0",
+                "core_hash": "e" * 64,
+                "issuance_marker": "dupe",
+                "metadata": {"size_bytes": 2},
+                "traits": {"structural": {}, "type_aware": {}},
+            },
+            structural_traits={},
+            type_traits={},
+        )
+        registration = SoulRegistrationSession.objects.create(
+            email=first_user.email,
+            offering_soul=offering,
+            survey_response=response,
+            state=SoulRegistrationSession.State.EMAIL_SENT,
+        )
+        token = "valid-token-dup"
+        registration.verification_token_hash = SoulRegistrationSession.digest_value(token)
+        registration.save(update_fields=["verification_token_hash"])
+
+        verify_response = self.client.get(
+            reverse("souls:register_verify", kwargs={"session_id": registration.id, "token": token})
+        )
+
+        self.assertRedirects(verify_response, reverse("souls:register_landing"), fetch_redirect_response=False)
+        self.assertFalse(verify_response.wsgi_request.user.is_authenticated)
+        self.assertFalse(Soul.objects.filter(user__email__iexact=registration.email).exists())
         registration.refresh_from_db()
         self.assertEqual(registration.state, SoulRegistrationSession.State.EMAIL_SENT)
 

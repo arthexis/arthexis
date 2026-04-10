@@ -204,7 +204,14 @@ def register_verify(request: HttpRequest, session_id: int, token: str) -> HttpRe
 
     user_model = get_user_model()
     with transaction.atomic():
-        user = user_model.objects.filter(email__iexact=registration.email).first()
+        matching_users = list(
+            user_model.objects.select_related("soul").filter(email__iexact=registration.email).order_by("id")[:2]
+        )
+        if len(matching_users) > 1:
+            messages.error(request, "Registration could not be completed for this email address.")
+            return redirect("souls:register_landing")
+
+        user = matching_users[0] if matching_users else None
         if user is None:
             username = registration.email.split("@", 1)[0]
             candidate = username
@@ -222,11 +229,10 @@ def register_verify(request: HttpRequest, session_id: int, token: str) -> HttpRe
             registration_session=registration,
             user=user,
         )
-        existing_soul = Soul.objects.filter(user=user).first()
+        existing_soul = getattr(user, "soul", None)
         if existing_soul and existing_soul.soul_id != soul_id:
             messages.error(request, "Registration could not be completed for this submission.")
-            request.session.pop(REG_SESSION_KEY, None)
-            return redirect("souls:register_complete")
+            return redirect("souls:register_landing")
 
         soul_defaults = {
             "offering_soul": registration.offering_soul,
@@ -238,12 +244,7 @@ def register_verify(request: HttpRequest, session_id: int, token: str) -> HttpRe
             "email_hash": email_hash,
             "email_verified_at": timezone.now(),
         }
-        if existing_soul:
-            for field, value in soul_defaults.items():
-                setattr(existing_soul, field, value)
-            existing_soul.save(update_fields=list(soul_defaults.keys()))
-        else:
-            Soul.objects.create(user=user, **soul_defaults)
+        Soul.objects.update_or_create(user=user, defaults=soul_defaults)
         registration.state = SoulRegistrationSession.State.COMPLETED
         registration.save(update_fields=["state"])
 
