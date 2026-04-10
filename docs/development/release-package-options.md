@@ -15,7 +15,7 @@ Administrators can override the default behavior through the
 - **Test command** – custom command executed when the release build runs the
   test suite (`test_command`). The command is parsed with `shlex.split` and
   executed via `subprocess.run`. When unset, the workflow runs
-  `.venv/bin/python manage.py test`.
+  `python manage.py test` using the current Python interpreter.
 
 These settings allow packaging projects with non-standard layouts without
 modifying the release tooling. Every value is optional, so existing packages
