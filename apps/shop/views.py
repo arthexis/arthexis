@@ -10,6 +10,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from apps.souls.views import attach_soul_to_order_items
+
 from .forms import CartQuantityForm, CheckoutForm
 from .models import Shop, ShopOrder, ShopOrderItem, ShopProduct
 from .services import CartValidationError, calculate_cart_total, serialize_product_for_cart
@@ -228,13 +230,14 @@ def checkout(request: HttpRequest) -> HttpResponse:
         )
 
         total = Decimal("0.00")
+        created_items = []
         for entry in entries:
             unit_price = Decimal(entry["unit_price"])
             quantity = int(entry["quantity"])
             line_total = unit_price * quantity
             total += line_total
             product = products[entry["product_id"]]
-            ShopOrderItem.objects.create(
+            created_item = ShopOrderItem.objects.create(
                 order=order,
                 product=product,
                 odoo_product=product.odoo_product,
@@ -244,6 +247,9 @@ def checkout(request: HttpRequest) -> HttpResponse:
                 quantity=quantity,
                 line_total=line_total,
             )
+            created_items.append(created_item)
+
+        attach_soul_to_order_items(request=request, order_items=created_items)
 
         order.total_amount = total
         order.save(update_fields=["total_amount", "updated_at"])

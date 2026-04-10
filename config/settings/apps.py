@@ -86,6 +86,7 @@ PROJECT_LOCAL_APPS = [
     "apps.sigils",
     "apps.simulators",
     "apps.sites",
+    "apps.souls",
     "apps.special",
     "apps.summary",
     "apps.survey",

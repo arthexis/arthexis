@@ -83,6 +83,7 @@ ROUTE_PROVIDERS = [
     "apps.repos.routes",
     "apps.shop.routes",
     "apps.sites.routes",
+    "apps.souls.routes",
     "apps.survey.routes",
     "apps.tasks.routes",
     "apps.teams.routes",
