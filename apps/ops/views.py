@@ -7,6 +7,8 @@ from django.http import Http404, HttpRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
+OPERATOR_JOURNEY_STEP_URL_NAME = "ops:operator-journey-step"
+
 from .models import OperatorJourneyStep
 from .operator_journey import complete_step_for_user, next_step_for_user
 from .redirects import safe_host_redirect
@@ -36,7 +38,7 @@ def status_log_excerpts(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"log_excerpts": scoped_log_excerpts(user=request.user)})
 
 
-@login_required
+@staff_member_required
 def operator_journey_step(request: HttpRequest, step_id: int):
     """Render the next required journey step with embedded action frame."""
 
@@ -56,17 +58,17 @@ def operator_journey_step(request: HttpRequest, step_id: int):
             request,
             "Please complete your current required operator step before opening later items.",
         )
-        return redirect(reverse("ops:operator-journey-step", args=[next_step.pk]))
+        return redirect(reverse(OPERATOR_JOURNEY_STEP_URL_NAME, args=[next_step.pk]))
 
     return render(request, "admin/ops/operator_journey_step.html", {"step": step})
 
 
-@login_required
+@staff_member_required
 def complete_operator_journey_step(request: HttpRequest, step_id: int):
     """Complete the current required journey step and route to the next one."""
 
     if request.method != "POST":
-        return redirect(reverse("ops:operator-journey-step", args=[step_id]))
+        return redirect(reverse(OPERATOR_JOURNEY_STEP_URL_NAME, args=[step_id]))
 
     step = (
         OperatorJourneyStep.objects.filter(pk=step_id, is_active=True, journey__is_active=True)
@@ -84,9 +86,9 @@ def complete_operator_journey_step(request: HttpRequest, step_id: int):
             request,
             "That step is not available yet. Finish the current required operator step first.",
         )
-        return redirect(reverse("ops:operator-journey-step", args=[next_step.pk]))
+        return redirect(reverse(OPERATOR_JOURNEY_STEP_URL_NAME, args=[next_step.pk]))
 
     next_step = next_step_for_user(user=request.user)
     if next_step is None:
         return render(request, "admin/ops/operator_journey_complete.html")
-    return redirect(reverse("ops:operator-journey-step", args=[next_step.pk]))
+    return redirect(reverse(OPERATOR_JOURNEY_STEP_URL_NAME, args=[next_step.pk]))

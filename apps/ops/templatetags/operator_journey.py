@@ -2,7 +2,7 @@
 
 from django import template
 
-from apps.ops.operator_journey import status_for_user
+from apps.ops.operator_journey import OperatorJourneyStatus, status_for_user
 
 register = template.Library()
 
@@ -13,10 +13,10 @@ def operator_journey_status(context):
 
     request = context.get("request")
     if request is None:
-        return {
-            "has_journey": False,
-            "is_complete": True,
-            "message": "",
-            "url": "",
-        }
+        return OperatorJourneyStatus(
+            has_journey=False,
+            is_complete=True,
+            message="",
+            url="",
+        )
     return status_for_user(user=request.user)

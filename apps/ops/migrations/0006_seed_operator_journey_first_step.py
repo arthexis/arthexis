@@ -4,6 +4,7 @@ NETWORK_OPERATOR_GROUP_NAME = "Network Operator"
 
 
 def seed_operator_journey(apps, schema_editor):
+    """Seed the default operator journey and initial step."""
     SecurityGroup = apps.get_model("groups", "SecurityGroup")
     OperatorJourney = apps.get_model("ops", "OperatorJourney")
     OperatorJourneyStep = apps.get_model("ops", "OperatorJourneyStep")
@@ -17,11 +18,18 @@ def seed_operator_journey(apps, schema_editor):
             "security_group": security_group,
             "priority": 10,
             "is_active": True,
+            "is_seed_data": True,
         },
     )
+    update_fields = []
     if journey.security_group_id != security_group.id:
         journey.security_group = security_group
-        journey.save(update_fields=["security_group"])
+        update_fields.append("security_group")
+    if not journey.is_seed_data:
+        journey.is_seed_data = True
+        update_fields.append("is_seed_data")
+    if update_fields:
+        journey.save(update_fields=update_fields)
 
     OperatorJourneyStep.objects.get_or_create(
         journey=journey,
@@ -40,13 +48,15 @@ def seed_operator_journey(apps, schema_editor):
             "iframe_url": "/admin/nodes/node/",
             "order": 1,
             "is_active": True,
+            "is_seed_data": True,
         },
     )
 
 
 def unseed_operator_journey(apps, schema_editor):
+    """Remove only seed-tagged operator journey records for this migration."""
     OperatorJourney = apps.get_model("ops", "OperatorJourney")
-    OperatorJourney.objects.filter(slug="operator-node-readiness").delete()
+    OperatorJourney.objects.filter(slug="operator-node-readiness", is_seed_data=True).delete()
 
 
 class Migration(migrations.Migration):

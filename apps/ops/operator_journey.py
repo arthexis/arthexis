@@ -26,23 +26,17 @@ def next_step_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStep | None:
     if not user.is_authenticated:
         return None
 
-    group_ids = list(user.groups.values_list("id", flat=True))
-    if not group_ids:
-        return None
-
-    steps = (
+    return (
         OperatorJourneyStep.objects.filter(
             is_active=True,
             journey__is_active=True,
-            journey__security_group_id__in=group_ids,
+            journey__security_group__in=user.groups.all(),
         )
+        .exclude(completions__user=user)
         .select_related("journey")
         .order_by("journey__priority", "journey__name", "order", "id")
+        .first()
     )
-    for step in steps:
-        if not OperatorJourneyStepCompletion.objects.filter(user=user, step=step).exists():
-            return step
-    return None
 
 
 def complete_step_for_user(*, user: AbstractBaseUser, step: OperatorJourneyStep) -> bool:
