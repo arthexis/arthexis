@@ -121,6 +121,8 @@ EXPECTED_PUBLISH_WORKFLOW_FILE = "publish.yml"
 EXPECTED_PUBLISH_REF_PATTERN = "refs/tags/v*"
 EXPECTED_PUBLISH_ENVIRONMENT = "pypi"
 RELEASE_VALIDATION_COMMAND_SETTING = "RELEASE_PUBLISH_VALIDATION_COMMAND"
+RELEASE_VALIDATION_TIMEOUT_SETTING = "RELEASE_PUBLISH_VALIDATION_TIMEOUT_SECONDS"
+DEFAULT_RELEASE_VALIDATION_TIMEOUT_SECONDS = 900
 
 
 def _resolve_github_token(
@@ -1547,8 +1549,42 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
         )
 
     command = _normalize_validation_command(validation_command)
-    _append_log(log_path, f"Running release validation command: {shlex.join(command)}")
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    command_text = shlex.join(command)
+    configured_timeout = int(
+        getattr(
+            settings,
+            RELEASE_VALIDATION_TIMEOUT_SETTING,
+            DEFAULT_RELEASE_VALIDATION_TIMEOUT_SECONDS,
+        )
+    )
+    _append_log(
+        log_path,
+        "Running release validation command: "
+        f"{command_text} (timeout={configured_timeout}s)",
+    )
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=configured_timeout,
+        )
+    except subprocess.TimeoutExpired:
+        ctx["tests_command"] = command_text
+        ctx["tests_result"] = {
+            "success": False,
+            "reason": "timeout",
+            "source": "pipeline_command",
+            "timeout_seconds": configured_timeout,
+        }
+        _fail_release_gate(
+            ctx,
+            log_path,
+            "Release test gate failed: configured validation command "
+            f"'{command_text}' timed out after {configured_timeout} seconds. "
+            "Fix the stalled tests and rerun the step.",
+        )
     if result.stdout.strip():
         _append_log(log_path, "Validation command stdout:\n" + result.stdout.strip())
     if result.stderr.strip():
@@ -1562,7 +1598,7 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
         )
 
     ctx["tests_verified_at"] = timezone.now().isoformat()
-    ctx["tests_command"] = shlex.join(command)
+    ctx["tests_command"] = command_text
     ctx["tests_result"] = {
         "success": True,
         "returncode": result.returncode,
