@@ -49,10 +49,13 @@ def test_cp_simulator_start_posts_selected_backend(
     "apps.ocpp.views.simulator.get_simulator_backend_choices",
     return_value=(("arthexis", "arthexis"), ("mobilityhouse", "mobilityhouse")),
 )
-def test_cp_simulator_backend_selector_has_no_js_fallback(_backend_choices, admin_client):
+def test_cp_simulator_backend_selector_has_noscript_apply_fallback(
+    _backend_choices, admin_client
+):
     response = admin_client.get(reverse("ocpp:cp-simulator"))
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
     assert 'name="simulator_backend" value="mobilityhouse"' in content
-    assert "Apply" in content
+    assert "<noscript>" in content
+    assert '<button type="submit" class="btn btn-sm btn-outline-secondary">Apply</button>' in content
