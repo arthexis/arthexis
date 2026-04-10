@@ -25,18 +25,6 @@
             </div>
             <div class="d-flex flex-column align-items-stretch align-items-sm-end gap-2">
               <span class="badge text-uppercase fw-semibold px-3 py-2 shadow-sm" style="background-color: {{ color }}; color: #fff;">{{ state }}</span>
-              {% if available_languages|length > 1 %}
-              <form action="{% url 'set_language' %}" method="post" class="d-flex gap-2">
-                {% csrf_token %}
-                <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                <select name="language" class="form-select form-select-sm" aria-label="{% trans 'Language' %}">
-                  {% for option in available_languages %}
-                    <option value="{{ option.code }}" {% if option.code == preferred_language %}selected{% endif %}>{{ option.label }}</option>
-                  {% endfor %}
-                </select>
-                <button type="submit" class="btn btn-outline-primary btn-sm">{% trans "Apply" %}</button>
-              </form>
-              {% endif %}
             </div>
           </div>
         </div>

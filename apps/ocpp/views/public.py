@@ -1,19 +1,16 @@
 import logging
 from pathlib import Path
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.utils import OperationalError, ProgrammingError
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone, translation
+from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.docs import rendering
 from apps.features.utils import get_cached_feature_enabled, get_cached_feature_parameter
-from apps.locale.models import Language
 from apps.ocpp.models.location import Location
 from apps.ocpp.services import ChargerAccessDeniedError, build_charger_chart_payload
 from apps.sites.utils import (
@@ -30,7 +27,6 @@ from .common import (
     _clear_stale_statuses_for_view,
     _connector_overview,
     _connector_set,
-    _default_language_code,
     _ensure_charger_access,
     _get_charger,
     _important_non_transaction_events,
@@ -40,7 +36,6 @@ from .common import (
     _live_sessions,
     _reverse_connector_url,
     _status_badge_class,
-    _supported_language_codes,
     _transaction_rfid_details,
     _usage_timeline,
     _visible_chargers,
@@ -176,41 +171,8 @@ def charger_page(request, cid, connector=None):
         tx if charger.connector_id is not None else (sessions if sessions else None)
     )
     state, color = _charger_state(charger, state_source)
-    language_cookie = request.COOKIES.get(settings.LANGUAGE_COOKIE_NAME)
-    available_languages = _supported_language_codes()
-    supported_languages = set(available_languages)
-    language_candidates: list[str] = []
-    connector_language = charger.language_code()
-    if connector_language:
-        language_candidates.append(connector_language)
-    if charger.connector_id is not None:
-        parent_language = (
-            Charger.objects.filter(charger_id=charger.charger_id, connector_id=None)
-            .values_list("language__code", flat=True)
-            .first()
-            or ""
-        ).strip()
-        if parent_language:
-            language_candidates.append(parent_language)
-    fallback_language = _default_language_code()
-    if fallback_language and fallback_language in supported_languages:
-        language_candidates.append(fallback_language)
-    elif available_languages:
-        language_candidates.append(available_languages[0])
-    charger_language = ""
-    for code in language_candidates:
-        if code in supported_languages:
-            charger_language = code
-            break
-    if charger_language and (
-        not language_cookie
-        or language_cookie not in supported_languages
-        or language_cookie != charger_language
-    ):
-        translation.activate(charger_language)
-    current_language = translation.get_language()
-    request.LANGUAGE_CODE = current_language
-    preferred_language = charger_language or current_language
+    preferred_language = "en"
+    request.LANGUAGE_CODE = "en"
     connector_links = [
         {
             "slug": item["slug"],

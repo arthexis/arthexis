@@ -1,16 +1,11 @@
-"""Internationalization and localization settings."""
-
-from django.utils.translation import gettext_lazy as _
+"""Language and localization settings."""
 
 from .base import BASE_DIR
 
 LANGUAGE_CODE = "en-us"
 
 LANGUAGES = [
-    ("es", _("Spanish (Latin America)")),
-    ("en", _("English")),
-    ("it", _("Italian")),
-    ("de", _("German")),
+    ("en", "English"),
 ]
 
 PARLER_DEFAULT_LANGUAGE_CODE = "en"
@@ -18,9 +13,6 @@ PARLER_DEFAULT_LANGUAGE_CODE = "en"
 PARLER_LANGUAGES = {
     None: (
         {"code": "en"},
-        {"code": "es"},
-        {"code": "it"},
-        {"code": "de"},
     ),
     "default": {
         "fallbacks": ["en"],
@@ -31,5 +23,5 @@ PARLER_LANGUAGES = {
 LOCALE_PATHS = [BASE_DIR / "apps" / "locale" / "locale"]
 FORMAT_MODULE_PATH = ["config.formats"]
 TIME_ZONE = "America/Monterrey"
-USE_I18N = True
+USE_I18N = False
 USE_TZ = True
