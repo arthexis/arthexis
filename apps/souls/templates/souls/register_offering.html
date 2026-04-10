@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Upload Offering</h1>
+<p>Max upload 25MB. Recommended 10MB.</p>
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Derive Soul</button>
+</form>
+{% endblock %}
