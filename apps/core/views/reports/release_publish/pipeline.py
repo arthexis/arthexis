@@ -22,6 +22,7 @@ from typing import NoReturn
 from urllib.parse import urlencode, urlparse
 
 import requests
+import yaml
 from django.conf import settings
 from django.contrib import messages
 from django.db import DatabaseError
@@ -1546,7 +1547,7 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
         )
 
     command = _normalize_validation_command(validation_command)
-    _append_log(log_path, f"Running release validation command: {' '.join(command)}")
+    _append_log(log_path, f"Running release validation command: {shlex.join(command)}")
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.stdout.strip():
         _append_log(log_path, "Validation command stdout:\n" + result.stdout.strip())
@@ -1561,7 +1562,7 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
         )
 
     ctx["tests_verified_at"] = timezone.now().isoformat()
-    ctx["tests_command"] = " ".join(command)
+    ctx["tests_command"] = shlex.join(command)
     ctx["tests_result"] = {
         "success": True,
         "returncode": result.returncode,
@@ -1590,25 +1591,44 @@ def _step_confirm_pypi_trusted_publisher_settings(
             "Add the publish workflow before publishing.",
         )
 
-    workflow_text = workflow_path.read_text(encoding="utf-8")
-    observed_ref_pattern = (
-        EXPECTED_PUBLISH_REF_PATTERN if '- "v*"' in workflow_text else ""
-    )
-    observed_environment = (
-        EXPECTED_PUBLISH_ENVIRONMENT if "name: pypi" in workflow_text else ""
-    )
+    workflow_data: dict = {}
+    yaml_error = False
+    try:
+        loaded_workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        if isinstance(loaded_workflow, dict):
+            workflow_data = loaded_workflow
+    except yaml.YAMLError:
+        yaml_error = True
 
     mismatches: list[str] = []
-    if EXPECTED_PUBLISH_WORKFLOW_FILE != workflow_path.name:
+    if yaml_error:
         mismatches.append(
-            f"workflow file must be {EXPECTED_PUBLISH_WORKFLOW_FILE} (found {workflow_path.name})"
+            f"workflow YAML in {workflow_path} must be valid and parseable"
         )
-    if observed_ref_pattern != EXPECTED_PUBLISH_REF_PATTERN:
+
+    on_section = workflow_data.get("on", workflow_data.get(True, {}))
+    push_section = on_section.get("push", {}) if isinstance(on_section, dict) else {}
+    tags = push_section.get("tags", []) if isinstance(push_section, dict) else []
+    if isinstance(tags, str):
+        tags = [tags]
+    expected_tag = EXPECTED_PUBLISH_REF_PATTERN.removeprefix("refs/tags/")
+    if expected_tag not in {str(tag).strip() for tag in tags if str(tag).strip()}:
         mismatches.append(
             f"workflow tag pattern must be {EXPECTED_PUBLISH_REF_PATTERN} "
             f"(check tags trigger in {workflow_path})"
         )
-    if observed_environment != EXPECTED_PUBLISH_ENVIRONMENT:
+
+    jobs = workflow_data.get("jobs", {})
+    publish_job = jobs.get("publish-to-pypi", {}) if isinstance(jobs, dict) else {}
+    environment = (
+        publish_job.get("environment", "") if isinstance(publish_job, dict) else ""
+    )
+    observed_environment_name = ""
+    if isinstance(environment, str):
+        observed_environment_name = environment.strip()
+    elif isinstance(environment, dict):
+        observed_environment_name = str(environment.get("name", "")).strip()
+    if observed_environment_name != EXPECTED_PUBLISH_ENVIRONMENT:
         mismatches.append(
             f"workflow environment must be {EXPECTED_PUBLISH_ENVIRONMENT} "
             f"(check publish job environment.name in {workflow_path})"

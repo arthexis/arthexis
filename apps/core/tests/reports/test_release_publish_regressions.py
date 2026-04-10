@@ -310,7 +310,7 @@ def test_step_run_tests_executes_configured_validation_command(
     monkeypatch, settings, tmp_path: Path
 ):
     ctx: dict[str, object] = {}
-    settings.RELEASE_PUBLISH_VALIDATION_COMMAND = "echo release-tests-ok"
+    settings.RELEASE_PUBLISH_VALIDATION_COMMAND = "echo 'release tests ok'"
     monkeypatch.setattr(
         pipeline,
         "_append_log",
@@ -321,7 +321,7 @@ def test_step_run_tests_executes_configured_validation_command(
 
     assert ctx["tests_result"]["success"] is True
     assert ctx["tests_result"]["source"] == "pipeline_command"
-    assert ctx["tests_command"] == "echo release-tests-ok"
+    assert ctx["tests_command"] == "echo 'release tests ok'"
     assert "tests_verified_at" in ctx
 
 
@@ -351,6 +351,32 @@ def test_step_confirm_pypi_trusted_publisher_settings_validates_expected_workflo
     assert ctx["trusted_publisher_ref"] == "refs/tags/v*"
     assert ctx["trusted_publisher_environment"] == "pypi"
     assert "trusted_publisher_verified_at" in ctx
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_accepts_yaml_variants(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        "on:\n  push:\n    tags: ['v*']\n"
+        "jobs:\n  publish-to-pypi:\n    environment: pypi\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+
+    ctx: dict[str, object] = {}
+    pipeline._step_confirm_pypi_trusted_publisher_settings(
+        object(), ctx, tmp_path / "publish.log"
+    )
+
+    assert ctx["trusted_publisher_ref"] == "refs/tags/v*"
+    assert ctx["trusted_publisher_environment"] == "pypi"
 
 
 def test_step_confirm_pypi_trusted_publisher_settings_fails_on_mismatch(
