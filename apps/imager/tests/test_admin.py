@@ -1,6 +1,7 @@
 """Regression tests for Raspberry Pi imager admin UI actions."""
 
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 import pytest
 from django.test import override_settings
@@ -8,6 +9,20 @@ from django.urls import reverse
 
 from apps.imager.admin import _probe_download_url
 from apps.imager.models import RaspberryPiImageArtifact
+
+
+class _ProbeResponse:
+    headers: dict[str, str] = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return None
+
+    @staticmethod
+    def getcode():
+        return 200
 
 
 @pytest.mark.django_db
@@ -140,6 +155,82 @@ def test_probe_download_url_blocks_unsafe_targets(download_url, expected_message
     reachable, result = _probe_download_url(download_url)
     assert reachable is False
     assert result == expected_message
+
+
+@patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
+@patch("apps.imager.admin.build_opener")
+def test_probe_download_url_revalidates_redirect_targets(build_opener_mock, _getaddrinfo_mock):
+    """Regression: redirect responses must not allow probes to private hosts."""
+
+    build_opener_mock.return_value.open.side_effect = [
+        HTTPError(
+            "https://cdn.example.com/images/stable-rpi-4b.img",
+            302,
+            "Found",
+            {"Location": "http://127.0.0.1/secret"},
+            None,
+        )
+    ]
+
+    reachable, result = _probe_download_url("https://cdn.example.com/images/stable-rpi-4b.img")
+
+    assert reachable is False
+    assert result == "Refusing to probe local or private addresses."
+
+
+@patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
+@patch("apps.imager.admin.build_opener")
+def test_probe_download_url_allows_five_redirect_hops(build_opener_mock, _getaddrinfo_mock):
+    """Regression: redirect limit should allow five redirects before failing."""
+
+    build_opener_mock.return_value.open.side_effect = [
+        HTTPError("https://cdn.example.com/images/stable.img", 302, "Found", {"Location": "/hop-1"}, None),
+        HTTPError("https://cdn.example.com/hop-1", 302, "Found", {"Location": "/hop-2"}, None),
+        HTTPError("https://cdn.example.com/hop-2", 302, "Found", {"Location": "/hop-3"}, None),
+        HTTPError("https://cdn.example.com/hop-3", 302, "Found", {"Location": "/hop-4"}, None),
+        HTTPError("https://cdn.example.com/hop-4", 302, "Found", {"Location": "/hop-5"}, None),
+        _ProbeResponse(),
+    ]
+
+    reachable, result = _probe_download_url("https://cdn.example.com/images/stable.img")
+
+    assert reachable is True
+    assert result == "HTTP 200"
+
+
+@patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
+@patch("apps.imager.admin.build_opener")
+def test_probe_download_url_fails_after_sixth_redirect(build_opener_mock, _getaddrinfo_mock):
+    """Regression: sixth redirect hop should fail with an explicit limit error."""
+
+    build_opener_mock.return_value.open.side_effect = [
+        HTTPError("https://cdn.example.com/images/stable.img", 302, "Found", {"Location": "/hop-1"}, None),
+        HTTPError("https://cdn.example.com/hop-1", 302, "Found", {"Location": "/hop-2"}, None),
+        HTTPError("https://cdn.example.com/hop-2", 302, "Found", {"Location": "/hop-3"}, None),
+        HTTPError("https://cdn.example.com/hop-3", 302, "Found", {"Location": "/hop-4"}, None),
+        HTTPError("https://cdn.example.com/hop-4", 302, "Found", {"Location": "/hop-5"}, None),
+        HTTPError("https://cdn.example.com/hop-5", 302, "Found", {"Location": "/hop-6"}, None),
+    ]
+
+    reachable, result = _probe_download_url("https://cdn.example.com/images/stable.img")
+
+    assert reachable is False
+    assert result == "Too many redirects."
+
+
+@patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
+@patch("apps.imager.admin.build_opener")
+def test_probe_download_url_fails_redirect_without_location(build_opener_mock, _getaddrinfo_mock):
+    """Regression: redirects without Location should fail probing."""
+
+    build_opener_mock.return_value.open.side_effect = [
+        HTTPError("https://cdn.example.com/images/stable.img", 302, "Found", {}, None),
+    ]
+
+    reachable, result = _probe_download_url("https://cdn.example.com/images/stable.img")
+
+    assert reachable is False
+    assert result == "HTTP 302"
 
 
 @pytest.mark.django_db

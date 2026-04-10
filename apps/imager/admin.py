@@ -1,11 +1,13 @@
 """Admin integration for Raspberry Pi image artifacts."""
 
+from contextlib import contextmanager, nullcontext
 from ipaddress import ip_address
 from pathlib import Path
+import socket
 from socket import getaddrinfo
 from urllib.error import HTTPError, URLError
-from urllib.parse import unquote, urlparse
-from urllib.request import Request, urlopen
+from urllib.parse import unquote, urljoin, urlparse
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from django import forms
 from django.conf import settings
@@ -21,52 +23,103 @@ from django_object_actions import DjangoObjectActions
 from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.services import ImagerBuildError, build_rpi4b_image
 
+BLOCKED_ADDRESS_FLAGS = (
+    "is_link_local",
+    "is_loopback",
+    "is_multicast",
+    "is_private",
+    "is_reserved",
+    "is_unspecified",
+)
+MAX_DOWNLOAD_PROBE_REDIRECTS = 5
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Disable automatic redirects so each target can be validated."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+@contextmanager
+def _pin_hostname_resolution(hostname: str, resolved_ip: str):
+    original_getaddrinfo = socket.getaddrinfo
+
+    def _pinned_getaddrinfo(host, *args, **kwargs):
+        if host == hostname:
+            return original_getaddrinfo(resolved_ip, *args, **kwargs)
+        return original_getaddrinfo(host, *args, **kwargs)
+
+    socket.getaddrinfo = _pinned_getaddrinfo
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = original_getaddrinfo
+
 
 def _probe_download_url(download_url: str) -> tuple[bool, str]:
     """Check whether an artifact download URL appears reachable."""
 
-    parsed_url = urlparse(download_url)
-    hostname = parsed_url.hostname
-    if parsed_url.scheme not in {"http", "https"} or not hostname:
-        return False, _("Unsupported download URL.")
-
     blocked_message = _("Refusing to probe local or private addresses.")
-    if hostname == "localhost":
-        return False, blocked_message
+    redirect_codes = {301, 302, 303, 307, 308}
+    opener = build_opener(ProxyHandler({}), _NoRedirectHandler())
+    current_url = download_url
+    redirects_followed = 0
 
-    try:
-        ip_candidate = ip_address(hostname)
-    except ValueError:
-        ip_candidate = None
-
-    blocked_flags = ("is_link_local", "is_loopback", "is_multicast", "is_private", "is_unspecified")
-    if ip_candidate is not None:
-        if any(getattr(ip_candidate, flag) for flag in blocked_flags):
+    while True:
+        parsed_url = urlparse(current_url)
+        hostname = parsed_url.hostname
+        if parsed_url.scheme not in {"http", "https"} or not hostname:
+            return False, _("Unsupported download URL.")
+        if hostname == "localhost":
             return False, blocked_message
-    else:
+
         try:
-            resolved_hosts = {
-                ip_address(record[4][0]) for record in getaddrinfo(hostname, None, type=0)
-            }
-        except OSError as exc:
-            reason = getattr(exc, "strerror", str(exc))
+            ip_candidate = ip_address(hostname)
+        except ValueError:
+            ip_candidate = None
+
+        if ip_candidate is not None:
+            if any(getattr(ip_candidate, flag) for flag in BLOCKED_ADDRESS_FLAGS):
+                return False, blocked_message
+            resolution_context = nullcontext()
+        else:
+            try:
+                resolved_hosts = {
+                    ip_address(record[4][0]) for record in getaddrinfo(hostname, None, type=0)
+                }
+            except OSError as exc:
+                reason = getattr(exc, "strerror", str(exc))
+                return False, str(reason)
+            if any(any(getattr(ip_value, flag) for flag in BLOCKED_ADDRESS_FLAGS) for ip_value in resolved_hosts):
+                return False, blocked_message
+            selected_ip = sorted(str(ip_value) for ip_value in resolved_hosts)[0]
+            resolution_context = _pin_hostname_resolution(hostname, selected_ip)
+
+        request = Request(current_url, method="HEAD")
+        try:
+            with resolution_context:
+                with opener.open(request, timeout=10) as response:  # noqa: S310 - staff-triggered verification flow
+                    status = response.getcode()
+                    location = response.headers.get("Location")
+        except HTTPError as exc:
+            location = exc.headers.get("Location")
+            status = exc.code
+        except (URLError, ValueError) as exc:
+            reason = getattr(exc, "reason", str(exc))
             return False, str(reason)
-        if any(any(getattr(ip_value, flag) for flag in blocked_flags) for ip_value in resolved_hosts):
-            return False, blocked_message
 
-    request = Request(download_url, method="HEAD")
-    try:
-        with urlopen(request, timeout=10) as response:  # noqa: S310 - staff-triggered verification flow
-            status = response.getcode()
-    except HTTPError as exc:
-        status = exc.code
-    except (URLError, ValueError) as exc:
-        reason = getattr(exc, "reason", str(exc))
-        return False, str(reason)
-
-    if 200 <= status < 400:
-        return True, f"HTTP {status}"
-    return False, f"HTTP {status}"
+        if status in redirect_codes:
+            if not location:
+                return False, f"HTTP {status}"
+            if redirects_followed >= MAX_DOWNLOAD_PROBE_REDIRECTS:
+                return False, _("Too many redirects.")
+            redirects_followed += 1
+            current_url = urljoin(current_url, location)
+            continue
+        if 200 <= status < 300:
+            return True, f"HTTP {status}"
+        return False, f"HTTP {status}"
 
 
 class RaspberryPiImageBuildForm(forms.Form):
