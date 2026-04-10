@@ -28,7 +28,6 @@
   const copyAriaLabel = form.dataset.copyAriaLabel;
   const canCopyStaffDetails = form.dataset.copyStaffDetails === '1';
   const messageField = form.querySelector('input[name="messages"]');
-  const javascriptEnabledField = form.querySelector('input[name="javascript_enabled"]');
   let previousFocus = null;
   let copyFeedbackTimeout = null;
 
@@ -371,10 +370,6 @@
     event.preventDefault();
     resetAlerts();
     syncMessageField(getPageMessages());
-    if (javascriptEnabledField) {
-      javascriptEnabledField.value = '1';
-    }
-
     if (submitBtn) {
       submitBtn.disabled = true;
     }
