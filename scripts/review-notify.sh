@@ -5,9 +5,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$BASE_DIR"
 
-if [ ! -x "$BASE_DIR/.venv/bin/python" ]; then
-  echo "Virtual environment not found. Run ./install.sh first." >&2
+PYTHON_BIN="$BASE_DIR/.venv/bin/python"
+if [ ! -x "$PYTHON_BIN" ]; then
+  PYTHON_BIN="$(command -v python3 || true)"
+fi
+
+if [ -z "$PYTHON_BIN" ]; then
+  echo "Python runtime not found. Install Python 3 or run ./install.sh first." >&2
   exit 1
 fi
 
-exec "$BASE_DIR/.venv/bin/python" manage.py review_notify "$@"
+exec "$PYTHON_BIN" manage.py review_notify "$@"
