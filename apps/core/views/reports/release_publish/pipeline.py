@@ -1655,14 +1655,19 @@ def _step_confirm_pypi_trusted_publisher_settings(
             f"(check key: jobs.publish-to-pypi.environment.name in {workflow_path})"
         )
 
+    job_permissions = (
+        publish_job.get("permissions") if isinstance(publish_job, dict) else None
+    )
     permissions = (
-        publish_job.get("permissions", {}) if isinstance(publish_job, dict) else {}
+        job_permissions
+        if job_permissions is not None
+        else workflow_data.get("permissions", {})
     )
-    id_token_permission = (
-        str(permissions.get("id-token", "")).strip()
-        if isinstance(permissions, dict)
-        else ""
-    )
+    id_token_permission = ""
+    if isinstance(permissions, dict):
+        id_token_permission = str(permissions.get("id-token", "")).strip()
+    elif isinstance(permissions, str) and permissions == "write-all":
+        id_token_permission = "write"
     if id_token_permission != "write":
         mismatches.append(
             f"{workflow_path} must set jobs.publish-to-pypi.permissions.id-token to"
@@ -1700,6 +1705,12 @@ def _step_confirm_pypi_trusted_publisher_settings(
     has_static_token_field = False
     for step in steps if isinstance(steps, list) else []:
         if not isinstance(step, dict):
+            continue
+        uses = str(step.get("uses", "")).strip()
+        if not (
+            uses.startswith("pypa/gh-action-pypi-publish@")
+            or uses == "pypa/gh-action-pypi-publish"
+        ):
             continue
         step_with = step.get("with", {})
         if not isinstance(step_with, dict):
