@@ -24,6 +24,9 @@
       <option value="{{ value }}" {% if value == selected_backend %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
+    <noscript>
+      <button type="submit" class="btn btn-sm btn-outline-secondary">Apply</button>
+    </noscript>
     {% if not backends_available %}<small class="text-warning ms-2">No simulator backends are enabled.</small>{% endif %}
   </form>
 </div>

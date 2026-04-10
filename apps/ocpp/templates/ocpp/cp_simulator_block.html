@@ -6,6 +6,7 @@
           hx-swap="outerHTML">
       {% csrf_token %}
       <input type="hidden" name="simulator_slot" value="{{ idx }}">
+      <input type="hidden" name="simulator_backend" value="{{ selected_backend }}">
       <div class="row g-3 align-items-start simulator-layout">
         <div class="col-12 col-xl-6">
           <div class="row g-2">
