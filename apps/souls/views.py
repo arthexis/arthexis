@@ -276,3 +276,5 @@ def attach_soul_to_order_items(*, request: HttpRequest, order_items: list) -> No
             ShopOrderSoulAttachment.objects.create(order_item=item, soul=soul)
         except IntegrityError:
             continue
+
+    request.session.pop(CHECKOUT_SOUL_KEY, None)
