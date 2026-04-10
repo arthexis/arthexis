@@ -1,7 +1,7 @@
 {% extends "pages/base.html" %}
 {% load static %}
 
-{% block title %}CP Simulator{% endblock %}
+{% block title %}OCPP Simulator{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'ocpp/evcs/cp_simulator.css' %}">
@@ -13,7 +13,7 @@
 
 {% block content %}
 <div class="simulator-page-header">
-  <h1 class="mb-0">OCPP Charge Point Simulator</h1>
+  <h1 class="mb-0">OCPP Simulator</h1>
   <form method="post" class="simulator-backend-form">
     {% csrf_token %}
     <input type="hidden" name="action" value="select-backend">
