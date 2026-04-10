@@ -939,15 +939,28 @@ def register_visitor_proxy(request):
     session = requests.Session()
     timeout_seconds = 45
 
-    visitor_info, visitor_info_url, last_error, info_attempt = _try_proxy_json_request(
-        session=session,
-        url=visitor_info_url,
-        timeout_seconds=timeout_seconds,
-        method="get",
-        log_prefix="Visitor registration proxy",
-        request_error_message="info request failed",
-        response_error_message="info response json parse failed",
-    )
+    try:
+        visitor_info, visitor_info_url, last_error, info_attempt = (
+            _try_proxy_json_request(
+                session=session,
+                url=visitor_info_url,
+                timeout_seconds=timeout_seconds,
+                method="get",
+                log_prefix="Visitor registration proxy",
+                request_error_message="info request failed",
+                response_error_message="info response json parse failed",
+            )
+        )
+    except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
+        registration_logger.warning(
+            "Visitor registration proxy: unexpected visitor info proxy failure",
+            extra={
+                "target": redact_url_token(visitor_info_url),
+                "attempt": "visitor_info_proxy",
+                "exception_class": exc.__class__.__name__,
+            },
+        )
+        return JsonResponse({"detail": "visitor info unavailable"}, status=502)
     if visitor_info is None:
         registration_logger.warning(
             "Visitor registration proxy: unable to fetch visitor info from %s: %s",
@@ -989,18 +1002,29 @@ def register_visitor_proxy(request):
     visitor_payload = _build_registration_payload(host_info, "Upstream")
     _apply_token_signature(visitor_payload, host_info, token)
 
-    visitor_register_body, visitor_register_url, last_error, register_attempt = (
-        _try_proxy_json_request(
-            session=session,
-            url=visitor_register_url,
-            timeout_seconds=timeout_seconds,
-            method="post",
-            payload=visitor_payload,
-            log_prefix="Visitor registration proxy",
-            request_error_message="visitor notification request failed",
-            response_error_message="visitor response json parse failed",
+    try:
+        visitor_register_body, visitor_register_url, last_error, register_attempt = (
+            _try_proxy_json_request(
+                session=session,
+                url=visitor_register_url,
+                timeout_seconds=timeout_seconds,
+                method="post",
+                payload=visitor_payload,
+                log_prefix="Visitor registration proxy",
+                request_error_message="visitor notification request failed",
+                response_error_message="visitor response json parse failed",
+            )
         )
-    )
+    except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
+        registration_logger.warning(
+            "Visitor registration proxy: unexpected visitor confirmation proxy failure",
+            extra={
+                "target": redact_url_token(visitor_register_url),
+                "attempt": "visitor_register_proxy",
+                "exception_class": exc.__class__.__name__,
+            },
+        )
+        return JsonResponse({"detail": "visitor confirmation failed"}, status=502)
     if visitor_register_body is None:
         registration_logger.warning(
             "Visitor registration proxy: unable to notify visitor at %s: %s",
