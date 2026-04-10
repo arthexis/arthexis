@@ -52,6 +52,7 @@ To remove long-lived PyPI API tokens from the release workflow, publishing is de
    - The workflow exports built artifacts (wheel/sdist) to the GitHub release and pushes the release tag, which triggers the GitHub Actions `publish` workflow for OIDC uploads.
 4. **Release publish workflow** (example: `.github/workflows/publish.yml`) that:
    - Builds the sdist and wheel in a dedicated job, uploads them as artifacts, and publishes in a separate job.
+   - Runs a pre-build version consistency gate that normalizes the release tag (`vX.Y.Z` → `X.Y.Z`) and compares it against `VERSION` (and the `tool.setuptools.dynamic.version.file` source when configured). The build fails early if they do not match.
    - Uses `permissions: id-token: write` on the publish job and keeps `permissions: contents: read` at the workflow level.
    - Uses `pypa/gh-action-pypi-publish@release/v1` with `attestations: true` and no API token configured, relying on OIDC instead.
    - Exposes `secrets.GITHUB_TOKEN` (or an environment-specific `GH_TOKEN` secret) as `GITHUB_TOKEN`/`GH_TOKEN` so release automation can create GitHub releases, upload assets, and check workflow runs.
@@ -65,6 +66,7 @@ To remove long-lived PyPI API tokens from the release workflow, publishing is de
 - The new `publish.yml` workflow is designed to build from a release tag and publish to PyPI using OIDC.
 - Configure the PyPI trusted publisher to match the repository, workflow path, and tag patterns (for example, `v*`).
 - Use the `pypi` environment in GitHub with required reviewers if a human approval gate is required before the job publishes.
+- Before pushing a release tag, ensure `VERSION` and any dynamic version source file configured in `pyproject.toml` contain the exact same version string as the tag (e.g., `X.Y.Z`, without the `v` prefix). The publish workflow now enforces this and will stop before build if they are out of sync.
 
 ### PyPI Trusted Publisher configuration (required)
 
