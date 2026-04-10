@@ -38,6 +38,13 @@ from packaging.version import InvalidVersion, Version
 import apps.release as release_utils
 from apps.nodes.models import NetMessage, Node
 from apps.release import git_utils
+from apps.release.domain import (
+    BUILD_RELEASE_ARTIFACTS_STEP_NAME,
+    FIXTURE_REVIEW_STEP_NAME,
+)
+from apps.release.domain import (
+    PUBLISH_STEPS as DOMAIN_PUBLISH_STEPS,
+)
 from apps.release.models import PackageRelease
 from apps.release.services import builder as release_builder
 from apps.release.services import uploader as release_uploader
@@ -2185,29 +2192,25 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
         _append_log(log_path, "Publish logs already recorded")
 
 
-BUILD_RELEASE_ARTIFACTS_STEP_NAME = "Build release artifacts"
-FIXTURE_REVIEW_STEP_NAME = "Freeze, squash and approve migrations"
-
+_STEP_HANDLER_MAP = {
+    "_step_capture_publish_logs": _step_capture_publish_logs,
+    "_step_check_version": _step_check_version,
+    "_step_confirm_pypi_trusted_publisher_settings": _step_confirm_pypi_trusted_publisher_settings,
+    "_step_export_and_dispatch": _step_export_and_dispatch,
+    "_step_handle_migrations": _step_handle_migrations,
+    "_step_pre_release_actions": _step_pre_release_actions,
+    "_step_promote_build": _step_promote_build,
+    "_step_record_publish_metadata": _step_record_publish_metadata,
+    "_step_run_tests": _step_run_tests,
+    "_step_verify_release_environment": _step_verify_release_environment,
+    "_step_wait_for_github_actions_publish": _step_wait_for_github_actions_publish,
+}
 
 PUBLISH_STEPS = [
-    ("Check version number availability", _step_check_version),
-    (FIXTURE_REVIEW_STEP_NAME, _step_handle_migrations),
-    ("Execute pre-release actions", _step_pre_release_actions),
-    (BUILD_RELEASE_ARTIFACTS_STEP_NAME, _step_promote_build),
-    ("Complete test suite with --all flag", _step_run_tests),
-    (
-        "Confirm PyPI Trusted Publisher settings",
-        _step_confirm_pypi_trusted_publisher_settings,
-    ),
-    ("Verify release environment", _step_verify_release_environment),
-    (
-        "Export artifacts and push release tag",
-        _step_export_and_dispatch,
-    ),
-    ("Wait for GitHub Actions publish", _step_wait_for_github_actions_publish),
-    ("Record publish URLs & update fixtures", _step_record_publish_metadata),
-    ("Capture PyPI publish logs", _step_capture_publish_logs),
+    (name, _STEP_HANDLER_MAP[handler_name])
+    for name, handler_name in DOMAIN_PUBLISH_STEPS
 ]
+
 
 def _ensure_publish_step_compatibility(
     typed_ctx: ReleasePublishContext,

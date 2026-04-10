@@ -11,13 +11,13 @@ from django.db import DatabaseError, models
 
 from apps.core.views import (
     DirtyRepository,
-    PUBLISH_STEPS,
     PublishPending,
     _append_log,
     _release_log_name,
     _resolve_release_log_dir,
 )
 from apps.flows import NodeWorkflow, NodeWorkflowStep
+from apps.release.domain import PUBLISH_STEPS as DOMAIN_PUBLISH_STEPS
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +72,11 @@ _STEP_WORKFLOW_NAME = "release_publish"
 
 
 def _build_release_workflow() -> NodeWorkflow:
+    from apps.core.views.reports.release_publish import pipeline
+
     steps = [
-        NodeWorkflowStep.from_callable(func, name=name) for name, func in PUBLISH_STEPS
+        NodeWorkflowStep.from_callable(getattr(pipeline, handler_name), name=name)
+        for name, handler_name in DOMAIN_PUBLISH_STEPS
     ]
     return NodeWorkflow(_STEP_WORKFLOW_NAME, steps)
 
