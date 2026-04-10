@@ -47,9 +47,11 @@ jobs:
               echo "### PR security scan configuration is missing"
               echo ""
               echo "Set repository variable \`PR_SECURITY_SCAN_TARGET\` (Settings → Secrets and variables → Actions → Variables) to a safe non-production URL, such as \`https://staging.example.com\`."
+              echo ""
+              echo "Skipping OWASP ZAP scan for this pull request until the variable is configured."
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "PR_SECURITY_SCAN_TARGET is missing or empty." >&2
-            exit 1
+            echo "PR_SECURITY_SCAN_TARGET is missing or empty. Skipping PR security scan." >&2
+            exit 0
           fi
 
           echo "target_configured=true" >> "$GITHUB_OUTPUT"

@@ -211,6 +211,40 @@ def test_publish_steps_match_documented_release_flow():
     ]
 
 
+def test_publish_step_compatibility_resets_inflight_session():
+    typed_ctx = ReleasePublishContext(
+        step=3,
+        started=True,
+        paused=True,
+        extras={"publish_steps_schema": "old-step-order"},
+    )
+
+    result = pipeline._ensure_publish_step_compatibility(typed_ctx, pipeline.PUBLISH_STEPS)
+
+    assert result.step == 0
+    assert result.started is False
+    assert result.paused is False
+    assert result.error == (
+        "Release publish steps changed after an upgrade. Restart the publish workflow to continue safely."
+    )
+    assert result.extras["publish_steps_schema"] == "|".join(
+        name for name, _func in pipeline.PUBLISH_STEPS
+    )
+
+
+def test_publish_step_compatibility_records_schema_for_new_session():
+    typed_ctx = ReleasePublishContext(step=0, started=False, paused=False, extras={})
+
+    result = pipeline._ensure_publish_step_compatibility(typed_ctx, pipeline.PUBLISH_STEPS)
+
+    assert result.step == 0
+    assert result.started is False
+    assert result.error is None
+    assert result.extras["publish_steps_schema"] == "|".join(
+        name for name, _func in pipeline.PUBLISH_STEPS
+    )
+
+
 def test_resolve_safe_child_path_rejects_parent_traversal(tmp_path: Path):
     with pytest.raises(ValueError):
         pipeline._resolve_safe_child_path(tmp_path, "../escape.txt")

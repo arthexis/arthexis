@@ -1748,6 +1748,8 @@ def _wait_for_publish_workflow_completion(
     token: str | None,
 ) -> dict[str, object]:
     owner, repo = _resolve_github_repository(release)
+    ctx["github_owner"] = owner
+    ctx["github_repo"] = repo
     tag_name = f"v{release.version}"
     run = _fetch_publish_workflow_run(
         owner=owner,
@@ -1824,7 +1826,9 @@ def _step_wait_for_github_actions_publish(
         log_path,
         token=token,
     )
-    run_url = run.get("html_url") if isinstance(run.get("html_url"), str) else ""
+    run_url = ctx.get("publish_workflow_url", "")
+    if not isinstance(run_url, str):
+        run_url = ""
     if run_url:
         _append_log(log_path, f"Publish workflow completed: {run_url}")
     else:
@@ -1968,8 +1972,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
     run_id = run.get("id")
     if not isinstance(run_id, int):
         raise ValueError("Publish workflow run ID missing")
-    owner, repo = _resolve_github_repository(release)
-    status = run.get("status")
+    owner, repo = ctx["github_owner"], ctx["github_repo"]
 
     raw_log = _download_publish_workflow_logs(
         owner=owner, repo=repo, run_id=run_id, token=token
@@ -1987,7 +1990,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
     conclusion = run.get("conclusion") or ""
     summary_lines = [
         f"Workflow run: {run_url or run_id}",
-        f"Status: {status}",
+        f"Status: {run.get('status')}",
     ]
     if conclusion:
         summary_lines.append(f"Conclusion: {conclusion}")
@@ -2035,6 +2038,31 @@ PUBLISH_STEPS = [
     ("Record publish URLs & update fixtures", _step_record_publish_metadata),
     ("Capture PyPI publish logs", _step_capture_publish_logs),
 ]
+
+def _ensure_publish_step_compatibility(
+    typed_ctx: ReleasePublishContext,
+    steps: list[tuple[str, object]],
+) -> ReleasePublishContext:
+    expected_schema = "|".join(name for name, _func in steps)
+    recorded_schema = typed_ctx.extras.get("publish_steps_schema")
+    if recorded_schema is None:
+        typed_ctx.extras["publish_steps_schema"] = expected_schema
+        return typed_ctx
+
+    if (
+        recorded_schema != expected_schema
+        and typed_ctx.started
+        and typed_ctx.step < len(steps)
+    ):
+        typed_ctx.step = 0
+        typed_ctx.started = False
+        typed_ctx.paused = False
+        typed_ctx.error = _(
+            "Release publish steps changed after an upgrade. Restart the publish workflow to continue safely."
+        )
+
+    typed_ctx.extras["publish_steps_schema"] = expected_schema
+    return typed_ctx
 
 
 def release_progress_impl(request, pk: int, action: str):
@@ -2107,6 +2135,8 @@ def release_progress_impl(request, pk: int, action: str):
     ctx = workflow.template_state(typed_ctx)
 
     steps = PUBLISH_STEPS
+    typed_ctx = _ensure_publish_step_compatibility(typed_ctx, steps)
+    ctx = workflow.template_state(typed_ctx)
     step_count = typed_ctx.step
     start_enabled = _is_release_start_enabled(ctx, step_count, len(steps))
 
