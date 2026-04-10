@@ -1268,6 +1268,177 @@ def _major_minor_version_changed(previous: str, current: str) -> bool:
     )
 
 
+def _summarize_fixture_file(path: str) -> dict[str, object]:
+    fixture_path = Path(path)
+    try:
+        data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, ValueError):
+        count = 0
+        models: list[str] = []
+    else:
+        if isinstance(data, list):
+            count = len(data)
+            models = sorted(
+                {obj.get("model", "") for obj in data if isinstance(obj, dict)}
+            )
+        elif isinstance(data, dict):
+            count = 1
+            models = [data.get("model", "")]
+        else:  # pragma: no cover - unexpected structure
+            count = 0
+            models = []
+    return {"path": path, "count": count, "models": models}
+
+
+def _commit_release_prep_changes(
+    *,
+    ctx: dict,
+    log_path: Path,
+    fixture_files: list[str],
+    version_dirty: bool,
+) -> None:
+    ctx["fixtures"] = [_summarize_fixture_file(path) for path in fixture_files]
+    commit_paths = [*fixture_files]
+    if version_dirty:
+        commit_paths.append("VERSION")
+
+    log_fragments = []
+    if fixture_files:
+        log_fragments.append("fixtures " + ", ".join(fixture_files))
+    if version_dirty:
+        log_fragments.append("VERSION")
+    details = ", ".join(log_fragments) if log_fragments else "changes"
+    _append_log(log_path, f"Committing release prep changes: {details}")
+    GIT_ADAPTER.run(["git", "add", *commit_paths], check=True)
+
+    if version_dirty and fixture_files:
+        commit_message = "chore: update version and fixtures"
+    elif version_dirty:
+        commit_message = "chore: update version"
+    else:
+        commit_message = "chore: update fixtures"
+
+    GIT_ADAPTER.run(["git", "commit", "-m", commit_message], check=True)
+    _append_log(log_path, f"Release prep changes committed ({commit_message})")
+    ctx.pop("dirty_files", None)
+    ctx.pop("dirty_commit_error", None)
+
+
+def _handle_version_step_dirty_repository(ctx: dict, log_path: Path) -> bool:
+    if release_builder._git_clean():
+        ctx.pop("dirty_files", None)
+        ctx.pop("dirty_commit_error", None)
+        ctx.pop("dirty_log_message", None)
+        return False
+
+    dirty_entries = _collect_dirty_files()
+    files = [entry["path"] for entry in dirty_entries]
+    fixture_files = [
+        path
+        for path in files
+        if "fixtures" in Path(path).parts and Path(path).suffix == ".json"
+    ]
+    version_dirty = "VERSION" in files
+    allowed_dirty_files = set(fixture_files)
+    if version_dirty:
+        allowed_dirty_files.add("VERSION")
+
+    if files and len(allowed_dirty_files) == len(files):
+        _commit_release_prep_changes(
+            ctx=ctx,
+            log_path=log_path,
+            fixture_files=fixture_files,
+            version_dirty=version_dirty,
+        )
+        return True
+
+    ctx["dirty_files"] = dirty_entries
+    ctx.setdefault("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE)
+    ctx.pop("fixtures", None)
+    ctx.pop("dirty_commit_error", None)
+    details = ", ".join(entry["path"] for entry in dirty_entries) if dirty_entries else ""
+    message = "Git repository has uncommitted changes"
+    if details:
+        message += f": {details}"
+    if ctx.get("dirty_log_message") != message:
+        _append_log(log_path, message)
+        ctx["dirty_log_message"] = message
+    raise DirtyRepository()
+
+
+def _ensure_release_version_is_not_older(release) -> None:
+    version_path = Path("VERSION")
+    if not version_path.exists():
+        return
+
+    current = version_path.read_text(encoding="utf-8").strip()
+    if not current:
+        return
+
+    current_clean = PackageRelease.strip_dev_suffix(current) or "0.0.0"
+    try:
+        left = Version(release.version)
+        right = Version(current_clean)
+    except InvalidVersion as exc:
+        raise ValueError(f"Invalid release.version '{release.version}': {exc}") from exc
+
+    if left < right:
+        raise ValueError(f"Version {release.version} is older than existing {current}")
+
+
+def _check_release_version_not_on_pypi(release, log_path: Path) -> None:
+    _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
+    if not release_utils.network_available():
+        _append_log(log_path, "Network unavailable, skipping PyPI check")
+        return
+
+    resp = None
+    try:
+        resp = requests.get(
+            f"https://pypi.org/pypi/{release.package.name}/json",
+            timeout=PYPI_REQUEST_TIMEOUT,
+        )
+        if not resp.ok:
+            return
+
+        data = resp.json()
+        releases = data.get("releases", {})
+        try:
+            target_version = Version(release.version)
+        except InvalidVersion:
+            target_version = None
+
+        for candidate, files in releases.items():
+            same_version = candidate == release.version
+            if target_version is not None and not same_version:
+                try:
+                    same_version = Version(candidate) == target_version
+                except InvalidVersion:
+                    same_version = False
+            if not same_version:
+                continue
+
+            has_available_files = any(
+                isinstance(file_data, dict) and not file_data.get("yanked", False)
+                for file_data in files or []
+            )
+            if has_available_files:
+                raise RuntimeError(f"Version {release.version} already on PyPI")
+    except RuntimeError:
+        raise
+    except (requests.exceptions.RequestException, ValueError) as exc:
+        _append_log(log_path, f"PyPI check failed: {exc}")
+        return
+    else:
+        _append_log(log_path, f"Version {release.version} not published on PyPI")
+    finally:
+        if resp is not None:
+            close = getattr(resp, "close", None)
+            if callable(close):
+                with contextlib.suppress(Exception):
+                    close()
+
+
 def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
     """Validate release version preconditions before publish.
 
@@ -1282,98 +1453,7 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
     except RuntimeError as exc:
         sync_error = exc
 
-    if not release_builder._git_clean():
-        dirty_entries = _collect_dirty_files()
-        files = [entry["path"] for entry in dirty_entries]
-        fixture_files = [
-            f
-            for f in files
-            if "fixtures" in Path(f).parts and Path(f).suffix == ".json"
-        ]
-        version_dirty = "VERSION" in files
-        allowed_dirty_files = set(fixture_files)
-        if version_dirty:
-            allowed_dirty_files.add("VERSION")
-
-        if files and len(allowed_dirty_files) == len(files):
-            summary = []
-            for f in fixture_files:
-                path = Path(f)
-                try:
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                except (json.JSONDecodeError, OSError, ValueError):
-                    count = 0
-                    models: list[str] = []
-                else:
-                    if isinstance(data, list):
-                        count = len(data)
-                        models = sorted(
-                            {
-                                obj.get("model", "")
-                                for obj in data
-                                if isinstance(obj, dict)
-                            }
-                        )
-                    elif isinstance(data, dict):
-                        count = 1
-                        models = [data.get("model", "")]
-                    else:  # pragma: no cover - unexpected structure
-                        count = 0
-                        models = []
-                summary.append({"path": f, "count": count, "models": models})
-
-            ctx["fixtures"] = summary
-            commit_paths = [*fixture_files]
-            if version_dirty:
-                commit_paths.append("VERSION")
-
-            log_fragments = []
-            if fixture_files:
-                log_fragments.append("fixtures " + ", ".join(fixture_files))
-            if version_dirty:
-                log_fragments.append("VERSION")
-            details = ", ".join(log_fragments) if log_fragments else "changes"
-            _append_log(
-                log_path,
-                f"Committing release prep changes: {details}",
-            )
-            GIT_ADAPTER.run(["git", "add", *commit_paths], check=True)
-
-            if version_dirty and fixture_files:
-                commit_message = "chore: update version and fixtures"
-            elif version_dirty:
-                commit_message = "chore: update version"
-            else:
-                commit_message = "chore: update fixtures"
-
-            GIT_ADAPTER.run(["git", "commit", "-m", commit_message], check=True)
-            _append_log(
-                log_path,
-                f"Release prep changes committed ({commit_message})",
-            )
-            ctx.pop("dirty_files", None)
-            ctx.pop("dirty_commit_error", None)
-            retry_sync = True
-        else:
-            ctx["dirty_files"] = dirty_entries
-            ctx.setdefault("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE)
-            ctx.pop("fixtures", None)
-            ctx.pop("dirty_commit_error", None)
-            if dirty_entries:
-                details = ", ".join(entry["path"] for entry in dirty_entries)
-            else:
-                details = ""
-            message = "Git repository has uncommitted changes"
-            if details:
-                message += f": {details}"
-            if ctx.get("dirty_log_message") != message:
-                _append_log(log_path, message)
-                ctx["dirty_log_message"] = message
-            raise DirtyRepository()
-    else:
-        ctx.pop("dirty_files", None)
-        ctx.pop("dirty_commit_error", None)
-        ctx.pop("dirty_log_message", None)
+    retry_sync = _handle_version_step_dirty_repository(ctx, log_path)
 
     if retry_sync and sync_error is not None:
         try:
@@ -1386,76 +1466,8 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
     if sync_error is not None:
         raise sync_error
 
-    version_path = Path("VERSION")
-    if version_path.exists():
-        current = version_path.read_text(encoding="utf-8").strip()
-        if current:
-            current_clean = PackageRelease.strip_dev_suffix(current) or "0.0.0"
-            try:
-                left = Version(release.version)
-                right = Version(current_clean)
-            except InvalidVersion as exc:
-                raise ValueError(
-                    f"Invalid release.version '{release.version}': {exc}"
-                ) from exc
-            if left < right:
-                raise ValueError(
-                    f"Version {release.version} is older than existing {current}"
-                )
-
-    _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
-    if release_utils.network_available():
-        resp = None
-        try:
-            resp = requests.get(
-                f"https://pypi.org/pypi/{release.package.name}/json",
-                timeout=PYPI_REQUEST_TIMEOUT,
-            )
-            if resp.ok:
-                data = resp.json()
-                releases = data.get("releases", {})
-                try:
-                    target_version = Version(release.version)
-                except InvalidVersion:
-                    target_version = None
-
-                for candidate, files in releases.items():
-                    same_version = candidate == release.version
-                    if target_version is not None and not same_version:
-                        try:
-                            same_version = Version(candidate) == target_version
-                        except InvalidVersion:
-                            same_version = False
-                    if not same_version:
-                        continue
-
-                    has_available_files = any(
-                        isinstance(file_data, dict)
-                        and not file_data.get("yanked", False)
-                        for file_data in files or []
-                    )
-                    if has_available_files:
-                        raise RuntimeError(
-                            f"Version {release.version} already on PyPI"
-                        )
-        except RuntimeError:
-            raise
-        except (requests.exceptions.RequestException, ValueError) as exc:
-            # network errors should be logged but not crash
-            _append_log(log_path, f"PyPI check failed: {exc}")
-        else:
-            _append_log(
-                log_path,
-                f"Version {release.version} not published on PyPI",
-            )
-        finally:
-            if resp is not None:
-                close = getattr(resp, "close", None)
-                if callable(close):
-                    with contextlib.suppress(Exception):
-                        close()
-    else:
-        _append_log(log_path, "Network unavailable, skipping PyPI check")
+    _ensure_release_version_is_not_older(release)
+    _check_release_version_not_on_pypi(release, log_path)
 
 
 def _step_handle_migrations(release, ctx, log_path: Path, *, user=None) -> None:
