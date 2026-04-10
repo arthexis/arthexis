@@ -156,31 +156,30 @@ class Command(BaseCommand):
                 stderr=subprocess.PIPE,
                 text=True,
             )
-            process_info = psutil.Process(process.pid)
+            process_info = None
+            try:
+                process_info = psutil.Process(process.pid)
+            except psutil.NoSuchProcess:
+                process_info = None
             peak_rss_bytes = 0
+            stdout = ""
+            stderr = ""
 
             while True:
-                if process.poll() is not None:
-                    break
+                if process_info is not None:
+                    try:
+                        rss = process_info.memory_info().rss
+                    except (psutil.AccessDenied, psutil.NoSuchProcess):
+                        rss = 0
+                    peak_rss_bytes = max(peak_rss_bytes, rss)
+
                 try:
-                    rss = process_info.memory_info().rss
-                except (
-                    psutil.AccessDenied,
-                    psutil.NoSuchProcess,
-                    psutil.ZombieProcess,
-                ):
-                    rss = 0
-                peak_rss_bytes = max(peak_rss_bytes, int(rss))
-                time.sleep(0.1)
+                    stdout, stderr = process.communicate(timeout=0.1)
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
 
-            stdout, stderr = process.communicate()
             duration_seconds = time.monotonic() - start
-
-            try:
-                rss = process_info.memory_info().rss
-            except (psutil.AccessDenied, psutil.NoSuchProcess, psutil.ZombieProcess):
-                rss = 0
-            peak_rss_bytes = max(peak_rss_bytes, int(rss))
 
             return BenchmarkRun(
                 version=version,
