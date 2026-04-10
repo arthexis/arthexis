@@ -1,11 +1,10 @@
 from datetime import datetime, time, timedelta
 
-from django.contrib.auth.views import redirect_to_login
 from django.db.models import (ExpressionWrapper, F, FloatField, OuterRef,
                               Subquery, Sum, Value)
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render, resolve_url
+from django.shortcuts import render
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.encoding import force_str
@@ -36,13 +35,6 @@ def dashboard(request):
     node = Node.get_local()
     role = node.role if node else None
     role_name = role.name if role else ""
-    if role_name != "Terminal":
-        user = getattr(request, "user", None)
-        if not getattr(user, "is_authenticated", False):
-            return redirect_to_login(
-                request.get_full_path(),
-                resolve_url("pages:login"),
-            )
     _clear_stale_statuses_for_view()
     is_watchtower = role_name in {"Watchtower", "Constellation"}
     latest_tx_subquery = (
