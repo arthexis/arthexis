@@ -50,7 +50,6 @@
         {% csrf_token %}
         <input type="hidden" name="path" value="{{ request.get_full_path|default:'/' }}">
         <input type="hidden" name="messages" value="">
-            <input type="hidden" name="javascript_enabled" value="0">
         {% if request.user.is_authenticated %}
           <div class="user-story-field user-story-contact-row">
             <div class="user-story-contact-name">
@@ -89,7 +88,7 @@
         <div class="user-story-field">
           <div class="user-story-rating-row">
             <span class="user-story-label" id="user-story-rating-group-label">
-              {% if request.user.is_authenticated %}
+          {% if request.user.is_authenticated %}
                 {% blocktrans trimmed with link_start='<a href="#" class="user-story-copy-link" data-feedback-copy role="button">'|safe link_end='</a>'|safe %}
                   Please rate {{ link_start }}this page{{ link_end }}
                 {% endblocktrans %}
