@@ -144,6 +144,7 @@ class Migration(migrations.Migration):
                 ("is_user_data", models.BooleanField(default=False, editable=False)),
                 ("is_deleted", models.BooleanField(default=False, editable=False)),
                 ("email", models.EmailField(max_length=254)),
+                ("participant_token", models.CharField(blank=True, default="", max_length=64)),
                 (
                     "state",
                     models.CharField(

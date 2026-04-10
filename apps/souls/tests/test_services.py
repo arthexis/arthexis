@@ -8,8 +8,18 @@ from django.test import TestCase
 from apps.cards.models import OfferingSoul
 from apps.cards.soul import PACKAGE_MAX_BYTES
 from apps.souls.models import SoulRegistrationSession
-from apps.souls.services import build_soul_package, digest_normalized_answers, normalize_survey_response
-from apps.survey.models import Survey, SurveyAnswer, SurveyOption, SurveyQuestion, SurveyResponse
+from apps.souls.services import (
+    build_soul_package,
+    digest_normalized_answers,
+    normalize_survey_response,
+)
+from apps.survey.models import (
+    Survey,
+    SurveyAnswer,
+    SurveyOption,
+    SurveyQuestion,
+    SurveyResponse,
+)
 
 
 class SoulServicesTests(TestCase):
@@ -63,3 +73,29 @@ class SoulServicesTests(TestCase):
 
         encoded = json.dumps(package, sort_keys=True, separators=(",", ":")).encode("utf-8")
         self.assertLessEqual(len(encoded), PACKAGE_MAX_BYTES)
+
+    def test_build_soul_package_rejects_oversized_payload(self):
+        user = get_user_model().objects.create_user(username="soul-user-2", email="big@example.com", password="x")
+        response = SurveyResponse.objects.create(survey=self.survey, participant_token="token-3")
+        answer = SurveyAnswer.objects.create(response=response, question=self.question)
+        answer.selected_options.set([self.option_a])
+        offering = OfferingSoul.objects.create(
+            core_hash="b" * 64,
+            package={
+                "schema_version": "1.0",
+                "core_hash": "b" * 64,
+                "issuance_marker": "",
+                "metadata": {"blob": "x" * PACKAGE_MAX_BYTES},
+                "traits": {"structural": {}, "type_aware": {}},
+            },
+            structural_traits={},
+            type_traits={},
+        )
+        registration = SoulRegistrationSession.objects.create(
+            email="big@example.com",
+            offering_soul=offering,
+            survey_response=response,
+        )
+
+        with self.assertRaises(ValueError):
+            build_soul_package(registration_session=registration, user=user)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import secrets
 from datetime import timedelta
@@ -42,6 +43,7 @@ class SoulRegistrationSession(Entity):
         on_delete=models.SET_NULL,
         related_name="registration_sessions",
     )
+    participant_token = models.CharField(max_length=64, blank=True, default="")
     state = models.CharField(max_length=32, choices=State.choices, default=State.STARTED)
     verification_token_hash = models.CharField(max_length=64, blank=True, default="")
     verification_sent_at = models.DateTimeField(null=True, blank=True)
@@ -54,7 +56,11 @@ class SoulRegistrationSession(Entity):
 
     @staticmethod
     def digest_value(value: str) -> str:
-        return hashlib.sha256(value.encode("utf-8")).hexdigest()
+        return hmac.new(
+            settings.SECRET_KEY.encode("utf-8"),
+            value.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
 
     @classmethod
     def create_verification_token(cls) -> tuple[str, str]:
@@ -102,6 +108,8 @@ class Soul(Entity):
         encoded = json.dumps(self.package or {}, sort_keys=True, separators=(",", ":")).encode("utf-8")
         if len(encoded) > PACKAGE_MAX_BYTES:
             raise ValidationError({"package": "Soul package exceeds 512 KB limit."})
+        if self.package_bytes and len(self.package_bytes) > PACKAGE_MAX_BYTES:
+            raise ValidationError({"package_bytes": "Soul package bytes exceed 512 KB limit."})
 
 
 class ShopOrderSoulAttachment(Entity):

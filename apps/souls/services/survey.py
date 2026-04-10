@@ -20,10 +20,11 @@ def normalize_survey_response(response: SurveyResponse) -> dict:
     )
 
     for answer in answers:
-        selected = [
-            _normalize_text(option.label)
-            for option in answer.selected_options.all().order_by("display_order", "id")
-        ]
+        selected_options = sorted(
+            answer.selected_options.all(),
+            key=lambda option: (option.display_order, option.id),
+        )
+        selected = [_normalize_text(option.label) for option in selected_options]
         answers_payload.append(
             {
                 "allow_multiple": bool(answer.question.allow_multiple),

@@ -11,11 +11,13 @@ from apps.cards.soul import PACKAGE_MAX_BYTES
 
 from .survey import digest_normalized_answers, normalize_survey_response
 
+SOUL_ID_HMAC_KEY = getattr(settings, "SOUL_ID_HMAC_KEY", settings.SECRET_KEY)
+
 
 def _compute_soul_id(*, core_hash: str, survey_digest: str, issuance_marker: str) -> str:
     material = "|".join([core_hash, survey_digest, issuance_marker])
     digest = hmac.new(
-        settings.SECRET_KEY.encode("utf-8"),
+        SOUL_ID_HMAC_KEY.encode("utf-8"),
         material.encode("utf-8"),
         hashlib.sha256,
     ).digest()

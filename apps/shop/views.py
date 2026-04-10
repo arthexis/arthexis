@@ -10,11 +10,15 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from apps.souls.views import attach_soul_to_order_items
+from apps.souls.services import attach_soul_to_order_items
 
 from .forms import CartQuantityForm, CheckoutForm
 from .models import Shop, ShopOrder, ShopOrderItem, ShopProduct
-from .services import CartValidationError, calculate_cart_total, serialize_product_for_cart
+from .services import (
+    CartValidationError,
+    calculate_cart_total,
+    serialize_product_for_cart,
+)
 
 CART_SESSION_KEY = "shop_cart"
 
@@ -249,10 +253,10 @@ def checkout(request: HttpRequest) -> HttpResponse:
             )
             created_items.append(created_item)
 
-        attach_soul_to_order_items(request=request, order_items=created_items)
-
         order.total_amount = total
         order.save(update_fields=["total_amount", "updated_at"])
+
+    attach_soul_to_order_items(request=request, order_items=created_items)
 
     _save_cart(request, {})
     messages.success(request, "Order placed successfully.")

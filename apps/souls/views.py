@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 from uuid import uuid4
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -18,14 +19,13 @@ from apps.cards.models import OfferingSoul
 from apps.emails import mailer
 from apps.survey.forms import SurveySubmissionForm
 from apps.survey.models import Survey, SurveyAnswer, SurveyResponse
-from apps.survey.views import PARTICIPANT_TOKEN_SESSION_KEY
 
 from .forms import SoulOfferingUploadForm, SoulRegistrationStartForm
-from .models import ShopOrderSoulAttachment, Soul, SoulRegistrationSession
+from .models import Soul, SoulRegistrationSession
 from .services import build_soul_package
+from .services.checkout import CHECKOUT_SOUL_KEY
 
 REG_SESSION_KEY = "soul_registration_session_id"
-CHECKOUT_SOUL_KEY = "shop_checkout_soul_id"
 SOUL_SURVEY_TITLE = "Soul Registration"
 
 
@@ -101,12 +101,15 @@ def register_survey(request: HttpRequest) -> HttpResponse:
         return redirect("souls:register_offering")
 
     survey = get_object_or_404(Survey, title=SOUL_SURVEY_TITLE, is_active=True)
-    participant_token = request.session.get(PARTICIPANT_TOKEN_SESSION_KEY)
-    if not participant_token:
-        participant_token = uuid4().hex
-        request.session[PARTICIPANT_TOKEN_SESSION_KEY] = participant_token
+    participant_token = registration.participant_token or uuid4().hex
+    if registration.participant_token != participant_token:
+        registration.participant_token = participant_token
+        registration.save(update_fields=["participant_token", "updated_at"])
 
-    existing = SurveyResponse.objects.filter(survey=survey, participant_token=participant_token).first()
+    existing = registration.survey_response or SurveyResponse.objects.filter(
+        survey=survey,
+        participant_token=participant_token,
+    ).first()
     if request.method == "GET":
         if existing:
             registration.survey_response = existing
@@ -161,7 +164,7 @@ def _send_verification_email(request: HttpRequest, registration: SoulRegistratio
     )
 
     verification_url = request.build_absolute_uri(
-        reverse("souls:register_verify", kwargs={"token": token})
+        reverse("souls:register_verify", kwargs={"session_id": registration.id, "token": token})
     )
     mailer.send(
         subject="Verify your Soul Registration",
@@ -181,16 +184,28 @@ def register_complete(request: HttpRequest) -> HttpResponse:
     return render(request, "souls/register_complete.html", {"registration": registration})
 
 
+def _registration_auth_backend() -> str | None:
+    for backend in settings.AUTHENTICATION_BACKENDS:
+        if "LocalhostAdminBackend" not in backend:
+            return backend
+    return settings.AUTHENTICATION_BACKENDS[0] if settings.AUTHENTICATION_BACKENDS else None
+
+
 @require_GET
-def register_verify(request: HttpRequest, token: str) -> HttpResponse:
+def register_verify(request: HttpRequest, session_id: int, token: str) -> HttpResponse:
+    token_hash = SoulRegistrationSession.digest_value(token)
     registration = (
         SoulRegistrationSession.objects.select_related("offering_soul", "survey_response")
-        .filter(state=SoulRegistrationSession.State.EMAIL_SENT)
-        .order_by("-id")
+        .filter(
+            id=session_id,
+            state=SoulRegistrationSession.State.EMAIL_SENT,
+            verification_token_hash=token_hash,
+            expires_at__gte=timezone.now(),
+        )
         .first()
     )
     if not registration or not registration.verify_token(token):
-        messages.error(request, "Verification token is invalid.")
+        messages.error(request, "Verification token is invalid or expired.")
         return redirect("souls:register_landing")
 
     user_model = get_user_model()
@@ -200,7 +215,7 @@ def register_verify(request: HttpRequest, token: str) -> HttpResponse:
             username = registration.email.split("@", 1)[0]
             candidate = username
             suffix = 1
-            while user_model.objects.filter(username=candidate).exists():
+            while user_model.objects.filter(username=candidate).exists() and suffix < 1000:
                 suffix += 1
                 candidate = f"{username}{suffix}"
             user = user_model.objects.create_user(
@@ -229,7 +244,9 @@ def register_verify(request: HttpRequest, token: str) -> HttpResponse:
         registration.state = SoulRegistrationSession.State.COMPLETED
         registration.save(update_fields=["state", "updated_at"])
 
-    login(request, user)
+    backend = _registration_auth_backend()
+    if backend:
+        login(request, user, backend=backend)
     request.session.pop(REG_SESSION_KEY, None)
     messages.success(request, "Soul registration completed.")
     return redirect("souls:me")
@@ -259,22 +276,3 @@ def attach_to_checkout(request: HttpRequest) -> HttpResponse:
     request.session[CHECKOUT_SOUL_KEY] = soul.id
     messages.success(request, "Soul will be attached at checkout for Soul Card fulfillment.")
     return redirect("shop:checkout")
-
-
-def attach_soul_to_order_items(*, request: HttpRequest, order_items: list) -> None:
-    soul_id = request.session.get(CHECKOUT_SOUL_KEY)
-    if not soul_id:
-        return
-
-    soul = Soul.objects.filter(pk=soul_id).first()
-    if not soul:
-        request.session.pop(CHECKOUT_SOUL_KEY, None)
-        return
-
-    for item in order_items:
-        try:
-            ShopOrderSoulAttachment.objects.create(order_item=item, soul=soul)
-        except IntegrityError:
-            continue
-
-    request.session.pop(CHECKOUT_SOUL_KEY, None)
