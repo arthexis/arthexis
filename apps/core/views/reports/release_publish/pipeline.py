@@ -1622,7 +1622,7 @@ def _step_confirm_pypi_trusted_publisher_settings(
             " (missing key: on.push.tags)"
         )
     expected_tag = EXPECTED_PUBLISH_REF_PATTERN.removeprefix("refs/tags/")
-    if tags and expected_tag not in set(tags):
+    if tags and set(tags) != {expected_tag}:
         mismatches.append(
             f"workflow tag pattern must be {EXPECTED_PUBLISH_REF_PATTERN} "
             f"(check key: on.push.tags in {workflow_path})"
@@ -1703,10 +1703,23 @@ def _step_confirm_pypi_trusted_publisher_settings(
         "username",
     )
     has_static_token_field = False
+    has_non_oidc_publish_path = False
     for step in steps if isinstance(steps, list) else []:
         if not isinstance(step, dict):
             continue
         uses = str(step.get("uses", "")).strip()
+        if uses:
+            normalized_uses = uses.lower()
+            if (
+                "pypa/gh-action-pypi-publish" not in normalized_uses
+                and "pypi-publish" in normalized_uses
+            ):
+                has_non_oidc_publish_path = True
+                break
+        run_command = str(step.get("run", "")).strip().lower()
+        if "twine upload" in run_command:
+            has_non_oidc_publish_path = True
+            break
         if not (
             uses.startswith("pypa/gh-action-pypi-publish@")
             or uses == "pypa/gh-action-pypi-publish"
@@ -1723,6 +1736,12 @@ def _step_confirm_pypi_trusted_publisher_settings(
             f"{workflow_path} must not set static token credentials in"
             " jobs.publish-to-pypi.steps[*].with when Trusted Publisher OIDC is expected"
             " (remove keys like password/token/api_token)"
+        )
+    if has_non_oidc_publish_path:
+        mismatches.append(
+            f"{workflow_path} jobs.publish-to-pypi.steps must use only"
+            " pypa/gh-action-pypi-publish for package upload"
+            " (remove twine upload and other publish actions)"
         )
 
     if mismatches:
