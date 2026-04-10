@@ -10,7 +10,9 @@ from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ImproperlyConfigured
 from django.db import DatabaseError
+from django.http import HttpResponseRedirect
 from django.urls import Resolver404, resolve
+from django.utils.translation import activate
 
 from .models import Landing, LandingLead, ViewHistory
 from .utils import (
@@ -29,12 +31,61 @@ class LanguagePreferenceMiddleware:
 
     def __init__(self, get_response):
         self.get_response = get_response
+        self._supported_language_codes = {
+            str(code).split("-", maxsplit=1)[0].lower()
+            for code, _label in getattr(settings, "LANGUAGES", ())
+            if isinstance(code, str) and len(str(code).split("-", maxsplit=1)[0]) == 2
+        }
 
     def __call__(self, request):
-        language_code = get_request_language_code(request)
+        language_code = self._language_from_path(request.path_info)
+        if not language_code:
+            language_code = get_request_language_code(request)
+
+        language_code = (language_code or "").lower()
+        if language_code:
+            activate(language_code)
+            request.LANGUAGE_CODE = language_code
+
         request.selected_language_code = language_code
         request.selected_language = language_code
+
+        if self._should_redirect_to_language_path(request, language_code):
+            return HttpResponseRedirect(f"/{language_code}{request.get_full_path()}")
+
         return self.get_response(request)
+
+    def _language_from_path(self, path_info: str) -> str:
+        """Return a two-letter language code extracted from ``path_info``."""
+
+        stripped = (path_info or "").lstrip("/")
+        first_segment = stripped.split("/", maxsplit=1)[0].lower()
+        if first_segment in self._supported_language_codes:
+            return first_segment
+        return ""
+
+    def _should_redirect_to_language_path(self, request, language_code: str) -> bool:
+        """Redirect unprefixed public pages so public URLs are language-scoped."""
+
+        if not language_code:
+            return False
+        if request.method.upper() not in {"GET", "HEAD"}:
+            return False
+        if request.path_info.startswith("/admin"):
+            return False
+        if request.path_info.startswith("/i18n/"):
+            return False
+        if self._language_from_path(request.path_info):
+            return False
+
+        resolver_match = getattr(request, "resolver_match", None)
+        if resolver_match is None:
+            try:
+                resolver_match = resolve(request.path_info)
+            except Resolver404:
+                return False
+
+        return resolver_match.namespace in {"pages", "pages-lang"}
 
 
 class ViewHistoryMiddleware:
