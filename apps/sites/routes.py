@@ -1,24 +1,18 @@
 """Root route provider for public site and site-specific admin tools."""
 
-from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
 
 from config.admin_urls import admin_route
 
+from apps.sites.languages import get_supported_language_codes
 from apps.sites import views as pages_views
 
 
 def _supported_language_prefix_regex() -> str:
     """Return a strict two-letter regex for configured public languages."""
 
-    language_codes = sorted(
-        {
-            str(code).split("-", maxsplit=1)[0].lower()
-            for code, _label in getattr(settings, "LANGUAGES", ())
-            if isinstance(code, str) and len(str(code).split("-", maxsplit=1)[0]) == 2
-        }
-    )
+    language_codes = sorted(get_supported_language_codes())
     if not language_codes:
         return "en"
     return "|".join(language_codes)

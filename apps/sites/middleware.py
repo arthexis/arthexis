@@ -14,6 +14,7 @@ from django.http import HttpResponseRedirect
 from django.urls import Resolver404, resolve
 from django.utils.translation import activate
 
+from .languages import get_supported_language_codes, normalize_language_code
 from .models import Landing, LandingLead, ViewHistory
 from .utils import (
     cache_original_referer,
@@ -31,18 +32,14 @@ class LanguagePreferenceMiddleware:
 
     def __init__(self, get_response):
         self.get_response = get_response
-        self._supported_language_codes = {
-            str(code).split("-", maxsplit=1)[0].lower()
-            for code, _label in getattr(settings, "LANGUAGES", ())
-            if isinstance(code, str) and len(str(code).split("-", maxsplit=1)[0]) == 2
-        }
+        self._supported_language_codes = get_supported_language_codes()
 
     def __call__(self, request):
         language_code = self._language_from_path(request.path_info)
         if not language_code:
-            language_code = get_request_language_code(request)
+            raw_language_code = get_request_language_code(request)
+            language_code = normalize_language_code(raw_language_code)
 
-        language_code = (language_code or "").lower()
         if language_code:
             activate(language_code)
             request.LANGUAGE_CODE = language_code
