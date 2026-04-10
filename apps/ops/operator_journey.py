@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from django.contrib.auth.models import AbstractBaseUser
 from django.urls import reverse
 
+from apps.groups.security import ensure_default_staff_groups
+
 from .models import OperatorJourneyStep, OperatorJourneyStepCompletion
 
 
@@ -30,7 +32,7 @@ def next_step_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStep | None:
         OperatorJourneyStep.objects.filter(
             is_active=True,
             journey__is_active=True,
-            journey__security_group__in=user.groups.all(),
+            journey__security_group__in=_active_security_groups_for_user(user),
         )
         .exclude(completions__user=user)
         .select_related("journey")
@@ -56,13 +58,13 @@ def status_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStatus:
     if not user.is_authenticated:
         return OperatorJourneyStatus(has_journey=False, is_complete=True, message="", url="")
 
-    group_ids = list(user.groups.values_list("id", flat=True))
-    has_journey = OperatorJourneyStep.objects.filter(
+    has_journey_steps = OperatorJourneyStep.objects.filter(
         is_active=True,
         journey__is_active=True,
-        journey__security_group_id__in=group_ids,
-    ).exists()
-    if not has_journey:
+        journey__security_group__in=_active_security_groups_for_user(user),
+    )
+
+    if not has_journey_steps.exists():
         return OperatorJourneyStatus(has_journey=False, is_complete=True, message="", url="")
 
     next_step = next_step_for_user(user=user)
@@ -80,3 +82,9 @@ def status_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStatus:
         message=f"Next Operator task: {next_step.title}",
         url=reverse("ops:operator-journey-step", args=[next_step.pk]),
     )
+
+
+def _active_security_groups_for_user(user: AbstractBaseUser):
+    if user.is_staff:
+        ensure_default_staff_groups(user)
+    return user.groups.all()
