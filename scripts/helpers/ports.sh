@@ -51,3 +51,16 @@ arthexis_detect_backend_port() {
 
     printf '%s\n' "$fallback"
 }
+
+# arthexis_service_url BASE_DIR [HOST] [FALLBACK_PORT]
+#
+# Build the suite URL using the configured backend port.
+arthexis_service_url() {
+    local base_dir="$1"
+    local host="${2:-localhost}"
+    local fallback_port="${3:-8888}"
+    local port
+
+    port="$(arthexis_detect_backend_port "$base_dir" "$fallback_port")"
+    printf 'http://%s:%s\n' "$host" "$port"
+}

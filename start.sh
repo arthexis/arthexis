@@ -13,6 +13,8 @@ mkdir -p "$LOCK_DIR"
 . "$BASE_DIR/scripts/helpers/service_manager.sh"
 # shellcheck source=scripts/helpers/suite-uptime-lock.sh
 . "$BASE_DIR/scripts/helpers/suite-uptime-lock.sh"
+# shellcheck source=scripts/helpers/ports.sh
+. "$BASE_DIR/scripts/helpers/ports.sh"
 arthexis_load_env_file "$BASE_DIR"
 STARTUP_SCRIPT_NAME="$(basename "$0")"
 arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "start" "invoked"
@@ -141,6 +143,9 @@ wait_for_systemd_service() {
 
     if [ "$active_state" = "active" ]; then
       echo "Service '$service_name' is active."
+      if [ "$service_name" = "$SERVICE_NAME" ]; then
+        echo "Access the service at $(arthexis_service_url "$BASE_DIR")."
+      fi
       "${SYSTEMCTL_CMD[@]}" status "$service_name" --no-pager --lines 10 || true
       return 0
     fi
