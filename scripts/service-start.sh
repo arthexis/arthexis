@@ -443,6 +443,7 @@ wait_for_suite_startup() {
 
     if arthexis_suite_reachable "$port"; then
       echo "Suite is reachable at http://localhost:$port"
+      arthexis_print_local_admin_login_hint
       return 0
     fi
 

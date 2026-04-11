@@ -282,6 +282,7 @@ fi
 
 if [ "$SUITE_REACHABLE" = true ]; then
   echo "Application reachable at: http://localhost:$PORT"
+  arthexis_print_local_admin_login_hint
 elif [ "$RUNNING" = true ]; then
   echo "Application process running but port $PORT is not reachable yet"
 else
@@ -313,6 +314,7 @@ if [ "$WAIT_FOR_REACHABLE" = true ] && [ "$SUITE_REACHABLE" = false ]; then
     if arthexis_suite_reachable "$PORT"; then
       SUITE_REACHABLE=true
       echo "Application reachable at: http://localhost:$PORT"
+      arthexis_print_local_admin_login_hint
       break
     fi
     echo "Still waiting for application to become reachable on port $PORT..."

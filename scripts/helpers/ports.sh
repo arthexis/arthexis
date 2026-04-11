@@ -64,3 +64,10 @@ arthexis_service_url() {
     port="$(arthexis_detect_backend_port "$base_dir" "$fallback_port")"
     printf 'http://%s:%s\n' "$host" "$port"
 }
+
+# arthexis_print_local_admin_login_hint
+#
+# Print the default admin credential hint with localhost-only scope.
+arthexis_print_local_admin_login_hint() {
+    echo "Login hint: use admin/admin from the local machine only."
+}
