@@ -12,14 +12,14 @@ def update_raspberry_pi_footer_label(apps, schema_editor) -> None:
     Reference = apps.get_model("links", "Reference")
 
     old_seed_rows = list(
-        Reference.objects.filter(
+        Reference.all_objects.filter(
             alt_text=OLD_ALT_TEXT,
             value=RPI4B_VALUE,
             is_seed_data=True,
         ).order_by("pk")
     )
     target_rows = list(
-        Reference.objects.filter(
+        Reference.all_objects.filter(
             alt_text=NEW_ALT_TEXT,
             value=RPI4B_VALUE,
         ).order_by("pk")

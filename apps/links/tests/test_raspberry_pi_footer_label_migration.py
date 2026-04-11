@@ -75,3 +75,34 @@ def test_raspberry_pi_footer_label_migration_keeps_existing_non_seed_label() -> 
     assert not Reference.objects.filter(pk=stale_seed.pk).exists()
     existing_non_seed.refresh_from_db()
     assert existing_non_seed.alt_text == "Raspberry Pi 4B 3GB"
+
+
+def test_raspberry_pi_footer_label_migration_handles_soft_deleted_target_row() -> None:
+    migration = importlib.import_module(
+        "apps.links.migrations.0005_update_raspberry_pi_footer_label"
+    )
+
+    stale_seed = Reference.objects.create(
+        alt_text="Raspberry Pi 4B 2GB",
+        value=RPI4B_VALUE,
+        include_in_footer=True,
+        is_seed_data=True,
+        method="link",
+    )
+    soft_deleted_target = Reference.objects.create(
+        alt_text="Raspberry Pi 4B 3GB",
+        value=RPI4B_VALUE,
+        include_in_footer=True,
+        is_seed_data=True,
+        method="link",
+    )
+    Reference.all_objects.filter(pk=soft_deleted_target.pk).update(is_deleted=True)
+
+    migration.update_raspberry_pi_footer_label(
+        apps=type("Apps", (), {"get_model": staticmethod(lambda *_: Reference)}),
+        schema_editor=SimpleNamespace(connection=SimpleNamespace(alias="default")),
+    )
+
+    stale_seed.refresh_from_db()
+    assert stale_seed.alt_text == "Raspberry Pi 4B 3GB"
+    assert not Reference.all_objects.filter(pk=soft_deleted_target.pk).exists()
