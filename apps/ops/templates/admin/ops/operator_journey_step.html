@@ -5,47 +5,156 @@
   <div class="module aligned">
     <h1>{{ step.title }}</h1>
     {% if node_role_validation %}
+      <style>
+        .ops-role-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+          gap: 1rem;
+          margin-top: 1rem;
+        }
+        .ops-role-card {
+          border: 1px solid var(--hairline-color);
+          border-radius: 8px;
+          padding: 1rem;
+          background: var(--body-bg, #fff);
+        }
+        .ops-role-card h2 {
+          margin-top: 0;
+        }
+        .ops-role-options {
+          display: grid;
+          gap: 0.5rem;
+          margin-top: 0.75rem;
+        }
+        .ops-role-option {
+          border: 1px solid var(--hairline-color);
+          border-radius: 6px;
+          padding: 0.5rem 0.75rem;
+        }
+        .ops-role-command {
+          margin-top: 0.75rem;
+          padding: 0.75rem;
+          border-radius: 6px;
+          background: var(--darkened-bg, #f6f8fa);
+        }
+        .ops-role-command code {
+          display: block;
+          margin-top: 0.4rem;
+          white-space: pre-wrap;
+        }
+      </style>
       <p>
         {% translate "Confirm the current node setup before proceeding. Node role changes must be applied with install/configure scripts, not by editing Nodes records." %}
       </p>
-      <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
-        <thead>
-          <tr>
-            <th style="text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Check" %}</th>
-            <th style="text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Current value" %}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Runtime/configured role" %}</td>
-            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{{ node_role_validation.configured_role }}</td>
-          </tr>
-          <tr>
-            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Lock file role (.locks/role.lck)" %}</td>
-            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{{ node_role_validation.lock_role }}</td>
-          </tr>
-          <tr>
-            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Registered local node role" %}</td>
-            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{{ node_role_validation.local_node_role }} ({{ node_role_validation.local_node_label }})</td>
-          </tr>
-        </tbody>
-      </table>
-      {% if node_role_validation.role_mismatch %}
-        <p style="margin-top: 1rem;">
-          <strong>{% translate "Role mismatch detected." %}</strong>
-          {% translate "The local node record does not match the active runtime role. Reconfigure and restart before completing this step." %}
-        </p>
-      {% endif %}
-      <h2 style="margin-top: 1.25rem;">{% translate "If setup is wrong, run these commands" %}</h2>
-      <ol>
-        {% for command in node_role_validation.commands %}
-          <li><code>{{ command }}</code></li>
-        {% endfor %}
-      </ol>
-      <p>
-        {% translate "Decision flow:" %}
-        {% translate "1) Confirm intended role. 2) Run configure with that role. 3) Restart and verify check output, then continue." %}
-      </p>
+      <div class="ops-role-grid">
+        <section class="ops-role-card">
+          <h2>{% translate "Current configuration and command" %}</h2>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr>
+                <th style="text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Check" %}</th>
+                <th style="text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Current value" %}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Runtime/configured role" %}</td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{{ node_role_validation.configured_role }}</td>
+              </tr>
+              <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Lock file role (.locks/role.lck)" %}</td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{{ node_role_validation.lock_role }}</td>
+              </tr>
+              <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Registered local node role" %}</td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{{ node_role_validation.local_node_role }} ({{ node_role_validation.local_node_label }})</td>
+              </tr>
+              <tr>
+                <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Auto-upgrade status" %}</td>
+                <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">
+                  {% if node_role_validation.interactive.current.auto_upgrade_enabled %}
+                    {% blocktrans with channel=node_role_validation.interactive.current.channel %}Enabled ({{ channel }}){% endblocktrans %}
+                  {% else %}
+                    {% translate "Disabled (manual/fixed)" %}
+                  {% endif %}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          {% if node_role_validation.role_mismatch %}
+            <p style="margin-top: 1rem;">
+              <strong>{% translate "Role mismatch detected." %}</strong>
+              {% translate "The local node record does not match the active runtime role. Reconfigure and restart before completing this step." %}
+            </p>
+          {% endif %}
+          <div class="ops-role-command">
+            <strong>{% translate "Generated command" %}</strong>
+            <code id="ops-generated-command"></code>
+            <button type="button" class="button" id="ops-copy-command" style="margin-top: 0.6rem;">
+              {% translate "Copy command" %}
+            </button>
+          </div>
+        </section>
+
+        <section class="ops-role-card">
+          <h2>{% translate "Role and auto-upgrade options" %}</h2>
+          <p>{% translate "Select a role and upgrade mode to generate the exact configure command." %}</p>
+          <div class="ops-role-options" role="group" aria-label="{% translate 'Role options' %}">
+            {% for role in node_role_validation.interactive.roles %}
+              <label class="ops-role-option">
+                <input
+                  type="radio"
+                  name="ops-role"
+                  value="{{ role.slug }}"
+                  {% if role.slug == node_role_validation.interactive.current.role %}checked{% endif %}
+                />
+                {{ role.label }}
+              </label>
+            {% endfor %}
+          </div>
+          <div class="ops-role-options" role="group" aria-label="{% translate 'Auto-upgrade options' %}">
+            {% for option in node_role_validation.interactive.auto_upgrade_options %}
+              <label class="ops-role-option">
+                <input
+                  type="radio"
+                  name="ops-auto-upgrade"
+                  value="{{ option.slug }}"
+                  {% if option.channel == node_role_validation.interactive.current.channel or option.slug == "fixed" and not node_role_validation.interactive.current.auto_upgrade_enabled %}checked{% endif %}
+                />
+                {{ option.label }}
+              </label>
+            {% endfor %}
+          </div>
+          <p style="margin-top: 0.75rem;">
+            {% translate "Decision flow:" %}
+            {% translate "1) Confirm intended role. 2) Select auto-upgrade mode. 3) Copy and run configure command. 4) Restart and verify check output, then continue." %}
+          </p>
+        </section>
+      </div>
+      <script>
+        (() => {
+          const roleInputs = document.querySelectorAll('input[name="ops-role"]');
+          const upgradeInputs = document.querySelectorAll('input[name="ops-auto-upgrade"]');
+          const output = document.getElementById("ops-generated-command");
+          const copyButton = document.getElementById("ops-copy-command");
+
+          const buildCommand = () => {
+            const role = [...roleInputs].find((input) => input.checked)?.value || "terminal";
+            const upgrade = [...upgradeInputs].find((input) => input.checked)?.value || "fixed";
+            const parts = ["./configure.sh", `--${role}`, `--${upgrade}`];
+            return `${parts.join(" ")}\n./service-start.sh`;
+          };
+
+          const render = () => {
+            output.textContent = buildCommand();
+          };
+
+          roleInputs.forEach((input) => input.addEventListener("change", render));
+          upgradeInputs.forEach((input) => input.addEventListener("change", render));
+          copyButton.addEventListener("click", () => navigator.clipboard?.writeText(buildCommand()));
+          render();
+        })();
+      </script>
     {% else %}
       <p>{{ step.instruction }}</p>
       {% if step.help_text %}

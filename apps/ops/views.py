@@ -10,6 +10,8 @@ from django.http import Http404, HttpRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
+from apps.core.system.upgrade import _read_auto_upgrade_mode
+
 OPERATOR_JOURNEY_STEP_URL_NAME = "ops:operator-journey-step"
 
 from .models import OperatorJourneyStep
@@ -78,6 +80,43 @@ def _build_node_role_validation_summary() -> dict[str, object]:
         "local_node_label": local_node_label,
         "role_mismatch": role_mismatch,
         "commands": commands,
+        "interactive": _build_role_upgrade_command_builder_context(
+            default_role=suggested_role,
+            base_dir=Path(settings.BASE_DIR),
+        ),
+    }
+
+
+def _build_role_upgrade_command_builder_context(*, default_role: str, base_dir: Path) -> dict[str, object]:
+    """Return current and selectable configure options for role/upgrade command building."""
+
+    upgrade_mode = _read_auto_upgrade_mode(base_dir=base_dir)
+    current_channel = str(upgrade_mode.get("mode") or "manual").strip().lower()
+    if current_channel not in {"manual", "stable", "regular", "latest", "mixed"}:
+        current_channel = "manual"
+    auto_upgrade_enabled = bool(upgrade_mode.get("enabled", False))
+
+    valid_roles = {role.lower() for role in KNOWN_NODE_ROLES}
+    normalized_default_role = str(default_role or "").strip().lower()
+    if normalized_default_role not in valid_roles:
+        normalized_default_role = "terminal"
+
+    return {
+        "current": {
+            "role": normalized_default_role,
+            "auto_upgrade_enabled": auto_upgrade_enabled,
+            "channel": current_channel,
+        },
+        "roles": [
+            {"slug": role.lower(), "label": role}
+            for role in KNOWN_NODE_ROLES
+        ],
+        "auto_upgrade_options": [
+            {"slug": "fixed", "label": "Manual (fixed)", "enabled": False, "channel": "manual"},
+            {"slug": "stable", "label": "Auto-upgrade stable", "enabled": True, "channel": "stable"},
+            {"slug": "regular", "label": "Auto-upgrade regular", "enabled": True, "channel": "regular"},
+            {"slug": "latest", "label": "Auto-upgrade latest", "enabled": True, "channel": "latest"},
+        ],
     }
 
 

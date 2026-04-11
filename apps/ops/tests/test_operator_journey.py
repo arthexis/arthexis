@@ -1,5 +1,8 @@
 """Regression tests for operator journey progression and admin dashboard surfacing."""
 
+from pathlib import Path
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.template import Context, Template
@@ -9,7 +12,7 @@ from apps.groups.constants import SITE_OPERATOR_GROUP_NAME
 from apps.groups.models import SecurityGroup
 from apps.ops.models import OperatorJourney, OperatorJourneyStep
 from apps.ops.operator_journey import complete_step_for_user, status_for_user
-from apps.ops.views import _build_node_role_validation_summary
+from apps.ops.views import _build_node_role_validation_summary, _build_role_upgrade_command_builder_context
 
 
 class OperatorJourneyFlowTests(TestCase):
@@ -138,7 +141,9 @@ class OperatorJourneyViewTests(TestCase):
         response = self.client.get(reverse("ops:operator-journey-step", args=[self.step_1.pk]))
 
         self.assertContains(response, "Node role changes must be applied with install/configure scripts")
-        self.assertContains(response, "./configure.sh --check")
+        self.assertContains(response, "Generated command")
+        self.assertContains(response, 'name="ops-role"')
+        self.assertContains(response, 'name="ops-auto-upgrade"')
         self.assertContains(response, "Decision flow:")
         self.assertNotContains(response, "<iframe", html=False)
 
@@ -149,6 +154,19 @@ class OperatorJourneyViewTests(TestCase):
         self.assertEqual(summary["configured_role"], "Watchtower")
         self.assertIn("./configure.sh --watchtower", summary["commands"])
         self.assertNotIn("./configure.sh --terminal|--satellite|--control|--watchtower", summary["commands"])
+        self.assertEqual(summary["interactive"]["current"]["role"], "watchtower")
+
+    def test_role_upgrade_command_builder_defaults_to_manual_for_unknown_mode(self):
+        context = _build_role_upgrade_command_builder_context(
+            default_role="Unknown",
+            base_dir=Path(settings.BASE_DIR),
+        )
+
+        self.assertEqual(context["current"]["role"], "terminal")
+        self.assertIn(
+            {"slug": "fixed", "label": "Manual (fixed)", "enabled": False, "channel": "manual"},
+            context["auto_upgrade_options"],
+        )
 
     def test_completing_all_steps_shows_completion_message_on_dashboard(self):
         self.client.post(reverse("ops:operator-journey-step-complete", args=[self.step_1.pk]))
