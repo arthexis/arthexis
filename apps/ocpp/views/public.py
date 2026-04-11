@@ -172,7 +172,6 @@ def charger_page(request, cid, connector=None):
     )
     state, color = _charger_state(charger, state_source)
     preferred_language = "en"
-    request.LANGUAGE_CODE = "en"
     connector_links = [
         {
             "slug": item["slug"],

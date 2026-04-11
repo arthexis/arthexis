@@ -2,7 +2,7 @@
 
 from .base import BASE_DIR
 
-LANGUAGE_CODE = "en-us"
+LANGUAGE_CODE = "en"
 
 LANGUAGES = [
     ("en", "English"),

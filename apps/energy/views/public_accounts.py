@@ -122,7 +122,7 @@ def public_connector_page(request, slug):
     """Public landing page for a connector QR code."""
     _clear_stale_statuses_for_view()
     page = get_object_or_404(
-        PublicConnectorPage.objects.select_related("charger", "language"),
+        PublicConnectorPage.objects.select_related("charger"),
         slug=slug,
         enabled=True,
     )
@@ -152,8 +152,6 @@ def public_connector_page(request, slug):
         page.instructions_markdown or ""
     )
     rules_html, _ = rendering.render_markdown_with_toc(page.rules_markdown or "")
-
-    request.LANGUAGE_CODE = "en"
 
     try:
         ip_value = _get_client_ip(request)
