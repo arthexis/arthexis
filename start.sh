@@ -143,7 +143,9 @@ wait_for_systemd_service() {
 
     if [ "$active_state" = "active" ]; then
       echo "Service '$service_name' is active."
-      echo "Access the service at $(arthexis_service_url "$BASE_DIR")."
+      if [ "$service_name" = "$SERVICE_NAME" ]; then
+        echo "Access the service at $(arthexis_service_url "$BASE_DIR")."
+      fi
       "${SYSTEMCTL_CMD[@]}" status "$service_name" --no-pager --lines 10 || true
       return 0
     fi
