@@ -11,15 +11,17 @@ RPI4B_VALUE = "https://www.raspberrypi.com/products/raspberry-pi-4-model-b/"
 def update_raspberry_pi_footer_label(apps, schema_editor) -> None:
     Reference = apps.get_model("links", "Reference")
 
+    manager = getattr(Reference, "all_objects", Reference._base_manager)
+
     old_seed_rows = list(
-        Reference.all_objects.filter(
+        manager.filter(
             alt_text=OLD_ALT_TEXT,
             value=RPI4B_VALUE,
             is_seed_data=True,
         ).order_by("pk")
     )
     target_rows = list(
-        Reference.all_objects.filter(
+        manager.filter(
             alt_text=NEW_ALT_TEXT,
             value=RPI4B_VALUE,
         ).order_by("pk")
@@ -35,7 +37,7 @@ def update_raspberry_pi_footer_label(apps, schema_editor) -> None:
 
     duplicate_pks = [row.pk for row in old_seed_rows + target_rows if row.pk != keep.pk]
     if duplicate_pks:
-        Reference.all_objects.filter(pk__in=duplicate_pks)._raw_delete(
+        manager.filter(pk__in=duplicate_pks)._raw_delete(
             schema_editor.connection.alias
         )
 
