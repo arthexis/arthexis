@@ -49,7 +49,7 @@ FOOTER_REFERENCE_KEY_RENAMES = [
     (
         "RPi 4 Model B",
         "https://www.raspberrypi.com/products/raspberry-pi-4-model-b/",
-        "Raspberry Pi 4B 2GB",
+        "Raspberry Pi 4B 3GB",
         "https://www.raspberrypi.com/products/raspberry-pi-4-model-b/",
     ),
     (
