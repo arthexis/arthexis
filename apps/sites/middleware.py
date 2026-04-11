@@ -12,7 +12,10 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import DatabaseError
 from django.urls import Resolver404, resolve
 
-from apps.features.utils import QUICK_WEB_SHARE_FEATURE_SLUG, is_suite_feature_enabled
+from apps.features.utils import (
+    QUICK_WEB_SHARE_FEATURE_SLUG,
+    get_cached_feature_enabled,
+)
 
 from .models import Landing, LandingLead, ViewHistory
 from .utils import (
@@ -291,14 +294,20 @@ class SharePreviewPublicMiddleware:
 
     _PREVIEW_MARKER = "share-preview"
     _PUBLIC_FLAG = "share_preview_public"
+    _QUICK_WEB_SHARE_ENABLED_CACHE_KEY = "features:quick-web-share:enabled"
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        if is_suite_feature_enabled(QUICK_WEB_SHARE_FEATURE_SLUG, default=False) and (
+        if (
             request.GET.get("djdt") == self._PREVIEW_MARKER
             and request.GET.get(self._PUBLIC_FLAG) == "1"
+            and get_cached_feature_enabled(
+                QUICK_WEB_SHARE_FEATURE_SLUG,
+                cache_key=self._QUICK_WEB_SHARE_ENABLED_CACHE_KEY,
+                default=False,
+            )
         ):
             request.user = AnonymousUser()
         return self.get_response(request)

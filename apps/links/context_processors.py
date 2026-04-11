@@ -5,7 +5,7 @@ from django.contrib.sites.models import Site
 from django.core.exceptions import DisallowedHost
 from django.db.utils import DatabaseError
 
-from apps.features.utils import QUICK_WEB_SHARE_FEATURE_SLUG, is_suite_feature_enabled
+from apps.features.utils import QUICK_WEB_SHARE_FEATURE_SLUG, get_cached_feature_enabled
 
 from .models import get_or_create_short_url
 from .qr_utils import build_qr_png_bytes
@@ -14,6 +14,7 @@ _FALLBACK_QR_PNG_BYTES = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB"
     "/oX6zj4AAAAASUVORK5CYII="
 )
+_QUICK_WEB_SHARE_ENABLED_CACHE_KEY = "features:quick-web-share:enabled"
 
 
 def _encode_share_qr_data_uri(url: str) -> str:
@@ -69,23 +70,21 @@ def share_short_url(request):
     None
         Exceptions from QR generation are handled and converted to an empty QR value.
     """
+    disabled_context = {
+        "quick_web_share_enabled": False,
+        "share_short_url": "",
+        "share_short_url_qr": "",
+    }
     if request is None:
-        return {
-            "quick_web_share_enabled": False,
-            "share_short_url": "",
-            "share_short_url_qr": "",
-        }
+        return disabled_context
 
-    quick_web_share_enabled = is_suite_feature_enabled(
+    quick_web_share_enabled = get_cached_feature_enabled(
         QUICK_WEB_SHARE_FEATURE_SLUG,
+        cache_key=_QUICK_WEB_SHARE_ENABLED_CACHE_KEY,
         default=False,
     )
     if not quick_web_share_enabled:
-        return {
-            "quick_web_share_enabled": False,
-            "share_short_url": "",
-            "share_short_url_qr": "",
-        }
+        return disabled_context
 
     def _build_absolute_with_fallback(path: str) -> str:
         """Build an absolute URI and fall back safely when host validation fails.

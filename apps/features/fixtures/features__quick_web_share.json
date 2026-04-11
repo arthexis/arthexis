@@ -7,8 +7,7 @@
       "summary": "Controls public share actions, short-link generation, and share preview embeds in page chrome.",
       "is_enabled": false,
       "main_app": [
-        "links",
-        "sites"
+        "links"
       ],
       "node_feature": null,
       "admin_requirements": "Staff and admin pages should only render the quick-share trigger and modal when this suite feature is enabled.",

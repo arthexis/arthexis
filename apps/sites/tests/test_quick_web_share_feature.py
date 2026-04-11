@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.http import HttpResponse
 from django.test import RequestFactory
 from django.urls import reverse
@@ -15,6 +16,14 @@ from apps.links.models import ShortURL
 from apps.sites.middleware import SharePreviewPublicMiddleware
 
 pytestmark = pytest.mark.django_db
+
+
+def _set_quick_web_share_enabled(enabled: bool) -> None:
+    Feature.objects.update_or_create(
+        slug=QUICK_WEB_SHARE_FEATURE_SLUG,
+        defaults={"display": "Quick Web Share", "is_enabled": enabled},
+    )
+    cache.delete("features:quick-web-share:enabled")
 
 
 def test_share_context_returns_empty_values_when_feature_disabled_by_default(
@@ -35,10 +44,7 @@ def test_share_context_returns_empty_values_when_feature_disabled_by_default(
 def test_share_context_builds_short_url_when_feature_enabled(
     rf: RequestFactory,
 ) -> None:
-    Feature.objects.update_or_create(
-        slug=QUICK_WEB_SHARE_FEATURE_SLUG,
-        defaults={"display": "Quick Web Share", "is_enabled": True},
-    )
+    _set_quick_web_share_enabled(True)
     request = rf.get("/public/")
 
     context = share_short_url(request)
@@ -52,6 +58,7 @@ def test_share_context_builds_short_url_when_feature_enabled(
 def test_share_preview_public_middleware_requires_quick_web_share_feature(
     rf: RequestFactory,
 ) -> None:
+    _set_quick_web_share_enabled(False)
     user = get_user_model().objects.create_user(
         username="quick-share-middleware-user",
         email="quick-share-middleware-user@example.com",
@@ -66,10 +73,7 @@ def test_share_preview_public_middleware_requires_quick_web_share_feature(
     disabled_response = middleware(request)
     assert disabled_response.content == b"False"
 
-    Feature.objects.update_or_create(
-        slug=QUICK_WEB_SHARE_FEATURE_SLUG,
-        defaults={"display": "Quick Web Share", "is_enabled": True},
-    )
+    _set_quick_web_share_enabled(True)
     enabled_request = rf.get("/?djdt=share-preview&share_preview_public=1")
     enabled_request.user = user
 
@@ -78,7 +82,7 @@ def test_share_preview_public_middleware_requires_quick_web_share_feature(
 
 
 def test_base_page_hides_share_ui_when_quick_web_share_feature_disabled(client) -> None:
-    Feature.objects.filter(slug=QUICK_WEB_SHARE_FEATURE_SLUG).delete()
+    _set_quick_web_share_enabled(False)
 
     response = client.get(reverse("pages:index"))
 
