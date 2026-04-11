@@ -87,8 +87,10 @@
     }
     .admin-home-operator-journey {
         margin: 0;
+        padding: 2px 4px;
         font-size: 0.75rem;
         line-height: 1.05;
+        border-radius: 4px;
     }
     .admin-home-operator-journey__link {
         font-weight: 400;
