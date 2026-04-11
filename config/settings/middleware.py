@@ -13,8 +13,6 @@ MIDDLEWARE = [
     "config.middleware.ActiveAppMiddleware",
     "config.middleware.SiteHttpsRedirectMiddleware",
     "config.middleware.ContentSecurityPolicyMiddleware",
-    "django.middleware.locale.LocaleMiddleware",
-    "apps.sites.middleware.LanguagePreferenceMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",

@@ -90,8 +90,10 @@ def test_invitation_login_invalid_tokens_are_handled_safely(client):
 def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
     url = reverse("pages:whatsapp-webhook")
 
-    assert client.get(url).status_code == 302
-    assert client.get(f"/en{url}").status_code == 405
+    assert client.get(url).status_code == 405
+    prefixed = client.get(f"/en{url}", follow=False)
+    assert prefixed.status_code == 301
+    assert prefixed["Location"] == url
 
     settings.PAGES_WHATSAPP_ENABLED = False
     disabled = client.post(
