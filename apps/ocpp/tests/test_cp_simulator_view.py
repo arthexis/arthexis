@@ -197,6 +197,101 @@ def test_cp_simulator_service_warning_links_to_simulator_logs(
 @pytest.mark.django_db
 @patch(
     "apps.ocpp.views.simulator.get_cpsim_request_metadata",
+    return_value={
+        "queued": True,
+        "lock_path": "/workspace/arthexis/.locks/cpsim-service.lck",
+        "age_seconds": 42,
+    },
+)
+@patch(
+    "apps.ocpp.views.simulator.get_simulator_state",
+    return_value={
+        "running": True,
+        "last_status": "cpsim-service start requested",
+        "last_command": "start",
+        "last_error": "",
+        "last_message": "",
+        "phase": "Service",
+        "start_time": "2026-04-11 09:28:28",
+        "stop_time": None,
+        "params": {"host": "localhost", "ws_port": 8888, "cp_path": "CP2"},
+    },
+)
+@patch(
+    "apps.ocpp.views.simulator.get_simulator_backend_choices",
+    return_value=(("arthexis", "arthexis"),),
+)
+def test_cp_simulator_service_warning_links_to_active_simulator_logs(
+    _backend_choices,
+    _state,
+    _request_metadata,
+    admin_client,
+):
+    Simulator.objects.create(
+        name="Default CP",
+        cp_path="CP1",
+        serial_number="CP1",
+        default=True,
+    )
+    simulator = Simulator.objects.create(
+        name="Active CP",
+        cp_path="CP2",
+        serial_number="CP2",
+        default=False,
+    )
+
+    response = admin_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert f'href="{reverse("admin:ocpp_simulator_log", args=[simulator.pk])}"' in content
+    assert "check simulator logs" in content
+
+
+@pytest.mark.django_db
+@patch(
+    "apps.ocpp.views.simulator.get_cpsim_request_metadata",
+    return_value={
+        "queued": True,
+        "lock_path": "/workspace/arthexis/.locks/cpsim-service.lck",
+        "age_seconds": 42,
+    },
+)
+@patch(
+    "apps.ocpp.views.simulator.get_simulator_state",
+    return_value={
+        "running": True,
+        "last_status": "cpsim-service start requested",
+        "last_command": "start",
+        "last_error": "",
+        "last_message": "",
+        "phase": "Service",
+        "start_time": "2026-04-11 09:28:28",
+        "stop_time": None,
+        "params": {"host": "localhost", "ws_port": 8888, "cp_path": "CP2"},
+    },
+)
+@patch(
+    "apps.ocpp.views.simulator.get_simulator_backend_choices",
+    return_value=(("arthexis", "arthexis"),),
+)
+def test_cp_simulator_service_warning_links_to_log_viewer_when_no_default(
+    _backend_choices,
+    _state,
+    _request_metadata,
+    admin_client,
+):
+    response = admin_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert f'href="{reverse("admin:log_viewer")}"' in content
+    assert "check simulator logs" in content
+
+
+@pytest.mark.django_db
+@patch(
+    "apps.ocpp.views.simulator.get_cpsim_request_metadata",
     side_effect=OSError("read-only"),
 )
 @patch(
