@@ -80,12 +80,15 @@
     .admin-home-net-message {
         justify-self: start;
     }
+    .admin-home-status {
+        display: grid;
+        row-gap: 0.25rem;
+        align-content: start;
+    }
     .admin-home-operator-journey {
-        grid-column: 2;
         margin: 0;
         font-size: 0.75rem;
         line-height: 1.05;
-        align-self: start;
     }
     .admin-home-operator-journey__link {
         font-weight: 400;
@@ -97,14 +100,17 @@
     .admin-home-operator-journey__text {
         color: var(--body-quiet-color);
     }
+    .admin-home-actions-wrap {
+        align-self: start;
+        justify-self: end;
+        width: 100%;
+    }
     .admin-home-actions {
         display: flex;
         align-items: flex-start;
         justify-content: flex-end;
         gap: 8px;
         flex-wrap: wrap;
-        justify-self: end;
-        align-self: start;
         margin: 0;
         width: 100%;
         max-width: none;
@@ -113,6 +119,7 @@
         white-space: nowrap;
         padding-top: 0;
         padding-bottom: 0;
+        margin-top: 0;
     }
     .admin-home-actions__form {
         margin: 0;
@@ -159,13 +166,12 @@
             row-gap: 0.35rem;
         }
         .admin-home-actions {
-            grid-column: 2;
             justify-content: flex-start;
             max-width: none;
         }
-        .admin-home-operator-journey {
+        .admin-home-actions-wrap {
             grid-column: 2;
-            margin-top: 0;
+            justify-self: start;
         }
     }
     @media (max-width: 992px) {
@@ -174,15 +180,15 @@
             gap: 0.75rem;
         }
         .admin-home-actions {
-            grid-column: auto;
             justify-content: flex-start;
+        }
+        .admin-home-actions-wrap {
+            grid-column: auto;
+            justify-self: start;
         }
         .admin-home-net-message {
             width: 100%;
             min-width: 0;
-        }
-        .admin-home-operator-journey {
-            grid-column: auto;
         }
     }
     .dashboard-main {
