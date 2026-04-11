@@ -35,9 +35,9 @@ __all__ = [
     "product_list",
     "release_progress",
     "request_temp_password",
-    "stop_impersonation",
     "rfid_batch",
     "rfid_login",
+    "stop_impersonation",
     "usage_analytics_summary",
     "version_info",
 ]

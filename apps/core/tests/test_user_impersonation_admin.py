@@ -33,21 +33,23 @@ class UserImpersonationAdminTests(TestCase):
     def test_superuser_can_impersonate_user_from_admin_url(self):
         self.client.force_login(self.superuser)
 
-        response = self.client.get(
-            reverse("admin:core_user_impersonate", args=[self.target_user.pk])
+        url = reverse("admin:core_user_impersonate", args=[self.target_user.pk])
+        response = self.client.post(
+            url,
+            data={"next": reverse("admin:index")},
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "/")
+        self.assertEqual(response.url, reverse("admin:index"))
         session = self.client.session
         self.assertEqual(session.get(IMPERSONATOR_SESSION_KEY), self.superuser.pk)
         self.assertEqual(int(session.get("_auth_user_id")), self.target_user.pk)
 
     def test_stop_impersonation_restores_original_superuser(self):
         self.client.force_login(self.superuser)
-        self.client.get(reverse("admin:core_user_impersonate", args=[self.target_user.pk]))
+        self.client.post(reverse("admin:core_user_impersonate", args=[self.target_user.pk]))
 
-        response = self.client.get(reverse("stop-impersonation"))
+        response = self.client.post(reverse("stop-impersonation"))
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("admin:index"))
@@ -55,10 +57,23 @@ class UserImpersonationAdminTests(TestCase):
         self.assertNotIn(IMPERSONATOR_SESSION_KEY, session)
         self.assertEqual(int(session.get("_auth_user_id")), self.superuser.pk)
 
+    def test_stop_impersonation_logs_out_when_impersonator_missing(self):
+        self.client.force_login(self.superuser)
+        self.client.post(reverse("admin:core_user_impersonate", args=[self.target_user.pk]))
+        self.superuser.delete()
+
+        response = self.client.post(reverse("stop-impersonation"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("admin:index"))
+        session = self.client.session
+        self.assertNotIn(IMPERSONATOR_SESSION_KEY, session)
+        self.assertNotIn("_auth_user_id", session)
+
     def test_staff_without_superuser_access_cannot_impersonate(self):
         self.client.force_login(self.staff_user)
 
-        response = self.client.get(
+        response = self.client.post(
             reverse("admin:core_user_impersonate", args=[self.target_user.pk])
         )
 
@@ -76,3 +91,42 @@ class UserImpersonationAdminTests(TestCase):
             response,
             reverse("admin:core_user_impersonate", args=[self.target_user.pk]),
         )
+
+    def test_impersonate_view_get_does_not_switch_session(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(
+            reverse("admin:core_user_impersonate", args=[self.target_user.pk])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("admin:users_user_change", args=[self.target_user.pk]),
+        )
+        session = self.client.session
+        self.assertNotIn(IMPERSONATOR_SESSION_KEY, session)
+        self.assertEqual(int(session.get("_auth_user_id")), self.superuser.pk)
+
+    def test_impersonation_next_url_rejects_external_target(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("admin:core_user_impersonate", args=[self.target_user.pk]),
+            data={"next": "https://evil.example/phish"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/")
+
+    def test_stop_impersonation_next_url_rejects_external_target(self):
+        self.client.force_login(self.superuser)
+        self.client.post(reverse("admin:core_user_impersonate", args=[self.target_user.pk]))
+
+        response = self.client.post(
+            reverse("stop-impersonation"),
+            data={"next": "https://evil.example/phish"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("admin:index"))

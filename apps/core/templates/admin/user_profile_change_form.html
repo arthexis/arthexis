@@ -56,12 +56,20 @@
   {% endif %}
   {% if impersonate_url %}
     <li>
-      <a href="{{ impersonate_url }}" class="historylink">{% trans "Impersonate user" %}</a>
+      <form action="{{ impersonate_url }}" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="historylink">{% trans "Impersonate user" %}</button>
+      </form>
     </li>
   {% endif %}
   {% if stop_impersonation_url %}
     <li>
-      <a href="{{ stop_impersonation_url }}" class="historylink">{% trans "Stop impersonation" %}</a>
+      <form action="{{ stop_impersonation_url }}" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="historylink">{% trans "Stop impersonation" %}</button>
+      </form>
     </li>
   {% endif %}
 {% endblock %}

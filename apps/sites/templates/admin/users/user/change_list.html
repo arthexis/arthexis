@@ -11,9 +11,11 @@
   {% endif %}
   {% if request.session.core_admin_impersonator_user_id %}
     <li>
-      <a href="{% url 'stop-impersonation' %}?next={{ request.get_full_path|urlencode }}">
-        {% translate "Stop impersonation" %}
-      </a>
+      <form action="{% url 'stop-impersonation' %}" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit">{% translate "Stop impersonation" %}</button>
+      </form>
     </li>
   {% endif %}
   {{ block.super }}
