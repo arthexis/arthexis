@@ -27,6 +27,7 @@
   const copyErrorMessage = form.dataset.copyError;
   const copyAriaLabel = form.dataset.copyAriaLabel;
   const canCopyStaffDetails = form.dataset.copyStaffDetails === '1';
+  const securityGroups = (form.dataset.securityGroups || '').trim();
   const messageField = form.querySelector('input[name="messages"]');
   let previousFocus = null;
   let copyFeedbackTimeout = null;
@@ -325,6 +326,9 @@
       return baseValue;
     }
     const details = getFormDetails();
+    if (securityGroups) {
+      details.push(`Security groups: ${securityGroups}`);
+    }
     const messages = getPageMessages();
     syncMessageField(messages);
     if (!details.length && !messages.length) {

@@ -1,6 +1,7 @@
 """Regression tests for operator journey progression and admin dashboard surfacing."""
 
 from django.contrib.auth import get_user_model
+from django.template import Context, Template
 from django.test import TestCase
 from django.urls import reverse
 
@@ -47,11 +48,15 @@ class OperatorJourneyFlowTests(TestCase):
 
     def test_status_tracks_progress_and_catches_up_on_new_steps(self):
         status = status_for_user(user=self.user)
-        self.assertEqual(status.message, "Next Operator task: Step 1")
+        self.assertEqual(status.message, "Step 1")
+        self.assertEqual(status.task_title, "Step 1")
+        self.assertEqual(status.available_since, self.user.date_joined)
 
         self.assertTrue(complete_step_for_user(user=self.user, step=self.step_1))
         status = status_for_user(user=self.user)
-        self.assertEqual(status.message, "Next Operator task: Step 2")
+        self.assertEqual(status.message, "Step 2")
+        self.assertEqual(status.task_title, "Step 2")
+        self.assertEqual(status.available_since, self.user.operator_journey_step_completions.first().completed_at)
 
         self.assertTrue(complete_step_for_user(user=self.user, step=self.step_2))
         status = status_for_user(user=self.user)
@@ -66,7 +71,8 @@ class OperatorJourneyFlowTests(TestCase):
             order=3,
         )
         status = status_for_user(user=self.user)
-        self.assertEqual(status.message, "Next Operator task: Step 3")
+        self.assertEqual(status.message, "Step 3")
+        self.assertEqual(status.task_title, "Step 3")
         self.assertIn(str(step_3.pk), status.url)
 
     def test_cannot_complete_out_of_order_step(self):
@@ -116,7 +122,7 @@ class OperatorJourneyViewTests(TestCase):
     def test_dashboard_shows_operator_journey_link(self):
         response = self.client.get(reverse("admin:index"))
 
-        self.assertContains(response, "Next Operator task: Validate role")
+        self.assertContains(response, "Validate role")
         self.assertContains(
             response,
             reverse("ops:operator-journey-step", args=[self.step_1.pk]),
@@ -169,5 +175,18 @@ class OperatorJourneyViewTests(TestCase):
         self.client.force_login(admin_user)
         response = self.client.get(reverse("admin:index"))
 
-        self.assertContains(response, "Next Operator task: Run admin setup")
+        self.assertContains(response, "Run admin setup")
         self.assertTrue(admin_user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).exists())
+
+
+class OperatorJourneyTemplateTagTests(TestCase):
+    """Validate operator journey template tag fallback contexts."""
+
+    def test_tag_returns_empty_status_without_request_context(self):
+        rendered = Template(
+            "{% load operator_journey %}"
+            "{% operator_journey_status as operator_journey %}"
+            "{{ operator_journey.task_title|default:'__empty__' }}"
+        ).render(Context({}))
+
+        self.assertEqual(rendered, "__empty__")
