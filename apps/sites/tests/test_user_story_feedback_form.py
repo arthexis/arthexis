@@ -1,4 +1,7 @@
 import pytest
+from django.contrib.auth import get_user_model
+from django.template.loader import render_to_string
+from django.test import RequestFactory
 
 from apps.sites.forms import UserStoryForm
 from apps.sites.models import UserStory
@@ -38,3 +41,17 @@ def test_user_story_issue_body_omits_javascript_enabled_line():
 
     assert "**Contact via chat:** Yes" in issue_body
     assert "JavaScript enabled" not in issue_body
+
+
+def test_user_story_feedback_template_omits_security_groups_for_non_staff_users():
+    user = get_user_model().objects.create_user(
+        username="regular-user",
+        password="x",
+        email="regular-user@example.com",
+    )
+    request = RequestFactory().get("/admin/")
+    request.user = user
+
+    html = render_to_string("admin/includes/user_story_feedback.html", request=request)
+
+    assert 'data-security-groups=""' in html

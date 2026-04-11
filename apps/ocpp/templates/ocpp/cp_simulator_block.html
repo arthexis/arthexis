@@ -125,7 +125,14 @@
                 Queue age: {{ cpsim_request.age_seconds|floatformat:0 }}s · Lock file: <code>{{ cpsim_request.lock_path }}</code>
               </div>
               {% endif %}
-              <div class="small mb-0">If this stays in Service phase, start or restart the cpsim worker and check simulator logs.</div>
+              <div class="small mb-0">
+                If this stays in Service phase, start or restart the cpsim worker and
+                {% if simulator_log_url %}
+                <a href="{{ simulator_log_url }}">check simulator logs</a>.
+                {% else %}
+                check simulator logs.
+                {% endif %}
+              </div>
             </div>
             {% endif %}
             {% if cp.last_error %}
