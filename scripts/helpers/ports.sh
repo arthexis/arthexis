@@ -70,10 +70,8 @@ arthexis_service_url() {
 # Build a login guidance message for the suite URL shown by install/upgrade flows.
 arthexis_service_access_message() {
     local base_dir="$1"
-    local host="${2:-localhost}"
-    local fallback_port="${3:-8888}"
     local url
 
-    url="$(arthexis_service_url "$base_dir" "$host" "$fallback_port")"
-    printf 'Access the service at %s. Login with admin/admin (local machine only).\n' "$url"
+    url="$(arthexis_service_url "$base_dir" "$2" "$3")"
+    printf 'Access the service at %s. Local-only default login is admin/admin when unchanged.\n' "$url"
 }
