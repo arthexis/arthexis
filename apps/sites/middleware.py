@@ -12,13 +12,14 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import DatabaseError
 from django.urls import Resolver404, resolve
 
+from apps.features.utils import QUICK_WEB_SHARE_FEATURE_SLUG, is_suite_feature_enabled
+
 from .models import Landing, LandingLead, ViewHistory
 from .utils import (
     cache_original_referer,
     get_original_referer,
     landing_leads_supported,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -177,9 +178,7 @@ class ViewHistoryMiddleware:
                 .first()
             )
         except Exception:  # pragma: no cover - best effort logging
-            logger.debug(
-                "Failed to resolve Landing for %s", path, exc_info=True
-            )
+            logger.debug("Failed to resolve Landing for %s", path, exc_info=True)
             return None
 
     def _record_landing_lead(self, request, landing):
@@ -267,7 +266,9 @@ class ViewHistoryMiddleware:
 
     def _update_user_last_visit_ip(self, request) -> None:
         user = getattr(request, "user", None)
-        if not getattr(user, "is_authenticated", False) or not getattr(user, "pk", None):
+        if not getattr(user, "is_authenticated", False) or not getattr(
+            user, "pk", None
+        ):
             return
 
         ip_address = self._extract_client_ip(request)
@@ -279,7 +280,8 @@ class ViewHistoryMiddleware:
             user.save(update_fields=["last_visit_ip_address"])
         except Exception:  # pragma: no cover - best effort logging
             logger.debug(
-                "Failed to update last_visit_ip_address for user %s", user.pk,
+                "Failed to update last_visit_ip_address for user %s",
+                user.pk,
                 exc_info=True,
             )
 
@@ -294,7 +296,7 @@ class SharePreviewPublicMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        if (
+        if is_suite_feature_enabled(QUICK_WEB_SHARE_FEATURE_SLUG, default=False) and (
             request.GET.get("djdt") == self._PREVIEW_MARKER
             and request.GET.get(self._PUBLIC_FLAG) == "1"
         ):

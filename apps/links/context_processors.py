@@ -5,9 +5,10 @@ from django.contrib.sites.models import Site
 from django.core.exceptions import DisallowedHost
 from django.db.utils import DatabaseError
 
+from apps.features.utils import QUICK_WEB_SHARE_FEATURE_SLUG, is_suite_feature_enabled
+
 from .models import get_or_create_short_url
 from .qr_utils import build_qr_png_bytes
-
 
 _FALLBACK_QR_PNG_BYTES = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB"
@@ -60,7 +61,8 @@ def share_short_url(request):
     Returns
     -------
     dict[str, str]
-        Mapping containing ``share_short_url`` and ``share_short_url_qr``.
+        Mapping containing ``quick_web_share_enabled``, ``share_short_url``, and
+        ``share_short_url_qr``.
 
     Raises
     ------
@@ -68,7 +70,22 @@ def share_short_url(request):
         Exceptions from QR generation are handled and converted to an empty QR value.
     """
     if request is None:
-        return {"share_short_url": "", "share_short_url_qr": ""}
+        return {
+            "quick_web_share_enabled": False,
+            "share_short_url": "",
+            "share_short_url_qr": "",
+        }
+
+    quick_web_share_enabled = is_suite_feature_enabled(
+        QUICK_WEB_SHARE_FEATURE_SLUG,
+        default=False,
+    )
+    if not quick_web_share_enabled:
+        return {
+            "quick_web_share_enabled": False,
+            "share_short_url": "",
+            "share_short_url_qr": "",
+        }
 
     def _build_absolute_with_fallback(path: str) -> str:
         """Build an absolute URI and fall back safely when host validation fails.
@@ -91,7 +108,9 @@ def share_short_url(request):
         try:
             return request.build_absolute_uri(path)
         except DisallowedHost:
-            raw_host = (request.META.get("HTTP_HOST") or request.META.get("SERVER_NAME") or "").strip()
+            raw_host = (
+                request.META.get("HTTP_HOST") or request.META.get("SERVER_NAME") or ""
+            ).strip()
             if not raw_host:
                 return path
 
@@ -110,7 +129,12 @@ def share_short_url(request):
                 return path
 
             try:
-                site_domain = (Site.objects.get_current().domain or "").strip().lower().rstrip(".")
+                site_domain = (
+                    (Site.objects.get_current().domain or "")
+                    .strip()
+                    .lower()
+                    .rstrip(".")
+                )
                 parsed_site = urlsplit(f"//{site_domain}")
                 site_host = (parsed_site.hostname or "").strip().lower().rstrip(".")
                 site_port = parsed_site.port
@@ -148,4 +172,8 @@ def share_short_url(request):
     except Exception:
         qr_data_uri = ""
 
-    return {"share_short_url": share_url, "share_short_url_qr": qr_data_uri}
+    return {
+        "quick_web_share_enabled": True,
+        "share_short_url": share_url,
+        "share_short_url_qr": qr_data_uri,
+    }

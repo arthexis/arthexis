@@ -180,12 +180,14 @@
                 </div>
                 {% endif %}
               </a>
+              {% if quick_web_share_enabled %}
               <button id="share-button" class="btn btn-sm btn-outline-light ms-2" type="button">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-share"></use>
                 </svg>
                 <span class="visually-hidden">{% trans "Share" %}</span>
               </button>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -204,6 +206,7 @@
     </div>
     {% include "pages/includes/public_chat_widget.html" %}
     {% include "pages/includes/public_feedback_widget.html" %}
+    {% if quick_web_share_enabled %}
     <div class="modal fade" id="shareModal" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -258,6 +261,7 @@
         </div>
       </div>
     </div>
+    {% endif %}
     {% url 'pages:footer-fragment' as footer_fragment_url %}
     {% if not hide_default_footer and footer_fragment_url %}
       <div
