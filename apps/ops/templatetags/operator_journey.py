@@ -17,6 +17,7 @@ def operator_journey_status(context):
             has_journey=False,
             is_complete=True,
             message="",
+            task_title="",
             url="",
         )
     return status_for_user(user=request.user)

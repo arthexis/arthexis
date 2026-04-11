@@ -105,6 +105,7 @@ def status_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStatus:
 
 
 def _first_available_at(*, user: AbstractBaseUser, next_step: OperatorJourneyStep) -> datetime:
+    fallback_available_at = getattr(user, "date_joined", timezone.localtime())
     previous_step = (
         OperatorJourneyStep.objects.filter(journey=next_step.journey, is_active=True)
         .exclude(pk=next_step.pk)
@@ -114,15 +115,11 @@ def _first_available_at(*, user: AbstractBaseUser, next_step: OperatorJourneySte
     )
 
     if previous_step is None:
-        return user.date_joined
+        return fallback_available_at
 
-    completion = (
-        OperatorJourneyStepCompletion.objects.filter(user=user, step=previous_step)
-        .order_by("completed_at")
-        .first()
-    )
+    completion = OperatorJourneyStepCompletion.objects.filter(user=user, step=previous_step).first()
     if completion is None:
-        return timezone.now()
+        return fallback_available_at
     return completion.completed_at
 
 

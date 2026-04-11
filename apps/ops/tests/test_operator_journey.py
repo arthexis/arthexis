@@ -1,6 +1,7 @@
 """Regression tests for operator journey progression and admin dashboard surfacing."""
 
 from django.contrib.auth import get_user_model
+from django.template import Context, Template
 from django.test import TestCase
 from django.urls import reverse
 
@@ -176,3 +177,16 @@ class OperatorJourneyViewTests(TestCase):
 
         self.assertContains(response, "Run admin setup")
         self.assertTrue(admin_user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).exists())
+
+
+class OperatorJourneyTemplateTagTests(TestCase):
+    """Validate operator journey template tag fallback contexts."""
+
+    def test_tag_returns_empty_status_without_request_context(self):
+        rendered = Template(
+            "{% load operator_journey %}"
+            "{% operator_journey_status as operator_journey %}"
+            "{{ operator_journey.task_title|default:'__empty__' }}"
+        ).render(Context({}))
+
+        self.assertEqual(rendered, "__empty__")
