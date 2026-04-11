@@ -6,6 +6,8 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.http import Http404, HttpRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -138,6 +140,8 @@ def operator_journey_step(request: HttpRequest, step_id: int):
     if step.slug == ROLE_VALIDATION_STEP_SLUG:
         context["node_role_validation"] = _build_node_role_validation_summary()
     if step.slug == PROVISION_SUPERUSER_STEP_SLUG:
+        if not request.user.is_superuser:
+            raise PermissionDenied
         context["provision_superuser_form"] = OperatorJourneyProvisionSuperuserForm()
 
     return render(request, "admin/ops/operator_journey_step.html", context)
@@ -171,6 +175,8 @@ def complete_operator_journey_step(request: HttpRequest, step_id: int):
         return redirect(reverse(OPERATOR_JOURNEY_STEP_URL_NAME, args=[current_step.pk]))
 
     if step.slug == PROVISION_SUPERUSER_STEP_SLUG:
+        if not request.user.is_superuser:
+            raise PermissionDenied
         provision_form = OperatorJourneyProvisionSuperuserForm(request.POST)
         if not provision_form.is_valid():
             return render(
@@ -178,13 +184,39 @@ def complete_operator_journey_step(request: HttpRequest, step_id: int):
                 "admin/ops/operator_journey_step.html",
                 {"step": step, "provision_superuser_form": provision_form},
             )
-        new_user, password = provision_form.save()
-        messages.success(
+        with transaction.atomic():
+            request.user.__class__._default_manager.select_for_update().get(
+                pk=request.user.pk
+            )
+            locked_step = next_step_for_user(user=request.user)
+            if locked_step is None:
+                return redirect(reverse("admin:index"))
+            if locked_step.pk != step.pk:
+                messages.warning(
+                    request,
+                    "That step is not available yet. Finish the current required operator step first.",
+                )
+                return redirect(
+                    reverse(OPERATOR_JOURNEY_STEP_URL_NAME, args=[locked_step.pk])
+                )
+            if not complete_step_for_user(user=request.user, step=step):
+                messages.warning(
+                    request,
+                    "That step is not available yet. Finish the current required operator step first.",
+                )
+                return redirect(
+                    reverse(OPERATOR_JOURNEY_STEP_URL_NAME, args=[locked_step.pk])
+                )
+            new_user, password = provision_form.save()
+        next_step = next_step_for_user(user=request.user)
+        return render(
             request,
-            (
-                f"Created superuser {new_user.get_username()} with password: {password}. "
-                "Record this securely because it will not be shown again."
-            ),
+            "admin/ops/operator_journey_provision_success.html",
+            {
+                "new_user": new_user,
+                "one_time_password": password,
+                "next_step": next_step,
+            },
         )
 
     if not complete_step_for_user(user=request.user, step=step):

@@ -1,0 +1,24 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <div class="module aligned">
+    <h1>{% translate "Operational superuser created" %}</h1>
+    <p>
+      {% blocktranslate with username=new_user.get_username %}Created superuser {{ username }}.{% endblocktranslate %}
+    </p>
+    <p>
+      {% translate "Record this password securely now. It will not be shown again." %}
+    </p>
+    <p><code>{{ one_time_password }}</code></p>
+    {% if next_step %}
+      <p>
+        <a class="button default" href="{% url 'ops:operator-journey-step' next_step.pk %}">{% translate "Continue to next step" %}</a>
+      </p>
+    {% else %}
+      <p>
+        <a class="button default" href="{% url 'admin:index' %}">{% translate "Return to admin dashboard" %}</a>
+      </p>
+    {% endif %}
+  </div>
+{% endblock %}

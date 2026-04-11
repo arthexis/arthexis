@@ -270,18 +270,10 @@ class OperatorJourneyViewTests(TestCase):
                 "github_username": "octocat",
                 "github_token": "ghp_example_token",
             },
-            follow=True,
         )
 
-        self.assertContains(response, "Operator journey complete")
-        messages = list(response.context["messages"])
-        self.assertTrue(
-            any(
-                "Record this securely because it will not be shown again."
-                in str(message)
-                for message in messages
-            )
-        )
+        self.assertContains(response, "Operational superuser created")
+        self.assertContains(response, "Record this password securely now")
         created_user = get_user_model().objects.get(username="ops-provisioned")
         self.assertTrue(created_user.is_superuser)
         self.assertTrue(created_user.is_staff)
@@ -291,6 +283,36 @@ class OperatorJourneyViewTests(TestCase):
         )
         token = GitHubToken.objects.get(user=created_user)
         self.assertEqual(token.label, "octocat")
+
+    def test_provision_step_ignores_autofilled_password_when_mode_is_random(self):
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+        )
+
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            {
+                "username": "ops-random-password",
+                "email": "ops-random-password@example.com",
+                "security_groups": [self.group.pk],
+                "password_mode": "random",
+                "password": "autofilled-password",
+            },
+        )
+
+        created_user = get_user_model().objects.get(username="ops-random-password")
+        self.assertFalse(created_user.check_password("autofilled-password"))
 
     def test_provision_step_rejects_existing_username(self):
         provision_step = OperatorJourneyStep.objects.create(
@@ -353,6 +375,55 @@ class OperatorJourneyViewTests(TestCase):
         )
         self.assertFalse(
             get_user_model().objects.filter(username="ops-not-allowed").exists()
+        )
+
+    def test_non_superuser_staff_cannot_view_or_submit_provision_step(self):
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+        )
+
+        staff_user = get_user_model().objects.create_user(
+            username="staff-operator",
+            password="x",
+            is_staff=True,
+            is_superuser=False,
+        )
+        staff_user.groups.add(self.group)
+        self.client.force_login(staff_user)
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+        )
+
+        view_response = self.client.get(
+            reverse("ops:operator-journey-step", args=[provision_step.pk])
+        )
+        self.assertEqual(view_response.status_code, 403)
+
+        submit_response = self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            {
+                "username": "ops-should-not-create",
+                "security_groups": [self.group.pk],
+                "password_mode": "random",
+            },
+        )
+        self.assertEqual(submit_response.status_code, 403)
+        self.assertFalse(
+            get_user_model().objects.filter(username="ops-should-not-create").exists()
         )
 
 

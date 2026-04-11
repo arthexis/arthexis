@@ -36,7 +36,7 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
     )
     password = forms.CharField(
         required=False,
-        widget=forms.PasswordInput(render_value=True),
+        widget=forms.PasswordInput(),
         help_text="Required only when using a manual password.",
     )
     github_username = forms.CharField(
@@ -46,7 +46,7 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
     )
     github_token = forms.CharField(
         required=False,
-        widget=forms.PasswordInput(render_value=True),
+        widget=forms.PasswordInput(),
         help_text="Optional GitHub token to store for this new user.",
     )
 
@@ -63,8 +63,12 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
     def clean_username(self):
         """Reject usernames that already exist."""
 
-        username = (self.cleaned_data.get("username") or "").strip()
-        if get_user_model().objects.filter(username=username).exists():
+        user_model = get_user_model()
+        username = user_model.normalize_username(
+            (self.cleaned_data.get("username") or "").strip()
+        )
+        user_manager = getattr(user_model, "all_objects", user_model._default_manager)
+        if user_manager.filter(username=username).exists():
             raise forms.ValidationError("A user with this username already exists.")
         return username
 
@@ -72,7 +76,10 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
         """Create the superuser, assign groups, and return the account/password tuple."""
 
         cleaned_data = self.cleaned_data
-        password = cleaned_data.get("password") or self._generate_password()
+        if cleaned_data["password_mode"] == "custom":
+            password = cleaned_data["password"]
+        else:
+            password = self._generate_password()
         username = cleaned_data["username"]
         email = cleaned_data.get("email", "")
 
