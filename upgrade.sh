@@ -1271,7 +1271,7 @@ wait_for_service_active() {
       active)
         echo "Service $service is active."
         if [ "$service" = "$SERVICE_NAME" ]; then
-          echo "Access the service at $(arthexis_service_url "$BASE_DIR")."
+          arthexis_service_access_message "$BASE_DIR"
         fi
         return 0
         ;;
