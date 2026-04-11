@@ -4,6 +4,7 @@ import ipaddress
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
+from ..cpsim_service import get_cpsim_request_metadata
 from ..utils import resolve_ws_scheme
 from apps.core.notifications import LcdChannel
 from apps.screens.startup_notifications import format_lcd_lines
@@ -394,6 +395,27 @@ def cp_simulator(request):
         "backend_choices": backend_choices,
         "backends_available": backends_available,
     }
+    state_params = state.get("params") or {}
+    cp_path = str(state_params.get("cp_path") or form_params.get("cp_path") or "").strip()
+    host = str(state_params.get("host") or "").strip()
+    ws_port = state_params.get("ws_port")
+    target_host = _format_host_with_port(host, ws_port) if host else ""
+    target_ws_url = ""
+    if target_host and cp_path:
+        target_ws_url = f"{ws_scheme}://{target_host}/{cp_path}"
+    cpsim_request = get_cpsim_request_metadata()
+    is_service_queued = (
+        state.get("running")
+        and state.get("phase") == "Service"
+        and str(state.get("last_status") or "").startswith("cpsim-service start requested")
+    )
+    context.update(
+        {
+            "target_ws_url": target_ws_url,
+            "is_service_queued": is_service_queued,
+            "cpsim_request": cpsim_request,
+        }
+    )
 
     template = "ocpp/includes/cp_simulator_panel.html" if is_htmx else "ocpp/cp_simulator.html"
     return render(request, template, context)

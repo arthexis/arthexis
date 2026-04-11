@@ -11,6 +11,9 @@
 .simulator-details .stat { font-family: monospace; }
 .sim-msg { margin-bottom: 1em; color: #333; }
 .error { color: #b00020; }
+.simulator-service-alert code {
+  font-size: 0.85em;
+}
 
 .simulator-page-header {
   display: flex;

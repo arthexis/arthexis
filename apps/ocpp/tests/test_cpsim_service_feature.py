@@ -6,7 +6,12 @@ import pytest
 
 from apps.features.models import Feature
 from apps.nodes.models import Node
-from apps.ocpp.cpsim_service import CPSIM_FEATURE_SLUG, cpsim_service_enabled
+from apps.ocpp.cpsim_service import (
+    CPSIM_FEATURE_SLUG,
+    get_cpsim_request_metadata,
+    queue_cpsim_request,
+    cpsim_service_enabled,
+)
 
 
 pytestmark = pytest.mark.django_db
@@ -53,3 +58,19 @@ def test_simulator_admin_toggle_requires_local_node(admin_client, monkeypatch):
     assert response.status_code == 200
     messages = [str(message) for message in response.context["messages"]]
     assert any("No local node is registered" in message for message in messages)
+
+
+def test_get_cpsim_request_metadata_returns_unqueued_when_absent(tmp_path):
+    metadata = get_cpsim_request_metadata(base_dir=tmp_path)
+
+    assert metadata["queued"] is False
+    assert metadata["lock_path"].endswith("cpsim-service.lck")
+
+
+def test_get_cpsim_request_metadata_reports_age_for_existing_queue(tmp_path):
+    queue_cpsim_request(action="start", name="Simulator", base_dir=tmp_path)
+
+    metadata = get_cpsim_request_metadata(base_dir=tmp_path)
+
+    assert metadata["queued"] is True
+    assert metadata["age_seconds"] >= 0
