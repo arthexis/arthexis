@@ -10,6 +10,7 @@ from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ImproperlyConfigured
 from django.db import DatabaseError
+from django.urls import Resolver404, resolve
 
 from .models import Landing, LandingLead, ViewHistory
 from .utils import (
