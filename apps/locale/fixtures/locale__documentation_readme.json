@@ -4,8 +4,8 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "slug": "constellation-readme",
-      "title": "Constelaci\u00f3n Arthexis README",
+      "slug": "arthexis-readme",
+      "title": "Arthexis README",
       "description": "Localized README landing content for the platform.",
       "default_language": [
         "en"
@@ -18,57 +18,12 @@
       "is_seed_data": true,
       "is_deleted": false,
       "documentation": [
-        "constellation-readme"
+        "arthexis-readme"
       ],
       "language": [
         "en"
       ],
       "source_path": "README.md",
-      "body": ""
-    }
-  },
-  {
-    "model": "locale.documentationtranslation",
-    "fields": {
-      "is_seed_data": true,
-      "is_deleted": false,
-      "documentation": [
-        "constellation-readme"
-      ],
-      "language": [
-        "es"
-      ],
-      "source_path": "apps/locale/docs/README.es.md",
-      "body": ""
-    }
-  },
-  {
-    "model": "locale.documentationtranslation",
-    "fields": {
-      "is_seed_data": true,
-      "is_deleted": false,
-      "documentation": [
-        "constellation-readme"
-      ],
-      "language": [
-        "it"
-      ],
-      "source_path": "apps/locale/docs/README.it.md",
-      "body": ""
-    }
-  },
-  {
-    "model": "locale.documentationtranslation",
-    "fields": {
-      "is_seed_data": true,
-      "is_deleted": false,
-      "documentation": [
-        "constellation-readme"
-      ],
-      "language": [
-        "de"
-      ],
-      "source_path": "apps/locale/docs/README.de.md",
       "body": ""
     }
   }

@@ -9,38 +9,5 @@
       "native_name": "English",
       "is_default": true
     }
-  },
-  {
-    "model": "locale.language",
-    "fields": {
-      "is_seed_data": true,
-      "is_deleted": false,
-      "code": "es",
-      "english_name": "Spanish (Latin America)",
-      "native_name": "Espa\u00f1ol (Latinoam\u00e9rica)",
-      "is_default": false
-    }
-  },
-  {
-    "model": "locale.language",
-    "fields": {
-      "is_seed_data": true,
-      "is_deleted": false,
-      "code": "it",
-      "english_name": "Italian",
-      "native_name": "Italiano",
-      "is_default": false
-    }
-  },
-  {
-    "model": "locale.language",
-    "fields": {
-      "is_seed_data": true,
-      "is_deleted": false,
-      "code": "de",
-      "english_name": "German",
-      "native_name": "Deutsch",
-      "is_default": false
-    }
   }
 ]

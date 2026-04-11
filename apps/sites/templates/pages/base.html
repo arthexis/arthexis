@@ -161,15 +161,6 @@
                 </svg>
                 <span class="visually-hidden">{% trans "Light Mode" %}</span>
               </button>
-              <form action="{% url 'set_language' %}" method="post" class="d-inline me-2">
-                {% csrf_token %}
-                <input name="next" type="hidden" value="{{ request.get_full_path }}">
-                <select name="language" class="form-select form-select-sm d-inline w-auto language-select">
-                  {% for lang_code, lang_name in LANGUAGES %}
-                    <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>{{ lang_code|slice:":2"|upper }}</option>
-                  {% endfor %}
-                </select>
-              </form>
               <a class="btn btn-sm btn-outline-light position-relative user-info-trigger" href="{% if request.user.is_staff %}{% url 'admin:index' %}{% elif request.user.is_authenticated %}#{% else %}{{ login_url }}{% endif %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-person"></use>
