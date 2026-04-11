@@ -22,7 +22,7 @@
         align-items: center;
         align-content: right;
         gap: 0.5rem;
-        padding: 0.35rem 0.65rem;
+        padding: 0 0.65rem;
         border-radius: 6px;
         background: var(--darkened-bg);
         color: var(--body-fg);
@@ -111,6 +111,8 @@
     }
     .admin-home-actions .button {
         white-space: nowrap;
+        padding-top: 0;
+        padding-bottom: 0;
     }
     .admin-home-actions__form {
         margin: 0;
