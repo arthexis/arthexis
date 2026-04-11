@@ -50,15 +50,6 @@
       <p>
         {% translate "Create an operational superuser for this node role, assign security groups, and optionally connect GitHub credentials for repository/release/issue workflows." %}
       </p>
-      {% if last_provisioned_account.username %}
-        <p>
-          <strong>{% translate "Latest created account:" %}</strong>
-          {{ last_provisioned_account.username }}
-          <br>
-          <strong>{% translate "Password:" %}</strong>
-          <code>{{ last_provisioned_account.password }}</code>
-        </p>
-      {% endif %}
       <p>
         {% translate "After creation, open a private browser session to verify this account can log in." %}
       </p>

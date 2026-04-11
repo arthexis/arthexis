@@ -7,14 +7,19 @@ SEEDED_STEP_SLUG = "provision-ops-superuser"
 def seed_operator_journey_superuser_step(apps, schema_editor):
     """Add the post-role-confirmation superuser provisioning step."""
 
+    OperatorJourney = apps.get_model("ops", "OperatorJourney")
     OperatorJourneyStep = apps.get_model("ops", "OperatorJourneyStep")
+    journey = OperatorJourney.objects.filter(slug=SEEDED_JOURNEY_SLUG).first()
+    if journey is None:
+        return
+
     OperatorJourneyStep.objects.filter(
         journey__slug=SEEDED_JOURNEY_SLUG,
         slug=SEEDED_STEP_SLUG,
         is_seed_data=True,
     ).delete()
     OperatorJourneyStep.objects.create(
-        journey=apps.get_model("ops", "OperatorJourney").objects.get(slug=SEEDED_JOURNEY_SLUG),
+        journey=journey,
         slug=SEEDED_STEP_SLUG,
         title="Create operational superuser and security access",
         instruction=(
@@ -51,5 +56,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(seed_operator_journey_superuser_step, unseed_operator_journey_superuser_step),
+        migrations.RunPython(
+            seed_operator_journey_superuser_step, unseed_operator_journey_superuser_step
+        ),
     ]

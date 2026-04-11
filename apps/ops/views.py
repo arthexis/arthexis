@@ -62,7 +62,9 @@ def _build_node_role_validation_summary() -> dict[str, object]:
         local_node_role = _normalize_role_name(role_name)
 
     current_role = configured_role or lock_role or local_node_role
-    role_mismatch = bool(local_node_role and current_role and local_node_role != current_role)
+    role_mismatch = bool(
+        local_node_role and current_role and local_node_role != current_role
+    )
 
     suggested_role = current_role or local_node_role
     normalized_slug = str(suggested_role or "").strip().lower()
@@ -70,7 +72,9 @@ def _build_node_role_validation_summary() -> dict[str, object]:
     if normalized_slug in {role.lower() for role in KNOWN_NODE_ROLES}:
         commands.extend([f"./configure.sh --{normalized_slug}", "./service-start.sh"])
     else:
-        commands.extend([f"./configure.sh --{role.lower()}" for role in KNOWN_NODE_ROLES])
+        commands.extend(
+            [f"./configure.sh --{role.lower()}" for role in KNOWN_NODE_ROLES]
+        )
         commands.append("./service-start.sh")
 
     return {
@@ -111,7 +115,9 @@ def operator_journey_step(request: HttpRequest, step_id: int):
     """Render the next required journey step with embedded action frame."""
 
     step = (
-        OperatorJourneyStep.objects.filter(pk=step_id, is_active=True, journey__is_active=True)
+        OperatorJourneyStep.objects.filter(
+            pk=step_id, is_active=True, journey__is_active=True
+        )
         .select_related("journey")
         .first()
     )
@@ -133,10 +139,6 @@ def operator_journey_step(request: HttpRequest, step_id: int):
         context["node_role_validation"] = _build_node_role_validation_summary()
     if step.slug == PROVISION_SUPERUSER_STEP_SLUG:
         context["provision_superuser_form"] = OperatorJourneyProvisionSuperuserForm()
-        context["last_provisioned_account"] = request.session.get(
-            "operator_journey_last_provisioned_account",
-            {},
-        )
 
     return render(request, "admin/ops/operator_journey_step.html", context)
 
@@ -149,12 +151,24 @@ def complete_operator_journey_step(request: HttpRequest, step_id: int):
         return redirect(reverse(OPERATOR_JOURNEY_STEP_URL_NAME, args=[step_id]))
 
     step = (
-        OperatorJourneyStep.objects.filter(pk=step_id, is_active=True, journey__is_active=True)
+        OperatorJourneyStep.objects.filter(
+            pk=step_id, is_active=True, journey__is_active=True
+        )
         .select_related("journey")
         .first()
     )
     if step is None:
         raise Http404("Journey step not found")
+
+    current_step = next_step_for_user(user=request.user)
+    if current_step is None:
+        return redirect(reverse("admin:index"))
+    if current_step.pk != step.pk:
+        messages.warning(
+            request,
+            "That step is not available yet. Finish the current required operator step first.",
+        )
+        return redirect(reverse(OPERATOR_JOURNEY_STEP_URL_NAME, args=[current_step.pk]))
 
     if step.slug == PROVISION_SUPERUSER_STEP_SLUG:
         provision_form = OperatorJourneyProvisionSuperuserForm(request.POST)
@@ -165,13 +179,12 @@ def complete_operator_journey_step(request: HttpRequest, step_id: int):
                 {"step": step, "provision_superuser_form": provision_form},
             )
         new_user, password = provision_form.save()
-        request.session["operator_journey_last_provisioned_account"] = {
-            "username": new_user.get_username(),
-            "password": password,
-        }
         messages.success(
             request,
-            f"Created superuser {new_user.get_username()}. Log in with that account when needed.",
+            (
+                f"Created superuser {new_user.get_username()} with password: {password}. "
+                "Record this securely because it will not be shown again."
+            ),
         )
 
     if not complete_step_for_user(user=request.user, step=step):

@@ -14,8 +14,14 @@ from apps.groups.models import SecurityGroup
 class OperatorJourneyProvisionSuperuserForm(forms.Form):
     """Create a superuser account and optionally attach a GitHub token."""
 
-    username = forms.CharField(max_length=150, help_text="Login name for the new superuser.")
-    email = forms.EmailField(required=False, help_text="Optional email address for account recovery.")
+    PASSWORD_ALPHABET = string.ascii_letters + string.digits + "-._~!@#$%^&*"
+
+    username = forms.CharField(
+        max_length=150, help_text="Login name for the new superuser."
+    )
+    email = forms.EmailField(
+        required=False, help_text="Optional email address for account recovery."
+    )
     security_groups = forms.ModelMultipleChoiceField(
         queryset=SecurityGroup.objects.order_by("name"),
         required=True,
@@ -46,9 +52,21 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
-        if cleaned_data.get("password_mode") == "custom" and not cleaned_data.get("password"):
-            self.add_error("password", "Provide a password or switch to random generation.")
+        if cleaned_data.get("password_mode") == "custom" and not cleaned_data.get(
+            "password"
+        ):
+            self.add_error(
+                "password", "Provide a password or switch to random generation."
+            )
         return cleaned_data
+
+    def clean_username(self):
+        """Reject usernames that already exist."""
+
+        username = (self.cleaned_data.get("username") or "").strip()
+        if get_user_model().objects.filter(username=username).exists():
+            raise forms.ValidationError("A user with this username already exists.")
+        return username
 
     def save(self):
         """Create the superuser, assign groups, and return the account/password tuple."""
@@ -59,12 +77,10 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
         email = cleaned_data.get("email", "")
 
         user_model = get_user_model()
-        user = user_model._default_manager.create_user(
+        user = user_model._default_manager.create_superuser(
             username=username,
             email=email,
             password=password,
-            is_staff=True,
-            is_superuser=True,
         )
         user.groups.set(cleaned_data["security_groups"])
 
@@ -75,12 +91,17 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
 
             GitHubToken.objects.update_or_create(
                 user=user,
-                defaults={"label": github_username or "Ops onboarding token", "token": github_token},
+                defaults={
+                    "label": github_username or "Ops onboarding token",
+                    "token": github_token,
+                },
             )
 
         return user, password
 
     @staticmethod
     def _generate_password(length: int = 24) -> str:
-        alphabet = string.ascii_letters + string.digits + "-._~!@#$%^&*"
-        return "".join(secrets.choice(alphabet) for _ in range(length))
+        return "".join(
+            secrets.choice(OperatorJourneyProvisionSuperuserForm.PASSWORD_ALPHABET)
+            for _ in range(length)
+        )
