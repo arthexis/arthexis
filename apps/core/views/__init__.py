@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .admin_tools import request_temp_password, version_info
+from .admin_tools import request_temp_password, stop_impersonation, version_info
 from .auth import rfid_login
 from .odoo import (
     add_live_subscription,
@@ -35,6 +35,7 @@ __all__ = [
     "product_list",
     "release_progress",
     "request_temp_password",
+    "stop_impersonation",
     "rfid_batch",
     "rfid_login",
     "usage_analytics_summary",

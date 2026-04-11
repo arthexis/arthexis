@@ -54,6 +54,16 @@
       <a href="{{ rfid_write_url }}" class="historylink">{% trans "Write RFID login data" %}</a>
     </li>
   {% endif %}
+  {% if impersonate_url %}
+    <li>
+      <a href="{{ impersonate_url }}" class="historylink">{% trans "Impersonate user" %}</a>
+    </li>
+  {% endif %}
+  {% if stop_impersonation_url %}
+    <li>
+      <a href="{{ stop_impersonation_url }}" class="historylink">{% trans "Stop impersonation" %}</a>
+    </li>
+  {% endif %}
 {% endblock %}
 
 {% block extrajs %}

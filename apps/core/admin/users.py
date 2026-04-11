@@ -8,6 +8,7 @@ from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
+from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.locals.user_data import (
@@ -18,6 +19,10 @@ from apps.locals.user_data import (
     user_allows_user_data,
 )
 from apps.core.admin.mixins import OwnedObjectLinksMixin
+from apps.core.impersonation import (
+    get_impersonator_user_id,
+    store_impersonator_user_id,
+)
 from apps.core.models import get_owned_objects_for_user
 from apps.users import temp_passwords
 from apps.users.models import User
@@ -67,8 +72,12 @@ GUEST_NAME_NOUNS = (
 class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
     form = UserChangeRFIDForm
     add_form = UserCreationWithExpirationForm
-    actions = (DjangoUserAdmin.actions or []) + ["login_as_guest_user"]
+    actions = (DjangoUserAdmin.actions or []) + [
+        "impersonate_selected_user",
+        "login_as_guest_user",
+    ]
     changelist_actions = ["login_as_guest_user"]
+    list_display = (*DjangoUserAdmin.list_display, "impersonate_link")
     fieldsets = _include_site_template(
         _include_temporary_expiration(
             _include_require_2fa(_append_operate_as(DjangoUserAdmin.fieldsets))
@@ -108,6 +117,10 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
         suffix = secrets.token_hex(2)
         return f"{candidate}-{suffix}" if candidate else f"guest-{suffix}"
 
+    def _change_url(self, user_id) -> str:
+        opts = self.model._meta
+        return reverse(f"admin:{opts.app_label}_{opts.model_name}_change", args=[user_id])
+
     def get_urls(self):
         urls = super().get_urls()
         custom = [
@@ -115,7 +128,12 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
                 "login-as-guest/",
                 self.admin_site.admin_view(self.login_as_guest_user),
                 name="core_user_login_as_guest_user",
-            )
+            ),
+            path(
+                "<path:user_id>/impersonate/",
+                self.admin_site.admin_view(self.impersonate_user_view),
+                name="core_user_impersonate",
+            ),
         ]
         custom += [
             path(
@@ -125,6 +143,17 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
             ),
         ]
         return custom + urls
+
+    def _can_impersonate(self, request, target=None) -> bool:
+        if not request.user.is_active or not request.user.is_superuser:
+            return False
+        if target is None:
+            return True
+        if not getattr(target, "is_active", False):
+            return False
+        if target.pk == request.user.pk:
+            return False
+        return True
 
     def get_changelist_actions(self, request):
         parent = getattr(super(), "get_changelist_actions", None)
@@ -136,6 +165,14 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
         if "login_as_guest_user" not in actions:
             actions.append("login_as_guest_user")
         return actions
+
+    def impersonate_link(self, obj):
+        if not getattr(obj, "pk", None):
+            return "—"
+        url = reverse("admin:core_user_impersonate", args=[obj.pk])
+        return format_html('<a class="button" href="{}">{}</a>', url, _("Impersonate"))
+
+    impersonate_link.short_description = _("Impersonate")
 
     @admin.action(description=_("Login as Guest"), permissions=["add"])
     def login_as_guest_user(self, request, queryset=None):
@@ -180,6 +217,63 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
 
     login_as_guest_user.label = _("Login as Guest")
     login_as_guest_user.requires_queryset = False
+
+    @admin.action(
+        description=_("Impersonate selected user"),
+        permissions=["change"],
+    )
+    def impersonate_selected_user(self, request, queryset):
+        if not request.user.is_superuser:
+            raise PermissionDenied
+        selected_ids = list(queryset.values_list("pk", flat=True)[:2])
+        if not selected_ids:
+            self.message_user(
+                request,
+                _("Select one user to impersonate."),
+                level=messages.WARNING,
+            )
+            return None
+        if len(selected_ids) > 1 or queryset.count() > 1:
+            self.message_user(
+                request,
+                _("Please select exactly one user to impersonate."),
+                level=messages.WARNING,
+            )
+            return None
+        return HttpResponseRedirect(
+            reverse("admin:core_user_impersonate", args=[selected_ids[0]])
+        )
+
+    def impersonate_user_view(self, request, user_id):
+        if not request.user.is_superuser:
+            raise PermissionDenied
+        target = self.get_object(request, user_id)
+        if target is None:
+            raise PermissionDenied
+        if not self._can_impersonate(request, target):
+            self.message_user(
+                request,
+                _("You cannot impersonate the selected user."),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(
+                self._change_url(target.pk)
+            )
+        impersonator_id = get_impersonator_user_id(request.session)
+        if impersonator_id is None:
+            impersonator_id = request.user.pk
+        login(request, target, backend="apps.users.backends.PasswordOrOTPBackend")
+        store_impersonator_user_id(request.session, impersonator_id)
+        self.message_user(
+            request,
+            _("You are now impersonating %(username)s.")
+            % {"username": target.get_username()},
+            level=messages.WARNING,
+        )
+        next_url = request.GET.get("next")
+        if next_url:
+            return HttpResponseRedirect(next_url)
+        return HttpResponseRedirect("/")
 
     def get_fieldsets(self, request, obj=None):
         fieldsets = list(super().get_fieldsets(request, obj))
@@ -259,6 +353,13 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
                 context_data["rfid_write_url"] = reverse(
                     "admin:core_user_write_login_rfid", args=[obj.pk]
                 )
+                if self._can_impersonate(request, obj):
+                    context_data["impersonate_url"] = reverse(
+                        "admin:core_user_impersonate",
+                        args=[obj.pk],
+                    )
+            if get_impersonator_user_id(getattr(request, "session", None)) is not None:
+                context_data["stop_impersonation_url"] = reverse("stop-impersonation")
         return response
 
     def write_login_rfid(self, request, user_id):
@@ -316,10 +417,7 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
                             level=messages.SUCCESS,
                         )
                         return HttpResponseRedirect(
-                            reverse(
-                                "admin:core_user_change",
-                                args=[user.pk],
-                            )
+                            self._change_url(user.pk)
                         )
 
         context = dict(self.admin_site.each_context(request))

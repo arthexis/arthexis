@@ -9,5 +9,12 @@
       </a>
     </li>
   {% endif %}
+  {% if request.session.core_admin_impersonator_user_id %}
+    <li>
+      <a href="{% url 'stop-impersonation' %}?next={{ request.get_full_path|urlencode }}">
+        {% translate "Stop impersonation" %}
+      </a>
+    </li>
+  {% endif %}
   {{ block.super }}
 {% endblock %}
