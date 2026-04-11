@@ -237,6 +237,7 @@ def _ensure_gpio_loaded() -> bool:
         import RPi.GPIO as gpio_mod  # type: ignore
     except Exception as exc:  # pragma: no cover - hardware dependent
         logger.debug("RFID auto-detect: RPi.GPIO unavailable: %s", exc)
+        _disable_hardware("GPIO library not available")
         return False
     GPIO = gpio_mod
     return True
@@ -344,7 +345,8 @@ def _setup_hardware():  # pragma: no cover - hardware dependent
     try:
         from mfrc522 import MFRC522  # type: ignore
     except Exception as exc:
-        logger.warning("MFRC522 library not available: %s", exc)
+        logger.debug("MFRC522 library not available: %s", exc)
+        _disable_hardware("MFRC522 library not available")
         return False
 
     try:
@@ -449,7 +451,13 @@ def start():
     if not is_configured():
         logger.debug("RFID not configured; background reader not started")
         return
-    if GPIO is None:
+    if _hardware_disabled_reason:
+        logger.debug(
+            "RFID background reader start skipped; hardware disabled (%s)",
+            _hardware_disabled_reason,
+        )
+        return
+    if not _ensure_gpio_loaded():
         return
     if _thread and _thread.is_alive():
         return
