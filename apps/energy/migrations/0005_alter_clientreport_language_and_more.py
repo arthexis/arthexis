@@ -4,6 +4,14 @@ import apps.locale.language
 from django.db import migrations, models
 
 
+def backfill_report_languages(apps, schema_editor):
+    ClientReport = apps.get_model("energy", "ClientReport")
+    ClientReportSchedule = apps.get_model("energy", "ClientReportSchedule")
+
+    ClientReport.objects.filter(language__in=["de", "es", "it"]).update(language="en")
+    ClientReportSchedule.objects.filter(language__in=["de", "es", "it"]).update(language="en")
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -11,6 +19,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(backfill_report_languages, migrations.RunPython.noop),
         migrations.AlterField(
             model_name="clientreport",
             name="language",
