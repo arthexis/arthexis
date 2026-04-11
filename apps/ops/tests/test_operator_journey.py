@@ -152,6 +152,9 @@ class OperatorJourneyViewTests(TestCase):
         self.assertContains(
             response, "Node role changes must be applied with install/configure scripts"
         )
+        self.assertContains(response, "Current config and completion command")
+        self.assertContains(response, "Roles and auto-upgrade options")
+        self.assertContains(response, 'id="operator-upgrade-command"', html=False)
         self.assertContains(response, "./configure.sh --check")
         self.assertContains(response, "Decision flow:")
         self.assertNotContains(response, "<iframe", html=False)

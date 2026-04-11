@@ -70,17 +70,59 @@ def _build_node_role_validation_summary() -> dict[str, object]:
 
     suggested_role = current_role or local_node_role
     normalized_slug = str(suggested_role or "").strip().lower()
+    available_roles = list(KNOWN_NODE_ROLES)
+    try:
+        from apps.nodes.models import NodeRole, UpgradePolicy
+    except (ImportError, LookupError):
+        upgrade_policy_options = [
+            {"label": "Stable", "flags": ["--stable"]},
+            {"label": "Unstable", "flags": ["--latest"]},
+            {"label": "Force refresh", "flags": ["--force-refresh"]},
+            {"label": "Pre-check", "flags": ["--pre-check"]},
+            {"label": "No restart", "flags": ["--no-restart"]},
+        ]
+    else:
+        role_names = list(
+            NodeRole.objects.order_by("name").values_list("name", flat=True)
+        )
+        if role_names:
+            available_roles = role_names
+        upgrade_policy_options = []
+        for policy in UpgradePolicy.objects.order_by("name"):
+            channel_flag = (
+                "--latest" if policy.channel == UpgradePolicy.Channel.UNSTABLE else "--stable"
+            )
+            option_label = f"Policy: {policy.name}"
+            if not policy.is_active:
+                option_label = f"{option_label} (inactive)"
+            option_flags = [channel_flag]
+            if policy.requires_pypi_packages:
+                option_flags.append("--force-refresh")
+            upgrade_policy_options.append(
+                {"label": option_label, "flags": option_flags}
+            )
+        if not upgrade_policy_options:
+            upgrade_policy_options = [
+                {"label": "Stable", "flags": ["--stable"]},
+                {"label": "Unstable", "flags": ["--latest"]},
+                {"label": "Force refresh", "flags": ["--force-refresh"]},
+                {"label": "Pre-check", "flags": ["--pre-check"]},
+                {"label": "No restart", "flags": ["--no-restart"]},
+            ]
+
     commands: list[str] = ["./configure.sh --check"]
-    if normalized_slug in {role.lower() for role in KNOWN_NODE_ROLES}:
+    valid_roles = {_normalize_role_name(role).lower() for role in available_roles}
+    if normalized_slug in valid_roles:
         commands.extend([f"./configure.sh --{normalized_slug}", "./service-start.sh"])
     else:
-        commands.extend(
-            [f"./configure.sh --{role.lower()}" for role in KNOWN_NODE_ROLES]
-        )
+        commands.extend([f"./configure.sh --{role.lower()}" for role in available_roles])
         commands.append("./service-start.sh")
 
     return {
+        "available_roles": available_roles,
         "configured_role": configured_role or "Unknown",
+        "default_upgrade_command": "./upgrade.sh --stable --pre-check",
+        "upgrade_policy_options": upgrade_policy_options,
         "lock_role": lock_role or "Unknown",
         "local_node_role": local_node_role or "Unknown",
         "local_node_label": local_node_label,
