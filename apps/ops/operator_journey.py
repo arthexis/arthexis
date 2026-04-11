@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from django.contrib.auth.models import AbstractBaseUser
+from django.db.models import Q
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.groups.security import ensure_default_staff_groups
 
@@ -19,7 +22,9 @@ class OperatorJourneyStatus:
     has_journey: bool
     is_complete: bool
     message: str
+    task_title: str
     url: str
+    available_since: datetime | None = None
 
 
 def next_step_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStep | None:
@@ -56,7 +61,13 @@ def status_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStatus:
     """Build dashboard status text and URL for the signed-in user."""
 
     if not user.is_authenticated:
-        return OperatorJourneyStatus(has_journey=False, is_complete=True, message="", url="")
+        return OperatorJourneyStatus(
+            has_journey=False,
+            is_complete=True,
+            message="",
+            task_title="",
+            url="",
+        )
 
     has_journey_steps = OperatorJourneyStep.objects.filter(
         is_active=True,
@@ -65,7 +76,13 @@ def status_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStatus:
     )
 
     if not has_journey_steps.exists():
-        return OperatorJourneyStatus(has_journey=False, is_complete=True, message="", url="")
+        return OperatorJourneyStatus(
+            has_journey=False,
+            is_complete=True,
+            message="",
+            task_title="",
+            url="",
+        )
 
     next_step = next_step_for_user(user=user)
     if next_step is None:
@@ -73,15 +90,40 @@ def status_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStatus:
             has_journey=True,
             is_complete=True,
             message="All Operator tasks completed to date. Keep coming back for more.",
+            task_title="",
             url="",
         )
 
     return OperatorJourneyStatus(
         has_journey=True,
         is_complete=False,
-        message=f"Next Operator task: {next_step.title}",
+        message=next_step.title,
+        task_title=next_step.title,
         url=reverse("ops:operator-journey-step", args=[next_step.pk]),
+        available_since=_first_available_at(user=user, next_step=next_step),
     )
+
+
+def _first_available_at(*, user: AbstractBaseUser, next_step: OperatorJourneyStep) -> datetime:
+    previous_step = (
+        OperatorJourneyStep.objects.filter(journey=next_step.journey, is_active=True)
+        .exclude(pk=next_step.pk)
+        .filter(Q(order__lt=next_step.order) | Q(order=next_step.order, id__lt=next_step.id))
+        .order_by("-order", "-id")
+        .first()
+    )
+
+    if previous_step is None:
+        return user.date_joined
+
+    completion = (
+        OperatorJourneyStepCompletion.objects.filter(user=user, step=previous_step)
+        .order_by("completed_at")
+        .first()
+    )
+    if completion is None:
+        return timezone.now()
+    return completion.completed_at
 
 
 def _active_security_groups_for_user(user: AbstractBaseUser):
