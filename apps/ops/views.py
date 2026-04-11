@@ -1,5 +1,8 @@
 """Views supporting in-progress operation banners."""
 
+from pathlib import Path
+
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
@@ -13,6 +16,71 @@ from .models import OperatorJourneyStep
 from .operator_journey import complete_step_for_user, next_step_for_user
 from .redirects import safe_host_redirect
 from .status_surface import build_status_surface, scoped_log_excerpts
+
+ROLE_VALIDATION_STEP_SLUG = "validate-local-node-role"
+KNOWN_NODE_ROLES = ("Terminal", "Satellite", "Control", "Watchtower")
+
+
+def _normalize_role_name(value: str) -> str:
+    """Return the canonical role name when known, else the input as-is."""
+
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return ""
+    role_lookup = {role.lower(): role for role in KNOWN_NODE_ROLES}
+    return role_lookup.get(cleaned.lower(), cleaned)
+
+
+def _build_node_role_validation_summary() -> dict[str, object]:
+    """Build operator-facing local role checks and command guidance."""
+
+    lock_role = ""
+    lock_path = Path(settings.BASE_DIR) / ".locks" / "role.lck"
+    if lock_path.exists():
+        try:
+            lock_role = _normalize_role_name(lock_path.read_text().strip())
+        except OSError:
+            lock_role = ""
+
+    configured_role = _normalize_role_name(getattr(settings, "NODE_ROLE", ""))
+
+    local_node_role = ""
+    local_node_label = "Not registered"
+    try:
+        from apps.nodes.models import Node
+    except Exception:
+        local_node = None
+    else:
+        local_node = Node.get_local()
+    if local_node:
+        local_node_label = str(local_node)
+        role_name = getattr(getattr(local_node, "role", None), "name", "")
+        local_node_role = _normalize_role_name(role_name)
+
+    current_role = configured_role or lock_role or local_node_role
+    role_mismatch = bool(local_node_role and current_role and local_node_role != current_role)
+
+    suggested_role = current_role or local_node_role
+    normalized_slug = str(suggested_role or "").strip().lower()
+    commands: list[str] = ["./configure.sh --check"]
+    if normalized_slug in {role.lower() for role in KNOWN_NODE_ROLES}:
+        commands.extend([f"./configure.sh --{normalized_slug}", "./service-start.sh"])
+    else:
+        commands.extend(
+            [
+                "./configure.sh --terminal|--satellite|--control|--watchtower",
+                "./service-start.sh",
+            ]
+        )
+
+    return {
+        "configured_role": configured_role or "Unknown",
+        "lock_role": lock_role or "Unknown",
+        "local_node_role": local_node_role or "Unknown",
+        "local_node_label": local_node_label,
+        "role_mismatch": role_mismatch,
+        "commands": commands,
+    }
 
 
 @staff_member_required
@@ -60,7 +128,11 @@ def operator_journey_step(request: HttpRequest, step_id: int):
         )
         return redirect(reverse(OPERATOR_JOURNEY_STEP_URL_NAME, args=[next_step.pk]))
 
-    return render(request, "admin/ops/operator_journey_step.html", {"step": step})
+    context = {"step": step}
+    if step.slug == ROLE_VALIDATION_STEP_SLUG:
+        context["node_role_validation"] = _build_node_role_validation_summary()
+
+    return render(request, "admin/ops/operator_journey_step.html", context)
 
 
 @staff_member_required

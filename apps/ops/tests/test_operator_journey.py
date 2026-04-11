@@ -98,7 +98,7 @@ class OperatorJourneyViewTests(TestCase):
         self.step_1 = OperatorJourneyStep.objects.create(
             journey=self.journey,
             title="Validate role",
-            slug="validate-role",
+            slug="validate-local-node-role",
             instruction="Validate the role.",
             help_text="Switch role and restart if required.",
             iframe_url="/admin/nodes/node/",
@@ -126,6 +126,14 @@ class OperatorJourneyViewTests(TestCase):
         response = self.client.get(reverse("ops:operator-journey-step", args=[self.step_2.pk]))
 
         self.assertRedirects(response, reverse("ops:operator-journey-step", args=[self.step_1.pk]))
+
+    def test_validate_role_step_shows_setup_check_instead_of_iframe(self):
+        response = self.client.get(reverse("ops:operator-journey-step", args=[self.step_1.pk]))
+
+        self.assertContains(response, "Node role changes must be applied with install/configure scripts")
+        self.assertContains(response, "./configure.sh --check")
+        self.assertContains(response, "Decision flow:")
+        self.assertNotContains(response, "<iframe", html=False)
 
     def test_completing_all_steps_shows_completion_message_on_dashboard(self):
         self.client.post(reverse("ops:operator-journey-step-complete", args=[self.step_1.pk]))
