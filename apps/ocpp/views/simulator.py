@@ -397,6 +397,26 @@ def cp_simulator(request):
     }
     state_params = state.get("params") or {}
     cp_path = str(state_params.get("cp_path") or form_params.get("cp_path") or "").strip()
+    simulator_log_url = None
+    if getattr(user, "is_staff", False):
+        simulator_for_logs = None
+        if cp_path:
+            simulator_for_logs = (
+                Simulator.objects.filter(cp_path=cp_path, is_deleted=False)
+                .order_by("-default", "pk")
+                .first()
+            )
+        if simulator_for_logs is None:
+            simulator_for_logs = default_simulator
+        try:
+            if simulator_for_logs is not None:
+                simulator_log_url = reverse(
+                    "admin:ocpp_simulator_log", args=[simulator_for_logs.pk]
+                )
+            else:
+                simulator_log_url = reverse("admin:log_viewer")
+        except NoReverseMatch:
+            simulator_log_url = None
     host = str(state_params.get("host") or "").strip()
     ws_port = state_params.get("ws_port")
     target_host = _format_host_with_port(host, ws_port) if host else ""
@@ -419,6 +439,7 @@ def cp_simulator(request):
             "target_ws_url": target_ws_url,
             "is_service_queued": is_service_queued,
             "cpsim_request": cpsim_request,
+            "simulator_log_url": simulator_log_url,
         }
     )
 
