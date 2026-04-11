@@ -7,10 +7,10 @@
     #admin-home-header {
         display: grid;
         grid-template-columns: auto minmax(var(--admin-ui-dashboard-net-message-min-width, 18rem), 30%) minmax(0, 1fr);
-        align-items: center;
+        align-items: start;
         column-gap: 1rem;
-        row-gap: 0.15rem;
-        margin-bottom: 1.25rem;
+        row-gap: 0;
+        margin-bottom: 0;
     }
     #admin-home-header h1 {
         margin: 0;
@@ -99,11 +99,13 @@
     }
     .admin-home-actions {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: flex-end;
         gap: 8px;
         flex-wrap: wrap;
         justify-self: end;
+        align-self: start;
+        margin: 0;
         width: 100%;
         max-width: none;
     }
