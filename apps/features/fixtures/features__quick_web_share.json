@@ -1,0 +1,40 @@
+[
+  {
+    "model": "features.feature",
+    "fields": {
+      "slug": "quick-web-share",
+      "display": "Quick Web Share",
+      "summary": "Controls public share actions, short-link generation, and share preview embeds in page chrome.",
+      "is_enabled": false,
+      "main_app": [
+        "links"
+      ],
+      "node_feature": null,
+      "admin_requirements": "Staff and admin pages should only render the quick-share trigger and modal when this suite feature is enabled.",
+      "public_requirements": "Public pages should not expose share buttons, short links, QR codes, or preview embeds unless this suite feature is enabled.",
+      "service_requirements": "Requires links short-url storage and share-preview middleware behavior only when enabled.",
+      "admin_views": [
+        "admin:index"
+      ],
+      "public_views": [
+        "pages:index"
+      ],
+      "service_views": [
+        "apps.links.context_processors.share_short_url",
+        "apps.sites.middleware.SharePreviewPublicMiddleware"
+      ],
+      "code_locations": [
+        "apps/features/utils.py",
+        "apps/links/context_processors.py",
+        "apps/sites/middleware.py",
+        "apps/sites/templates/pages/base.html"
+      ],
+      "protocol_coverage": {},
+      "created_at": "2024-02-28T00:00:00Z",
+      "updated_at": "2024-02-28T00:00:00Z",
+      "is_seed_data": true,
+      "is_deleted": false,
+      "source": "mainstream"
+    }
+  }
+]
