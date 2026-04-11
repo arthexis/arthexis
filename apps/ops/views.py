@@ -19,6 +19,7 @@ from .status_surface import build_status_surface, scoped_log_excerpts
 
 ROLE_VALIDATION_STEP_SLUG = "validate-local-node-role"
 KNOWN_NODE_ROLES = ("Terminal", "Satellite", "Control", "Watchtower")
+ROLE_ALIASES = {"constellation": "Watchtower"}
 
 
 def _normalize_role_name(value: str) -> str:
@@ -28,6 +29,7 @@ def _normalize_role_name(value: str) -> str:
     if not cleaned:
         return ""
     role_lookup = {role.lower(): role for role in KNOWN_NODE_ROLES}
+    role_lookup.update(ROLE_ALIASES)
     return role_lookup.get(cleaned.lower(), cleaned)
 
 
@@ -48,7 +50,7 @@ def _build_node_role_validation_summary() -> dict[str, object]:
     local_node_label = "Not registered"
     try:
         from apps.nodes.models import Node
-    except Exception:
+    except (ImportError, LookupError):
         local_node = None
     else:
         local_node = Node.get_local()
@@ -66,12 +68,8 @@ def _build_node_role_validation_summary() -> dict[str, object]:
     if normalized_slug in {role.lower() for role in KNOWN_NODE_ROLES}:
         commands.extend([f"./configure.sh --{normalized_slug}", "./service-start.sh"])
     else:
-        commands.extend(
-            [
-                "./configure.sh --terminal|--satellite|--control|--watchtower",
-                "./service-start.sh",
-            ]
-        )
+        commands.extend([f"./configure.sh --{role.lower()}" for role in KNOWN_NODE_ROLES])
+        commands.append("./service-start.sh")
 
     return {
         "configured_role": configured_role or "Unknown",

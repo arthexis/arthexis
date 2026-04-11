@@ -11,22 +11,22 @@
       <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
         <thead>
           <tr>
-            <th style="text-align: left; padding: 0.5rem; border-bottom: 1px solid #444;">{% translate "Check" %}</th>
-            <th style="text-align: left; padding: 0.5rem; border-bottom: 1px solid #444;">{% translate "Current value" %}</th>
+            <th style="text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Check" %}</th>
+            <th style="text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Current value" %}</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td style="padding: 0.5rem; border-bottom: 1px solid #333;">{% translate "Runtime/configured role" %}</td>
-            <td style="padding: 0.5rem; border-bottom: 1px solid #333;">{{ node_role_validation.configured_role }}</td>
+            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Runtime/configured role" %}</td>
+            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{{ node_role_validation.configured_role }}</td>
           </tr>
           <tr>
-            <td style="padding: 0.5rem; border-bottom: 1px solid #333;">{% translate "Lock file role (.locks/role.lck)" %}</td>
-            <td style="padding: 0.5rem; border-bottom: 1px solid #333;">{{ node_role_validation.lock_role }}</td>
+            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Lock file role (.locks/role.lck)" %}</td>
+            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{{ node_role_validation.lock_role }}</td>
           </tr>
           <tr>
-            <td style="padding: 0.5rem; border-bottom: 1px solid #333;">{% translate "Registered local node role" %}</td>
-            <td style="padding: 0.5rem; border-bottom: 1px solid #333;">{{ node_role_validation.local_node_role }} ({{ node_role_validation.local_node_label }})</td>
+            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Registered local node role" %}</td>
+            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{{ node_role_validation.local_node_role }} ({{ node_role_validation.local_node_label }})</td>
           </tr>
         </tbody>
       </table>
@@ -54,7 +54,7 @@
       <iframe
         src="{{ step.iframe_url }}"
         title="{{ step.title }}"
-        style="width: 100%; min-height: 60vh; border: 1px solid #d5d5d5; border-radius: 8px;"
+        style="width: 100%; min-height: 60vh; border: 1px solid var(--hairline-color); border-radius: 8px;"
       ></iframe>
     {% endif %}
     <form method="post" action="{% url 'ops:operator-journey-step-complete' step.pk %}" style="margin-top: 1rem;">

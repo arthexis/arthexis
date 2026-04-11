@@ -1,13 +1,14 @@
 """Regression tests for operator journey progression and admin dashboard surfacing."""
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from apps.groups.constants import SITE_OPERATOR_GROUP_NAME
 from apps.groups.models import SecurityGroup
 from apps.ops.models import OperatorJourney, OperatorJourneyStep
 from apps.ops.operator_journey import complete_step_for_user, status_for_user
+from apps.ops.views import _build_node_role_validation_summary
 
 
 class OperatorJourneyFlowTests(TestCase):
@@ -134,6 +135,14 @@ class OperatorJourneyViewTests(TestCase):
         self.assertContains(response, "./configure.sh --check")
         self.assertContains(response, "Decision flow:")
         self.assertNotContains(response, "<iframe", html=False)
+
+    @override_settings(NODE_ROLE="Constellation")
+    def test_role_validation_normalizes_constellation_alias_for_commands(self):
+        summary = _build_node_role_validation_summary()
+
+        self.assertEqual(summary["configured_role"], "Watchtower")
+        self.assertIn("./configure.sh --watchtower", summary["commands"])
+        self.assertNotIn("./configure.sh --terminal|--satellite|--control|--watchtower", summary["commands"])
 
     def test_completing_all_steps_shows_completion_message_on_dashboard(self):
         self.client.post(reverse("ops:operator-journey-step-complete", args=[self.step_1.pk]))
