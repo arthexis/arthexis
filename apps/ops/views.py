@@ -12,12 +12,14 @@ from django.urls import reverse
 
 OPERATOR_JOURNEY_STEP_URL_NAME = "ops:operator-journey-step"
 
+from .forms import OperatorJourneyProvisionSuperuserForm
 from .models import OperatorJourneyStep
 from .operator_journey import complete_step_for_user, next_step_for_user
 from .redirects import safe_host_redirect
 from .status_surface import build_status_surface, scoped_log_excerpts
 
 ROLE_VALIDATION_STEP_SLUG = "validate-local-node-role"
+PROVISION_SUPERUSER_STEP_SLUG = "provision-ops-superuser"
 KNOWN_NODE_ROLES = ("Terminal", "Satellite", "Control", "Watchtower")
 ROLE_ALIASES = {"constellation": "Watchtower"}
 
@@ -129,6 +131,12 @@ def operator_journey_step(request: HttpRequest, step_id: int):
     context = {"step": step}
     if step.slug == ROLE_VALIDATION_STEP_SLUG:
         context["node_role_validation"] = _build_node_role_validation_summary()
+    if step.slug == PROVISION_SUPERUSER_STEP_SLUG:
+        context["provision_superuser_form"] = OperatorJourneyProvisionSuperuserForm()
+        context["last_provisioned_account"] = request.session.get(
+            "operator_journey_last_provisioned_account",
+            {},
+        )
 
     return render(request, "admin/ops/operator_journey_step.html", context)
 
@@ -147,6 +155,24 @@ def complete_operator_journey_step(request: HttpRequest, step_id: int):
     )
     if step is None:
         raise Http404("Journey step not found")
+
+    if step.slug == PROVISION_SUPERUSER_STEP_SLUG:
+        provision_form = OperatorJourneyProvisionSuperuserForm(request.POST)
+        if not provision_form.is_valid():
+            return render(
+                request,
+                "admin/ops/operator_journey_step.html",
+                {"step": step, "provision_superuser_form": provision_form},
+            )
+        new_user, password = provision_form.save()
+        request.session["operator_journey_last_provisioned_account"] = {
+            "username": new_user.get_username(),
+            "password": password,
+        }
+        messages.success(
+            request,
+            f"Created superuser {new_user.get_username()}. Log in with that account when needed.",
+        )
 
     if not complete_step_for_user(user=request.user, step=step):
         next_step = next_step_for_user(user=request.user)

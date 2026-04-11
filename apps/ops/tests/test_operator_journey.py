@@ -10,6 +10,7 @@ from apps.groups.models import SecurityGroup
 from apps.ops.models import OperatorJourney, OperatorJourneyStep
 from apps.ops.operator_journey import complete_step_for_user, status_for_user
 from apps.ops.views import _build_node_role_validation_summary
+from apps.repos.models import GitHubToken
 
 
 class OperatorJourneyFlowTests(TestCase):
@@ -194,6 +195,60 @@ class OperatorJourneyViewTests(TestCase):
 
         self.assertContains(response, "Run admin setup")
         self.assertTrue(admin_user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).exists())
+
+    def test_provision_step_renders_account_form(self):
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        self.client.post(reverse("ops:operator-journey-step-complete", args=[self.step_1.pk]))
+        self.client.post(reverse("ops:operator-journey-step-complete", args=[self.step_2.pk]))
+
+        response = self.client.get(reverse("ops:operator-journey-step", args=[provision_step.pk]))
+
+        self.assertContains(response, "Create account and complete step")
+        self.assertNotContains(response, "<iframe", html=False)
+
+    def test_provision_step_creates_superuser_groups_and_github_token(self):
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        self.client.post(reverse("ops:operator-journey-step-complete", args=[self.step_1.pk]))
+        self.client.post(reverse("ops:operator-journey-step-complete", args=[self.step_2.pk]))
+        extra_group = SecurityGroup.objects.create(name="Provisioned Ops Group")
+
+        response = self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            {
+                "username": "ops-provisioned",
+                "email": "ops-provisioned@example.com",
+                "security_groups": [self.group.pk, extra_group.pk],
+                "password_mode": "random",
+                "github_username": "octocat",
+                "github_token": "ghp_example_token",
+            },
+            follow=True,
+        )
+
+        self.assertContains(response, "Operator journey complete")
+        created_user = get_user_model().objects.get(username="ops-provisioned")
+        self.assertTrue(created_user.is_superuser)
+        self.assertTrue(created_user.is_staff)
+        self.assertSetEqual(
+            set(created_user.groups.values_list("name", flat=True)),
+            {self.group.name, extra_group.name},
+        )
+        token = GitHubToken.objects.get(user=created_user)
+        self.assertEqual(token.label, "octocat")
 
 
 class OperatorJourneyTemplateTagTests(TestCase):
