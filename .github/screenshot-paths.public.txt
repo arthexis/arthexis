@@ -2,3 +2,4 @@
 # One path per line. Comments and blank lines are ignored.
 # Example:
 # /status/
+/
