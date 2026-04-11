@@ -71,6 +71,38 @@ def test_cp_simulator_backend_selector_has_noscript_apply_fallback(
 
 
 @pytest.mark.django_db
+@patch("apps.ocpp.views.simulator.get_cpsim_request_metadata")
+@patch(
+    "apps.ocpp.views.simulator.get_simulator_state",
+    return_value={
+        "running": False,
+        "last_status": "",
+        "last_command": "",
+        "last_error": "",
+        "last_message": "",
+        "phase": "",
+        "start_time": None,
+        "stop_time": None,
+        "params": {},
+    },
+)
+@patch(
+    "apps.ocpp.views.simulator.get_simulator_backend_choices",
+    return_value=(("arthexis", "arthexis"),),
+)
+def test_cp_simulator_skips_cpsim_metadata_lookup_when_not_service_queued(
+    _backend_choices,
+    _state,
+    request_metadata,
+    admin_client,
+):
+    response = admin_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200
+    request_metadata.assert_not_called()
+
+
+@pytest.mark.django_db
 @patch(
     "apps.ocpp.views.simulator.get_cpsim_request_metadata",
     return_value={
@@ -110,3 +142,37 @@ def test_cp_simulator_shows_queued_service_warning_and_target_url(
     assert "ws://localhost:8888/CP2" in content
     assert "Start request queued for cpsim-service." in content
     assert "Queue age: 42s" in content
+
+
+@pytest.mark.django_db
+@patch(
+    "apps.ocpp.views.simulator.get_cpsim_request_metadata",
+    side_effect=OSError("read-only"),
+)
+@patch(
+    "apps.ocpp.views.simulator.get_simulator_state",
+    return_value={
+        "running": True,
+        "last_status": "cpsim-service start requested",
+        "last_command": "start",
+        "last_error": "",
+        "last_message": "",
+        "phase": "Service",
+        "start_time": "2026-04-11 09:28:28",
+        "stop_time": None,
+        "params": {"host": "localhost", "ws_port": 8888, "cp_path": "CP2"},
+    },
+)
+@patch(
+    "apps.ocpp.views.simulator.get_simulator_backend_choices",
+    return_value=(("arthexis", "arthexis"),),
+)
+def test_cp_simulator_handles_cpsim_metadata_oserror(
+    _backend_choices,
+    _state,
+    _request_metadata,
+    admin_client,
+):
+    response = admin_client.get(reverse("ocpp:cp-simulator"))
+
+    assert response.status_code == 200

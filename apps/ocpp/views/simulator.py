@@ -403,12 +403,17 @@ def cp_simulator(request):
     target_ws_url = ""
     if target_host and cp_path:
         target_ws_url = f"{ws_scheme}://{target_host}/{cp_path}"
-    cpsim_request = get_cpsim_request_metadata()
     is_service_queued = (
         state.get("running")
         and state.get("phase") == "Service"
         and str(state.get("last_status") or "").startswith("cpsim-service start requested")
     )
+    cpsim_request = {"queued": False}
+    if is_service_queued:
+        try:
+            cpsim_request = get_cpsim_request_metadata()
+        except OSError:
+            cpsim_request = {"queued": False}
     context.update(
         {
             "target_ws_url": target_ws_url,

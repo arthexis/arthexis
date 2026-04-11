@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import timezone as dt_timezone
 from dataclasses import asdict, is_dataclass
+from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 from typing import Any
 
@@ -26,10 +26,11 @@ def _serialize_params(params: Any) -> dict[str, Any]:
     return {"value": params}
 
 
-def _lock_path(*, base_dir: Path | None = None) -> Path:
+def _lock_path(*, base_dir: Path | None = None, ensure_dir: bool = True) -> Path:
     base = Path(base_dir or settings.BASE_DIR)
     lock_dir = base / ".locks"
-    lock_dir.mkdir(parents=True, exist_ok=True)
+    if ensure_dir:
+        lock_dir.mkdir(parents=True, exist_ok=True)
     return lock_dir / CPSIM_REQUEST_LOCK_NAME
 
 
@@ -52,7 +53,7 @@ def queue_cpsim_request(
         "source": source,
         "params": _serialize_params(params),
     }
-    lock_path = _lock_path(base_dir=base_dir)
+    lock_path = _lock_path(base_dir=base_dir, ensure_dir=True)
     lock_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return lock_path
 
@@ -90,13 +91,16 @@ def get_cpsim_feature():
 def get_cpsim_request_metadata(*, base_dir: Path | None = None) -> dict[str, Any]:
     """Return lock-file metadata for the queued cpsim service request."""
 
-    lock_path = _lock_path(base_dir=base_dir)
-    if not lock_path.exists():
+    lock_path = _lock_path(base_dir=base_dir, ensure_dir=False)
+    try:
+        if not lock_path.exists():
+            return {"queued": False, "lock_path": str(lock_path)}
+    except OSError:
         return {"queued": False, "lock_path": str(lock_path)}
 
     queued_at = timezone.now()
     try:
-        queued_at = timezone.datetime.fromtimestamp(
+        queued_at = datetime.fromtimestamp(
             lock_path.stat().st_mtime,
             tz=dt_timezone.utc,
         )

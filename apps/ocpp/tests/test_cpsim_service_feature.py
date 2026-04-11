@@ -1,5 +1,7 @@
 """Regression tests for OCPP Simulator suite feature control."""
 
+from datetime import datetime
+
 from django.urls import reverse
 
 import pytest
@@ -74,3 +76,25 @@ def test_get_cpsim_request_metadata_reports_age_for_existing_queue(tmp_path):
 
     assert metadata["queued"] is True
     assert metadata["age_seconds"] >= 0
+    assert isinstance(metadata["queued_at"], datetime)
+
+
+def test_get_cpsim_request_metadata_handles_unreadable_lock_path(monkeypatch):
+    class UnreadablePath:
+        def exists(self):
+            raise PermissionError("read-only")
+
+        def __str__(self):
+            return "/workspace/arthexis/.locks/cpsim-service.lck"
+
+    monkeypatch.setattr(
+        "apps.ocpp.cpsim_service._lock_path",
+        lambda **_kwargs: UnreadablePath(),
+    )
+
+    metadata = get_cpsim_request_metadata()
+
+    assert metadata == {
+        "queued": False,
+        "lock_path": "/workspace/arthexis/.locks/cpsim-service.lck",
+    }
