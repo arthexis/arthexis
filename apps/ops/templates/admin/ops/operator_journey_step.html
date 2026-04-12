@@ -1,6 +1,16 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+    &rsaquo;
+    <span>{% translate "Operator journey" %}</span>
+    &rsaquo;
+    <span>{{ step.title }}</span>
+  </div>
+{% endblock %}
+
 {% block content %}
   <div class="module aligned">
     <h1>{{ step.title }}</h1>
@@ -163,7 +173,7 @@
       </script>
     {% elif provision_superuser_form %}
       <p>
-        {% translate "Create an operational superuser for this node role, assign security groups, and optionally connect GitHub credentials for repository/release/issue workflows." %}
+        {% translate "Create an operational superuser for this node role and assign the required security groups." %}
       </p>
       <p>
         {% translate "After creation, open a private browser session to verify this account can log in." %}

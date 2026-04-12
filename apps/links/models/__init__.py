@@ -12,6 +12,7 @@ from .reference import (
     get_reference_file_bucket,
     get_reference_qr_bucket,
 )
+from .reference_attachment import ReferenceAttachment
 from .short_url import ShortURL, get_or_create_short_url
 from .validators import (
     _is_valid_redirect_target,
@@ -29,6 +30,7 @@ __all__ = [
     "ExperienceReference",
     "QRRedirect",
     "QRRedirectLead",
+    "ReferenceAttachment",
     "REFERENCE_FILE_ALLOWED_PATTERNS",
     "REFERENCE_FILE_BUCKET_SLUG",
     "REFERENCE_QR_ALLOWED_PATTERNS",

@@ -38,7 +38,6 @@ Operational audit artifact for endpoint-documentation status across the Arthexis
 | `apps.embeds` | embed routes | Not yet documented (current state) |
 | `apps.teams` | team routes | Not yet documented (current state) |
 | `apps.awg` | awg routes | Not yet documented (current state) |
-| `apps.shortcuts` | shortcut routes | Not yet documented (current state) |
 | `apps.widgets` | widget routes | Not yet documented (current state) |
 | `apps.certs` | certificate routes | Not yet documented (current state) |
 | `apps.ops` | ops routes | Not yet documented (current state) |
