@@ -14,6 +14,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.features.models import Feature
 from apps.features.parameters import set_feature_parameter_values
+from apps.nodes.models import NodeFeature
 
 from .constants import LLM_SUMMARY_SUITE_FEATURE_SLUG
 from .models import LLMSummaryConfig
@@ -84,6 +85,35 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
     )
     change_list_template = "admin/summary/llmsummaryconfig/change_list.html"
 
+    def _sync_summary_suite_feature(self, config: LLMSummaryConfig) -> Feature:
+        """Persist suite feature parameters and ensure node-feature linkage is present."""
+
+        lcd_node_feature = NodeFeature.objects.filter(slug="lcd-screen").first()
+        suite_feature, _created = Feature.objects.get_or_create(
+            slug=LLM_SUMMARY_SUITE_FEATURE_SLUG,
+            defaults={
+                "display": "LLM Summary Suite",
+                "source": Feature.Source.CUSTOM,
+                "is_enabled": True,
+                "node_feature": lcd_node_feature,
+            },
+        )
+        updated_fields: set[str] = set()
+        if suite_feature.node_feature_id != (lcd_node_feature.pk if lcd_node_feature else None):
+            suite_feature.node_feature = lcd_node_feature
+            updated_fields.add("node_feature")
+
+        set_feature_parameter_values(
+            suite_feature,
+            {
+                "backend": config.backend,
+                "model_path": config.model_path,
+            },
+        )
+        updated_fields.update({"metadata", "updated_at"})
+        suite_feature.save(update_fields=sorted(updated_fields))
+        return suite_feature
+
     def get_urls(self):
         """Add the summary configuration wizard endpoint."""
 
@@ -152,23 +182,7 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
                 ]
             )
 
-            suite_feature, _created = Feature.objects.get_or_create(
-                slug=LLM_SUMMARY_SUITE_FEATURE_SLUG,
-                defaults={
-                    "display": "LLM Summary Suite",
-                    "source": Feature.Source.CUSTOM,
-                    "is_enabled": True,
-                    "node_feature": None,
-                },
-            )
-            set_feature_parameter_values(
-                suite_feature,
-                {
-                    "backend": config.backend,
-                    "model_path": config.model_path,
-                },
-            )
-            suite_feature.save(update_fields=["metadata", "updated_at"])
+            self._sync_summary_suite_feature(config)
             messages.success(request, _("LLM summary settings updated."))
             return redirect(
                 reverse("admin:summary_llmsummaryconfig_change", args=[config.pk])
