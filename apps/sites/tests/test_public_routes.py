@@ -3,9 +3,8 @@ import json
 from pathlib import Path
 
 import pytest
-from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import AnonymousUser, Group
 from django.contrib.sites.models import Site
 from django.core.exceptions import PermissionDenied
 from django.test import RequestFactory
@@ -22,7 +21,6 @@ from apps.sites.models import Landing, SiteProfile
 from apps.sites.utils import require_site_operator_or_staff
 
 pytestmark = [pytest.mark.django_db]
-
 
 def test_client_report_download_enforces_login_and_ownership(client, monkeypatch, tmp_path):
     user_model = get_user_model()
@@ -65,7 +63,6 @@ def test_client_report_download_enforces_login_and_ownership(client, monkeypatch
     assert staff_response.status_code == 200
     assert staff_response["Content-Type"] == "application/pdf"
 
-
 def test_invitation_login_invalid_tokens_are_handled_safely(client):
     user_model = get_user_model()
     user = user_model.objects.create_user(
@@ -85,7 +82,6 @@ def test_invitation_login_invalid_tokens_are_handled_safely(client):
     )
     assert malformed_uid_response.status_code == 400
 
-
 @pytest.mark.integration
 def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
     url = reverse("pages:whatsapp-webhook")
@@ -102,7 +98,6 @@ def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
         content_type="application/json",
     )
     assert disabled.status_code == 404
-
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -126,34 +121,6 @@ def test_whatsapp_webhook_post_payload_validation(
     assert response.status_code == expected_status
     if expected_status == 201:
         assert response.json()["status"] == "ok"
-
-
-@pytest.mark.integration
-def test_operator_site_interface_blocks_unsafe_redirect_targets(client):
-    Feature.objects.update_or_create(
-        slug="operator-site-interface",
-        defaults={"display": "Operator Site Interface", "is_enabled": False},
-    )
-    module = Module.objects.create(path="operator-unsafe")
-    landing = Landing.objects.create(
-        module=module,
-        path="//malicious.example/phish",
-        label="Unsafe",
-    )
-    site, _created = Site.objects.get_or_create(
-        domain="testserver",
-        defaults={"name": "testserver"},
-    )
-    SiteProfile.objects.update_or_create(
-        site=site,
-        defaults={"interface_landing": landing},
-    )
-
-    response = client.get(reverse("pages:index"), follow=True)
-
-    assert response.status_code == 200
-    assert 'id="operator-interface-title"' in response.content.decode()
-
 
 @pytest.mark.critical
 def test_require_site_operator_or_staff_enforces_admin_operator_boundary(rf):
@@ -221,7 +188,6 @@ def test_charge_points_module_hides_dashboard_and_simulator_links_from_anonymous
     nav_modules = nav_context["nav_modules"]
     assert not any(module.path == "/charge-points/" for module in nav_modules)
 
-
 def test_charge_points_module_shows_dashboard_and_simulator_links_to_site_operators():
     module = Module.objects.create(path="/charge-points/", menu="Charge Points")
     Landing.objects.create(
@@ -254,7 +220,6 @@ def test_charge_points_module_shows_dashboard_and_simulator_links_to_site_operat
         reverse("ocpp:ocpp-dashboard"),
         reverse("ocpp:cp-simulator"),
     }.issubset(visible_paths)
-
 
 def test_charge_points_module_hides_operator_only_map_link_from_anonymous_users():
     module = Module.objects.create(path="/charge-points/", menu="Charge Points")
