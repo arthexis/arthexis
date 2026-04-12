@@ -214,6 +214,20 @@ def test_git_modified_paths_handles_rename_and_ignored_paths(
             ".venv/bin/python manage.py test run --",
             [".venv/bin/python", "manage.py", "test", "run", "--"],
         ),
+        (
+            ".venv/bin/python manage.py test run -- --tag smoke -k billing",
+            [
+                ".venv/bin/python",
+                "manage.py",
+                "test",
+                "run",
+                "--",
+                "--tag",
+                "smoke",
+                "-k",
+                "billing",
+            ],
+        ),
     ),
 )
 def test_normalize_test_command_accepts_approved_wrappers(
@@ -225,6 +239,11 @@ def test_normalize_test_command_accepts_approved_wrappers(
 def test_normalize_test_command_rejects_unapproved_commands() -> None:
     with pytest.raises(ValueError):
         normalize_test_command("python manage.py test")
+
+
+def test_normalize_test_command_rejects_unsupported_wrapper_flags() -> None:
+    with pytest.raises(ValueError, match="Unsupported flag"):
+        normalize_test_command(".venv/bin/python manage.py test run -- --pdb")
 
 
 def test_build_rejects_unapproved_package_test_command(

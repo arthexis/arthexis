@@ -74,19 +74,27 @@ def normalize_test_command(command: str | None) -> list[str] | None:
     if value == MANAGED_DEFAULT_TEST_COMMAND:
         return None
 
-    policy = _POLICY_BY_VALUE.get(value)
+    argv = shlex.split(value)
+    policy = _policy_for_argv(argv)
     if policy is None:
         raise ValueError(
             "Use one of the approved release test command wrappers. "
             "Extend the release command tooling for new workflows."
         )
 
-    argv = shlex.split(value)
-    if list(policy.prefix) != argv[: len(policy.prefix)]:
-        raise ValueError("Release test command must use an approved command prefix.")
-
     _validate_flags(argv[len(policy.prefix) :], policy)
     return argv
+
+
+def _policy_for_argv(argv: list[str]) -> TestCommandPolicy | None:
+    candidates = [
+        policy
+        for policy in TEST_COMMAND_POLICIES
+        if policy.prefix and list(policy.prefix) == argv[: len(policy.prefix)]
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda candidate: len(candidate.prefix))
 
 
 def _validate_flags(args: Sequence[str], policy: TestCommandPolicy) -> None:
