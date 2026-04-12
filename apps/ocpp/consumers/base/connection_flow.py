@@ -20,7 +20,7 @@ from config.offline import requires_network
 
 logger = logging.getLogger(__name__)
 
-CHARGER_CREATION_FEATURE_SLUG = "standard-charge-point"
+CHARGER_CREATION_FEATURE_SLUG = "cp-auto-enrollment"
 OCPP_VERSION_FEATURE_SLUGS = {
     "ocpp1.6": "ocpp-16-charge-point",
     "ocpp2.0.1": "ocpp-201-charge-point",
