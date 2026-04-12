@@ -28,4 +28,3 @@ Celery beat is the scheduler service that triggers periodic background tasks for
 
 ## Notes
 - Celery beat is typically paired with the Celery worker; disabling the lock disables both.
-- Optional feature reference: [LLM LCD log summary](../feature/llm-summary.md).

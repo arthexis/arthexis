@@ -10,9 +10,12 @@ The current MyPy-owned paths are recorded in `pyproject.toml` under `[tool.mypy]
 - `scripts/sort_pyproject_deps.py`
 - `apps/protocols/`
 - `apps/repos/github.py`
+- `apps/repos/models/repositories.py`
 - `apps/repos/services/github.py`
+- `apps/repos/task_utils.py`
 - `apps/core/services/health.py`
 - `apps/core/services/health_checks.py`
+- `apps/core/services/odoo_quote_report.py`
 - `apps/core/modeling/`
 - `apps/core/system_ui.py`
 - `apps/core/system/ui/formatting.py`
@@ -86,7 +89,6 @@ Small follow-ups:
 - Service-heavy candidates: none currently pending after `apps/repos/views/webhooks.py` moved into the MyPy-owned path set.
 - Recently completed: `apps/repos/release_management.py` now uses narrow `TypedDict` payloads for release/issue/PR data and is included in the MyPy approved path set.
 - Recently completed: `apps/repos/views/webhooks.py` now uses typed webhook payload aliases, reducing `from typing import Any` usage in `apps/repos/` from 4 imports to 3.
-- Registry and model-adjacent candidates: `apps/repos/task_utils.py` and `apps/repos/models/repositories.py`.
 - Replace remaining `Any` payloads with `TypedDict` shapes for GitHub CLI data as those modules become owned.
 
 ### Selected `apps/core/` modules
@@ -101,7 +103,6 @@ Small follow-ups:
 
 - `apps/core/modeling/events.py`
 - `apps/core/modeling/registry.py`
-- `apps/core/services/odoo_quote_report.py`
 
 Keep broader `apps/core/system/ui/` rollout tracked separately until translation and uptime helpers are typed cleanly.
 

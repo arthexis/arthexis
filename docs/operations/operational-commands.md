@@ -78,7 +78,6 @@ For advanced admin workflows and any non-allowlisted Django command, run `manage
 - `run_scheduled_sql_reports`
 - `runftpserver`
 - `runserver`
-- `shortcut_listener`
 - `show_rfid_history`
 - `simulator`
 - `smb`

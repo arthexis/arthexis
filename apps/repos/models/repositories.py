@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import ClassVar, TYPE_CHECKING
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class GitHubRepository(Entity):
     """Source code repository reference specific to GitHub."""
 
-    objects = github.GitHubRepositoryManager()
+    objects: ClassVar[github.GitHubRepositoryManager] = github.GitHubRepositoryManager()
     API_ROOT = github_service.API_ROOT
     REQUEST_TIMEOUT = github_service.REQUEST_TIMEOUT
 
@@ -86,7 +86,7 @@ class GitHubRepository(Entity):
 class PackageRepository(Entity):
     """Represents a package upload target such as PyPI."""
 
-    objects = github.PackageRepositoryManager()
+    objects: ClassVar[github.PackageRepositoryManager] = github.PackageRepositoryManager()
 
     name = models.CharField(max_length=255, unique=True)
     repository_url = models.URLField(blank=True, default="")

@@ -12,7 +12,7 @@ from apps.groups.models import SecurityGroup
 
 
 class OperatorJourneyProvisionSuperuserForm(forms.Form):
-    """Create a superuser account and optionally attach a GitHub token."""
+    """Create a superuser account for operations onboarding."""
 
     PASSWORD_ALPHABET = string.ascii_letters + string.digits + "-._~!@#$%^&*"
 
@@ -38,16 +38,6 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
         required=False,
         widget=forms.PasswordInput(),
         help_text="Required only when using a manual password.",
-    )
-    github_username = forms.CharField(
-        required=False,
-        max_length=255,
-        help_text="Optional GitHub username for repository, release, and issue operations.",
-    )
-    github_token = forms.CharField(
-        required=False,
-        widget=forms.PasswordInput(),
-        help_text="Optional GitHub token to store for this new user.",
     )
 
     def clean(self):
@@ -90,19 +80,6 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
             password=password,
         )
         user.groups.set(cleaned_data["security_groups"])
-
-        github_token = (cleaned_data.get("github_token") or "").strip()
-        github_username = (cleaned_data.get("github_username") or "").strip()
-        if github_token:
-            from apps.repos.models import GitHubToken
-
-            GitHubToken.objects.update_or_create(
-                user=user,
-                defaults={
-                    "label": github_username or "Ops onboarding token",
-                    "token": github_token,
-                },
-            )
 
         return user, password
 
