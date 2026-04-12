@@ -89,6 +89,13 @@
         .empty {
             color: #8892a3;
         }
+        .notice {
+            border: 1px solid #2e3441;
+            border-radius: 10px;
+            color: #d5dbe6;
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+        }
     </style>
 </head>
 <body>
@@ -101,6 +108,9 @@
         {% endif %}
 
         <form method="get">
+            {% if not execution_allowed %}
+                <div class="notice">Execution is restricted to authenticated staff users. Public pages remain metadata-only previews.</div>
+            {% endif %}
             {% for variable in variables %}
                 <div class="field">
                     <label for="var-{{ variable.key }}">{{ variable.label }}</label>
@@ -114,15 +124,15 @@
                     {% if variable.help_text %}
                         <div class="help">{{ variable.help_text }}</div>
                     {% endif %}
-                    {% if errors[variable.key] %}
-                        <div class="error">{{ errors[variable.key] }}</div>
+                    {% if variable.error %}
+                        <div class="error">{{ variable.error }}</div>
                     {% endif %}
                 </div>
             {% empty %}
                 <p class="empty">No variables are defined for this query.</p>
             {% endfor %}
             <div class="actions">
-                <button type="submit">Run Query</button>
+                <button type="submit" {% if not execution_allowed %}disabled{% endif %}>Run Query</button>
             </div>
         </form>
 

@@ -13,6 +13,8 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.entity import Entity
 from apps.sigils.sigil_resolver import resolve_sigil, resolve_sigils
 
+from ..public_query_features import is_public_query_execution_secure_mode_enabled
+
 _LOCAL_SIGIL_PATTERN = re.compile(r"\[VAR\.([A-Za-z0-9_-]+)\]", re.IGNORECASE)
 _SIGIL_TOKEN_PATTERN = re.compile(r"\[[A-Za-z0-9_-]+[\.:=][^\[\]]+\]")
 
@@ -82,6 +84,14 @@ class OdooQuery(Entity):
     def clean(self):
         super().clean()
         errors: dict[str, list[str]] = {}
+        if self.enable_public_view and not is_public_query_execution_secure_mode_enabled(
+            default=False
+        ):
+            errors.setdefault("enable_public_view", []).append(
+                _(
+                    "Public query execution is disabled unless Odoo public query secure mode is explicitly enabled."
+                )
+            )
         if not isinstance(self.kwquery, dict):
             errors.setdefault("kwquery", []).append(
                 _("Provide keyword arguments as a JSON object."),
@@ -104,6 +114,8 @@ class OdooQuery(Entity):
             return ""
 
     def variable_defaults(self) -> dict[str, str]:
+        if not self.pk:
+            return {}
         return {
             variable.key: variable.default_value or ""
             for variable in self.variables.order_by("sort_order", "key")

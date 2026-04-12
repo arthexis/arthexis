@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django import forms
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -10,6 +11,7 @@ from apps.discovery.services import record_discovery_item, start_discovery
 from apps.locals.user_data import EntityModelAdmin
 
 from .models import OdooDeployment, OdooQuery, OdooQueryVariable
+from .public_query_features import is_public_query_execution_secure_mode_enabled
 from .services import sync_odoo_deployments
 from .sync_features import (
     ODOO_SYNC_DEPLOYMENT_DISCOVERY_PARAMETER_KEY,
@@ -197,8 +199,40 @@ class OdooQueryVariableInline(admin.TabularInline):
     )
 
 
+class OdooQueryAdminForm(forms.ModelForm):
+    class Meta:
+        model = OdooQuery
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        secure_mode_enabled = is_public_query_execution_secure_mode_enabled(default=False)
+        policy = _(
+            "Public execution is restricted. Public routes are metadata-only previews; staff can execute with authenticated access."
+        )
+        if secure_mode_enabled:
+            self.fields["enable_public_view"].help_text = _(
+                "Enable only when absolutely needed and reviewed. "
+            ) + policy
+            return
+        self.fields["enable_public_view"].help_text = _(
+            "This toggle is currently blocked by policy. "
+        ) + policy
+
+    def clean_enable_public_view(self):
+        enabled = self.cleaned_data.get("enable_public_view", False)
+        if enabled and not is_public_query_execution_secure_mode_enabled(default=False):
+            raise forms.ValidationError(
+                _(
+                    "Cannot enable public query execution while secure-mode feature flag is disabled."
+                )
+            )
+        return enabled
+
+
 @admin.register(OdooQuery)
 class OdooQueryAdmin(EntityModelAdmin):
+    form = OdooQueryAdminForm
     list_display = (
         "name",
         "model_name",
