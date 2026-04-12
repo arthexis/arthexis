@@ -3,9 +3,8 @@ import json
 from pathlib import Path
 
 import pytest
-from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import AnonymousUser, Group
 from django.contrib.sites.models import Site
 from django.core.exceptions import PermissionDenied
 from django.test import RequestFactory
@@ -147,6 +146,28 @@ def test_require_site_operator_or_staff_enforces_admin_operator_boundary(rf):
     )
     request.user = operator_user
     assert require_site_operator_or_staff(request) is None
+
+
+def test_public_charge_point_dashboard_redirects_anonymous_users_to_login(client):
+    response = client.get(reverse("ocpp:ocpp-dashboard"))
+
+    assert response.status_code == 302
+    assert response.url.startswith(f"{reverse('pages:login')}?next=")
+
+
+@pytest.mark.parametrize("path_name", ["ocpp:ocpp-dashboard", "ocpp:cp-simulator"])
+def test_charge_point_views_forbid_authenticated_non_operator_users(client, path_name):
+    user = get_user_model().objects.create_user(
+        username=f"charge-point-regular-{path_name.split(':')[-1]}",
+        email=f"{path_name.split(':')[-1]}@example.com",
+        password="secret",
+    )
+    client.force_login(user)
+
+    response = client.get(reverse(path_name))
+
+    assert response.status_code == 403
+
 
 def test_charge_points_module_hides_dashboard_and_simulator_links_from_anonymous_users():
     module = Module.objects.create(path="/charge-points/", menu="Charge Points")

@@ -2,18 +2,169 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import patch
-
 import pytest
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoUser
-from apps.evergo.views import _compute_tracking_step_completion
-from apps.features.models import Feature
+
+
+@pytest.mark.django_db
+def test_customer_public_detail_requires_authentication(client):
+    """Regression: customer detail should require login for access."""
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="evergo-owner",
+        email="owner@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(
+        user=profile,
+        name="Jane Doe",
+    )
+
+    response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
+
+    assert response.status_code == 302
+    assert "/login/" in response.url
+
+
+@pytest.mark.django_db
+def test_customer_public_detail_rejects_non_owner_access(client):
+    """Security: authenticated users cannot view customer details for other owners."""
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="evergo-owner-private",
+        email="owner-private@example.com",
+    )
+    intruder = user_model.objects.create_user(
+        username="evergo-intruder",
+        email="intruder@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-private@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="Jane Doe")
+
+    client.force_login(intruder)
+    response = client.get(reverse("evergo:customer-public-detail", args=[customer.pk]))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_customer_artifact_download_requires_authentication(client):
+    """Regression: artifact download should require login before evaluating the artifact."""
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="evergo-owner-2",
+        email="owner2@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner2@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="John")
+    artifact = EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("photo.jpg", b"img", content_type="image/jpeg"),
+    )
+
+    response = client.get(
+        reverse("evergo:customer-artifact-download", args=[customer.pk, artifact.pk])
+    )
+
+    assert response.status_code == 302
+    assert "/login/" in response.url
+
+
+@pytest.mark.django_db
+def test_customer_artifact_download_rejects_non_owner_access(client):
+    """Security: authenticated users cannot download artifacts for other owners' customers."""
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="evergo-owner-2c",
+        email="owner2c@example.com",
+    )
+    intruder = user_model.objects.create_user(
+        username="evergo-owner-2d",
+        email="owner2d@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner2c@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(user=profile, name="John")
+    artifact = EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("quote.pdf", b"%PDF-1.4\nmock", content_type="application/pdf"),
+    )
+
+    client.force_login(intruder)
+    response = client.get(
+        reverse("evergo:customer-artifact-download", args=[customer.pk, artifact.pk])
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_order_tracking_public_requires_login(client):
+    """Security: anonymous users should be redirected to login for tracking form access."""
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="evergo-owner-6",
+        email="owner6@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner6@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=28692, order_number="GM01164")
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 302
+    assert "login" in response["Location"]
+
+
+@pytest.mark.django_db
+def test_order_tracking_public_rejects_non_owner_access(client):
+    """Security: authenticated users cannot access tracking forms for other users' orders."""
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="evergo-owner-7",
+        email="owner7@example.com",
+    )
+    intruder = user_model.objects.create_user(
+        username="evergo-owner-8",
+        email="owner8@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner7@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=28693, order_number="GM01165")
+
+    client.force_login(intruder)
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 404
 
 @pytest.mark.django_db
 def test_my_evergo_dashboard_renders_and_generates_table_from_local_orders(client):

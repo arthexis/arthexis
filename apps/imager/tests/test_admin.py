@@ -65,6 +65,10 @@ def test_imager_admin_create_rpi_image_view_rejects_disallowed_paths(
     mock_build.assert_not_called()
 
 @patch("apps.imager.admin.build_rpi4b_image")
+@override_settings(
+    IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=("/tmp",),
+    IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS=("/tmp",),
+)
 def test_imager_admin_create_rpi_image_view_shows_artifact_download_actions(mock_build, admin_client, tmp_path):
     """Regression: successful builds should return to the wizard with artifact URL actions."""
 
