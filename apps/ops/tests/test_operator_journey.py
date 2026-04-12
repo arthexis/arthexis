@@ -161,6 +161,15 @@ class OperatorJourneyViewTests(TestCase):
         self.assertContains(response, "Decision flow:")
         self.assertNotContains(response, "<iframe", html=False)
 
+    def test_step_view_renders_breadcrumb_with_step_title(self):
+        response = self.client.get(
+            reverse("ops:operator-journey-step", args=[self.step_1.pk])
+        )
+
+        self.assertContains(response, '<div class="breadcrumbs">', html=False)
+        self.assertContains(response, "Operator journey")
+        self.assertContains(response, self.step_1.title)
+
     def test_validate_role_step_limits_role_choices_to_basic_configure_roles(self):
         NodeRole.objects.create(name="Gateway")
         response = self.client.get(
