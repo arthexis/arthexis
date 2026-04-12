@@ -8,7 +8,7 @@
 
 Arthexis Constellation is a Django-based software suite that centralizes tools for managing electric vehicle charging infrastructure and orchestrating energy-related products and services.
 
-Visit our [Changelog Report](https://arthexis.com/changelog/) to browse shipped changes, release notes, and operational updates.
+Visit our [Changelog Report](https://arthexis.com/changelog/) to browse release history and operational updates.
 
 For release confidence and version lifecycle expectations, see the [Versioning and Maturity Policy](docs/development/versioning-maturity-policy.md).
 
@@ -129,7 +129,7 @@ Detailed install flags, service-management choices, and upgrade-channel behavior
 - Reference the [Sigils Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/sigils.md) when configuring tokenized settings across environments.
 - Understand seed fixtures and per-user files with [Managing Local Node Data](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/managing-local-node-data.md).
 - Manage exports, imports, and audit trails with the [User Data Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/user-data.md).
-- Plan node capability adoption and configuration using the [Node Features Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/node-features.md).
+- Plan node capability adoption and configuration using the [Node Features Cookbook](apps/docs/cookbooks/node-features.md).
 - Curate shortcuts for power users through the [Favorites Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/favorites.md).
 - Connect Slack workspaces through the [Slack Bot Onboarding Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
 
