@@ -434,6 +434,9 @@ def _system_nginx_report_view(request):
     group="reports",
 )
 def _system_upgrade_report_view(request):
+    if not can_trigger_upgrade_checks(request.user):
+        raise PermissionDenied
+
     revision_info = None
     session = getattr(request, "session", None)
     if session is not None:
@@ -618,6 +621,9 @@ def _system_trigger_upgrade_check_view(request):
     group="reports",
 )
 def _system_upgrade_revision_check_view(request):
+    if not can_trigger_upgrade_checks(request.user):
+        raise PermissionDenied
+
     if request.method != "POST":
         return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
 

@@ -89,6 +89,38 @@ class AdminStaffTasksTests(TestCase):
         self.assertEqual(response.status_code, 403)
         mocked_trigger_upgrade_check.assert_not_called()
 
+    def test_staff_without_upgrade_privilege_cannot_access_upgrade_report_directly(self):
+        """Staff users without upgrade privileges should receive 403 on report view."""
+
+        user_model = get_user_model()
+        staff_user = user_model.objects.create_user(
+            username="staffer5",
+            email="staffer5@example.com",
+            password="admin123",
+            is_staff=True,
+        )
+        self.client.force_login(staff_user)
+
+        response = self.client.get(reverse("admin:system-upgrade-report"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_staff_without_upgrade_privilege_cannot_refresh_upgrade_revision(self):
+        """Staff users without upgrade privileges should receive 403 on revision refresh."""
+
+        user_model = get_user_model()
+        staff_user = user_model.objects.create_user(
+            username="staffer6",
+            email="staffer6@example.com",
+            password="admin123",
+            is_staff=True,
+        )
+        self.client.force_login(staff_user)
+
+        response = self.client.post(reverse("admin:system-upgrade-check-revision"))
+
+        self.assertEqual(response.status_code, 403)
+
     @patch("apps.core.system.admin_views._trigger_upgrade_check", return_value=True)
     def test_staff_with_upgrade_privilege_can_trigger_upgrade_check(self, _mocked_trigger: Mock):
         """Staff users with explicit upgrade privilege should be able to trigger checks."""
