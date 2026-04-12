@@ -69,15 +69,27 @@ class MeshMembership(Entity):
             update_fields = set(update_fields)
 
         was_enabled = True
+        previous_tenant = self.tenant
+        previous_site_id = self.site_id
         if self.pk:
-            was_enabled = (
+            previous_state = (
                 type(self)
                 .objects.filter(pk=self.pk)
-                .values_list("is_enabled", flat=True)
+                .values("is_enabled", "site_id", "tenant")
                 .first()
             )
-            if was_enabled is None:
-                was_enabled = True
+            if previous_state is None:
+                previous_state = {"is_enabled": True, "site_id": self.site_id, "tenant": self.tenant}
+            was_enabled = previous_state["is_enabled"]
+            previous_tenant = previous_state["tenant"]
+            previous_site_id = previous_state["site_id"]
+
+        if update_fields is not None:
+            if previous_tenant != self.tenant:
+                update_fields.add("tenant")
+            if previous_site_id != self.site_id:
+                update_fields.add("site")
+            kwargs["update_fields"] = sorted(update_fields)
 
         from apps.netmesh.services.overlay_lease import ensure_overlay_lease, release_overlay_lease
 
@@ -95,8 +107,9 @@ class MeshMembership(Entity):
     def delete(self, *args, **kwargs):
         from apps.netmesh.services.overlay_lease import release_overlay_lease
 
-        release_overlay_lease(membership=self)
-        super().delete(*args, **kwargs)
+        with transaction.atomic():
+            release_overlay_lease(membership=self)
+            super().delete(*args, **kwargs)
 
 
 class MeshOverlayLease(Entity):

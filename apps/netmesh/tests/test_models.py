@@ -307,6 +307,15 @@ def test_mesh_membership_soft_delete_does_not_recreate_overlay_lease():
 
 
 @pytest.mark.django_db
+@override_settings(NETMESH_OVERLAY_IPV4_CIDR="100.96.40.0/31")
+def test_overlay_lease_allocator_rejects_network_and_broadcast_addresses():
+    node = Node.objects.create(hostname="mesh-overlay-small-pool")
+
+    with pytest.raises(RuntimeError):
+        MeshMembership.objects.create(node=node, tenant="tenant-overlay-small-pool", is_enabled=True)
+
+
+@pytest.mark.django_db
 def test_peer_policy_requires_non_empty_tenant():
     source = Node.objects.create(hostname="mesh-empty-policy-tenant-source")
     destination = Node.objects.create(hostname="mesh-empty-policy-tenant-destination")

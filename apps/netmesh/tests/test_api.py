@@ -1,5 +1,6 @@
 import pytest
 from django.contrib.sites.models import Site
+from django.test import override_settings
 
 from apps.netmesh.models import (
     MeshMembership,
@@ -23,6 +24,7 @@ def test_netmesh_api_requires_valid_enrollment_token(client):
 
 
 @pytest.mark.django_db
+@override_settings(NETMESH_OVERLAY_IPV4_CIDR="100.96.0.0/16")
 def test_netmesh_api_returns_scoped_payloads_and_etag(client):
     gateway_role = NodeRole.objects.create(name="Gateway")
     service_role = NodeRole.objects.create(name="Service")
@@ -145,6 +147,45 @@ def test_netmesh_api_returns_scoped_payloads_and_etag(client):
 
     etag_response = client.get("/api/netmesh/peers/", HTTP_IF_NONE_MATCH=peers["ETag"], **headers)
     assert etag_response.status_code == 304
+
+
+@pytest.mark.django_db
+def test_netmesh_api_versions_change_when_overlay_lease_changes(client):
+    gateway_role = NodeRole.objects.create(name="Gateway")
+    service_role = NodeRole.objects.create(name="Service")
+    caller = Node.objects.create(hostname="version-caller", role=gateway_role)
+    peer = Node.objects.create(hostname="version-peer", role=service_role)
+
+    enrollment, token = issue_enrollment_token(node=caller)
+    enrollment.status = NodeEnrollment.Status.ACTIVE
+    enrollment.save(update_fields=["status", "updated_at"])
+    caller.mesh_enrollment_state = Node.MeshEnrollmentState.ENROLLED
+    caller.save(update_fields=["mesh_enrollment_state"])
+
+    MeshMembership.objects.create(node=caller, tenant="tenant-version", is_enabled=True)
+    peer_membership = MeshMembership.objects.create(node=peer, tenant="tenant-version", is_enabled=True)
+    PeerPolicy.objects.create(
+        tenant="tenant-version",
+        source_node=caller,
+        destination_node=peer,
+        allowed_services=["telemetry"],
+    )
+    NodeEndpoint.objects.create(node=peer, endpoint="wss://version-peer.example/ws", nat_type=NodeEndpoint.NatType.OPEN)
+
+    headers = {"HTTP_AUTHORIZATION": f"Bearer {token}"}
+    peers_before = client.get("/api/netmesh/peers/", **headers).json()["version"]
+    endpoints_before = client.get("/api/netmesh/peer-endpoints/", **headers).json()["version"]
+
+    peer_membership.is_enabled = False
+    peer_membership.save(update_fields=["is_enabled"])
+    peer_membership.is_enabled = True
+    peer_membership.save(update_fields=["is_enabled"])
+
+    peers_after = client.get("/api/netmesh/peers/", **headers).json()["version"]
+    endpoints_after = client.get("/api/netmesh/peer-endpoints/", **headers).json()["version"]
+
+    assert peers_after > peers_before
+    assert endpoints_after > endpoints_before
 
 
 @pytest.mark.django_db

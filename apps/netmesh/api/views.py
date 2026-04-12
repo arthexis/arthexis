@@ -167,12 +167,16 @@ def permitted_peers(request: HttpRequest) -> HttpResponse:
             )
             peers.append(peer_payload)
 
-    payload = {
-        "version": max(
-            [membership.id] + [peer.id for peer in peer_memberships],
-        ),
-        "peers": peers,
-    }
+    version = [membership.id]
+    version.extend(peer.id for peer in peer_memberships)
+    version.extend(
+        lease_id
+        for lease_id in (
+            getattr(getattr(peer, "overlay_lease", None), "id", None) for peer in peer_memberships
+        )
+        if lease_id is not None
+    )
+    payload = {"version": max(version), "peers": peers}
     logger.info(
         "Netmesh peer map generated",
         extra={
@@ -304,6 +308,14 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
     )
 
     version = [membership.id]
+    version.extend(peer.id for peer in peer_memberships)
+    version.extend(
+        lease_id
+        for lease_id in (
+            getattr(getattr(peer, "overlay_lease", None), "id", None) for peer in peer_memberships
+        )
+        if lease_id is not None
+    )
     version.extend(endpoint.id for endpoint in endpoints_qs)
     payload = {"version": max(version), "endpoints": endpoints}
     return _json_with_etag(request, payload)

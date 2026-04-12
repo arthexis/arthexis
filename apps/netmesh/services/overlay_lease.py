@@ -26,6 +26,7 @@ def _scope_filters(*, membership: MeshMembership) -> dict:
 
 def _first_free_address(*, membership: MeshMembership) -> str:
     pool = _overlay_pool()
+    reserved = {pool.network_address, pool.broadcast_address}
     used_ips = {
         int(ipaddress.IPv4Address(value))
         for value in MeshOverlayLease.objects.filter(**_scope_filters(membership=membership)).values_list(
@@ -33,6 +34,8 @@ def _first_free_address(*, membership: MeshMembership) -> str:
         )
     }
     for candidate in pool.hosts():
+        if candidate in reserved:
+            continue
         candidate_int = int(candidate)
         if candidate_int in used_ips:
             continue

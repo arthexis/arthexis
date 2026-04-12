@@ -12,6 +12,7 @@ def backfill_overlay_leases(apps, schema_editor):
     mesh_overlay_lease = apps.get_model("netmesh", "MeshOverlayLease")
     cidr = getattr(settings, "NETMESH_OVERLAY_IPV4_CIDR", "100.96.0.0/16")
     pool = ipaddress.IPv4Network(cidr, strict=False)
+    reserved = {pool.network_address, pool.broadcast_address}
 
     scope_used_ips: dict[tuple[str, int | None], set[int]] = {}
 
@@ -29,6 +30,8 @@ def backfill_overlay_leases(apps, schema_editor):
             )
         address = None
         for candidate in pool.hosts():
+            if candidate in reserved:
+                continue
             candidate_int = int(candidate)
             if candidate_int in used:
                 continue
