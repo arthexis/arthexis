@@ -341,7 +341,7 @@ def _present_quote(quote: dict[str, object]) -> dict[str, object]:
     currency = quote.get("currency")
     currency_label = ""
     if isinstance(currency, dict):
-        currency_label = str(currency.get("label", ""))
+        currency_label = str(currency.get("label") or "")
     total_display = f"{currency_label}{amount_total:,.2f}"
     return {
         "name": quote.get("name", ""),

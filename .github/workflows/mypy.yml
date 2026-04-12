@@ -27,7 +27,19 @@ on:
       - 'apps/core/services/health_checks.py'
       - 'apps/core/services/odoo_quote_report.py'
       - 'apps/core/modeling/**'
+      - 'apps/core/system/ui/formatting.py'
+      - 'apps/core/system/ui/network_probe.py'
+      - 'apps/core/system/ui/services.py'
+      - 'apps/core/system/ui/uptime.py'
       - 'apps/core/system_ui.py'
+      - 'apps/ocpp/call_result_handlers/common.py'
+      - 'apps/ocpp/consumers/base/metering.py'
+      - 'apps/ocpp/consumers/base/notifications.py'
+      - 'apps/ocpp/consumers/base/routing.py'
+      - 'apps/ocpp/consumers/base/transactions.py'
+      - 'apps/ocpp/consumers/csms/dispatch.py'
+      - 'apps/ocpp/payload_types.py'
+      - 'apps/ocpp/services/certificate_status.py'
   push:
     branches:
       - main

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar, TYPE_CHECKING
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
