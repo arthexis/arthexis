@@ -1,6 +1,16 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+    &rsaquo;
+    <span>{% translate "Operator journey" %}</span>
+    &rsaquo;
+    <span>{{ step.title }}</span>
+  </div>
+{% endblock %}
+
 {% block content %}
   <div class="module aligned">
     <h1>{{ step.title }}</h1>
