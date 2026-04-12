@@ -14,7 +14,7 @@ Coordinate capabilities across nodes by managing `nodes.NodeFeature` records in 
 
 1. Open the Django admin and locate the **Nodes** application.
 2. Click **Node features** (model `nodes.NodeFeature`) to open the changelist (`admin:nodes_nodefeature_changelist`).
-3. The changelist is registered in [`apps/nodes/admin/node_feature_admin.py`](../../nodes/admin/node_feature_admin.py) and displays columns for the display name, slug, default roles, enablement status, and available actions.
+3. The changelist is registered in [`apps/nodes/admin/node_feature_admin.py`](../../apps/nodes/admin/node_feature_admin.py) and displays columns for the display name, slug, default roles, enablement status, and available actions.
 
 ## Reviewing feature metadata
 
@@ -57,7 +57,7 @@ Changes to assignments are applied immediately after saving the node or feature 
 
 ## Running eligibility checks
 
-Select one or more features on the changelist and choose **Check features for eligibility**. The admin action (`NodeFeatureAdmin.check_features_for_eligibility`) calls the registry in [`nodes/feature_checks.py`](../../nodes/feature_checks.py) to evaluate whether the local node satisfies hardware or software requirements. Results appear as Django messages (success, warning, or error).
+Select one or more features on the changelist and choose **Check features for eligibility**. The admin action (`NodeFeatureAdmin.check_features_for_eligibility`) calls the registry in [`apps/nodes/feature_checks.py`](../../apps/nodes/feature_checks.py) to evaluate whether the local node satisfies hardware or software requirements. Results appear as Django messages (success, warning, or error).
 
 Eligibility runs also report whether a feature can be enabled manually. The helper `_manual_enablement_data` in `NodeFeatureAdmin` communicates whether the feature belongs to `Node.MANUAL_FEATURE_SLUGS` or requires automation.
 
@@ -83,20 +83,20 @@ Use this pattern to separate policy from capability:
 Auto-managed features discover their enablement and lifecycle through app-level hooks:
 
 - Add a `node_features.py` module to an app.
-- Export `check_node_feature(slug, *, node, base_dir=None, base_path=None)` to return `True` when a feature could be meaningfully enabled on the provided node. Return `None` when the slug is unknown to the module.
-- Export `setup_node_feature(slug, *, node, base_dir=None, base_path=None)` for any setup or side-effects the feature needs during auto-detection (returning `True`/`False` mirrors `check_node_feature`).
+- Export `check_node_feature(slug, *, node, base_dir, base_path)` to return `True` when a feature could be meaningfully enabled on the provided node. Return `None` when the slug is unknown to the module.
+- Export `setup_node_feature(slug, *, node, base_dir, base_path)` for any setup or side-effects the feature needs during auto-detection (returning `True`/`False` mirrors `check_node_feature`).
 - Export `register_node_feature_detection(registry)` and register one detector per feature slug using `registry.register(slug, check=..., setup=...)`.
 
-The nodes app discovers and orchestrates these detectors from every installed app so each feature can own its own auto-detection lifecycle.
+The nodes app loads and orchestrates detectors only from the explicit approved registrar list in `apps/nodes/feature_registry.py`, so each feature app is added intentionally to the discovery flow.
 
 ## Enabling features manually
 
-To toggle features outside of automatic provisioning, select them in the changelist and execute **Enable selected features**. When a local node is registered, the action creates `NodeFeatureAssignment` rows for that node (see `NodeFeatureAssignment.objects.update_or_create` calls in [`apps/nodes/models/features.py`](../../nodes/models/features.py)).
+To toggle features outside of automatic provisioning, select them in the changelist and execute **Enable selected features**. When a local node is registered, the action creates `NodeFeatureAssignment` rows for that node (see `NodeFeatureAssignment.objects.update_or_create` calls in [`apps/nodes/models/features.py`](../../apps/nodes/models/features.py)).
 
 If no local node exists, the admin posts an informational message. Register a node first via the Nodes interface, then re-run the enable action.
 
 ## Troubleshooting
 
-- **Actions menu shows em dash (—)** – The feature is not currently enabled, or no default actions exist. Enable the feature or configure `DEFAULT_ACTIONS` in [`apps/nodes/models/features.py`](../../nodes/models/features.py).
-- **Eligibility checks always warn about missing checks** – Add an implementation to the `feature_checks` registry in [`nodes/feature_checks.py`](../../nodes/feature_checks.py) to cover the slug in question.
-- **Assignments disappear after deployments** – Verify that fixtures in `nodes/fixtures/` or migrations are not removing the feature (`nodes/migrations/0018`, `0027`, etc.). Reapply role assignments if a migration intentionally deprecates the feature.
+- **Actions menu shows em dash (—)** – The feature is not currently enabled, or no default actions exist. Enable the feature or configure `DEFAULT_ACTIONS` in [`apps/nodes/models/features.py`](../../apps/nodes/models/features.py).
+- **Eligibility checks always warn about missing checks** – Add an implementation to the `feature_checks` registry in [`apps/nodes/feature_checks.py`](../../apps/nodes/feature_checks.py) to cover the slug in question.
+- **Assignments disappear after deployments** – Verify that fixtures in `apps/nodes/fixtures/` or migrations are not removing the feature (`apps/nodes/migrations/0018`, `0027`, etc.). Reapply role assignments if a migration intentionally deprecates the feature.
