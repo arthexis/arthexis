@@ -170,8 +170,8 @@ class MeshMembershipAdmin(EntityModelAdmin):
 
 @admin.register(NodeKeyMaterial)
 class NodeKeyMaterialAdmin(EntityModelAdmin):
-    list_display = ("node", "created_at", "rotated_at", "revoked", "revoked_at")
-    list_filter = ("revoked",)
+    list_display = ("node", "key_type", "key_version", "key_state", "created_at", "rotated_at", "revoked_at")
+    list_filter = ("key_type", "key_state")
     search_fields = ("node__hostname", "public_key")
 
 

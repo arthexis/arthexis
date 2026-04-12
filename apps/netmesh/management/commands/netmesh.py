@@ -121,7 +121,11 @@ class Command(BaseCommand):
         now = timezone.now()
         cutoff = now - timedelta(days=max_age_days)
         due_keys = list(
-            NodeKeyMaterial.objects.filter(revoked=False, created_at__lt=cutoff)
+            NodeKeyMaterial.objects.filter(
+                key_state=NodeKeyMaterial.KeyState.ACTIVE,
+                key_type=NodeKeyMaterial.KeyType.X25519,
+                created_at__lt=cutoff,
+            )
             .select_related("node")
             .order_by("created_at")
         )

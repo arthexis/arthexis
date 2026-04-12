@@ -120,15 +120,19 @@ def rotate_mesh_key(modeladmin, request, queryset):
     rotated = 0
     for node in queryset:
         active_key = (
-            NodeKeyMaterial.objects.filter(node=node, revoked=False)
+            NodeKeyMaterial.objects.filter(
+                node=node,
+                key_state=NodeKeyMaterial.KeyState.ACTIVE,
+                key_type=NodeKeyMaterial.KeyType.X25519,
+            )
             .order_by("-created_at", "-id")
             .first()
         )
         if active_key:
             active_key.rotated_at = timezone.now()
-            active_key.revoked = True
+            active_key.key_state = NodeKeyMaterial.KeyState.RETIRED
             active_key.revoked_at = timezone.now()
-            active_key.save(update_fields=["rotated_at", "revoked", "revoked_at"])
+            active_key.save(update_fields=["rotated_at", "key_state", "revoked_at", "revoked"])
         issue_enrollment_token(
             node=node,
             actor=request.user,

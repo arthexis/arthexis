@@ -64,12 +64,32 @@ class MeshMembership(Entity):
 class NodeKeyMaterial(Entity):
     """Stores node public key material and lifecycle state for rotation workflows."""
 
+    class KeyState(models.TextChoices):
+        ACTIVE = "active", _("Active")
+        RETIRED = "retired", _("Retired")
+        RETIRING = "retiring", _("Retiring")
+
+    class KeyType(models.TextChoices):
+        RSA_BOOTSTRAP = "rsa-bootstrap", _("RSA bootstrap")
+        X25519 = "x25519", _("X25519")
+
     node = models.ForeignKey(
         "nodes.Node",
         on_delete=models.CASCADE,
         related_name="netmesh_keys",
     )
+    key_type = models.CharField(
+        max_length=32,
+        choices=KeyType.choices,
+        default=KeyType.X25519,
+    )
+    key_version = models.PositiveIntegerField(default=1)
     public_key = models.TextField()
+    key_state = models.CharField(
+        max_length=16,
+        choices=KeyState.choices,
+        default=KeyState.ACTIVE,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     rotated_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
@@ -80,10 +100,14 @@ class NodeKeyMaterial(Entity):
         constraints = [
             models.UniqueConstraint(
                 fields=["node"],
-                condition=Q(revoked=False),
-                name="netmesh_node_single_active_key",
+                condition=Q(key_state="active"),
+                name="netmesh_node_single_active_transport_key",
             ),
         ]
+
+    def save(self, *args, **kwargs):
+        self.revoked = self.key_state != self.KeyState.ACTIVE
+        super().save(*args, **kwargs)
 
 
 class PeerPolicy(Entity):
