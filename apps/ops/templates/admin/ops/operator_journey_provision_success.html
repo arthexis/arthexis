@@ -3,10 +3,17 @@
 
 {% block content %}
   <div class="module aligned">
-    <h1>{% translate "Operational superuser created" %}</h1>
-    <p>
-      {% blocktranslate with username=new_user.get_username %}Created superuser {{ username }}.{% endblocktranslate %}
-    </p>
+    {% if created_user %}
+      <h1>{% translate "Operational superuser created" %}</h1>
+      <p>
+        {% blocktranslate with username=new_user.get_username %}Created superuser {{ username }}.{% endblocktranslate %}
+      </p>
+    {% else %}
+      <h1>{% translate "Operational superuser upgraded" %}</h1>
+      <p>
+        {% blocktranslate with username=new_user.get_username %}Upgraded superuser {{ username }}.{% endblocktranslate %}
+      </p>
+    {% endif %}
     <p>
       {% translate "Record this password securely now. It will not be shown again." %}
     </p>

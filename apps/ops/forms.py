@@ -19,6 +19,10 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
     username = forms.CharField(
         max_length=150, help_text="Login name for the new superuser."
     )
+    upgrade_existing_user = forms.BooleanField(
+        required=False,
+        help_text="Upgrade and reuse this account when the username already exists.",
+    )
     email = forms.EmailField(
         required=False, help_text="Optional email address for account recovery."
     )
@@ -52,6 +56,17 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
+        user_model = get_user_model()
+        username = cleaned_data.get("username") or ""
+        user_manager = getattr(user_model, "all_objects", user_model._default_manager)
+        existing_user = user_manager.filter(username=username).first()
+        cleaned_data["existing_user"] = existing_user
+
+        if cleaned_data.get("upgrade_existing_user") and existing_user is None:
+            self.add_error(
+                "upgrade_existing_user",
+                "No existing user matches this username.",
+            )
         if cleaned_data.get("password_mode") == "custom" and not cleaned_data.get(
             "password"
         ):
@@ -68,8 +83,11 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
             (self.cleaned_data.get("username") or "").strip()
         )
         user_manager = getattr(user_model, "all_objects", user_model._default_manager)
-        if user_manager.filter(username=username).exists():
-            raise forms.ValidationError("A user with this username already exists.")
+        existing_user = user_manager.filter(username=username).first()
+        if existing_user is not None and not self.data.get("upgrade_existing_user"):
+            raise forms.ValidationError(
+                'Enable "Upgrade existing user" to reuse this username.'
+            )
         return username
 
     def save(self):
@@ -82,13 +100,34 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
             password = self._generate_password()
         username = cleaned_data["username"]
         email = cleaned_data.get("email", "")
+        existing_user = cleaned_data.get("existing_user")
+        is_upgrade = existing_user is not None and cleaned_data.get(
+            "upgrade_existing_user"
+        )
 
         user_model = get_user_model()
-        user = user_model._default_manager.create_superuser(
-            username=username,
-            email=email,
-            password=password,
-        )
+        if is_upgrade:
+            user = existing_user
+            user.username = username
+            user.email = email
+            user.is_staff = True
+            user.is_superuser = True
+            user.set_password(password)
+            user.save(
+                update_fields=[
+                    "email",
+                    "is_staff",
+                    "is_superuser",
+                    "password",
+                    "username",
+                ]
+            )
+        else:
+            user = user_model._default_manager.create_superuser(
+                username=username,
+                email=email,
+                password=password,
+            )
         user.groups.set(cleaned_data["security_groups"])
 
         github_token = (cleaned_data.get("github_token") or "").strip()
@@ -104,7 +143,7 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
                 },
             )
 
-        return user, password
+        return user, password, not is_upgrade
 
     @staticmethod
     def _generate_password(length: int = 24) -> str:
