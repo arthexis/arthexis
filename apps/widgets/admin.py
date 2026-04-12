@@ -54,9 +54,20 @@ class WidgetAdmin(EntityModelAdmin):
     def changelist_view(self, request, extra_context=None):
         token = _changelist_request.set(request)
         try:
-            return super().changelist_view(request, extra_context=extra_context)
-        finally:
+            response = super().changelist_view(request, extra_context=extra_context)
+        except Exception:
             _changelist_request.reset(token)
+            raise
+
+        if hasattr(response, "add_post_render_callback"):
+            def _reset_changelist_request(_response):
+                _changelist_request.reset(token)
+                return _response
+
+            response.add_post_render_callback(_reset_changelist_request)
+        else:
+            _changelist_request.reset(token)
+        return response
 
 
 @admin.register(WidgetProfile)
