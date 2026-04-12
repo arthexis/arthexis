@@ -10,7 +10,7 @@ class ReferenceAttachment(models.Model):
     """Attach a reference record to any model instance."""
 
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveBigIntegerField()
+    object_id = models.TextField()
     content_object = GenericForeignKey("content_type", "object_id")
     reference = models.ForeignKey(
         "links.Reference",

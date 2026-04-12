@@ -24,7 +24,7 @@ class Migration(migrations.Migration):
                         verbose_name="ID",
                     ),
                 ),
-                ("object_id", models.PositiveBigIntegerField()),
+                ("object_id", models.TextField()),
                 ("slot", models.CharField(blank=True, default="", max_length=32)),
                 ("is_primary", models.BooleanField(default=False)),
                 ("sort_order", models.PositiveIntegerField(default=0)),
