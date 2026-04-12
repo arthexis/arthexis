@@ -5,47 +5,186 @@
   <div class="module aligned">
     <h1>{{ step.title }}</h1>
     {% if node_role_validation %}
+      <style>
+        .operator-journey-grid {
+          display: grid;
+          gap: 1rem;
+          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+          margin-top: 1rem;
+        }
+        .operator-journey-card {
+          border: 1px solid var(--hairline-color);
+          border-radius: 8px;
+          padding: 1rem;
+        }
+        .operator-journey-card h2 {
+          margin-top: 0;
+        }
+        .operator-journey-config-table {
+          border-collapse: collapse;
+          width: 100%;
+        }
+        .operator-journey-config-table th,
+        .operator-journey-config-table td {
+          border-bottom: 1px solid var(--hairline-color);
+          padding: 0.5rem;
+          text-align: left;
+          vertical-align: top;
+        }
+        .operator-journey-option-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+        .operator-journey-option-list li + li {
+          margin-top: 0.5rem;
+        }
+        .operator-journey-command-preview {
+          background: var(--darkened-bg, #f4f6f8);
+          border-radius: 6px;
+          display: block;
+          margin-top: 0.75rem;
+          padding: 0.75rem;
+          white-space: pre-wrap;
+        }
+      </style>
       <p>
         {% translate "Confirm the current node setup before proceeding. Node role changes must be applied with install/configure scripts, not by editing Nodes records." %}
       </p>
-      <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
-        <thead>
-          <tr>
-            <th style="text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Check" %}</th>
-            <th style="text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Current value" %}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Runtime/configured role" %}</td>
-            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{{ node_role_validation.configured_role }}</td>
-          </tr>
-          <tr>
-            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Lock file role (.locks/role.lck)" %}</td>
-            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{{ node_role_validation.lock_role }}</td>
-          </tr>
-          <tr>
-            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{% translate "Registered local node role" %}</td>
-            <td style="padding: 0.5rem; border-bottom: 1px solid var(--hairline-color);">{{ node_role_validation.local_node_role }} ({{ node_role_validation.local_node_label }})</td>
-          </tr>
-        </tbody>
-      </table>
-      {% if node_role_validation.role_mismatch %}
-        <p style="margin-top: 1rem;">
-          <strong>{% translate "Role mismatch detected." %}</strong>
-          {% translate "The local node record does not match the active runtime role. Reconfigure and restart before completing this step." %}
-        </p>
-      {% endif %}
-      <h2 style="margin-top: 1.25rem;">{% translate "If setup is wrong, run these commands" %}</h2>
-      <ol>
-        {% for command in node_role_validation.commands %}
-          <li><code>{{ command }}</code></li>
-        {% endfor %}
-      </ol>
-      <p>
+      <div class="operator-journey-grid">
+        <section class="operator-journey-card" aria-labelledby="current-config-title">
+          <h2 id="current-config-title">{% translate "Current config and completion command" %}</h2>
+          <table class="operator-journey-config-table">
+            <thead>
+              <tr>
+                <th>{% translate "Check" %}</th>
+                <th>{% translate "Current value" %}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{% translate "Runtime/configured role" %}</td>
+                <td>{{ node_role_validation.configured_role }}</td>
+              </tr>
+              <tr>
+                <td>{% translate "Lock file role (.locks/role.lck)" %}</td>
+                <td>{{ node_role_validation.lock_role }}</td>
+              </tr>
+              <tr>
+                <td>{% translate "Registered local node role" %}</td>
+                <td>{{ node_role_validation.local_node_role }} ({{ node_role_validation.local_node_label }})</td>
+              </tr>
+            </tbody>
+          </table>
+          {% if node_role_validation.role_mismatch %}
+            <p style="margin-top: 1rem;">
+              <strong>{% translate "Role mismatch detected." %}</strong>
+              {% translate "The local node record does not match the active runtime role. Reconfigure and restart before completing this step." %}
+            </p>
+          {% endif %}
+          <p style="margin-top: 1rem;"><strong>{% translate "Role command preview" %}</strong></p>
+          <code id="operator-role-command" class="operator-journey-command-preview">{{ node_role_validation.commands.1 }}</code>
+          <p style="margin-top: 1rem;"><strong>{% translate "Upgrade command preview" %}</strong></p>
+          <code id="operator-upgrade-command" class="operator-journey-command-preview">{{ node_role_validation.default_upgrade_command }}</code>
+          <ol style="margin-top: 0.75rem;">
+            {% for command in node_role_validation.commands %}
+              <li><code>{{ command }}</code></li>
+            {% endfor %}
+          </ol>
+        </section>
+        <section class="operator-journey-card" aria-labelledby="command-builder-title">
+          <h2 id="command-builder-title">{% translate "Roles and auto-upgrade options" %}</h2>
+          <p>{% translate "Select a role and toggle options to generate copy/paste-ready commands." %}</p>
+          <p><strong>{% translate "Role" %}</strong></p>
+          <ul class="operator-journey-option-list">
+            {% for role in node_role_validation.available_roles %}
+              <li>
+                <label>
+                  <input
+                    type="radio"
+                    name="node-role-choice"
+                    value="{{ role|lower }}"
+                    {% if role == node_role_validation.configured_role or role == node_role_validation.local_node_role %}checked{% endif %}
+                  >
+                  {{ role }}
+                </label>
+              </li>
+            {% endfor %}
+          </ul>
+          <p style="margin-top: 1rem;"><strong>{% translate "Upgrade toggles" %}</strong></p>
+          <ul class="operator-journey-option-list">
+            {% for option in node_role_validation.upgrade_policy_options %}
+              <li>
+                <label>
+                  <input type="checkbox" name="upgrade-flag" value="{{ option.flags|join:' ' }}" {% if forloop.first %}checked{% endif %}>
+                  {{ option.label }}
+                </label>
+              </li>
+            {% endfor %}
+          </ul>
+        </section>
+      </div>
+      <p style="margin-top: 1rem;">
         {% translate "Decision flow:" %}
-        {% translate "1) Confirm intended role. 2) Run configure with that role. 3) Restart and verify check output, then continue." %}
+        {% translate "1) Confirm intended role. 2) Toggle options until the command preview matches your plan. 3) Run configure/upgrade, restart, verify, then continue." %}
       </p>
+      <script>
+        (() => {
+          const roleInputs = document.querySelectorAll('input[name="node-role-choice"]');
+          const flagInputs = document.querySelectorAll('input[name="upgrade-flag"]');
+          const rolePreview = document.getElementById("operator-role-command");
+          const upgradePreview = document.getElementById("operator-upgrade-command");
+
+          const currentRole = () => {
+            const selected = Array.from(roleInputs).find((input) => input.checked);
+            return selected ? selected.value : "";
+          };
+
+          const currentFlags = () => Array.from(flagInputs)
+            .filter((input) => input.checked)
+            .flatMap((input) => input.value.split(" "))
+            .filter(Boolean);
+
+          const updatePreview = () => {
+            const role = currentRole();
+            if (rolePreview) {
+              rolePreview.textContent = role ? `./configure.sh --${role}` : "./configure.sh --check";
+            }
+            if (upgradePreview) {
+              const flags = currentFlags();
+              upgradePreview.textContent = ["./upgrade.sh", ...flags].join(" ").trim();
+            }
+          };
+
+          roleInputs.forEach((input) => input.addEventListener("change", updatePreview));
+          flagInputs.forEach((input) => input.addEventListener("change", updatePreview));
+          updatePreview();
+        })();
+      </script>
+    {% elif provision_superuser_form %}
+      <p>
+        {% translate "Create an operational superuser for this node role, assign security groups, and optionally connect GitHub credentials for repository/release/issue workflows." %}
+      </p>
+      <p>
+        {% translate "After creation, open a private browser session to verify this account can log in." %}
+      </p>
+      <form method="post" action="{% url 'ops:operator-journey-step-complete' step.pk %}" style="margin-top: 1rem;">
+        {% csrf_token %}
+        {{ provision_superuser_form.non_field_errors }}
+        <fieldset class="module aligned" style="padding: 0.75rem;">
+          {% for field in provision_superuser_form %}
+            <div class="form-row" style="margin-bottom: 0.75rem;">
+              <label for="{{ field.id_for_label }}" style="display: block; font-weight: 600;">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}
+                <p class="help" style="margin: 0.25rem 0 0;">{{ field.help_text }}</p>
+              {% endif %}
+              {{ field.errors }}
+            </div>
+          {% endfor %}
+        </fieldset>
+        <button type="submit" class="button default">{% translate "Create account and complete step" %}</button>
+      </form>
     {% else %}
       <p>{{ step.instruction }}</p>
       {% if step.help_text %}
@@ -57,9 +196,11 @@
         style="width: 100%; min-height: 60vh; border: 1px solid var(--hairline-color); border-radius: 8px;"
       ></iframe>
     {% endif %}
-    <form method="post" action="{% url 'ops:operator-journey-step-complete' step.pk %}" style="margin-top: 1rem;">
-      {% csrf_token %}
-      <button type="submit" class="button default">{% translate "Mark this step complete" %}</button>
-    </form>
+    {% if not provision_superuser_form %}
+      <form method="post" action="{% url 'ops:operator-journey-step-complete' step.pk %}" style="margin-top: 1rem;">
+        {% csrf_token %}
+        <button type="submit" class="button default">{% translate "Mark this step complete" %}</button>
+      </form>
+    {% endif %}
   </div>
 {% endblock %}

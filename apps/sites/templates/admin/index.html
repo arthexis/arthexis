@@ -16,6 +16,21 @@
 <div id="admin-home-header">
   <h1>Home</h1>
   <div class="admin-home-status">
+    {% operator_journey_status as operator_journey %}
+    {% if operator_journey.has_journey %}
+      <div class="admin-home-operator-journey" role="status" aria-live="polite">
+        {% if operator_journey.url %}
+          <a class="admin-home-operator-journey__link" href="{{ operator_journey.url }}">{{ operator_journey.task_title|default:operator_journey.message }}</a>
+          {% if operator_journey.available_since %}
+            <span class="admin-home-operator-journey__age">
+              {% blocktrans trimmed with age=operator_journey.available_since|timesince %} · {{ age }} ago{% endblocktrans %}
+            </span>
+          {% endif %}
+        {% else %}
+          <span class="admin-home-operator-journey__text">{{ operator_journey.message }}</span>
+        {% endif %}
+      </div>
+    {% endif %}
     <div class="admin-home-net-message" role="status" aria-live="polite">
       <a
         class="admin-home-net-message__icon admin-home-net-message__link"
@@ -38,21 +53,6 @@
         <span class="admin-home-net-message__content admin-home-net-message__content--empty" title="{{ no_message_text }}">{{ no_message_text }}</span>
       {% endif %}
     </div>
-    {% operator_journey_status as operator_journey %}
-    {% if operator_journey.has_journey %}
-      <div class="admin-home-operator-journey" role="status" aria-live="polite">
-        {% if operator_journey.url %}
-          <a class="admin-home-operator-journey__link" href="{{ operator_journey.url }}">{{ operator_journey.task_title|default:operator_journey.message }}</a>
-          {% if operator_journey.available_since %}
-            <span class="admin-home-operator-journey__age">
-              {% blocktrans trimmed with age=operator_journey.available_since|timesince %} · {{ age }} ago{% endblocktrans %}
-            </span>
-          {% endif %}
-        {% else %}
-          <span class="admin-home-operator-journey__text">{{ operator_journey.message }}</span>
-        {% endif %}
-      </div>
-    {% endif %}
   </div>
   <div class="admin-home-actions-wrap">
     <div class="admin-home-actions">

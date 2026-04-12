@@ -79,7 +79,22 @@ def test_netmesh_api_returns_scoped_payloads_and_etag(client):
         config={"token_hint": "relay-token"},
     )
     ServiceAdvertisement.objects.create(node=peer_allowed, service_name="ocpp", port=443, protocol=ServiceAdvertisement.Protocol.HTTPS)
-    NodeKeyMaterial.objects.create(node=caller, public_key="caller-public-key", revoked=False)
+    NodeKeyMaterial.objects.create(
+        node=caller,
+        key_type=NodeKeyMaterial.KeyType.X25519,
+        key_version=2,
+        public_key="x25519:caller-public-key",
+        key_state=NodeKeyMaterial.KeyState.ACTIVE,
+        revoked=False,
+    )
+    NodeKeyMaterial.objects.create(
+        node=peer_allowed,
+        key_type=NodeKeyMaterial.KeyType.X25519,
+        key_version=3,
+        public_key="x25519:peer-public-key",
+        key_state=NodeKeyMaterial.KeyState.ACTIVE,
+        revoked=False,
+    )
 
     headers = {"HTTP_AUTHORIZATION": f"Bearer {token}"}
 
@@ -93,6 +108,8 @@ def test_netmesh_api_returns_scoped_payloads_and_etag(client):
     assert peers.status_code == 200
     assert [item["hostname"] for item in peers_json["peers"]] == ["peer-allowed"]
     assert peers_json["peers"][0]["site_id"] == site_a.id
+    assert peers_json["peers"][0]["transport_key"]["public_key"] == "x25519:peer-public-key"
+    assert peers_json["peers"][0]["transport_key"]["type"] == NodeKeyMaterial.KeyType.X25519
 
     endpoints = client.get("/api/netmesh/peer-endpoints/", **headers)
     endpoints_json = endpoints.json()
@@ -106,6 +123,7 @@ def test_netmesh_api_returns_scoped_payloads_and_etag(client):
     assert endpoint_payload["connection_candidates"][-1]["path"] == "relay"
     assert endpoint_payload["connection_candidates"][-1]["region"] == "use1"
     assert "config" not in endpoint_payload["connection_candidates"][-1]
+    assert endpoint_payload["transport_key"]["public_key"] == "x25519:peer-public-key"
     assert endpoint_payload["services"] == [
         {"service": "ocpp", "port": 443, "protocol": "https"}
     ]
@@ -119,6 +137,8 @@ def test_netmesh_api_returns_scoped_payloads_and_etag(client):
     key_info = client.get("/api/netmesh/key-info/", **headers)
     assert key_info.status_code == 200
     assert key_info.json()["key"]["state"] == "active"
+    assert key_info.json()["key"]["type"] == NodeKeyMaterial.KeyType.X25519
+    assert key_info.json()["key"]["version"] == 2
     assert len(key_info.json()["key"]["fingerprint"]) == 16
 
     etag_response = client.get("/api/netmesh/peers/", HTTP_IF_NONE_MATCH=peers["ETag"], **headers)

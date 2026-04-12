@@ -22,6 +22,9 @@ class AdminNotice(Entity):
 
     class Meta:
         ordering = ["-created_at"]
+        permissions = [
+            ("can_trigger_upgrade_checks", "Can trigger upgrade checks"),
+        ]
         verbose_name = "Admin Notice"
         verbose_name_plural = "Admin Notices"
 

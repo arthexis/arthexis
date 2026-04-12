@@ -8,9 +8,9 @@
 
 Arthexis Constellation is a Django-based software suite that centralizes tools for managing electric vehicle charging infrastructure and orchestrating energy-related products and services.
 
-Visit our [Changelog Report](https://arthexis.com/changelog/) to browse past and future features and other updates.
+Visit our [Changelog Report](https://arthexis.com/changelog/) to browse release history and operational updates.
 
-For release confidence and roadmap transparency, see the [Versioning and Maturity Policy](docs/development/versioning-maturity-policy.md).
+For release confidence and version lifecycle expectations, see the [Versioning and Maturity Policy](docs/development/versioning-maturity-policy.md).
 
 ## Suite Features
 
@@ -129,7 +129,7 @@ Detailed install flags, service-management choices, and upgrade-channel behavior
 - Reference the [Sigils Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/sigils.md) when configuring tokenized settings across environments.
 - Understand seed fixtures and per-user files with [Managing Local Node Data](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/managing-local-node-data.md).
 - Manage exports, imports, and audit trails with the [User Data Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/user-data.md).
-- Plan feature rollout strategies using the [Node Features Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/node-features.md).
+- Plan node capability adoption and configuration using the [Node Features Cookbook](apps/docs/cookbooks/node-features.md).
 - Curate shortcuts for power users through the [Favorites Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/favorites.md).
 - Connect Slack workspaces through the [Slack Bot Onboarding Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
 
@@ -142,7 +142,7 @@ Detailed install flags, service-management choices, and upgrade-channel behavior
 
 ## Support
 
-Arthexis Constellation is still under very active development and new features are added every day.
+Arthexis Constellation is actively maintained with documented release notes and operational guidance.
 
 If you decide to use our suite for your energy projects, you may contact us at [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) or visit our [web page](https://www.gelectriic.com/) for professional services and commercial support.
 

@@ -7,9 +7,11 @@ from django.urls import reverse
 
 from apps.groups.constants import SITE_OPERATOR_GROUP_NAME
 from apps.groups.models import SecurityGroup
+from apps.nodes.models import NodeRole
 from apps.ops.models import OperatorJourney, OperatorJourneyStep
 from apps.ops.operator_journey import complete_step_for_user, status_for_user
 from apps.ops.views import _build_node_role_validation_summary
+from apps.repos.models import GitHubToken
 
 
 class OperatorJourneyFlowTests(TestCase):
@@ -57,7 +59,10 @@ class OperatorJourneyFlowTests(TestCase):
         status = status_for_user(user=self.user)
         self.assertEqual(status.message, "Step 2")
         self.assertEqual(status.task_title, "Step 2")
-        self.assertEqual(status.available_since, self.user.operator_journey_step_completions.first().completed_at)
+        self.assertEqual(
+            status.available_since,
+            self.user.operator_journey_step_completions.first().completed_at,
+        )
 
         self.assertTrue(complete_step_for_user(user=self.user, step=self.step_2))
         status = status_for_user(user=self.user)
@@ -86,7 +91,9 @@ class OperatorJourneyViewTests(TestCase):
     """Validate operator journey routes and dashboard link rendering."""
 
     def setUp(self):
-        self.group = SecurityGroup.objects.create(name="Operator Journey Dashboard Group")
+        self.group = SecurityGroup.objects.create(
+            name="Operator Journey Dashboard Group"
+        )
         self.user = get_user_model().objects.create_user(
             username="ops-journey-dashboard",
             password="x",
@@ -130,17 +137,39 @@ class OperatorJourneyViewTests(TestCase):
         )
 
     def test_step_view_redirects_when_opening_future_step(self):
-        response = self.client.get(reverse("ops:operator-journey-step", args=[self.step_2.pk]))
+        response = self.client.get(
+            reverse("ops:operator-journey-step", args=[self.step_2.pk])
+        )
 
-        self.assertRedirects(response, reverse("ops:operator-journey-step", args=[self.step_1.pk]))
+        self.assertRedirects(
+            response, reverse("ops:operator-journey-step", args=[self.step_1.pk])
+        )
 
     def test_validate_role_step_shows_setup_check_instead_of_iframe(self):
-        response = self.client.get(reverse("ops:operator-journey-step", args=[self.step_1.pk]))
+        response = self.client.get(
+            reverse("ops:operator-journey-step", args=[self.step_1.pk])
+        )
 
-        self.assertContains(response, "Node role changes must be applied with install/configure scripts")
+        self.assertContains(
+            response, "Node role changes must be applied with install/configure scripts"
+        )
+        self.assertContains(response, "Current config and completion command")
+        self.assertContains(response, "Roles and auto-upgrade options")
+        self.assertContains(response, 'name="node-role-choice"', html=False)
+        self.assertContains(response, 'id="operator-upgrade-command"', html=False)
         self.assertContains(response, "./configure.sh --check")
         self.assertContains(response, "Decision flow:")
         self.assertNotContains(response, "<iframe", html=False)
+
+    def test_validate_role_step_limits_role_choices_to_basic_configure_roles(self):
+        NodeRole.objects.create(name="Gateway")
+        response = self.client.get(
+            reverse("ops:operator-journey-step", args=[self.step_1.pk])
+        )
+
+        self.assertNotContains(response, 'value="gateway"', html=False)
+        for role in ("terminal", "satellite", "control", "watchtower"):
+            self.assertContains(response, f'value="{role}"', html=False)
 
     @override_settings(NODE_ROLE="Constellation")
     def test_role_validation_normalizes_constellation_alias_for_commands(self):
@@ -148,10 +177,15 @@ class OperatorJourneyViewTests(TestCase):
 
         self.assertEqual(summary["configured_role"], "Watchtower")
         self.assertIn("./configure.sh --watchtower", summary["commands"])
-        self.assertNotIn("./configure.sh --terminal|--satellite|--control|--watchtower", summary["commands"])
+        self.assertNotIn(
+            "./configure.sh --terminal|--satellite|--control|--watchtower",
+            summary["commands"],
+        )
 
     def test_completing_all_steps_shows_completion_message_on_dashboard(self):
-        self.client.post(reverse("ops:operator-journey-step-complete", args=[self.step_1.pk]))
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+        )
         complete_response = self.client.post(
             reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
         )
@@ -164,8 +198,12 @@ class OperatorJourneyViewTests(TestCase):
             "All Operator tasks completed to date. Keep coming back for more.",
         )
 
-    def test_dashboard_shows_operator_journey_for_admin_user_without_group_assignment(self):
-        site_operator_group = SecurityGroup.objects.create(name=SITE_OPERATOR_GROUP_NAME)
+    def test_dashboard_shows_operator_journey_for_admin_user_without_group_assignment(
+        self,
+    ):
+        site_operator_group = SecurityGroup.objects.create(
+            name=SITE_OPERATOR_GROUP_NAME
+        )
         admin_user = get_user_model().objects.create_user(
             username="admin",
             password="x",
@@ -193,7 +231,215 @@ class OperatorJourneyViewTests(TestCase):
         response = self.client.get(reverse("admin:index"))
 
         self.assertContains(response, "Run admin setup")
-        self.assertTrue(admin_user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).exists())
+        self.assertTrue(
+            admin_user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).exists()
+        )
+
+    def test_provision_step_renders_account_form(self):
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+        )
+
+        response = self.client.get(
+            reverse("ops:operator-journey-step", args=[provision_step.pk])
+        )
+
+        self.assertContains(response, "Create account and complete step")
+        self.assertNotContains(response, "<iframe", html=False)
+
+    def test_provision_step_creates_superuser_groups_and_github_token(self):
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+        )
+        extra_group = SecurityGroup.objects.create(name="Provisioned Ops Group")
+
+        response = self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            {
+                "username": "ops-provisioned",
+                "email": "ops-provisioned@example.com",
+                "security_groups": [self.group.pk, extra_group.pk],
+                "password_mode": "random",
+                "github_username": "octocat",
+                "github_token": "ghp_example_token",
+            },
+        )
+
+        self.assertContains(response, "Operational superuser created")
+        self.assertContains(response, "Record this password securely now")
+        created_user = get_user_model().objects.get(username="ops-provisioned")
+        self.assertTrue(created_user.is_superuser)
+        self.assertTrue(created_user.is_staff)
+        self.assertSetEqual(
+            set(created_user.groups.values_list("name", flat=True)),
+            {self.group.name, extra_group.name},
+        )
+        token = GitHubToken.objects.get(user=created_user)
+        self.assertEqual(token.label, "octocat")
+
+    def test_provision_step_ignores_autofilled_password_when_mode_is_random(self):
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+        )
+
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            {
+                "username": "ops-random-password",
+                "email": "ops-random-password@example.com",
+                "security_groups": [self.group.pk],
+                "password_mode": "random",
+                "password": "autofilled-password",
+            },
+        )
+
+        created_user = get_user_model().objects.get(username="ops-random-password")
+        self.assertFalse(created_user.check_password("autofilled-password"))
+
+    def test_provision_step_rejects_existing_username(self):
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+        )
+        get_user_model().objects.create_user(
+            username="existing-ops-user",
+            password="x",
+            is_staff=True,
+            is_superuser=True,
+        )
+
+        response = self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            {
+                "username": "existing-ops-user",
+                "email": "ops-provisioned@example.com",
+                "security_groups": [self.group.pk],
+                "password_mode": "random",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "A user with this username already exists.")
+
+    def test_provision_step_post_rejects_when_not_current_required_step(self):
+        blocked_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+
+        response = self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[blocked_step.pk]),
+            {
+                "username": "ops-not-allowed",
+                "email": "ops-provisioned@example.com",
+                "security_groups": [self.group.pk],
+                "password_mode": "random",
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(
+            response, reverse("ops:operator-journey-step", args=[self.step_1.pk])
+        )
+        self.assertFalse(
+            get_user_model().objects.filter(username="ops-not-allowed").exists()
+        )
+
+    def test_non_superuser_staff_cannot_view_or_submit_provision_step(self):
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+        )
+
+        staff_user = get_user_model().objects.create_user(
+            username="staff-operator",
+            password="x",
+            is_staff=True,
+            is_superuser=False,
+        )
+        staff_user.groups.add(self.group)
+        self.client.force_login(staff_user)
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+        )
+
+        view_response = self.client.get(
+            reverse("ops:operator-journey-step", args=[provision_step.pk])
+        )
+        self.assertEqual(view_response.status_code, 403)
+
+        submit_response = self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            {
+                "username": "ops-should-not-create",
+                "security_groups": [self.group.pk],
+                "password_mode": "random",
+            },
+        )
+        self.assertEqual(submit_response.status_code, 403)
+        self.assertFalse(
+            get_user_model().objects.filter(username="ops-should-not-create").exists()
+        )
 
 
 class OperatorJourneyTemplateTagTests(TestCase):

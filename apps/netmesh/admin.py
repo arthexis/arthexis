@@ -15,6 +15,7 @@ from django.utils.translation import ngettext
 from apps.locals.user_data import EntityModelAdmin
 from apps.netmesh.models import (
     MeshMembership,
+    NetmeshAgentStatus,
     NodeEndpoint,
     NodeKeyMaterial,
     NodeRelayConfig,
@@ -169,8 +170,8 @@ class MeshMembershipAdmin(EntityModelAdmin):
 
 @admin.register(NodeKeyMaterial)
 class NodeKeyMaterialAdmin(EntityModelAdmin):
-    list_display = ("node", "created_at", "rotated_at", "revoked", "revoked_at")
-    list_filter = ("revoked",)
+    list_display = ("node", "key_type", "key_version", "key_state", "created_at", "rotated_at", "revoked_at")
+    list_filter = ("key_type", "key_state")
     search_fields = ("node__hostname", "public_key")
 
 
@@ -344,3 +345,33 @@ class ServiceAdvertisementAdmin(EntityModelAdmin):
     list_display = ("node", "service_name", "port", "protocol")
     list_filter = ("protocol",)
     search_fields = ("node__hostname", "service_name")
+
+
+@admin.register(NetmeshAgentStatus)
+class NetmeshAgentStatusAdmin(EntityModelAdmin):
+    list_display = (
+        "singleton",
+        "is_running",
+        "lifecycle_state",
+        "last_poll_at",
+        "peers_synced",
+        "session_count",
+        "relay_count",
+    )
+    readonly_fields = (
+        "singleton",
+        "is_running",
+        "lifecycle_state",
+        "last_poll_at",
+        "last_sync_at",
+        "peers_synced",
+        "session_count",
+        "relay_count",
+        "last_error",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

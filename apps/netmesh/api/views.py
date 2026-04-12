@@ -11,6 +11,7 @@ from django.utils.http import http_date
 from django.views.decorators.http import require_GET
 
 from apps.netmesh.api.auth import authenticate_enrollment
+from apps.netmesh.api.serializers import serialize_active_transport_key
 from apps.netmesh.metrics import map_generation_timer
 from apps.netmesh.models import (
     MeshMembership,
@@ -118,6 +119,14 @@ def permitted_peers(request: HttpRequest) -> HttpResponse:
     peer_memberships = MeshMembership.objects.select_related("node", "node__role").filter(**filters, is_enabled=True).exclude(
         node=principal.node
     )
+    active_transport_key_by_node = {
+        key.node_id: key
+        for key in NodeKeyMaterial.objects.filter(
+            node_id__in=peer_memberships.values_list("node_id", flat=True),
+            key_state=NodeKeyMaterial.KeyState.ACTIVE,
+            key_type=NodeKeyMaterial.KeyType.X25519,
+        )
+    }
 
     profile = _node_role_profile_name(principal.node)
     peers = []
@@ -150,6 +159,9 @@ def permitted_peers(request: HttpRequest) -> HttpResponse:
             if profile in {"gateway", "service"}:
                 peer_payload["tenant"] = mesh_peer.tenant
                 peer_payload["site_id"] = mesh_peer.site_id
+            peer_payload["transport_key"] = serialize_active_transport_key(
+                key_material=active_transport_key_by_node.get(mesh_peer.node_id)
+            )
             peers.append(peer_payload)
 
     payload = {
@@ -187,6 +199,14 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
         for membership in peer_memberships
     }
     peer_ids = [peer_id for peer_id, summary in policy_by_peer.items() if summary.allowed_services]
+    active_transport_key_by_node = {
+        key.node_id: key
+        for key in NodeKeyMaterial.objects.filter(
+            node_id__in=peer_ids,
+            key_state=NodeKeyMaterial.KeyState.ACTIVE,
+            key_type=NodeKeyMaterial.KeyType.X25519,
+        )
+    }
     endpoints_qs = list(NodeEndpoint.objects.filter(node_id__in=peer_ids).select_related("node", "node__role"))
     relay_qs = list(
         NodeRelayConfig.objects.filter(node_id__in=peer_ids, is_enabled=True).select_related("region")
@@ -257,6 +277,9 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
                     "allowed_services": policy_by_peer.get(endpoint.node_id).allowed_services,
                     "denied_services": policy_by_peer.get(endpoint.node_id).denied_services,
                 },
+                "transport_key": serialize_active_transport_key(
+                    key_material=active_transport_key_by_node.get(endpoint.node_id)
+                ),
             }
             if profile == "gateway":
                 row["nat_type"] = endpoint.nat_type
@@ -323,7 +346,11 @@ def key_info(request: HttpRequest) -> HttpResponse:
 
     principal, _membership = resolved
     active_key = (
-        NodeKeyMaterial.objects.filter(node=principal.node, revoked=False)
+        NodeKeyMaterial.objects.filter(
+            node=principal.node,
+            key_state=NodeKeyMaterial.KeyState.ACTIVE,
+            key_type=NodeKeyMaterial.KeyType.X25519,
+        )
         .order_by("-created_at", "-id")
         .first()
     )
@@ -340,6 +367,8 @@ def key_info(request: HttpRequest) -> HttpResponse:
             "key": {
                 "state": "active",
                 "fingerprint": hashlib.sha256(active_key.public_key.encode("utf-8")).hexdigest()[:16],
+                "type": active_key.key_type,
+                "version": active_key.key_version,
                 "created_at": http_date(active_key.created_at.timestamp()),
                 "rotated_at": http_date(active_key.rotated_at.timestamp()) if active_key.rotated_at else None,
             },

@@ -25,7 +25,6 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [OCPP 1.6 Compliance Review](ocpp16_compliance_review.md)
 - [Ops Command Wrapper](operations/operational-commands.md)
 - [Reinstall + Data Import Runbook (1.0+)](operations/reinstall-data-import-runbook.md)
-- [Recipes decommission path](recipes.md)
 - [Suite Services Report](suite-services-report.md)
 - [USB Camera Power-Off](usb-camera-power-off.md)
 - [Watchtower Attack Simulation Playbook](development/watchtower-attack-simulation.md)

@@ -7,8 +7,13 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import Client, RequestFactory
 
-from apps.netmesh.admin import MeshMembershipAdmin, NodeEndpointAdmin, PeerPolicyAdmin
-from apps.netmesh.models import MeshMembership, NodeEndpoint, PeerPolicy
+from apps.netmesh.admin import (
+    MeshMembershipAdmin,
+    NetmeshAgentStatusAdmin,
+    NodeEndpointAdmin,
+    PeerPolicyAdmin,
+)
+from apps.netmesh.models import MeshMembership, NetmeshAgentStatus, NodeEndpoint, PeerPolicy
 from apps.nodes.models import Node
 
 
@@ -194,3 +199,10 @@ def test_node_endpoint_health_view_denies_staff_without_model_permissions():
     response = client.get("/admin/netmesh/nodeendpoint/health/")
 
     assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_netmesh_agent_status_admin_disallows_deletes():
+    model_admin = NetmeshAgentStatusAdmin(NetmeshAgentStatus, admin.site)
+
+    assert model_admin.has_delete_permission(request=None) is False

@@ -11,7 +11,7 @@ from django.db import DatabaseError
 from django.db.models import Count, Q
 from django.utils import timezone
 
-from apps.netmesh.models import NodeEndpoint, NodeKeyMaterial
+from apps.netmesh.models import NetmeshAgentStatus, NodeEndpoint, NodeKeyMaterial
 from apps.nodes.models import Node
 
 _map_latency_state = {"count": 0, "total_seconds": 0.0, "max_seconds": 0.0}
@@ -76,7 +76,10 @@ def _key_age_distribution(now=None) -> dict[str, int]:
             "90_plus_days": 0,
         }
     )
-    active_keys = NodeKeyMaterial.objects.filter(revoked=False).only("created_at")
+    active_keys = NodeKeyMaterial.objects.filter(
+        key_state=NodeKeyMaterial.KeyState.ACTIVE,
+        key_type=NodeKeyMaterial.KeyType.X25519,
+    ).only("created_at")
     try:
         for key in active_keys:
             age = now - key.created_at
@@ -118,6 +121,25 @@ def snapshot() -> dict[str, object]:
     except DatabaseError:
         enrolled_nodes = 0
         stale_endpoint_total = 0
+    try:
+        agent_status = NetmeshAgentStatus.get_solo()
+        agent_snapshot = {
+            "is_running": agent_status.is_running,
+            "lifecycle_state": agent_status.lifecycle_state,
+            "last_poll_at": agent_status.last_poll_at.isoformat() if agent_status.last_poll_at else None,
+            "peers_synced": agent_status.peers_synced,
+            "session_count": agent_status.session_count,
+            "relay_count": agent_status.relay_count,
+        }
+    except DatabaseError:
+        agent_snapshot = {
+            "is_running": False,
+            "lifecycle_state": "unknown",
+            "last_poll_at": None,
+            "peers_synced": 0,
+            "session_count": 0,
+            "relay_count": 0,
+        }
     return {
         "map_generation_latency_seconds": _map_latency_snapshot(),
         "enrolled_nodes": enrolled_nodes,
@@ -125,4 +147,5 @@ def snapshot() -> dict[str, object]:
         "key_age_distribution": _key_age_distribution(),
         "enrollment_states": _enrollment_counts(),
         "stale_endpoint_total": stale_endpoint_total,
+        "agent": agent_snapshot,
     }

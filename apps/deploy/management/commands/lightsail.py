@@ -30,7 +30,7 @@ from apps.features.utils import is_suite_feature_enabled
 from apps.nodes.models import Node
 
 
-LIGHTSAIL_CLI_AUTH_BOOTSTRAP_FEATURE_SLUG = "deploy-lightsail-cli-auth-bootstrap"
+LIGHTSAIL_CLI_AUTH_BOOTSTRAP_FEATURE_SLUG = "lightsail-deployer"
 
 
 class Command(BaseCommand):
