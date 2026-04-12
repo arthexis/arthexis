@@ -1,5 +1,8 @@
+from types import SimpleNamespace
+
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.template.loader import render_to_string
 from django.test import RequestFactory
 
@@ -58,11 +61,11 @@ def test_user_story_feedback_template_omits_security_groups_for_non_staff_users(
 
 
 def test_user_story_feedback_template_enables_comments_autocomplete():
-    user = get_user_model().objects.create_user(
+    user = SimpleNamespace(
         username="staff-user",
-        password="x",
-        email="staff-user@example.com",
+        is_authenticated=True,
         is_staff=True,
+        groups=SimpleNamespace(all=lambda: []),
     )
     request = RequestFactory().get("/admin/")
     request.user = user
@@ -75,7 +78,7 @@ def test_user_story_feedback_template_enables_comments_autocomplete():
 
 def test_public_feedback_template_enables_comments_autocomplete():
     request = RequestFactory().get("/")
-    request.user = get_user_model()()
+    request.user = AnonymousUser()
 
     html = render_to_string(
         "pages/includes/public_feedback_widget.html",
