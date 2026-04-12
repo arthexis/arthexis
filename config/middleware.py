@@ -13,7 +13,7 @@ from apps.nodes.models import Node
 from utils.sites import get_site
 
 from .active_app import active_app
-from .request_utils import is_https_request
+from .request_utils import is_https_request, reset_request_log_context, set_request_log_context
 
 _is_https_request = is_https_request
 
@@ -30,10 +30,15 @@ class ActiveAppMiddleware:
         role_name = node.role.name if node and node.role else "Terminal"
         site_name = site.name if site else ""
         active = site_name or role_name
+        node_id = str(getattr(node, "pk", "") or "")
+        request_log_token = set_request_log_context(request, node_id=node_id)
         with active_app(active):
             request.site = site
             request.active_app = active
-            response = self.get_response(request)
+            try:
+                response = self.get_response(request)
+            finally:
+                reset_request_log_context(request_log_token)
         return response
 
 
