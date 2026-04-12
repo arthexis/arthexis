@@ -141,6 +141,16 @@ def test_mesh_membership_admin_revoke_selected_nodes_deduplicates_nodes():
 
 
 @pytest.mark.django_db
+def test_mesh_membership_admin_overlay_ipv4_display():
+    node = Node.objects.create(hostname="mesh-admin-overlay")
+    membership = MeshMembership.objects.create(node=node, tenant="tenant-overlay-admin", is_enabled=True)
+    model_admin = MeshMembershipAdmin(MeshMembership, admin.site)
+
+    assert "overlay_ipv4" in model_admin.list_display
+    assert model_admin.overlay_ipv4(membership) == "100.96.0.1"
+
+
+@pytest.mark.django_db
 def test_peer_policy_admin_changelist_exposes_policy_matrix_url(admin_client):
     response = admin_client.get("/admin/netmesh/peerpolicy/")
 

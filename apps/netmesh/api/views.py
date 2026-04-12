@@ -38,7 +38,7 @@ def _node_role_profile_name(node) -> str:
 
 
 def _scope_for_caller(*, node, site_id: int | None):
-    memberships = MeshMembership.objects.filter(node=node, is_enabled=True).select_related("site")
+    memberships = MeshMembership.objects.filter(node=node, is_enabled=True).select_related("overlay_lease", "site")
     if site_id:
         scoped_membership = memberships.filter(site_id=site_id).order_by("-pk").first()
         if scoped_membership:
@@ -116,8 +116,10 @@ def permitted_peers(request: HttpRequest) -> HttpResponse:
     principal, membership = resolved
     filters = _scope_filters(membership=membership)
     resolver = ACLResolver(tenant=membership.tenant, site_id=membership.site_id)
-    peer_memberships = MeshMembership.objects.select_related("node", "node__role").filter(**filters, is_enabled=True).exclude(
-        node=principal.node
+    peer_memberships = (
+        MeshMembership.objects.select_related("node", "node__role", "overlay_lease")
+        .filter(**filters, is_enabled=True)
+        .exclude(node=principal.node)
     )
     active_transport_key_by_node = {
         key.node_id: key
@@ -149,6 +151,7 @@ def permitted_peers(request: HttpRequest) -> HttpResponse:
                 "node_id": mesh_peer.node_id,
                 "hostname": mesh_peer.node.hostname,
                 "public_endpoint": mesh_peer.node.public_endpoint,
+                "overlay_ipv4": getattr(getattr(mesh_peer, "overlay_lease", None), "overlay_ipv4", None),
                 "role": getattr(mesh_peer.node.role, "name", ""),
                 "policy_summary": {
                     "policy_ids": pair_summary.policy_ids,
@@ -192,8 +195,11 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
     filters = _scope_filters(membership=membership)
     resolver = ACLResolver(tenant=membership.tenant, site_id=membership.site_id)
     peer_memberships = list(
-        MeshMembership.objects.select_related("node", "node__role").filter(**filters, is_enabled=True).exclude(node=principal.node)
+        MeshMembership.objects.select_related("node", "node__role", "overlay_lease")
+        .filter(**filters, is_enabled=True)
+        .exclude(node=principal.node)
     )
+    memberships_by_node_id = {item.node_id: item for item in peer_memberships}
     policy_by_peer = {
         membership.node_id: resolver.resolve_pair(source_node=principal.node, destination_node=membership.node)
         for membership in peer_memberships
@@ -262,6 +268,9 @@ def peer_endpoints(request: HttpRequest) -> HttpResponse:
             all_candidates = direct_candidates + relay_candidates
             row = {
                 "node_id": endpoint.node_id,
+                "overlay_ipv4": getattr(
+                    getattr(memberships_by_node_id.get(endpoint.node_id), "overlay_lease", None), "overlay_ipv4", None
+                ),
                 "endpoint": endpoint.endpoint,
                 "candidate_endpoints": [candidate["endpoint"] for candidate in direct_candidates[1:]],
                 "endpoint_priority": endpoint.endpoint_priority,

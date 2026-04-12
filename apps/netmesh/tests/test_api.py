@@ -108,6 +108,7 @@ def test_netmesh_api_returns_scoped_payloads_and_etag(client):
     assert peers.status_code == 200
     assert [item["hostname"] for item in peers_json["peers"]] == ["peer-allowed"]
     assert peers_json["peers"][0]["site_id"] == site_a.id
+    assert peers_json["peers"][0]["overlay_ipv4"] == "100.96.0.2"
     assert peers_json["peers"][0]["transport_key"]["public_key"] == "x25519:peer-public-key"
     assert peers_json["peers"][0]["transport_key"]["type"] == NodeKeyMaterial.KeyType.X25519
 
@@ -117,6 +118,7 @@ def test_netmesh_api_returns_scoped_payloads_and_etag(client):
     assert len(endpoints_json["endpoints"]) == 1
     endpoint_payload = endpoints_json["endpoints"][0]
     assert endpoint_payload["endpoint"] == "wss://peer-allowed.example/ws"
+    assert endpoint_payload["overlay_ipv4"] == "100.96.0.2"
     assert endpoint_payload["candidate_endpoints"] == ["https://peer-allowed.example/direct"]
     assert endpoint_payload["endpoint_priority"] == 10
     assert endpoint_payload["connection_candidates"][0]["path"] == "direct"

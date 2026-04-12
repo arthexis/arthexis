@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import ipaddress
+
+from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -59,6 +62,97 @@ class MeshMembership(Entity):
         if self.site_id and self.site:
             scope = f"{scope}/{self.site.domain}"
         return f"{self.node} [{scope}]"
+
+    def save(self, *args, **kwargs):
+        was_enabled = True
+        if self.pk:
+            was_enabled = (
+                type(self)
+                .objects.filter(pk=self.pk)
+                .values_list("is_enabled", flat=True)
+                .first()
+            )
+            if was_enabled is None:
+                was_enabled = True
+
+        super().save(*args, **kwargs)
+
+        from apps.netmesh.services.overlay_lease import ensure_overlay_lease, release_overlay_lease
+
+        if self.is_enabled:
+            ensure_overlay_lease(membership=self)
+        elif was_enabled:
+            release_overlay_lease(membership=self)
+
+    def delete(self, *args, **kwargs):
+        from apps.netmesh.services.overlay_lease import release_overlay_lease
+
+        release_overlay_lease(membership=self)
+        super().delete(*args, **kwargs)
+
+
+class MeshOverlayLease(Entity):
+    """Tracks assigned overlay IPv4 addresses for mesh memberships."""
+
+    membership = models.OneToOneField(
+        MeshMembership,
+        on_delete=models.CASCADE,
+        related_name="overlay_lease",
+    )
+    tenant = models.CharField(max_length=64)
+    site = models.ForeignKey(
+        Site,
+        on_delete=models.CASCADE,
+        related_name="netmesh_overlay_leases",
+        null=True,
+        blank=True,
+    )
+    overlay_ipv4 = models.GenericIPAddressField(protocol="IPv4", unpack_ipv4=False)
+
+    class Meta(Entity.Meta):
+        ordering = ["tenant", "site__domain", "overlay_ipv4", "pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(tenant=""),
+                name="netmesh_overlaylease_tenant_non_empty",
+            ),
+            models.UniqueConstraint(
+                fields=["tenant", "overlay_ipv4"],
+                condition=Q(site__isnull=True),
+                name="netmesh_overlaylease_unique_default_scope",
+            ),
+            models.UniqueConstraint(
+                fields=["tenant", "site", "overlay_ipv4"],
+                condition=Q(site__isnull=False),
+                name="netmesh_overlaylease_unique_site_scope",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        errors: dict[str, list[str]] = {}
+        cidr = getattr(settings, "NETMESH_OVERLAY_IPV4_CIDR", "100.96.0.0/16")
+        try:
+            pool = ipaddress.IPv4Network(cidr, strict=False)
+        except ValueError as exc:
+            errors.setdefault("overlay_ipv4", []).append(
+                _("NETMESH_OVERLAY_IPV4_CIDR configuration is invalid: %(error)s")
+                % {"error": str(exc)}
+            )
+        else:
+            ip_value = ipaddress.IPv4Address(self.overlay_ipv4)
+            if ip_value not in pool:
+                errors.setdefault("overlay_ipv4", []).append(
+                    _("Overlay address must belong to configured pool %(pool)s.") % {"pool": str(pool)}
+                )
+            elif ip_value in {pool.network_address, pool.broadcast_address}:
+                errors.setdefault("overlay_ipv4", []).append(
+                    _("Overlay address cannot use the network or broadcast address of %(pool)s.")
+                    % {"pool": str(pool)}
+                )
+
+        if errors:
+            raise ValidationError(errors)
 
 
 class NodeKeyMaterial(Entity):
