@@ -45,40 +45,48 @@ def split_github_setup_into_product_developer_journey(apps, schema_editor):
         },
     )
 
-    update_fields = []
-    if journey.security_group_id != product_developer_group.id:
-        journey.security_group = product_developer_group
-        update_fields.append("security_group")
-    if created:
-        update_fields.append("is_seed_data")
-    elif not journey.is_seed_data:
-        journey.is_seed_data = True
-        update_fields.append("is_seed_data")
-    if update_fields:
-        journey.save(update_fields=update_fields)
+    if not created:
+        update_fields = []
+        if journey.security_group_id != product_developer_group.id:
+            journey.security_group = product_developer_group
+            update_fields.append("security_group")
+        if not journey.is_seed_data:
+            journey.is_seed_data = True
+            update_fields.append("is_seed_data")
+        if update_fields:
+            journey.save(update_fields=update_fields)
 
-    step, _ = OperatorJourneyStep.objects.get_or_create(
-        journey=journey,
-        slug=PRODUCT_DEVELOPER_GITHUB_STEP_SLUG,
-        defaults={
-            "title": "Connect your GitHub access",
-            "instruction": (
-                "Use the GitHub token setup wizard to connect your product developer account "
-                "for repository, release, and issue workflows."
-            ),
-            "help_text": (
-                "This step is for Product Developer members only. "
-                "The wizard opens your token record and keeps setup in one place."
-            ),
-            "iframe_url": "/admin/repos/githubrepository/setup-token/",
-            "order": 1,
-            "is_active": True,
-            "is_seed_data": True,
-        },
+    step = OperatorJourneyStep.objects.filter(
+        journey=journey, slug=PRODUCT_DEVELOPER_GITHUB_STEP_SLUG
+    ).first()
+    if step is None:
+        step = OperatorJourneyStep(
+            journey=journey,
+            slug=PRODUCT_DEVELOPER_GITHUB_STEP_SLUG,
+        )
+
+    for conflicting_step in (
+        OperatorJourneyStep.objects.filter(journey=journey, order__gte=1)
+        .exclude(pk=step.pk)
+        .order_by("-order", "-id")
+    ):
+        conflicting_step.order += 1
+        conflicting_step.save(update_fields=["order"])
+
+    step.title = "Connect your GitHub access"
+    step.instruction = (
+        "Use the GitHub token setup wizard to connect your product developer account "
+        "for repository, release, and issue workflows."
     )
-    if not step.is_seed_data:
-        step.is_seed_data = True
-        step.save(update_fields=["is_seed_data"])
+    step.help_text = (
+        "This step is for Product Developer members only. "
+        "The wizard opens your token record and keeps setup in one place."
+    )
+    step.iframe_url = "/admin/repos/githubrepository/setup-token/"
+    step.order = 1
+    step.is_active = True
+    step.is_seed_data = True
+    step.save()
 
 
 def noop_reverse(apps, schema_editor):
