@@ -19,7 +19,11 @@ from django.utils.http import urlencode
 from django.utils.translation import gettext_lazy as _
 
 from apps.actions.models import StaffTask, StaffTaskPreference
-from apps.actions.staff_tasks import ensure_default_staff_tasks_exist
+from apps.actions.staff_tasks import (
+    can_trigger_upgrade_checks,
+    ensure_default_staff_tasks_exist,
+    user_can_access_staff_task,
+)
 from apps.core import changelog
 from apps.core.models import AdminNotice
 from apps.core.systemctl import _systemctl_command
@@ -91,9 +95,7 @@ def _system_view(request):
             if str(task_id).isdigit()
         }
         for task in tasks:
-            if task.staff_only and not request.user.is_staff:
-                continue
-            if task.superuser_only and not request.user.is_superuser:
+            if not user_can_access_staff_task(request.user, task):
                 continue
             if not task.resolve_url():
                 continue
@@ -111,9 +113,7 @@ def _system_view(request):
 
     task_rows = []
     for task in tasks:
-        if task.staff_only and not request.user.is_staff:
-            continue
-        if task.superuser_only and not request.user.is_superuser:
+        if not user_can_access_staff_task(request.user, task):
             continue
         task_url = task.resolve_url()
         if not task_url:
@@ -185,9 +185,7 @@ def _collect_admin_report_routes(user) -> list[dict[str, str]]:
 
     ensure_default_staff_tasks_exist()
     routes: list[dict[str, str]] = []
-    restricted_routes = set(
-        StaffTask.objects.filter(superuser_only=True).values_list("action_name", flat=True)
-    )
+    upgrade_task = StaffTask.objects.filter(action_name="upgrade").first()
 
     def _walk(patterns: list[URLPattern | URLResolver]) -> None:
         for pattern in patterns:
@@ -200,7 +198,11 @@ def _collect_admin_report_routes(user) -> list[dict[str, str]]:
                 continue
             if route_name.endswith("-data"):
                 continue
-            if route_name == "system-upgrade-report" and "upgrade" in restricted_routes and not user.is_superuser:
+            if (
+                route_name == "system-upgrade-report"
+                and upgrade_task
+                and not user_can_access_staff_task(user, upgrade_task)
+            ):
                 continue
 
             try:
@@ -560,6 +562,9 @@ def _dismiss_admin_notice_view(request, notice_id: int):
     group="reports",
 )
 def _system_trigger_upgrade_check_view(request):
+    if not can_trigger_upgrade_checks(request.user):
+        raise PermissionDenied
+
     if request.method != "POST":
         return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
 
