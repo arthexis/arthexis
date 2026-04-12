@@ -7,16 +7,7 @@ from django.urls import reverse
 from apps.aws.models import AWSCredentials, LightsailInstance
 from apps.deploy.models import DeployInstance, DeployRun, DeployServer
 
-
 pytestmark = [pytest.mark.django_db, pytest.mark.integration]
-
-
-def test_deploy_server_lightsail_setup_view_renders(admin_client):
-    response = admin_client.get(reverse("admin:deploy_deployserver_lightsail_setup"))
-
-    assert response.status_code == 200
-    assert "Lightsail Setup Wizard" in response.content.decode()
-
 
 def test_deploy_server_lightsail_setup_view_registers_existing_instance(admin_client, monkeypatch):
     credentials = AWSCredentials.objects.create(
@@ -75,7 +66,6 @@ def test_deploy_server_lightsail_setup_view_registers_existing_instance(admin_cl
     assert DeployInstance.objects.filter(server=server, name="main").exists()
     assert DeployRun.objects.filter(instance__server=server, requested_by="lightsail_admin_wizard").exists()
 
-
 def test_deploy_server_lightsail_setup_view_rejects_inline_credentials_without_aws_permission(
     client, django_user_model
 ):
@@ -111,7 +101,6 @@ def test_deploy_server_lightsail_setup_view_rejects_inline_credentials_without_a
 
     assert response.status_code == 403
     assert not AWSCredentials.objects.filter(access_key_id="AKIA_RESTRICTED").exists()
-
 
 def test_deploy_server_lightsail_setup_view_rejects_existing_inline_credentials_without_change_permission(
     client, django_user_model

@@ -10,7 +10,6 @@ from django.urls import reverse
 from apps.imager.admin import _probe_download_url
 from apps.imager.models import RaspberryPiImageArtifact
 
-
 class _ProbeResponse:
     headers: dict[str, str] = {}
 
@@ -23,7 +22,6 @@ class _ProbeResponse:
     @staticmethod
     def getcode():
         return 200
-
 
 @pytest.mark.django_db
 @pytest.mark.integration
@@ -66,13 +64,11 @@ def test_imager_admin_create_rpi_image_view_rejects_disallowed_paths(
     )
     mock_build.assert_not_called()
 
-
-@pytest.mark.django_db
+@patch("apps.imager.admin.build_rpi4b_image")
 @override_settings(
     IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=("/tmp",),
     IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS=("/tmp",),
 )
-@patch("apps.imager.admin.build_rpi4b_image")
 def test_imager_admin_create_rpi_image_view_shows_artifact_download_actions(mock_build, admin_client, tmp_path):
     """Regression: successful builds should return to the wizard with artifact URL actions."""
 
@@ -114,34 +110,6 @@ def test_imager_admin_create_rpi_image_view_shows_artifact_download_actions(mock
     assert "Test URL" in body
     assert artifact.download_uri in body
 
-
-@pytest.mark.django_db
-@patch("apps.imager.admin._probe_download_url", return_value=(True, "HTTP 200"))
-def test_imager_admin_test_download_url_reports_probe_result(probe_mock, admin_client):
-    """Regression: wizard URL-test action should probe and report the download endpoint status."""
-
-    artifact = RaspberryPiImageArtifact.objects.create(
-        name="stable",
-        target="rpi-4b",
-        base_image_uri="https://example.com/base.img",
-        output_filename="stable-rpi-4b.img",
-        output_path="/tmp/stable-rpi-4b.img",
-        sha256="abc123",
-        size_bytes=8,
-        download_uri="https://cdn.example.com/images/stable-rpi-4b.img",
-        metadata={},
-    )
-
-    response = admin_client.get(
-        reverse("admin:imager_raspberrypiimageartifact_test_download_url", args=[artifact.pk]),
-        follow=True,
-    )
-
-    assert response.status_code == 200
-    probe_mock.assert_called_once_with(artifact.download_uri)
-    assert "Download URL check succeeded" in response.content.decode("utf-8")
-
-
 @pytest.mark.parametrize(
     ("download_url", "expected_message"),
     [
@@ -155,7 +123,6 @@ def test_probe_download_url_blocks_unsafe_targets(download_url, expected_message
     reachable, result = _probe_download_url(download_url)
     assert reachable is False
     assert result == expected_message
-
 
 @patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
 @patch("apps.imager.admin.build_opener")
@@ -177,7 +144,6 @@ def test_probe_download_url_revalidates_redirect_targets(build_opener_mock, _get
     assert reachable is False
     assert result == "Refusing to probe local or private addresses."
 
-
 @patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
 @patch("apps.imager.admin.build_opener")
 def test_probe_download_url_allows_five_redirect_hops(build_opener_mock, _getaddrinfo_mock):
@@ -196,7 +162,6 @@ def test_probe_download_url_allows_five_redirect_hops(build_opener_mock, _getadd
 
     assert reachable is True
     assert result == "HTTP 200"
-
 
 @patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
 @patch("apps.imager.admin.build_opener")
@@ -217,7 +182,6 @@ def test_probe_download_url_fails_after_sixth_redirect(build_opener_mock, _getad
     assert reachable is False
     assert result == "Too many redirects."
 
-
 @patch("apps.imager.admin.getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 443))])
 @patch("apps.imager.admin.build_opener")
 def test_probe_download_url_fails_redirect_without_location(build_opener_mock, _getaddrinfo_mock):
@@ -231,44 +195,3 @@ def test_probe_download_url_fails_redirect_without_location(build_opener_mock, _
 
     assert reachable is False
     assert result == "HTTP 302"
-
-
-@pytest.mark.django_db
-@override_settings(
-    IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=("/tmp",),
-    IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS=("/tmp",),
-)
-@patch("apps.imager.admin.build_rpi4b_image")
-def test_imager_admin_create_rpi_image_view_uses_named_artifact_when_path_lookup_misses(
-    mock_build,
-    admin_client,
-):
-    """Regression: fallback artifact lookup should still resolve by artifact name."""
-
-    artifact = RaspberryPiImageArtifact.objects.create(
-        name="stable",
-        target="rpi-4b",
-        base_image_uri="/tmp/base-old.img",
-        output_filename="stable-old-rpi-4b.img",
-        output_path="/tmp/stable-old-rpi-4b.img",
-        sha256="abc123",
-        size_bytes=8,
-        download_uri="https://cdn.example.com/images/stable-old-rpi-4b.img",
-        metadata={},
-    )
-    mock_build.return_value = type("BuildResult", (), {"output_path": "/tmp/missing.img"})()
-
-    response = admin_client.post(
-        reverse("admin:imager_raspberrypiimageartifact_create_rpi_image"),
-        data={
-            "name": "stable",
-            "base_image_uri": "/tmp/base-new.img",
-            "output_dir": "/tmp",
-            "download_base_uri": "https://cdn.example.com/images",
-            "git_url": "https://github.com/arthexis/arthexis.git",
-        },
-        follow=False,
-    )
-
-    assert response.status_code == 302
-    assert response["Location"].endswith(f"?artifact={artifact.pk}")

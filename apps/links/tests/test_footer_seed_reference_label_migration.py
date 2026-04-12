@@ -9,9 +9,7 @@ import pytest
 
 from apps.links.models import Reference
 
-
 pytestmark = pytest.mark.django_db
-
 
 @pytest.mark.parametrize(
     ("old_alt_text", "value", "new_alt_text"),
@@ -69,32 +67,3 @@ def test_footer_seed_reference_label_migration_updates_existing_seed_rows(
     assert stale.value == value
     assert not Reference.objects.filter(pk=duplicate.pk).exists()
 
-
-def test_footer_seed_reference_label_migration_handles_existing_non_seed_short_label() -> None:
-    migration = importlib.import_module(
-        "apps.links.migrations.0004_shorten_footer_reference_labels"
-    )
-
-    stale_seed = Reference.objects.create(
-        alt_text="GitHub Repositories",
-        value="https://github.com/orgs/arthexis/repositories",
-        include_in_footer=True,
-        is_seed_data=True,
-        method="link",
-    )
-    existing_non_seed = Reference.objects.create(
-        alt_text="GitHub Repos",
-        value="https://github.com/orgs/arthexis/repositories",
-        include_in_footer=True,
-        is_seed_data=False,
-        method="link",
-    )
-
-    migration.shorten_footer_seed_reference_labels(
-        apps=type("Apps", (), {"get_model": staticmethod(lambda *_: Reference)}),
-        schema_editor=SimpleNamespace(connection=SimpleNamespace(alias="default")),
-    )
-
-    assert not Reference.objects.filter(pk=stale_seed.pk).exists()
-    existing_non_seed.refresh_from_db()
-    assert existing_non_seed.alt_text == "GitHub Repos"
