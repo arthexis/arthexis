@@ -1,3 +1,5 @@
+> **Historical-only note:** This document is retained for historical context only and is **not** a release plan.
+
 # Proposal: use Energy Transactions as the unified energy ledger
 
 ## Context
