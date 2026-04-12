@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import socket
 
 from config.active_app import get_active_app
+from config.request_utils import get_request_log_context
 
 from .debug import parse_debug_logging
 
@@ -42,3 +44,19 @@ class IgnoreStaticAssetRequestsFilter(logging.Filter):
         except IndexError:
             # Not in the expected format of an access log, so don't filter.
             return True
+
+
+class RequestContextFilter(logging.Filter):
+    """Attach request correlation metadata to each log record."""
+
+    _hostname = socket.gethostname()
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        context = get_request_log_context()
+        record.app = getattr(record, "app", get_active_app())
+        record.hostname = getattr(record, "hostname", self._hostname)
+        record.request_id = getattr(record, "request_id", context.get("request_id", ""))
+        record.node_id = getattr(record, "node_id", context.get("node_id", ""))
+        record.charger_id = getattr(record, "charger_id", context.get("charger_id", ""))
+        record.session_id = getattr(record, "session_id", context.get("session_id", ""))
+        return True

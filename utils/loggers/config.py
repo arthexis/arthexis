@@ -15,6 +15,14 @@ from .rotation import TRANSACTIONAL_LOG_RETENTION_DAYS
 
 FILTERS_MODULE = "utils.loggers.filters"
 HANDLERS_MODULE = "utils.loggers.handlers"
+FORMATTERS_MODULE = "utils.loggers.json_formatter"
+
+
+def resolve_log_formatter() -> str:
+    """Resolve the configured formatter mode from ``ARTHEXIS_LOG_FORMAT``."""
+
+    selected = os.environ.get("ARTHEXIS_LOG_FORMAT", "text").strip().lower()
+    return "json" if selected == "json" else "standard"
 
 
 def configure_library_loggers(
@@ -51,6 +59,7 @@ def build_logging_settings(
     )
 
     debug_control = parse_debug_logging(os.environ.get("DEBUG"), debug_enabled)
+    selected_formatter = resolve_log_formatter()
 
     logging_config: dict[str, Any] = {
         "version": 1,
@@ -58,7 +67,8 @@ def build_logging_settings(
         "formatters": {
             "standard": {
                 "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-            }
+            },
+            "json": {"()": f"{FORMATTERS_MODULE}.JSONFormatter"},
         },
         "filters": {
             "debug_app_filter": {
@@ -69,6 +79,9 @@ def build_logging_settings(
             "ignore_static_asset_requests": {
                 "()": f"{FILTERS_MODULE}.IgnoreStaticAssetRequestsFilter",
             },
+            "request_context": {
+                "()": f"{FILTERS_MODULE}.RequestContextFilter",
+            },
         },
         "handlers": {
             "file": {
@@ -77,8 +90,8 @@ def build_logging_settings(
                 "when": "midnight",
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
                 "encoding": "utf-8",
-                "formatter": "standard",
-                "filters": ["debug_app_filter"],
+                "formatter": selected_formatter,
+                "filters": ["debug_app_filter", "request_context"],
             },
             "cp_forwarder_file": {
                 "class": f"{HANDLERS_MODULE}.CPForwarderFileHandler",
@@ -86,8 +99,9 @@ def build_logging_settings(
                 "when": "midnight",
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
                 "encoding": "utf-8",
-                "formatter": "standard",
+                "formatter": selected_formatter,
                 "level": "INFO",
+                "filters": ["request_context"],
             },
             "rfid_file": {
                 "class": f"{HANDLERS_MODULE}.RFIDFileHandler",
@@ -95,8 +109,9 @@ def build_logging_settings(
                 "when": "midnight",
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
                 "encoding": "utf-8",
-                "formatter": "standard",
+                "formatter": selected_formatter,
                 "level": "INFO",
+                "filters": ["request_context"],
             },
             "error_file": {
                 "class": f"{HANDLERS_MODULE}.ErrorFileHandler",
@@ -104,8 +119,9 @@ def build_logging_settings(
                 "when": "midnight",
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
                 "encoding": "utf-8",
-                "formatter": "standard",
+                "formatter": selected_formatter,
                 "level": "WARNING",
+                "filters": ["request_context"],
             },
             "celery_file": {
                 "class": f"{HANDLERS_MODULE}.CeleryFileHandler",
@@ -113,8 +129,9 @@ def build_logging_settings(
                 "when": "midnight",
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
                 "encoding": "utf-8",
-                "formatter": "standard",
+                "formatter": selected_formatter,
                 "level": "INFO",
+                "filters": ["request_context"],
             },
             "page_misses_file": {
                 "class": f"{HANDLERS_MODULE}.PageMissesFileHandler",
@@ -122,13 +139,15 @@ def build_logging_settings(
                 "when": "midnight",
                 "backupCount": TRANSACTIONAL_LOG_RETENTION_DAYS,
                 "encoding": "utf-8",
-                "formatter": "standard",
+                "formatter": selected_formatter,
                 "level": "INFO",
+                "filters": ["request_context"],
             },
             "console": {
                 "class": "logging.StreamHandler",
                 "level": "ERROR",
-                "formatter": "standard",
+                "formatter": selected_formatter,
+                "filters": ["request_context"],
             },
         },
         "root": {
