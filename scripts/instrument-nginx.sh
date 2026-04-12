@@ -37,14 +37,15 @@ resolve_invocation_path() {
 }
 
 script_hint="$(resolve_invocation_path "${BASH_SOURCE[0]}")"
+printf -v script_hint_quoted '%q' "$script_hint"
 
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
-  usage "$script_hint"
+  usage "$script_hint_quoted"
   exit 0
 fi
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
-  echo "Run this script as root, for example: sudo ${script_hint}" >&2
+  echo "Run this script as root, for example: sudo ${script_hint_quoted}" >&2
   exit 1
 fi
 
