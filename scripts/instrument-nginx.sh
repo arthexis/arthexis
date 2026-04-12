@@ -3,8 +3,9 @@
 set -euo pipefail
 
 usage() {
-  cat <<'USAGE'
-Usage: sudo scripts/instrument-nginx.sh [--user <username>]
+  local script_hint="$1"
+  cat <<USAGE
+Usage: sudo ${script_hint} [--user <username>]
 
 Configure nginx permissions and sudoers entries so the Arthexis suite can
 manage nginx configurations without interactive sudo prompts or permission
@@ -15,13 +16,35 @@ Options:
 USAGE
 }
 
+resolve_invocation_path() {
+  local invoked_path="$1"
+
+  if [ -n "$invoked_path" ] && [[ "$invoked_path" = */* ]]; then
+    echo "$(cd -- "$(dirname -- "$invoked_path")" && pwd)/$(basename -- "$invoked_path")"
+    return
+  fi
+
+  local resolved
+  resolved="$(command -v -- "$invoked_path" 2>/dev/null || true)"
+  if [ -n "$resolved" ]; then
+    echo "$resolved"
+    return
+  fi
+
+  local script_dir
+  script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+  echo "${script_dir}/$(basename -- "${BASH_SOURCE[0]}")"
+}
+
+script_hint="$(resolve_invocation_path "${BASH_SOURCE[0]}")"
+
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
-  usage
+  usage "$script_hint"
   exit 0
 fi
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
-  echo "This script must be run as root (use sudo)." >&2
+  echo "Run this script as root, for example: sudo ${script_hint}" >&2
   exit 1
 fi
 
