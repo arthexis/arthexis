@@ -27,7 +27,9 @@ def test_public_view_does_not_execute_for_anonymous_users(client, monkeypatch):
 
     assert response.status_code == 200
     assert response.context["ran_query"] is False
-    assert "restricted to authenticated staff users" in response.context["error_message"]
+    assert (
+        "restricted to authenticated staff users" in response.context["error_message"]
+    )
 
 
 @pytest.mark.django_db
@@ -79,6 +81,26 @@ def test_model_validation_blocks_public_execution_without_secure_mode(monkeypatc
 
 
 @pytest.mark.django_db
+def test_model_validation_allows_legacy_public_query_edits_without_secure_mode(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "apps.odoo.models.query.is_public_query_execution_secure_mode_enabled",
+        lambda default=False: False,
+    )
+    query = OdooQuery.objects.create(
+        name="Legacy Query",
+        model_name="sale.order",
+        method="search_read",
+        enable_public_view=True,
+        public_view_slug="legacy-query",
+    )
+
+    query.description = "Updated"
+    query.full_clean()
+
+
+@pytest.mark.django_db
 def test_admin_form_shows_policy_error_when_secure_mode_disabled(monkeypatch):
     monkeypatch.setattr(
         "apps.odoo.admin.is_public_query_execution_secure_mode_enabled",
@@ -101,4 +123,6 @@ def test_admin_form_shows_policy_error_when_secure_mode_disabled(monkeypatch):
 
     assert "blocked by policy" in form.fields["enable_public_view"].help_text
     assert form.is_valid() is False
-    assert "secure-mode feature flag is disabled" in form.errors["enable_public_view"][0]
+    assert (
+        "secure-mode feature flag is disabled" in form.errors["enable_public_view"][0]
+    )

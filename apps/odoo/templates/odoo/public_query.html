@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load i18n %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -109,7 +110,7 @@
 
         <form method="get">
             {% if not execution_allowed %}
-                <div class="notice">Execution is restricted to authenticated staff users. Public pages remain metadata-only previews.</div>
+                <div class="notice">{% trans "Execution is restricted to authenticated staff users. Public pages remain metadata-only previews." %}</div>
             {% endif %}
             {% for variable in variables %}
                 <div class="field">
@@ -132,7 +133,7 @@
                 <p class="empty">No variables are defined for this query.</p>
             {% endfor %}
             <div class="actions">
-                <button type="submit" {% if not execution_allowed %}disabled{% endif %}>Run Query</button>
+                <button type="submit" {% if not execution_allowed %}disabled{% endif %}>{% trans "Run Query" %}</button>
             </div>
         </form>
 

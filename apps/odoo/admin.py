@@ -1,5 +1,5 @@
-from django.contrib import admin, messages
 from django import forms
+from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -11,7 +11,10 @@ from apps.discovery.services import record_discovery_item, start_discovery
 from apps.locals.user_data import EntityModelAdmin
 
 from .models import OdooDeployment, OdooQuery, OdooQueryVariable
-from .public_query_features import is_public_query_execution_secure_mode_enabled
+from .public_query_features import (
+    PUBLIC_QUERY_EXECUTION_RESTRICTION_MESSAGE,
+    is_public_query_execution_secure_mode_enabled,
+)
 from .services import sync_odoo_deployments
 from .sync_features import (
     ODOO_SYNC_DEPLOYMENT_DISCOVERY_PARAMETER_KEY,
@@ -87,7 +90,9 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
     def _discover_url(self) -> str:
         return reverse("admin:odoo_odoodeployment_discover")
 
-    def discover_instances(self, request, queryset=None):  # pragma: no cover - admin action
+    def discover_instances(
+        self, request, queryset=None
+    ):  # pragma: no cover - admin action
         return HttpResponseRedirect(self._discover_url())
 
     discover_instances.label = _("Discover")
@@ -119,7 +124,9 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
             ):
                 self.message_user(
                     request,
-                    _("Odoo deployment discovery sync is disabled by suite feature toggles."),
+                    _(
+                        "Odoo deployment discovery sync is disabled by suite feature toggles."
+                    ),
                     level=messages.ERROR,
                 )
                 return TemplateResponse(
@@ -200,24 +207,25 @@ class OdooQueryVariableInline(admin.TabularInline):
 
 
 class OdooQueryAdminForm(forms.ModelForm):
+    PUBLIC_EXECUTION_POLICY = PUBLIC_QUERY_EXECUTION_RESTRICTION_MESSAGE
+
     class Meta:
         model = OdooQuery
         fields = "__all__"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        secure_mode_enabled = is_public_query_execution_secure_mode_enabled(default=False)
-        policy = _(
-            "Public execution is restricted. Public routes are metadata-only previews; staff can execute with authenticated access."
+        secure_mode_enabled = is_public_query_execution_secure_mode_enabled(
+            default=False
         )
         if secure_mode_enabled:
             self.fields["enable_public_view"].help_text = _(
                 "Enable only when absolutely needed and reviewed. "
-            ) + policy
+            ) + str(self.PUBLIC_EXECUTION_POLICY)
             return
         self.fields["enable_public_view"].help_text = _(
             "This toggle is currently blocked by policy. "
-        ) + policy
+        ) + str(self.PUBLIC_EXECUTION_POLICY)
 
     def clean_enable_public_view(self):
         enabled = self.cleaned_data.get("enable_public_view", False)

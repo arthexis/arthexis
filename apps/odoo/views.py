@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, render
 from django.utils.translation import gettext as _
 
 from .models import OdooQuery
+from .public_query_features import PUBLIC_QUERY_EXECUTION_RESTRICTION_MESSAGE
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,9 @@ def query_public_view(request, slug: str):
             errors[variable.key] = _("This field is required.")
         values[variable.key] = value
 
-    should_run = bool(request.GET) or any(variable.default_value for variable in variables)
+    should_run = bool(request.GET) or any(
+        variable.default_value for variable in variables
+    )
     execution_allowed = bool(request.user.is_authenticated and request.user.is_staff)
     results = None
     error_message = ""
@@ -50,9 +53,7 @@ def query_public_view(request, slug: str):
             logger.exception("Unable to execute Odoo query %s", query.pk)
             error_message = _("Unable to execute query.")
     elif should_run and not execution_allowed:
-        error_message = _(
-            "Execution is restricted to authenticated staff users. Public access is metadata-only."
-        )
+        error_message = str(PUBLIC_QUERY_EXECUTION_RESTRICTION_MESSAGE)
 
     rendered_variables = []
     for variable in variables:

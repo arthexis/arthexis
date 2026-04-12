@@ -84,14 +84,26 @@ class OdooQuery(Entity):
     def clean(self):
         super().clean()
         errors: dict[str, list[str]] = {}
-        if self.enable_public_view and not is_public_query_execution_secure_mode_enabled(
-            default=False
+        if (
+            self.enable_public_view
+            and not is_public_query_execution_secure_mode_enabled(default=False)
         ):
-            errors.setdefault("enable_public_view", []).append(
-                _(
-                    "Public query execution is disabled unless Odoo public query secure mode is explicitly enabled."
+            had_public_view_enabled = False
+            if self.pk:
+                had_public_view_enabled = (
+                    type(self)
+                    .objects.filter(
+                        pk=self.pk,
+                        enable_public_view=True,
+                    )
+                    .exists()
                 )
-            )
+            if not had_public_view_enabled:
+                errors.setdefault("enable_public_view", []).append(
+                    _(
+                        "Public query execution is disabled unless Odoo public query secure mode is explicitly enabled."
+                    )
+                )
         if not isinstance(self.kwquery, dict):
             errors.setdefault("kwquery", []).append(
                 _("Provide keyword arguments as a JSON object."),
