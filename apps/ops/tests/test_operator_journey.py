@@ -11,7 +11,6 @@ from apps.nodes.models import NodeRole
 from apps.ops.models import OperatorJourney, OperatorJourneyStep
 from apps.ops.operator_journey import complete_step_for_user, status_for_user
 from apps.ops.views import _build_node_role_validation_summary
-from apps.repos.models import GitHubToken
 
 
 class OperatorJourneyFlowTests(TestCase):
@@ -258,7 +257,7 @@ class OperatorJourneyViewTests(TestCase):
         self.assertContains(response, "Create account and complete step")
         self.assertNotContains(response, "<iframe", html=False)
 
-    def test_provision_step_creates_superuser_groups_and_github_token(self):
+    def test_provision_step_creates_superuser_with_assigned_groups(self):
         provision_step = OperatorJourneyStep.objects.create(
             journey=self.journey,
             title="Create ops superuser",
@@ -282,8 +281,6 @@ class OperatorJourneyViewTests(TestCase):
                 "email": "ops-provisioned@example.com",
                 "security_groups": [self.group.pk, extra_group.pk],
                 "password_mode": "random",
-                "github_username": "octocat",
-                "github_token": "ghp_example_token",
             },
         )
 
@@ -296,8 +293,6 @@ class OperatorJourneyViewTests(TestCase):
             set(created_user.groups.values_list("name", flat=True)),
             {self.group.name, extra_group.name},
         )
-        token = GitHubToken.objects.get(user=created_user)
-        self.assertEqual(token.label, "octocat")
 
     def test_provision_step_ignores_autofilled_password_when_mode_is_random(self):
         provision_step = OperatorJourneyStep.objects.create(
