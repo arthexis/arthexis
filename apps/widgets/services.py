@@ -203,15 +203,12 @@ def render_zone_widgets(
 
     rendered: list[RenderedWidget] = []
     for widget in widgets:
-        definition = get_registered_widget(widget.slug)
-        if definition is None:
-            logger.debug("No registered widget definition for %s", widget.slug)
-            continue
-        if definition.permission and not definition.permission(request=request, widget=widget, **extra_context):
-            continue
-        if not _has_required_feature(widget, request):
-            continue
-        if not _visible(widget, getattr(request, "user", None)):
+        definition, blocker = evaluate_widget_visibility(
+            widget=widget,
+            request=request,
+            extra_context=extra_context,
+        )
+        if blocker:
             continue
 
         context = _build_context(definition, widget, request=request, **extra_context)
@@ -283,8 +280,35 @@ def invalidate_zone_cache(zone_slug: str) -> None:
     logger.debug("Invalidated widget cache for zone %s", zone_slug)
 
 
+def evaluate_widget_visibility(
+    *,
+    widget: Widget,
+    request,
+    extra_context: dict[str, Any] | None = None,
+) -> tuple[WidgetDefinition | None, str | None]:
+    """Return a widget definition and first visibility blocker for a request."""
+
+    extra_context = extra_context or {}
+    definition = get_registered_widget(widget.slug)
+    if definition is None:
+        logger.debug("No registered widget definition for %s", widget.slug)
+        return None, "missing_registration"
+    if definition.permission and not definition.permission(
+        request=request,
+        widget=widget,
+        **extra_context,
+    ):
+        return definition, "missing_permission"
+    if not _has_required_feature(widget, request):
+        return definition, "missing_required_feature"
+    if not _visible(widget, getattr(request, "user", None)):
+        return definition, "profile_restriction"
+    return definition, None
+
+
 __all__ = [
     "RenderedWidget",
+    "evaluate_widget_visibility",
     "invalidate_zone_cache",
     "render_zone_html",
     "render_zone_widgets",
