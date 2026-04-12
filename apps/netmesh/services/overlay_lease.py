@@ -12,7 +12,10 @@ from apps.netmesh.models import MeshMembership, MeshOverlayLease
 
 def _overlay_pool() -> ipaddress.IPv4Network:
     cidr = getattr(settings, "NETMESH_OVERLAY_IPV4_CIDR", "100.96.0.0/16")
-    return ipaddress.IPv4Network(cidr, strict=False)
+    try:
+        return ipaddress.IPv4Network(cidr, strict=False)
+    except ValueError as exc:
+        raise RuntimeError(f"NETMESH_OVERLAY_IPV4_CIDR configuration is invalid: {exc}") from exc
 
 
 def _scope_filters(*, membership: MeshMembership) -> dict:
@@ -62,7 +65,10 @@ def ensure_overlay_lease(*, membership: MeshMembership, retries: int = 3) -> Mes
                         setattr(existing, field_name, value)
                     existing.overlay_ipv4 = _first_free_address(membership=membership)
                     existing.full_clean()
-                    existing.save(update_fields=[*scope_values.keys(), "overlay_ipv4"])
+                    try:
+                        existing.save(update_fields=[*scope_values.keys(), "overlay_ipv4"])
+                    except IntegrityError:
+                        continue
                 return existing
 
             MeshMembership.objects.select_for_update().filter(pk=membership.pk).exists()

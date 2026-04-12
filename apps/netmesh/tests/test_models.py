@@ -13,6 +13,7 @@ from apps.netmesh.models import (
     ServiceAdvertisement,
 )
 from apps.netmesh.services.key_material import ensure_active_transport_key, rotate_transport_key
+from apps.netmesh.services.overlay_lease import ensure_overlay_lease
 from apps.nodes.models import Node, NodeRole
 from apps.ocpp.models import Charger
 
@@ -313,6 +314,42 @@ def test_overlay_lease_allocator_rejects_network_and_broadcast_addresses():
 
     with pytest.raises(RuntimeError):
         MeshMembership.objects.create(node=node, tenant="tenant-overlay-small-pool", is_enabled=True)
+
+
+@pytest.mark.django_db
+@override_settings(NETMESH_OVERLAY_IPV4_CIDR="invalid-cidr")
+def test_overlay_lease_allocator_reports_invalid_cidr_configuration():
+    node = Node.objects.create(hostname="mesh-overlay-invalid-cidr")
+
+    with pytest.raises(RuntimeError, match="NETMESH_OVERLAY_IPV4_CIDR configuration is invalid"):
+        MeshMembership.objects.create(node=node, tenant="tenant-overlay-invalid-cidr", is_enabled=True)
+
+
+@pytest.mark.django_db
+def test_overlay_lease_retries_integrity_collisions_on_scope_update(monkeypatch):
+    node_a = Node.objects.create(hostname="mesh-overlay-retry-a")
+    node_b = Node.objects.create(hostname="mesh-overlay-retry-b")
+
+    membership_a = MeshMembership.objects.create(node=node_a, tenant="tenant-a", is_enabled=True)
+    membership_b = MeshMembership.objects.create(node=node_b, tenant="tenant-b", is_enabled=True)
+
+    original_save = MeshOverlayLease.save
+    collision = {"seen": False}
+
+    def flaky_save(self, *args, **kwargs):
+        if self.membership_id == membership_b.id and not collision["seen"]:
+            collision["seen"] = True
+            raise IntegrityError("simulated lease collision")
+        return original_save(self, *args, **kwargs)
+
+    monkeypatch.setattr(MeshOverlayLease, "save", flaky_save)
+
+    membership_b.tenant = membership_a.tenant
+    ensure_overlay_lease(membership=membership_b, retries=2)
+    membership_b.refresh_from_db()
+
+    assert collision["seen"] is True
+    assert membership_b.overlay_lease.overlay_ipv4 != membership_a.overlay_lease.overlay_ipv4
 
 
 @pytest.mark.django_db

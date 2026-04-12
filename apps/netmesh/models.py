@@ -161,16 +161,25 @@ class MeshOverlayLease(Entity):
                 % {"error": str(exc)}
             )
         else:
-            ip_value = ipaddress.IPv4Address(self.overlay_ipv4)
-            if ip_value not in pool:
-                errors.setdefault("overlay_ipv4", []).append(
-                    _("Overlay address must belong to configured pool %(pool)s.") % {"pool": str(pool)}
-                )
-            elif ip_value in {pool.network_address, pool.broadcast_address}:
-                errors.setdefault("overlay_ipv4", []).append(
-                    _("Overlay address cannot use the network or broadcast address of %(pool)s.")
-                    % {"pool": str(pool)}
-                )
+            if not self.overlay_ipv4:
+                errors.setdefault("overlay_ipv4", []).append(_("Overlay IPv4 address is required."))
+            else:
+                try:
+                    ip_value = ipaddress.IPv4Address(self.overlay_ipv4)
+                except ValueError:
+                    errors.setdefault("overlay_ipv4", []).append(
+                        _("Overlay IPv4 address must be a valid IPv4 address.")
+                    )
+                else:
+                    if ip_value not in pool:
+                        errors.setdefault("overlay_ipv4", []).append(
+                            _("Overlay address must belong to configured pool %(pool)s.") % {"pool": str(pool)}
+                        )
+                    elif ip_value in {pool.network_address, pool.broadcast_address}:
+                        errors.setdefault("overlay_ipv4", []).append(
+                            _("Overlay address cannot use the network or broadcast address of %(pool)s.")
+                            % {"pool": str(pool)}
+                        )
 
         if errors:
             raise ValidationError(errors)
