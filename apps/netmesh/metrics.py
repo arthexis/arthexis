@@ -76,7 +76,10 @@ def _key_age_distribution(now=None) -> dict[str, int]:
             "90_plus_days": 0,
         }
     )
-    active_keys = NodeKeyMaterial.objects.filter(revoked=False).only("created_at")
+    active_keys = NodeKeyMaterial.objects.filter(
+        key_state=NodeKeyMaterial.KeyState.ACTIVE,
+        key_type=NodeKeyMaterial.KeyType.X25519,
+    ).only("created_at")
     try:
         for key in active_keys:
             age = now - key.created_at
