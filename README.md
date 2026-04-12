@@ -129,7 +129,7 @@ Detailed install flags, service-management choices, and upgrade-channel behavior
 - Reference the [Sigils Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/sigils.md) when configuring tokenized settings across environments.
 - Understand seed fixtures and per-user files with [Managing Local Node Data](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/managing-local-node-data.md).
 - Manage exports, imports, and audit trails with the [User Data Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/user-data.md).
-- Plan node capability adoption and configuration using the [Node Features Cookbook](apps/docs/cookbooks/node-features.md).
+- Plan node capability adoption and configuration using the [Node features guide](docs/feature/node-features.md).
 - Curate shortcuts for power users through the [Favorites Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/favorites.md).
 - Connect Slack workspaces through the [Slack Bot Onboarding Cookbook](https://github.com/arthexis/arthexis/blob/main/apps/docs/cookbooks/slack-bot-onboarding.md).
 
