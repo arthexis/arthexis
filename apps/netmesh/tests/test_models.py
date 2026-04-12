@@ -1,9 +1,11 @@
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.test import override_settings
 
 from apps.netmesh.models import (
     MeshMembership,
+    MeshOverlayLease,
     NodeKeyMaterial,
     NodeRelayConfig,
     PeerPolicy,
@@ -216,6 +218,101 @@ def test_mesh_membership_requires_non_empty_tenant():
     with pytest.raises(IntegrityError):
         with transaction.atomic():
             MeshMembership.objects.create(node=node, tenant="")
+
+
+@pytest.mark.django_db
+def test_mesh_membership_assigns_overlay_ipv4_lease_and_reclaims_on_disable():
+    node = Node.objects.create(hostname="mesh-overlay-lease")
+    membership = MeshMembership.objects.create(node=node, tenant="tenant-overlay", is_enabled=True)
+
+    lease = MeshOverlayLease.objects.get(membership=membership)
+    assert lease.tenant == "tenant-overlay"
+    assert lease.overlay_ipv4 == "100.96.0.1"
+
+    membership.is_enabled = False
+    membership.save(update_fields=["is_enabled"])
+
+    assert MeshOverlayLease.objects.filter(membership=membership).count() == 0
+
+
+@pytest.mark.django_db
+@override_settings(NETMESH_OVERLAY_IPV4_CIDR="100.96.10.0/30")
+def test_overlay_lease_allocator_uses_first_free_address_per_scope():
+    node_a = Node.objects.create(hostname="mesh-overlay-a")
+    node_b = Node.objects.create(hostname="mesh-overlay-b")
+
+    membership_a = MeshMembership.objects.create(node=node_a, tenant="tenant-overlay-first-free", is_enabled=True)
+    membership_b = MeshMembership.objects.create(node=node_b, tenant="tenant-overlay-first-free", is_enabled=True)
+
+    assert membership_a.overlay_lease.overlay_ipv4 == "100.96.10.1"
+    assert membership_b.overlay_lease.overlay_ipv4 == "100.96.10.2"
+
+    membership_a.is_enabled = False
+    membership_a.save(update_fields=["is_enabled"])
+    membership_a.is_enabled = True
+    membership_a.save(update_fields=["is_enabled"])
+    membership_a.refresh_from_db()
+
+    assert membership_a.overlay_lease.overlay_ipv4 == "100.96.10.1"
+
+
+@pytest.mark.django_db
+@override_settings(NETMESH_OVERLAY_IPV4_CIDR="100.96.20.0/29")
+def test_overlay_lease_validates_address_in_configured_pool():
+    node = Node.objects.create(hostname="mesh-overlay-validation")
+    membership = MeshMembership.objects.create(node=node, tenant="tenant-overlay-validation", is_enabled=True)
+    lease = membership.overlay_lease
+
+    lease.overlay_ipv4 = "100.96.21.1"
+    with pytest.raises(ValidationError):
+        lease.full_clean()
+
+
+@pytest.mark.django_db
+@override_settings(NETMESH_OVERLAY_IPV4_CIDR="100.96.30.0/30")
+def test_mesh_membership_save_rolls_back_when_overlay_pool_is_exhausted():
+    node_a = Node.objects.create(hostname="mesh-overlay-exhausted-a")
+    node_b = Node.objects.create(hostname="mesh-overlay-exhausted-b")
+    node_c = Node.objects.create(hostname="mesh-overlay-exhausted-c")
+
+    MeshMembership.objects.create(node=node_a, tenant="tenant-overlay-exhausted", is_enabled=True)
+    MeshMembership.objects.create(node=node_b, tenant="tenant-overlay-exhausted", is_enabled=True)
+
+    with pytest.raises(RuntimeError):
+        MeshMembership.objects.create(node=node_c, tenant="tenant-overlay-exhausted", is_enabled=True)
+
+    assert not MeshMembership.objects.filter(
+        node=node_c,
+        tenant="tenant-overlay-exhausted",
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_mesh_membership_soft_delete_does_not_recreate_overlay_lease():
+    node = Node.objects.create(hostname="mesh-overlay-soft-delete")
+    membership = MeshMembership.objects.create(
+        node=node,
+        tenant="tenant-overlay-soft-delete",
+        is_enabled=True,
+        is_seed_data=True,
+    )
+
+    assert MeshOverlayLease.objects.filter(membership=membership).exists()
+
+    membership.delete()
+    membership = MeshMembership.all_objects.get(pk=membership.pk)
+
+    assert membership.is_deleted is True
+    assert not MeshOverlayLease.objects.filter(membership=membership).exists()
+
+
+@pytest.mark.django_db
+@override_settings(NETMESH_OVERLAY_IPV4_CIDR="100.96.40.0/31")
+def test_overlay_lease_allocator_rejects_network_and_broadcast_addresses():
+    node = Node.objects.create(hostname="mesh-overlay-small-pool")
+
+    with pytest.raises(RuntimeError):
+        MeshMembership.objects.create(node=node, tenant="tenant-overlay-small-pool", is_enabled=True)
 
 
 @pytest.mark.django_db

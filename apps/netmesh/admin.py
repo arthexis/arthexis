@@ -69,9 +69,15 @@ class TenantFilter(admin.SimpleListFilter):
 @admin.register(MeshMembership)
 class MeshMembershipAdmin(EntityModelAdmin):
     actions = ("quarantine_segment", "revoke_selected_nodes")
-    list_display = ("node", "tenant", "site", "is_enabled")
+    list_display = ("node", "tenant", "site", "overlay_ipv4", "is_enabled")
     list_filter = ("is_enabled", "site", TenantFilter)
-    search_fields = ("node__hostname", "tenant", "site__domain")
+    search_fields = ("node__hostname", "tenant", "site__domain", "overlay_lease__overlay_ipv4")
+    list_select_related = ("node", "site", "overlay_lease")
+    readonly_fields = ("overlay_ipv4",)
+
+    @admin.display(description="Overlay IPv4")
+    def overlay_ipv4(self, obj):
+        return getattr(getattr(obj, "overlay_lease", None), "overlay_ipv4", "—")
 
     @admin.action(description="Quarantine segment")
     def quarantine_segment(self, request, queryset):
