@@ -383,9 +383,13 @@ class OperatorJourneyViewTests(TestCase):
             username="existing-ops-user",
             email="old@example.com",
             password="old-password",
+            is_active=False,
             is_staff=False,
             is_superuser=False,
         )
+        if hasattr(existing_user, "is_deleted"):
+            existing_user.is_deleted = True
+            existing_user.save(update_fields=["is_deleted"])
 
         response = self.client.post(
             reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
@@ -403,6 +407,9 @@ class OperatorJourneyViewTests(TestCase):
         existing_user.refresh_from_db()
         self.assertTrue(existing_user.is_staff)
         self.assertTrue(existing_user.is_superuser)
+        self.assertTrue(existing_user.is_active)
+        if hasattr(existing_user, "is_deleted"):
+            self.assertFalse(existing_user.is_deleted)
         self.assertEqual(existing_user.email, "ops-provisioned@example.com")
         self.assertTrue(existing_user.check_password("new-secure-password"))
         self.assertTrue(existing_user.groups.filter(pk=self.group.pk).exists())

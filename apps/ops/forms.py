@@ -15,6 +15,15 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
     """Create a superuser account and optionally attach a GitHub token."""
 
     PASSWORD_ALPHABET = string.ascii_letters + string.digits + "-._~!@#$%^&*"
+    UPGRADE_UPDATE_FIELDS = (
+        "email",
+        "is_active",
+        "is_deleted",
+        "is_staff",
+        "is_superuser",
+        "password",
+        "username",
+    )
 
     username = forms.CharField(
         max_length=150, help_text="Login name for the new superuser."
@@ -56,10 +65,17 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
-        user_model = get_user_model()
-        username = cleaned_data.get("username") or ""
-        user_manager = getattr(user_model, "all_objects", user_model._default_manager)
-        existing_user = user_manager.filter(username=username).first()
+        username = cleaned_data.get("username")
+        existing_user = None
+        if username:
+            existing_user = getattr(self, "_existing_user", None)
+            if existing_user is None:
+                user_model = get_user_model()
+                user_manager = getattr(
+                    user_model, "all_objects", user_model._default_manager
+                )
+                existing_user = user_manager.filter(username=username).first()
+                self._existing_user = existing_user
         cleaned_data["existing_user"] = existing_user
 
         if cleaned_data.get("upgrade_existing_user") and existing_user is None:
@@ -84,6 +100,7 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
         )
         user_manager = getattr(user_model, "all_objects", user_model._default_manager)
         existing_user = user_manager.filter(username=username).first()
+        self._existing_user = existing_user
         if existing_user is not None and not self.data.get("upgrade_existing_user"):
             raise forms.ValidationError(
                 'Enable "Upgrade existing user" to reuse this username.'
@@ -110,18 +127,13 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
             user = existing_user
             user.username = username
             user.email = email
+            user.is_active = True
+            if hasattr(user, "is_deleted"):
+                user.is_deleted = False
             user.is_staff = True
             user.is_superuser = True
             user.set_password(password)
-            user.save(
-                update_fields=[
-                    "email",
-                    "is_staff",
-                    "is_superuser",
-                    "password",
-                    "username",
-                ]
-            )
+            user.save(update_fields=self._resolve_upgrade_update_fields(user))
         else:
             user = user_model._default_manager.create_superuser(
                 username=username,
@@ -151,3 +163,7 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
             secrets.choice(OperatorJourneyProvisionSuperuserForm.PASSWORD_ALPHABET)
             for _ in range(length)
         )
+
+    @classmethod
+    def _resolve_upgrade_update_fields(cls, user) -> list[str]:
+        return [field for field in cls.UPGRADE_UPDATE_FIELDS if hasattr(user, field)]
