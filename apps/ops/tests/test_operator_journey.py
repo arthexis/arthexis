@@ -7,6 +7,7 @@ from django.urls import reverse
 
 from apps.groups.constants import SITE_OPERATOR_GROUP_NAME
 from apps.groups.models import SecurityGroup
+from apps.nodes.models import NodeRole
 from apps.ops.models import OperatorJourney, OperatorJourneyStep
 from apps.ops.operator_journey import complete_step_for_user, status_for_user
 from apps.ops.views import _build_node_role_validation_summary
@@ -154,10 +155,21 @@ class OperatorJourneyViewTests(TestCase):
         )
         self.assertContains(response, "Current config and completion command")
         self.assertContains(response, "Roles and auto-upgrade options")
+        self.assertContains(response, 'name="node-role-choice"', html=False)
         self.assertContains(response, 'id="operator-upgrade-command"', html=False)
         self.assertContains(response, "./configure.sh --check")
         self.assertContains(response, "Decision flow:")
         self.assertNotContains(response, "<iframe", html=False)
+
+    def test_validate_role_step_limits_role_choices_to_basic_configure_roles(self):
+        NodeRole.objects.create(name="Gateway")
+        response = self.client.get(
+            reverse("ops:operator-journey-step", args=[self.step_1.pk])
+        )
+
+        self.assertNotContains(response, 'value="gateway"', html=False)
+        for role in ("terminal", "satellite", "control", "watchtower"):
+            self.assertContains(response, f'value="{role}"', html=False)
 
     @override_settings(NODE_ROLE="Constellation")
     def test_role_validation_normalizes_constellation_alias_for_commands(self):

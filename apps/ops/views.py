@@ -72,7 +72,7 @@ def _build_node_role_validation_summary() -> dict[str, object]:
     normalized_slug = str(suggested_role or "").strip().lower()
     available_roles = list(KNOWN_NODE_ROLES)
     try:
-        from apps.nodes.models import NodeRole, UpgradePolicy
+        from apps.nodes.models import UpgradePolicy
     except (ImportError, LookupError):
         upgrade_policy_options = [
             {"label": "Stable", "flags": ["--stable"]},
@@ -82,11 +82,6 @@ def _build_node_role_validation_summary() -> dict[str, object]:
             {"label": "No restart", "flags": ["--no-restart"]},
         ]
     else:
-        role_names = list(
-            NodeRole.objects.order_by("name").values_list("name", flat=True)
-        )
-        if role_names:
-            available_roles = role_names
         upgrade_policy_options = []
         for policy in UpgradePolicy.objects.order_by("name"):
             channel_flag = (
