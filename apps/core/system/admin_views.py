@@ -185,7 +185,6 @@ def _collect_admin_report_routes(user) -> list[dict[str, str]]:
 
     ensure_default_staff_tasks_exist()
     routes: list[dict[str, str]] = []
-    upgrade_task = StaffTask.objects.filter(action_name="upgrade").first()
 
     def _walk(patterns: list[URLPattern | URLResolver]) -> None:
         for pattern in patterns:
@@ -198,10 +197,8 @@ def _collect_admin_report_routes(user) -> list[dict[str, str]]:
                 continue
             if route_name.endswith("-data"):
                 continue
-            if (
-                route_name == "system-upgrade-report"
-                and upgrade_task
-                and not user_can_access_staff_task(user, upgrade_task)
+            if route_name == "system-upgrade-report" and not can_trigger_upgrade_checks(
+                user
             ):
                 continue
 
