@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,6 +17,7 @@ from apps.release.services.builder import (
     promote,
 )
 from apps.release.services.models import Credentials, ReleaseError
+from apps.release.services.test_commands import normalize_test_command
 
 
 def test_builder_release_uploads_before_pushing_git_state(
@@ -202,3 +204,63 @@ def test_git_modified_paths_handles_rename_and_ignored_paths(
     monkeypatch.setattr("apps.release.services.builder.subprocess.run", fake_run)
 
     assert _git_modified_paths() == {Path("pyproject.toml"), Path("new/name -> value.txt")}
+
+
+@pytest.mark.parametrize(
+    ("configured", "expected"),
+    (
+        ("", None),
+        (
+            ".venv/bin/python manage.py test run --",
+            [".venv/bin/python", "manage.py", "test", "run", "--"],
+        ),
+        (
+            ".venv/bin/python manage.py test run -- --tag smoke -k billing",
+            [
+                ".venv/bin/python",
+                "manage.py",
+                "test",
+                "run",
+                "--",
+                "--tag",
+                "smoke",
+                "-k",
+                "billing",
+            ],
+        ),
+    ),
+)
+def test_normalize_test_command_accepts_approved_wrappers(
+    configured: str, expected: list[str] | None
+) -> None:
+    assert normalize_test_command(configured) == expected
+
+
+def test_normalize_test_command_rejects_unapproved_commands() -> None:
+    with pytest.raises(ValueError):
+        normalize_test_command("python manage.py test")
+
+
+def test_normalize_test_command_rejects_unsupported_wrapper_flags() -> None:
+    with pytest.raises(ValueError, match="Unsupported flag"):
+        normalize_test_command(".venv/bin/python manage.py test run -- --pdb")
+
+
+def test_build_rejects_unapproved_package_test_command(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "VERSION").write_text("1.2.3\n", encoding="utf-8")
+    (tmp_path / "requirements.txt").write_text("django\n", encoding="utf-8")
+
+    package = replace(DEFAULT_PACKAGE, test_command="python manage.py test")
+
+    with pytest.raises(ReleaseError, match="approved release test command wrappers"):
+        build(
+            dist=False,
+            git=False,
+            tag=False,
+            tests=True,
+            twine=False,
+            package=package,
+        )
