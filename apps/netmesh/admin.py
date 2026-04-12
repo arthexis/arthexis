@@ -15,6 +15,7 @@ from django.utils.translation import ngettext
 from apps.locals.user_data import EntityModelAdmin
 from apps.netmesh.models import (
     MeshMembership,
+    NetmeshAgentStatus,
     NodeEndpoint,
     NodeKeyMaterial,
     NodeRelayConfig,
@@ -344,3 +345,30 @@ class ServiceAdvertisementAdmin(EntityModelAdmin):
     list_display = ("node", "service_name", "port", "protocol")
     list_filter = ("protocol",)
     search_fields = ("node__hostname", "service_name")
+
+
+@admin.register(NetmeshAgentStatus)
+class NetmeshAgentStatusAdmin(EntityModelAdmin):
+    list_display = (
+        "singleton",
+        "is_running",
+        "lifecycle_state",
+        "last_poll_at",
+        "peers_synced",
+        "session_count",
+        "relay_count",
+    )
+    readonly_fields = (
+        "singleton",
+        "is_running",
+        "lifecycle_state",
+        "last_poll_at",
+        "last_sync_at",
+        "peers_synced",
+        "session_count",
+        "relay_count",
+        "last_error",
+    )
+
+    def has_add_permission(self, request):
+        return False

@@ -395,3 +395,25 @@ class ServiceAdvertisement(Entity):
                 name="netmesh_service_ad_unique",
             ),
         ]
+
+
+class NetmeshAgentStatus(Entity):
+    """Operational status row for the resident Netmesh agent loop."""
+
+    singleton = models.CharField(max_length=32, unique=True, default="default")
+    is_running = models.BooleanField(default=False)
+    lifecycle_state = models.CharField(max_length=64, default="idle")
+    last_poll_at = models.DateTimeField(null=True, blank=True)
+    last_sync_at = models.DateTimeField(null=True, blank=True)
+    peers_synced = models.PositiveIntegerField(default=0)
+    session_count = models.PositiveIntegerField(default=0)
+    relay_count = models.PositiveIntegerField(default=0)
+    last_error = models.TextField(blank=True)
+
+    class Meta(Entity.Meta):
+        ordering = ["singleton", "pk"]
+
+    @classmethod
+    def get_solo(cls):
+        status, _ = cls.objects.get_or_create(singleton="default")
+        return status
