@@ -269,6 +269,44 @@ def test_overlay_lease_validates_address_in_configured_pool():
 
 
 @pytest.mark.django_db
+@override_settings(NETMESH_OVERLAY_IPV4_CIDR="100.96.30.0/30")
+def test_mesh_membership_save_rolls_back_when_overlay_pool_is_exhausted():
+    node_a = Node.objects.create(hostname="mesh-overlay-exhausted-a")
+    node_b = Node.objects.create(hostname="mesh-overlay-exhausted-b")
+    node_c = Node.objects.create(hostname="mesh-overlay-exhausted-c")
+
+    MeshMembership.objects.create(node=node_a, tenant="tenant-overlay-exhausted", is_enabled=True)
+    MeshMembership.objects.create(node=node_b, tenant="tenant-overlay-exhausted", is_enabled=True)
+
+    with pytest.raises(RuntimeError):
+        MeshMembership.objects.create(node=node_c, tenant="tenant-overlay-exhausted", is_enabled=True)
+
+    assert not MeshMembership.objects.filter(
+        node=node_c,
+        tenant="tenant-overlay-exhausted",
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_mesh_membership_soft_delete_does_not_recreate_overlay_lease():
+    node = Node.objects.create(hostname="mesh-overlay-soft-delete")
+    membership = MeshMembership.objects.create(
+        node=node,
+        tenant="tenant-overlay-soft-delete",
+        is_enabled=True,
+        is_seed_data=True,
+    )
+
+    assert MeshOverlayLease.objects.filter(membership=membership).exists()
+
+    membership.delete()
+    membership = MeshMembership.all_objects.get(pk=membership.pk)
+
+    assert membership.is_deleted is True
+    assert not MeshOverlayLease.objects.filter(membership=membership).exists()
+
+
+@pytest.mark.django_db
 def test_peer_policy_requires_non_empty_tenant():
     source = Node.objects.create(hostname="mesh-empty-policy-tenant-source")
     destination = Node.objects.create(hostname="mesh-empty-policy-tenant-destination")

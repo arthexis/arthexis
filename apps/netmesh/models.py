@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
@@ -64,6 +64,10 @@ class MeshMembership(Entity):
         return f"{self.node} [{scope}]"
 
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            update_fields = set(update_fields)
+
         was_enabled = True
         if self.pk:
             was_enabled = (
@@ -75,14 +79,18 @@ class MeshMembership(Entity):
             if was_enabled is None:
                 was_enabled = True
 
-        super().save(*args, **kwargs)
-
         from apps.netmesh.services.overlay_lease import ensure_overlay_lease, release_overlay_lease
 
-        if self.is_enabled:
-            ensure_overlay_lease(membership=self)
-        elif was_enabled:
-            release_overlay_lease(membership=self)
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+
+            if update_fields == {"is_deleted"}:
+                return
+
+            if self.is_enabled:
+                ensure_overlay_lease(membership=self)
+            elif was_enabled:
+                release_overlay_lease(membership=self)
 
     def delete(self, *args, **kwargs):
         from apps.netmesh.services.overlay_lease import release_overlay_lease
