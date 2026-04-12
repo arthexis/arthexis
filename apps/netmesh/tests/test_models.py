@@ -10,7 +10,7 @@ from apps.netmesh.models import (
     RelayRegion,
     ServiceAdvertisement,
 )
-from apps.netmesh.services.key_material import rotate_transport_key
+from apps.netmesh.services.key_material import ensure_active_transport_key, rotate_transport_key
 from apps.nodes.models import Node, NodeRole
 from apps.ocpp.models import Charger
 
@@ -45,6 +45,31 @@ def test_rotate_transport_key_creates_x25519_transport_identity_separate_from_bo
     assert rotated.public_key.startswith("x25519:")
     assert rotated.public_key != node.public_key
     assert rotated.key_version == 2
+    assert previous.key_state == NodeKeyMaterial.KeyState.RETIRED
+    assert previous.revoked is True
+    assert previous.rotated_at is not None
+    assert private_key
+
+
+@pytest.mark.django_db
+def test_ensure_active_transport_key_replaces_active_bootstrap_key():
+    node = Node.objects.create(hostname="mesh-key-ensure", public_key="ssh-rsa bootstrap")
+    previous = NodeKeyMaterial.objects.create(
+        node=node,
+        key_type=NodeKeyMaterial.KeyType.RSA_BOOTSTRAP,
+        key_state=NodeKeyMaterial.KeyState.ACTIVE,
+        public_key="ssh-rsa bootstrap",
+        key_version=1,
+        revoked=False,
+    )
+
+    ensured, private_key = ensure_active_transport_key(node=node)
+    previous.refresh_from_db()
+
+    assert ensured.key_type == NodeKeyMaterial.KeyType.X25519
+    assert ensured.key_state == NodeKeyMaterial.KeyState.ACTIVE
+    assert ensured.public_key.startswith("x25519:")
+    assert ensured.key_version == 2
     assert previous.key_state == NodeKeyMaterial.KeyState.RETIRED
     assert previous.revoked is True
     assert previous.rotated_at is not None

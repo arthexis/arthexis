@@ -47,17 +47,35 @@ def generate_transport_keypair(*, node: Node, key_type: str = NodeKeyMaterial.Ke
 def ensure_active_transport_key(*, node: Node, key_type: str = NodeKeyMaterial.KeyType.X25519) -> tuple[NodeKeyMaterial, str]:
     active = (
         NodeKeyMaterial.objects.select_for_update()
-        .filter(node=node, key_state=NodeKeyMaterial.KeyState.ACTIVE)
+        .filter(
+            node=node,
+            key_state=NodeKeyMaterial.KeyState.ACTIVE,
+            key_type=key_type,
+        )
         .order_by("-key_version", "-created_at", "-id")
         .first()
     )
     if active:
         return active, ""
+    now = timezone.now()
+    superseded_active = (
+        NodeKeyMaterial.objects.select_for_update()
+        .filter(node=node, key_state=NodeKeyMaterial.KeyState.ACTIVE)
+        .order_by("-key_version", "-created_at", "-id")
+        .first()
+    )
+    next_version = 1
+    if superseded_active:
+        superseded_active.key_state = NodeKeyMaterial.KeyState.RETIRED
+        superseded_active.rotated_at = now
+        superseded_active.revoked_at = now
+        superseded_active.save(update_fields=["key_state", "rotated_at", "revoked_at", "revoked"])
+        next_version = superseded_active.key_version + 1
     private_key, public_key = generate_transport_keypair(node=node, key_type=key_type)
     key_material = NodeKeyMaterial.objects.create(
         node=node,
         key_type=key_type,
-        key_version=1,
+        key_version=next_version,
         public_key=public_key,
         key_state=NodeKeyMaterial.KeyState.ACTIVE,
     )

@@ -123,7 +123,6 @@ def rotate_mesh_key(modeladmin, request, queryset):
             NodeKeyMaterial.objects.filter(
                 node=node,
                 key_state=NodeKeyMaterial.KeyState.ACTIVE,
-                key_type=NodeKeyMaterial.KeyType.X25519,
             )
             .order_by("-created_at", "-id")
             .first()
