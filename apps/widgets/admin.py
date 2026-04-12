@@ -14,7 +14,7 @@ class WidgetZoneAdmin(EntityModelAdmin):
 @admin.register(Widget)
 class WidgetAdmin(EntityModelAdmin):
     list_display = ("name", "slug", "zone", "required_feature", "is_enabled", "priority")
-    list_filter = ("zone", "required_feature", "is_enabled")
+    list_filter = ("zone", "is_enabled")
     search_fields = ("name", "slug", "renderer_path")
     ordering = ("priority", "name")
 
