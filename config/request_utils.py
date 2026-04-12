@@ -67,11 +67,6 @@ def _extract_identifier(request: Any, keys: tuple[str, ...]) -> str:
         value = request.GET.get(key)
         if value:
             return str(value)
-
-    for key in keys:
-        value = request.POST.get(key)
-        if value:
-            return str(value)
     return ""
 
 

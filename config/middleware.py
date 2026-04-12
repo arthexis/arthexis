@@ -31,6 +31,11 @@ class ActiveAppMiddleware:
         site_name = site.name if site else ""
         active = site_name or role_name
         node_id = str(getattr(node, "pk", "") or "")
+        if getattr(request, "resolver_match", None) is None:
+            try:
+                request.resolver_match = resolve(request.path_info)
+            except Resolver404:
+                request.resolver_match = None
         request_log_token = set_request_log_context(request, node_id=node_id)
         with active_app(active):
             request.site = site
