@@ -129,6 +129,10 @@ class NetmeshAgentRuntime:
                 loops_completed += 1
                 if self.config.max_loops is not None and loops_completed >= self.config.max_loops:
                     break
-                sleep(max(self.config.poll_interval_seconds, 0.1))
+                remaining = max(self.config.poll_interval_seconds, 0.1)
+                while remaining > 0 and not self.lifecycle.shutdown_requested:
+                    step = min(remaining, 1.0)
+                    sleep(step)
+                    remaining -= step
 
         return loops_completed
