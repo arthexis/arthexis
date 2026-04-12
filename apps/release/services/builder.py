@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
-import shlex
 import shutil
 import subprocess
 import sys
@@ -14,6 +13,7 @@ from typing import Optional, Sequence
 from .defaults import DEFAULT_PACKAGE
 from .models import Credentials, Package, ReleaseError
 from .network import requires_network
+from .test_commands import normalize_test_command
 
 try:  # pragma: no cover - optional dependency
     import toml  # type: ignore
@@ -485,9 +485,10 @@ def build(
 
         if tests:
             log_path = Path("logs/test.log")
-            test_command = (
-                shlex.split(package.test_command) if package.test_command else None
-            )
+            try:
+                test_command = normalize_test_command(package.test_command)
+            except ValueError as err:
+                raise ReleaseError(str(err)) from err
             proc = run_tests(log_path=log_path, command=test_command)
             if proc.returncode != 0:
                 raise TestsFailed(log_path, proc.stdout + proc.stderr)

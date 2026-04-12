@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.deconstruct import deconstructible
 
 from apps.base.models import Entity, EntityManager
 
 from .. import DEFAULT_PACKAGE, Package as ReleasePackage
+from ..services.test_commands import TEST_COMMAND_CHOICES, normalize_test_command
 
 
 @deconstructible
@@ -67,7 +69,16 @@ class Package(Entity):
     homepage_url = models.URLField(default=DEFAULT_PACKAGE.homepage_url)
     version_path = models.CharField(max_length=255, blank=True, default="")
     dependencies_path = models.CharField(max_length=255, blank=True, default="")
-    test_command = models.TextField(blank=True, default="")
+    test_command = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        choices=TEST_COMMAND_CHOICES,
+        help_text=(
+            "Use an approved managed release test wrapper only. "
+            "For new workflows, add a managed `release` subcommand instead of shell commands."
+        ),
+    )
     generate_wheels = models.BooleanField(
         default=False,
         help_text="Build wheel distributions when creating releases",
@@ -93,6 +104,15 @@ class Package(Entity):
                 name="unique_active_package",
             )
         ]
+
+    def clean(self):
+        """Validate package configuration before persistence through forms/admin."""
+
+        super().clean()
+        try:
+            normalize_test_command(self.test_command)
+        except ValueError as err:
+            raise ValidationError({"test_command": str(err)}) from err
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         """Return the package name for human-readable displays."""
