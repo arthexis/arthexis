@@ -105,7 +105,7 @@ def _parse_positive_int(
         ValidationError: Raised when the value is not an integer or falls outside the range.
     """
 
-    if value in (None, ""):
+    if value is None or value == "":
         return default
     try:
         parsed = int(value)
@@ -338,8 +338,10 @@ def _present_quote(quote: dict[str, object]) -> dict[str, object]:
     activity_summary = quote.get("activity_summary") or ""
     activity_value = activity_summary or activity_name
     amount_total = quote.get("amount_total") or 0
-    currency = quote.get("currency") or {}
-    currency_label = currency.get("label", "")
+    currency = quote.get("currency")
+    currency_label = ""
+    if isinstance(currency, dict):
+        currency_label = str(currency.get("label", ""))
     total_display = f"{currency_label}{amount_total:,.2f}"
     return {
         "name": quote.get("name", ""),
@@ -402,6 +404,7 @@ def parse_odoo_datetime(value) -> datetime | None:
                         continue
                 if dt is None:
                     return None
+    assert dt is not None
     if timezone.is_naive(dt):
         tzinfo = getattr(timezone, "utc", datetime_timezone.utc)
         dt = timezone.make_aware(dt, tzinfo)
