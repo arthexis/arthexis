@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 from django.db.models import Q
 
 from apps.links.models import Reference, ReferenceAttachment
 
 
+@transaction.atomic
 def attach_reference(
     obj,
     *,
@@ -49,14 +51,6 @@ def attach_reference(
             "slot": normalized_slot,
         },
     )
-
-    if primary:
-        ReferenceAttachment.objects.filter(
-            content_type=content_type,
-            object_id=str(obj.pk),
-            is_primary=True,
-            slot=normalized_slot,
-        ).exclude(pk=attachment.pk).update(is_primary=False)
 
     return attachment
 

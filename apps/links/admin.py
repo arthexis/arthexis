@@ -206,7 +206,7 @@ class ReferenceAdmin(EntityModelAdmin):
         transaction_uuid = payload.get("transaction_uuid") or uuid.uuid4()
         created_ids = []
         for data in refs:
-            ref, _ = Reference.objects.update_or_create(
+            ref, _ = Reference.objects.get_or_create(
                 alt_text=data.get("alt_text", ""),
                 value=data.get("value", ""),
                 defaults={

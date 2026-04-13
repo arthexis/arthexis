@@ -983,8 +983,8 @@ class Charger(Ownable):
             method="link",
         )
         if self.reference_id != attachment.reference_id:
+            type(self).objects.filter(pk=self.pk).update(reference=attachment.reference)
             self.reference = attachment.reference
-            super().save(update_fields=["reference"])
 
     def refresh_manager_node(self, node: Node | None = None) -> Node | None:
         """Ensure ``manager_node`` matches the provided or local node."""

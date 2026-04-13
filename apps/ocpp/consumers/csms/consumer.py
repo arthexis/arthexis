@@ -59,6 +59,7 @@ from apps.ocpp.models import (
     ClearedChargingLimitEvent,
 )
 from apps.links.reference_utils import host_is_local_loopback
+from apps.links.models import Reference
 from apps.screens.startup_notifications import format_lcd_lines
 from apps.ocpp.evcs_discovery import (
     DEFAULT_CONSOLE_PORT,
@@ -426,6 +427,11 @@ class CSMSConsumer(
         if self.charger is None:
             return
         from apps.links.services import attach_reference
+
+        reference = Reference.objects.filter(alt_text=alt_text).order_by("id").first()
+        if reference is not None and reference.value != url:
+            reference.value = url
+            reference.save(update_fields=["value"])
 
         attach_reference(
             self.charger,
