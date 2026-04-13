@@ -3,68 +3,78 @@
 from django.db import migrations
 
 
+COPY_FIELDS = [
+    "name",
+    "confirmed",
+    "throttling_failure_timestamp",
+    "throttling_failure_count",
+    "created_at",
+    "last_used_at",
+    "key",
+    "step",
+    "t0",
+    "digits",
+    "tolerance",
+    "drift",
+    "last_t",
+    "user_id",
+]
+
+
+def _copy_devices(source_model, target_model):
+    source_rows = list(source_model.objects.all().iterator())
+    if not source_rows:
+        return
+
+    source_ids = [source.id for source in source_rows]
+    existing = target_model.objects.in_bulk(source_ids)
+    to_create = []
+    to_update = []
+
+    for source in source_rows:
+        values = {field: getattr(source, field) for field in COPY_FIELDS}
+        current = existing.get(source.id)
+        if current is None:
+            to_create.append(target_model(id=source.id, **values))
+            continue
+        for field, value in values.items():
+            setattr(current, field, value)
+        to_update.append(current)
+
+    if to_create:
+        target_model.objects.bulk_create(to_create, batch_size=500)
+    if to_update:
+        target_model.objects.bulk_update(to_update, COPY_FIELDS, batch_size=500)
+
+
+def _reset_postgres_sequence(schema_editor, table_name):
+    if schema_editor.connection.vendor != "postgresql":
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT setval(
+                pg_get_serial_sequence('{table_name}', 'id'),
+                COALESCE((SELECT MAX(id) FROM {table_name}), 1),
+                (SELECT COUNT(*) > 0 FROM {table_name})
+            )
+            """
+        )
+
+
 def copy_totp_devices_to_plugin(apps, schema_editor):
     source_model = apps.get_model("totp", "TOTPDevice")
     target_model = apps.get_model("otp_totp", "TOTPDevice")
+    _copy_devices(source_model, target_model)
+    _reset_postgres_sequence(schema_editor, "otp_totp_totpdevice")
 
-    for source in source_model.objects.all().iterator():
-        target_model.objects.update_or_create(
-            id=source.id,
-            defaults={
-                "name": source.name,
-                "confirmed": source.confirmed,
-                "throttling_failure_timestamp": source.throttling_failure_timestamp,
-                "throttling_failure_count": source.throttling_failure_count,
-                "created_at": source.created_at,
-                "last_used_at": source.last_used_at,
-                "key": source.key,
-                "step": source.step,
-                "t0": source.t0,
-                "digits": source.digits,
-                "tolerance": source.tolerance,
-                "drift": source.drift,
-                "last_t": source.last_t,
-                "user_id": source.user_id,
-            },
-        )
-
-    if schema_editor.connection.vendor == "postgresql":
-        with schema_editor.connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT setval(
-                    pg_get_serial_sequence('otp_totp_totpdevice', 'id'),
-                    COALESCE((SELECT MAX(id) FROM otp_totp_totpdevice), 1),
-                    (SELECT COUNT(*) > 0 FROM otp_totp_totpdevice)
-                )
-                """
-            )
 
 
 def copy_totp_devices_to_local(apps, schema_editor):
     source_model = apps.get_model("otp_totp", "TOTPDevice")
     target_model = apps.get_model("totp", "TOTPDevice")
-
-    for source in source_model.objects.all().iterator():
-        target_model.objects.update_or_create(
-            id=source.id,
-            defaults={
-                "name": source.name,
-                "confirmed": source.confirmed,
-                "throttling_failure_timestamp": source.throttling_failure_timestamp,
-                "throttling_failure_count": source.throttling_failure_count,
-                "created_at": source.created_at,
-                "last_used_at": source.last_used_at,
-                "key": source.key,
-                "step": source.step,
-                "t0": source.t0,
-                "digits": source.digits,
-                "tolerance": source.tolerance,
-                "drift": source.drift,
-                "last_t": source.last_t,
-                "user_id": source.user_id,
-            },
-        )
+    _copy_devices(source_model, target_model)
+    _reset_postgres_sequence(schema_editor, "totp_totpdevice")
 
 
 class Migration(migrations.Migration):

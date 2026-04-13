@@ -9,7 +9,9 @@ from urllib.parse import quote, urlencode
 
 from django.conf import settings
 from django.contrib.sites.models import Site
+from django.core.exceptions import ImproperlyConfigured
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -32,9 +34,9 @@ def get_totp_issuer(device: TOTPDevice) -> str:
         return configured.replace(":", "")
     try:
         current_site = Site.objects.get_current()
-    except Exception:
+    except (Site.DoesNotExist, ImproperlyConfigured):
         return "Arthexis"
-    return getattr(current_site, "name", "Arthexis") or "Arthexis"
+    return (getattr(current_site, "name", "Arthexis") or "Arthexis").replace(":", "")
 
 
 def totp_provisioning_uri(device: TOTPDevice) -> str:
@@ -49,8 +51,8 @@ def totp_provisioning_uri(device: TOTPDevice) -> str:
     }
     urlencoded_params = urlencode(params)
     if issuer:
-        urlencoded_params += f"&issuer={quote(issuer)}"
-    return f"otpauth://totp/{quote(label)}?{urlencoded_params}"
+        urlencoded_params += f"&issuer={quote(issuer, safe='')}"
+    return f"otpauth://totp/{quote(label, safe='')}?{urlencoded_params}"
 
 
 def render_totp_qr_data_uri(device: TOTPDevice) -> str:
@@ -80,5 +82,7 @@ def verify_any_totp(
         devices = devices.filter(confirmed=True)
     for device in devices:
         if device.verify_token(token):
+            device.last_used_at = timezone.localtime()
+            device.save(update_fields=["last_used_at"])
             return True
     return False

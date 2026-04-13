@@ -56,6 +56,23 @@ def test_provisioning_uri_uses_issuer_setting(user, settings):
 
 
 @pytest.mark.django_db
+def test_provisioning_uri_encodes_label_segments(user, settings):
+    settings.OTP_TOTP_ISSUER = "Ops/Blue:Team"
+    user.username = "alice/admin"
+    user.save(update_fields=["username"])
+    device = TOTPDevice.objects.create(
+        user=user,
+        name="Primary",
+        key="3132333435363738393031323334353637383930",
+    )
+
+    uri = totp_provisioning_uri(device)
+
+    assert uri.startswith("otpauth://totp/Ops%2FBlueTeam%3Aalice%2Fadmin?")
+    assert "issuer=Ops%2FBlueTeam" in uri
+
+
+@pytest.mark.django_db
 def test_verify_token_updates_device_state(monkeypatch, user):
     device = TOTPDevice.objects.create(
         user=user,
@@ -106,3 +123,6 @@ def test_verify_any_respects_confirmation(monkeypatch, user, settings):
 
     monkeypatch.setattr(time, "time", lambda: pending_time)
     assert verify_any_totp(user, pending_token, confirmed_only=False) is True
+
+    pending_device.refresh_from_db()
+    assert pending_device.last_used_at is not None

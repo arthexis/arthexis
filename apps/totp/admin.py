@@ -43,7 +43,8 @@ class TOTPDeviceRegistrationForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["user"].queryset = User.objects.all()
-        self.fields["name"].initial = _("Authenticator")
+        self.fields["name"].required = False
+        self.fields["name"].widget.attrs.setdefault("placeholder", _("Authenticator"))
 
 
 class TOTPConfirmationForm(forms.Form):
@@ -113,8 +114,9 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
             if setup_form.is_valid():
                 device = setup_form.save(commit=False)
                 device.key = generate_totp_key()
-                if not device.name:
-                    device.name = generate_totp_name(device.user)
+                device.name = (device.name or "").strip() or generate_totp_name(
+                    device.user
+                )
                 device.confirmed = False
                 try:
                     device.save()
@@ -202,6 +204,19 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
         return request.user.has_perm(
             "otp_totp.delete_totpdevice"
         ) or request.user.has_perm("totp.delete_totpdevice")
+
+    def has_view_permission(self, request, obj=None):
+        return (
+            request.user.has_perm("otp_totp.view_totpdevice")
+            or request.user.has_perm("otp_totp.change_totpdevice")
+            or request.user.has_perm("totp.view_totpdevice")
+            or request.user.has_perm("totp.change_totpdevice")
+        )
+
+    def has_module_permission(self, request):
+        return request.user.has_module_perms(
+            "otp_totp"
+        ) or request.user.has_module_perms("totp")
 
     @admin.display(description=_("Provisioning URI"))
     def provisioning_uri(self, obj: TOTPDevice) -> str:
