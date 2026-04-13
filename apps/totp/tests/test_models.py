@@ -7,6 +7,9 @@ import pytest
 from django_otp.oath import TOTP
 
 from apps.totp.models import TOTPDevice
+from apps.totp.services import totp_base32_key
+from apps.totp.services import totp_provisioning_uri
+from apps.totp.services import verify_any_totp
 
 
 @pytest.fixture
@@ -29,8 +32,8 @@ def test_base32_key_encodes_hex_secret_without_padding(user):
     )
 
     expected_base32 = base64.b32encode(bytes.fromhex(device.key)).decode("ascii").rstrip("=")
-    assert device.base32_key == expected_base32
-    assert "=" not in device.base32_key
+    assert totp_base32_key(device) == expected_base32
+    assert "=" not in totp_base32_key(device)
 
 
 @pytest.mark.django_db
@@ -42,10 +45,10 @@ def test_provisioning_uri_uses_issuer_setting(user, settings):
         key="3132333435363738393031323334353637383930",
     )
 
-    uri = device.provisioning_uri()
+    uri = totp_provisioning_uri(device)
 
     assert uri.startswith("otpauth://totp/ExampleIssuer%3Aalice?")
-    assert f"secret={device.base32_key}" in uri
+    assert f"secret={totp_base32_key(device)}" in uri
     assert "algorithm=SHA1" in uri
     assert "digits=6" in uri
     assert "period=30" in uri
@@ -96,10 +99,10 @@ def test_verify_any_respects_confirmation(monkeypatch, user, settings):
     pending_token, _ = _format_token(pending_device, pending_time)
 
     monkeypatch.setattr(time, "time", lambda: confirmed_time)
-    assert TOTPDevice.verify_any(user, confirmed_token, confirmed_only=True) is True
+    assert verify_any_totp(user, confirmed_token, confirmed_only=True) is True
 
     monkeypatch.setattr(time, "time", lambda: pending_time)
-    assert TOTPDevice.verify_any(user, pending_token, confirmed_only=True) is False
+    assert verify_any_totp(user, pending_token, confirmed_only=True) is False
 
     monkeypatch.setattr(time, "time", lambda: pending_time)
-    assert TOTPDevice.verify_any(user, pending_token, confirmed_only=False) is True
+    assert verify_any_totp(user, pending_token, confirmed_only=False) is True

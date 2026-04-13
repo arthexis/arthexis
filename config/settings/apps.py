@@ -105,6 +105,7 @@ THIRD_PARTY_APPS = [
     "django_mermaid.apps.MermaidConfig",
     "django_object_actions",
     "django_otp",
+    "django_otp.plugins.otp_totp",
     "import_export",
     "parler",
 ]

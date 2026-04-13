@@ -22,6 +22,7 @@ from apps.cards.models import RFIDAttempt
 from apps.cards.reader import read_rfid_cell_value
 from apps.energy.models import CustomerAccount
 from apps.features.utils import is_suite_feature_enabled
+from apps.totp.services import verify_any_totp
 from . import temp_passwords
 from .system import ensure_system_user
 
@@ -59,12 +60,7 @@ class PasswordOrOTPBackend(ModelBackend):
         if not digits_only.isdigit():
             return False
 
-        try:
-            from apps.totp.models import TOTPDevice
-        except Exception:
-            return False
-
-        return TOTPDevice.verify_any(user, digits_only, confirmed_only=True)
+        return verify_any_totp(user, digits_only, confirmed_only=True)
 
 
 class RFIDBackend:
