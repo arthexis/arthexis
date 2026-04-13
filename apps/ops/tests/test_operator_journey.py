@@ -391,6 +391,8 @@ class OperatorJourneyViewTests(TestCase):
             is_staff=False,
             is_superuser=False,
         )
+        old_group = SecurityGroup.objects.create(name="Old upgrade group")
+        existing_user.groups.add(old_group)
         if hasattr(existing_user, "is_deleted"):
             existing_user.is_deleted = True
             existing_user.save(update_fields=["is_deleted"])
@@ -416,7 +418,10 @@ class OperatorJourneyViewTests(TestCase):
             self.assertFalse(existing_user.is_deleted)
         self.assertEqual(existing_user.email, "ops-provisioned@example.com")
         self.assertTrue(existing_user.check_password("new-secure-password"))
-        self.assertTrue(existing_user.groups.filter(pk=self.group.pk).exists())
+        self.assertSetEqual(
+            set(existing_user.groups.values_list("pk", flat=True)),
+            {self.group.pk},
+        )
         self.assertContains(response, "Operational superuser upgraded")
 
     def test_provision_step_post_rejects_when_not_current_required_step(self):

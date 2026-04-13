@@ -55,6 +55,7 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
+        cleaned_data["upgrade_existing_user"] = self._is_upgrade_opt_in_requested()
         username = cleaned_data.get("username")
         existing_user = None
         if username:
@@ -68,6 +69,11 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
                 self._existing_user = existing_user
         cleaned_data["existing_user"] = existing_user
 
+        if existing_user is not None and not cleaned_data.get("upgrade_existing_user"):
+            self.add_error(
+                "username",
+                'Enable "Upgrade existing user" to reuse this username.',
+            )
         if cleaned_data.get("upgrade_existing_user") and existing_user is None:
             self.add_error(
                 "upgrade_existing_user",
@@ -82,7 +88,7 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
         return cleaned_data
 
     def clean_username(self):
-        """Reject usernames that already exist."""
+        """Normalize the submitted username and cache any existing account."""
 
         user_model = get_user_model()
         username = user_model.normalize_username(
@@ -91,11 +97,16 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
         user_manager = getattr(user_model, "all_objects", user_model._default_manager)
         existing_user = user_manager.filter(username=username).first()
         self._existing_user = existing_user
-        if existing_user is not None and not self.data.get("upgrade_existing_user"):
-            raise forms.ValidationError(
-                'Enable "Upgrade existing user" to reuse this username.'
-            )
         return username
+
+    def clean_upgrade_existing_user(self) -> bool:
+        """Treat only explicit opt-in values as enabling upgrades."""
+
+        return self._is_upgrade_opt_in_requested()
+
+    def _is_upgrade_opt_in_requested(self) -> bool:
+        value = (self.data.get("upgrade_existing_user") or "").strip().lower()
+        return value in {"1", "on", "true", "yes"}
 
     def save(self):
         """Create the superuser, assign groups, and return the account/password tuple."""
