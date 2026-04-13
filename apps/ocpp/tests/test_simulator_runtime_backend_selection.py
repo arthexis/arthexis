@@ -132,3 +132,24 @@ def test_backend_selection_flags_backend_available_when_arthexis_enabled(
     assert selection.backend == "legacy"
     assert selection.feature_enabled is True
 
+
+def test_backend_selection_defaults_enable_mobilityhouse_parameter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Selection should default Mobility House parameter to enabled when unset."""
+
+    monkeypatch.setattr(
+        simulator_runtime,
+        "get_feature_parameter",
+        _mock_feature_parameters(
+            {
+                simulator_runtime.ARTHEXIS_BACKEND_PARAMETER_KEY: "disabled",
+            }
+        ),
+    )
+    monkeypatch.setattr(simulator_runtime, "find_spec", lambda _: object())
+
+    selection = simulator_runtime.resolve_simulator_backend()
+
+    assert selection.use_mobility_house is True
+    assert selection.backend == "mobility_house"

@@ -255,7 +255,7 @@ def get_simulator_backend_choices() -> tuple[tuple[str, str], ...]:
         choices.append((ARTHEXIS_BACKEND, ARTHEXIS_BACKEND))
     if _is_simulator_backend_parameter_enabled(
         MOBILITY_HOUSE_BACKEND_PARAMETER_KEY,
-        default=False,
+        default=True,
     ):
         choices.append((MOBILITY_HOUSE_BACKEND, MOBILITY_HOUSE_BACKEND))
     return tuple(choices)
@@ -272,7 +272,7 @@ def resolve_simulator_backend(
     )
     mobility_house_enabled = _is_simulator_backend_parameter_enabled(
         MOBILITY_HOUSE_BACKEND_PARAMETER_KEY,
-        default=False,
+        default=True,
     )
     dependency_available = find_spec("ocpp") is not None
     backend_available = arthexis_enabled or (
