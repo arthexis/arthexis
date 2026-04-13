@@ -3,8 +3,9 @@ import uuid
 
 from django import forms
 from django.contrib import admin
-from django.http import JsonResponse
+from django.contrib.contenttypes.admin import GenericTabularInline
 from django.http import Http404
+from django.http import JsonResponse
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
@@ -19,10 +20,30 @@ from .models import (
     QRRedirect,
     QRRedirectLead,
     Reference,
+    ReferenceAttachment,
     ShortURL,
     get_reference_file_bucket,
     get_reference_qr_bucket,
 )
+
+
+class ReferenceAttachmentInline(GenericTabularInline):
+    model = ReferenceAttachment
+    autocomplete_fields = ("reference",)
+    extra = 0
+    fields = ("reference", "slot", "is_primary", "sort_order")
+
+
+class ReferenceAttachmentAdminMixin:
+    """Add generic reference attachments to model admin change forms."""
+
+    reference_attachment_inline = ReferenceAttachmentInline
+
+    def get_inlines(self, request, obj):
+        inlines = list(super().get_inlines(request, obj))
+        if self.reference_attachment_inline not in inlines:
+            inlines.append(self.reference_attachment_inline)
+        return inlines
 
 
 class ReferenceAdminForm(forms.ModelForm):

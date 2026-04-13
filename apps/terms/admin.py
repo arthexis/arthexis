@@ -4,6 +4,7 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin.mixins import PublicViewLinksAdminMixin
+from apps.links.admin import ReferenceAttachmentAdminMixin
 from apps.media.models import MediaFile
 
 from .models import (
@@ -15,7 +16,9 @@ from .models import (
 
 
 @admin.register(Term)
-class TermAdmin(PublicViewLinksAdminMixin, admin.ModelAdmin):
+class TermAdmin(
+    PublicViewLinksAdminMixin, ReferenceAttachmentAdminMixin, admin.ModelAdmin
+):
     list_display = (
         "title",
         "slug",

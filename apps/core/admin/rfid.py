@@ -39,6 +39,7 @@ from apps.cards.rfid_import_export import (
 )
 from apps.cards.utils import build_mode_toggle
 from apps.energy.models import ClientReport, CustomerAccount
+from apps.links.admin import ReferenceAttachmentAdminMixin
 from apps.links.models.reference import ExperienceReference, Reference
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.utils import ensure_feature_enabled
@@ -209,7 +210,9 @@ class CopyRFIDForm(forms.Form):
         return normalized
 
 
-class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
+class RFIDAdmin(
+    ReferenceAttachmentAdminMixin, EntityModelAdmin, ImportExportModelAdmin
+):
     change_list_template = "admin/cards/rfid/change_list.html"
     import_export_change_list_template = None
     resource_class = RFIDResource
