@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
@@ -303,122 +302,6 @@ class PeerPolicy(Entity):
 
         if errors:
             raise ValidationError(errors)
-
-
-class NodeEndpoint(Entity):
-    """Tracks discovered endpoints for mesh-capable nodes."""
-
-    class NatType(models.TextChoices):
-        UNKNOWN = "UNKNOWN", _("Unknown")
-        OPEN = "OPEN", _("Open")
-        RESTRICTED = "RESTRICTED", _("Restricted")
-        SYMMETRIC = "SYMMETRIC", _("Symmetric")
-
-    node = models.ForeignKey(
-        "nodes.Node",
-        on_delete=models.CASCADE,
-        related_name="netmesh_endpoints",
-    )
-    endpoint = models.CharField(max_length=255)
-    candidate_endpoints = models.JSONField(
-        default=list,
-        blank=True,
-        help_text=_("Additional direct endpoints agents should try for this node."),
-    )
-    endpoint_priority = models.PositiveSmallIntegerField(default=100)
-    nat_type = models.CharField(
-        max_length=16,
-        choices=NatType.choices,
-        default=NatType.UNKNOWN,
-    )
-    discovered_at = models.DateTimeField(auto_now_add=True)
-    last_seen = models.DateTimeField(null=True, blank=True)
-    last_successful_direct_at = models.DateTimeField(null=True, blank=True)
-    relay_required = models.BooleanField(default=False)
-    relay_reason = models.CharField(max_length=255, blank=True)
-
-    class Meta(Entity.Meta):
-        ordering = ["node__hostname", "-last_seen", "pk"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["node", "endpoint"],
-                name="netmesh_node_endpoint_unique",
-            ),
-        ]
-
-
-class RelayRegion(Entity):
-    """Defines relay region metadata for DERP-like relay coordination."""
-
-    code = models.SlugField(max_length=32, unique=True)
-    name = models.CharField(max_length=100)
-    relay_endpoint = models.CharField(max_length=255)
-    is_active = models.BooleanField(default=True)
-
-    class Meta(Entity.Meta):
-        ordering = ["code", "pk"]
-
-    def __str__(self) -> str:  # pragma: no cover - admin display helper
-        return f"{self.code} ({self.name})"
-
-
-class NodeRelayConfig(Entity):
-    """Stores node-specific relay preferences and fallback endpoint configuration."""
-
-    node = models.ForeignKey(
-        "nodes.Node",
-        on_delete=models.CASCADE,
-        related_name="netmesh_relay_configs",
-    )
-    region = models.ForeignKey(
-        RelayRegion,
-        on_delete=models.CASCADE,
-        related_name="node_configs",
-    )
-    relay_endpoint = models.CharField(max_length=255, blank=True)
-    config = models.JSONField(default=dict, blank=True)
-    priority = models.PositiveSmallIntegerField(default=1000)
-    is_enabled = models.BooleanField(default=True)
-
-    class Meta(Entity.Meta):
-        ordering = ["node__hostname", "priority", "pk"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["node", "region"],
-                name="netmesh_node_relay_region_unique",
-            ),
-        ]
-
-
-class ServiceAdvertisement(Entity):
-    """Service advertisement emitted by a node for peer routing decisions."""
-
-    class Protocol(models.TextChoices):
-        TCP = "tcp", _("TCP")
-        UDP = "udp", _("UDP")
-        HTTP = "http", _("HTTP")
-        HTTPS = "https", _("HTTPS")
-
-    node = models.ForeignKey(
-        "nodes.Node",
-        on_delete=models.CASCADE,
-        related_name="netmesh_service_ads",
-    )
-    service_name = models.CharField(max_length=100)
-    port = models.PositiveIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(65535)],
-    )
-    protocol = models.CharField(max_length=8, choices=Protocol.choices, default=Protocol.TCP)
-    route_metadata = models.JSONField(default=dict, blank=True)
-
-    class Meta(Entity.Meta):
-        ordering = ["node__hostname", "service_name", "port", "pk"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["node", "service_name", "port", "protocol"],
-                name="netmesh_service_ad_unique",
-            ),
-        ]
 
 
 class NetmeshAgentStatus(Entity):

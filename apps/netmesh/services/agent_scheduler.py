@@ -24,13 +24,11 @@ class NetmeshAgentScheduler:
         *,
         keepalive_interval: timedelta,
         rekey_interval: timedelta,
-        endpoint_refresh_interval: timedelta,
     ):
         now = timezone.now()
         self._tasks = {
             "keepalive": ScheduledTask(interval=keepalive_interval, next_run_at=now),
             "rekey": ScheduledTask(interval=rekey_interval, next_run_at=now),
-            "endpoint_refresh": ScheduledTask(interval=endpoint_refresh_interval, next_run_at=now),
         }
 
     def due_tasks(self, *, now=None) -> list[str]:

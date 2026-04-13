@@ -28,7 +28,6 @@ def test_netmesh_agent_sync_updates_status_and_emits_summary(monkeypatch):
     MeshMembership.objects.create(node=peer, tenant="arthexis", site=None, is_enabled=True)
     responses = {
         "peers/": {"peers": [{"node_id": peer.id, "hostname": peer.hostname}]},
-        "peer-endpoints/": {"endpoints": []},
     }
 
     def fake_request_json(self, path: str):

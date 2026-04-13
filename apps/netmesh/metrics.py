@@ -8,10 +8,10 @@ from datetime import timedelta
 from time import perf_counter
 
 from django.db import DatabaseError
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.utils import timezone
 
-from apps.netmesh.models import NetmeshAgentStatus, NodeEndpoint, NodeKeyMaterial
+from apps.netmesh.models import NetmeshAgentStatus, NodeKeyMaterial
 from apps.nodes.models import Node
 
 _map_latency_state = {"count": 0, "total_seconds": 0.0, "max_seconds": 0.0}
@@ -52,13 +52,9 @@ def _map_latency_snapshot() -> dict[str, float | int]:
 
 
 def _relay_only_ratio() -> dict[str, float | int]:
-    try:
-        endpoint_total = NodeEndpoint.objects.count()
-        relay_required = NodeEndpoint.objects.filter(relay_required=True).count()
-    except DatabaseError:
-        endpoint_total = 0
-        relay_required = 0
-    ratio = (relay_required / endpoint_total) if endpoint_total else 0.0
+    endpoint_total = 0
+    relay_required = 0
+    ratio = 0.0
     return {
         "relay_required": relay_required,
         "endpoint_total": endpoint_total,
@@ -115,12 +111,9 @@ def snapshot() -> dict[str, object]:
 
     try:
         enrolled_nodes = Node.objects.filter(mesh_enrollment_state=Node.MeshEnrollmentState.ENROLLED).count()
-        stale_endpoint_total = NodeEndpoint.objects.filter(
-            Q(last_seen__isnull=True) | Q(last_seen__lt=timezone.now() - timedelta(hours=24))
-        ).count()
     except DatabaseError:
         enrolled_nodes = 0
-        stale_endpoint_total = 0
+    stale_endpoint_total = 0
     try:
         agent_status = NetmeshAgentStatus.get_solo()
         agent_snapshot = {

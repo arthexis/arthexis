@@ -15,10 +15,7 @@ from apps.netmesh.api.serializers import serialize_active_transport_key
 from apps.netmesh.metrics import map_generation_timer
 from apps.netmesh.models import (
     MeshMembership,
-    NodeEndpoint,
     NodeKeyMaterial,
-    NodeRelayConfig,
-    ServiceAdvertisement,
 )
 from apps.netmesh.services import ACLResolver
 from utils.api_errors import json_api_error
@@ -148,12 +145,11 @@ def permitted_peers(request: HttpRequest) -> HttpResponse:
             peer_payload = {
                 "node_id": mesh_peer.node_id,
                 "hostname": mesh_peer.node.hostname,
-                "public_endpoint": mesh_peer.node.public_endpoint,
                 "role": getattr(mesh_peer.node.role, "name", ""),
-                "policy_summary": {
+                "task_policy": {
                     "policy_ids": pair_summary.policy_ids,
-                    "allowed_services": pair_summary.allowed_services,
-                    "denied_services": pair_summary.denied_services,
+                    "allowed_tasks": pair_summary.allowed_services,
+                    "denied_tasks": pair_summary.denied_services,
                 },
             }
             if profile in {"gateway", "service"}:
@@ -183,124 +179,6 @@ def permitted_peers(request: HttpRequest) -> HttpResponse:
 
 
 @require_GET
-def peer_endpoints(request: HttpRequest) -> HttpResponse:
-    resolved, error_response = _membership_or_auth_error(request)
-    if error_response:
-        return error_response
-
-    principal, membership = resolved
-    filters = _scope_filters(membership=membership)
-    resolver = ACLResolver(tenant=membership.tenant, site_id=membership.site_id)
-    peer_memberships = list(
-        MeshMembership.objects.select_related("node", "node__role").filter(**filters, is_enabled=True).exclude(node=principal.node)
-    )
-    policy_by_peer = {
-        membership.node_id: resolver.resolve_pair(source_node=principal.node, destination_node=membership.node)
-        for membership in peer_memberships
-    }
-    peer_ids = [peer_id for peer_id, summary in policy_by_peer.items() if summary.allowed_services]
-    active_transport_key_by_node = {
-        key.node_id: key
-        for key in NodeKeyMaterial.objects.filter(
-            node_id__in=peer_ids,
-            key_state=NodeKeyMaterial.KeyState.ACTIVE,
-            key_type=NodeKeyMaterial.KeyType.X25519,
-        )
-    }
-    endpoints_qs = list(NodeEndpoint.objects.filter(node_id__in=peer_ids).select_related("node", "node__role"))
-    relay_qs = list(
-        NodeRelayConfig.objects.filter(node_id__in=peer_ids, is_enabled=True).select_related("region")
-    )
-    ads_qs = ServiceAdvertisement.objects.filter(node_id__in=peer_ids)
-    relay_by_node: dict[int, list[NodeRelayConfig]] = {}
-    for relay in relay_qs:
-        relay_by_node.setdefault(relay.node_id, []).append(relay)
-    ads_by_node: dict[int, list[dict]] = {}
-    for advertisement in ads_qs:
-        ads_by_node.setdefault(advertisement.node_id, []).append(
-            {
-                "service": advertisement.service_name,
-                "port": advertisement.port,
-                "protocol": advertisement.protocol,
-            }
-        )
-
-    profile = _node_role_profile_name(principal.node)
-    endpoints = []
-    with map_generation_timer():
-        for endpoint in endpoints_qs:
-            direct_candidates = [
-                {
-                    "endpoint": endpoint.endpoint,
-                    "priority": endpoint.endpoint_priority,
-                    "path": "direct",
-                }
-            ]
-            raw_candidates = endpoint.candidate_endpoints if isinstance(endpoint.candidate_endpoints, list) else []
-            for index, candidate in enumerate(raw_candidates):
-                if not isinstance(candidate, str) or not candidate.strip():
-                    continue
-                direct_candidates.append(
-                    {
-                        "endpoint": candidate.strip(),
-                        "priority": endpoint.endpoint_priority + index + 1,
-                        "path": "direct",
-                    }
-                )
-
-            relay_candidates = []
-            for relay in relay_by_node.get(endpoint.node_id, []):
-                relay_candidates.append(
-                    {
-                        "endpoint": relay.relay_endpoint or relay.region.relay_endpoint,
-                        "priority": relay.priority,
-                        "path": "relay",
-                        "region": relay.region.code,
-                    }
-                )
-            relay_candidates.sort(key=lambda candidate: (candidate["priority"], candidate["endpoint"]))
-            all_candidates = direct_candidates + relay_candidates
-            row = {
-                "node_id": endpoint.node_id,
-                "endpoint": endpoint.endpoint,
-                "candidate_endpoints": [candidate["endpoint"] for candidate in direct_candidates[1:]],
-                "endpoint_priority": endpoint.endpoint_priority,
-                "last_seen": endpoint.last_seen.isoformat() if endpoint.last_seen else None,
-                "last_successful_direct_at": (
-                    endpoint.last_successful_direct_at.isoformat() if endpoint.last_successful_direct_at else None
-                ),
-                "relay_required": endpoint.relay_required,
-                "relay_reason": endpoint.relay_reason,
-                "connection_candidates": all_candidates,
-                "policy_summary": {
-                    "policy_ids": policy_by_peer.get(endpoint.node_id).policy_ids,
-                    "allowed_services": policy_by_peer.get(endpoint.node_id).allowed_services,
-                    "denied_services": policy_by_peer.get(endpoint.node_id).denied_services,
-                },
-                "transport_key": serialize_active_transport_key(
-                    key_material=active_transport_key_by_node.get(endpoint.node_id)
-                ),
-            }
-            if profile == "gateway":
-                row["nat_type"] = endpoint.nat_type
-                row["services"] = ads_by_node.get(endpoint.node_id, [])
-            endpoints.append(row)
-    logger.info(
-        "Netmesh endpoint map generated",
-        extra={
-            "event": "netmesh.map.generated",
-            "node_id": principal.node.id,
-            "peer_count": len(endpoints),
-        },
-    )
-
-    version = [membership.id]
-    version.extend(endpoint.id for endpoint in endpoints_qs)
-    payload = {"version": max(version), "endpoints": endpoints}
-    return _json_with_etag(request, payload)
-
-
-@require_GET
 def acl_policy(request: HttpRequest) -> HttpResponse:
     resolved, error_response = _membership_or_auth_error(request)
     if error_response:
@@ -321,8 +199,8 @@ def acl_policy(request: HttpRequest) -> HttpResponse:
             continue
         row = {
             "destination_node_id": peer.node_id,
-            "allowed_services": pair_summary.allowed_services,
-            "denied_services": pair_summary.denied_services,
+            "allowed_tasks": pair_summary.allowed_services,
+            "denied_tasks": pair_summary.denied_services,
             "policy_ids": pair_summary.policy_ids,
         }
         if profile in {"gateway", "service"}:
