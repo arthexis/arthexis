@@ -47,6 +47,10 @@ class Command(BaseCommand):
 
         health_parser = subparsers.add_parser("health", help="Emit monitoring-friendly health and metrics output.")
         health_parser.add_argument("--json", action="store_true", help="Emit JSON.")
+        subparsers.add_parser(
+            "cleanup-endpoints",
+            help="Deprecated no-op retained for upgrade compatibility; remove scheduled invocations.",
+        )
 
     def handle(self, *args, **options):
         action = options["action"]
@@ -58,6 +62,8 @@ class Command(BaseCommand):
             return self._handle_policy(**options)
         if action == "health":
             return self._handle_health(**options)
+        if action == "cleanup-endpoints":
+            return self._handle_cleanup_endpoints()
         raise CommandError(f"Unsupported action: {action}")
 
     def _resolve_node(self, selector: str) -> Node:
@@ -201,3 +207,8 @@ class Command(BaseCommand):
         self.stdout.write(f"status={health_payload['status']}")
         self.stdout.write(f"timestamp={health_payload['timestamp']}")
         self.stdout.write(json.dumps(health_payload["metrics"], sort_keys=True))
+
+    def _handle_cleanup_endpoints(self):
+        self.stdout.write(
+            "cleanup-endpoints is deprecated and now a no-op; remove this invocation from scheduled automation."
+        )

@@ -117,5 +117,12 @@ class ACLResolver:
             denied_tasks=sorted(denied_tasks),
         )
 
+    def resolve_task(self, *, source_node, destination_node, task_identifier: str) -> bool:
+        return self.resolve_pair(source_node=source_node, destination_node=destination_node).allows(task_identifier)
+
     def resolve_service(self, *, source_node, destination_node, service_identifier: str) -> bool:
-        return self.resolve_pair(source_node=source_node, destination_node=destination_node).allows(service_identifier)
+        return self.resolve_task(
+            source_node=source_node,
+            destination_node=destination_node,
+            task_identifier=service_identifier,
+        )

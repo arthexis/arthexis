@@ -194,7 +194,7 @@ Arthexis should be extended as an integration pivot (apps + models + migrations)
 
 #### `POST /nodes/register/`
 - **Expected caller**: node registration client.
-- **Purpose**: create/update node identity, version, role, trust and peer-task policy metadata.
+- **Purpose**: create/update node identity, version, role, trust and capabilities.
 - **AuthN/AuthZ**:
   - Signature-verified flows preferred.
   - Authenticated Django user may override some signature failures under explicit policy.

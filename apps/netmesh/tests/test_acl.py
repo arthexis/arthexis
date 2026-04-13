@@ -34,6 +34,8 @@ def test_acl_resolver_resolves_effective_allow_and_deny_for_service_identifier()
 
     assert summary.allowed_tasks == ["telemetry"]
     assert summary.denied_tasks == ["heartbeat"]
+    assert resolver.resolve_task(source_node=source, destination_node=destination, task_identifier="telemetry")
+    assert not resolver.resolve_task(source_node=source, destination_node=destination, task_identifier="heartbeat")
     assert resolver.resolve_service(source_node=source, destination_node=destination, service_identifier="telemetry")
     assert not resolver.resolve_service(source_node=source, destination_node=destination, service_identifier="heartbeat")
 

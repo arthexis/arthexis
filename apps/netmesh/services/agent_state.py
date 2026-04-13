@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class NetmeshStateStore:
-    """Holds current peer/task maps with deterministic reconciliation."""
+    """Holds current peer_map with deterministic reconciliation."""
 
     peer_map: dict[int, dict[str, object]] = field(default_factory=dict)
 

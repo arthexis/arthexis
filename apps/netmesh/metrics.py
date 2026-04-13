@@ -51,14 +51,10 @@ def _map_latency_snapshot() -> dict[str, float | int]:
     }
 
 
-def _relay_only_ratio() -> dict[str, float | int]:
-    endpoint_total = 0
-    relay_required = 0
-    ratio = 0.0
+def _relay_only_ratio() -> dict[str, bool | str]:
     return {
-        "relay_required": relay_required,
-        "endpoint_total": endpoint_total,
-        "ratio": ratio,
+        "available": False,
+        "reason": "deprecated: endpoint and relay models removed",
     }
 
 
@@ -113,7 +109,10 @@ def snapshot() -> dict[str, object]:
         enrolled_nodes = Node.objects.filter(mesh_enrollment_state=Node.MeshEnrollmentState.ENROLLED).count()
     except DatabaseError:
         enrolled_nodes = 0
-    stale_endpoint_total = 0
+    stale_endpoint_total = {
+        "available": False,
+        "reason": "deprecated: endpoint and relay models removed",
+    }
     try:
         agent_status = NetmeshAgentStatus.get_solo()
         agent_snapshot = {

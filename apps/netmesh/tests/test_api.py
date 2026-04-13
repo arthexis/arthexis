@@ -41,6 +41,7 @@ def test_netmesh_api_returns_scoped_task_payloads_and_etag(client):
         source_node=caller,
         destination_node=peer_allowed,
         allowed_services=["ocpp", "heartbeat"],
+        denied_services=["heartbeat"],
     )
     PeerPolicy.objects.create(
         tenant="tenant-a",
@@ -81,13 +82,15 @@ def test_netmesh_api_returns_scoped_task_payloads_and_etag(client):
     assert peers_json["peers"][0]["site_id"] == site_a.id
     assert "public_endpoint" not in peers_json["peers"][0]
     assert peers_json["peers"][0]["transport_key"]["public_key"] == "x25519:peer-public-key"
-    assert peers_json["peers"][0]["task_policy"]["allowed_tasks"] == ["heartbeat", "ocpp"]
+    assert peers_json["peers"][0]["task_policy"]["allowed_tasks"] == ["ocpp"]
+    assert peers_json["peers"][0]["task_policy"]["denied_tasks"] == ["heartbeat"]
 
     acl = client.get("/api/netmesh/acl/", **headers)
     acl_json = acl.json()
     assert acl.status_code == 200
     assert len(acl_json["acl"]) == 1
-    assert acl_json["acl"][0]["allowed_tasks"] == ["heartbeat", "ocpp"]
+    assert acl_json["acl"][0]["allowed_tasks"] == ["ocpp"]
+    assert acl_json["acl"][0]["denied_tasks"] == ["heartbeat"]
 
     key_info = client.get("/api/netmesh/key-info/", **headers)
     assert key_info.status_code == 200
