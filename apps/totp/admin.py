@@ -6,18 +6,30 @@ from typing import Optional
 
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin.sites import NotRegistered
 from django.db import IntegrityError
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect
 from django.urls import path, reverse
-from django.utils.translation import gettext_lazy as _
 from django.template.response import TemplateResponse
+from django.utils.translation import gettext_lazy as _
 
 from django_object_actions import DjangoObjectActions
+from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from apps.users.models import User
 
-from .models import TOTPDevice
+from .services import generate_totp_key
+from .services import generate_totp_name
+from .services import render_totp_qr_data_uri
+from .services import totp_base32_key
+from .services import totp_provisioning_uri
+
+
+try:
+    admin.site.unregister(TOTPDevice)
+except NotRegistered:
+    pass
 
 
 class TOTPDeviceRegistrationForm(forms.ModelForm):
@@ -31,7 +43,8 @@ class TOTPDeviceRegistrationForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["user"].queryset = User.objects.all()
-        self.fields["name"].initial = _("Authenticator")
+        self.fields["name"].required = False
+        self.fields["name"].widget.attrs.setdefault("placeholder", _("Authenticator"))
 
 
 class TOTPConfirmationForm(forms.Form):
@@ -73,13 +86,13 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
             path(
                 "register/",
                 self.admin_site.admin_view(self.registration_wizard_view),
-                name="totp_totpdevice_register",
+                name="otp_totp_totpdevice_register",
             ),
         ]
         return custom + super().get_urls()
 
     def registration_wizard(self, request, queryset=None):
-        return HttpResponseRedirect(reverse("admin:totp_totpdevice_register"))
+        return HttpResponseRedirect(reverse("admin:otp_totp_totpdevice_register"))
 
     registration_wizard.label = _("Register")
     registration_wizard.short_description = _("Register")
@@ -100,9 +113,10 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
         if request.method == "POST" and "start" in request.POST:
             if setup_form.is_valid():
                 device = setup_form.save(commit=False)
-                device.key = TOTPDevice.generate_key()
-                if not device.name:
-                    device.name = TOTPDevice.generate_name(device.user)
+                device.key = generate_totp_key()
+                device.name = (device.name or "").strip() or generate_totp_name(
+                    device.user
+                )
                 device.confirmed = False
                 try:
                     device.save()
@@ -115,7 +129,8 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
                         request, _("Authenticator secret generated. Scan to continue."),
                     )
                     return redirect(
-                        reverse("admin:totp_totpdevice_register") + f"?device={device.pk}"
+                        reverse("admin:otp_totp_totpdevice_register")
+                        + f"?device={device.pk}"
                     )
         elif request.method == "POST" and device and "confirm" in request.POST:
             if not self.has_change_permission(request, device):
@@ -128,19 +143,19 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
                         device.save(update_fields=["confirmed", "last_t", "drift", "last_used_at", "throttling_failure_count", "throttling_failure_timestamp"])
                     messages.success(request, _("TOTP device confirmed and ready to use."))
                     return redirect(
-                        reverse("admin:totp_totpdevice_change", args=[device.pk])
+                        reverse("admin:otp_totp_totpdevice_change", args=[device.pk])
                     )
                 confirm_form.add_error("token", _("Invalid or expired code."))
         elif request.method == "POST" and device and "cancel" in request.POST:
             device.delete()
             messages.info(request, _("Pending TOTP device removed."))
-            return redirect(reverse("admin:totp_totpdevice_changelist"))
+            return redirect(reverse("admin:otp_totp_totpdevice_changelist"))
         else:
             confirm_form = TOTPConfirmationForm()
 
         if device:
-            qr_data_uri = device.render_qr_data_uri()
-            manual_key = device.base32_key
+            qr_data_uri = render_totp_qr_data_uri(device)
+            manual_key = totp_base32_key(device)
             if not confirm_form:
                 confirm_form = TOTPConfirmationForm()
 
@@ -155,7 +170,7 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
             "qr_data_uri": qr_data_uri,
             "manual_key": manual_key,
             "breadcrumbs_title": _("Register authenticator app"),
-            "registration_url": reverse("admin:totp_totpdevice_register"),
+            "registration_url": reverse("admin:otp_totp_totpdevice_register"),
         }
         return TemplateResponse(request, "admin/totp/device_wizard.html", context)
 
@@ -176,10 +191,33 @@ class TOTPDeviceAdmin(DjangoObjectActions, admin.ModelAdmin):
         return redirect(reverse("admin:index"))
 
     def has_add_permission(self, request):
-        return request.user.has_perm("totp.add_totpdevice")
+        return request.user.has_perm("otp_totp.add_totpdevice") or request.user.has_perm(
+            "totp.add_totpdevice"
+        )
 
     def has_change_permission(self, request, obj=None):
-        return request.user.has_perm("totp.change_totpdevice")
+        return request.user.has_perm(
+            "otp_totp.change_totpdevice"
+        ) or request.user.has_perm("totp.change_totpdevice")
 
     def has_delete_permission(self, request, obj=None):
-        return request.user.has_perm("totp.delete_totpdevice")
+        return request.user.has_perm(
+            "otp_totp.delete_totpdevice"
+        ) or request.user.has_perm("totp.delete_totpdevice")
+
+    def has_view_permission(self, request, obj=None):
+        return (
+            request.user.has_perm("otp_totp.view_totpdevice")
+            or request.user.has_perm("otp_totp.change_totpdevice")
+            or request.user.has_perm("totp.view_totpdevice")
+            or request.user.has_perm("totp.change_totpdevice")
+        )
+
+    def has_module_permission(self, request):
+        return request.user.has_module_perms(
+            "otp_totp"
+        ) or request.user.has_module_perms("totp")
+
+    @admin.display(description=_("Provisioning URI"))
+    def provisioning_uri(self, obj: TOTPDevice) -> str:
+        return totp_provisioning_uri(obj)
