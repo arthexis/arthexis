@@ -1,15 +1,12 @@
-from datetime import timedelta
-
-import importlib
-
 import pytest
-from django.apps import apps as django_apps
 from django.utils import timezone
+from django_celery_beat.models import PeriodicTask
 
 from apps.reports.models import SQLReport, SQLReportProduct
 from apps.reports.report_definitions import report_catalog
 from apps.reports.services import run_due_scheduled_reports, run_sql_report
 from apps.sigils.models import SigilRoot
+
 
 @pytest.mark.django_db
 def test_run_named_report_generates_html_and_pdf_products():
@@ -36,9 +33,8 @@ def test_run_named_report_generates_html_and_pdf_products():
 
 @pytest.mark.django_db
 def test_schedule_enabled_reports_default_next_run_at_on_save():
-    """Enabled schedules should default the next run timestamp when omitted."""
+    """Enabled schedules should create beat tasks from legacy interval minutes."""
 
-    before = timezone.now()
     report = SQLReport.objects.create(
         name="Scheduled report",
         report_type=SQLReport.ReportType.SIGIL_ROOTS,
@@ -46,14 +42,15 @@ def test_schedule_enabled_reports_default_next_run_at_on_save():
         schedule_enabled=True,
         schedule_interval_minutes=15,
     )
-    after = timezone.now()
 
-    assert report.next_scheduled_run_at is not None
-    assert before <= report.next_scheduled_run_at <= after
+    report.refresh_from_db()
+    assert report.schedule_interval is not None
+    assert report.schedule_periodic_task is not None
+    assert report.schedule_periodic_task.task == "apps.reports.tasks.run_scheduled_sql_reports"
 
 @pytest.mark.django_db
-def test_run_due_scheduled_reports_runs_due_only():
-    """Only due scheduled reports should execute and advance next run timestamp."""
+def test_run_due_scheduled_reports_runs_requested_ids_only():
+    """Only requested scheduled reports should execute."""
 
     now = timezone.now()
     due = SQLReport.objects.create(
@@ -62,24 +59,42 @@ def test_run_due_scheduled_reports_runs_due_only():
         parameters={"context_type": "all"},
         schedule_enabled=True,
         schedule_interval_minutes=30,
-        next_scheduled_run_at=now - timedelta(minutes=1),
     )
-    SQLReport.objects.create(
+    not_requested = SQLReport.objects.create(
         name="Not due report",
         report_type=SQLReport.ReportType.SCHEDULED_REPORTS,
         parameters={"schedule_state": "all", "name_contains": ""},
         schedule_enabled=True,
         schedule_interval_minutes=30,
-        next_scheduled_run_at=now + timedelta(minutes=30),
     )
 
-    processed = run_due_scheduled_reports(now=now)
+    processed = run_due_scheduled_reports(report_ids=[due.pk], now=now)
 
     assert processed == 1
     assert SQLReportProduct.objects.filter(report=due).exists()
+    assert not SQLReportProduct.objects.filter(report=not_requested).exists()
 
-    due.refresh_from_db()
-    assert due.next_scheduled_run_at == now + timedelta(minutes=30)
+
+@pytest.mark.django_db
+def test_schedule_disabled_reports_remove_periodic_task():
+    """Disabling schedules should remove managed beat tasks."""
+
+    report = SQLReport.objects.create(
+        name="Toggle schedule report",
+        report_type=SQLReport.ReportType.SIGIL_ROOTS,
+        parameters={"context_type": "all"},
+        schedule_enabled=True,
+        schedule_interval_minutes=5,
+    )
+    task_id = report.schedule_periodic_task_id
+    assert task_id is not None
+
+    report.schedule_enabled = False
+    report.save()
+    report.refresh_from_db()
+
+    assert report.schedule_periodic_task is None
+    assert not PeriodicTask.objects.filter(pk=task_id).exists()
 
 @pytest.mark.django_db
 def test_run_sql_report_validation_failure_returns_error():

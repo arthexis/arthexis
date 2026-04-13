@@ -11,7 +11,6 @@ from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.html import strip_tags
-
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
@@ -175,21 +174,36 @@ def run_sql_report(sql_report: SQLReport) -> tuple[SQLExecutionResult, SQLReport
     return result, product
 
 
-def run_due_scheduled_reports(now: timezone.datetime | None = None) -> int:
-    """Run all enabled reports whose schedule indicates they are due.
+def run_due_scheduled_reports(
+    report_ids: list[int] | tuple[int, ...] | None = None,
+    now: timezone.datetime | None = None,
+) -> int:
+    """Run explicitly targeted scheduled reports.
 
     Parameters:
-        now: Optional reference timestamp.
+        report_ids: Explicit report IDs to execute.
+        now: Optional reference timestamp used for legacy fallback.
 
     Returns:
         Number of successfully processed reports.
     """
 
-    current = now or timezone.now()
+    selected_ids = [int(report_id) for report_id in (report_ids or []) if report_id]
+    if not selected_ids:
+        current = now or timezone.now()
+        selected_ids = list(
+            SQLReport.objects.filter(
+                schedule_enabled=True,
+                schedule_interval_minutes__gt=0,
+                next_scheduled_run_at__lte=current,
+            )
+            .exclude(report_type=SQLReport.ReportType.LEGACY_ARCHIVED)
+            .values_list("pk", flat=True)
+        )
+
     due_reports = SQLReport.objects.filter(
+        pk__in=selected_ids,
         schedule_enabled=True,
-        schedule_interval_minutes__gt=0,
-        next_scheduled_run_at__lte=current,
     ).exclude(report_type=SQLReport.ReportType.LEGACY_ARCHIVED)
 
     processed = 0
@@ -198,8 +212,6 @@ def run_due_scheduled_reports(now: timezone.datetime | None = None) -> int:
         if result.error:
             continue
 
-        report.next_scheduled_run_at = current + timedelta(minutes=report.schedule_interval_minutes)
-        report.save(update_fields=["next_scheduled_run_at", "updated_at"])
         processed += 1
 
     return processed

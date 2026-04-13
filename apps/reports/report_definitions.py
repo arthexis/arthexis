@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone as datetime_timezone
+from datetime import datetime
+from datetime import timezone as datetime_timezone
 from typing import Any
 
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -239,9 +241,15 @@ class ScheduledReportsDefinition(ReportDefinition):
             queryset = queryset.filter(schedule_enabled=True)
         elif parameters["schedule_state"] == "due":
             queryset = queryset.filter(
-                schedule_enabled=True,
-                schedule_interval_minutes__gt=0,
-                next_scheduled_run_at__lte=now,
+                Q(
+                    schedule_enabled=True,
+                    schedule_periodic_task__enabled=True,
+                )
+                | Q(
+                    schedule_enabled=True,
+                    schedule_interval_minutes__gt=0,
+                    next_scheduled_run_at__lte=now,
+                )
             )
 
         rows = [
