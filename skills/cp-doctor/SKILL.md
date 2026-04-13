@@ -97,8 +97,8 @@ Keep final diagnostics compact and operator-friendly.
 
 ```text
 CP Doctor Diagnostic
-CP: <id>  Site: <site>  Window: <start..end>
-Overall: <HEALTHY|DEGRADED|HALTED>   Priority: <P0..P3>
+CP: <id>  Site: <site>  Tenant: <tenant>  Window: <start..end>
+Overall: <HEALTHY|DEGRADED|HALTED>   Priority: <P0..P3>   Scope: <connector|station|site|tenant>
 
 HALTING ISSUES (first)
 - [P0] <issue title> | Impact: <what is blocked> | Since: <timestamp>
@@ -112,6 +112,7 @@ KEY CONTEXT
 - Connectivity: <status>
 - Protocol: <status>
 - Transactions: <status>
+- Control: <status>
 - External deps: <status>
 
 ACTIONS TAKEN
