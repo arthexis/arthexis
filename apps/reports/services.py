@@ -3,17 +3,18 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
-from io import BytesIO
 from time import perf_counter
 from typing import Any
 
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils import timezone
-from django.utils.html import strip_tags
 
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+try:  # pragma: no cover - exercised through fallback behavior tests
+    from weasyprint import HTML
+except ImportError:  # pragma: no cover - optional dependency
+    HTML = None
 
 from .models import SQLReport, SQLReportProduct
 from .report_definitions import get_report_definition, report_catalog
@@ -206,7 +207,7 @@ def run_due_scheduled_reports(now: timezone.datetime | None = None) -> int:
 
 
 def _render_pdf_bytes(rendered_html: str) -> bytes:
-    """Create a basic PDF document from rendered template text content.
+    """Render report HTML into PDF bytes using the configured HTML renderer.
 
     Parameters:
         rendered_html: Rendered HTML payload.
@@ -215,23 +216,16 @@ def _render_pdf_bytes(rendered_html: str) -> bytes:
         PDF bytes.
     """
 
-    stream = BytesIO()
-    pdf = canvas.Canvas(stream, pagesize=letter)
-    y = 760
+    if not getattr(settings, "REPORTS_HTML_TO_PDF_ENABLED", True):
+        logger.info("Report PDF rendering disabled by REPORTS_HTML_TO_PDF_ENABLED")
+        return b""
 
-    text_content = strip_tags(rendered_html)
+    if HTML is None:
+        logger.warning("Report PDF rendering unavailable: missing WeasyPrint dependency")
+        return b""
 
-    for line in text_content.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-
-        if y <= 60:
-            pdf.showPage()
-            y = 760
-
-        pdf.drawString(40, y, stripped[:140])
-        y -= 14
-
-    pdf.save()
-    return stream.getvalue()
+    try:
+        return HTML(string=rendered_html).write_pdf()
+    except (OSError, RuntimeError, ValueError) as exc:
+        logger.warning("Report PDF rendering failed; returning empty PDF payload", exc_info=exc)
+        return b""
