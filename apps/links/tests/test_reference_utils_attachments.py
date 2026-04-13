@@ -90,3 +90,59 @@ def test_mirror_legacy_reference_attachment_updates_existing_slot() -> None:
         is_primary=True,
     )
     assert attachment.reference_id == second_reference.pk
+
+
+def test_mirror_legacy_reference_attachment_deletes_primary_on_clear() -> None:
+    reference = Reference.objects.create(
+        alt_text="Present",
+        value="https://example.com/present",
+    )
+    term = Term.objects.create(
+        title="Clearable",
+        slug="clearable",
+        reference=reference,
+    )
+    assert ReferenceAttachment.objects.filter(
+        object_id=str(term.pk),
+        slot="term",
+        is_primary=True,
+    ).exists()
+
+    term.reference = None
+    mirror_legacy_reference_attachment(term)
+
+    assert not ReferenceAttachment.objects.filter(
+        object_id=str(term.pk),
+        slot="term",
+        is_primary=True,
+    ).exists()
+    assert get_primary_reference(term) is None
+
+
+def test_mirror_legacy_reference_attachment_skips_when_field_not_updated() -> None:
+    first_reference = Reference.objects.create(
+        alt_text="First",
+        value="https://example.com/first-ref",
+    )
+    second_reference = Reference.objects.create(
+        alt_text="Second",
+        value="https://example.com/second-ref",
+    )
+    term = Term.objects.create(
+        title="Skip updates",
+        slug="skip-updates",
+        reference=first_reference,
+    )
+
+    term.reference = second_reference
+    mirror_legacy_reference_attachment(
+        term,
+        update_fields={"title"},
+    )
+
+    attachment = ReferenceAttachment.objects.get(
+        object_id=str(term.pk),
+        slot="term",
+        is_primary=True,
+    )
+    assert attachment.reference_id == first_reference.pk

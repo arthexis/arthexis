@@ -938,12 +938,13 @@ class Charger(Ownable):
             )
 
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        update_fields_set = set(update_fields) if update_fields is not None else None
         self.clean()
         if self.node_origin_id is None:
             local = Node.get_local()
             if local:
                 self.node_origin = local
-        update_fields = kwargs.get("update_fields")
         update_list = list(update_fields) if update_fields is not None else None
         if not self.manager_node_id:
             local_node = Node.get_local()
@@ -988,7 +989,10 @@ class Charger(Ownable):
             )
             self.reference.value = ref_value
             self.reference.alt_text = self.charger_id
-        mirror_legacy_reference_attachment(self)
+        mirror_legacy_reference_attachment(
+            self,
+            update_fields=update_fields_set,
+        )
 
     def refresh_manager_node(self, node: Node | None = None) -> Node | None:
         """Ensure ``manager_node`` matches the provided or local node."""

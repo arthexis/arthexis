@@ -122,6 +122,8 @@ class Term(models.Model):
         return self.title
 
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        update_fields_set = set(update_fields) if update_fields is not None else None
         is_new = self.pk is None
         super().save(*args, **kwargs)
         if is_new and not self.reference_id and self.slug:
@@ -134,7 +136,10 @@ class Term(models.Model):
             desired_value = self.get_absolute_url()
             if self.reference.value != desired_value:
                 Reference.objects.filter(pk=self.reference_id).update(value=desired_value)
-        mirror_legacy_reference_attachment(self)
+        mirror_legacy_reference_attachment(
+            self,
+            update_fields=update_fields_set,
+        )
 
     def clean(self):
         super().clean()

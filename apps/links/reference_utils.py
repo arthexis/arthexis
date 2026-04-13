@@ -40,21 +40,31 @@ def mirror_legacy_reference_attachment(
     *,
     legacy_field: str = "reference",
     slot: str | None = None,
+    update_fields: set[str] | None = None,
 ) -> "ReferenceAttachment | None":
     """Mirror ``instance.<legacy_field>`` into ``ReferenceAttachment``."""
 
     if not getattr(instance, "pk", None):
         return None
-    reference = getattr(instance, legacy_field, None)
-    if reference is None:
+    if update_fields is not None and legacy_field not in update_fields:
         return None
 
     from .models import ReferenceAttachment
 
     attachment_slot = slot or default_reference_slot(instance)
     content_type = ContentType.objects.get_for_model(
-        instance, for_concrete_model=False
+        instance, for_concrete_model=True
     )
+    reference = getattr(instance, legacy_field, None)
+    if reference is None:
+        ReferenceAttachment.objects.filter(
+            content_type=content_type,
+            object_id=str(instance.pk),
+            slot=attachment_slot,
+            is_primary=True,
+        ).delete()
+        return None
+
     attachment, _ = ReferenceAttachment.objects.update_or_create(
         content_type=content_type,
         object_id=str(instance.pk),
@@ -79,7 +89,7 @@ def get_attached_references(
     from .models import ReferenceAttachment
 
     content_type = ContentType.objects.get_for_model(
-        instance, for_concrete_model=False
+        instance, for_concrete_model=True
     )
     queryset = ReferenceAttachment.objects.filter(
         content_type=content_type,
@@ -105,14 +115,28 @@ def get_primary_reference(
 ) -> "Reference | None":
     """Return one reference for integrations/UI using staged fallback logic."""
 
-    references = get_attached_references(
-        instance,
-        slot=slot,
-        legacy_field=legacy_field,
-    )
-    if not references:
+    if not getattr(instance, "pk", None):
         return None
-    return references[0]
+
+    from .models import ReferenceAttachment
+
+    content_type = ContentType.objects.get_for_model(
+        instance, for_concrete_model=True
+    )
+    queryset = ReferenceAttachment.objects.filter(
+        content_type=content_type,
+        object_id=str(instance.pk),
+        is_primary=True,
+    ).select_related("reference")
+    if slot is not None:
+        queryset = queryset.filter(slot=slot)
+
+    attachment = queryset.order_by("sort_order", "id").first()
+    if attachment is not None:
+        return attachment.reference
+
+    legacy_reference = getattr(instance, legacy_field, None)
+    return legacy_reference
 
 
 def _normalize_host(host: str | None) -> str:

@@ -196,6 +196,7 @@ class RFID(Entity):
 
     def save(self, *args, **kwargs):
         update_fields = kwargs.get("update_fields")
+        update_fields_set = set(update_fields) if update_fields is not None else None
         if not self.origin_node_id:
             try:
                 from apps.nodes.models import (
@@ -239,7 +240,10 @@ class RFID(Entity):
         if self.endianness:
             self.endianness = self.normalize_endianness(self.endianness)
         super().save(*args, **kwargs)
-        mirror_legacy_reference_attachment(self)
+        mirror_legacy_reference_attachment(
+            self,
+            update_fields=update_fields_set,
+        )
         if not self.allowed:
             self.energy_accounts.clear()
 
