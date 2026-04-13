@@ -186,7 +186,7 @@ jobs:
       issues: write
     steps:
       - name: Open or update install failure issue
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const title = 'Install health check is failing';
@@ -309,7 +309,7 @@ jobs:
       issues: write
     steps:
       - name: Comment and close install failure issue when recovered
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const title = 'Install health check is failing';

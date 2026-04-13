@@ -428,7 +428,7 @@ jobs:
 
       - name: Upsert pull request screenshot comment
         if: ${{ always() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
@@ -560,7 +560,7 @@ jobs:
       issues: write
     steps:
       - name: Open or update screenshot failure issue
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const title = 'Dashboard screenshot workflow is failing';
@@ -661,7 +661,7 @@ jobs:
       issues: write
     steps:
       - name: Comment and close screenshot failure issue when recovered
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const title = 'Dashboard screenshot workflow is failing';
