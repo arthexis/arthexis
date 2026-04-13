@@ -1,6 +1,5 @@
-from datetime import timedelta
-
 import importlib
+from datetime import timedelta
 
 import pytest
 from django.apps import apps as django_apps
@@ -8,8 +7,13 @@ from django.utils import timezone
 
 from apps.reports.models import SQLReport, SQLReportProduct
 from apps.reports.report_definitions import report_catalog
-from apps.reports.services import _render_pdf_bytes, run_due_scheduled_reports, run_sql_report
+from apps.reports.services import (
+    _render_pdf_bytes,
+    run_due_scheduled_reports,
+    run_sql_report,
+)
 from apps.sigils.models import SigilRoot
+
 
 @pytest.mark.django_db
 def test_run_named_report_generates_html_and_pdf_products():
@@ -27,7 +31,7 @@ def test_run_named_report_generates_html_and_pdf_products():
     assert product is not None
     assert SQLReportProduct.objects.filter(report=report).count() == 1
     assert "Sigil catalog" in product.html_content
-    assert product.pdf_content is not None
+    assert product.pdf_content
     assert product.renderer_template_name == "reports/sql/sigil_roots.html"
 
     report.refresh_from_db()
@@ -158,8 +162,10 @@ def test_catalog_templates_render_with_html_pdf_engine(monkeypatch, report_type,
     captured_html: list[str] = []
 
     class FakeHTML:
-        def __init__(self, string: str):
+        def __init__(self, string: str, url_fetcher):
             captured_html.append(string)
+            with pytest.raises(ValueError, match="External resource loading is disabled"):
+                url_fetcher("https://example.com/image.png")
 
         def write_pdf(self) -> bytes:
             return b"%PDF-fake"
@@ -228,7 +234,7 @@ def test_render_pdf_bytes_returns_empty_when_renderer_errors(monkeypatch):
     """Renderer errors should degrade to empty PDF bytes instead of bubbling up."""
 
     class FailingHTML:
-        def __init__(self, string: str):
+        def __init__(self, string: str, url_fetcher):
             pass
 
         def write_pdf(self) -> bytes:

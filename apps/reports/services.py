@@ -5,16 +5,18 @@ from dataclasses import dataclass
 from datetime import timedelta
 from time import perf_counter
 from typing import Any
+from urllib.parse import urlparse
 
-from django.core.exceptions import ValidationError
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
 from django.utils import timezone
 
 try:  # pragma: no cover - exercised through fallback behavior tests
-    from weasyprint import HTML
+    from weasyprint import HTML, default_url_fetcher
 except ImportError:  # pragma: no cover - optional dependency
     HTML = None
+    default_url_fetcher = None
 
 from .models import SQLReport, SQLReportProduct
 from .report_definitions import get_report_definition, report_catalog
@@ -217,7 +219,7 @@ def _render_pdf_bytes(rendered_html: str) -> bytes:
     """
 
     if not getattr(settings, "REPORTS_HTML_TO_PDF_ENABLED", True):
-        logger.info("Report PDF rendering disabled by REPORTS_HTML_TO_PDF_ENABLED")
+        logger.debug("Report PDF rendering disabled by REPORTS_HTML_TO_PDF_ENABLED")
         return b""
 
     if HTML is None:
@@ -225,7 +227,16 @@ def _render_pdf_bytes(rendered_html: str) -> bytes:
         return b""
 
     try:
-        return HTML(string=rendered_html).write_pdf()
+        return HTML(string=rendered_html, url_fetcher=_safe_report_url_fetcher).write_pdf()
     except (OSError, RuntimeError, ValueError) as exc:
         logger.warning("Report PDF rendering failed; returning empty PDF payload", exc_info=exc)
         return b""
+
+
+def _safe_report_url_fetcher(url: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    """Restrict WeasyPrint URL fetching to data URIs only."""
+
+    parsed = urlparse(url)
+    if parsed.scheme == "data" and default_url_fetcher is not None:
+        return default_url_fetcher(url, *args, **kwargs)
+    raise ValueError("External resource loading is disabled for report PDF rendering")
