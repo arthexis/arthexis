@@ -206,11 +206,13 @@ class ReferenceAdmin(EntityModelAdmin):
         transaction_uuid = payload.get("transaction_uuid") or uuid.uuid4()
         created_ids = []
         for data in refs:
-            ref = Reference.objects.create(
+            ref, _ = Reference.objects.update_or_create(
                 alt_text=data.get("alt_text", ""),
                 value=data.get("value", ""),
-                transaction_uuid=transaction_uuid,
-                author=request.user if request.user.is_authenticated else None,
+                defaults={
+                    "author": request.user if request.user.is_authenticated else None,
+                    "transaction_uuid": transaction_uuid,
+                },
             )
             created_ids.append(ref.id)
         return JsonResponse(

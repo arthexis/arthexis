@@ -13,7 +13,6 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from apps.energy.models import CustomerAccount
-from apps.links.models import Reference
 from apps.cards.models import RFID as CoreRFID, RFIDAttempt
 from apps.core.notifications import LcdChannel
 from apps.nodes.models import NetMessage
@@ -424,26 +423,19 @@ class CSMSConsumer(
         secure = port in HTTPS_PORTS
         url = build_console_url(host, port, secure)
         alt_text = f"{serial} Console"
-        reference = Reference.objects.filter(alt_text=alt_text).order_by("id").first()
-        if reference is None:
-            reference = Reference.objects.create(
-                alt_text=alt_text,
-                value=url,
-                show_in_header=True,
-                method="link",
-            )
-        updated_fields: list[str] = []
-        if reference.value != url:
-            reference.value = url
-            updated_fields.append("value")
-        if reference.method != "link":
-            reference.method = "link"
-            updated_fields.append("method")
-        if not reference.show_in_header:
-            reference.show_in_header = True
-            updated_fields.append("show_in_header")
-        if updated_fields:
-            reference.save(update_fields=updated_fields)
+        if self.charger is None:
+            return
+        from apps.links.services import attach_reference
+
+        attach_reference(
+            self.charger,
+            alt_text=alt_text,
+            value=url,
+            slot="console",
+            primary=True,
+            method="link",
+            show_in_header=True,
+        )
 
     async def _store_meter_values(self, payload: dict, raw_message: str) -> None:
         """Parse a MeterValues payload into MeterValue rows."""
