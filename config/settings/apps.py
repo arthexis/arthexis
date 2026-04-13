@@ -54,6 +54,7 @@ PROJECT_LOCAL_APPS = [
     "apps.forwarder.ocpp",
     "apps.ftp",
     "apps.gdrive",
+    "apps.gallery",
     "apps.groups",
     "apps.imager",
     "apps.leads",

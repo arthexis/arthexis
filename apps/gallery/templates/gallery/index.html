@@ -1,0 +1,36 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Image Gallery" %}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">{% trans "Image Gallery" %}</h1>
+    {% if user.is_authenticated %}
+      <div class="d-flex gap-2">
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'gallery:upload' %}">{% trans "Upload" %}</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'gallery:taxonomy' %}">{% trans "Taxonomy" %}</a>
+      </div>
+    {% endif %}
+  </div>
+  <div class="row g-4">
+    {% for image in images %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 shadow-sm">
+          <img src="{{ image.media_file.file.url }}" alt="{{ image.title }}" class="card-img-top">
+          <div class="card-body">
+            <h2 class="h6">{{ image.title }}</h2>
+            {% if image.description %}
+              <p class="text-muted">{{ image.description|truncatechars:120 }}</p>
+            {% endif %}
+            <a class="btn btn-sm btn-outline-primary" href="{% url 'gallery:detail' slug=image.slug %}">{% trans "Open" %}</a>
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="col-12"><div class="alert alert-info">{% trans "No images yet." %}</div></div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
