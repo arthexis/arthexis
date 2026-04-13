@@ -31,12 +31,19 @@ def sync_report_schedule(report) -> None:
 
         cadence_interval = report.schedule_interval
         cadence_crontab = report.schedule_crontab
-        if cadence_interval is None and cadence_crontab is None and report.schedule_interval_minutes > 0:
+        if (
+            cadence_interval is None
+            and cadence_crontab is None
+            and report.schedule_interval_minutes > 0
+        ):
             cadence_interval, _ = IntervalSchedule.objects.get_or_create(
                 every=report.schedule_interval_minutes,
                 period=IntervalSchedule.MINUTES,
             )
-            type(report).objects.filter(pk=report.pk).update(schedule_interval=cadence_interval)
+            type(report).objects.filter(pk=report.pk).update(
+                schedule_interval=cadence_interval
+            )
+            report.schedule_interval = cadence_interval
 
         if cadence_interval is None and cadence_crontab is None:
             _clear_report_task(report, PeriodicTask)
@@ -57,7 +64,9 @@ def sync_report_schedule(report) -> None:
             },
         )
         if report.schedule_periodic_task_id != task.pk:
-            type(report).objects.filter(pk=report.pk).update(schedule_periodic_task=task)
+            type(report).objects.filter(pk=report.pk).update(
+                schedule_periodic_task=task
+            )
             report.schedule_periodic_task_id = task.pk
     except (OperationalError, ProgrammingError):
         return
