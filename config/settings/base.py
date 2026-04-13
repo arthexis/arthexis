@@ -61,6 +61,7 @@ HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not N
 NET_MESSAGE_DISABLE_PROPAGATION = env_bool("NET_MESSAGE_DISABLE_PROPAGATION", False)
 NODES_ENABLE_SIBLING_IPC = env_bool("NODES_ENABLE_SIBLING_IPC", False)
 ENABLE_USAGE_ANALYTICS = env_bool("ENABLE_USAGE_ANALYTICS", False)
+REPORTS_HTML_TO_PDF_ENABLED = env_bool("REPORTS_HTML_TO_PDF_ENABLED", True)
 ROUTE_PROVIDERS = [
     "apps.actions.routes",
     "apps.awg.routes",
