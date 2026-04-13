@@ -32,9 +32,8 @@ def parse_expected_images(readme_path: Path) -> list[str]:
     return expected
 
 
-def detect_visual_blank(image_path: Path, stddev_floor: float) -> bool:
-    with Image.open(image_path) as image:
-        stat = ImageStat.Stat(image.convert("RGB"))
+def detect_visual_blank(image: Image.Image, stddev_floor: float) -> bool:
+    stat = ImageStat.Stat(image.convert("RGB"))
     return max(stat.stddev) < stddev_floor
 
 
@@ -77,22 +76,22 @@ def verify_artifacts(
         with Image.open(image_path) as image:
             width, height = image.size
 
-        if width < min_width or height < min_height:
-            issues.append(
-                VerificationIssue(
-                    image_path.name,
-                    f"Image dimensions are too small ({width}x{height} < {min_width}x{min_height}).",
+            if width < min_width or height < min_height:
+                issues.append(
+                    VerificationIssue(
+                        image_path.name,
+                        f"Image dimensions are too small ({width}x{height} < {min_width}x{min_height}).",
+                    )
                 )
-            )
-            continue
+                continue
 
-        if detect_visual_blank(image_path, stddev_floor):
-            issues.append(
-                VerificationIssue(
-                    image_path.name,
-                    "Image appears visually blank (near-zero color variance).",
+            if detect_visual_blank(image, stddev_floor):
+                issues.append(
+                    VerificationIssue(
+                        image_path.name,
+                        "Image appears visually blank (near-zero color variance).",
+                    )
                 )
-            )
 
     return issues, [path.name for path in images], expected
 
@@ -107,7 +106,7 @@ def write_report(
         "## Screenshot verification checklist",
         "",
         f"- {'✅' if artifact_names else '❌'} PNG artifacts found: `{len(artifact_names)}`",
-        f"- {'✅' if not expected or not any(i.filename in expected for i in issues) else '❌'} README-listed desktop screenshots present",
+        f"- {'✅' if not expected or all(name in artifact_names for name in expected) else '❌'} README-listed desktop screenshots present",
         f"- {'✅' if not any('dimensions' in i.reason for i in issues) else '❌'} Minimum dimensions check",
         f"- {'✅' if not any('too small' in i.reason for i in issues) else '❌'} Minimum file-size check",
         f"- {'✅' if not any('visually blank' in i.reason for i in issues) else '❌'} Non-blank image heuristic",

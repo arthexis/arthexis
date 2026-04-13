@@ -352,12 +352,14 @@ jobs:
 
       - name: Verify screenshot artifacts checklist (pull requests)
         if: ${{ github.event_name == 'pull_request' }}
+        id: verify-pr-screenshot-artifacts
+        continue-on-error: true
         run: |
           source .venv/bin/activate
           python scripts/verify_screenshot_artifacts.py --artifacts-dir artifacts --report artifacts/screenshot-verification.md
 
       - name: Build PR screenshot comment body
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ always() && github.event_name == 'pull_request' }}
         run: |
           source .venv/bin/activate
           python <<'PY'
@@ -425,7 +427,7 @@ jobs:
           PY
 
       - name: Upsert pull request screenshot comment
-        if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
+        if: ${{ always() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
         uses: actions/github-script@v8
         with:
           script: |
@@ -463,6 +465,10 @@ jobs:
               body,
             });
             core.info('Created screenshot preview comment.');
+
+      - name: Fail pull request build when screenshot verification fails
+        if: ${{ github.event_name == 'pull_request' && steps.verify-pr-screenshot-artifacts.outcome == 'failure' }}
+        run: exit 1
 
       - name: Capture public screenshot
         if: ${{ github.event_name != 'pull_request' }}

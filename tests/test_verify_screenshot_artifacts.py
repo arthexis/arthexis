@@ -2,7 +2,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from scripts.verify_screenshot_artifacts import verify_artifacts
+from scripts.verify_screenshot_artifacts import VerificationIssue, verify_artifacts, write_report
 
 
 def _write_image(path: Path, *, size=(640, 360), color="white", text: str | None = None) -> None:
@@ -57,3 +57,23 @@ def test_verify_artifacts_flags_blank_or_tiny_outputs(tmp_path):
     reasons = "\n".join(issue.reason for issue in issues)
     assert "visually blank" in reasons
     assert "dimensions are too small" in reasons
+
+
+def test_write_report_marks_readme_presence_from_artifacts_only(tmp_path):
+    report_path = tmp_path / "artifacts" / "screenshot-verification.md"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    write_report(
+        report_path=report_path,
+        artifact_names=["admin-desktop.png"],
+        expected=["admin-desktop.png"],
+        issues=[
+            VerificationIssue(
+                filename="admin-desktop.png",
+                reason="Image appears visually blank (near-zero color variance).",
+            )
+        ],
+    )
+
+    report = report_path.read_text(encoding="utf-8")
+    assert "- ✅ README-listed desktop screenshots present" in report
+    assert "- ❌ Non-blank image heuristic" in report
