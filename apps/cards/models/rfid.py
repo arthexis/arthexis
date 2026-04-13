@@ -4,8 +4,6 @@ import base64
 from io import BytesIO
 from typing import Any
 
-from apps.cards.actions import get_rfid_action_choices
-
 from django.apps import apps
 from django.core.management.color import no_style
 from django.core.validators import RegexValidator
@@ -16,6 +14,8 @@ from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
+from apps.cards.actions import get_rfid_action_choices
+from apps.links.reference_utils import mirror_legacy_reference_attachment
 
 __all__ = ["RFID"]
 
@@ -239,6 +239,7 @@ class RFID(Entity):
         if self.endianness:
             self.endianness = self.normalize_endianness(self.endianness)
         super().save(*args, **kwargs)
+        mirror_legacy_reference_attachment(self)
         if not self.allowed:
             self.energy_accounts.clear()
 

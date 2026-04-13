@@ -1,17 +1,118 @@
-"""Utility helpers for working with :class:`apps.links.models.Reference`."""
+"""Utility helpers for link references and reference attachments."""
 
 from __future__ import annotations
 
 import ipaddress
-from typing import Iterable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable
 from urllib.parse import urlparse
 
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.sites.models import Site
 
 if TYPE_CHECKING:  # pragma: no cover - imported only for type checking
+    from django.db import models
     from django.http import HttpRequest
+
     from apps.nodes.models import Node
-    from .models import Reference
+
+    from .models import Reference, ReferenceAttachment
+
+
+DEFAULT_REFERENCE_SLOT = "default"
+REFERENCE_SLOT_BY_MODEL_LABEL = {
+    "cards.rfid": "rfid",
+    "ocpp.charger": "charger",
+    "terms.term": "term",
+}
+
+
+def default_reference_slot(
+    instance: "models.Model", *, fallback: str = DEFAULT_REFERENCE_SLOT
+) -> str:
+    """Return the default attachment slot name for ``instance``."""
+
+    model_label = instance._meta.label_lower
+    return REFERENCE_SLOT_BY_MODEL_LABEL.get(model_label, fallback)
+
+
+def mirror_legacy_reference_attachment(
+    instance: "models.Model",
+    *,
+    legacy_field: str = "reference",
+    slot: str | None = None,
+) -> "ReferenceAttachment | None":
+    """Mirror ``instance.<legacy_field>`` into ``ReferenceAttachment``."""
+
+    if not getattr(instance, "pk", None):
+        return None
+    reference = getattr(instance, legacy_field, None)
+    if reference is None:
+        return None
+
+    from .models import ReferenceAttachment
+
+    attachment_slot = slot or default_reference_slot(instance)
+    content_type = ContentType.objects.get_for_model(
+        instance, for_concrete_model=False
+    )
+    attachment, _ = ReferenceAttachment.objects.update_or_create(
+        content_type=content_type,
+        object_id=str(instance.pk),
+        slot=attachment_slot,
+        is_primary=True,
+        defaults={"reference": reference},
+    )
+    return attachment
+
+
+def get_attached_references(
+    instance: "models.Model",
+    *,
+    slot: str | None = None,
+    legacy_field: str = "reference",
+) -> list["Reference"]:
+    """Return references for ``instance``, preferring attachments first."""
+
+    if not getattr(instance, "pk", None):
+        return []
+
+    from .models import ReferenceAttachment
+
+    content_type = ContentType.objects.get_for_model(
+        instance, for_concrete_model=False
+    )
+    queryset = ReferenceAttachment.objects.filter(
+        content_type=content_type,
+        object_id=str(instance.pk),
+    ).select_related("reference")
+    if slot is not None:
+        queryset = queryset.filter(slot=slot)
+    references = [attachment.reference for attachment in queryset]
+    if references:
+        return references
+
+    legacy_reference = getattr(instance, legacy_field, None)
+    if legacy_reference is None:
+        return []
+    return [legacy_reference]
+
+
+def get_primary_reference(
+    instance: "models.Model",
+    *,
+    slot: str | None = None,
+    legacy_field: str = "reference",
+) -> "Reference | None":
+    """Return one reference for integrations/UI using staged fallback logic."""
+
+    references = get_attached_references(
+        instance,
+        slot=slot,
+        legacy_field=legacy_field,
+    )
+    if not references:
+        return None
+    return references[0]
 
 
 def _normalize_host(host: str | None) -> str:
@@ -68,7 +169,9 @@ def filter_visible_references(
 
     if node is None:
         try:
-            from apps.nodes.models import Node  # imported lazily to avoid circular import
+            from apps.nodes.models import (
+                Node,  # imported lazily to avoid circular import
+            )
 
             node = Node.get_local()
         except Exception:
@@ -142,7 +245,12 @@ def filter_visible_references(
 
 
 __all__ = [
+    "DEFAULT_REFERENCE_SLOT",
+    "default_reference_slot",
     "filter_visible_references",
+    "get_attached_references",
+    "get_primary_reference",
     "host_is_local_loopback",
+    "mirror_legacy_reference_attachment",
     "url_targets_local_loopback",
 ]

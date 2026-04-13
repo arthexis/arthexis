@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.links.models import Reference
+from apps.links.reference_utils import mirror_legacy_reference_attachment
 from apps.media.models import MediaFile
 from apps.media.utils import ensure_media_bucket
 
@@ -133,6 +134,7 @@ class Term(models.Model):
             desired_value = self.get_absolute_url()
             if self.reference.value != desired_value:
                 Reference.objects.filter(pk=self.reference_id).update(value=desired_value)
+        mirror_legacy_reference_attachment(self)
 
     def clean(self):
         super().clean()

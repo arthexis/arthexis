@@ -3,12 +3,17 @@ from __future__ import annotations
 from django.conf import settings
 from django.urls import NoReverseMatch
 
+from apps.links.reference_utils import mirror_legacy_reference_attachment
 from apps.locale.models import Language
-from apps.sites.utils import SITE_OPERATOR_GROUP_NAME, user_in_charge_station_manager_group
+from apps.sites.utils import (
+    SITE_OPERATOR_GROUP_NAME,
+    user_in_charge_station_manager_group,
+)
 
 from .. import store
 from .base import *
 from .transaction import annotate_transaction_energy_bounds
+
 
 class Charger(Ownable):
     """Known charge point."""
@@ -983,6 +988,7 @@ class Charger(Ownable):
             )
             self.reference.value = ref_value
             self.reference.alt_text = self.charger_id
+        mirror_legacy_reference_attachment(self)
 
     def refresh_manager_node(self, node: Node | None = None) -> Node | None:
         """Ensure ``manager_node`` matches the provided or local node."""
