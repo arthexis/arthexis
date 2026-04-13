@@ -121,8 +121,6 @@ def snapshot() -> dict[str, object]:
             "lifecycle_state": agent_status.lifecycle_state,
             "last_poll_at": agent_status.last_poll_at.isoformat() if agent_status.last_poll_at else None,
             "peers_synced": agent_status.peers_synced,
-            "session_count": agent_status.session_count,
-            "relay_count": agent_status.relay_count,
         }
     except DatabaseError:
         agent_snapshot = {
@@ -130,8 +128,6 @@ def snapshot() -> dict[str, object]:
             "lifecycle_state": "unknown",
             "last_poll_at": None,
             "peers_synced": 0,
-            "session_count": 0,
-            "relay_count": 0,
         }
     return {
         "map_generation_latency_seconds": _map_latency_snapshot(),

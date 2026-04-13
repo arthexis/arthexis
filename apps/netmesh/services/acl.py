@@ -9,16 +9,24 @@ from apps.ocpp.models import Charger
 
 
 @dataclass(frozen=True, slots=True)
-class ACLServiceSummary:
-    """Resolved allow/deny summary for a node pair."""
+class ACLTaskSummary:
+    """Resolved allow/deny task summary for a node pair."""
 
     policy_ids: list[int]
-    allowed_services: list[str]
-    denied_services: list[str]
+    allowed_tasks: list[str]
+    denied_tasks: list[str]
 
-    def allows(self, service_identifier: str) -> bool:
-        service = (service_identifier or "").strip().lower()
-        return bool(service and service in self.allowed_services and service not in self.denied_services)
+    @property
+    def allowed_services(self) -> list[str]:
+        return self.allowed_tasks
+
+    @property
+    def denied_services(self) -> list[str]:
+        return self.denied_tasks
+
+    def allows(self, task_identifier: str) -> bool:
+        task = (task_identifier or "").strip().lower()
+        return bool(task and task in self.allowed_tasks and task not in self.denied_tasks)
 
 
 class ACLResolver:
@@ -67,7 +75,7 @@ class ACLResolver:
             return False
         return True
 
-    def resolve_pair(self, *, source_node, destination_node) -> ACLServiceSummary:
+    def resolve_pair(self, *, source_node, destination_node) -> ACLTaskSummary:
         source_group_id = getattr(source_node, "role_id", None)
         destination_group_id = getattr(destination_node, "role_id", None)
         source_station_ids = self._station_ids_for_node(source_node)
@@ -75,8 +83,8 @@ class ACLResolver:
         source_tags = self._node_tags(source_node)
         destination_tags = self._node_tags(destination_node)
 
-        allowed_services: set[str] = set()
-        denied_services: set[str] = set()
+        allowed_tasks: set[str] = set()
+        denied_tasks: set[str] = set()
         matched_policy_ids: list[int] = []
 
         for policy in self.policies:
@@ -100,13 +108,13 @@ class ACLResolver:
                 continue
 
             matched_policy_ids.append(policy.id)
-            allowed_services.update(policy.normalized_allowed_services())
-            denied_services.update(policy.normalized_denied_services())
+            allowed_tasks.update(policy.normalized_allowed_services())
+            denied_tasks.update(policy.normalized_denied_services())
 
-        return ACLServiceSummary(
+        return ACLTaskSummary(
             policy_ids=sorted(matched_policy_ids),
-            allowed_services=sorted(service for service in allowed_services if service not in denied_services),
-            denied_services=sorted(denied_services),
+            allowed_tasks=sorted(task for task in allowed_tasks if task not in denied_tasks),
+            denied_tasks=sorted(denied_tasks),
         )
 
     def resolve_service(self, *, source_node, destination_node, service_identifier: str) -> bool:

@@ -77,8 +77,6 @@ class NetmeshAgentRuntime:
         peers_synced = self.store.reconcile_peers(peers if isinstance(peers, list) else [])
         return {
             "peers_synced": peers_synced,
-            "session_count": 0,
-            "relay_count": 0,
         }
 
     def _run_due_tasks(self) -> None:
@@ -111,8 +109,6 @@ class NetmeshAgentRuntime:
                 except Exception as exc:
                     self.lifecycle.mark_progress(
                         peers_synced=len(self.store.peer_map),
-                        session_count=0,
-                        relay_count=0,
                         lifecycle_state="degraded",
                         last_error=str(exc),
                     )

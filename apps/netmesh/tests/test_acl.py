@@ -32,8 +32,8 @@ def test_acl_resolver_resolves_effective_allow_and_deny_for_service_identifier()
 
     summary = resolver.resolve_pair(source_node=source, destination_node=destination)
 
-    assert summary.allowed_services == ["telemetry"]
-    assert summary.denied_services == ["heartbeat"]
+    assert summary.allowed_tasks == ["telemetry"]
+    assert summary.denied_tasks == ["heartbeat"]
     assert resolver.resolve_service(source_node=source, destination_node=destination, service_identifier="telemetry")
     assert not resolver.resolve_service(source_node=source, destination_node=destination, service_identifier="heartbeat")
 
@@ -68,8 +68,8 @@ def test_acl_resolver_uses_scope_filters_for_tenant_and_site():
     summary = resolver.resolve_pair(source_node=source, destination_node=destination)
     other_summary = resolver.resolve_pair(source_node=source, destination_node=other_site_destination)
 
-    assert summary.allowed_services == ["ocpp"]
-    assert other_summary.allowed_services == []
+    assert summary.allowed_tasks == ["ocpp"]
+    assert other_summary.allowed_tasks == []
 
 
 @pytest.mark.django_db
@@ -89,5 +89,5 @@ def test_acl_resolver_ignores_policies_with_no_selectors():
     summary = resolver.resolve_pair(source_node=source, destination_node=destination)
 
     assert summary.policy_ids == []
-    assert summary.allowed_services == []
-    assert summary.denied_services == []
+    assert summary.allowed_tasks == []
+    assert summary.denied_tasks == []

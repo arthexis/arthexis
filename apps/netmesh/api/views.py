@@ -130,7 +130,7 @@ def permitted_peers(request: HttpRequest) -> HttpResponse:
     with map_generation_timer():
         for mesh_peer in peer_memberships:
             pair_summary = resolver.resolve_pair(source_node=principal.node, destination_node=mesh_peer.node)
-            if not pair_summary.allowed_services:
+            if not pair_summary.allowed_tasks:
                 logger.info(
                     "Netmesh policy denied peer visibility",
                     extra={
@@ -138,7 +138,7 @@ def permitted_peers(request: HttpRequest) -> HttpResponse:
                         "source_node_id": principal.node.id,
                         "destination_node_id": mesh_peer.node_id,
                         "policy_ids": pair_summary.policy_ids,
-                        "denied_services": pair_summary.denied_services,
+                        "denied_tasks": pair_summary.denied_tasks,
                     },
                 )
                 continue
@@ -148,8 +148,8 @@ def permitted_peers(request: HttpRequest) -> HttpResponse:
                 "role": getattr(mesh_peer.node.role, "name", ""),
                 "task_policy": {
                     "policy_ids": pair_summary.policy_ids,
-                    "allowed_tasks": pair_summary.allowed_services,
-                    "denied_tasks": pair_summary.denied_services,
+                    "allowed_tasks": pair_summary.allowed_tasks,
+                    "denied_tasks": pair_summary.denied_tasks,
                 },
             }
             if profile in {"gateway", "service"}:
@@ -199,8 +199,8 @@ def acl_policy(request: HttpRequest) -> HttpResponse:
             continue
         row = {
             "destination_node_id": peer.node_id,
-            "allowed_tasks": pair_summary.allowed_services,
-            "denied_tasks": pair_summary.denied_services,
+            "allowed_tasks": pair_summary.allowed_tasks,
+            "denied_tasks": pair_summary.denied_tasks,
             "policy_ids": pair_summary.policy_ids,
         }
         if profile in {"gateway", "service"}:

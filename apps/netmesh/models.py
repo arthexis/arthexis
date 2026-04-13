@@ -313,8 +313,6 @@ class NetmeshAgentStatus(Entity):
     last_poll_at = models.DateTimeField(null=True, blank=True)
     last_sync_at = models.DateTimeField(null=True, blank=True)
     peers_synced = models.PositiveIntegerField(default=0)
-    session_count = models.PositiveIntegerField(default=0)
-    relay_count = models.PositiveIntegerField(default=0)
     last_error = models.TextField(blank=True)
 
     class Meta(Entity.Meta):

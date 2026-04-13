@@ -55,7 +55,6 @@ def test_netmesh_agent_sync_updates_status_and_emits_summary(monkeypatch):
     status = NetmeshAgentStatus.get_solo()
     assert status.last_poll_at is not None
     assert status.peers_synced == 1
-    assert status.session_count == 0
     assert status.is_running is False
 
 
@@ -109,7 +108,7 @@ def test_netmesh_agent_runtime_sleep_is_shutdown_responsive(monkeypatch):
     monkeypatch.setattr(
         NetmeshAgentRuntime,
         "_sync_cycle",
-        lambda _self: {"peers_synced": 0, "session_count": 0, "relay_count": 0},
+        lambda _self: {"peers_synced": 0},
     )
 
     sleep_steps: list[float] = []

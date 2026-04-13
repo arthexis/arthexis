@@ -239,8 +239,6 @@ class NetmeshAgentStatusAdmin(EntityModelAdmin):
         "lifecycle_state",
         "last_poll_at",
         "peers_synced",
-        "session_count",
-        "relay_count",
     )
     readonly_fields = (
         "singleton",
@@ -249,8 +247,6 @@ class NetmeshAgentStatusAdmin(EntityModelAdmin):
         "last_poll_at",
         "last_sync_at",
         "peers_synced",
-        "session_count",
-        "relay_count",
         "last_error",
     )
 

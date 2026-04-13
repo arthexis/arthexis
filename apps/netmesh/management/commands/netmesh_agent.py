@@ -60,7 +60,5 @@ class Command(BaseCommand):
             "status": "stopped",
             "loops_completed": loops_completed,
             "peers_synced": len(runtime.store.peer_map),
-            "session_count": 0,
-            "relay_count": 0,
         }
         self.stdout.write(json.dumps(status_payload, sort_keys=True))
