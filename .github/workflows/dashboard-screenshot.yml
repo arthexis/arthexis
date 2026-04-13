@@ -350,6 +350,12 @@ jobs:
             artifacts/*.png
             artifacts/README.md
 
+      - name: Verify screenshot artifacts checklist (pull requests)
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          source .venv/bin/activate
+          python scripts/verify_screenshot_artifacts.py --artifacts-dir artifacts --report artifacts/screenshot-verification.md
+
       - name: Build PR screenshot comment body
         if: ${{ github.event_name == 'pull_request' }}
         run: |
@@ -386,6 +392,11 @@ jobs:
               ),
               "",
           ]
+
+          verification_report = Path("artifacts/screenshot-verification.md")
+          if verification_report.exists():
+              lines.append(verification_report.read_text(encoding="utf-8").strip())
+              lines.append("")
 
           if not images:
               lines.append("- ⚠️ No screenshots were produced in this run.")
@@ -493,6 +504,12 @@ jobs:
             --ready-selector "body" \
             "${capture_paths[@]}" \
             --output-dir artifacts
+
+      - name: Verify screenshot artifacts checklist (non-pull requests)
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          source .venv/bin/activate
+          python scripts/verify_screenshot_artifacts.py --artifacts-dir artifacts --report artifacts/screenshot-verification.md
 
       - name: Upload public screenshot
         if: ${{ github.event_name != 'pull_request' }}
