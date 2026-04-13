@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from django.contrib import admin
 from django.contrib.admin.sites import AdminSite
 from django.test import RequestFactory
 
@@ -39,3 +40,20 @@ def test_reference_admin_keeps_attachment_context_out_of_reference_form() -> Non
     request = RequestFactory().get("/admin/")
 
     assert ReferenceAttachmentInline not in admin_instance.get_inlines(request, None)
+
+
+class ExistingInline(admin.TabularInline):
+    model = ExperienceReference
+
+
+class AdminWithExistingInline(RFIDAdmin):
+    inlines = (ExistingInline,)
+
+
+def test_reference_attachment_inline_is_appended_to_existing_inlines() -> None:
+    admin_instance = AdminWithExistingInline(RFID, AdminSite())
+    request = RequestFactory().get("/admin/")
+
+    inlines = admin_instance.get_inlines(request, None)
+    assert inlines[0] is ExistingInline
+    assert ReferenceAttachmentInline in inlines

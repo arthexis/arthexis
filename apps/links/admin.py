@@ -29,7 +29,7 @@ from .models import (
 
 class ReferenceAttachmentInline(GenericTabularInline):
     model = ReferenceAttachment
-    autocomplete_fields = ("reference",)
+    raw_id_fields = ("reference",)
     extra = 0
     fields = ("reference", "slot", "is_primary", "sort_order")
 
