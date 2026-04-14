@@ -55,6 +55,9 @@ JSONScalar: TypeAlias = str | int | float | bool | None
 JSONMapping: TypeAlias = dict[str, Any]
 JSONList: TypeAlias = list[Any]
 JSONValue: TypeAlias = JSONMapping | JSONList | JSONScalar
+RequestParamScalar: TypeAlias = str | bytes | int | float
+RequestParamValue: TypeAlias = RequestParamScalar | Iterable[RequestParamScalar] | None
+RequestParams: TypeAlias = Mapping[str, RequestParamValue]
 
 
 def build_headers(token: str, *, user_agent: str = "arthexis-admin") -> Mapping[str, str]:
@@ -238,12 +241,12 @@ def fetch_paginated_items(
     *,
     token: str,
     endpoint: str,
-    params: Mapping[str, object],
+    params: RequestParams,
     timeout: int = REQUEST_TIMEOUT,
 ) -> Iterator[Mapping[str, object]]:
     headers = build_headers(token)
     url = endpoint
-    query_params: Mapping[str, object] | None = params
+    query_params: RequestParams | None = params
 
     while url:
         response = None
@@ -284,7 +287,7 @@ def fetch_repository_issues(
     state: str = "open",
 ) -> Iterator[Mapping[str, object]]:
     endpoint = f"{API_ROOT}/repos/{owner}/{name}/issues"
-    params = {"state": state, "per_page": 100}
+    params: dict[str, RequestParamValue] = {"state": state, "per_page": 100}
     yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
 
 
@@ -296,7 +299,7 @@ def fetch_repository_pull_requests(
     state: str = "open",
 ) -> Iterator[Mapping[str, object]]:
     endpoint = f"{API_ROOT}/repos/{owner}/{name}/pulls"
-    params = {"state": state, "per_page": 100}
+    params: dict[str, RequestParamValue] = {"state": state, "per_page": 100}
     yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
 
 

@@ -930,11 +930,17 @@ async def test_get_certificate_status_marks_revoked_when_ocsp_revoked(monkeypatc
                 "errors": [],
             }
 
-    monkeypatch.setattr(
-        consumers_base.certificate_status.requests,
-        "post",
-        lambda *_args, **_kwargs: FakeResponse(),
-    )
+    class FakeSession:
+        def mount(self, *_args, **_kwargs):
+            return None
+
+        def request(self, *_args, **_kwargs):
+            return FakeResponse()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(consumers_base.certificate_status.requests, "Session", FakeSession)
 
     result = await consumer._handle_get_certificate_status_action(
         {"certificateHashData": hash_data}, "msg-ocsp-rev", "", ""
@@ -979,7 +985,17 @@ async def test_get_certificate_status_ocsp_timeout_uses_responder_unavailable(mo
     def _raise_timeout(*_args, **_kwargs):
         raise consumers_base.certificate_status.requests.Timeout("timed out")
 
-    monkeypatch.setattr(consumers_base.certificate_status.requests, "post", _raise_timeout)
+    class FakeSession:
+        def mount(self, *_args, **_kwargs):
+            return None
+
+        def request(self, *_args, **_kwargs):
+            return _raise_timeout()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(consumers_base.certificate_status.requests, "Session", FakeSession)
 
     result = await consumer._handle_get_certificate_status_action(
         {"certificateHashData": hash_data}, "msg-ocsp-timeout", "", ""
@@ -1025,7 +1041,17 @@ async def test_get_certificate_status_ocsp_timeout_fail_open_accepts(monkeypatch
     def _raise_timeout(*_args, **_kwargs):
         raise consumers_base.certificate_status.requests.Timeout("timed out")
 
-    monkeypatch.setattr(consumers_base.certificate_status.requests, "post", _raise_timeout)
+    class FakeSession:
+        def mount(self, *_args, **_kwargs):
+            return None
+
+        def request(self, *_args, **_kwargs):
+            return _raise_timeout()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(consumers_base.certificate_status.requests, "Session", FakeSession)
 
     result = await consumer._handle_get_certificate_status_action(
         {"certificateHashData": hash_data}, "msg-ocsp-open", "", ""
@@ -1073,11 +1099,17 @@ async def test_get_certificate_status_invalid_crl_payload_is_responder_unavailab
         def json():
             return {"revokedSerialNumbers": "not-a-list"}
 
-    monkeypatch.setattr(
-        consumers_base.certificate_status.requests,
-        "get",
-        lambda *_args, **_kwargs: FakeCRLResponse(),
-    )
+    class FakeSession:
+        def mount(self, *_args, **_kwargs):
+            return None
+
+        def request(self, *_args, **_kwargs):
+            return FakeCRLResponse()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(consumers_base.certificate_status.requests, "Session", FakeSession)
 
     result = await consumer._handle_get_certificate_status_action(
         {"certificateHashData": hash_data}, "msg-crl-invalid", "", ""

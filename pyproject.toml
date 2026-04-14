@@ -103,6 +103,7 @@ ci = [
   "mypy==1.20.0",
   "ruff==0.15.9",
   "twine==6.1.0",
+  "types-requests==2.32.4.20250913",
 ]
 dev = [
   "django-debug-toolbar==6.3.0",
