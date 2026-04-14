@@ -75,6 +75,7 @@ dependencies = [
   "urllib3~=2.6.3",
   "webauthn==2.7.1",
   "websocket-client==1.8.0",
+  "weasyprint==66.0",
   "websockets>=15,<17",
   "whitenoise==6.12.0",
 ]

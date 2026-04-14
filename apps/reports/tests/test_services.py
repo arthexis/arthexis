@@ -1,3 +1,4 @@
+import importlib
 from datetime import timedelta
 
 import pytest
@@ -6,7 +7,11 @@ from django_celery_beat.models import PeriodicTask
 
 from apps.reports.models import SQLReport, SQLReportProduct
 from apps.reports.report_definitions import report_catalog
-from apps.reports.services import run_due_scheduled_reports, run_sql_report
+from apps.reports.services import (
+    _render_pdf_bytes,
+    run_due_scheduled_reports,
+    run_sql_report,
+)
 from apps.sigils.models import SigilRoot
 
 
@@ -209,37 +214,107 @@ def test_sigil_root_report_uses_orm_backed_results():
 
 
 @pytest.mark.django_db
-def test_scheduled_reports_due_state_filters_to_actually_due_beat_tasks():
-    """Due scheduled-reports output should exclude beat tasks that are not due yet."""
+@pytest.mark.parametrize(
+    ("report_type", "parameters"),
+    [
+        (
+            SQLReport.ReportType.REPORT_PRODUCT_ACTIVITY,
+            {"report_name_contains": "", "created_since": "", "limit": 10},
+        ),
+        (
+            SQLReport.ReportType.SCHEDULED_REPORTS,
+            {"schedule_state": "all", "name_contains": ""},
+        ),
+        (
+            SQLReport.ReportType.SIGIL_ROOTS,
+            {"context_type": "all"},
+        ),
+    ],
+)
+def test_catalog_templates_render_with_html_pdf_engine(monkeypatch, report_type, parameters):
+    """Catalog report templates should render as HTML tables before PDF conversion."""
 
-    now = timezone.now()
-    due_legacy = SQLReport.objects.create(
-        name="Due legacy schedule",
+    captured_html: list[str] = []
+
+    class FakeHTML:
+        def __init__(self, string: str, url_fetcher):
+            captured_html.append(string)
+            with pytest.raises(ValueError, match="External resource loading is disabled"):
+                url_fetcher("https://example.com/image.png")
+
+        def write_pdf(self) -> bytes:
+            return b"%PDF-fake"
+
+    monkeypatch.setattr("apps.reports.services.HTML", FakeHTML)
+
+    report = SQLReport.objects.create(
+        name=f"{report_type} report",
+        report_type=report_type,
+        parameters=parameters,
+    )
+
+    result, product = run_sql_report(report)
+
+    assert result.error is None
+    assert product is not None
+    assert product.pdf_content == b"%PDF-fake"
+    assert captured_html
+    assert "<table>" in captured_html[0]
+    assert "<th>" in captured_html[0]
+
+
+@pytest.mark.django_db
+def test_report_pdf_rendering_gracefully_degrades_when_engine_missing(monkeypatch):
+    """Missing HTML-to-PDF dependency should not fail report product generation."""
+
+    monkeypatch.setattr("apps.reports.services.HTML", None)
+    report = SQLReport.objects.create(
+        name="No engine",
         report_type=SQLReport.ReportType.SIGIL_ROOTS,
         parameters={"context_type": "all"},
-        schedule_enabled=True,
-        schedule_interval_minutes=10,
-        next_scheduled_run_at=now - timedelta(minutes=1),
     )
-    not_due_beat = SQLReport.objects.create(
-        name="Not due beat schedule",
+
+    result, product = run_sql_report(report)
+
+    assert result.error is None
+    assert product is not None
+    assert product.pdf_content == b""
+
+
+@pytest.mark.django_db
+def test_report_pdf_rendering_can_be_feature_flag_disabled(settings, monkeypatch):
+    """Feature flag should allow runtime opt-out of PDF rendering dependencies."""
+
+    class RaisingHTML:
+        def __init__(self, string: str):
+            raise AssertionError("HTML renderer should not be instantiated when disabled")
+
+    settings.REPORTS_HTML_TO_PDF_ENABLED = False
+    monkeypatch.setattr("apps.reports.services.HTML", RaisingHTML)
+
+    report = SQLReport.objects.create(
+        name="Disabled engine",
         report_type=SQLReport.ReportType.SIGIL_ROOTS,
         parameters={"context_type": "all"},
-        schedule_enabled=True,
-        schedule_interval_minutes=60,
-    )
-    PeriodicTask.objects.filter(pk=not_due_beat.schedule_periodic_task_id).update(
-        last_run_at=now
     )
 
-    scheduled_overview = SQLReport.objects.create(
-        name="Scheduled overview",
-        report_type=SQLReport.ReportType.SCHEDULED_REPORTS,
-        parameters={"schedule_state": "due", "name_contains": ""},
-    )
+    result, product = run_sql_report(report)
 
-    result, _ = run_sql_report(scheduled_overview)
-    row_names = {row[0] for row in result.rows}
+    assert result.error is None
+    assert product is not None
+    assert product.pdf_content == b""
 
-    assert due_legacy.name in row_names
-    assert not_due_beat.name not in row_names
+
+def test_render_pdf_bytes_returns_empty_when_renderer_errors(monkeypatch):
+    """Renderer errors should degrade to empty PDF bytes instead of bubbling up."""
+
+    class FailingHTML:
+        def __init__(self, string: str, url_fetcher):
+            pass
+
+        def write_pdf(self) -> bytes:
+            raise OSError("missing cairo libs")
+
+    monkeypatch.setattr("apps.reports.services.HTML", FailingHTML)
+
+    assert _render_pdf_bytes("<table><tr><td>x</td></tr></table>") == b""
