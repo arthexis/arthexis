@@ -73,6 +73,7 @@ ROUTE_PROVIDERS = [
     "apps.embeds.routes",
     "apps.evergo.routes",
     "apps.features.routes",
+    "apps.gallery.routes",
     "apps.links.routes",
     "apps.logbook.routes",
     "apps.meta.routes",
