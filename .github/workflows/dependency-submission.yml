@@ -67,7 +67,7 @@ jobs:
 
       - name: Track persistent submission failures
         if: steps.submit_snapshot_attempt_3.outcome == 'failure'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         with:
