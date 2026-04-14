@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
-import re
 
 from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 
 from .models import Thermometer, UsbTracker
-from .thermometers import read_w1_temperature
+from .thermometers import read_temperature
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +54,22 @@ def sample_thermometers() -> dict[str, int]:
             skipped += 1
             continue
 
-        path_template = getattr(
+        source = str(getattr(settings, "THERMOMETER_SOURCE", "auto")).strip().lower()
+        w1_path_template = getattr(
             settings,
             "THERMOMETER_PATH_TEMPLATE",
             "/sys/bus/w1/devices/{slug}/temperature",
         )
-        device_path = path_template.format(slug=thermometer.slug)
-        reading = read_w1_temperature(paths=[device_path])
+        w1_paths = [w1_path_template.format(slug=thermometer.slug)]
+        i2c_path_template = str(
+            getattr(settings, "THERMOMETER_I2C_PATH_TEMPLATE", "")
+        ).strip()
+        i2c_paths = (
+            [i2c_path_template.format(slug=thermometer.slug)]
+            if i2c_path_template
+            else None
+        )
+        reading = read_temperature(source=source, w1_paths=w1_paths, i2c_paths=i2c_paths)
         if reading is None:
             failed += 1
             logger.info(

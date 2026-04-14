@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from .models import Thermometer, ThermometerReading, UsbTracker
-from .thermometers import read_w1_temperature
+from .thermometers import read_temperature
 
 
 @admin.register(Thermometer)
@@ -39,9 +39,22 @@ class ThermometerAdmin(admin.ModelAdmin):
     def sample_selected_thermometers(self, request, queryset):
         updated_count = 0
         failed_names = []
+        source = str(getattr(settings, "THERMOMETER_SOURCE", "auto")).strip().lower()
+        i2c_path_template = str(
+            getattr(settings, "THERMOMETER_I2C_PATH_TEMPLATE", "")
+        ).strip()
         for thermometer in queryset:
-            device_path = f"/sys/bus/w1/devices/{thermometer.slug}/temperature"
-            reading = read_w1_temperature(paths=[device_path])
+            w1_path = f"/sys/bus/w1/devices/{thermometer.slug}/temperature"
+            i2c_paths = (
+                [i2c_path_template.format(slug=thermometer.slug)]
+                if i2c_path_template
+                else None
+            )
+            reading = read_temperature(
+                source=source,
+                w1_paths=[w1_path],
+                i2c_paths=i2c_paths,
+            )
             if reading is None:
                 failed_names.append(thermometer.name)
                 continue
