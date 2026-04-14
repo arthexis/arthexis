@@ -39,6 +39,7 @@ class SQLReportAdmin(admin.ModelAdmin):
         "name",
         "report_type",
         "schedule_enabled",
+        "schedule_periodic_task",
         "next_scheduled_run_at",
         "last_run_at",
         "last_run_duration",
@@ -53,6 +54,7 @@ class SQLReportAdmin(admin.ModelAdmin):
         "last_run_duration",
         "maintained_report_catalog",
         "legacy_definition",
+        "schedule_periodic_task",
     )
     inlines = [SQLReportProductInline]
     actions = ["run_selected_reports"]
@@ -69,6 +71,9 @@ class SQLReportAdmin(admin.ModelAdmin):
                 "fields": (
                     "schedule_enabled",
                     "schedule_interval_minutes",
+                    "schedule_interval",
+                    "schedule_crontab",
+                    "schedule_periodic_task",
                     "next_scheduled_run_at",
                 )
             },

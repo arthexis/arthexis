@@ -2,7 +2,6 @@ from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
@@ -38,6 +37,27 @@ class SQLReport(Entity):
     legacy_definition = models.JSONField(blank=True, null=True, editable=False)
     schedule_enabled = models.BooleanField(default=False)
     schedule_interval_minutes = models.PositiveIntegerField(default=0)
+    schedule_crontab = models.ForeignKey(
+        "django_celery_beat.CrontabSchedule",
+        blank=True,
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name="scheduled_sql_reports",
+    )
+    schedule_interval = models.ForeignKey(
+        "django_celery_beat.IntervalSchedule",
+        blank=True,
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name="scheduled_sql_reports",
+    )
+    schedule_periodic_task = models.OneToOneField(
+        "django_celery_beat.PeriodicTask",
+        blank=True,
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name="scheduled_sql_report",
+    )
     next_scheduled_run_at = models.DateTimeField(blank=True, null=True)
     last_run_at = models.DateTimeField(blank=True, null=True)
     last_run_duration = models.DurationField(blank=True, null=True)
@@ -106,12 +126,17 @@ class SQLReport(Entity):
             )
 
         if self.schedule_enabled:
-            if self.schedule_interval_minutes <= 0:
-                errors["schedule_interval_minutes"] = _(
-                    "Set a positive interval when scheduling is enabled."
+            cadence_count = int(self.schedule_interval is not None) + int(
+                self.schedule_crontab is not None
+            )
+            if cadence_count > 1:
+                errors["schedule_interval"] = _(
+                    "Select either an interval or a crontab cadence, not both."
                 )
-            elif self.next_scheduled_run_at is None:
-                self.next_scheduled_run_at = timezone.now()
+            elif cadence_count == 0 and self.schedule_interval_minutes <= 0:
+                errors["schedule_interval_minutes"] = _(
+                    "Set a positive interval or choose an interval/crontab cadence when scheduling is enabled."
+                )
 
         if errors:
             raise ValidationError(errors)
@@ -132,6 +157,9 @@ class SQLReport(Entity):
 
         self.full_clean()
         super().save(*args, **kwargs)
+        from .scheduling import sync_report_schedule
+
+        sync_report_schedule(self)
 
     def record_last_run(self, started_at, runtime_seconds: float) -> None:
         """Persist the timestamp and duration for the latest successful run.
