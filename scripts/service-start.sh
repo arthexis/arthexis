@@ -442,7 +442,7 @@ wait_for_suite_startup() {
     fi
 
     if arthexis_suite_reachable "$port"; then
-      arthexis_service_access_message "$BASE_DIR" "localhost" "$port"
+      arthexis_service_access_message_for_port "localhost" "$port"
       return 0
     fi
 

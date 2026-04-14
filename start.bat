@@ -21,7 +21,18 @@ set SHOW_LEVEL=
 :parse
 if "%1"=="" goto run
 if "%1"=="--port" (
-    set PORT=%2
+    if "%~2"=="" (
+        echo Usage: %0 [--port PORT] [--reload] [--debug] [--show LEVEL]
+        set EXIT_CODE=1
+        goto cleanup
+    )
+    echo %~2| findstr /R "^[0-9][0-9]*$" >nul
+    if errorlevel 1 (
+        echo Invalid port: %~2
+        set EXIT_CODE=1
+        goto cleanup
+    )
+    set "PORT=%~2"
     shift
     shift
     goto parse
@@ -120,9 +131,9 @@ if errorlevel 1 (
     set EXIT_CODE=1
     goto cleanup
 )
-call :service_access_message %PORT%
+call :service_access_message "%PORT%"
 set RUNSERVER_SKIP_CHECKS=--skip-checks
-%VENV%\Scripts\python.exe manage.py runserver 0.0.0.0:%PORT% %NORELOAD% %RUNSERVER_SKIP_CHECKS%
+%VENV%\Scripts\python.exe manage.py runserver "0.0.0.0:%PORT%" %NORELOAD% %RUNSERVER_SKIP_CHECKS%
 set EXIT_CODE=%ERRORLEVEL%
 goto cleanup
 

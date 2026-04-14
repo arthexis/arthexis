@@ -75,3 +75,13 @@ arthexis_service_access_message() {
     url="$(arthexis_service_url "$base_dir" "$2" "$3")"
     printf 'Access the service at %s. Local-only default login is admin/admin when unchanged.\n' "$url"
 }
+
+# arthexis_service_access_message_for_port HOST PORT
+#
+# Build a login guidance message for a specific runtime host/port pair.
+arthexis_service_access_message_for_port() {
+    local host="${1:-localhost}"
+    local port="${2:-8888}"
+
+    printf 'Access the service at http://%s:%s. Local-only default login is admin/admin when unchanged.\n' "$host" "$port"
+}
