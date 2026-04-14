@@ -85,7 +85,9 @@ def _build_node_role_validation_summary() -> dict[str, object]:
         upgrade_policy_options = []
         for policy in UpgradePolicy.objects.order_by("name"):
             channel_flag = (
-                "--latest" if policy.channel == UpgradePolicy.Channel.UNSTABLE else "--stable"
+                "--latest"
+                if policy.channel == UpgradePolicy.Channel.UNSTABLE
+                else "--stable"
             )
             option_label = f"Policy: {policy.name}"
             if not policy.is_active:
@@ -110,7 +112,9 @@ def _build_node_role_validation_summary() -> dict[str, object]:
     if normalized_slug in valid_roles:
         commands.extend([f"./configure.sh --{normalized_slug}", "./service-start.sh"])
     else:
-        commands.extend([f"./configure.sh --{role.lower()}" for role in available_roles])
+        commands.extend(
+            [f"./configure.sh --{role.lower()}" for role in available_roles]
+        )
         commands.append("./service-start.sh")
 
     return {
@@ -244,12 +248,13 @@ def complete_operator_journey_step(request: HttpRequest, step_id: int):
                 return redirect(
                     reverse(OPERATOR_JOURNEY_STEP_URL_NAME, args=[locked_step.pk])
                 )
-            new_user, password = provision_form.save()
+            new_user, password, created_user = provision_form.save()
         next_step = next_step_for_user(user=request.user)
         return render(
             request,
             "admin/ops/operator_journey_provision_success.html",
             {
+                "created_user": created_user,
                 "new_user": new_user,
                 "one_time_password": password,
                 "next_step": next_step,

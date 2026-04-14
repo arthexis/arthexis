@@ -1,5 +1,8 @@
+from types import SimpleNamespace
+
 import pytest
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.template.loader import render_to_string
 from django.test import RequestFactory
 
@@ -55,3 +58,33 @@ def test_user_story_feedback_template_omits_security_groups_for_non_staff_users(
     html = render_to_string("admin/includes/user_story_feedback.html", request=request)
 
     assert 'data-security-groups=""' in html
+
+
+def test_user_story_feedback_template_enables_comments_autocomplete():
+    user = SimpleNamespace(
+        username="staff-user",
+        is_authenticated=True,
+        is_staff=True,
+        groups=SimpleNamespace(all=lambda: []),
+    )
+    request = RequestFactory().get("/admin/")
+    request.user = user
+
+    html = render_to_string("admin/includes/user_story_feedback.html", request=request)
+
+    assert 'name="comments"' in html
+    assert 'autocomplete="on"' in html
+
+
+def test_public_feedback_template_enables_comments_autocomplete():
+    request = RequestFactory().get("/")
+    request.user = AnonymousUser()
+
+    html = render_to_string(
+        "pages/includes/public_feedback_widget.html",
+        {"feedback_ingestion_enabled": True},
+        request=request,
+    )
+
+    assert 'name="comments"' in html
+    assert 'autocomplete="on"' in html

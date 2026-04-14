@@ -333,7 +333,7 @@ class OperatorJourneyViewTests(TestCase):
         created_user = get_user_model().objects.get(username="ops-random-password")
         self.assertFalse(created_user.check_password("autofilled-password"))
 
-    def test_provision_step_rejects_existing_username(self):
+    def test_provision_step_requires_upgrade_checkbox_for_existing_username(self):
         provision_step = OperatorJourneyStep.objects.create(
             journey=self.journey,
             title="Create ops superuser",
@@ -366,7 +366,63 @@ class OperatorJourneyViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "A user with this username already exists.")
+        self.assertContains(response, "Upgrade existing user")
+
+    def test_provision_step_can_upgrade_existing_username(self):
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+        )
+        existing_user = get_user_model().objects.create_user(
+            username="existing-ops-user",
+            email="old@example.com",
+            password="old-password",
+            is_active=False,
+            is_staff=False,
+            is_superuser=False,
+        )
+        old_group = SecurityGroup.objects.create(name="Old upgrade group")
+        existing_user.groups.add(old_group)
+        if hasattr(existing_user, "is_deleted"):
+            existing_user.is_deleted = True
+            existing_user.save(update_fields=["is_deleted"])
+
+        response = self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            {
+                "username": "existing-ops-user",
+                "email": "ops-provisioned@example.com",
+                "security_groups": [self.group.pk],
+                "password_mode": "custom",
+                "password": "new-secure-password",
+                "upgrade_existing_user": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        existing_user.refresh_from_db()
+        self.assertTrue(existing_user.is_staff)
+        self.assertTrue(existing_user.is_superuser)
+        self.assertTrue(existing_user.is_active)
+        if hasattr(existing_user, "is_deleted"):
+            self.assertFalse(existing_user.is_deleted)
+        self.assertEqual(existing_user.email, "ops-provisioned@example.com")
+        self.assertTrue(existing_user.check_password("new-secure-password"))
+        self.assertSetEqual(
+            set(existing_user.groups.values_list("pk", flat=True)),
+            {self.group.pk},
+        )
+        self.assertContains(response, "Operational superuser upgraded")
 
     def test_provision_step_post_rejects_when_not_current_required_step(self):
         blocked_step = OperatorJourneyStep.objects.create(
