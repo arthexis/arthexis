@@ -48,26 +48,26 @@ def sample_thermometers() -> dict[str, int]:
     sampled = 0
     skipped = 0
     failed = 0
+    source = str(getattr(settings, "THERMOMETER_SOURCE", "auto")).strip().lower()
+    w1_path_template = getattr(
+        settings,
+        "THERMOMETER_PATH_TEMPLATE",
+        "/sys/bus/w1/devices/{slug}/temperature",
+    )
+    i2c_path_template = str(
+        getattr(settings, "THERMOMETER_I2C_PATH_TEMPLATE", "")
+    ).strip()
 
     for thermometer in Thermometer.objects.filter(is_active=True).iterator():
         if not _thermometer_is_due(thermometer, now):
             skipped += 1
             continue
 
-        source = str(getattr(settings, "THERMOMETER_SOURCE", "auto")).strip().lower()
-        w1_path_template = getattr(
-            settings,
-            "THERMOMETER_PATH_TEMPLATE",
-            "/sys/bus/w1/devices/{slug}/temperature",
-        )
         w1_paths = [w1_path_template.format(slug=thermometer.slug)]
-        i2c_path_template = str(
-            getattr(settings, "THERMOMETER_I2C_PATH_TEMPLATE", "")
-        ).strip()
         i2c_paths = (
             [i2c_path_template.format(slug=thermometer.slug)]
             if i2c_path_template
-            else None
+            else []
         )
         reading = read_temperature(source=source, w1_paths=w1_paths, i2c_paths=i2c_paths)
         if reading is None:

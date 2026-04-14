@@ -111,3 +111,35 @@ def test_sample_thermometers_prefers_i2c_source(settings, monkeypatch) -> None:
     assert captured["w1_paths"] == ["/sys/bus/w1/devices/1-0048/temperature"]
     assert captured["i2c_paths"] == ["/sys/bus/i2c/devices/1-0048/temp1_input"]
     assert thermometer.last_reading == 23
+
+
+def test_sample_thermometers_auto_mode_disables_global_i2c_discovery(
+    settings,
+    monkeypatch,
+) -> None:
+    settings.THERMOMETER_SOURCE = "auto"
+    settings.THERMOMETER_I2C_PATH_TEMPLATE = ""
+    thermometer = Thermometer.objects.create(
+        name="Ambient",
+        slug="28-000000000001",
+        unit="C",
+        sampling_interval_seconds=60,
+    )
+    captured: dict[str, object] = {}
+
+    def fake_read_temperature(*, source, w1_paths, i2c_paths):
+        captured["source"] = source
+        captured["w1_paths"] = w1_paths
+        captured["i2c_paths"] = i2c_paths
+        return 19
+
+    monkeypatch.setattr("apps.sensors.tasks.read_temperature", fake_read_temperature)
+
+    result = sample_thermometers()
+    thermometer.refresh_from_db()
+
+    assert result == {"sampled": 1, "skipped": 0, "failed": 0}
+    assert captured["source"] == "auto"
+    assert captured["w1_paths"] == ["/sys/bus/w1/devices/28-000000000001/temperature"]
+    assert captured["i2c_paths"] == []
+    assert thermometer.last_reading == 19
