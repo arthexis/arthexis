@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 from django.contrib import admin, messages
 from django.contrib.admin import helpers
 from django.core.exceptions import PermissionDenied
@@ -7,8 +5,6 @@ from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
-from django.utils import timezone
-from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import ngettext
 
@@ -16,33 +12,10 @@ from apps.locals.user_data import EntityModelAdmin
 from apps.netmesh.models import (
     MeshMembership,
     NetmeshAgentStatus,
-    NodeEndpoint,
     NodeKeyMaterial,
-    NodeRelayConfig,
     PeerPolicy,
-    RelayRegion,
-    ServiceAdvertisement,
 )
-from apps.nodes.services.enrollment import issue_enrollment_token, revoke_enrollment
-
-
-class DirectConnectivityFilter(admin.SimpleListFilter):
-    title = "direct connectivity"
-    parameter_name = "direct_connectivity"
-
-    def lookups(self, request, model_admin):
-        return (
-            ("relay_only", "Relay-only"),
-            ("failing_direct", "Failing direct"),
-        )
-
-    def queryset(self, request, queryset):
-        value = self.value()
-        if value == "relay_only":
-            return queryset.filter(relay_required=True)
-        if value == "failing_direct":
-            return queryset.filter(last_successful_direct_at__isnull=True)
-        return queryset
+from apps.nodes.services.enrollment import revoke_enrollment
 
 
 class TenantFilter(admin.SimpleListFilter):
@@ -258,95 +231,6 @@ class PeerPolicyAdmin(EntityModelAdmin):
         return TemplateResponse(request, "admin/netmesh/peerpolicy/matrix.html", context)
 
 
-@admin.register(NodeEndpoint)
-class NodeEndpointAdmin(EntityModelAdmin):
-    change_list_template = "admin/netmesh/nodeendpoint/change_list.html"
-    list_display = (
-        "node",
-        "endpoint",
-        "endpoint_priority",
-        "nat_type",
-        "relay_required",
-        "health_status",
-        "last_successful_direct_at",
-        "last_seen",
-    )
-    list_filter = ("nat_type", "relay_required", DirectConnectivityFilter)
-    search_fields = ("node__hostname", "endpoint")
-
-    @admin.display(description="Health")
-    def health_status(self, obj):
-        if obj.last_successful_direct_at:
-            age = timezone.now() - obj.last_successful_direct_at
-            if age <= timedelta(hours=1):
-                return format_html('<span style="color:#198754;font-weight:600;">{}</span>', "healthy")
-            if age <= timedelta(hours=24):
-                return format_html('<span style="color:#fd7e14;font-weight:600;">{}</span>', "stale")
-        return format_html('<span style="color:#dc3545;font-weight:600;">{}</span>', "degraded")
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path(
-                "health/",
-                self.admin_site.admin_view(self.endpoint_health_view),
-                name="netmesh_nodeendpoint_health",
-            ),
-        ]
-        return custom_urls + urls
-
-    def changelist_view(self, request, extra_context=None):
-        extra_context = extra_context or {}
-        extra_context["endpoint_health_url"] = reverse("admin:netmesh_nodeendpoint_health")
-        return super().changelist_view(request, extra_context=extra_context)
-
-    def endpoint_health_view(self, request):
-        if not self.has_view_permission(request):
-            raise PermissionDenied
-        endpoints = []
-        for endpoint in self.get_queryset(request).select_related("node").order_by("node__hostname", "endpoint_priority"):
-            if endpoint.last_successful_direct_at:
-                age = timezone.now() - endpoint.last_successful_direct_at
-                if age <= timedelta(hours=1):
-                    health = "healthy"
-                elif age <= timedelta(hours=24):
-                    health = "stale"
-                else:
-                    health = "degraded"
-            else:
-                health = "degraded"
-            endpoints.append({"endpoint": endpoint, "health": health})
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": self.model._meta,
-            "title": _("Endpoint health"),
-            "endpoints": endpoints,
-            "changelist_url": reverse("admin:netmesh_nodeendpoint_changelist"),
-        }
-        return TemplateResponse(request, "admin/netmesh/nodeendpoint/health.html", context)
-
-
-@admin.register(RelayRegion)
-class RelayRegionAdmin(EntityModelAdmin):
-    list_display = ("code", "name", "relay_endpoint", "is_active")
-    list_filter = ("is_active",)
-    search_fields = ("code", "name", "relay_endpoint")
-
-
-@admin.register(NodeRelayConfig)
-class NodeRelayConfigAdmin(EntityModelAdmin):
-    list_display = ("node", "region", "priority", "is_enabled")
-    list_filter = ("is_enabled", "region")
-    search_fields = ("node__hostname", "region__code", "relay_endpoint")
-
-
-@admin.register(ServiceAdvertisement)
-class ServiceAdvertisementAdmin(EntityModelAdmin):
-    list_display = ("node", "service_name", "port", "protocol")
-    list_filter = ("protocol",)
-    search_fields = ("node__hostname", "service_name")
-
-
 @admin.register(NetmeshAgentStatus)
 class NetmeshAgentStatusAdmin(EntityModelAdmin):
     list_display = (
@@ -355,8 +239,6 @@ class NetmeshAgentStatusAdmin(EntityModelAdmin):
         "lifecycle_state",
         "last_poll_at",
         "peers_synced",
-        "session_count",
-        "relay_count",
     )
     readonly_fields = (
         "singleton",
@@ -365,8 +247,6 @@ class NetmeshAgentStatusAdmin(EntityModelAdmin):
         "last_poll_at",
         "last_sync_at",
         "peers_synced",
-        "session_count",
-        "relay_count",
         "last_error",
     )
 

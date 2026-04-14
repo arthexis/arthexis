@@ -8,10 +8,10 @@ from datetime import timedelta
 from time import perf_counter
 
 from django.db import DatabaseError
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.utils import timezone
 
-from apps.netmesh.models import NetmeshAgentStatus, NodeEndpoint, NodeKeyMaterial
+from apps.netmesh.models import NetmeshAgentStatus, NodeKeyMaterial
 from apps.nodes.models import Node
 
 _map_latency_state = {"count": 0, "total_seconds": 0.0, "max_seconds": 0.0}
@@ -51,18 +51,10 @@ def _map_latency_snapshot() -> dict[str, float | int]:
     }
 
 
-def _relay_only_ratio() -> dict[str, float | int]:
-    try:
-        endpoint_total = NodeEndpoint.objects.count()
-        relay_required = NodeEndpoint.objects.filter(relay_required=True).count()
-    except DatabaseError:
-        endpoint_total = 0
-        relay_required = 0
-    ratio = (relay_required / endpoint_total) if endpoint_total else 0.0
+def _relay_only_ratio() -> dict[str, bool | str]:
     return {
-        "relay_required": relay_required,
-        "endpoint_total": endpoint_total,
-        "ratio": ratio,
+        "available": False,
+        "reason": "deprecated: endpoint and relay models removed",
     }
 
 
@@ -115,12 +107,12 @@ def snapshot() -> dict[str, object]:
 
     try:
         enrolled_nodes = Node.objects.filter(mesh_enrollment_state=Node.MeshEnrollmentState.ENROLLED).count()
-        stale_endpoint_total = NodeEndpoint.objects.filter(
-            Q(last_seen__isnull=True) | Q(last_seen__lt=timezone.now() - timedelta(hours=24))
-        ).count()
     except DatabaseError:
         enrolled_nodes = 0
-        stale_endpoint_total = 0
+    stale_endpoint_total = {
+        "available": False,
+        "reason": "deprecated: endpoint and relay models removed",
+    }
     try:
         agent_status = NetmeshAgentStatus.get_solo()
         agent_snapshot = {
@@ -128,8 +120,6 @@ def snapshot() -> dict[str, object]:
             "lifecycle_state": agent_status.lifecycle_state,
             "last_poll_at": agent_status.last_poll_at.isoformat() if agent_status.last_poll_at else None,
             "peers_synced": agent_status.peers_synced,
-            "session_count": agent_status.session_count,
-            "relay_count": agent_status.relay_count,
         }
     except DatabaseError:
         agent_snapshot = {
@@ -137,8 +127,6 @@ def snapshot() -> dict[str, object]:
             "lifecycle_state": "unknown",
             "last_poll_at": None,
             "peers_synced": 0,
-            "session_count": 0,
-            "relay_count": 0,
         }
     return {
         "map_generation_latency_seconds": _map_latency_snapshot(),

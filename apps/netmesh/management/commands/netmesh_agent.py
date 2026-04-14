@@ -32,12 +32,6 @@ class Command(BaseCommand):
         parser.add_argument("--poll-interval", type=float, default=30.0, help="Poll interval in seconds.")
         parser.add_argument("--keepalive-interval", type=float, default=60.0, help="Keepalive interval in seconds.")
         parser.add_argument("--rekey-interval", type=float, default=300.0, help="Rekey interval in seconds.")
-        parser.add_argument(
-            "--endpoint-refresh-interval",
-            type=float,
-            default=120.0,
-            help="Endpoint refresh interval in seconds.",
-        )
         parser.add_argument("--request-timeout", type=float, default=10.0, help="API request timeout in seconds.")
         parser.add_argument(
             "--max-loops",
@@ -57,7 +51,6 @@ class Command(BaseCommand):
             poll_interval_seconds=max(float(options["poll_interval"]), 0.1),
             keepalive_interval_seconds=max(float(options["keepalive_interval"]), 0.1),
             rekey_interval_seconds=max(float(options["rekey_interval"]), 0.1),
-            endpoint_refresh_interval_seconds=max(float(options["endpoint_refresh_interval"]), 0.1),
             request_timeout_seconds=max(float(options["request_timeout"]), 0.1),
             max_loops=options["max_loops"],
         )
@@ -67,7 +60,5 @@ class Command(BaseCommand):
             "status": "stopped",
             "loops_completed": loops_completed,
             "peers_synced": len(runtime.store.peer_map),
-            "session_count": len(runtime.store.session_map),
-            "relay_count": len(runtime.store.relay_map),
         }
         self.stdout.write(json.dumps(status_payload, sort_keys=True))

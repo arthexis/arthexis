@@ -7,7 +7,6 @@ from apps.netmesh.api import views
 urlpatterns = [
     path("caller/", views.caller_metadata, name="netmesh-api-caller"),
     path("peers/", views.permitted_peers, name="netmesh-api-peers"),
-    path("peer-endpoints/", views.peer_endpoints, name="netmesh-api-peer-endpoints"),
     path("acl/", views.acl_policy, name="netmesh-api-acl"),
     path("key-info/", views.key_info, name="netmesh-api-key-info"),
 ]

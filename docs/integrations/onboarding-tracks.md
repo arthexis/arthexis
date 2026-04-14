@@ -10,7 +10,7 @@ Arthexis should be treated as an OCPP-compatible WebSocket server and integratio
 ## Prerequisites and environment assumptions
 
 - You have a running Arthexis environment with dependencies installed.
-- You can authenticate to Django admin with a user that has permission for OCPP, Nodes, and Netmesh objects.
+- You can authenticate to Django admin with a user that has permission for OCPP and Nodes objects.
 - Charger/network endpoints are reachable from your deployment network.
 - Time sync and TLS basics are already in place (for token expiry and secure endpoint usage).
 - You can access key integration docs:
@@ -60,7 +60,7 @@ A successful first run is:
 ### Step 1 — authentication model and scope selection
 
 1. Choose the endpoint family you are integrating first:
-   - Netmesh discovery/read (`mesh:read`)
+   - Netmesh peer task policy discovery (`mesh:read`)
    - node-network OCPP control (`ocpp:control`)
 2. Mint/reissue enrollment token through the canonical enrollment service/admin flow.
 3. Store token as a secret; do not embed it in source or scripts committed to git.
@@ -125,7 +125,7 @@ Prefer extending Arthexis directly through apps/models/migrations/admin when you
   - `apps.ocpp.models.transaction.Transaction`
 - **Endpoint/action integration surfaces**:
   - `apps.actions.api` endpoints
-  - `apps.netmesh.api` endpoints
+  - `apps.netmesh.api` peer task policy endpoints
 
 ### Admin entry points for operations and extension
 

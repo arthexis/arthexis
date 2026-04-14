@@ -62,8 +62,6 @@ class NetmeshLifecycle(AbstractContextManager):
         self,
         *,
         peers_synced: int,
-        session_count: int,
-        relay_count: int,
         lifecycle_state: str = "running",
         last_error: str = "",
     ) -> NetmeshAgentStatus:
@@ -74,8 +72,6 @@ class NetmeshLifecycle(AbstractContextManager):
         status.last_poll_at = now
         status.last_sync_at = now
         status.peers_synced = max(peers_synced, 0)
-        status.session_count = max(session_count, 0)
-        status.relay_count = max(relay_count, 0)
         status.last_error = last_error[:500]
         status.save(
             update_fields=[
@@ -84,8 +80,6 @@ class NetmeshLifecycle(AbstractContextManager):
                 "last_poll_at",
                 "last_sync_at",
                 "peers_synced",
-                "session_count",
-                "relay_count",
                 "last_error",
             ]
         )

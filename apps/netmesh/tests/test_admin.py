@@ -10,10 +10,9 @@ from django.test import Client, RequestFactory
 from apps.netmesh.admin import (
     MeshMembershipAdmin,
     NetmeshAgentStatusAdmin,
-    NodeEndpointAdmin,
     PeerPolicyAdmin,
 )
-from apps.netmesh.models import MeshMembership, NetmeshAgentStatus, NodeEndpoint, PeerPolicy
+from apps.netmesh.models import MeshMembership, NetmeshAgentStatus, PeerPolicy
 from apps.nodes.models import Node
 
 def _attach_messages(request):
@@ -133,13 +132,4 @@ def test_mesh_membership_admin_revoke_selected_nodes_deduplicates_nodes():
         actor=user,
         reason="netmesh incident response",
     )
-
-@pytest.mark.django_db
-def test_node_endpoint_admin_health_status_classes():
-    model_admin = NodeEndpointAdmin(NodeEndpoint, admin.site)
-    endpoint = NodeEndpoint(node=Node(hostname="health-node"), endpoint="198.51.100.10:443")
-
-    rendered = model_admin.health_status(endpoint)
-
-    assert "degraded" in str(rendered)
 

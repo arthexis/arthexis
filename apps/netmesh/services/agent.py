@@ -29,7 +29,6 @@ class NetmeshAgentConfig:
     poll_interval_seconds: float = 30.0
     keepalive_interval_seconds: float = 60.0
     rekey_interval_seconds: float = 300.0
-    endpoint_refresh_interval_seconds: float = 120.0
     request_timeout_seconds: float = 10.0
     max_loops: int | None = None
 
@@ -44,7 +43,6 @@ class NetmeshAgentRuntime:
         self.scheduler = NetmeshAgentScheduler(
             keepalive_interval=timedelta(seconds=config.keepalive_interval_seconds),
             rekey_interval=timedelta(seconds=config.rekey_interval_seconds),
-            endpoint_refresh_interval=timedelta(seconds=config.endpoint_refresh_interval_seconds),
         )
 
     def _request_json(self, path: str) -> dict[str, object]:
@@ -75,16 +73,10 @@ class NetmeshAgentRuntime:
 
     def _sync_cycle(self) -> dict[str, int]:
         peers_payload = self._request_json("peers/")
-        endpoints_payload = self._request_json("peer-endpoints/")
-
         peers = peers_payload.get("peers")
-        endpoints = endpoints_payload.get("endpoints")
         peers_synced = self.store.reconcile_peers(peers if isinstance(peers, list) else [])
-        session_count, relay_count = self.store.reconcile_endpoints(endpoints if isinstance(endpoints, list) else [])
         return {
             "peers_synced": peers_synced,
-            "session_count": session_count,
-            "relay_count": relay_count,
         }
 
     def _run_due_tasks(self) -> None:
@@ -93,8 +85,6 @@ class NetmeshAgentRuntime:
                 logger.info("Netmesh agent keepalive", extra={"event": "netmesh.agent.keepalive", "metrics": snapshot()})
             elif task_name == "rekey":
                 logger.info("Netmesh agent rekey check", extra={"event": "netmesh.agent.rekey"})
-            elif task_name == "endpoint_refresh":
-                logger.info("Netmesh agent endpoint refresh", extra={"event": "netmesh.agent.endpoint_refresh"})
 
     def run(self) -> int:
         """Run until shutdown signal or max loop count is reached."""
@@ -119,8 +109,6 @@ class NetmeshAgentRuntime:
                 except Exception as exc:
                     self.lifecycle.mark_progress(
                         peers_synced=len(self.store.peer_map),
-                        session_count=len(self.store.session_map),
-                        relay_count=len(self.store.relay_map),
                         lifecycle_state="degraded",
                         last_error=str(exc),
                     )

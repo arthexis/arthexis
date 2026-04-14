@@ -5,10 +5,7 @@ from django.db import IntegrityError, transaction
 from apps.netmesh.models import (
     MeshMembership,
     NodeKeyMaterial,
-    NodeRelayConfig,
     PeerPolicy,
-    RelayRegion,
-    ServiceAdvertisement,
 )
 from apps.netmesh.services.key_material import ensure_active_transport_key, rotate_transport_key
 from apps.nodes.models import Node, NodeRole
@@ -239,31 +236,3 @@ def test_peer_policy_requires_non_empty_tenant():
                 destination_node=destination,
             )
 
-
-@pytest.mark.django_db
-def test_service_advertisement_port_range_validation():
-    node = Node.objects.create(hostname="mesh-port")
-    out_of_range_port = ServiceAdvertisement(
-        node=node,
-        service_name="svc",
-        protocol=ServiceAdvertisement.Protocol.TCP,
-        port=65536,
-    )
-
-    with pytest.raises(ValidationError):
-        out_of_range_port.full_clean()
-
-
-@pytest.mark.django_db
-def test_node_relay_config_unique_per_region():
-    node = Node.objects.create(hostname="mesh-relay-node")
-    region = RelayRegion.objects.create(
-        code="usw2",
-        name="US West",
-        relay_endpoint="wss://relay-usw2.example/mesh",
-    )
-    NodeRelayConfig.objects.create(node=node, region=region)
-
-    with pytest.raises(IntegrityError):
-        with transaction.atomic():
-            NodeRelayConfig.objects.create(node=node, region=region)
