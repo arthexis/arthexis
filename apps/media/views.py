@@ -25,7 +25,7 @@ def media_bucket_upload(request, slug):
     if request.method not in {"POST", "PUT"}:
         return HttpResponseNotAllowed(["POST", "PUT"])
 
-    if bucket.expires_at is None and not request.user.is_authenticated:
+    if bucket.expires_at is None and not (request.user.is_authenticated and request.user.is_active):
         return JsonResponse(
             {"detail": "authentication is required for this bucket"},
             status=403,
