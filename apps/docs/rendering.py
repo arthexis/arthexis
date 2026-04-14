@@ -8,6 +8,7 @@ import bleach
 import markdown
 
 from apps.docs import assets
+from apps.sigils.sigil_resolver import resolve_sigils
 
 
 MARKDOWN_EXTENSIONS = ["toc", "tables", "mdx_truly_sane_lists", "fenced_code"]
@@ -179,7 +180,8 @@ def _rewrite_mermaid_blocks(html: str) -> str:
 def read_document_text(file_path: Path) -> str:
     """Read ``file_path`` as UTF-8 text, replacing undecodable bytes."""
 
-    return file_path.read_text(encoding="utf-8", errors="replace")
+    raw_text = file_path.read_text(encoding="utf-8", errors="replace")
+    return resolve_sigils(raw_text)
 
 
 def render_document_file(file_path: Path) -> tuple[str, str]:

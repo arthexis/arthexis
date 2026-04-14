@@ -18,6 +18,7 @@ from apps.nodes.utils import FeatureChecker
 from apps.modules.models import Module
 from apps.sites.utils import module_pill_link_validation
 
+from .models import DocumentIndex
 from . import assets, rendering
 
 
@@ -266,6 +267,7 @@ def _build_library_item(
     root: Path,
     route_name: str,
     *,
+    doc_path_prefix: str = "",
     label: str | None = None,
 ) -> dict[str, str]:
     """Build a single document-library item with URL and blurb metadata."""
@@ -279,7 +281,9 @@ def _build_library_item(
     except NoReverseMatch:
         logger.warning("Unable to reverse %r for %s", route_name, relative)
         url = ""
+    stored_doc_path = f"{doc_path_prefix}{relative}" if doc_path_prefix else relative
     return {
+        "doc_path": stored_doc_path,
         "label": label or relative,
         "url": url,
         "description": description,
@@ -309,6 +313,7 @@ def _build_library_section(
     *,
     root: Path,
     route_name: str,
+    doc_path_prefix: str,
     title: str,
     prefix: str,
     parameter: str,
@@ -324,7 +329,15 @@ def _build_library_section(
             if relative == prefix:
                 if path.stem.lower() == "index":
                     continue
-                items.append(_build_library_item(path, root, route_name, label=Path(relative).name))
+                items.append(
+                    _build_library_item(
+                        path,
+                        root,
+                        route_name,
+                        doc_path_prefix=doc_path_prefix,
+                        label=Path(relative).name,
+                    )
+                )
                 continue
             if not relative.startswith(f"{prefix}/"):
                 continue
@@ -337,7 +350,15 @@ def _build_library_section(
             continue
         if path.stem.lower() == "index":
             continue
-        items.append(_build_library_item(path, root, route_name, label=Path(relative).name))
+        items.append(
+            _build_library_item(
+                path,
+                root,
+                route_name,
+                doc_path_prefix=doc_path_prefix,
+                label=Path(relative).name,
+            )
+        )
 
     folder_items = [
         {
@@ -372,7 +393,7 @@ def _collect_document_library(
     docs_files: list[Path] | None = None,
     apps_docs_files: list[Path] | None = None,
 ) -> list[dict[str, object]]:
-    """Build a library index for docs and apps/docs content."""
+    """Build a flat library index for docs and apps/docs content."""
 
     docs_root = root_base / "docs"
     apps_docs_root = root_base / "apps" / "docs"
@@ -385,6 +406,7 @@ def _collect_document_library(
                 docs_files,
                 root=docs_root,
                 route_name="docs:docs-document",
+                doc_path_prefix="docs/",
                 title="Documentation",
                 prefix=_normalize_library_prefix(docs_prefix),
                 parameter="docs_path",
@@ -400,6 +422,7 @@ def _collect_document_library(
                 apps_docs_files,
                 root=apps_docs_root,
                 route_name="docs:apps-docs-document",
+                doc_path_prefix="apps/docs/",
                 title="Application Docs",
                 prefix=_normalize_library_prefix(apps_docs_prefix),
                 parameter="apps_docs_path",
@@ -407,6 +430,81 @@ def _collect_document_library(
         )
 
     return sections
+
+
+def _build_library_documents(
+    files: list[Path],
+    *,
+    root: Path,
+    route_name: str,
+    doc_path_prefix: str,
+) -> list[dict[str, str]]:
+    """Build all document entries for indexed grouping and fallback listing."""
+
+    documents: list[dict[str, str]] = []
+    for path in files:
+        if path.stem.lower() == "index":
+            continue
+        documents.append(
+            _build_library_item(
+                path,
+                root,
+                route_name,
+                doc_path_prefix=doc_path_prefix,
+                label=path.name,
+            )
+        )
+    return [item for item in documents if item["url"]]
+
+
+def _build_indexed_document_groups(request, documents: list[dict[str, str]]) -> list[dict[str, object]]:
+    """Group indexed documents by security-group course (and listable catch-all)."""
+
+    document_by_path = {item["doc_path"]: item for item in documents}
+    indexed_documents = (
+        DocumentIndex.objects.filter(doc_path__in=document_by_path.keys())
+        .prefetch_related("assignments__security_group")
+        .order_by("title", "doc_path")
+    )
+    user_group_ids = set(request.user.groups.values_list("id", flat=True))
+    grouped: dict[str, dict[str, object]] = {}
+
+    def ensure_group(title: str, *, description: str = "") -> dict[str, object]:
+        if title not in grouped:
+            grouped[title] = {"title": title, "description": description, "items": []}
+        return grouped[title]
+
+    for indexed in indexed_documents:
+        item = document_by_path.get(indexed.doc_path)
+        if not item:
+            continue
+
+        has_assignments = False
+        has_visible_assignment = False
+        for assignment in indexed.assignments.all():
+            has_assignments = True
+            if (
+                assignment.access == DocumentIndex.ACCESS_RESTRICTED
+                and assignment.security_group_id not in user_group_ids
+            ):
+                continue
+            has_visible_assignment = True
+            group = ensure_group(
+                assignment.security_group.name,
+                description="Course",
+            )
+            group["items"].append(
+                {
+                    **item,
+                    "access": assignment.get_access_display(),
+                }
+            )
+
+        if indexed.listable and not has_assignments and not has_visible_assignment:
+            group = ensure_group("Listable", description="General")
+            group["items"].append({**item, "access": "Available"})
+
+    return [value for _, value in sorted(grouped.items(), key=lambda pair: pair[0].lower())]
 
 
 def _get_cached_document_library_paths(root_base: Path) -> tuple[list[Path], list[Path]]:
@@ -463,14 +561,38 @@ def _render_document_library(
     root_base = Path(settings.BASE_DIR).resolve()
     docs_prefix = request.GET.get("docs_path", "")
     apps_docs_prefix = request.GET.get("apps_docs_path", "")
+    sections = _get_cached_document_library(
+        root_base,
+        docs_prefix=docs_prefix,
+        apps_docs_prefix=apps_docs_prefix,
+    )
+    docs_paths, apps_docs_paths = _get_cached_document_library_paths(root_base)
+    all_documents = _build_library_documents(
+        docs_paths,
+        root=root_base / "docs",
+        route_name="docs:docs-document",
+        doc_path_prefix="docs/",
+    ) + _build_library_documents(
+        apps_docs_paths,
+        root=root_base / "apps" / "docs",
+        route_name="docs:apps-docs-document",
+        doc_path_prefix="apps/docs/",
+    )
+    indexed_groups = _build_indexed_document_groups(request, all_documents)
+    indexed_doc_paths = {
+        assignment_item["doc_path"]
+        for group in indexed_groups
+        for assignment_item in group["items"]
+    }
+    other_documents = [
+        item for item in all_documents if item["doc_path"] not in indexed_doc_paths
+    ]
     context = {
         "canonical_url": _build_canonical_url(request),
-        "sections": _get_cached_document_library(
-            root_base,
-            docs_prefix=docs_prefix,
-            apps_docs_prefix=apps_docs_prefix,
-        ),
+        "indexed_groups": indexed_groups,
+        "other_documents": other_documents,
         "page_url": request.build_absolute_uri(),
+        "sections": sections,
         "title": "Developer Documents",
     }
     if missing_document:
