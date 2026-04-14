@@ -239,3 +239,37 @@ def test_charge_points_module_hides_operator_only_map_link_from_anonymous_users(
     )
 
     assert charge_point_module is None
+
+
+def test_docs_library_and_documents_require_login(client):
+    library_url = reverse("docs:docs-library")
+    document_url = reverse("docs:docs-document", args=["index.md"])
+    apps_document_url = reverse("docs:apps-docs-document", args=["README.md"])
+
+    library_response = client.get(library_url)
+    document_response = client.get(document_url)
+    apps_document_response = client.get(apps_document_url)
+
+    expected_prefix = f"{reverse('pages:login')}?next="
+    assert library_response.status_code == 302
+    assert library_response.url.startswith(expected_prefix)
+    assert document_response.status_code == 302
+    assert document_response.url.startswith(expected_prefix)
+    assert apps_document_response.status_code == 302
+    assert apps_document_response.url.startswith(expected_prefix)
+
+
+def test_docs_module_pill_hidden_from_anonymous_users_when_landing_is_docs_library():
+    module = Module.objects.create(path="/docs/", menu="Docs")
+    Landing.objects.create(
+        module=module,
+        path=reverse("docs:docs-library"),
+        label="Developer Documents",
+    )
+    request = RequestFactory().get("/")
+    request.user = AnonymousUser()
+
+    nav_context = context_processors.nav_links(request)
+    nav_modules = nav_context["nav_modules"]
+
+    assert not any(candidate.path == "/docs/" for candidate in nav_modules)

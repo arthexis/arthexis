@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from urllib.parse import urlencode, urlunsplit
 
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.http import FileResponse, Http404, HttpResponse
@@ -15,6 +16,7 @@ from django.views.decorators.cache import never_cache
 from apps.nodes.models import Node
 from apps.nodes.utils import FeatureChecker
 from apps.modules.models import Module
+from apps.sites.utils import module_pill_link_validation
 
 from . import assets, rendering
 
@@ -36,6 +38,11 @@ DOCS_CANONICAL_HOST_OVERRIDES = {
 FULL_CONTENT_DEFAULT_DOCUMENTS = {
     "docs/development/install-lifecycle-scripts-manual.md",
 }
+
+
+def _show_docs_navigation_link(*, request, landing) -> bool:
+    del landing
+    return bool(getattr(request.user, "is_authenticated", False))
 
 
 def _is_allowed_doc_path(path: Path) -> bool:
@@ -567,6 +574,8 @@ def render_readme_page(
     return response
 
 
+@module_pill_link_validation(_show_docs_navigation_link)
+@login_required(login_url="pages:login")
 def document_library(request):
     """Render the developer documentation library index."""
 
@@ -580,7 +589,9 @@ def _render_missing_document(request, *, doc: str | None, prepend_docs: bool) ->
     return _render_document_library(request, status=404, missing_document=missing_path)
 
 
+@module_pill_link_validation(_show_docs_navigation_link)
 @never_cache
+@login_required(login_url="pages:login")
 def readme(request, doc=None, prepend_docs: bool = False):
     try:
         return render_readme_page(request, doc=doc, prepend_docs=prepend_docs)
@@ -591,6 +602,7 @@ def readme(request, doc=None, prepend_docs: bool = False):
         raise
 
 
+@login_required(login_url="pages:login")
 def readme_asset(request, source: str, asset: str):
     source_normalized = (source or "").lower()
     if source_normalized == "static":
