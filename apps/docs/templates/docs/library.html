@@ -18,30 +18,18 @@
           {% blocktrans with missing_document=missing_document %}The requested document "{{ missing_document }}" was not found. Choose one of the available documents below.{% endblocktrans %}
         </div>
       {% endif %}
-      {% if sections %}
-        {% for section in sections %}
-          <h2>{{ section.title }}</h2>
-          {% if section.current_prefix %}
-            <p class="mb-2">
-              <span class="text-muted">{% trans "Folder" %}:</span>
-              <code>{{ section.current_prefix }}/</code>
-              ·
-              <a href="{{ section.parent_url }}">{% trans "Up one level" %}</a>
-            </p>
-          {% endif %}
+      <h2>{% trans "Indexed Documents" %}</h2>
+      {% if indexed_groups %}
+        {% for group in indexed_groups %}
+          <h3 class="h5">{{ group.title }}</h3>
           <div class="row row-cols-1 row-cols-lg-2 g-3 mb-4">
-            {% for item in section.items %}
+            {% for item in group.items %}
               <div class="col">
                 <div class="card h-100 shadow-sm">
                   <div class="card-body">
-                    <h3 class="h5 mb-2"><a href="{{ item.url }}">{{ item.label }}</a></h3>
-                    <p class="mb-0 text-muted">
-                      {% if item.kind == "folder" %}
-                        {% trans "Folder" %} · {{ item.description }}
-                      {% else %}
-                        {{ item.description }}
-                      {% endif %}
-                    </p>
+                    <h4 class="h6 mb-2"><a href="{{ item.url }}">{{ item.label }}</a></h4>
+                    <p class="mb-2 text-muted">{{ item.description }}</p>
+                    <span class="badge text-bg-primary">{{ item.access }}</span>
                   </div>
                 </div>
               </div>
@@ -49,7 +37,25 @@
           </div>
         {% endfor %}
       {% else %}
-        <p class="text-muted">{% trans "No documents are available." %}</p>
+        <p class="text-muted">{% trans "No indexed documents are available." %}</p>
+      {% endif %}
+
+      <h2>{% trans "Other Documents" %}</h2>
+      {% if other_documents %}
+        <div class="row row-cols-1 row-cols-lg-2 g-3 mb-4">
+          {% for item in other_documents %}
+            <div class="col">
+              <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                  <h3 class="h5 mb-2"><a href="{{ item.url }}">{{ item.label }}</a></h3>
+                  <p class="mb-0 text-muted">{{ item.description }}</p>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-muted">{% trans "No other documents are available." %}</p>
       {% endif %}
     </div>
   </div>

@@ -18,6 +18,7 @@ from apps.nodes.utils import FeatureChecker
 from apps.modules.models import Module
 from apps.sites.utils import module_pill_link_validation
 
+from .models import DocumentIndex
 from . import assets, rendering
 
 
@@ -280,6 +281,7 @@ def _build_library_item(
         logger.warning("Unable to reverse %r for %s", route_name, relative)
         url = ""
     return {
+        "doc_path": relative,
         "label": label or relative,
         "url": url,
         "description": description,
@@ -372,7 +374,7 @@ def _collect_document_library(
     docs_files: list[Path] | None = None,
     apps_docs_files: list[Path] | None = None,
 ) -> list[dict[str, object]]:
-    """Build a library index for docs and apps/docs content."""
+    """Build a flat library index for docs and apps/docs content."""
 
     docs_root = root_base / "docs"
     apps_docs_root = root_base / "apps" / "docs"
@@ -407,6 +409,66 @@ def _collect_document_library(
         )
 
     return sections
+
+
+def _flatten_library_documents(sections: list[dict[str, object]]) -> list[dict[str, str]]:
+    """Return all document items from library sections."""
+
+    documents: list[dict[str, str]] = []
+    for section in sections:
+        for item in section.get("items", []):
+            if item.get("kind") != "document":
+                continue
+            documents.append(item)
+    return documents
+
+
+def _build_indexed_document_groups(request, documents: list[dict[str, str]]) -> list[dict[str, object]]:
+    """Group indexed documents by security-group course (and listable catch-all)."""
+
+    document_by_path = {item["doc_path"]: item for item in documents}
+    indexed_documents = (
+        DocumentIndex.objects.select_related()
+        .prefetch_related("assignments__security_group")
+        .order_by("title", "doc_path")
+    )
+    user_group_ids = set(request.user.groups.values_list("id", flat=True))
+    grouped: dict[str, dict[str, object]] = {}
+
+    def ensure_group(title: str, *, description: str = "") -> dict[str, object]:
+        if title not in grouped:
+            grouped[title] = {"title": title, "description": description, "items": []}
+        return grouped[title]
+
+    for indexed in indexed_documents:
+        item = document_by_path.get(indexed.doc_path)
+        if not item:
+            continue
+
+        has_visible_assignment = False
+        for assignment in indexed.assignments.all():
+            if (
+                assignment.access == DocumentIndex.ACCESS_RESTRICTED
+                and assignment.security_group_id not in user_group_ids
+            ):
+                continue
+            has_visible_assignment = True
+            group = ensure_group(
+                assignment.security_group.name,
+                description="Course",
+            )
+            group["items"].append(
+                {
+                    **item,
+                    "access": assignment.get_access_display(),
+                }
+            )
+
+        if indexed.listable and not has_visible_assignment:
+            group = ensure_group("Listable", description="General")
+            group["items"].append({**item, "access": "Available"})
+
+    return [value for _, value in sorted(grouped.items(), key=lambda pair: pair[0].lower())]
 
 
 def _get_cached_document_library_paths(root_base: Path) -> tuple[list[Path], list[Path]]:
@@ -463,13 +525,25 @@ def _render_document_library(
     root_base = Path(settings.BASE_DIR).resolve()
     docs_prefix = request.GET.get("docs_path", "")
     apps_docs_prefix = request.GET.get("apps_docs_path", "")
+    sections = _get_cached_document_library(
+        root_base,
+        docs_prefix=docs_prefix,
+        apps_docs_prefix=apps_docs_prefix,
+    )
+    all_documents = _flatten_library_documents(sections)
+    indexed_groups = _build_indexed_document_groups(request, all_documents)
+    indexed_doc_paths = {
+        assignment_item["doc_path"]
+        for group in indexed_groups
+        for assignment_item in group["items"]
+    }
+    other_documents = [
+        item for item in all_documents if item["doc_path"] not in indexed_doc_paths
+    ]
     context = {
         "canonical_url": _build_canonical_url(request),
-        "sections": _get_cached_document_library(
-            root_base,
-            docs_prefix=docs_prefix,
-            apps_docs_prefix=apps_docs_prefix,
-        ),
+        "indexed_groups": indexed_groups,
+        "other_documents": other_documents,
         "page_url": request.build_absolute_uri(),
         "title": "Developer Documents",
     }

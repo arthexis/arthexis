@@ -12,9 +12,11 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
+from apps.docs.models import DocumentIndex, DocumentIndexAssignment
 from apps.energy.models import ClientReport
 from apps.features.models import Feature
 from apps.groups.constants import SITE_OPERATOR_GROUP_NAME
+from apps.groups.models import SecurityGroup
 from apps.modules.models import Module
 from apps.sites import context_processors
 from apps.sites.models import Landing, SiteProfile
@@ -259,8 +261,8 @@ def test_docs_library_and_documents_require_login(client):
     assert apps_document_response.url.startswith(expected_prefix)
 
 
-def test_docs_module_pill_hidden_from_anonymous_users_when_landing_is_docs_library():
-    module = Module.objects.create(path="/docs/", menu="Docs")
+def test_developers_module_pill_hidden_from_anonymous_users_when_landing_is_docs_library():
+    module = Module.objects.create(path="/docs/", menu="Developers")
     Landing.objects.create(
         module=module,
         path=reverse("docs:docs-library"),
@@ -273,3 +275,50 @@ def test_docs_module_pill_hidden_from_anonymous_users_when_landing_is_docs_libra
     nav_modules = nav_context["nav_modules"]
 
     assert not any(candidate.path == "/docs/" for candidate in nav_modules)
+
+
+def test_docs_library_renders_indexed_documents_before_other_documents(client):
+    staff_user = get_user_model().objects.create_user(
+        username="docs-index-staff",
+        email="docs-index-staff@example.com",
+        password="secret",
+        is_staff=True,
+    )
+    course_group = SecurityGroup.objects.create(name="Safety Course")
+    course_group.user_set.add(staff_user)
+    indexed = DocumentIndex.objects.create(
+        title="Security Model Guide",
+        doc_path="docs/security-model.md",
+        listable=True,
+    )
+    DocumentIndexAssignment.objects.create(
+        document=indexed,
+        security_group=course_group,
+        access=DocumentIndex.ACCESS_REQUIRED,
+    )
+
+    client.force_login(staff_user)
+    response = client.get(reverse("docs:docs-library"))
+
+    body = response.content.decode()
+    assert response.status_code == 200
+    assert "Indexed Documents" in body
+    assert "Other Documents" in body
+    assert "security-model.md" in body
+
+
+def test_readme_resolves_sigils_for_authenticated_user(client):
+    user = get_user_model().objects.create_user(
+        username="docs-sigil-user",
+        email="docs-sigil-user@example.com",
+        password="secret",
+    )
+    document = Path("docs/sigil-test.md")
+    document.write_text("# Sigils\n\nCurrent path: [REQ.path]\n", encoding="utf-8")
+    client.force_login(user)
+    try:
+        response = client.get(reverse("docs:docs-document", args=["sigil-test.md"]))
+        assert response.status_code == 200
+        assert "Current path: /docs/sigil-test.md" in response.content.decode()
+    finally:
+        document.unlink(missing_ok=True)
