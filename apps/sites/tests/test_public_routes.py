@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser, Group
 from django.contrib.sites.models import Site
 from django.core.exceptions import PermissionDenied
+from django.core.cache import cache
 from django.test import RequestFactory
 from django.urls import reverse
 from django.utils.encoding import force_bytes
@@ -322,3 +323,92 @@ def test_readme_resolves_sigils_for_authenticated_user(client):
         assert "Current path: /docs/sigil-test.md" in response.content.decode()
     finally:
         document.unlink(missing_ok=True)
+
+
+def test_docs_library_preserves_docs_prefix_for_indexed_document_matching(client):
+    staff_user = get_user_model().objects.create_user(
+        username="docs-prefix-match-staff",
+        email="docs-prefix-match-staff@example.com",
+        password="secret",
+        is_staff=True,
+    )
+    course_group = SecurityGroup.objects.create(name="Platform Course")
+    course_group.user_set.add(staff_user)
+    indexed = DocumentIndex.objects.create(
+        title="Security Model Guide",
+        doc_path="docs/security-model.md",
+        listable=True,
+    )
+    DocumentIndexAssignment.objects.create(
+        document=indexed,
+        security_group=course_group,
+        access=DocumentIndex.ACCESS_REQUIRED,
+    )
+
+    client.force_login(staff_user)
+    response = client.get(reverse("docs:docs-library"))
+    body = response.content.decode()
+
+    assert response.status_code == 200
+    assert "Platform Course" in body
+    assert "security-model.md" in body
+
+
+def test_docs_library_hides_restricted_assignment_from_non_member_users(client):
+    user = get_user_model().objects.create_user(
+        username="docs-restricted-user",
+        email="docs-restricted-user@example.com",
+        password="secret",
+        is_staff=True,
+    )
+    restricted_group = SecurityGroup.objects.create(name="Restricted Course")
+    document = Path("docs/restricted-visibility-test.md")
+    document.write_text("# Restricted\n\nHidden document.\n", encoding="utf-8")
+    indexed = DocumentIndex.objects.create(
+        title="Restricted Visibility Test",
+        doc_path="docs/restricted-visibility-test.md",
+        listable=True,
+    )
+    DocumentIndexAssignment.objects.create(
+        document=indexed,
+        security_group=restricted_group,
+        access=DocumentIndex.ACCESS_RESTRICTED,
+    )
+
+    client.force_login(user)
+    try:
+        response = client.get(reverse("docs:docs-library"))
+        body = response.content.decode()
+        assert response.status_code == 200
+        assert "Restricted Visibility Test" not in body
+        assert "restricted-visibility-test.md" not in body
+    finally:
+        document.unlink(missing_ok=True)
+
+
+def test_docs_library_keeps_nested_docs_visible_and_shows_parent_navigation(client):
+    user = get_user_model().objects.create_user(
+        username="docs-nested-user",
+        email="docs-nested-user@example.com",
+        password="secret",
+        is_staff=True,
+    )
+    nested_document = Path("docs/library-test/subfolder/nested-visibility-test.md")
+    nested_document.parent.mkdir(parents=True, exist_ok=True)
+    nested_document.write_text("# Nested visibility\n\nNested document.\n", encoding="utf-8")
+
+    client.force_login(user)
+    try:
+        cache.clear()
+        root_response = client.get(reverse("docs:docs-library"))
+        folder_response = client.get(reverse("docs:docs-library"), {"docs_path": "library-test/subfolder"})
+
+        assert root_response.status_code == 200
+        assert "nested-visibility-test.md" in root_response.content.decode()
+        assert folder_response.status_code == 200
+        assert "Up one level" in folder_response.content.decode()
+    finally:
+        nested_document.unlink(missing_ok=True)
+        for parent in (nested_document.parent, nested_document.parent.parent):
+            if parent.exists():
+                parent.rmdir()

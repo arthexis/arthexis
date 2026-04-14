@@ -18,6 +18,29 @@
           {% blocktrans with missing_document=missing_document %}The requested document "{{ missing_document }}" was not found. Choose one of the available documents below.{% endblocktrans %}
         </div>
       {% endif %}
+      {% if sections %}
+        <h2>{% trans "Browse by Folder" %}</h2>
+        {% for section in sections %}
+          <h3 class="h5">{{ section.title }}</h3>
+          {% if section.current_prefix and section.parent_url %}
+            <p class="mb-2"><a href="{{ section.parent_url }}">← {% trans "Up one level" %}</a></p>
+          {% endif %}
+          {% if section.items %}
+            <ul class="list-unstyled mb-4">
+              {% for item in section.items %}
+                <li class="mb-2">
+                  <a href="{{ item.url }}">{{ item.label }}</a>
+                  {% if item.description %}
+                    <div class="text-muted small">{{ item.description }}</div>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-muted">{% trans "No documents available in this folder." %}</p>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
       <h2>{% trans "Indexed Documents" %}</h2>
       {% if indexed_groups %}
         {% for group in indexed_groups %}
