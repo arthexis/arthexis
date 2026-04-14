@@ -42,7 +42,7 @@ FULL_CONTENT_DEFAULT_DOCUMENTS = {
 
 def _show_docs_navigation_link(*, request, landing) -> bool:
     del landing
-    return bool(getattr(request.user, "is_authenticated", False))
+    return bool(getattr(request, "user", None) and request.user.is_authenticated)
 
 
 def _is_allowed_doc_path(path: Path) -> bool:
