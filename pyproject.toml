@@ -132,7 +132,7 @@ qa = [
   "pytest-django==4.12.0",
   "pytest-timeout==2.4.0",
   "pytest-xdist==3.8.0",
-  "pytest==9.0.2",
+  "pytest==9.0.3",
 ]
 video = [
   "aiortc==1.14.0",
