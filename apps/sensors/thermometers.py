@@ -40,7 +40,7 @@ def read_w1_temperature(
 def read_i2c_temperature(
     paths: Iterable[str | Path] | None = None,
 ) -> Decimal | None:
-    candidates = list(paths or _iter_i2c_paths())
+    candidates = list(paths if paths is not None else _iter_i2c_paths())
     for candidate in candidates:
         path = Path(candidate)
         try:
@@ -78,9 +78,10 @@ def read_temperature(
     if normalized == "w1":
         return read_w1_temperature(w1_paths)
 
-    i2c_reading = read_i2c_temperature(i2c_paths)
-    if i2c_reading is not None:
-        return i2c_reading
+    if i2c_paths is not None:
+        i2c_reading = read_i2c_temperature(i2c_paths)
+        if i2c_reading is not None:
+            return i2c_reading
     return read_w1_temperature(w1_paths)
 
 

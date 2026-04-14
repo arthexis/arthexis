@@ -40,11 +40,16 @@ class ThermometerAdmin(admin.ModelAdmin):
         updated_count = 0
         failed_names = []
         source = str(getattr(settings, "THERMOMETER_SOURCE", "auto")).strip().lower()
+        w1_path_template = getattr(
+            settings,
+            "THERMOMETER_PATH_TEMPLATE",
+            "/sys/bus/w1/devices/{slug}/temperature",
+        )
         i2c_path_template = str(
             getattr(settings, "THERMOMETER_I2C_PATH_TEMPLATE", "")
         ).strip()
         for thermometer in queryset:
-            w1_path = f"/sys/bus/w1/devices/{thermometer.slug}/temperature"
+            w1_path = w1_path_template.format(slug=thermometer.slug)
             i2c_paths = (
                 [i2c_path_template.format(slug=thermometer.slug)]
                 if i2c_path_template
