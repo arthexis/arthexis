@@ -8,21 +8,23 @@ import os
 import random
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone as datetime_timezone
+from datetime import datetime
+from datetime import timezone as datetime_timezone
 from decimal import Decimal, InvalidOperation
 from glob import glob
 from itertools import cycle, islice
 from pathlib import Path
-from typing import Callable, NamedTuple
+from typing import NamedTuple
 
 import psutil
 
-from apps.screens.animations import AnimationLoadError, default_tree_frames
 from apps.core import uptime_utils
+from apps.screens.animations import AnimationLoadError, default_tree_frames
 
 from . import locks
-from .hardware import LCDFrameWriter, LCD_COLUMNS, LCD_ROWS
+from .hardware import LCD_COLUMNS, LCD_ROWS, LCDFrameWriter
 from .logging import BASE_DIR
 
 logger = logging.getLogger(__name__)
@@ -431,18 +433,27 @@ def _refresh_uptime_payload(
 
 
 def _lcd_temperature_label_from_sensors() -> str | None:
-    return None
+    from apps.sensors.models import Thermometer
+
+    thermometer = (
+        Thermometer.objects.filter(is_active=True, last_reading__isnull=False)
+        .order_by("-last_read_at", "name")
+        .first()
+    )
+    if not thermometer:
+        return None
+    return thermometer.format_lcd_reading() or None
 
 
 def _lcd_temperature_label_from_sysfs() -> str | None:
     try:
-        from apps.sensors.thermometers import format_w1_temperature
+        from apps.sensors.thermometers import format_temperature
     except Exception:
-        format_w1_temperature = None
+        format_temperature = None
 
-    if format_w1_temperature:
+    if format_temperature:
         try:
-            label = format_w1_temperature()
+            label = format_temperature()
         except Exception:
             logger.debug("Unable to load sysfs thermometer reading", exc_info=True)
         else:
