@@ -2,8 +2,8 @@ import importlib
 from datetime import timedelta
 
 import pytest
-from django.apps import apps as django_apps
 from django.utils import timezone
+from django_celery_beat.models import PeriodicTask
 
 from apps.reports.models import SQLReport, SQLReportProduct
 from apps.reports.report_definitions import report_catalog
@@ -38,11 +38,11 @@ def test_run_named_report_generates_html_and_pdf_products():
     assert report.last_run_at is not None
     assert report.last_run_duration is not None
 
+
 @pytest.mark.django_db
 def test_schedule_enabled_reports_default_next_run_at_on_save():
-    """Enabled schedules should default the next run timestamp when omitted."""
+    """Enabled schedules should create beat tasks from legacy interval minutes."""
 
-    before = timezone.now()
     report = SQLReport.objects.create(
         name="Scheduled report",
         report_type=SQLReport.ReportType.SIGIL_ROOTS,
@@ -50,14 +50,19 @@ def test_schedule_enabled_reports_default_next_run_at_on_save():
         schedule_enabled=True,
         schedule_interval_minutes=15,
     )
-    after = timezone.now()
 
-    assert report.next_scheduled_run_at is not None
-    assert before <= report.next_scheduled_run_at <= after
+    report.refresh_from_db()
+    assert report.schedule_interval is not None
+    assert report.schedule_periodic_task is not None
+    assert (
+        report.schedule_periodic_task.task
+        == "apps.reports.tasks.run_scheduled_sql_reports"
+    )
+
 
 @pytest.mark.django_db
-def test_run_due_scheduled_reports_runs_due_only():
-    """Only due scheduled reports should execute and advance next run timestamp."""
+def test_run_due_scheduled_reports_runs_requested_ids_only():
+    """Only requested scheduled reports should execute."""
 
     now = timezone.now()
     due = SQLReport.objects.create(
@@ -66,24 +71,90 @@ def test_run_due_scheduled_reports_runs_due_only():
         parameters={"context_type": "all"},
         schedule_enabled=True,
         schedule_interval_minutes=30,
-        next_scheduled_run_at=now - timedelta(minutes=1),
     )
-    SQLReport.objects.create(
+    not_requested = SQLReport.objects.create(
         name="Not due report",
         report_type=SQLReport.ReportType.SCHEDULED_REPORTS,
         parameters={"schedule_state": "all", "name_contains": ""},
         schedule_enabled=True,
         schedule_interval_minutes=30,
-        next_scheduled_run_at=now + timedelta(minutes=30),
+    )
+
+    processed = run_due_scheduled_reports(report_ids=[due.pk], now=now)
+
+    assert processed == 1
+    assert SQLReportProduct.objects.filter(report=due).exists()
+    assert not SQLReportProduct.objects.filter(report=not_requested).exists()
+
+
+@pytest.mark.django_db
+def test_run_due_scheduled_reports_advances_legacy_next_run_at():
+    """Legacy fallback processing should move next scheduled run forward."""
+
+    now = timezone.now()
+    report = SQLReport.objects.create(
+        name="Legacy due report",
+        report_type=SQLReport.ReportType.SIGIL_ROOTS,
+        parameters={"context_type": "all"},
+        schedule_enabled=True,
+        schedule_interval_minutes=10,
+        schedule_interval=None,
+        next_scheduled_run_at=now - timedelta(minutes=1),
+    )
+    SQLReport.objects.filter(pk=report.pk).update(
+        schedule_periodic_task=None,
+        schedule_interval=None,
+    )
+
+    processed = run_due_scheduled_reports(now=now)
+    report.refresh_from_db()
+
+    assert processed == 1
+    assert report.next_scheduled_run_at == now + timedelta(minutes=10)
+
+
+@pytest.mark.django_db
+def test_run_due_scheduled_reports_ignores_beat_managed_reports_in_legacy_fallback():
+    """Legacy fallback should not double-run reports already managed by beat."""
+
+    now = timezone.now()
+    report = SQLReport.objects.create(
+        name="Beat managed report",
+        report_type=SQLReport.ReportType.SIGIL_ROOTS,
+        parameters={"context_type": "all"},
+        schedule_enabled=True,
+        schedule_interval_minutes=10,
+        next_scheduled_run_at=now - timedelta(minutes=1),
     )
 
     processed = run_due_scheduled_reports(now=now)
 
-    assert processed == 1
-    assert SQLReportProduct.objects.filter(report=due).exists()
+    assert report.schedule_periodic_task_id is not None
+    assert processed == 0
+    assert not SQLReportProduct.objects.filter(report=report).exists()
 
-    due.refresh_from_db()
-    assert due.next_scheduled_run_at == now + timedelta(minutes=30)
+
+@pytest.mark.django_db
+def test_schedule_disabled_reports_remove_periodic_task():
+    """Disabling schedules should remove managed beat tasks."""
+
+    report = SQLReport.objects.create(
+        name="Toggle schedule report",
+        report_type=SQLReport.ReportType.SIGIL_ROOTS,
+        parameters={"context_type": "all"},
+        schedule_enabled=True,
+        schedule_interval_minutes=5,
+    )
+    task_id = report.schedule_periodic_task_id
+    assert task_id is not None
+
+    report.schedule_enabled = False
+    report.save()
+    report.refresh_from_db()
+
+    assert report.schedule_periodic_task is None
+    assert not PeriodicTask.objects.filter(pk=task_id).exists()
+
 
 @pytest.mark.django_db
 def test_run_sql_report_validation_failure_returns_error():
@@ -95,7 +166,9 @@ def test_run_sql_report_validation_failure_returns_error():
         parameters={"schedule_state": "all", "name_contains": ""},
         schedule_enabled=False,
     )
-    SQLReport.objects.filter(pk=report.pk).update(parameters={"schedule_state": "invalid"})
+    SQLReport.objects.filter(pk=report.pk).update(
+        parameters={"schedule_state": "invalid"}
+    )
     report.refresh_from_db()
 
     result, product = run_sql_report(report)
@@ -103,6 +176,7 @@ def test_run_sql_report_validation_failure_returns_error():
     assert product is None
     assert result.error is not None
     assert "valid schedule state filter" in result.error
+
 
 @pytest.mark.django_db
 def test_catalog_reports_are_shipped_in_code():
@@ -115,6 +189,7 @@ def test_catalog_reports_are_shipped_in_code():
         SQLReport.ReportType.SCHEDULED_REPORTS,
         SQLReport.ReportType.SIGIL_ROOTS,
     ]
+
 
 @pytest.mark.django_db
 def test_sigil_root_report_uses_orm_backed_results():

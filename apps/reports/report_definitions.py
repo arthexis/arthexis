@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone as datetime_timezone
+from datetime import datetime
+from datetime import timezone as datetime_timezone
 from typing import Any
 
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -108,10 +110,14 @@ class SigilRootsReportDefinition(ReportDefinition):
     """Catalog configured sigil roots and their backing models."""
 
     def clean_parameters(self, parameters: dict[str, Any]) -> dict[str, Any]:
-        normalized = {"context_type": str(parameters.get("context_type") or "all").strip().lower()}
+        normalized = {
+            "context_type": str(parameters.get("context_type") or "all").strip().lower()
+        }
         allowed = {"all", *[value for value, _ in SigilRoot.Context.choices]}
         if normalized["context_type"] not in allowed:
-            raise ValidationError({"parameters": _("Select a valid sigil context filter.")})
+            raise ValidationError(
+                {"parameters": _("Select a valid sigil context filter.")}
+            )
         return normalized
 
     def execute(self, parameters: dict[str, Any]) -> ReportExecution:
@@ -153,7 +159,9 @@ class ReportProductActivityDefinition(ReportDefinition):
         try:
             limit = int(limit_raw)
         except (TypeError, ValueError):
-            errors.setdefault("parameters", []).append(str(_("Limit must be an integer.")))
+            errors.setdefault("parameters", []).append(
+                str(_("Limit must be an integer."))
+            )
             limit = 50
 
         if not 1 <= limit <= 200:
@@ -167,10 +175,16 @@ class ReportProductActivityDefinition(ReportDefinition):
                 created_since = datetime.fromisoformat(created_since_raw)
             except ValueError as exc:
                 raise ValidationError(
-                    {"parameters": _("created_since must be a valid ISO-8601 datetime.")}
+                    {
+                        "parameters": _(
+                            "created_since must be a valid ISO-8601 datetime."
+                        )
+                    }
                 ) from exc
             if timezone.is_naive(created_since):
-                created_since = timezone.make_aware(created_since, datetime_timezone.utc)
+                created_since = timezone.make_aware(
+                    created_since, datetime_timezone.utc
+                )
 
         if errors:
             raise ValidationError(errors)
@@ -183,11 +197,17 @@ class ReportProductActivityDefinition(ReportDefinition):
 
     def execute(self, parameters: dict[str, Any]) -> ReportExecution:
         started = timezone.now()
-        queryset = SQLReportProduct.objects.select_related("report").order_by("-created_at")
+        queryset = SQLReportProduct.objects.select_related("report").order_by(
+            "-created_at"
+        )
         if parameters["report_name_contains"]:
-            queryset = queryset.filter(report__name__icontains=parameters["report_name_contains"])
+            queryset = queryset.filter(
+                report__name__icontains=parameters["report_name_contains"]
+            )
         if parameters["created_since"]:
-            queryset = queryset.filter(created_at__gte=datetime.fromisoformat(parameters["created_since"]))
+            queryset = queryset.filter(
+                created_at__gte=datetime.fromisoformat(parameters["created_since"])
+            )
         queryset = queryset[: parameters["limit"]]
 
         rows = [
@@ -223,7 +243,9 @@ class ScheduledReportsDefinition(ReportDefinition):
         schedule_state = str(parameters.get("schedule_state") or "all").strip().lower()
         name_contains = str(parameters.get("name_contains") or "").strip()
         if schedule_state not in {"all", "enabled", "due"}:
-            raise ValidationError({"parameters": _("Select a valid schedule state filter.")})
+            raise ValidationError(
+                {"parameters": _("Select a valid schedule state filter.")}
+            )
         return {
             "schedule_state": schedule_state,
             "name_contains": name_contains,
@@ -238,10 +260,17 @@ class ScheduledReportsDefinition(ReportDefinition):
         if parameters["schedule_state"] == "enabled":
             queryset = queryset.filter(schedule_enabled=True)
         elif parameters["schedule_state"] == "due":
+            beat_due_ids = _due_periodic_report_ids(now=now)
             queryset = queryset.filter(
-                schedule_enabled=True,
-                schedule_interval_minutes__gt=0,
-                next_scheduled_run_at__lte=now,
+                Q(
+                    schedule_enabled=True,
+                    pk__in=beat_due_ids,
+                )
+                | Q(
+                    schedule_enabled=True,
+                    schedule_interval_minutes__gt=0,
+                    next_scheduled_run_at__lte=now,
+                )
             )
 
         rows = [
@@ -262,7 +291,10 @@ class ScheduledReportsDefinition(ReportDefinition):
             row_count=len(rows),
             executed_at=finished,
             duration_ms=(finished - started).total_seconds() * 1000,
-            details={"schedule_state": parameters["schedule_state"], "name_contains": parameters["name_contains"]},
+            details={
+                "schedule_state": parameters["schedule_state"],
+                "name_contains": parameters["name_contains"],
+            },
         )
 
 
@@ -272,7 +304,11 @@ REPORT_DEFINITIONS: tuple[ReportDefinition, ...] = (
         label=str(_("Report product activity")),
         description=str(_("Catalog generated report products with safe ORM filters.")),
         template_name="reports/sql/report_product_activity.html",
-        default_parameters={"report_name_contains": "", "created_since": "", "limit": 50},
+        default_parameters={
+            "report_name_contains": "",
+            "created_since": "",
+            "limit": 50,
+        },
     ),
     ScheduledReportsDefinition(
         key="scheduled_reports",
@@ -289,8 +325,33 @@ REPORT_DEFINITIONS: tuple[ReportDefinition, ...] = (
         default_parameters={"context_type": "all"},
     ),
 )
-REPORT_DEFINITION_MAP = {definition.key: definition for definition in REPORT_DEFINITIONS}
+REPORT_DEFINITION_MAP = {
+    definition.key: definition for definition in REPORT_DEFINITIONS
+}
 LEGACY_REPORT_TYPE = "legacy_archived"
+
+
+def _due_periodic_report_ids(*, now: datetime) -> list[int]:
+    """Return report ids whose beat-managed tasks are currently due."""
+
+    try:
+        from django_celery_beat.schedulers import ModelEntry
+    except Exception:  # pragma: no cover - optional dependency
+        return []
+
+    due_ids: list[int] = []
+    reports = SQLReport.objects.select_related("schedule_periodic_task").filter(
+        schedule_enabled=True,
+        schedule_periodic_task__enabled=True,
+    )
+    for report in reports:
+        task = report.schedule_periodic_task
+        if task is None:
+            continue
+        state = ModelEntry(task).is_due()
+        if state.is_due:
+            due_ids.append(report.pk)
+    return due_ids
 
 
 def get_report_definition(report_type: str) -> ReportDefinition:
@@ -307,11 +368,15 @@ def get_report_definition(report_type: str) -> ReportDefinition:
     """
 
     if report_type == LEGACY_REPORT_TYPE:
-        raise ValidationError({"report_type": _("Archived legacy SQL reports cannot be executed.")})
+        raise ValidationError(
+            {"report_type": _("Archived legacy SQL reports cannot be executed.")}
+        )
     try:
         return REPORT_DEFINITION_MAP[report_type]
     except KeyError as exc:
-        raise ValidationError({"report_type": _("Select a valid report type.")}) from exc
+        raise ValidationError(
+            {"report_type": _("Select a valid report type.")}
+        ) from exc
 
 
 def report_type_choices() -> list[tuple[str, str]]:
