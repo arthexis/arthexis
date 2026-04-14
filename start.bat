@@ -120,6 +120,7 @@ if errorlevel 1 (
     set EXIT_CODE=1
     goto cleanup
 )
+call :service_access_message %PORT%
 set RUNSERVER_SKIP_CHECKS=--skip-checks
 %VENV%\Scripts\python.exe manage.py runserver 0.0.0.0:%PORT% %NORELOAD% %RUNSERVER_SKIP_CHECKS%
 set EXIT_CODE=%ERRORLEVEL%
@@ -167,6 +168,12 @@ start "" /B powershell -NoProfile -Command ^
  "    }" ^
  "    Write-Host $line" ^
  "  }"
+exit /b 0
+
+:service_access_message
+set "SERVICE_PORT=%~1"
+if "%SERVICE_PORT%"=="" set "SERVICE_PORT=8888"
+echo Access the service at http://localhost:%SERVICE_PORT%. Local-only default login is admin/admin when unchanged.
 exit /b 0
 
 :cleanup
