@@ -9,6 +9,8 @@ from apps.core.entity import Entity
 from apps.groups.models import SecurityGroup
 from apps.media.models import MediaFile
 
+from .constants import GALLERY_MANAGER_GROUP_NAME
+from .permissions import can_manage_gallery
 
 class GalleryCategory(Entity):
     name = models.CharField(max_length=120)
@@ -66,7 +68,10 @@ class GalleryImage(Entity):
         verbose_name_plural = _("Gallery Images")
         constraints = [
             models.CheckConstraint(
-                condition=~(Q(owner_user__isnull=False) & Q(owner_group__isnull=False)),
+                condition=(
+                    (Q(owner_user__isnull=False) & Q(owner_group__isnull=True))
+                    | (Q(owner_user__isnull=True) & Q(owner_group__isnull=False))
+                ),
                 name="gallery_image_single_owner",
             )
         ]
@@ -79,7 +84,7 @@ class GalleryImage(Entity):
             return True
         if not getattr(user, "is_authenticated", False):
             return False
-        if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
+        if can_manage_gallery(user):
             return True
         if self.owner_user_id and self.owner_user_id == user.pk:
             return True
@@ -96,7 +101,7 @@ class GalleryImage(Entity):
             return True
         if self.owner_group_id and user.groups.filter(pk=self.owner_group_id).exists():
             return True
-        return user.groups.filter(name="Gallery Manager").exists()
+        return user.groups.filter(name=GALLERY_MANAGER_GROUP_NAME).exists()
 
 
 class GalleryCredit(Entity):
@@ -137,8 +142,14 @@ class GalleryImageTrait(Entity):
         verbose_name_plural = _("Gallery Image Traits")
         constraints = [
             models.UniqueConstraint(
+                condition=Q(category__isnull=True),
+                fields=("image", "trait", "qualitative_value"),
+                name="gallery_image_trait_unique_assignment_without_category",
+            ),
+            models.UniqueConstraint(
+                condition=Q(category__isnull=False),
                 fields=("image", "category", "trait", "qualitative_value"),
-                name="gallery_image_trait_unique_assignment",
+                name="gallery_image_trait_unique_assignment_with_category",
             )
         ]
 

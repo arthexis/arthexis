@@ -1,13 +1,11 @@
 from django.db import migrations
 
+GALLERY_MANAGER_GROUP_NAME = "Gallery Manager"
+
+
 def ensure_gallery_manager_group(apps, schema_editor):
     SecurityGroup = apps.get_model("groups", "SecurityGroup")
-    SecurityGroup.objects.get_or_create(name="Gallery Manager")
-
-
-def remove_gallery_manager_group(apps, schema_editor):
-    SecurityGroup = apps.get_model("groups", "SecurityGroup")
-    SecurityGroup.objects.filter(name="Gallery Manager").delete()
+    SecurityGroup.objects.get_or_create(name=GALLERY_MANAGER_GROUP_NAME)
 
 
 class Migration(migrations.Migration):
@@ -17,5 +15,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(ensure_gallery_manager_group, remove_gallery_manager_group),
+        migrations.RunPython(ensure_gallery_manager_group, migrations.RunPython.noop),
     ]

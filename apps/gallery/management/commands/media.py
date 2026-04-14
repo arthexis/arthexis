@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.files import File
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.groups.models import SecurityGroup
@@ -71,8 +72,8 @@ class Command(BaseCommand):
         owner_group = None
         owner_username = options.get("owner_user") or ""
         owner_group_name = options.get("owner_group") or ""
-        if owner_username and owner_group_name:
-            raise CommandError("Pick owner user or owner group, not both.")
+        if bool(owner_username) == bool(owner_group_name):
+            raise CommandError("Pick exactly one owner user or owner group.")
 
         if owner_username:
             owner_user = get_user_model().objects.filter(username=owner_username).first()
@@ -86,9 +87,7 @@ class Command(BaseCommand):
 
         file_path = options["file"]
         with open(file_path, "rb") as handle:
-            from django.core.files.base import ContentFile
-
-            uploaded_file = ContentFile(handle.read(), name=file_path.split("/")[-1])
+            uploaded_file = File(handle, name=file_path.split("/")[-1])
             image = create_gallery_image(
                 uploaded_file=uploaded_file,
                 title=options["title"],

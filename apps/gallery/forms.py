@@ -15,8 +15,10 @@ class GalleryUploadForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
-        if cleaned.get("owner_user") and cleaned.get("owner_group"):
-            raise forms.ValidationError("Choose either owner user or owner group.")
+        owner_user = cleaned.get("owner_user")
+        owner_group = cleaned.get("owner_group")
+        if bool(owner_user) == bool(owner_group):
+            raise forms.ValidationError("Choose exactly one owner user or owner group.")
         return cleaned
 
 

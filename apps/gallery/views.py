@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -11,8 +12,14 @@ from .services import create_gallery_image
 
 
 def _visible_images_for_user(user):
-    images = GalleryImage.objects.select_related("media_file", "owner_user", "owner_group").prefetch_related("credits", "categories", "trait_values__trait", "trait_values__category")
-    return [image for image in images if image.can_view(user)]
+    queryset = GalleryImage.objects.select_related("media_file", "owner_user", "owner_group")
+    if can_manage_gallery(user):
+        return queryset
+    visibility_filter = Q(include_in_public_gallery=True)
+    if getattr(user, "is_authenticated", False):
+        visibility_filter |= Q(owner_user=user)
+        visibility_filter |= Q(owner_group__in=user.groups.all())
+    return queryset.filter(visibility_filter).distinct()
 
 
 def gallery_index(request):
@@ -46,10 +53,13 @@ def gallery_detail(request, slug):
         elif action == "add-trait":
             trait_form = GalleryTraitAssignmentForm(request.POST)
             if trait_form.is_valid():
-                trait_obj = trait_form.save(commit=False)
-                trait_obj.image = image
-                trait_obj.save()
-                messages.success(request, "Trait added.")
+                _, created = image.trait_values.update_or_create(
+                    category=trait_form.cleaned_data["category"],
+                    trait=trait_form.cleaned_data["trait"],
+                    qualitative_value=trait_form.cleaned_data["qualitative_value"],
+                    defaults={"float_value": trait_form.cleaned_data["float_value"]},
+                )
+                messages.success(request, "Trait added." if created else "Trait updated.")
                 return redirect("gallery:detail", slug=image.slug)
         elif action == "add-credit":
             credit_form = GalleryCreditForm(request.POST)
@@ -131,27 +141,31 @@ def gallery_taxonomy(request):
     if request.method == "POST":
         action = request.POST.get("action", "")
         if action == "upsert-category":
-            category_pk = request.POST.get("category_pk")
-            instance = None
-            if category_pk:
+            category_form = GalleryCategoryForm(request.POST, prefix="category")
+            if category_form.is_valid():
                 from .models import GalleryCategory
 
-                instance = GalleryCategory.objects.filter(pk=category_pk).first()
-            category_form = GalleryCategoryForm(request.POST, instance=instance, prefix="category")
-            if category_form.is_valid():
-                category_form.save()
+                GalleryCategory.objects.update_or_create(
+                    slug=category_form.cleaned_data["slug"],
+                    defaults={
+                        "name": category_form.cleaned_data["name"],
+                        "description": category_form.cleaned_data["description"],
+                    },
+                )
                 messages.success(request, "Category saved.")
                 return redirect("gallery:taxonomy")
         elif action == "upsert-trait":
-            trait_pk = request.POST.get("trait_pk")
-            instance = None
-            if trait_pk:
+            trait_form = GalleryTraitForm(request.POST, prefix="trait")
+            if trait_form.is_valid():
                 from .models import GalleryTrait
 
-                instance = GalleryTrait.objects.filter(pk=trait_pk).first()
-            trait_form = GalleryTraitForm(request.POST, instance=instance, prefix="trait")
-            if trait_form.is_valid():
-                trait_form.save()
+                GalleryTrait.objects.update_or_create(
+                    slug=trait_form.cleaned_data["slug"],
+                    defaults={
+                        "name": trait_form.cleaned_data["name"],
+                        "description": trait_form.cleaned_data["description"],
+                    },
+                )
                 messages.success(request, "Trait saved.")
                 return redirect("gallery:taxonomy")
 

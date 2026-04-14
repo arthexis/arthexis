@@ -231,17 +231,25 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="galleryimagetrait",
             constraint=models.UniqueConstraint(
+                condition=models.Q(category__isnull=True),
+                fields=("image", "trait", "qualitative_value"),
+                name="gallery_image_trait_unique_assignment_without_category",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="galleryimagetrait",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(category__isnull=False),
                 fields=("image", "category", "trait", "qualitative_value"),
-                name="gallery_image_trait_unique_assignment",
+                name="gallery_image_trait_unique_assignment_with_category",
             ),
         ),
         migrations.AddConstraint(
             model_name="galleryimage",
             constraint=models.CheckConstraint(
-                condition=models.Q(
-                    ("owner_user__isnull", False),
-                    ("owner_group__isnull", False),
-                    _negated=True,
+                condition=(
+                    (models.Q(owner_user__isnull=False) & models.Q(owner_group__isnull=True))
+                    | (models.Q(owner_user__isnull=True) & models.Q(owner_group__isnull=False))
                 ),
                 name="gallery_image_single_owner",
             ),

@@ -4,9 +4,7 @@ from .constants import GALLERY_MANAGER_GROUP_NAME
 
 
 def can_manage_gallery(user) -> bool:
-    if user is None or isinstance(user, AnonymousUser):
-        return False
-    if not user.is_authenticated:
+    if user is None or isinstance(user, AnonymousUser) or not getattr(user, "is_authenticated", False):
         return False
     if user.is_staff or user.is_superuser:
         return True
