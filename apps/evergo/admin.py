@@ -6,8 +6,8 @@ from datetime import datetime, time, timedelta
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Prefetch, Q
-from django.db.models.functions import Coalesce
+from django.db.models import CharField, Prefetch, Q
+from django.db.models.functions import Cast, Coalesce
 from django.utils.html import format_html
 from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
@@ -980,7 +980,11 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     def get_queryset(self, request):
         """Limit customer rows to the signed-in owner unless user is superuser."""
         queryset = super().get_queryset(request).annotate(
-            brand_sort_value=Coalesce("latest_order__site_name", "raw_payload__orden_instalacion__marca_cargador")
+            brand_sort_value=Coalesce(
+                "latest_order__site_name",
+                Cast("raw_payload__orden_instalacion__marca_cargador", output_field=CharField()),
+                output_field=CharField(),
+            )
         )
         selected_ids = _parse_selected_ids_query_param(request)
         if selected_ids:
