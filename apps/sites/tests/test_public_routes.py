@@ -100,6 +100,15 @@ def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
     assert disabled.status_code == 404
 
 @pytest.mark.integration
+def test_legacy_language_redirect_rejects_scheme_relative_targets(client):
+    response = client.get("/en//evil.com", follow=False)
+
+    assert not (
+        response.status_code in {301, 302, 307, 308}
+        and response["Location"].startswith("//")
+    )
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("payload", "expected_status"),
     [

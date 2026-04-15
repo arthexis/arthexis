@@ -20,7 +20,12 @@ ROOT_URLPATTERNS = [
         name="admin-model-graph",
     ),
     re_path(
-        r"^(?P<lang>[a-z]{2})/(?P<rest>.*)$",
+        r"^(?P<lang>[a-z]{2})/$",
+        RedirectView.as_view(url="/", permanent=True, query_string=True),
+        name="legacy-language-prefix-root-redirect",
+    ),
+    re_path(
+        r"^(?P<lang>[a-z]{2})/(?P<rest>[^/].*)$",
         RedirectView.as_view(url="/%(rest)s", permanent=True, query_string=True),
         name="legacy-language-prefix-redirect",
     ),
