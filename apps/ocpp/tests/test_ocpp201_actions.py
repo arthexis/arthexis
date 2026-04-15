@@ -307,6 +307,9 @@ def test_firmware_actions_register_ocpp201_and_ocpp21():
         ("_handle_get_monitoring_report", "GetMonitoringReport"),
         ("_handle_set_network_profile", "SetNetworkProfile"),
         ("_handle_get_transaction_status", "GetTransactionStatus"),
+        ("_handle_install_certificate", "InstallCertificate"),
+        ("_handle_get_variables", "GetVariables"),
+        ("_handle_request_start_transaction", "RequestStartTransaction"),
         ("_handle_change_availability", "ChangeAvailability"),
         ("_handle_clear_cache", "ClearCache"),
         ("_handle_get_log", "GetLog"),
@@ -328,6 +331,76 @@ def test_csms_control_actions_register_ocpp21(handler_name, action):
 
     assert ("ocpp201", ProtocolCallModel.CSMS_TO_CP, action) in protocol_calls
     assert ("ocpp21", ProtocolCallModel.CSMS_TO_CP, action) in protocol_calls
+
+
+def test_get_variables_registers_pending_call_metadata(ws):
+    log_key = store.identity_key("CID", 1)
+    context = ActionContext("CID", 1, charger=None, ws=ws, log_key=log_key)
+    result = actions._handle_get_variables(
+        context,
+        {
+            "getVariableData": [
+                {
+                    "component": {"name": "AuthCtrlr"},
+                    "variable": {"name": "LocalAuthListEnabled"},
+                }
+            ]
+        },
+    )
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "GetVariables"
+    message_id = message[1]
+    assert message_id in store.pending_calls
+    assert store.pending_calls[message_id]["action"] == "GetVariables"
+    assert message_id in store._pending_call_handles
+
+
+def test_request_start_transaction_registers_pending_call_metadata(ws):
+    log_key = store.identity_key("CID", 1)
+    context = ActionContext("CID", 1, charger=None, ws=ws, log_key=log_key)
+    result = actions._handle_request_start_transaction(
+        context,
+        {"idToken": "TAG-REQ", "evseId": 3, "remoteStartId": 22},
+    )
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "RequestStartTransaction"
+    message_id = message[1]
+    assert message_id in store.pending_calls
+    assert store.pending_calls[message_id]["remote_start_id"] == 22
+    assert store.pending_calls[message_id]["id_token"] == "TAG-REQ"
+    assert message_id in store.transaction_requests
+
+
+@pytest.mark.django_db
+def test_install_certificate_registers_pending_call_metadata(ws):
+    charger = Charger.objects.create(charger_id="CID-CERT")
+    connector_value = charger.connector_id
+    log_key = store.identity_key(charger.charger_id, connector_value)
+    context = ActionContext(
+        charger.charger_id,
+        connector_value,
+        charger=charger,
+        ws=ws,
+        log_key=log_key,
+    )
+    result = actions._handle_install_certificate(
+        context,
+        {"certificate": "-----BEGIN CERT-----\nabc\n-----END CERT-----"},
+    )
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "InstallCertificate"
+    message_id = message[1]
+    assert message_id in store.pending_calls
+    assert store.pending_calls[message_id]["action"] == "InstallCertificate"
+    assert store.pending_calls[message_id]["operation_pk"] is not None
+    assert store.pending_calls[message_id]["installed_certificate_pk"] is not None
+    assert message_id in store._pending_call_handles
 
 @pytest.mark.django_db
 def test_get_log_supports_ocpp201(monkeypatch, ws):
