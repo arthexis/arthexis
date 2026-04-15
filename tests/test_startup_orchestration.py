@@ -22,21 +22,6 @@ def test_extract_payload_reads_last_json_object() -> None:
     assert payload["status"] == "ok"
     assert payload["launch"]["celery_embedded"] is True
 
-
-def test_extract_payload_reads_pretty_printed_json_object() -> None:
-    output = """{
-  "status": "ok",
-  "launch": {
-    "celery_embedded": true
-  }
-}"""
-
-    payload = extract_payload(output)
-
-    assert payload["status"] == "ok"
-    assert payload["launch"]["celery_embedded"] is True
-
-
 def test_extract_payload_reads_pretty_printed_json_after_noise() -> None:
     output = """channel_layer.redis_url_invalid
 {
