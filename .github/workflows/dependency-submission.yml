@@ -37,7 +37,7 @@ jobs:
       - name: Submit dependency snapshot (attempt 1)
         id: submit_snapshot_attempt_1
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@9c110eb34dee187cd9eca76a652b9f6a0ed22927
+        uses: advanced-security/component-detection-dependency-submission-action@7c766a0966c66533ae37f76556cf9a33be50e5f8
         with:
           detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
 
@@ -49,7 +49,7 @@ jobs:
         id: submit_snapshot_attempt_2
         if: steps.submit_snapshot_attempt_1.outcome == 'failure'
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@9c110eb34dee187cd9eca76a652b9f6a0ed22927
+        uses: advanced-security/component-detection-dependency-submission-action@7c766a0966c66533ae37f76556cf9a33be50e5f8
         with:
           detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
 
@@ -61,7 +61,7 @@ jobs:
         id: submit_snapshot_attempt_3
         if: steps.submit_snapshot_attempt_2.outcome == 'failure'
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@9c110eb34dee187cd9eca76a652b9f6a0ed22927
+        uses: advanced-security/component-detection-dependency-submission-action@7c766a0966c66533ae37f76556cf9a33be50e5f8
         with:
           detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
 
