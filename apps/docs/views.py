@@ -13,6 +13,11 @@ from django.urls import NoReverseMatch, reverse
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 
+from apps.groups.constants import (
+    PRODUCT_DEVELOPER_GROUP_NAME,
+    RELEASE_MANAGER_GROUP_NAME,
+)
+from apps.groups.decorators import security_group_required
 from apps.nodes.models import Node
 from apps.nodes.utils import FeatureChecker
 from apps.modules.models import Module
@@ -43,9 +48,20 @@ FULL_CONTENT_DEFAULT_DOCUMENTS = {
 }
 
 
+DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES = (
+    PRODUCT_DEVELOPER_GROUP_NAME,
+    RELEASE_MANAGER_GROUP_NAME,
+)
+
+
 def _show_docs_navigation_link(*, request, landing) -> bool:
     del landing
-    return bool(getattr(request, "user", None) and request.user.is_authenticated)
+    user = getattr(request, "user", None)
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    return user.groups.filter(name__in=DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES).exists()
 
 
 def _is_allowed_doc_path(path: Path) -> bool:
@@ -818,6 +834,7 @@ def render_readme_page(
 
 
 @module_pill_link_validation(_show_docs_navigation_link)
+@security_group_required(*DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES)
 @login_required(login_url="pages:login")
 def document_library(request):
     """Render the developer documentation library index."""
@@ -834,6 +851,7 @@ def _render_missing_document(request, *, doc: str | None, prepend_docs: bool) ->
 
 @module_pill_link_validation(_show_docs_navigation_link)
 @never_cache
+@security_group_required(*DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES)
 @login_required(login_url="pages:login")
 def readme(request, doc=None, prepend_docs: bool = False):
     try:
