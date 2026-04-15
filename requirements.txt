@@ -64,7 +64,7 @@ Twisted==25.5.0
 txaio==25.9.2
 typing_extensions==4.15.0
 urllib3~=2.6.3
-weasyprint==66.0
+weasyprint==68.0
 webauthn==2.7.1
 websocket-client==1.8.0
 websockets>=15,<17
