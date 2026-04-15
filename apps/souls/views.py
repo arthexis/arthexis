@@ -26,7 +26,7 @@ from .services import build_soul_package
 from .services.checkout import CHECKOUT_SOUL_KEY
 
 REG_SESSION_KEY = "soul_registration_session_id"
-SOUL_SURVEY_TITLE = "Soul Registration"
+SOUL_SURVEY_TITLE = "Soul Seed Registration"
 
 
 @require_GET
@@ -68,7 +68,7 @@ def register_offering(request: HttpRequest) -> HttpResponse:
     try:
         registration = _load_registration_session(request)
     except ValidationError:
-        messages.warning(request, "Start a soul registration first.")
+        messages.warning(request, "Start a Soul Seed registration first.")
         return redirect("souls:register_landing")
 
     form = SoulOfferingUploadForm(request.POST or None, request.FILES or None)
@@ -88,7 +88,7 @@ def register_survey(request: HttpRequest) -> HttpResponse:
     try:
         registration = _load_registration_session(request)
     except ValidationError:
-        messages.warning(request, "Start a soul registration first.")
+        messages.warning(request, "Start a Soul Seed registration first.")
         return redirect("souls:register_landing")
 
     if not registration.offering_soul_id:
@@ -161,8 +161,8 @@ def _send_verification_email(request: HttpRequest, registration: SoulRegistratio
         reverse("souls:register_verify", kwargs={"session_id": registration.id, "token": token})
     )
     mailer.send(
-        subject="Verify your Soul Registration",
-        message=f"Verify your soul registration: {verification_url}",
+        subject="Verify your Soul Seed Registration",
+        message=f"Verify your Soul Seed registration: {verification_url}",
         recipient_list=[registration.email],
         fail_silently=True,
     )
@@ -173,7 +173,7 @@ def register_complete(request: HttpRequest) -> HttpResponse:
     try:
         registration = _load_registration_session(request)
     except ValidationError:
-        messages.warning(request, "Start a soul registration first.")
+        messages.warning(request, "Start a Soul Seed registration first.")
         return redirect("souls:register_landing")
     return render(request, "souls/register_complete.html", {"registration": registration})
 
@@ -252,7 +252,7 @@ def register_verify(request: HttpRequest, session_id: int, token: str) -> HttpRe
     if backend:
         login(request, user, backend=backend)
     request.session.pop(REG_SESSION_KEY, None)
-    messages.success(request, "Soul registration completed.")
+    messages.success(request, "Soul Seed registration completed.")
     return redirect("souls:me")
 
 
@@ -278,5 +278,5 @@ def soul_download(request: HttpRequest) -> HttpResponse:
 def attach_to_checkout(request: HttpRequest) -> HttpResponse:
     soul = get_object_or_404(Soul, user=request.user, soul_id=request.POST.get("soul_id", ""))
     request.session[CHECKOUT_SOUL_KEY] = soul.id
-    messages.success(request, "Soul will be attached at checkout for Soul Card fulfillment.")
+    messages.success(request, "Soul Seed will be preloaded into eligible cards at checkout.")
     return redirect("shop:checkout")

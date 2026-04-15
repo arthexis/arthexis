@@ -17,5 +17,5 @@ class SoulAdmin(admin.ModelAdmin):
 
 @admin.register(ShopOrderSoulAttachment)
 class ShopOrderSoulAttachmentAdmin(admin.ModelAdmin):
-    list_display = ("order_item", "soul", "status")
+    list_display = ("order_item", "soul", "preload_quantity", "status")
     search_fields = ("order_item__order__order_number", "soul__soul_id")

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Soul Registration</h1>
+<h1>Soul Seed Registration</h1>
 <form method="post" action="{% url 'souls:register_start' %}">
   {% csrf_token %}
   {{ start_form.as_p }}

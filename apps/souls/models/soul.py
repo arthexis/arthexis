@@ -107,9 +107,9 @@ class Soul(Entity):
         super().clean()
         encoded = json.dumps(self.package or {}, sort_keys=True, separators=(",", ":")).encode("utf-8")
         if len(encoded) > PACKAGE_MAX_BYTES:
-            raise ValidationError({"package": "Soul package exceeds 512 KB limit."})
+            raise ValidationError({"package": "Soul Seed package exceeds 512 KB limit."})
         if self.package_bytes and len(self.package_bytes) > PACKAGE_MAX_BYTES:
-            raise ValidationError({"package_bytes": "Soul package bytes exceed 512 KB limit."})
+            raise ValidationError({"package_bytes": "Soul Seed package bytes exceed 512 KB limit."})
 
 
 class ShopOrderSoulAttachment(Entity):
@@ -128,6 +128,7 @@ class ShopOrderSoulAttachment(Entity):
         on_delete=models.PROTECT,
         related_name="order_attachments",
     )
+    preload_quantity = models.PositiveIntegerField(default=1)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.PENDING)
     failure_reason = models.CharField(max_length=255, blank=True, default="")
 

@@ -26,7 +26,7 @@ class SoulRegistrationViewsTests(TestCase):
             structural_traits={},
             type_traits={},
         )
-        survey = Survey.objects.create(title="Soul Registration", is_active=True)
+        survey = Survey.objects.create(title="Soul Seed Registration", is_active=True)
         response = SurveyResponse.objects.create(survey=survey, participant_token="existing-token")
         Soul.objects.create(
             user=user,
@@ -61,7 +61,7 @@ class SoulRegistrationViewsTests(TestCase):
     def test_register_verify_blocks_claim_when_existing_soul_id_differs(self):
         user_model = get_user_model()
         user = user_model.objects.create_user(username="claimed-user", email="claimed@example.com", password="x")
-        survey = Survey.objects.create(title="Soul Registration", is_active=True)
+        survey = Survey.objects.create(title="Soul Seed Registration", is_active=True)
         question = SurveyQuestion.objects.create(
             survey=survey,
             prompt="Axis",
@@ -118,7 +118,7 @@ class SoulRegistrationViewsTests(TestCase):
         user_model = get_user_model()
         first_user = user_model.objects.create_user(username="dupe-a", email="dupe@example.com", password="x")
         user_model.objects.create_user(username="dupe-b", email="dupe@example.com", password="x")
-        survey = Survey.objects.create(title="Soul Registration", is_active=True)
+        survey = Survey.objects.create(title="Soul Seed Registration", is_active=True)
         question = SurveyQuestion.objects.create(
             survey=survey,
             prompt="Axis",
@@ -164,7 +164,7 @@ class SoulRegistrationViewsTests(TestCase):
     def test_register_verify_allows_claim_when_existing_soul_id_matches(self):
         user_model = get_user_model()
         user = user_model.objects.create_user(username="matching-user", email="matching@example.com", password="x")
-        survey = Survey.objects.create(title="Soul Registration", is_active=True)
+        survey = Survey.objects.create(title="Soul Seed Registration", is_active=True)
         question = SurveyQuestion.objects.create(
             survey=survey,
             prompt="Axis",

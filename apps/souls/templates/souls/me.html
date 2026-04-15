@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Your Soul</h1>
-<p>Soul ID: {{ soul.soul_id }}</p>
-<a href="{% url 'souls:download' %}">Download Soul Package</a>
+<h1>Your Soul Seed</h1>
+<p>Soul Seed ID: {{ soul.soul_id }}</p>
+<a href="{% url 'souls:download' %}">Download Soul Seed Package</a>
 <form method="post" action="{% url 'souls:attach_to_checkout' %}">
   {% csrf_token %}
   <input type="hidden" name="soul_id" value="{{ soul.soul_id }}" />
-  <button type="submit">Attach Soul to Checkout</button>
+  <button type="submit">Attach Soul Seed to Checkout</button>
 </form>
 {% endblock %}

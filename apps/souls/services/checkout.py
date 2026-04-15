@@ -18,6 +18,22 @@ def attach_soul_to_order_items(*, request: HttpRequest, order_items: list) -> No
         return
 
     for item in order_items:
-        ShopOrderSoulAttachment.objects.get_or_create(order_item=item, soul=soul)
+        attachment, created = ShopOrderSoulAttachment.objects.get_or_create(
+            order_item=item,
+            defaults={"soul": soul, "preload_quantity": max(1, int(item.quantity or 1))},
+        )
+        if created:
+            continue
+
+        next_quantity = max(1, int(item.quantity or 1))
+        update_fields: list[str] = []
+        if attachment.soul_id != soul.id:
+            attachment.soul = soul
+            update_fields.append("soul")
+        if attachment.preload_quantity != next_quantity:
+            attachment.preload_quantity = next_quantity
+            update_fields.append("preload_quantity")
+        if update_fields:
+            attachment.save(update_fields=update_fields)
 
     request.session.pop(CHECKOUT_SOUL_KEY, None)
