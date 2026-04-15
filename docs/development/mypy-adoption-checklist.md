@@ -61,15 +61,9 @@ Search these patterns before claiming a package as MyPy-owned:
 - `from typing import Any`
 - unparameterized `list`, `dict`, `set`, and `tuple` annotations
 
-The backlog summaries below are a snapshot taken on 2026-03-21 with `rg` so reviewers can refresh them as coverage expands instead of treating them as evergreen totals.
+Treat backlog counts as on-demand metrics, not fixed targets in this checklist. Recompute them when reviewing rollout scope changes.
 
 ### `apps/protocols/`
-
-Backlog snapshot as of 2026-03-21:
-
-- `TYPE_CHECKING`: 0
-- `from typing import Any`: 0
-- unparameterized collections: 6
 
 Small follow-ups:
 
@@ -77,12 +71,6 @@ Small follow-ups:
 - Replace runtime tuple and set checks in `apps/protocols/registry.py` with narrower aliases where practical.
 
 ### `apps/repos/`
-
-Backlog snapshot as of 2026-03-21 (with `from typing import Any` and unparameterized collection counts manually adjusted after that snapshot to reflect the `release_management.py` rollout):
-
-- `TYPE_CHECKING`: 8
-- `from typing import Any`: 3
-- unparameterized collections: 20
 
 Small follow-ups:
 
@@ -93,18 +81,26 @@ Small follow-ups:
 
 ### Selected `apps/core/` modules
 
-Backlog snapshot as of 2026-03-21 for the current service and registry-heavy targets:
-
-- `TYPE_CHECKING`: 0
-- `from typing import Any`: 2
-- unparameterized collections: 7
-
 Small follow-ups:
 
 - `apps/core/modeling/events.py`
 - `apps/core/modeling/registry.py`
 
 Keep broader `apps/core/system/ui/` rollout tracked separately until translation and uptime helpers are typed cleanly.
+
+### Refresh procedure (on demand)
+
+When maintainers need current backlog counts, run these exact patterns against the package under review:
+
+- `TYPE_CHECKING`
+- `from typing import Any`
+- `(?::|->)\s*\b(list|dict|set|tuple)\b(?!\s*\[)` (requires `rg -nP` and shell quoting)
+
+Use this workflow:
+
+1. run the three searches for each target package (`rg -n` for the first two, `rg -nP '(?::|->)\s*\b(list|dict|set|tuple)\b(?!\s*\[)'` for the third)
+2. count each result set for the current totals
+3. record refreshed totals and the refresh date in the optional history section below, not in the evergreen checklist sections above
 
 ## Regression tracking during rollout
 
@@ -133,3 +129,27 @@ Keep the signal useful after each rollout step:
 4. leave excluded apps out of the blocking workflow until their checklist step is complete
 
 If a warning turns out to be persistent noise, document the exact module and reason next to the corresponding override so later rollout work can remove it deliberately instead of normalizing broad ignores.
+
+## Optional history (point-in-time snapshots)
+
+Use this section for dated snapshots when a review or release needs an auditable before/after comparison. Keep entries date-stamped and append-only.
+
+### Snapshot: 2026-03-21
+
+`apps/protocols/`
+
+- `TYPE_CHECKING`: 0
+- `from typing import Any`: 0
+- unparameterized collections: 6
+
+`apps/repos/`
+
+- `TYPE_CHECKING`: 8
+- `from typing import Any`: 3
+- unparameterized collections: 20
+
+`apps/core/` selected modules
+
+- `TYPE_CHECKING`: 0
+- `from typing import Any`: 2
+- unparameterized collections: 7
