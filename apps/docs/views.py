@@ -36,6 +36,8 @@ DOCUMENT_LIBRARY_CACHE_TIMEOUT = 300
 DOCS_CANONICAL_HOST_OVERRIDES = {
     "m.arthexis.com": "arthexis.com",
 }
+LIBRARY_ROOT_FOLDER_LABEL = "root"
+LIBRARY_ROOT_QUERY_PARAMETER = "virtual_root"
 FULL_CONTENT_DEFAULT_DOCUMENTS = {
     "docs/development/install-lifecycle-scripts-manual.md",
 }
@@ -308,6 +310,10 @@ def _build_library_query_url(parameter: str, prefix: str) -> str:
     return f"{reverse('docs:docs-library')}?{query}" if query else reverse("docs:docs-library")
 
 
+def _build_virtual_root_query_url(parameter: str) -> str:
+    return f"{reverse('docs:docs-library')}?{urlencode({parameter: '1'})}"
+
+
 def _build_library_section(
     files: list[Path],
     *,
@@ -317,14 +323,31 @@ def _build_library_section(
     title: str,
     prefix: str,
     parameter: str,
+    virtual_root_selected: bool,
 ) -> dict[str, object]:
     """Build a section index scoped to one folder level."""
 
     folders: set[str] = set()
     items: list[dict[str, str]] = []
+    root_items: list[dict[str, str]] = []
+    show_root_folder = prefix == ""
+    in_virtual_root_folder = virtual_root_selected and prefix == ""
 
     for path in files:
         relative = path.relative_to(root).as_posix()
+        if in_virtual_root_folder:
+            if "/" in relative or path.stem.lower() == "index":
+                continue
+            items.append(
+                _build_library_item(
+                    path,
+                    root,
+                    route_name,
+                    doc_path_prefix=doc_path_prefix,
+                    label=Path(relative).name,
+                )
+            )
+            continue
         if prefix:
             if relative == prefix:
                 if path.stem.lower() == "index":
@@ -350,7 +373,7 @@ def _build_library_section(
             continue
         if path.stem.lower() == "index":
             continue
-        items.append(
+        root_items.append(
             _build_library_item(
                 path,
                 root,
@@ -372,7 +395,20 @@ def _build_library_section(
         }
         for folder in sorted(folders)
     ]
+    if show_root_folder and root_items:
+        folder_items.insert(
+            0,
+            {
+                "kind": "folder",
+                "label": f"{LIBRARY_ROOT_FOLDER_LABEL}/",
+                "url": _build_virtual_root_query_url(f"{parameter}_{LIBRARY_ROOT_QUERY_PARAMETER}"),
+                "description": "Browse root-level documents.",
+            },
+        )
+
     folder_items.extend(item for item in items if item["url"])
+    if prefix != "":
+        folder_items.extend(item for item in root_items if item["url"])
 
     section: dict[str, object] = {
         "title": title,
@@ -380,8 +416,13 @@ def _build_library_section(
     }
     if prefix:
         parent_prefix = prefix.rsplit("/", 1)[0] if "/" in prefix else ""
+        if in_virtual_root_folder:
+            parent_prefix = ""
         section["current_prefix"] = prefix
         section["parent_url"] = _build_library_query_url(parameter, parent_prefix)
+    elif in_virtual_root_folder:
+        section["current_prefix"] = LIBRARY_ROOT_FOLDER_LABEL
+        section["parent_url"] = _build_library_query_url(parameter, "")
     return section
 
 
@@ -390,6 +431,8 @@ def _collect_document_library(
     *,
     docs_prefix: str = "",
     apps_docs_prefix: str = "",
+    docs_virtual_root_selected: bool = False,
+    apps_docs_virtual_root_selected: bool = False,
     docs_files: list[Path] | None = None,
     apps_docs_files: list[Path] | None = None,
 ) -> list[dict[str, object]]:
@@ -410,6 +453,7 @@ def _collect_document_library(
                 title="Documentation",
                 prefix=_normalize_library_prefix(docs_prefix),
                 parameter="docs_path",
+                virtual_root_selected=docs_virtual_root_selected,
             )
         )
 
@@ -426,6 +470,7 @@ def _collect_document_library(
                 title="Application Docs",
                 prefix=_normalize_library_prefix(apps_docs_prefix),
                 parameter="apps_docs_path",
+                virtual_root_selected=apps_docs_virtual_root_selected,
             )
         )
 
@@ -537,6 +582,8 @@ def _get_cached_document_library(
     *,
     docs_prefix: str = "",
     apps_docs_prefix: str = "",
+    docs_virtual_root_selected: bool = False,
+    apps_docs_virtual_root_selected: bool = False,
 ) -> list[dict[str, object]]:
     """Return a cached library index to avoid repeated filesystem scans."""
 
@@ -545,6 +592,8 @@ def _get_cached_document_library(
         root_base,
         docs_prefix=docs_prefix,
         apps_docs_prefix=apps_docs_prefix,
+        docs_virtual_root_selected=docs_virtual_root_selected,
+        apps_docs_virtual_root_selected=apps_docs_virtual_root_selected,
         docs_files=docs_paths,
         apps_docs_files=apps_docs_paths,
     )
@@ -561,10 +610,16 @@ def _render_document_library(
     root_base = Path(settings.BASE_DIR).resolve()
     docs_prefix = request.GET.get("docs_path", "")
     apps_docs_prefix = request.GET.get("apps_docs_path", "")
+    docs_virtual_root_selected = request.GET.get(f"docs_path_{LIBRARY_ROOT_QUERY_PARAMETER}") == "1"
+    apps_docs_virtual_root_selected = (
+        request.GET.get(f"apps_docs_path_{LIBRARY_ROOT_QUERY_PARAMETER}") == "1"
+    )
     sections = _get_cached_document_library(
         root_base,
         docs_prefix=docs_prefix,
         apps_docs_prefix=apps_docs_prefix,
+        docs_virtual_root_selected=docs_virtual_root_selected,
+        apps_docs_virtual_root_selected=apps_docs_virtual_root_selected,
     )
     docs_paths, apps_docs_paths = _get_cached_document_library_paths(root_base)
     all_documents = _build_library_documents(
@@ -579,22 +634,23 @@ def _render_document_library(
         doc_path_prefix="apps/docs/",
     )
     indexed_groups = _build_indexed_document_groups(request, all_documents)
-    indexed_doc_paths = {
-        assignment_item["doc_path"]
-        for group in indexed_groups
-        for assignment_item in group["items"]
-    }
-    other_documents = [
-        item for item in all_documents if item["doc_path"] not in indexed_doc_paths
-    ]
     context = {
         "canonical_url": _build_canonical_url(request),
+        "document_index_admin_add_url": "",
+        "document_index_admin_changelist_url": "",
         "indexed_groups": indexed_groups,
-        "other_documents": other_documents,
         "page_url": request.build_absolute_uri(),
         "sections": sections,
         "title": "Developer Documents",
     }
+    if request.user.is_staff:
+        try:
+            context["document_index_admin_changelist_url"] = reverse(
+                "admin:docs_documentindex_changelist"
+            )
+            context["document_index_admin_add_url"] = reverse("admin:docs_documentindex_add")
+        except NoReverseMatch:
+            pass
     if missing_document:
         context["missing_document"] = missing_document
     response = render(request, "docs/library.html", context, status=status)

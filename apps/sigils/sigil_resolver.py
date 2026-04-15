@@ -3,7 +3,7 @@ import concurrent.futures
 import json
 import logging
 import os
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -129,6 +129,21 @@ def _get_sigil_root(prefix: str) -> SigilRoot | None:
 
 def _candidate_names(name: str) -> list[str]:
     return _identifier_variants(name)
+
+
+def _normalize_allowed_roots(allowed_roots: Collection[str] | None) -> set[str] | None:
+    """Normalize an optional root allow-list for case-insensitive checks."""
+    if allowed_roots is None:
+        return None
+    return {_normalize_name(root).upper() for root in allowed_roots if root}
+
+
+def get_user_safe_sigil_roots() -> set[str]:
+    """Return sigil roots marked safe for user-facing resolution."""
+    return {
+        _normalize_name(prefix).upper()
+        for prefix in SigilRoot.objects.filter(is_user_safe=True).values_list("prefix", flat=True)
+    }
 
 
 def _stringify_value(value) -> str:
@@ -737,6 +752,7 @@ def _resolve_entity_root(
 def _build_resolution_context(
     token: str,
     current: models.Model | None,
+    allowed_roots: set[str] | None = None,
 ) -> ResolutionContext:
     """Build normalized token resolution context from a raw token."""
     token_parts = _parse_token_parts(token)
@@ -745,9 +761,17 @@ def _build_resolution_context(
     normalized_key = _normalize_name(token_parts.key) if token_parts.key else None
     key_upper = normalized_key.upper() if normalized_key else None
     key_lower = normalized_key.lower() if normalized_key else None
-    param = resolve_sigils(token_parts.param, current) if token_parts.param else token_parts.param
+    param = (
+        resolve_sigils(token_parts.param, current, allowed_roots=allowed_roots)
+        if token_parts.param
+        else token_parts.param
+    )
     param_args = tuple(param.split(",")) if param else ()
-    instance_id = resolve_sigils(token_parts.instance_id, current) if token_parts.instance_id else token_parts.instance_id
+    instance_id = (
+        resolve_sigils(token_parts.instance_id, current, allowed_roots=allowed_roots)
+        if token_parts.instance_id
+        else token_parts.instance_id
+    )
     return ResolutionContext(
         current=current,
         instance_id=instance_id,
@@ -794,12 +818,19 @@ CONTEXT_RESOLVERS = {
 }
 
 
-def _resolve_token(token: str, current: models.Model | None = None) -> str:
-    """Resolve a single sigil token to its string value with graceful degradation."""
+def _resolve_token_with_policy(
+    token: str,
+    current: models.Model | None = None,
+    allowed_roots: set[str] | None = None,
+) -> str:
+    """Resolve one sigil token while enforcing an optional root allow-list."""
     try:
-        context = _build_resolution_context(token, current)
+        context = _build_resolution_context(token, current, allowed_roots=allowed_roots)
     except TokenParseError:
         return _failed_resolution(token)
+
+    if allowed_roots is not None and context.lookup_root not in allowed_roots:
+        return _failed_resolution(context.original_token)
 
     if context.lookup_root == "OBJECT" and context.current is not None:
         return _resolve_dynamic_root(
@@ -840,7 +871,12 @@ def _resolve_token(token: str, current: models.Model | None = None) -> str:
         return _failed_resolution(context.original_token)
 
 
-def resolve_sigils(text: str, current: models.Model | None = None) -> str:
+def resolve_sigils(
+    text: str,
+    current: models.Model | None = None,
+    *,
+    allowed_roots: Collection[str] | None = None,
+) -> str:
     """Resolve every sigil token found in the given text.
 
     Args:
@@ -850,20 +886,32 @@ def resolve_sigils(text: str, current: models.Model | None = None) -> str:
     Returns:
         The input text with each recognized sigil token replaced by its resolved value.
     """
+    normalized_allowed_roots = _normalize_allowed_roots(allowed_roots)
     parts: list[str] = []
     cursor = 0
     for span in scan_sigil_tokens(text):
         if span.start > cursor:
             parts.append(text[cursor:span.start])
         token = text[span.start + 1 : span.end - 1]
-        parts.append(_resolve_token(token, current))
+        parts.append(
+            _resolve_token_with_policy(
+                token,
+                current,
+                allowed_roots=normalized_allowed_roots,
+            )
+        )
         cursor = span.end
     if cursor < len(text):
         parts.append(text[cursor:])
     return "".join(parts)
 
 
-def resolve_sigil(sigil: str, current: models.Model | None = None) -> str:
+def resolve_sigil(
+    sigil: str,
+    current: models.Model | None = None,
+    *,
+    allowed_roots: Collection[str] | None = None,
+) -> str:
     """Resolve a single sigil-bearing string.
 
     Args:
@@ -873,4 +921,4 @@ def resolve_sigil(sigil: str, current: models.Model | None = None) -> str:
     Returns:
         The resolved sigil text.
     """
-    return resolve_sigils(sigil, current)
+    return resolve_sigils(sigil, current, allowed_roots=allowed_roots)
