@@ -9,13 +9,14 @@ from .models import CustomSigil, SigilRoot
 class CustomSigilAdminForm(forms.ModelForm):
     class Meta:
         model = CustomSigil
-        fields = ["prefix", "content_type"]
+        fields = ["prefix", "content_type", "is_user_safe"]
 
 
 @admin.register(CustomSigil)
 class CustomSigilAdmin(EntityModelAdmin):
     form = CustomSigilAdminForm
-    list_display = ("prefix", "content_type")
+    list_display = ("prefix", "content_type", "is_user_safe")
+    list_filter = ("is_user_safe",)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -37,11 +38,12 @@ class SigilRootAdmin(EntityModelAdmin):
         "prefix",
         "context_type",
         "content_type",
+        "is_user_safe",
         "is_built_in",
         "is_seed_data",
         "is_deleted",
     )
-    list_filter = ("context_type", "is_seed_data", "is_deleted")
+    list_filter = ("context_type", "is_user_safe", "is_seed_data", "is_deleted")
     search_fields = ("prefix",)
 
     @admin.display(boolean=True, description="Is Built-In")

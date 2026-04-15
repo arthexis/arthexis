@@ -209,3 +209,47 @@ def test_resolve_sigils_table_driven_aggregate_requests(user_root, token, expect
     resolved = sigil_resolver.resolve_sigils(token)
     expected_value = expected if isinstance(expected, str) else expected(baseline_total, user_ids)
     assert resolved == expected_value
+
+
+@pytest.mark.django_db
+def test_resolve_sigils_allowed_roots_limits_resolution(monkeypatch):
+    monkeypatch.setenv("SIGIL_POLICY_TEST", "resolved")
+    SigilRoot.objects.update_or_create(
+        prefix="ENV",
+        defaults={"context_type": SigilRoot.Context.CONFIG},
+    )
+
+    assert (
+        sigil_resolver.resolve_sigils(
+            "[ENV.SIGIL_POLICY_TEST]",
+            allowed_roots={"REQ"},
+        )
+        == "[ENV.SIGIL_POLICY_TEST]"
+    )
+    assert (
+        sigil_resolver.resolve_sigils(
+            "[ENV.SIGIL_POLICY_TEST]",
+            allowed_roots={"ENV"},
+        )
+        == "resolved"
+    )
+
+
+@pytest.mark.django_db
+def test_get_user_safe_sigil_roots_normalizes_prefixes():
+    SigilRoot.objects.update_or_create(
+        prefix="safe-root",
+        defaults={
+            "context_type": SigilRoot.Context.REQUEST,
+            "is_user_safe": True,
+        },
+    )
+    SigilRoot.objects.update_or_create(
+        prefix="unsafe_root",
+        defaults={
+            "context_type": SigilRoot.Context.REQUEST,
+            "is_user_safe": False,
+        },
+    )
+
+    assert sigil_resolver.get_user_safe_sigil_roots() == {"SAFE_ROOT"}

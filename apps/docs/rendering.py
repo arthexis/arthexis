@@ -8,7 +8,7 @@ import bleach
 import markdown
 
 from apps.docs import assets
-from apps.sigils.sigil_resolver import resolve_sigils
+from apps.sigils.sigil_resolver import get_user_safe_sigil_roots, resolve_sigils
 
 
 MARKDOWN_EXTENSIONS = ["toc", "tables", "mdx_truly_sane_lists", "fenced_code"]
@@ -181,7 +181,7 @@ def read_document_text(file_path: Path) -> str:
     """Read ``file_path`` as UTF-8 text, replacing undecodable bytes."""
 
     raw_text = file_path.read_text(encoding="utf-8", errors="replace")
-    return resolve_sigils(raw_text)
+    return resolve_sigils(raw_text, allowed_roots=get_user_safe_sigil_roots())
 
 
 def render_document_file(file_path: Path) -> tuple[str, str]:

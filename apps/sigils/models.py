@@ -23,6 +23,12 @@ class SigilRoot(Entity):
         REQUEST = "request", "Request"
 
     prefix = models.CharField(max_length=50, unique=True)
+    is_user_safe = models.BooleanField(
+        default=False,
+        help_text=_(
+            "Allow this sigil root in user-facing rendering contexts."
+        ),
+    )
     context_type = models.CharField(max_length=20, choices=Context.choices)
     content_type = models.ForeignKey(
         ContentType, null=True, blank=True, on_delete=models.CASCADE
