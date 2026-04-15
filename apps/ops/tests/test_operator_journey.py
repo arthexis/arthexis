@@ -424,6 +424,52 @@ class OperatorJourneyViewTests(TestCase):
         )
         self.assertContains(response, "Operational superuser upgraded")
 
+    @override_settings(
+        AUTH_PASSWORD_VALIDATORS=[
+            {
+                "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+                "OPTIONS": {"min_length": 16},
+            }
+        ]
+    )
+    def test_provision_step_rejects_custom_password_that_fails_validators(self):
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+        )
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+        )
+
+        response = self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            {
+                "username": "ops-provisioned-weak-password",
+                "email": "ops-provisioned-weak-password@example.com",
+                "security_groups": [self.group.pk],
+                "password_mode": "custom",
+                "password": "too-short",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "This password is too short. It must contain at least 16 characters.",
+        )
+        self.assertFalse(
+            get_user_model()
+            .objects.filter(username="ops-provisioned-weak-password")
+            .exists()
+        )
+
     def test_provision_step_post_rejects_when_not_current_required_step(self):
         blocked_step = OperatorJourneyStep.objects.create(
             journey=self.journey,
