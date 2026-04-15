@@ -4,11 +4,23 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 
 import pytest
+from django.contrib import admin
 from django.test import override_settings
 from django.urls import reverse
 
 from apps.imager.admin import _probe_download_url
 from apps.imager.models import RaspberryPiImageArtifact
+
+
+@pytest.mark.django_db
+def test_imager_admin_has_no_duplicate_dashboard_create_action():
+    """Regression: dashboard action wiring should not duplicate the create-image shortcut."""
+
+    model_admin = admin.site._registry[RaspberryPiImageArtifact]
+
+    assert not hasattr(model_admin, "dashboard_actions")
+    assert not hasattr(model_admin, "create_rpi_image_dashboard_action")
+
 
 class _ProbeResponse:
     headers: dict[str, str] = {}

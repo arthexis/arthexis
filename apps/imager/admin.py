@@ -234,7 +234,6 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
 
     change_list_template = "django_object_actions/change_list.html"
     changelist_actions = ("create_rpi_image",)
-    dashboard_actions = ("create_rpi_image_dashboard_action",)
     list_display = ("name", "target", "output_filename", "download_uri", "created_at")
     list_filter = ("target", "created_at")
     search_fields = ("name", "target", "output_filename", "download_uri", "base_image_uri")
@@ -258,9 +257,6 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
     def get_changelist_actions(self, request):
         return list(self.changelist_actions)
 
-    def get_dashboard_actions(self, request):
-        return list(self.dashboard_actions)
-
     def create_rpi_image(self, request, queryset=None):
         return HttpResponseRedirect(reverse("admin:imager_raspberrypiimageartifact_create_rpi_image"))
 
@@ -268,14 +264,6 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
     create_rpi_image.short_description = _("Create RPI image")
     create_rpi_image.changelist = True
     create_rpi_image.requires_queryset = False
-
-    def create_rpi_image_dashboard_action(self, request, queryset=None):
-        return self.create_rpi_image(request, queryset)
-
-    create_rpi_image_dashboard_action.label = _("Create RPI image")
-    create_rpi_image_dashboard_action.short_description = _("Create RPI image")
-    create_rpi_image_dashboard_action.requires_queryset = False
-    create_rpi_image_dashboard_action.dashboard_url = "admin:imager_raspberrypiimageartifact_create_rpi_image"
 
     def create_rpi_image_view(self, request: HttpRequest) -> HttpResponse:
         if not self.has_add_permission(request):
