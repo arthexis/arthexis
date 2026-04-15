@@ -314,47 +314,38 @@ def _build_virtual_root_query_url(parameter: str) -> str:
     return f"{reverse('docs:docs-library')}?{urlencode({parameter: '1'})}"
 
 
-def _build_folder_blurb(files: list[Path], root: Path, folder_prefix: str) -> str:
+def _pluralize(count: int, singular: str) -> str:
+    """Return the singular/plural form for a count."""
+
+    return singular if count == 1 else f"{singular}s"
+
+
+def _preview_files(names: list[str]) -> tuple[str, str]:
+    """Build a deterministic two-item preview and overflow suffix."""
+
+    preview = ", ".join(sorted(names)[:2])
+    suffix = "…" if len(names) > 2 else ""
+    return preview, suffix
+
+
+def _build_folder_blurb(direct_files: list[str], nested_count: int) -> str:
     """Return a short, data-backed summary for a folder entry."""
 
-    folder_root = f"{folder_prefix}/"
-    direct_files: list[str] = []
-    nested_folders: set[str] = set()
-
-    for path in files:
-        relative = path.relative_to(root).as_posix()
-        if not relative.startswith(folder_root):
-            continue
-        scoped_relative = relative.removeprefix(folder_root)
-        if "/" in scoped_relative:
-            nested_folders.add(scoped_relative.split("/", 1)[0])
-            continue
-        if path.stem.lower() == "index":
-            continue
-        direct_files.append(Path(scoped_relative).name)
-
     direct_count = len(direct_files)
-    nested_count = len(nested_folders)
     total_documents = direct_count + nested_count
     if total_documents == 0:
         return "Folder overview and related references."
 
     if direct_count == 0:
-        return (
-            f"{nested_count} nested folder"
-            f"{'' if nested_count == 1 else 's'} with additional documentation."
-        )
+        return f"{nested_count} nested {_pluralize(nested_count, 'folder')} with additional documentation."
 
-    preview_files = sorted(direct_files)[:2]
-    preview = ", ".join(preview_files)
-    suffix = "…" if direct_count > 2 else ""
+    preview, suffix = _preview_files(direct_files)
     if nested_count:
         return (
-            f"{direct_count} doc{'s' if direct_count != 1 else ''} ({preview}{suffix}) "
-            f"and {nested_count} nested folder"
-            f"{'' if nested_count == 1 else 's'}."
+            f"{direct_count} {_pluralize(direct_count, 'doc')} ({preview}{suffix}) "
+            f"and {nested_count} nested {_pluralize(nested_count, 'folder')}."
         )
-    return f"{direct_count} doc{'s' if direct_count != 1 else ''}: {preview}{suffix}."
+    return f"{direct_count} {_pluralize(direct_count, 'doc')}: {preview}{suffix}."
 
 
 def _build_library_section(
@@ -426,6 +417,34 @@ def _build_library_section(
             )
         )
 
+    folder_direct_files: dict[str, list[str]] = {}
+    folder_nested_folders: dict[str, dict[str, bool]] = {}
+    for path in files:
+        relative = path.relative_to(root).as_posix()
+        if prefix:
+            prefix_root = f"{prefix}/"
+            if not relative.startswith(prefix_root):
+                continue
+            scoped_relative = relative.removeprefix(prefix_root)
+        else:
+            scoped_relative = relative
+        if "/" not in scoped_relative:
+            continue
+
+        folder, remainder = scoped_relative.split("/", 1)
+        direct_files = folder_direct_files.setdefault(folder, [])
+        nested_folders = folder_nested_folders.setdefault(folder, {})
+        if "/" in remainder:
+            nested_folder = remainder.split("/", 1)[0]
+            if Path(remainder).stem.lower() != "index":
+                nested_folders[nested_folder] = True
+            else:
+                nested_folders.setdefault(nested_folder, False)
+            continue
+        if path.stem.lower() == "index":
+            continue
+        direct_files.append(Path(remainder).name)
+
     folder_items = [
         {
             "kind": "folder",
@@ -435,9 +454,8 @@ def _build_library_section(
                 f"{prefix}/{folder}" if prefix else folder,
             ),
             "description": _build_folder_blurb(
-                files,
-                root,
-                f"{prefix}/{folder}" if prefix else folder,
+                folder_direct_files.get(folder, []),
+                sum(folder_nested_folders.get(folder, {}).values()),
             ),
         }
         for folder in sorted(folders)

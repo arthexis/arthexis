@@ -536,3 +536,38 @@ def test_docs_library_folder_entries_include_content_blurbs(client):
         second_document.unlink(missing_ok=True)
         if first_document.parent.exists():
             first_document.parent.rmdir()
+        cache.clear()
+
+
+def test_docs_library_folder_blurb_ignores_index_only_nested_folders(client):
+    user = get_user_model().objects.create_user(
+        username="docs-folder-blurb-index-user",
+        email="docs-folder-blurb-index-user@example.com",
+        password="secret",
+        is_staff=True,
+    )
+    parent_document = Path("docs/library-blurb-parent/direct.md")
+    nested_index_document = Path("docs/library-blurb-parent/child/index.md")
+    parent_document.parent.mkdir(parents=True, exist_ok=True)
+    nested_index_document.parent.mkdir(parents=True, exist_ok=True)
+    parent_document.write_text("# Direct\n\nTop-level document.\n", encoding="utf-8")
+    nested_index_document.write_text("# Index\n\nHidden nested index.\n", encoding="utf-8")
+
+    client.force_login(user)
+    try:
+        cache.clear()
+        response = client.get(reverse("docs:docs-library"))
+        body = response.content.decode()
+
+        assert response.status_code == 200
+        assert "library-blurb-parent/" in body
+        assert "1 doc: direct.md." in body
+        assert "nested folder with additional documentation" not in body
+    finally:
+        nested_index_document.unlink(missing_ok=True)
+        parent_document.unlink(missing_ok=True)
+        if nested_index_document.parent.exists():
+            nested_index_document.parent.rmdir()
+        if parent_document.parent.exists():
+            parent_document.parent.rmdir()
+        cache.clear()
