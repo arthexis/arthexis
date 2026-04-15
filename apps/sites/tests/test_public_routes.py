@@ -507,3 +507,32 @@ def test_docs_library_folder_view_includes_file_matching_prefix_exactly(client):
         assert "library-prefix-match.md" in response.content.decode()
     finally:
         prefixed_document.unlink(missing_ok=True)
+
+
+def test_docs_library_folder_entries_include_content_blurbs(client):
+    user = get_user_model().objects.create_user(
+        username="docs-folder-blurb-user",
+        email="docs-folder-blurb-user@example.com",
+        password="secret",
+        is_staff=True,
+    )
+    first_document = Path("docs/library-blurb-test/alpha.md")
+    second_document = Path("docs/library-blurb-test/beta.md")
+    first_document.parent.mkdir(parents=True, exist_ok=True)
+    first_document.write_text("# Alpha\n\nFolder blurb alpha.\n", encoding="utf-8")
+    second_document.write_text("# Beta\n\nFolder blurb beta.\n", encoding="utf-8")
+
+    client.force_login(user)
+    try:
+        cache.clear()
+        response = client.get(reverse("docs:docs-library"))
+        body = response.content.decode()
+
+        assert response.status_code == 200
+        assert "library-blurb-test/" in body
+        assert "2 docs: alpha.md, beta.md." in body
+    finally:
+        first_document.unlink(missing_ok=True)
+        second_document.unlink(missing_ok=True)
+        if first_document.parent.exists():
+            first_document.parent.rmdir()

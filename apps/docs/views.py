@@ -314,6 +314,49 @@ def _build_virtual_root_query_url(parameter: str) -> str:
     return f"{reverse('docs:docs-library')}?{urlencode({parameter: '1'})}"
 
 
+def _build_folder_blurb(files: list[Path], root: Path, folder_prefix: str) -> str:
+    """Return a short, data-backed summary for a folder entry."""
+
+    folder_root = f"{folder_prefix}/"
+    direct_files: list[str] = []
+    nested_folders: set[str] = set()
+
+    for path in files:
+        relative = path.relative_to(root).as_posix()
+        if not relative.startswith(folder_root):
+            continue
+        scoped_relative = relative.removeprefix(folder_root)
+        if "/" in scoped_relative:
+            nested_folders.add(scoped_relative.split("/", 1)[0])
+            continue
+        if path.stem.lower() == "index":
+            continue
+        direct_files.append(Path(scoped_relative).name)
+
+    direct_count = len(direct_files)
+    nested_count = len(nested_folders)
+    total_documents = direct_count + nested_count
+    if total_documents == 0:
+        return "Folder overview and related references."
+
+    if direct_count == 0:
+        return (
+            f"{nested_count} nested folder"
+            f"{'' if nested_count == 1 else 's'} with additional documentation."
+        )
+
+    preview_files = sorted(direct_files)[:2]
+    preview = ", ".join(preview_files)
+    suffix = "…" if direct_count > 2 else ""
+    if nested_count:
+        return (
+            f"{direct_count} doc{'s' if direct_count != 1 else ''} ({preview}{suffix}) "
+            f"and {nested_count} nested folder"
+            f"{'' if nested_count == 1 else 's'}."
+        )
+    return f"{direct_count} doc{'s' if direct_count != 1 else ''}: {preview}{suffix}."
+
+
 def _build_library_section(
     files: list[Path],
     *,
@@ -391,7 +434,11 @@ def _build_library_section(
                 parameter,
                 f"{prefix}/{folder}" if prefix else folder,
             ),
-            "description": f"Browse documents in {folder}.",
+            "description": _build_folder_blurb(
+                files,
+                root,
+                f"{prefix}/{folder}" if prefix else folder,
+            ),
         }
         for folder in sorted(folders)
     ]
