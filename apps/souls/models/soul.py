@@ -107,9 +107,9 @@ class Soul(Entity):
         super().clean()
         encoded = json.dumps(self.package or {}, sort_keys=True, separators=(",", ":")).encode("utf-8")
         if len(encoded) > PACKAGE_MAX_BYTES:
-            raise ValidationError({"package": "Soul package exceeds 512 KB limit."})
+            raise ValidationError({"package": "Soul Seed package exceeds 512 KB limit."})
         if self.package_bytes and len(self.package_bytes) > PACKAGE_MAX_BYTES:
-            raise ValidationError({"package_bytes": "Soul package bytes exceed 512 KB limit."})
+            raise ValidationError({"package_bytes": "Soul Seed package bytes exceed 512 KB limit."})
 
 
 class ShopOrderSoulAttachment(Entity):

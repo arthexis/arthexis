@@ -307,7 +307,7 @@ class OfferingSoulAdmin(admin.ModelAdmin):
             soul = form.save()
             messages.success(
                 request,
-                _("Derived Soul package %(hash)s from uploaded offering.")
+                _("Derived Soul Seed package %(hash)s from uploaded offering.")
                 % {"hash": soul.core_hash[:12]},
             )
             return redirect(reverse("admin:cards_offeringsoul_change", args=[soul.pk]))

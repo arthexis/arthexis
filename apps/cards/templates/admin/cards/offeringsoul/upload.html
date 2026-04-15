@@ -3,14 +3,14 @@
 
 {% block content %}
   <h1>{% trans "Upload offering" %}</h1>
-  <p>{% trans "Arthexis derives a compact deterministic Soul package for RFID storage without persisting raw file bytes." %}</p>
+  <p>{% trans "Arthexis derives a compact deterministic Soul Seed package for RFID storage without persisting raw file bytes." %}</p>
   <form method="post" enctype="multipart/form-data" novalidate>
     {% csrf_token %}
     <fieldset class="module aligned">
       {{ form.as_p }}
     </fieldset>
     <div class="submit-row">
-      <input type="submit" value="{% trans "Derive Soul" %}" class="default">
+      <input type="submit" value="{% trans "Derive Soul Seed" %}" class="default">
       <a href="{% url 'admin:cards_offeringsoul_changelist' %}" class="button">
         {% trans "Cancel" %}
       </a>

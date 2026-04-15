@@ -8,7 +8,10 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.cards.models import OfferingSoul
 from apps.shop.models import Shop, ShopOrder, ShopProduct
+from apps.souls.models import ShopOrderSoulAttachment, Soul
+from apps.survey.models import Survey, SurveyResponse
 
 
 class ShopCheckoutTests(TestCase):
@@ -323,3 +326,111 @@ class ShopNextOpeningDatetimeTests(TestCase):
 
         self.assertEqual(next_opening, timezone.make_aware(datetime(2026, 1, 3, 22, 0), current_timezone))
 
+
+class ShopSoulSeedPreloadTests(TestCase):
+    def setUp(self):
+        self.shop = Shop.objects.create(
+            name="Seed Shop",
+            slug="seed-shop",
+            default_payment_provider="stripe",
+        )
+        self.card_product = ShopProduct.objects.create(
+            shop=self.shop,
+            name="Soul Card",
+            sku="SOUL-CARD-1",
+            unit_price=Decimal("29.90"),
+            stock_quantity=20,
+            supports_soul_seed_preload=True,
+        )
+        self.poster_product = ShopProduct.objects.create(
+            shop=self.shop,
+            name="Poster",
+            sku="POSTER-1",
+            unit_price=Decimal("9.90"),
+            stock_quantity=20,
+            supports_soul_seed_preload=False,
+        )
+
+    def _create_soul_for_email(self, email: str) -> Soul:
+        from django.contrib.auth import get_user_model
+
+        user_model = get_user_model()
+        username_base = email.split("@", 1)[0]
+        username = f"{username_base}-{user_model.objects.count() + 1}"
+        user = user_model.objects.create_user(
+            username=username,
+            email=email,
+            password="x",
+        )
+        core_hash = f"{user.id:064x}"
+        offering = OfferingSoul.objects.create(
+            core_hash=core_hash,
+            package={
+                "schema_version": "1.0",
+                "core_hash": core_hash,
+                "issuance_marker": "checkout",
+                "metadata": {"size_bytes": 2},
+                "traits": {"structural": {}, "type_aware": {}},
+            },
+            structural_traits={},
+            type_traits={},
+        )
+        survey, _ = Survey.objects.get_or_create(
+            title="Soul Seed Registration",
+            defaults={"is_active": True},
+        )
+        response = SurveyResponse.objects.create(survey=survey, participant_token=f"pt-{user.id}")
+        return Soul.objects.create(
+            user=user,
+            offering_soul=offering,
+            survey_response=response,
+            soul_id=f"soul-{user.id}",
+            survey_digest=f"digest-{user.id}",
+            package={"schema_version": "1.0"},
+            email_hash=f"hash-{user.id}",
+        )
+
+    def _add_to_cart(self, product: ShopProduct, quantity: int = 1) -> None:
+        self.client.post(
+            reverse("shop:add_to_cart", kwargs={"shop_slug": self.shop.slug, "product_id": product.id}),
+            {"quantity": quantity},
+            follow=True,
+        )
+
+    def _checkout(self, email: str):
+        return self.client.post(
+            reverse("shop:checkout"),
+            {
+                "customer_name": "Jane Buyer",
+                "customer_email": email,
+                "shipping_address_line1": "42 Main Street",
+                "shipping_address_line2": "",
+                "shipping_city": "Madrid",
+                "shipping_postal_code": "28001",
+                "shipping_country": "Spain",
+            },
+            follow=True,
+        )
+
+    def test_checkout_preloads_soul_seed_for_card_products(self):
+        soul = self._create_soul_for_email("seed@example.com")
+        self._add_to_cart(self.card_product, quantity=2)
+        self._add_to_cart(self.poster_product, quantity=1)
+
+        response = self._checkout("seed@example.com")
+
+        self.assertEqual(response.status_code, 200)
+        attachments = list(ShopOrderSoulAttachment.objects.select_related("order_item").order_by("order_item__id"))
+        self.assertEqual(len(attachments), 1)
+        self.assertEqual(attachments[0].soul_id, soul.id)
+        self.assertEqual(attachments[0].order_item.product_id, self.card_product.id)
+
+    def test_checkout_skips_preload_when_no_unique_soul_for_email(self):
+        self._create_soul_for_email("dupe@example.com")
+        self._create_soul_for_email("dupe@example.com")
+        self._add_to_cart(self.card_product, quantity=1)
+
+        response = self._checkout("dupe@example.com")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ShopOrderSoulAttachment.objects.count(), 0)

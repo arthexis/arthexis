@@ -256,7 +256,11 @@ def checkout(request: HttpRequest) -> HttpResponse:
         order.total_amount = total
         order.save(update_fields=["total_amount", "updated_at"])
 
-    attach_soul_to_order_items(request=request, order_items=created_items)
+    attach_soul_to_order_items(
+        request=request,
+        order_items=created_items,
+        customer_email=order.customer_email,
+    )
 
     _save_cart(request, {})
     messages.success(request, "Order placed successfully.")
