@@ -252,4 +252,6 @@ def test_get_user_safe_sigil_roots_normalizes_prefixes():
         },
     )
 
-    assert sigil_resolver.get_user_safe_sigil_roots() == {"SAFE_ROOT"}
+    safe_roots = sigil_resolver.get_user_safe_sigil_roots()
+    assert "SAFE_ROOT" in safe_roots
+    assert "UNSAFE_ROOT" not in safe_roots
