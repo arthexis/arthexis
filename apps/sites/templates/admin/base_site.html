@@ -109,6 +109,99 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     const modules = Array.from(sidebar.querySelectorAll('.module'));
+    const storage = (function resolveStorage() {
+        try {
+            return window.localStorage;
+        } catch (error) {
+            return null;
+        }
+    })();
+    const storagePrefix = [
+        'arthexis',
+        'admin',
+        'sidebar',
+        '{{ current_site_domain|default:"default-site"|escapejs }}',
+        '{{ request.user.pk|default:"anonymous"|escapejs }}',
+    ].join('.');
+    const keys = {
+        filter: `${storagePrefix}.filter`,
+        collapsed: `${storagePrefix}.collapsed`,
+        recentTargets: `${storagePrefix}.recent_targets`,
+    };
+    const writeTimers = {};
+    const recentTargetLimit = 12;
+
+    function readJson(key, fallback) {
+        if (!storage) {
+            return fallback;
+        }
+        try {
+            const value = storage.getItem(key);
+            return value ? JSON.parse(value) : fallback;
+        } catch (error) {
+            return fallback;
+        }
+    }
+
+    function writeStorageDebounced(key, value) {
+        if (!storage) {
+            return;
+        }
+
+        if (writeTimers[key]) {
+            window.clearTimeout(writeTimers[key]);
+        }
+
+        writeTimers[key] = window.setTimeout(function () {
+            try {
+                storage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+            } catch (error) {
+                // Ignore storage quota and serialization errors.
+            }
+            delete writeTimers[key];
+        }, 150);
+    }
+
+    function getAppLabel(module) {
+        if (module.dataset && module.dataset.appLabel) {
+            return module.dataset.appLabel;
+        }
+        const appClass = Array.from(module.classList).find(function (token) {
+            return token.indexOf('app-') === 0;
+        });
+        return appClass ? appClass.replace('app-', '') : null;
+    }
+
+    function getCollapsedMap() {
+        const value = readJson(keys.collapsed, {});
+        return value && typeof value === 'object' ? value : {};
+    }
+
+    function applyCollapsedMap(collapsedMap) {
+        modules.forEach(function (module) {
+            const appLabel = getAppLabel(module);
+            if (!appLabel) {
+                return;
+            }
+            if (collapsedMap[appLabel]) {
+                module.classList.add('collapsed');
+            } else {
+                module.classList.remove('collapsed');
+            }
+        });
+    }
+
+    function persistCollapsedState() {
+        const collapsedMap = {};
+        modules.forEach(function (module) {
+            const appLabel = getAppLabel(module);
+            if (!appLabel) {
+                return;
+            }
+            collapsedMap[appLabel] = module.classList.contains('collapsed');
+        });
+        writeStorageDebounced(keys.collapsed, collapsedMap);
+    }
 
     function toggleEmptyGroups() {
         const query = nav.value.trim().toLowerCase();
@@ -127,15 +220,103 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        // Ensure modules remain expanded while filtering and during normal navigation.
-        visibleModules.forEach(function (module) {
-            module.classList.remove('collapsed');
+        if (query) {
+            visibleModules.forEach(function (module) {
+                module.classList.remove('collapsed');
+            });
+        } else {
+            applyCollapsedMap(getCollapsedMap());
+        }
+    }
+
+    function persistFilterValue() {
+        writeStorageDebounced(keys.filter, nav.value);
+    }
+
+    function normalizeRecentTargets(value) {
+        if (!Array.isArray(value)) {
+            return [];
+        }
+        return value
+            .filter(function (target) {
+                return typeof target === 'string' && target.length > 0;
+            })
+            .slice(0, recentTargetLimit);
+    }
+
+    function persistRecentTarget(url) {
+        if (!url) {
+            return;
+        }
+        const dedupedTargets = normalizeRecentTargets(readJson(keys.recentTargets, []))
+            .filter(function (target) {
+                return target !== url;
+            });
+        dedupedTargets.unshift(url);
+        writeStorageDebounced(keys.recentTargets, dedupedTargets.slice(0, recentTargetLimit));
+    }
+
+    function prefetchRecentTargets() {
+        const targets = normalizeRecentTargets(readJson(keys.recentTargets, []));
+        window.__adminRecentAppTargets = targets;
+        targets.slice(0, 4).forEach(function (url) {
+            const prefetch = document.createElement('link');
+            prefetch.rel = 'prefetch';
+            prefetch.href = url;
+            prefetch.as = 'document';
+            document.head.appendChild(prefetch);
         });
     }
 
-    nav.addEventListener('change', toggleEmptyGroups);
-    nav.addEventListener('input', toggleEmptyGroups);
+    const restoredFilter = storage ? storage.getItem(keys.filter) : '';
+    if (typeof restoredFilter === 'string') {
+        nav.value = restoredFilter;
+    }
+    applyCollapsedMap(getCollapsedMap());
+    prefetchRecentTargets();
+
+    nav.addEventListener('change', function () {
+        persistFilterValue();
+        toggleEmptyGroups();
+    });
+    nav.addEventListener('input', function () {
+        persistFilterValue();
+        toggleEmptyGroups();
+    });
     nav.addEventListener('keyup', toggleEmptyGroups);
+
+    sidebar.addEventListener('click', function (event) {
+        const link = event.target.closest('a[href]');
+        if (!link || !sidebar.contains(link)) {
+            return;
+        }
+        persistRecentTarget(link.href);
+        if (link.closest('.app-caption')) {
+            return;
+        }
+        window.setTimeout(persistCollapsedState, 0);
+    });
+    sidebar.addEventListener('click', function (event) {
+        const toggleButton = event.target.closest('.app-collapse-toggle');
+        if (!toggleButton || !sidebar.contains(toggleButton)) {
+            return;
+        }
+        window.setTimeout(persistCollapsedState, 0);
+    });
+
+    const observer = new MutationObserver(function (records) {
+        if (!nav.value.trim()) {
+            return;
+        }
+        records.forEach(function (record) {
+            if (record.type === 'attributes' && record.attributeName === 'class') {
+                record.target.classList.remove('collapsed');
+            }
+        });
+    });
+    modules.forEach(function (module) {
+        observer.observe(module, { attributes: true, attributeFilter: ['class'] });
+    });
 
     toggleEmptyGroups();
 });
