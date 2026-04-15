@@ -123,10 +123,15 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
             return
 
         user_model = get_user_model()
-        user = existing_user or user_model(
-            username=cleaned_data.get("username", ""),
-            email=cleaned_data.get("email", ""),
-        )
+        if existing_user is not None:
+            user = user_model(pk=existing_user.pk)
+            user.username = cleaned_data.get("username", existing_user.username)
+            user.email = cleaned_data.get("email", existing_user.email)
+        else:
+            user = user_model(
+                username=cleaned_data.get("username", ""),
+                email=cleaned_data.get("email", ""),
+            )
         try:
             validate_password(password=password, user=user)
         except ValidationError as exc:
