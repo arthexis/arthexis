@@ -8,6 +8,7 @@ CHECKOUT_SOUL_KEY = "shop_checkout_soul_id"
 
 
 def _resolve_checkout_soul(*, request: HttpRequest, customer_email: str) -> Soul | None:
+    normalized_email = customer_email.strip().lower()
     soul_id = request.session.get(CHECKOUT_SOUL_KEY)
     if soul_id:
         soul = Soul.objects.filter(pk=soul_id).first()
@@ -21,9 +22,15 @@ def _resolve_checkout_soul(*, request: HttpRequest, customer_email: str) -> Soul
         if soul:
             return soul
 
-    souls = list(Soul.objects.select_related("user").filter(user__email__iexact=customer_email).order_by("id")[:2])
-    if len(souls) == 1:
-        return souls[0]
+        user_email = getattr(user, "email", "").strip().lower()
+        if user_email != normalized_email:
+            return None
+
+        souls = list(
+            Soul.objects.select_related("user").filter(user__email__iexact=normalized_email).order_by("id")[:2]
+        )
+        if len(souls) == 1:
+            return souls[0]
     return None
 
 

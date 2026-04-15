@@ -13,6 +13,8 @@ from apps.shop.models import Shop, ShopOrder, ShopProduct
 from apps.souls.models import ShopOrderSoulAttachment, Soul
 from apps.survey.models import Survey, SurveyResponse
 
+SOUL_SURVEY_TITLE = "Soul Seed Registration"
+
 
 class ShopCheckoutTests(TestCase):
     """End-to-end tests for shop cart checkout and order tracking."""
@@ -376,7 +378,7 @@ class ShopSoulSeedPreloadTests(TestCase):
             type_traits={},
         )
         survey, _ = Survey.objects.get_or_create(
-            title="Soul Seed Registration",
+            title=SOUL_SURVEY_TITLE,
             defaults={"is_active": True},
         )
         response = SurveyResponse.objects.create(survey=survey, participant_token=f"pt-{user.id}")
@@ -414,6 +416,7 @@ class ShopSoulSeedPreloadTests(TestCase):
 
     def test_checkout_preloads_soul_seed_for_card_products(self):
         soul = self._create_soul_for_email("seed@example.com")
+        self.client.force_login(soul.user)
         self._add_to_cart(self.card_product, quantity=2)
         self._add_to_cart(self.poster_product, quantity=1)
 
@@ -424,6 +427,15 @@ class ShopSoulSeedPreloadTests(TestCase):
         self.assertEqual(len(attachments), 1)
         self.assertEqual(attachments[0].soul_id, soul.id)
         self.assertEqual(attachments[0].order_item.product_id, self.card_product.id)
+
+    def test_checkout_does_not_attach_soul_from_different_email_owner(self):
+        self._create_soul_for_email("alice@example.com")
+        self._add_to_cart(self.card_product, quantity=1)
+
+        response = self._checkout("alice@example.com")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ShopOrderSoulAttachment.objects.count(), 0)
 
     def test_checkout_skips_preload_when_no_unique_soul_for_email(self):
         self._create_soul_for_email("dupe@example.com")
