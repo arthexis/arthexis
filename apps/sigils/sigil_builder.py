@@ -34,8 +34,9 @@ def generate_model_sigils(**kwargs) -> None:
         if root:
             root.prefix = prefix
             root.context_type = policy["context_type"]
+            root.is_user_safe = policy["is_user_safe"]
             root.is_deleted = False
-            root.save(update_fields=["prefix", "context_type", "is_deleted"])
+            root.save(update_fields=["prefix", "context_type", "is_user_safe", "is_deleted"])
         else:
             SigilRoot.objects.create(
                 prefix=prefix,
