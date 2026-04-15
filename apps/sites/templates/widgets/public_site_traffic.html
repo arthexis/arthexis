@@ -94,11 +94,62 @@
       window.location,
     );
     chartDataUrl.searchParams.set('days', '7');
+    const cacheKey = `viewhistory-mini-traffic:${chartDataUrl.pathname}${chartDataUrl.search}`;
 
-    const fetchData = () =>
-      fetch(chartDataUrl.toString(), {
-        headers: { Accept: 'application/json' },
-      }).then((response) => (response.ok ? response.json() : Promise.reject()));
+    const readJsonCache = (key) => {
+      try {
+        const value = window.localStorage.getItem(key);
+        if (!value) {
+          return null;
+        }
+        const parsed = JSON.parse(value);
+        if (!parsed || typeof parsed !== 'object' || typeof parsed.body !== 'object') {
+          return null;
+        }
+        return parsed;
+      } catch (error) {
+        return null;
+      }
+    };
+
+    const writeJsonCache = (key, entry) => {
+      try {
+        window.localStorage.setItem(key, JSON.stringify(entry));
+      } catch (error) {
+        // Ignore storage write errors.
+      }
+    };
+
+    const fetchData = async () => {
+      const cached = readJsonCache(cacheKey);
+      const headers = { Accept: 'application/json' };
+      if (cached?.etag) {
+        headers['If-None-Match'] = cached.etag;
+      }
+      if (cached?.lastModified) {
+        headers['If-Modified-Since'] = cached.lastModified;
+      }
+      const response = await fetch(chartDataUrl.toString(), {
+        headers,
+        credentials: 'same-origin',
+        cache: 'no-cache',
+      });
+
+      if (response.status === 304 && cached?.body) {
+        return cached.body;
+      }
+      if (!response.ok) {
+        throw new Error('Unable to fetch mini chart data');
+      }
+
+      const body = await response.json();
+      writeJsonCache(cacheKey, {
+        body,
+        etag: response.headers.get('ETag') || '',
+        lastModified: response.headers.get('Last-Modified') || '',
+      });
+      return body;
+    };
 
     ensureChartJs()
       .then((Chart) => {

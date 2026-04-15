@@ -2,23 +2,26 @@ import logging
 import re
 from collections import deque
 from datetime import datetime, time, timedelta
+from hashlib import sha256
+from json import dumps
 from pathlib import Path
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib import admin
 from django.db.models import Count
 from django.db.models.functions import TruncDate
-from django.http import FileResponse, JsonResponse
-from django.template.response import TemplateResponse
+from django.http import FileResponse, HttpResponseNotModified, JsonResponse
 from django.shortcuts import redirect
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
+from django.utils.http import http_date, parse_etags, parse_http_date_safe, quote_etag
 from django.utils.translation import gettext_lazy as _
 
 from apps.locals.user_data import EntityModelAdmin
 
 from ..models import ViewHistory
-
 
 logger = logging.getLogger(__name__)
 LOG_LEVEL_NAMES = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
@@ -177,9 +180,73 @@ class ViewHistoryAdmin(EntityModelAdmin):
         )
 
     def traffic_data_view(self, request):
-        return JsonResponse(
-            self._build_chart_data(days=self._resolve_requested_days(request))
+        days = self._resolve_requested_days(request)
+        payload = self._build_chart_data(days=days)
+        last_modified = self._traffic_last_modified(days=days)
+        query_string = urlencode(sorted(request.GET.items()))
+        version_marker = f"{query_string}|{dumps(payload, sort_keys=True, separators=(',', ':'))}"
+        etag = quote_etag(sha256(version_marker.encode("utf-8")).hexdigest())
+
+        if self._request_matches_cached_payload(
+            request,
+            etag=etag,
+            last_modified=last_modified,
+        ):
+            response = HttpResponseNotModified()
+        else:
+            response = JsonResponse(payload)
+
+        response["ETag"] = etag
+        response["Last-Modified"] = self._http_last_modified(last_modified)
+        response["Cache-Control"] = "private, no-cache"
+        return response
+
+    def _traffic_last_modified(self, days: int):
+        end_date = timezone.localdate()
+        start_date = end_date - timedelta(days=days - 1)
+        start_at = datetime.combine(start_date, time.min)
+
+        if settings.USE_TZ:
+            start_at = timezone.make_aware(start_at, timezone.get_current_timezone())
+
+        latest_visited_at = (
+            ViewHistory.objects.filter(visited_at__gte=start_at)
+            .order_by("-visited_at")
+            .values_list("visited_at", flat=True)
+            .first()
         )
+        return latest_visited_at or timezone.now()
+
+    def _request_matches_cached_payload(self, request, *, etag: str, last_modified):
+        normalized_etag = etag.strip('"')
+        raw_if_none_match = request.headers.get("If-None-Match", "")
+        if raw_if_none_match:
+            header_candidates = {part.strip() for part in raw_if_none_match.split(",")}
+            if etag in header_candidates or "*" in header_candidates:
+                return True
+            normalized_candidates = {candidate.strip('"') for candidate in header_candidates}
+            if normalized_etag in normalized_candidates:
+                return True
+
+        request_etags = {candidate.strip('"') for candidate in parse_etags(raw_if_none_match)}
+        if request_etags and (normalized_etag in request_etags or "*" in request_etags):
+            return True
+
+        if_modified_since_header = request.headers.get("If-Modified-Since", "")
+        if if_modified_since_header and if_modified_since_header == self._http_last_modified(last_modified):
+            return True
+
+        if_modified_since = parse_http_date_safe(if_modified_since_header)
+        if if_modified_since is None:
+            return False
+
+        last_modified_epoch = int(last_modified.timestamp())
+        return last_modified_epoch <= if_modified_since
+
+    def _http_last_modified(self, last_modified):
+        if timezone.is_naive(last_modified):
+            last_modified = timezone.make_aware(last_modified, timezone.get_current_timezone())
+        return http_date(last_modified.timestamp())
 
     def _resolve_requested_days(self, request, default: int = 30) -> int:
         raw_value = request.GET.get("days")

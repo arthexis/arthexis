@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+from hashlib import sha256
+
 from django.contrib.admin.sites import site as admin_site
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import login, logout
-from django.http import JsonResponse
+from django.http import HttpResponseNotModified, JsonResponse
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
+from django.utils.http import (
+    http_date,
+    parse_etags,
+    parse_http_date_safe,
+    quote_etag,
+    url_has_allowed_host_and_scheme,
+)
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET, require_POST
 
@@ -53,12 +61,30 @@ def request_temp_password(request):
 def version_info(request):
     """Return the running application version and Git revision."""
 
-    return JsonResponse(
-        {
-            "version": get_version(),
-            "revision": revision.get_revision(),
-        }
-    )
+    payload = {
+        "version": get_version(),
+        "revision": revision.get_revision(),
+    }
+    etag = quote_etag(sha256(f"{payload['version']}|{payload['revision']}".encode()).hexdigest())
+    last_modified = timezone.now()
+
+    normalized_etag = etag.strip('"')
+    request_etags = {
+        candidate.strip('"') for candidate in parse_etags(request.META.get("HTTP_IF_NONE_MATCH", ""))
+    }
+    if request_etags and (normalized_etag in request_etags or "*" in request_etags):
+        response = HttpResponseNotModified()
+    else:
+        if_modified_since = parse_http_date_safe(request.META.get("HTTP_IF_MODIFIED_SINCE", ""))
+        if if_modified_since is not None and int(last_modified.timestamp()) <= if_modified_since:
+            response = HttpResponseNotModified()
+        else:
+            response = JsonResponse(payload)
+
+    response["ETag"] = etag
+    response["Last-Modified"] = http_date(last_modified.timestamp())
+    response["Cache-Control"] = "private, no-cache"
+    return response
 
 
 def _safe_next_url(request, *, fallback_url: str) -> str:

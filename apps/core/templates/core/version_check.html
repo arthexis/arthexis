@@ -107,6 +107,8 @@
           version: typeof parsed.version === "string" ? parsed.version : "",
           revision: typeof parsed.revision === "string" ? parsed.revision : "",
           checkedAt: typeof parsed.checkedAt === "number" ? parsed.checkedAt : 0,
+          etag: typeof parsed.etag === "string" ? parsed.etag : "",
+          lastModified: typeof parsed.lastModified === "string" ? parsed.lastModified : "",
         };
       } catch (error) {
         return null;
@@ -119,6 +121,8 @@
           version: info.version || "",
           revision: info.revision || "",
           checkedAt: Date.now(),
+          etag: info.etag || "",
+          lastModified: info.lastModified || "",
         };
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
       } catch (error) {
@@ -232,17 +236,42 @@
         return;
       }
       try {
+        const cached = readStoredState();
+        const headers = {};
+        if (cached && cached.etag) {
+          headers["If-None-Match"] = cached.etag;
+        }
+        if (cached && cached.lastModified) {
+          headers["If-Modified-Since"] = cached.lastModified;
+        }
         const response = await fetch(CHECK_URL, {
           credentials: "same-origin",
-          cache: "no-store",
+          cache: "no-cache",
+          headers,
         });
+        if (response.status === 304 && cached) {
+          const version = typeof cached.version === "string" ? cached.version : "";
+          const revision = typeof cached.revision === "string" ? cached.revision : "";
+          writeStoredState({
+            version,
+            revision,
+            etag: cached.etag || "",
+            lastModified: cached.lastModified || "",
+          });
+          return;
+        }
         if (!response.ok) {
           return;
         }
         const data = await response.json();
         const version = typeof data.version === "string" ? data.version : "";
         const revision = typeof data.revision === "string" ? data.revision : "";
-        writeStoredState({ version, revision });
+        writeStoredState({
+          version,
+          revision,
+          etag: response.headers.get("ETag") || "",
+          lastModified: response.headers.get("Last-Modified") || "",
+        });
         if (currentVersion === null && currentRevision === null) {
           currentVersion = version;
           currentRevision = revision;
