@@ -7,6 +7,8 @@ import string
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 
 from apps.groups.models import SecurityGroup
 
@@ -85,6 +87,10 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
             self.add_error(
                 "password", "Provide a password or switch to random generation."
             )
+        self._validate_custom_password(
+            cleaned_data=cleaned_data,
+            existing_user=existing_user,
+        )
         return cleaned_data
 
     def clean_username(self):
@@ -107,6 +113,29 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
     def _is_upgrade_opt_in_requested(self) -> bool:
         value = (self.data.get("upgrade_existing_user") or "").strip().lower()
         return value in {"1", "on", "true", "yes"}
+
+    def _validate_custom_password(self, *, cleaned_data, existing_user) -> None:
+        if cleaned_data.get("password_mode") != "custom":
+            return
+
+        password = cleaned_data.get("password")
+        if not password:
+            return
+
+        user_model = get_user_model()
+        if existing_user is not None:
+            user = user_model(pk=existing_user.pk)
+            user.username = cleaned_data.get("username", existing_user.username)
+            user.email = cleaned_data.get("email", existing_user.email)
+        else:
+            user = user_model(
+                username=cleaned_data.get("username", ""),
+                email=cleaned_data.get("email", ""),
+            )
+        try:
+            validate_password(password=password, user=user)
+        except ValidationError as exc:
+            self.add_error("password", exc)
 
     def save(self):
         """Create the superuser, assign groups, and return the account/password tuple."""
