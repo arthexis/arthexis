@@ -129,6 +129,7 @@ document.addEventListener('DOMContentLoaded', function () {
         recentTargets: `${storagePrefix}.recent_targets`,
     };
     const writeTimers = {};
+    const pendingWrites = {};
     const recentTargetLimit = 12;
 
     function readJson(key, fallback) {
@@ -143,6 +144,37 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function writeStorageNow(key, value) {
+        if (!storage) {
+            return;
+        }
+        if (writeTimers[key]) {
+            window.clearTimeout(writeTimers[key]);
+            delete writeTimers[key];
+        }
+        if (Object.prototype.hasOwnProperty.call(pendingWrites, key)) {
+            delete pendingWrites[key];
+        }
+        try {
+            storage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+        } catch (error) {
+            // Ignore storage quota and serialization errors.
+        }
+    }
+
+    function flushPendingStorageWrites() {
+        Object.keys(writeTimers).forEach(function (key) {
+            if (writeTimers[key]) {
+                window.clearTimeout(writeTimers[key]);
+                delete writeTimers[key];
+            }
+            if (Object.prototype.hasOwnProperty.call(pendingWrites, key)) {
+                writeStorageNow(key, pendingWrites[key]);
+                delete pendingWrites[key];
+            }
+        });
+    }
+
     function writeStorageDebounced(key, value) {
         if (!storage) {
             return;
@@ -152,12 +184,10 @@ document.addEventListener('DOMContentLoaded', function () {
             window.clearTimeout(writeTimers[key]);
         }
 
+        pendingWrites[key] = value;
         writeTimers[key] = window.setTimeout(function () {
-            try {
-                storage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
-            } catch (error) {
-                // Ignore storage quota and serialization errors.
-            }
+            writeStorageNow(key, pendingWrites[key]);
+            delete pendingWrites[key];
             delete writeTimers[key];
         }, 150);
     }
@@ -191,7 +221,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    function persistCollapsedState() {
+    function persistCollapsedState(immediate) {
         const collapsedMap = {};
         modules.forEach(function (module) {
             const appLabel = getAppLabel(module);
@@ -200,6 +230,10 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             collapsedMap[appLabel] = module.classList.contains('collapsed');
         });
+        if (immediate) {
+            writeStorageNow(keys.collapsed, collapsedMap);
+            return;
+        }
         writeStorageDebounced(keys.collapsed, collapsedMap);
     }
 
@@ -244,7 +278,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .slice(0, recentTargetLimit);
     }
 
-    function persistRecentTarget(url) {
+    function persistRecentTarget(url, immediate) {
         if (!url) {
             return;
         }
@@ -253,6 +287,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 return target !== url;
             });
         dedupedTargets.unshift(url);
+        if (immediate) {
+            writeStorageNow(keys.recentTargets, dedupedTargets.slice(0, recentTargetLimit));
+            return;
+        }
         writeStorageDebounced(keys.recentTargets, dedupedTargets.slice(0, recentTargetLimit));
     }
 
@@ -269,6 +307,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     const restoredFilter = storage ? storage.getItem(keys.filter) : '';
+    const shouldReapplyFilter = typeof restoredFilter === 'string' && Boolean(restoredFilter.trim());
     if (typeof restoredFilter === 'string') {
         nav.value = restoredFilter;
     }
@@ -287,21 +326,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
     sidebar.addEventListener('click', function (event) {
         const link = event.target.closest('a[href]');
-        if (!link || !sidebar.contains(link)) {
-            return;
-        }
-        persistRecentTarget(link.href);
-        if (link.closest('.app-caption')) {
-            return;
-        }
-        window.setTimeout(persistCollapsedState, 0);
-    });
-    sidebar.addEventListener('click', function (event) {
         const toggleButton = event.target.closest('.app-collapse-toggle');
+
+        if (link && sidebar.contains(link)) {
+            persistRecentTarget(link.href, true);
+            persistCollapsedState(true);
+            return;
+        }
+
         if (!toggleButton || !sidebar.contains(toggleButton)) {
             return;
         }
-        window.setTimeout(persistCollapsedState, 0);
+
+        window.setTimeout(function () {
+            persistCollapsedState(true);
+        }, 0);
     });
 
     const observer = new MutationObserver(function (records) {
@@ -309,16 +348,27 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         records.forEach(function (record) {
-            if (record.type === 'attributes' && record.attributeName === 'class') {
+            if (
+                record.type === 'attributes'
+                && record.attributeName === 'class'
+                && record.target.classList.contains('collapsed')
+            ) {
                 record.target.classList.remove('collapsed');
             }
         });
     });
-    modules.forEach(function (module) {
-        observer.observe(module, { attributes: true, attributeFilter: ['class'] });
-    });
+    observer.observe(sidebar, { attributes: true, attributeFilter: ['class'], subtree: true });
 
-    toggleEmptyGroups();
+    if (storage) {
+        window.addEventListener('pagehide', flushPendingStorageWrites);
+        window.addEventListener('beforeunload', flushPendingStorageWrites);
+    }
+
+    if (shouldReapplyFilter) {
+        nav.dispatchEvent(new Event('input', { bubbles: true }));
+    } else {
+        toggleEmptyGroups();
+    }
 });
 </script>
 <script id="admin-sidebar-collapse-toggle-visibility">
