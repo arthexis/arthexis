@@ -57,14 +57,12 @@
           {% if section.items %}
             <ul class="list-unstyled mb-4">
               {% for item in section.items %}
-                {% if section.current_prefix or item.kind == "folder" %}
-                  <li class="mb-2">
-                    <a href="{{ item.url }}">{{ item.label }}</a>
-                    {% if item.description %}
-                      <div class="text-muted small">{{ item.description }}</div>
-                    {% endif %}
-                  </li>
-                {% endif %}
+                <li class="mb-2">
+                  <a href="{{ item.url }}">{{ item.label }}</a>
+                  {% if item.description %}
+                    <div class="text-muted small">{{ item.description }}</div>
+                  {% endif %}
+                </li>
               {% endfor %}
             </ul>
           {% else %}

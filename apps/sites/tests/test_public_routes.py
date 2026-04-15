@@ -434,7 +434,7 @@ def test_docs_library_groups_root_documents_into_root_folder(client):
         root_response = client.get(reverse("docs:docs-library"))
         virtual_root_response = client.get(
             reverse("docs:docs-library"),
-            {"docs_path": "__root__"},
+            {"docs_path_virtual_root": "1"},
         )
 
         assert root_response.status_code == 200
@@ -444,3 +444,48 @@ def test_docs_library_groups_root_documents_into_root_folder(client):
         assert "library-root-visibility-test.md" in virtual_root_response.content.decode()
     finally:
         root_document.unlink(missing_ok=True)
+
+
+def test_docs_library_virtual_root_does_not_collide_with_real_root_named_folder(client):
+    user = get_user_model().objects.create_user(
+        username="docs-root-collision-user",
+        email="docs-root-collision-user@example.com",
+        password="secret",
+        is_staff=True,
+    )
+    nested_document = Path("docs/__root__/folder-navigation-test.md")
+    nested_document.parent.mkdir(parents=True, exist_ok=True)
+    nested_document.write_text("# Root folder\n\nFolder document.\n", encoding="utf-8")
+
+    client.force_login(user)
+    try:
+        cache.clear()
+        folder_response = client.get(reverse("docs:docs-library"), {"docs_path": "__root__"})
+
+        assert folder_response.status_code == 200
+        assert "folder-navigation-test.md" in folder_response.content.decode()
+    finally:
+        nested_document.unlink(missing_ok=True)
+        if nested_document.parent.exists():
+            nested_document.parent.rmdir()
+
+
+def test_docs_library_folder_view_includes_file_matching_prefix_exactly(client):
+    user = get_user_model().objects.create_user(
+        username="docs-prefix-file-user",
+        email="docs-prefix-file-user@example.com",
+        password="secret",
+        is_staff=True,
+    )
+    prefixed_document = Path("docs/library-prefix-match.md")
+    prefixed_document.write_text("# Prefix match\n\nExact path document.\n", encoding="utf-8")
+
+    client.force_login(user)
+    try:
+        cache.clear()
+        response = client.get(reverse("docs:docs-library"), {"docs_path": "library-prefix-match.md"})
+
+        assert response.status_code == 200
+        assert "library-prefix-match.md" in response.content.decode()
+    finally:
+        prefixed_document.unlink(missing_ok=True)

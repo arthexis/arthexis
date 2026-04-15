@@ -37,7 +37,7 @@ DOCS_CANONICAL_HOST_OVERRIDES = {
     "m.arthexis.com": "arthexis.com",
 }
 LIBRARY_ROOT_FOLDER_LABEL = "root"
-LIBRARY_ROOT_FOLDER_SENTINEL = "__root__"
+LIBRARY_ROOT_QUERY_PARAMETER = "virtual_root"
 FULL_CONTENT_DEFAULT_DOCUMENTS = {
     "docs/development/install-lifecycle-scripts-manual.md",
 }
@@ -310,6 +310,10 @@ def _build_library_query_url(parameter: str, prefix: str) -> str:
     return f"{reverse('docs:docs-library')}?{query}" if query else reverse("docs:docs-library")
 
 
+def _build_virtual_root_query_url(parameter: str) -> str:
+    return f"{reverse('docs:docs-library')}?{urlencode({parameter: '1'})}"
+
+
 def _build_library_section(
     files: list[Path],
     *,
@@ -319,6 +323,7 @@ def _build_library_section(
     title: str,
     prefix: str,
     parameter: str,
+    virtual_root_selected: bool,
 ) -> dict[str, object]:
     """Build a section index scoped to one folder level."""
 
@@ -326,7 +331,7 @@ def _build_library_section(
     items: list[dict[str, str]] = []
     root_items: list[dict[str, str]] = []
     show_root_folder = prefix == ""
-    in_virtual_root_folder = prefix == LIBRARY_ROOT_FOLDER_SENTINEL
+    in_virtual_root_folder = virtual_root_selected and prefix == ""
 
     for path in files:
         relative = path.relative_to(root).as_posix()
@@ -396,14 +401,13 @@ def _build_library_section(
             {
                 "kind": "folder",
                 "label": f"{LIBRARY_ROOT_FOLDER_LABEL}/",
-                "url": _build_library_query_url(parameter, LIBRARY_ROOT_FOLDER_SENTINEL),
+                "url": _build_virtual_root_query_url(f"{parameter}_{LIBRARY_ROOT_QUERY_PARAMETER}"),
                 "description": "Browse root-level documents.",
             },
         )
 
-    if in_virtual_root_folder:
-        folder_items.extend(item for item in items if item["url"])
-    else:
+    folder_items.extend(item for item in items if item["url"])
+    if prefix != "":
         folder_items.extend(item for item in root_items if item["url"])
 
     section: dict[str, object] = {
@@ -416,6 +420,9 @@ def _build_library_section(
             parent_prefix = ""
         section["current_prefix"] = prefix
         section["parent_url"] = _build_library_query_url(parameter, parent_prefix)
+    elif in_virtual_root_folder:
+        section["current_prefix"] = LIBRARY_ROOT_FOLDER_LABEL
+        section["parent_url"] = _build_library_query_url(parameter, "")
     return section
 
 
@@ -424,6 +431,8 @@ def _collect_document_library(
     *,
     docs_prefix: str = "",
     apps_docs_prefix: str = "",
+    docs_virtual_root_selected: bool = False,
+    apps_docs_virtual_root_selected: bool = False,
     docs_files: list[Path] | None = None,
     apps_docs_files: list[Path] | None = None,
 ) -> list[dict[str, object]]:
@@ -444,6 +453,7 @@ def _collect_document_library(
                 title="Documentation",
                 prefix=_normalize_library_prefix(docs_prefix),
                 parameter="docs_path",
+                virtual_root_selected=docs_virtual_root_selected,
             )
         )
 
@@ -460,6 +470,7 @@ def _collect_document_library(
                 title="Application Docs",
                 prefix=_normalize_library_prefix(apps_docs_prefix),
                 parameter="apps_docs_path",
+                virtual_root_selected=apps_docs_virtual_root_selected,
             )
         )
 
@@ -571,6 +582,8 @@ def _get_cached_document_library(
     *,
     docs_prefix: str = "",
     apps_docs_prefix: str = "",
+    docs_virtual_root_selected: bool = False,
+    apps_docs_virtual_root_selected: bool = False,
 ) -> list[dict[str, object]]:
     """Return a cached library index to avoid repeated filesystem scans."""
 
@@ -579,6 +592,8 @@ def _get_cached_document_library(
         root_base,
         docs_prefix=docs_prefix,
         apps_docs_prefix=apps_docs_prefix,
+        docs_virtual_root_selected=docs_virtual_root_selected,
+        apps_docs_virtual_root_selected=apps_docs_virtual_root_selected,
         docs_files=docs_paths,
         apps_docs_files=apps_docs_paths,
     )
@@ -595,10 +610,16 @@ def _render_document_library(
     root_base = Path(settings.BASE_DIR).resolve()
     docs_prefix = request.GET.get("docs_path", "")
     apps_docs_prefix = request.GET.get("apps_docs_path", "")
+    docs_virtual_root_selected = request.GET.get(f"docs_path_{LIBRARY_ROOT_QUERY_PARAMETER}") == "1"
+    apps_docs_virtual_root_selected = (
+        request.GET.get(f"apps_docs_path_{LIBRARY_ROOT_QUERY_PARAMETER}") == "1"
+    )
     sections = _get_cached_document_library(
         root_base,
         docs_prefix=docs_prefix,
         apps_docs_prefix=apps_docs_prefix,
+        docs_virtual_root_selected=docs_virtual_root_selected,
+        apps_docs_virtual_root_selected=apps_docs_virtual_root_selected,
     )
     docs_paths, apps_docs_paths = _get_cached_document_library_paths(root_base)
     all_documents = _build_library_documents(
