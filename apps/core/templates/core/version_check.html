@@ -1,4 +1,4 @@
-{% load i18n version_tags %}
+{% load i18n static version_tags %}
 {% translate "A new version of this site is available." as version_message %}
 {% translate "Refresh" as refresh_label %}
 {% translate "Version" as version_label %}
@@ -7,6 +7,7 @@
   {% if request.user.is_staff %}
     {% version_check_info as local_version_info %}
   {% endif %}
+<script src="{% static 'pages/js/admin_cache.js' %}"></script>
 <script>
 (function () {
   const CHECK_URL = "{% url 'version-info' %}";
@@ -17,7 +18,7 @@
   const LOCAL_VERSION = "{{ local_version_info.version|escapejs }}";
   const LOCAL_REVISION = "{{ local_version_info.revision|escapejs }}";
   const CHECK_INTERVAL = 120000;
-  const REMOTE_CHECK_INTERVAL = 600000;
+  const VERSION_INFO_TTL = 180000;
   const STORAGE_KEY = "version-check-state-v1";
   const LOCK_KEY = "version-check-lock-v1";
   const LOCK_TTL = 15000;
@@ -137,16 +138,6 @@
       }
     }
 
-    function shouldSkipRemoteFetch() {
-      const stored = readStoredState();
-      if (!stored) {
-        return false;
-      }
-      syncWithStoredState(stored);
-      const age = Date.now() - stored.checkedAt;
-      return age < REMOTE_CHECK_INTERVAL;
-    }
-
     function acquireLock() {
       try {
         const now = Date.now();
@@ -221,38 +212,52 @@
       return banner;
     }
 
-    async function fetchInfo() {
-      if (document.visibilityState === "hidden") {
+    function applyRemoteState(data) {
+      if (!data || typeof data !== "object") {
         return;
       }
-      if (shouldSkipRemoteFetch()) {
+      const version = typeof data.version === "string" ? data.version : "";
+      const revision = typeof data.revision === "string" ? data.revision : "";
+      writeStoredState({ version, revision });
+      if (currentVersion === null && currentRevision === null) {
+        currentVersion = version;
+        currentRevision = revision;
+        return;
+      }
+      if (version !== currentVersion || revision !== currentRevision) {
+        currentVersion = version;
+        currentRevision = revision;
+        updateBanner({ version, revision });
+      }
+    }
+
+    async function fetchInfo() {
+      if (document.visibilityState === "hidden") {
         return;
       }
       if (!acquireLock()) {
         return;
       }
       try {
-        const response = await fetch(CHECK_URL, {
-          credentials: "same-origin",
-          cache: "no-store",
+        const cacheClient = window.ArthexisAdminCache;
+        if (!cacheClient || typeof cacheClient.fetchJSON !== "function") {
+          return;
+        }
+        const result = await cacheClient.fetchJSON(CHECK_URL, {
+          maxPayloadBytes: 32768,
+          onRevalidate: (nextData, state) => {
+            if (state.changed) {
+              applyRemoteState(nextData);
+            }
+          },
+          requestInit: {
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+          },
+          staleWhileRevalidate: true,
+          ttlMs: VERSION_INFO_TTL,
         });
-        if (!response.ok) {
-          return;
-        }
-        const data = await response.json();
-        const version = typeof data.version === "string" ? data.version : "";
-        const revision = typeof data.revision === "string" ? data.revision : "";
-        writeStoredState({ version, revision });
-        if (currentVersion === null && currentRevision === null) {
-          currentVersion = version;
-          currentRevision = revision;
-          return;
-        }
-        if (version !== currentVersion || revision !== currentRevision) {
-          currentVersion = version;
-          currentRevision = revision;
-          updateBanner({ version, revision });
-        }
+        applyRemoteState(result.data);
       } catch (error) {
         // Network issues are ignored to avoid interrupting the user experience.
       }

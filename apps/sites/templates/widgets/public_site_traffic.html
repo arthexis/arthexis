@@ -7,6 +7,7 @@
   </div>
   <p class="chart-link"><a id="viewhistory-mini-link" href="{% url 'admin:pages_viewhistory_traffic_graph' %}">{% translate 'Open full report' %}</a></p>
 </div>
+<script src="{% static 'pages/js/admin_cache.js' %}"></script>
 <script>
   const initializeMiniTrafficChart = () => {
     const canvas = document.getElementById('viewhistory-mini-chart');
@@ -95,66 +96,91 @@
     );
     chartDataUrl.searchParams.set('days', '7');
 
-    const fetchData = () =>
-      fetch(chartDataUrl.toString(), {
-        headers: { Accept: 'application/json' },
-      }).then((response) => (response.ok ? response.json() : Promise.reject()));
+    const applyData = (Chart, data) => {
+      if (!data || !Array.isArray(data.datasets) || !data.datasets.length) {
+        if (canvas.chart) {
+          canvas.chart.destroy();
+          delete canvas.chart;
+        }
+        canvas.hidden = true;
+        if (emptyLabel) {
+          emptyLabel.hidden = false;
+          emptyLabel.textContent = '{% translate "No visit data yet." %}';
+        }
+        return;
+      }
+
+      if (emptyLabel) {
+        emptyLabel.hidden = true;
+      }
+      canvas.hidden = false;
+      const nextData = {
+        labels: data.labels,
+        datasets: data.datasets.map((dataset) => ({
+          ...dataset,
+          pointRadius: 0,
+          pointHoverRadius: 3,
+          borderWidth: 2,
+        })),
+      };
+      if (canvas.chart) {
+        canvas.chart.data = nextData;
+        canvas.chart.update();
+        return;
+      }
+
+      const context = canvas.getContext('2d');
+      canvas.chart = new Chart(context, {
+        type: 'line',
+        data: nextData,
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              mode: 'nearest',
+              intersect: false,
+            },
+          },
+          elements: {
+            line: { tension: 0.3 },
+          },
+          scales: {
+            x: {
+              ticks: { autoSkip: true, maxTicksLimit: 7 },
+            },
+          },
+        },
+      });
+    };
+
+    const fetchData = (Chart) =>
+      window.ArthexisAdminCache.fetchJSON(chartDataUrl.toString(), {
+        keyParams: ['days', 'page', 'pages'],
+        maxPayloadBytes: 196608,
+        onRevalidate: (nextData, state) => {
+          if (state.changed) {
+            applyData(Chart, nextData);
+          }
+        },
+        requestInit: {
+          headers: { Accept: 'application/json' },
+        },
+        staleWhileRevalidate: true,
+        ttlMs: 45000,
+      }).then((result) => result.data);
 
     ensureChartJs()
       .then((Chart) => {
         if (!Chart) {
           throw new Error('chartjs');
         }
-        return fetchData().then((data) => ({ Chart, data }));
+        return fetchData(Chart).then((data) => ({ Chart, data }));
       })
       .then(({ Chart, data }) => {
-        if (!data || !Array.isArray(data.datasets) || !data.datasets.length) {
-          canvas.hidden = true;
-          if (emptyLabel) {
-            emptyLabel.hidden = false;
-            emptyLabel.textContent = '{% translate "No visit data yet." %}';
-          }
-          return;
-        }
-
-        if (emptyLabel) {
-          emptyLabel.hidden = true;
-        }
-        canvas.hidden = false;
-        const context = canvas.getContext('2d');
-        const chart = new Chart(context, {
-          type: 'line',
-          data: {
-            labels: data.labels,
-            datasets: data.datasets.map((dataset) => ({
-              ...dataset,
-              pointRadius: 0,
-              pointHoverRadius: 3,
-              borderWidth: 2,
-            })),
-          },
-          options: {
-            animation: false,
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                mode: 'nearest',
-                intersect: false,
-              },
-            },
-            elements: {
-              line: { tension: 0.3 },
-            },
-            scales: {
-              x: {
-                ticks: { autoSkip: true, maxTicksLimit: 7 },
-              },
-            },
-          },
-        });
-        canvas.chart = chart;
+        applyData(Chart, data);
       })
       .catch(() => {
         canvas.hidden = true;
