@@ -284,12 +284,23 @@ def test_docs_library_and_documents_require_login(client):
     assert apps_document_response.url.startswith(expected_prefix)
 
 
-def test_docs_library_and_documents_require_developer_or_release_manager_group(client):
+@pytest.mark.parametrize(
+    ("group_name", "is_superuser"),
+    [
+        (PRODUCT_DEVELOPER_GROUP_NAME, False),
+        (RELEASE_MANAGER_GROUP_NAME, False),
+        (None, True),
+    ],
+)
+def test_docs_library_and_documents_require_developer_or_release_manager_group(
+    client, group_name, is_superuser
+):
     user = get_user_model().objects.create_user(
-        username="docs-group-user",
-        email="docs-group-user@example.com",
+        username=f"docs-group-user-{group_name or 'superuser'}",
+        email=f"docs-group-user-{group_name or 'superuser'}@example.com",
         password="secret",
         is_staff=True,
+        is_superuser=is_superuser,
     )
     library_url = reverse("docs:docs-library")
     document_url = reverse("docs:docs-document", args=["index.md"])
@@ -297,11 +308,13 @@ def test_docs_library_and_documents_require_developer_or_release_manager_group(c
     library_response = client.get(library_url)
     document_response = client.get(document_url)
 
-    assert library_response.status_code == 302
-    assert document_response.status_code == 302
+    expected_initial_status = 200 if is_superuser else 403
+    assert library_response.status_code == expected_initial_status
+    assert document_response.status_code == expected_initial_status
 
-    developer_group = SecurityGroup.objects.create(name=PRODUCT_DEVELOPER_GROUP_NAME)
-    developer_group.user_set.add(user)
+    if group_name:
+        allowed_group, _ = SecurityGroup.objects.get_or_create(name=group_name)
+        allowed_group.user_set.add(user)
 
     library_response = client.get(library_url)
     document_response = client.get(document_url)
@@ -360,7 +373,9 @@ def test_developers_module_pill_visible_to_release_manager_users():
         email="docs-release-manager@example.com",
         password="secret",
     )
-    release_manager_group = SecurityGroup.objects.create(name=RELEASE_MANAGER_GROUP_NAME)
+    release_manager_group, _ = SecurityGroup.objects.get_or_create(
+        name=RELEASE_MANAGER_GROUP_NAME
+    )
     release_manager_group.user_set.add(user)
     request = RequestFactory().get("/")
     request.user = user

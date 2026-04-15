@@ -835,7 +835,6 @@ def render_readme_page(
 
 @module_pill_link_validation(_show_docs_navigation_link)
 @security_group_required(*DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES)
-@login_required(login_url="pages:login")
 def document_library(request):
     """Render the developer documentation library index."""
 
@@ -852,7 +851,6 @@ def _render_missing_document(request, *, doc: str | None, prepend_docs: bool) ->
 @module_pill_link_validation(_show_docs_navigation_link)
 @never_cache
 @security_group_required(*DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES)
-@login_required(login_url="pages:login")
 def readme(request, doc=None, prepend_docs: bool = False):
     try:
         return render_readme_page(request, doc=doc, prepend_docs=prepend_docs)
