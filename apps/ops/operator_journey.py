@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 
 from django.contrib.auth.models import AbstractBaseUser
-from django.db.models import Q
 from django.urls import reverse
-from django.utils import timezone
 
 from apps.groups.security import ensure_default_staff_groups
 
@@ -24,7 +21,6 @@ class OperatorJourneyStatus:
     message: str
     task_title: str
     url: str
-    available_since: datetime | None = None
 
 
 def next_step_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStep | None:
@@ -100,27 +96,7 @@ def status_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStatus:
         message=next_step.title,
         task_title=next_step.title,
         url=reverse("ops:operator-journey-step", args=[next_step.pk]),
-        available_since=_first_available_at(user=user, next_step=next_step),
     )
-
-
-def _first_available_at(*, user: AbstractBaseUser, next_step: OperatorJourneyStep) -> datetime:
-    fallback_available_at = getattr(user, "date_joined", timezone.localtime())
-    previous_step = (
-        OperatorJourneyStep.objects.filter(journey=next_step.journey, is_active=True)
-        .exclude(pk=next_step.pk)
-        .filter(Q(order__lt=next_step.order) | Q(order=next_step.order, id__lt=next_step.id))
-        .order_by("-order", "-id")
-        .first()
-    )
-
-    if previous_step is None:
-        return fallback_available_at
-
-    completion = OperatorJourneyStepCompletion.objects.filter(user=user, step=previous_step).first()
-    if completion is None:
-        return fallback_available_at
-    return completion.completed_at
 
 
 def _active_security_groups_for_user(user: AbstractBaseUser):

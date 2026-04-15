@@ -52,16 +52,11 @@ class OperatorJourneyFlowTests(TestCase):
         status = status_for_user(user=self.user)
         self.assertEqual(status.message, "Step 1")
         self.assertEqual(status.task_title, "Step 1")
-        self.assertEqual(status.available_since, self.user.date_joined)
 
         self.assertTrue(complete_step_for_user(user=self.user, step=self.step_1))
         status = status_for_user(user=self.user)
         self.assertEqual(status.message, "Step 2")
         self.assertEqual(status.task_title, "Step 2")
-        self.assertEqual(
-            status.available_since,
-            self.user.operator_journey_step_completions.first().completed_at,
-        )
 
         self.assertTrue(complete_step_for_user(user=self.user, step=self.step_2))
         status = status_for_user(user=self.user)
