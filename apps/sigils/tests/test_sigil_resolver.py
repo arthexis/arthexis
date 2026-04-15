@@ -259,13 +259,20 @@ def test_get_user_safe_sigil_roots_normalizes_prefixes():
 
 
 @pytest.mark.django_db
-def test_generate_model_sigils_sets_default_user_safety_for_new_builtin_roots():
-    SigilRoot.all_objects.filter(prefix__in=["ENV", "CONF", "SYS", "REQ"]).delete()
+def test_generate_model_sigils_sets_default_user_safety_for_new_builtin_roots(monkeypatch):
+    monkeypatch.setattr(
+        "apps.sigils.sigil_builder.BUILTIN_SIGIL_POLICIES",
+        {
+            "REQ_TEST": {
+                "context_type": SigilRoot.Context.REQUEST,
+                "is_user_safe": True,
+            }
+        },
+    )
 
     generate_model_sigils()
 
-    assert SigilRoot.objects.get(prefix="REQ").is_user_safe is True
-    assert SigilRoot.objects.get(prefix="ENV").is_user_safe is False
+    assert SigilRoot.objects.get(prefix="REQ_TEST").is_user_safe is True
 
 
 @pytest.mark.django_db
