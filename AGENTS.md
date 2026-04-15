@@ -143,7 +143,7 @@ Agents must run relevant tests after code changes.
 
 * Do **not** take manual screenshots in the agent runtime.
 * The Screenshot CI workflow is the source of truth for previews and artifacts.
-* Leave screenshot generation to Screenshot CI, even when making visual/UI changes, unless a maintainer explicitly asks for a one-off manual capture for a specific debugging need.
+* Leave screenshot generation to Screenshot CI, even when making visual/UI changes; do not use manual capture skills unless a maintainer explicitly asks for a one-off capture for a specific debugging need.
 * If you need extra screenshot coverage, add route paths (one per line) to:
   * `.github/screenshot-paths.authenticated.txt` for pages that require login.
   * `.github/screenshot-paths.public.txt` for public pages.
