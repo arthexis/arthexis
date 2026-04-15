@@ -15,6 +15,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import LoginView
+from django.contrib.staticfiles.storage import staticfiles_storage
 from django.contrib.sites.models import Site
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
@@ -40,7 +41,7 @@ from django.utils.http import (
 from django.utils.text import slugify
 from django.utils.translation import gettext as _
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from webauthn.helpers.exceptions import (
     InvalidAuthenticationResponse,
@@ -888,6 +889,14 @@ def _render_admin_template(
             context=signal_context,
         )
     return response
+
+
+@never_cache
+@require_GET
+def admin_service_worker(request):
+    service_worker_url = staticfiles_storage.url("pages/js/admin-sw.js")
+    script = f'importScripts("{service_worker_url}" + self.location.search);'
+    return HttpResponse(script, content_type="application/javascript")
 
 
 @staff_member_required

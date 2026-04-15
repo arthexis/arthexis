@@ -85,6 +85,30 @@
     loadLocalHtmx(loadHtmxExtensions);
   })();
 </script>
+<script>
+  (function registerAdminServiceWorker() {
+    if (!('serviceWorker' in navigator) || !window.isSecureContext) {
+      return;
+    }
+
+    const precacheUrls = [
+      '{% static "core/vendor/chart.umd.min.js" %}',
+      '{% static "htmx/htmx.min.js" %}',
+      '{% static "htmx/intersect.js" %}',
+      '{% static "htmx/reveal.js" %}',
+      '{% static "admin/css/base.css" %}',
+      '{% static "admin/css/nav_sidebar.css" %}',
+      '{% static "admin/css/dark_mode.css" %}',
+      '{% static "admin/js/core.js" %}',
+      '{% static "admin/js/nav_sidebar.js" %}',
+      '{% static "admin/js/theme.js" %}',
+    ];
+
+    const precacheParam = encodeURIComponent(precacheUrls.join(','));
+    const serviceWorkerUrl = `{% url "admin-service-worker" %}?precache=${precacheParam}`;
+    navigator.serviceWorker.register(serviceWorkerUrl);
+  })();
+</script>
 {% if badge_role %}
   {% if badge_role.name == "Control" %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_control.txt' %}">
