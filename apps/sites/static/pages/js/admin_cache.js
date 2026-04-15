@@ -63,27 +63,57 @@
 
   const storeEntry = (cacheKey, entry, maxPayloadBytes) => {
     try {
-      const payload = JSON.stringify(entry.data);
+      const serialized = JSON.stringify(entry);
       if (
         typeof maxPayloadBytes === "number" &&
         maxPayloadBytes > 0 &&
-        new TextEncoder().encode(payload).length > maxPayloadBytes
+        new TextEncoder().encode(serialized).length > maxPayloadBytes
       ) {
         return;
       }
       memoryCache.set(cacheKey, entry);
-      window.localStorage.setItem(cacheKey, JSON.stringify(entry));
+      window.localStorage.setItem(cacheKey, serialized);
     } catch (error) {
       // Ignore serialization and storage failures.
     }
   };
 
+  const isPlainObject = (value) =>
+    Object.prototype.toString.call(value) === "[object Object]";
+
   const sameData = (first, second) => {
-    try {
-      return JSON.stringify(first) === JSON.stringify(second);
-    } catch (error) {
+    if (Object.is(first, second)) {
+      return true;
+    }
+
+    if (typeof first !== typeof second || first == null || second == null) {
       return false;
     }
+
+    if (Array.isArray(first)) {
+      if (!Array.isArray(second) || first.length !== second.length) {
+        return false;
+      }
+      return first.every((value, index) => sameData(value, second[index]));
+    }
+
+    if (isPlainObject(first)) {
+      if (!isPlainObject(second)) {
+        return false;
+      }
+
+      const firstKeys = Object.keys(first).sort();
+      const secondKeys = Object.keys(second).sort();
+      if (firstKeys.length !== secondKeys.length) {
+        return false;
+      }
+
+      return firstKeys.every(
+        (key, index) => key === secondKeys[index] && sameData(first[key], second[key]),
+      );
+    }
+
+    return false;
   };
 
   const fetchNetworkData = (url, requestInit) =>
@@ -142,7 +172,9 @@
     }
 
     if (staleWhileRevalidate) {
-      void revalidate();
+      if (isExpired) {
+        void revalidate().catch(() => {});
+      }
     } else if (isExpired) {
       return revalidate().then((data) => ({
         data,
