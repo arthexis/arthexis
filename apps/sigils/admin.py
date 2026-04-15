@@ -3,6 +3,7 @@ from django.contrib import admin
 
 from apps.locals.user_data import EntityModelAdmin
 
+from .builtin_policy import BUILTIN_SIGIL_POLICIES
 from .models import CustomSigil, SigilRoot
 
 
@@ -32,7 +33,7 @@ class CustomSigilAdmin(EntityModelAdmin):
 
 @admin.register(SigilRoot)
 class SigilRootAdmin(EntityModelAdmin):
-    BUILTIN_PREFIXES = {"ENV", "CONF", "SYS", "REQ"}
+    BUILTIN_PREFIXES = set(BUILTIN_SIGIL_POLICIES)
 
     list_display = (
         "prefix",

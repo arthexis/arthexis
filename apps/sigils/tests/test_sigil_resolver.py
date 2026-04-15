@@ -9,6 +9,7 @@ from django.test import RequestFactory
 from apps.nodes.models import Node, NodeRole
 from apps.sigils import sigil_resolver
 from apps.sigils.models import SigilRoot
+from apps.sigils.sigil_builder import generate_model_sigils
 from apps.sigils.sigil_context import clear_request, set_request
 
 
@@ -252,4 +253,31 @@ def test_get_user_safe_sigil_roots_normalizes_prefixes():
         },
     )
 
-    assert sigil_resolver.get_user_safe_sigil_roots() == {"SAFE_ROOT"}
+    safe_roots = sigil_resolver.get_user_safe_sigil_roots()
+    assert "SAFE_ROOT" in safe_roots
+    assert "UNSAFE_ROOT" not in safe_roots
+
+
+@pytest.mark.django_db
+def test_generate_model_sigils_sets_default_user_safety_for_new_builtin_roots():
+    SigilRoot.all_objects.filter(prefix__in=["ENV", "CONF", "SYS", "REQ"]).delete()
+
+    generate_model_sigils()
+
+    assert SigilRoot.objects.get(prefix="REQ").is_user_safe is True
+    assert SigilRoot.objects.get(prefix="ENV").is_user_safe is False
+
+
+@pytest.mark.django_db
+def test_generate_model_sigils_preserves_existing_builtin_user_safety():
+    SigilRoot.objects.update_or_create(
+        prefix="REQ",
+        defaults={
+            "context_type": SigilRoot.Context.REQUEST,
+            "is_user_safe": False,
+        },
+    )
+
+    generate_model_sigils()
+
+    assert SigilRoot.objects.get(prefix="REQ").is_user_safe is False
