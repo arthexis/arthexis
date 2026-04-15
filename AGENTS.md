@@ -80,6 +80,15 @@ legacy migration-only pattern instead of deleting it in place:
 This keeps upgrade paths intact now and ensures the retired app is positioned
 to be dropped cleanly on the next **major** version.
 
+## Removal requests
+
+When a user asks to remove something, perform an actual removal by default.
+Do not archive, deprecate, or soft-retire the target unless a developer
+explicitly asks for one of those alternatives.
+
+This policy exists so maintainers can accurately assess merge impact from
+true removals without soft-retirement patterns masking downstream effects.
+
 ---
 
 ## Exceptions
