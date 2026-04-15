@@ -305,7 +305,10 @@ def test_docs_library_renders_indexed_documents_before_other_documents(client):
     assert response.status_code == 200
     assert "Indexed Documents" in body
     assert "Other Documents" in body
+    assert body.index("Indexed Documents") < body.index("Other Documents")
     assert "security-model.md" in body
+    assert "Manage indexed documents" in body
+    assert "Create indexed document" in body
 
 
 def test_readme_resolves_sigils_for_authenticated_user(client):
@@ -404,7 +407,8 @@ def test_docs_library_keeps_nested_docs_visible_and_shows_parent_navigation(clie
         folder_response = client.get(reverse("docs:docs-library"), {"docs_path": "library-test/subfolder"})
 
         assert root_response.status_code == 200
-        assert "nested-visibility-test.md" in root_response.content.decode()
+        assert "library-test/" in root_response.content.decode()
+        assert "nested-visibility-test.md" not in root_response.content.decode()
         assert folder_response.status_code == 200
         assert "Up one level" in folder_response.content.decode()
     finally:
@@ -412,3 +416,31 @@ def test_docs_library_keeps_nested_docs_visible_and_shows_parent_navigation(clie
         for parent in (nested_document.parent, nested_document.parent.parent):
             if parent.exists():
                 parent.rmdir()
+
+
+def test_docs_library_groups_root_documents_into_root_folder(client):
+    user = get_user_model().objects.create_user(
+        username="docs-root-folder-user",
+        email="docs-root-folder-user@example.com",
+        password="secret",
+        is_staff=True,
+    )
+    root_document = Path("docs/library-root-visibility-test.md")
+    root_document.write_text("# Root visibility\n\nRoot document.\n", encoding="utf-8")
+
+    client.force_login(user)
+    try:
+        cache.clear()
+        root_response = client.get(reverse("docs:docs-library"))
+        virtual_root_response = client.get(
+            reverse("docs:docs-library"),
+            {"docs_path": "__root__"},
+        )
+
+        assert root_response.status_code == 200
+        assert "root/" in root_response.content.decode()
+        assert "library-root-visibility-test.md" not in root_response.content.decode()
+        assert virtual_root_response.status_code == 200
+        assert "library-root-visibility-test.md" in virtual_root_response.content.decode()
+    finally:
+        root_document.unlink(missing_ok=True)

@@ -36,6 +36,8 @@ DOCUMENT_LIBRARY_CACHE_TIMEOUT = 300
 DOCS_CANONICAL_HOST_OVERRIDES = {
     "m.arthexis.com": "arthexis.com",
 }
+LIBRARY_ROOT_FOLDER_LABEL = "root"
+LIBRARY_ROOT_FOLDER_SENTINEL = "__root__"
 FULL_CONTENT_DEFAULT_DOCUMENTS = {
     "docs/development/install-lifecycle-scripts-manual.md",
 }
@@ -322,9 +324,25 @@ def _build_library_section(
 
     folders: set[str] = set()
     items: list[dict[str, str]] = []
+    root_items: list[dict[str, str]] = []
+    show_root_folder = prefix == ""
+    in_virtual_root_folder = prefix == LIBRARY_ROOT_FOLDER_SENTINEL
 
     for path in files:
         relative = path.relative_to(root).as_posix()
+        if in_virtual_root_folder:
+            if "/" in relative or path.stem.lower() == "index":
+                continue
+            items.append(
+                _build_library_item(
+                    path,
+                    root,
+                    route_name,
+                    doc_path_prefix=doc_path_prefix,
+                    label=Path(relative).name,
+                )
+            )
+            continue
         if prefix:
             if relative == prefix:
                 if path.stem.lower() == "index":
@@ -350,7 +368,7 @@ def _build_library_section(
             continue
         if path.stem.lower() == "index":
             continue
-        items.append(
+        root_items.append(
             _build_library_item(
                 path,
                 root,
@@ -372,7 +390,21 @@ def _build_library_section(
         }
         for folder in sorted(folders)
     ]
-    folder_items.extend(item for item in items if item["url"])
+    if show_root_folder and root_items:
+        folder_items.insert(
+            0,
+            {
+                "kind": "folder",
+                "label": f"{LIBRARY_ROOT_FOLDER_LABEL}/",
+                "url": _build_library_query_url(parameter, LIBRARY_ROOT_FOLDER_SENTINEL),
+                "description": "Browse root-level documents.",
+            },
+        )
+
+    if in_virtual_root_folder:
+        folder_items.extend(item for item in items if item["url"])
+    else:
+        folder_items.extend(item for item in root_items if item["url"])
 
     section: dict[str, object] = {
         "title": title,
@@ -380,6 +412,8 @@ def _build_library_section(
     }
     if prefix:
         parent_prefix = prefix.rsplit("/", 1)[0] if "/" in prefix else ""
+        if in_virtual_root_folder:
+            parent_prefix = ""
         section["current_prefix"] = prefix
         section["parent_url"] = _build_library_query_url(parameter, parent_prefix)
     return section
@@ -579,22 +613,23 @@ def _render_document_library(
         doc_path_prefix="apps/docs/",
     )
     indexed_groups = _build_indexed_document_groups(request, all_documents)
-    indexed_doc_paths = {
-        assignment_item["doc_path"]
-        for group in indexed_groups
-        for assignment_item in group["items"]
-    }
-    other_documents = [
-        item for item in all_documents if item["doc_path"] not in indexed_doc_paths
-    ]
     context = {
         "canonical_url": _build_canonical_url(request),
+        "document_index_admin_add_url": "",
+        "document_index_admin_changelist_url": "",
         "indexed_groups": indexed_groups,
-        "other_documents": other_documents,
         "page_url": request.build_absolute_uri(),
         "sections": sections,
         "title": "Developer Documents",
     }
+    if request.user.is_staff:
+        try:
+            context["document_index_admin_changelist_url"] = reverse(
+                "admin:docs_documentindex_changelist"
+            )
+            context["document_index_admin_add_url"] = reverse("admin:docs_documentindex_add")
+        except NoReverseMatch:
+            pass
     if missing_document:
         context["missing_document"] = missing_document
     response = render(request, "docs/library.html", context, status=status)
