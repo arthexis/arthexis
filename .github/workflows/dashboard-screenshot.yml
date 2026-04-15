@@ -283,7 +283,7 @@ jobs:
           python <<'PY' > /tmp/authenticated-screenshot-paths.txt
           from pathlib import Path
 
-          defaults = ["/admin/", "/ocpp/cpms/dashboard/"]
+          defaults = ["/admin/", "/ocpp/cpms/dashboard/", "/docs/library/"]
           configured_paths_file = Path(".github/screenshot-paths.authenticated.txt")
           requested_paths_file = Path("/tmp/pr-authenticated-screenshot-paths.txt")
           configured = []
@@ -339,6 +339,14 @@ jobs:
         with:
           name: ocpp-dashboard
           path: artifacts/ocpp-cpms-dashboard-desktop.png
+
+      - name: Upload developer library screenshot for pull requests
+        if: ${{ github.event_name == 'pull_request' }}
+        id: upload-developer-library
+        uses: actions/upload-artifact@v7
+        with:
+          name: developer-library
+          path: artifacts/docs-library-desktop.png
 
       - name: Upload pull request screenshot bundle
         if: ${{ github.event_name == 'pull_request' }}
@@ -530,6 +538,13 @@ jobs:
         with:
           name: ocpp-dashboard
           path: artifacts/ocpp-cpms-dashboard-desktop.png
+
+      - name: Upload developer library screenshot
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: developer-library
+          path: artifacts/docs-library-desktop.png
 
       - name: Upload EVCS public screenshot
         if: ${{ github.event_name != 'pull_request' }}
