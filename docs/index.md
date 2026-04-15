@@ -20,6 +20,7 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [LCD Screen Hardware](lcd-screen-hardware.md)
 - [App Structure Policy](development/app-structure-policy.md)
 - [Endpoint Documentation Inventory](integrations/endpoint-inventory.md)
+- [GitHub Monitoring Suite Proposal](integrations/github-monitoring-suite.md)
 - [Endpoint Documentation Completeness Checklist](integrations/documentation-completeness-checklist.md)
 - [Integration Onboarding Tracks](integrations/onboarding-tracks.md)
 - [OCPP 1.6 Compliance Review](ocpp16_compliance_review.md)
