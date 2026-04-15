@@ -73,6 +73,12 @@ INTERNAL_ACTION_SPECS: tuple[InternalActionSpec, ...] = (
         admin_url_name="admin:log_viewer",
     ),
     InternalActionSpec(
+        name="operations",
+        label="Operations",
+        description="Review and continue assigned operator journey tasks.",
+        admin_url_name="ops:my-tasks",
+    ),
+    InternalActionSpec(
         name="reports",
         label="Reports",
         description="Run system reports and provide query parameters.",

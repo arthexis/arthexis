@@ -1,0 +1,64 @@
+{% extends "admin/base_site.html" %}
+{% load i18n tz %}
+
+{% block bodyclass %}{{ block.super }} app-ops model-operatorjourneystep{% endblock %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+    &rsaquo; {% translate "My Ops Tasks" %}
+  </div>
+{% endblock %}
+
+{% block content %}
+  <div id="content-main">
+    <h1>{% translate "My Ops Tasks" %}</h1>
+
+    {% if task_items %}
+      <table id="result_list" class="adminlist">
+        <thead>
+          <tr>
+            <th>{% translate "Journey" %}</th>
+            <th>{% translate "Task" %}</th>
+            <th>{% translate "Status" %}</th>
+            <th>{% translate "Completed" %}</th>
+            <th>{% translate "Action" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in task_items %}
+            <tr>
+              <td>{{ item.step.journey.name }}</td>
+              <td>{{ item.step.title }}</td>
+              <td>
+                {% if item.is_completed %}
+                  {% translate "Completed" %}
+                {% elif item.is_next %}
+                  {% translate "Ready" %}
+                {% else %}
+                  {% translate "Locked" %}
+                {% endif %}
+              </td>
+              <td>
+                {% if item.completed_at %}
+                  {{ item.completed_at|localtime|date:"Y-m-d H:i" }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td>
+                {% if item.is_next %}
+                  <a class="button" href="{% url 'ops:operator-journey-step' item.step.pk %}">{% translate "Open next task" %}</a>
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>{% translate "No operator tasks are currently assigned to your account." %}</p>
+    {% endif %}
+  </div>
+{% endblock %}

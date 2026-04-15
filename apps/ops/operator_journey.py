@@ -27,6 +27,17 @@ class OperatorJourneyStatus:
     available_since: datetime | None = None
 
 
+@dataclass(frozen=True)
+class OperatorJourneyTaskItem:
+    """Template-friendly task item for the user's eligible operator steps."""
+
+    step: OperatorJourneyStep
+    is_completed: bool
+    is_next: bool
+    is_locked: bool
+    completed_at: datetime | None = None
+
+
 def next_step_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStep | None:
     """Return the next required step for a user across active journey assignments."""
 
@@ -121,6 +132,49 @@ def _first_available_at(*, user: AbstractBaseUser, next_step: OperatorJourneySte
     if completion is None:
         return fallback_available_at
     return completion.completed_at
+
+
+def task_items_for_user(*, user: AbstractBaseUser) -> list[OperatorJourneyTaskItem]:
+    """Return ordered eligible steps with completion and lock state metadata."""
+
+    if not user.is_authenticated:
+        return []
+
+    steps = list(
+        OperatorJourneyStep.objects.filter(
+            is_active=True,
+            journey__is_active=True,
+            journey__security_group__in=_active_security_groups_for_user(user),
+        )
+        .select_related("journey")
+        .order_by("journey__priority", "journey__name", "order", "id")
+    )
+    if not steps:
+        return []
+
+    completion_map = {
+        completion.step_id: completion.completed_at
+        for completion in OperatorJourneyStepCompletion.objects.filter(
+            user=user,
+            step__in=steps,
+        )
+    }
+    next_step = next_step_for_user(user=user)
+    items: list[OperatorJourneyTaskItem] = []
+    for step in steps:
+        completed_at = completion_map.get(step.pk)
+        is_completed = completed_at is not None
+        is_next = bool(next_step and next_step.pk == step.pk)
+        items.append(
+            OperatorJourneyTaskItem(
+                step=step,
+                is_completed=is_completed,
+                is_next=is_next,
+                is_locked=not is_completed and not is_next,
+                completed_at=completed_at,
+            )
+        )
+    return items
 
 
 def _active_security_groups_for_user(user: AbstractBaseUser):

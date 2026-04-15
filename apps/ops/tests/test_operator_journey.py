@@ -135,6 +135,38 @@ class OperatorJourneyViewTests(TestCase):
             reverse("ops:operator-journey-step", args=[self.step_1.pk]),
         )
 
+    def test_my_ops_tasks_lists_all_eligible_steps_with_next_action_only(self):
+        response = self.client.get(reverse("ops:my-tasks"))
+
+        self.assertContains(response, "My Ops Tasks")
+        self.assertContains(response, "Validate role")
+        self.assertContains(response, "Confirm restart")
+        self.assertContains(
+            response,
+            reverse("ops:operator-journey-step", args=[self.step_1.pk]),
+        )
+        self.assertNotContains(
+            response,
+            reverse("ops:operator-journey-step", args=[self.step_2.pk]),
+        )
+
+    def test_my_ops_tasks_advances_clickable_step_after_completion(self):
+        self.client.post(
+            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+        )
+
+        response = self.client.get(reverse("ops:my-tasks"))
+
+        self.assertContains(response, "Completed")
+        self.assertContains(
+            response,
+            reverse("ops:operator-journey-step", args=[self.step_2.pk]),
+        )
+        self.assertNotContains(
+            response,
+            reverse("ops:operator-journey-step", args=[self.step_1.pk]),
+        )
+
     def test_step_view_redirects_when_opening_future_step(self):
         response = self.client.get(
             reverse("ops:operator-journey-step", args=[self.step_2.pk])

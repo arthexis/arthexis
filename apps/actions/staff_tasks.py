@@ -59,6 +59,13 @@ DEFAULT_STAFF_TASKS: tuple[dict[str, object], ...] = (
         "order": 60,
     },
     {
+        "slug": "operations",
+        "label": "Operations",
+        "description": "Review and continue assigned operator journey tasks.",
+        "action_name": "operations",
+        "order": 65,
+    },
+    {
         "slug": "rules",
         "label": "Rules",
         "description": "Review dashboard rule evaluation outcomes.",

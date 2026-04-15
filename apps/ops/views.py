@@ -16,7 +16,7 @@ OPERATOR_JOURNEY_STEP_URL_NAME = "ops:operator-journey-step"
 
 from .forms import OperatorJourneyProvisionSuperuserForm
 from .models import OperatorJourneyStep
-from .operator_journey import complete_step_for_user, next_step_for_user
+from .operator_journey import complete_step_for_user, next_step_for_user, task_items_for_user
 from .redirects import safe_host_redirect
 from .status_surface import build_status_surface, scoped_log_excerpts
 
@@ -151,6 +151,21 @@ def status_log_excerpts(request: HttpRequest) -> JsonResponse:
     """Return only scoped log excerpts for clients polling the status surface."""
 
     return JsonResponse({"log_excerpts": scoped_log_excerpts(user=request.user)})
+
+
+@staff_member_required
+def my_ops_tasks(request: HttpRequest):
+    """Render all operator journey tasks assigned to the current staff user."""
+
+    items = task_items_for_user(user=request.user)
+    return render(
+        request,
+        "admin/ops/my_ops_tasks.html",
+        {
+            "title": "My Ops Tasks",
+            "task_items": items,
+        },
+    )
 
 
 @staff_member_required
