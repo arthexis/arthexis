@@ -104,6 +104,24 @@ def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("path", "expected_status"),
+    [
+        ("/en//evil.com", 404),
+        ("/en///evil.com", 404),
+        (r"/en/\evil.com", 301),
+    ],
+)
+def test_legacy_language_redirect_rejects_scheme_relative_targets(
+    client, path, expected_status
+):
+    response = client.get(path, follow=False)
+
+    assert response.status_code == expected_status
+    if response.status_code in {301, 302, 307, 308}:
+        assert not response["Location"].startswith("//")
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("payload", "expected_status"),
     [
         ({"from": "+15551234", "message": "Hello"}, 201),
