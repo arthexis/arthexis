@@ -66,10 +66,13 @@ When new apps are created:
   * `docs/development/create-local-app.md`
   * `docs/development/app-structure-policy.md`
 
-## Retiring legacy apps
+## Removal requests and legacy app retirement
 
-When retiring an app that still needs migration compatibility, move it to the
-legacy migration-only pattern instead of deleting it in place:
+When a developer asks to remove something, perform an actual removal by default.
+Do not archive, deprecate, or soft-retire the target unless explicitly asked.
+
+If the request is to retire an app that still needs migration compatibility,
+follow this legacy migration-only retirement process instead of hard deletion:
 
 1. Create or reuse `apps/_legacy/<app>_migration_only/` with an `AppConfig`.
 2. Register that config in `LEGACY_MIGRATION_APPS`.
@@ -77,8 +80,9 @@ legacy migration-only pattern instead of deleting it in place:
    historical migrations stay runnable.
 4. Remove the runtime app from normal app discovery/runtime wiring.
 
-This keeps upgrade paths intact now and ensures the retired app is positioned
-to be dropped cleanly on the next **major** version.
+This policy keeps merge impact clear for removals while preserving upgrade
+paths for legacy-app retirement, and positions retired apps to be dropped
+cleanly on the next **major** version.
 
 ---
 
