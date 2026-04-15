@@ -7,7 +7,15 @@ from django.urls import reverse
 from apps.cards.models import OfferingSoul
 from apps.souls.models import Soul, SoulRegistrationSession
 from apps.souls.services import build_soul_package
-from apps.survey.models import Survey, SurveyAnswer, SurveyOption, SurveyQuestion, SurveyResponse
+from apps.survey.models import (
+    Survey,
+    SurveyAnswer,
+    SurveyOption,
+    SurveyQuestion,
+    SurveyResponse,
+)
+
+SOUL_SEED_REGISTRATION_TITLE = "Soul Seed Registration"
 
 
 class SoulRegistrationViewsTests(TestCase):
@@ -26,7 +34,7 @@ class SoulRegistrationViewsTests(TestCase):
             structural_traits={},
             type_traits={},
         )
-        survey = Survey.objects.create(title="Soul Registration", is_active=True)
+        survey = Survey.objects.create(title=SOUL_SEED_REGISTRATION_TITLE, is_active=True)
         response = SurveyResponse.objects.create(survey=survey, participant_token="existing-token")
         Soul.objects.create(
             user=user,
@@ -58,10 +66,41 @@ class SoulRegistrationViewsTests(TestCase):
             1,
         )
 
+
+    def test_register_survey_uses_legacy_title_fallback(self):
+        offering = OfferingSoul.objects.create(
+            core_hash="f" * 64,
+            package={
+                "schema_version": "1.0",
+                "core_hash": "f" * 64,
+                "issuance_marker": "legacy",
+                "metadata": {"size_bytes": 2},
+                "traits": {"structural": {}, "type_aware": {}},
+            },
+            structural_traits={},
+            type_traits={},
+        )
+        survey = Survey.objects.create(title="Soul Registration", is_active=True)
+        response = SurveyResponse.objects.create(survey=survey, participant_token="legacy-token")
+        registration = SoulRegistrationSession.objects.create(
+            email="legacy@example.com",
+            offering_soul=offering,
+            survey_response=response,
+            participant_token="legacy-token",
+            state=SoulRegistrationSession.State.OFFERING_DONE,
+        )
+        session = self.client.session
+        session["soul_registration_session_id"] = registration.id
+        session.save()
+
+        register_response = self.client.get(reverse("souls:register_survey"))
+
+        self.assertRedirects(register_response, reverse("souls:register_complete"), fetch_redirect_response=False)
+
     def test_register_verify_blocks_claim_when_existing_soul_id_differs(self):
         user_model = get_user_model()
         user = user_model.objects.create_user(username="claimed-user", email="claimed@example.com", password="x")
-        survey = Survey.objects.create(title="Soul Registration", is_active=True)
+        survey = Survey.objects.create(title=SOUL_SEED_REGISTRATION_TITLE, is_active=True)
         question = SurveyQuestion.objects.create(
             survey=survey,
             prompt="Axis",
@@ -118,7 +157,7 @@ class SoulRegistrationViewsTests(TestCase):
         user_model = get_user_model()
         first_user = user_model.objects.create_user(username="dupe-a", email="dupe@example.com", password="x")
         user_model.objects.create_user(username="dupe-b", email="dupe@example.com", password="x")
-        survey = Survey.objects.create(title="Soul Registration", is_active=True)
+        survey = Survey.objects.create(title=SOUL_SEED_REGISTRATION_TITLE, is_active=True)
         question = SurveyQuestion.objects.create(
             survey=survey,
             prompt="Axis",
@@ -164,7 +203,7 @@ class SoulRegistrationViewsTests(TestCase):
     def test_register_verify_allows_claim_when_existing_soul_id_matches(self):
         user_model = get_user_model()
         user = user_model.objects.create_user(username="matching-user", email="matching@example.com", password="x")
-        survey = Survey.objects.create(title="Soul Registration", is_active=True)
+        survey = Survey.objects.create(title=SOUL_SEED_REGISTRATION_TITLE, is_active=True)
         question = SurveyQuestion.objects.create(
             survey=survey,
             prompt="Axis",

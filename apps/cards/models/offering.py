@@ -11,7 +11,7 @@ from apps.cards.soul import PACKAGE_MAX_BYTES, derive_soul_package
 
 
 class OfferingSoul(Entity):
-    """Deterministic, compact Soul package derived from an uploaded offering file."""
+    """Deterministic, compact Soul Seed package derived from an uploaded offering file."""
 
     schema_version = models.CharField(max_length=16, default="1.0")
     hash_algorithm = models.CharField(max_length=16, default="sha256")
@@ -29,15 +29,15 @@ class OfferingSoul(Entity):
 
     class Meta:
         ordering = ("-id",)
-        verbose_name = "Offering Soul"
-        verbose_name_plural = "Offering Souls"
+        verbose_name = "Offering Soul Seed"
+        verbose_name_plural = "Offering Soul Seeds"
 
     def clean(self):
         super().clean()
         payload = self.package or {}
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         if len(encoded) > PACKAGE_MAX_BYTES:
-            raise ValidationError({"package": "Soul package exceeds 512 KB limit."})
+            raise ValidationError({"package": "Soul Seed package exceeds 512 KB limit."})
 
     @classmethod
     def create_from_upload(

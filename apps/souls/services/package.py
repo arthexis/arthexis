@@ -58,6 +58,7 @@ def build_soul_package(*, registration_session, user) -> tuple[dict, str, str, s
     }
     encoded = json.dumps(package, sort_keys=True, separators=(",", ":")).encode("utf-8")
     if len(encoded) > PACKAGE_MAX_BYTES:
-        raise ValueError("Soul package exceeds 512 KB limit.")
+        limit_kb = PACKAGE_MAX_BYTES // 1024
+        raise ValueError(f"Soul Seed package exceeds {limit_kb} KB limit.")
 
     return package, soul_id, survey_digest, email_hash

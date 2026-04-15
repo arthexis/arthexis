@@ -24,7 +24,7 @@ from apps.survey.models import (
 
 class SoulServicesTests(TestCase):
     def setUp(self):
-        self.survey = Survey.objects.create(title="Soul Registration", is_active=True)
+        self.survey = Survey.objects.create(title="Soul Seed Registration", is_active=True)
         self.question = SurveyQuestion.objects.create(
             survey=self.survey,
             prompt="Axis",

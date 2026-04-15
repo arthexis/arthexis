@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.http import HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -26,7 +26,9 @@ from .services import build_soul_package
 from .services.checkout import CHECKOUT_SOUL_KEY
 
 REG_SESSION_KEY = "soul_registration_session_id"
-SOUL_SURVEY_TITLE = "Soul Registration"
+SOUL_SURVEY_TITLE = "Soul Seed Registration"
+LEGACY_SOUL_SURVEY_TITLE = "Soul Registration"
+START_REGISTRATION_WARNING = "Start a Soul Seed registration first."
 
 
 @require_GET
@@ -68,7 +70,7 @@ def register_offering(request: HttpRequest) -> HttpResponse:
     try:
         registration = _load_registration_session(request)
     except ValidationError:
-        messages.warning(request, "Start a soul registration first.")
+        messages.warning(request, START_REGISTRATION_WARNING)
         return redirect("souls:register_landing")
 
     form = SoulOfferingUploadForm(request.POST or None, request.FILES or None)
@@ -88,14 +90,18 @@ def register_survey(request: HttpRequest) -> HttpResponse:
     try:
         registration = _load_registration_session(request)
     except ValidationError:
-        messages.warning(request, "Start a soul registration first.")
+        messages.warning(request, START_REGISTRATION_WARNING)
         return redirect("souls:register_landing")
 
     if not registration.offering_soul_id:
         messages.warning(request, "Upload an offering before answering the survey.")
         return redirect("souls:register_offering")
 
-    survey = get_object_or_404(Survey, title=SOUL_SURVEY_TITLE, is_active=True)
+    survey = Survey.objects.filter(title=SOUL_SURVEY_TITLE, is_active=True).first()
+    if survey is None:
+        survey = Survey.objects.filter(title=LEGACY_SOUL_SURVEY_TITLE, is_active=True).first()
+    if survey is None:
+        raise Http404
     participant_token = registration.participant_token or uuid4().hex
     if registration.participant_token != participant_token:
         registration.participant_token = participant_token
@@ -161,8 +167,8 @@ def _send_verification_email(request: HttpRequest, registration: SoulRegistratio
         reverse("souls:register_verify", kwargs={"session_id": registration.id, "token": token})
     )
     mailer.send(
-        subject="Verify your Soul Registration",
-        message=f"Verify your soul registration: {verification_url}",
+        subject="Verify your Soul Seed Registration",
+        message=f"Verify your Soul Seed registration: {verification_url}",
         recipient_list=[registration.email],
         fail_silently=True,
     )
@@ -173,7 +179,7 @@ def register_complete(request: HttpRequest) -> HttpResponse:
     try:
         registration = _load_registration_session(request)
     except ValidationError:
-        messages.warning(request, "Start a soul registration first.")
+        messages.warning(request, START_REGISTRATION_WARNING)
         return redirect("souls:register_landing")
     return render(request, "souls/register_complete.html", {"registration": registration})
 
@@ -252,7 +258,7 @@ def register_verify(request: HttpRequest, session_id: int, token: str) -> HttpRe
     if backend:
         login(request, user, backend=backend)
     request.session.pop(REG_SESSION_KEY, None)
-    messages.success(request, "Soul registration completed.")
+    messages.success(request, "Soul Seed registration completed.")
     return redirect("souls:me")
 
 
@@ -278,5 +284,5 @@ def soul_download(request: HttpRequest) -> HttpResponse:
 def attach_to_checkout(request: HttpRequest) -> HttpResponse:
     soul = get_object_or_404(Soul, user=request.user, soul_id=request.POST.get("soul_id", ""))
     request.session[CHECKOUT_SOUL_KEY] = soul.id
-    messages.success(request, "Soul will be attached at checkout for Soul Card fulfillment.")
+    messages.success(request, "Soul Seed will be attached at checkout for Soul Card fulfillment.")
     return redirect("shop:checkout")

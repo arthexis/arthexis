@@ -203,7 +203,7 @@ def derive_soul_package(
     issuance_marker: str = "",
     schema_version: str = SOUL_SCHEMA_VERSION,
 ) -> dict[str, object]:
-    """Derive a compact deterministic Soul package from an uploaded offering."""
+    """Derive a compact deterministic Soul Seed package from an uploaded offering."""
 
     size_bytes = int(getattr(uploaded_file, "size", 0) or 0)
     if size_bytes <= 0:
