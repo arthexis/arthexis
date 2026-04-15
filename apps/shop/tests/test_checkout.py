@@ -446,3 +446,20 @@ class ShopSoulSeedPreloadTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(ShopOrderSoulAttachment.objects.count(), 0)
+
+    def test_checkout_does_not_attach_other_users_soul_for_duplicate_email(self):
+        from django.contrib.auth import get_user_model
+
+        self._create_soul_for_email("shared@example.com")
+        user = get_user_model().objects.create_user(
+            username="shared-attacker",
+            email="shared@example.com",
+            password="x",
+        )
+        self.client.force_login(user)
+        self._add_to_cart(self.card_product, quantity=1)
+
+        response = self._checkout("shared@example.com")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ShopOrderSoulAttachment.objects.count(), 0)
