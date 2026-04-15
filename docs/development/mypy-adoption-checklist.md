@@ -90,15 +90,15 @@ Keep broader `apps/core/system/ui/` rollout tracked separately until translation
 
 ### Refresh procedure (on demand)
 
-When maintainers need current backlog counts, run these exact patterns with `rg -n` against the package under review:
+When maintainers need current backlog counts, run these exact patterns against the package under review:
 
 - `TYPE_CHECKING`
 - `from typing import Any`
-- `\b(list|dict|set|tuple)\b(?!\s*\[)`
+- `(?::|->)\s*\b(list|dict|set|tuple)\b(?!\s*\[)` (requires `rg -nP` and shell quoting)
 
 Use this workflow:
 
-1. run the three searches for each target package
+1. run the three searches for each target package (`rg -n` for the first two, `rg -nP '(?::|->)\s*\b(list|dict|set|tuple)\b(?!\s*\[)'` for the third)
 2. count each result set for the current totals
 3. record refreshed totals and the refresh date in the optional history section below, not in the evergreen checklist sections above
 
