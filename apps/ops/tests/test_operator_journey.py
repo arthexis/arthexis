@@ -129,7 +129,9 @@ class OperatorJourneyViewTests(TestCase):
     def test_dashboard_shows_operator_journey_link(self):
         response = self.client.get(reverse("admin:index"))
 
+        self.assertContains(response, "Next:")
         self.assertContains(response, "Validate role")
+        self.assertNotContains(response, "admin-home-operator-journey__age")
         self.assertContains(
             response,
             reverse("ops:operator-journey-step", args=[self.step_1.pk]),
