@@ -1,11 +1,13 @@
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const STATIC_CACHE_NAME = `arthexis-admin-static-${CACHE_VERSION}`;
-const PRECACHE_URLS = Array.isArray(self.__ARTHEXIS_ADMIN_SW_PRECACHE_URLS)
-  ? self.__ARTHEXIS_ADMIN_SW_PRECACHE_URLS
-  : [];
+const ADMIN_DOCUMENT_CACHE_NAME = `arthexis-admin-document-${CACHE_VERSION}`;
+const PRECACHE_URLS = (new URL(self.location.href).searchParams.get("precache") || "")
+  .split(",")
+  .map((url) => url.trim())
+  .filter(Boolean);
 const STATIC_PREFIX = "/static/";
 const ADMIN_PREFIX = "/admin/";
-const CACHE_NAMES = [STATIC_CACHE_NAME];
+const CACHE_NAMES = [ADMIN_DOCUMENT_CACHE_NAME, STATIC_CACHE_NAME];
 
 function isCacheableStaticRequest(request) {
   if (request.method !== "GET") {
@@ -75,7 +77,16 @@ self.addEventListener("fetch", (event) => {
 
   if (isAdminDocumentRequest(request)) {
     event.respondWith(
-      fetch(request).catch(() => caches.match(request).then((response) => response || Response.error())),
+      caches.open(ADMIN_DOCUMENT_CACHE_NAME).then((cache) =>
+        fetch(request)
+          .then((response) => {
+            if (response && response.ok) {
+              cache.put(request, response.clone());
+            }
+            return response;
+          })
+          .catch(() => cache.match(request).then((response) => response || Response.error())),
+      ),
     );
     return;
   }

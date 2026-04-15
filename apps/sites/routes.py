@@ -10,6 +10,11 @@ from apps.sites import views as pages_views
 
 ROOT_URLPATTERNS = [
     path(
+        admin_route("service-worker.js"),
+        pages_views.admin_service_worker,
+        name="admin-service-worker",
+    ),
+    path(
         admin_route("user-tools/"),
         pages_views.admin_user_tools,
         name="admin-user-tools",

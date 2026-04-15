@@ -91,7 +91,7 @@
       return;
     }
 
-    window.__ARTHEXIS_ADMIN_SW_PRECACHE_URLS = [
+    const precacheUrls = [
       '{% static "core/vendor/chart.umd.min.js" %}',
       '{% static "htmx/htmx.min.js" %}',
       '{% static "htmx/intersect.js" %}',
@@ -104,10 +104,9 @@
       '{% static "admin/js/theme.js" %}',
     ];
 
-    const serviceWorkerUrl = '{% static "pages/js/admin-sw.js" %}';
-    navigator.serviceWorker.register(serviceWorkerUrl, { scope: '/admin/' }).catch(function () {
-      return navigator.serviceWorker.register(serviceWorkerUrl);
-    });
+    const precacheParam = encodeURIComponent(precacheUrls.join(','));
+    const serviceWorkerUrl = `{% url "admin-service-worker" %}?precache=${precacheParam}`;
+    navigator.serviceWorker.register(serviceWorkerUrl);
   })();
 </script>
 {% if badge_role %}
