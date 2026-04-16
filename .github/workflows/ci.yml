@@ -117,7 +117,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          pytest_help="$(pytest --help)"
+          pytest_help="$(python -m pytest --help)"
           if grep -q -- '--dist' <<<"$pytest_help"; then
             workers="${PYTEST_WORKERS:-auto}"
             echo "PYTEST_XDIST_ARGS=-n ${workers} --dist loadfile" >> "${GITHUB_ENV}"
@@ -130,7 +130,7 @@ jobs:
           set -Eeuo pipefail
           source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
-          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee pytest.log
+          python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee pytest.log
 
       - name: Upload pytest log
         if: always()
