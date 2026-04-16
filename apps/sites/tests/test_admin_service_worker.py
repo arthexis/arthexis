@@ -1,4 +1,5 @@
 import pytest
+from django.contrib.staticfiles import finders
 from django.contrib.staticfiles.storage import staticfiles_storage
 from django.urls import reverse
 
@@ -27,10 +28,15 @@ def test_admin_service_worker_script_imports_static_worker(client):
     assert staticfiles_storage.url("pages/js/admin-sw.js") in body
 
 
-def test_admin_service_worker_does_not_cache_admin_html(client):
-    response = client.get(staticfiles_storage.url("pages/js/admin-sw.js"))
+def test_admin_service_worker_does_not_cache_admin_html():
+    try:
+        with staticfiles_storage.open("pages/js/admin-sw.js") as service_worker_file:
+            body = service_worker_file.read().decode()
+    except FileNotFoundError:
+        resolved_path = finders.find("pages/js/admin-sw.js")
+        assert resolved_path
+        with open(resolved_path, encoding="utf-8") as service_worker_file:
+            body = service_worker_file.read()
 
-    assert response.status_code == 200
-    body = b"".join(response.streaming_content).decode()
     assert "ADMIN_DOCUMENT_CACHE_NAME" not in body
     assert "isAdminDocumentRequest" not in body
