@@ -66,7 +66,7 @@ jobs:
         run: |
           set -o pipefail
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
+          python -m pytest --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v7
