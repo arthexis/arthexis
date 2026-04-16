@@ -96,7 +96,7 @@
           {% for image in gallery_images %}
             <div class="col">
               <a href="{% url 'gallery:detail' slug=image.slug %}" class="text-decoration-none">
-                <img src="{{ image.media_file.file.url }}" alt="{{ image.title }}" class="img-fluid rounded border">
+                <img src="{{ image.media_file.file.url }}" alt="{{ image.title }}" class="img-fluid rounded border" loading="lazy" decoding="async">
                 <div class="small mt-1 text-truncate">{{ image.title }}</div>
               </a>
             </div>

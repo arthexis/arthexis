@@ -706,22 +706,29 @@ def _get_cached_document_library(
     )
 
 
-def _latest_gallery_images_for_user(user, *, limit: int = 4):
-    queryset = GalleryImage.objects.select_related(
-        "media_file", "owner_user", "owner_group"
-    )
-    if can_manage_gallery(user):
+def _latest_gallery_images_for_user(
+    user, *, limit: int = 4, is_gallery_manager: bool | None = None
+):
+    """Return latest gallery images visible to the user, limited to four by default.
+
+    Gallery managers can see all images. Other users see public images plus images
+    they own and images owned by one of their groups. Results are ordered newest
+    first by media upload time and primary key.
+    """
+
+    queryset = GalleryImage.objects.select_related("media_file")
+    if is_gallery_manager is None:
+        is_gallery_manager = can_manage_gallery(user)
+    if is_gallery_manager:
         return queryset.order_by("-media_file__uploaded_at", "-pk")[:limit]
 
     visibility_filter = Q(include_in_public_gallery=True)
     if getattr(user, "is_authenticated", False):
         visibility_filter |= Q(owner_user=user)
         visibility_filter |= Q(owner_group__in=user.groups.all())
-    return (
-        queryset.filter(visibility_filter)
-        .distinct()
-        .order_by("-media_file__uploaded_at", "-pk")[:limit]
-    )
+    return queryset.filter(visibility_filter).order_by("-media_file__uploaded_at", "-pk")[
+        :limit
+    ]
 
 
 def _render_document_library(
@@ -761,7 +768,11 @@ def _render_document_library(
         doc_path_prefix="apps/docs/",
     )
     indexed_groups = _build_indexed_document_groups(request, all_documents)
-    gallery_images = _latest_gallery_images_for_user(request.user)
+    is_gallery_manager = can_manage_gallery(request.user)
+    gallery_images = _latest_gallery_images_for_user(
+        request.user,
+        is_gallery_manager=is_gallery_manager,
+    )
     context = {
         "canonical_url": _build_canonical_url(request),
         "document_index_admin_add_url": "",
@@ -770,7 +781,7 @@ def _render_document_library(
         "gallery_index_url": reverse("gallery:index"),
         "gallery_upload_url": reverse("gallery:upload"),
         "indexed_groups": indexed_groups,
-        "is_gallery_manager": can_manage_gallery(request.user),
+        "is_gallery_manager": is_gallery_manager,
         "page_url": request.build_absolute_uri(),
         "sections": sections,
         "title": "Developer Documents",
