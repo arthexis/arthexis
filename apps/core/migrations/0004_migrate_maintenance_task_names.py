@@ -20,11 +20,22 @@ def migrate_maintenance_task_names(apps, schema_editor):
 
     try:
         PeriodicTask = apps.get_model("django_celery_beat", "PeriodicTask")
+        PeriodicTasks = apps.get_model("django_celery_beat", "PeriodicTasks")
     except LookupError:
         return
 
+    from django.utils import timezone
+
+    updated = False
     for legacy_name, canonical_name in LEGACY_TO_CANONICAL_TASK_NAMES.items():
-        PeriodicTask.objects.filter(task=legacy_name).update(task=canonical_name)
+        if PeriodicTask.objects.filter(task=legacy_name).update(task=canonical_name) > 0:
+            updated = True
+
+    if updated:
+        PeriodicTasks.objects.update_or_create(
+            ident=1,
+            defaults={"last_update": timezone.now()},
+        )
 
 
 class Migration(migrations.Migration):

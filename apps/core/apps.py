@@ -388,6 +388,11 @@ def _configure_lock_dependent_tasks(config):
         }
 
         try:
+            if not PeriodicTask.objects.filter(
+                task__in=legacy_to_canonical_task_names
+            ).exists():
+                return
+
             updated = False
             for legacy_name, canonical_name in legacy_to_canonical_task_names.items():
                 if (
