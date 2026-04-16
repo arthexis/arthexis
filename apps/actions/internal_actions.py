@@ -55,6 +55,12 @@ INTERNAL_ACTION_SPECS: tuple[InternalActionSpec, ...] = (
         admin_url_name="admin:environment",
     ),
     InternalActionSpec(
+        name="evergo",
+        label="Evergo",
+        description="Open the Evergo contractor setup or order load workspace.",
+        admin_url_name="admin:evergo",
+    ),
+    InternalActionSpec(
         name="groups",
         label="Groups",
         description="Browse the current user's security groups.",

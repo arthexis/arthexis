@@ -5,10 +5,12 @@ from pathlib import Path
 import subprocess
 from urllib.parse import parse_qsl
 from dataclasses import dataclass
+from django.apps import apps
 
 from django.conf import settings
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.db.models import Q
 from django.http import HttpResponseRedirect, JsonResponse
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
@@ -79,6 +81,27 @@ def task_panel_route(*, route: str, name: str, group: str = "panels"):
     return decorator
 
 
+def _assigned_evergo_contractor_for_user(user):
+    """Return the first Evergo contractor assigned to the given authenticated user."""
+
+    if not getattr(user, "is_authenticated", False):
+        return None
+
+    evergo_user_model = apps.get_model("evergo", "EvergoUser")
+    if evergo_user_model is None:
+        return None
+
+    group_ids = list(user.groups.values_list("id", flat=True))
+    owner_filter = Q(user=user)
+    if group_ids:
+        owner_filter |= Q(group_id__in=group_ids)
+    owner_filter |= Q(avatar__user=user)
+    if group_ids:
+        owner_filter |= Q(avatar__group_id__in=group_ids)
+
+    return evergo_user_model._default_manager.filter(owner_filter).order_by("pk").first()
+
+
 @task_panel_route(route="system/", name="system", group="panels")
 def _system_view(request):
     ensure_default_staff_tasks_exist()
@@ -136,6 +159,21 @@ def _system_view(request):
         }
     )
     return TemplateResponse(request, "admin/system.html", context)
+
+
+@task_panel_route(route="evergo/", name="evergo", group="panels")
+def _evergo_shortcut_view(request):
+    """Route users to order loading when assigned; otherwise to contractor setup."""
+
+    contractor = _assigned_evergo_contractor_for_user(request.user)
+    if contractor is not None:
+        return HttpResponseRedirect(reverse("admin:evergo_evergocustomer_load_customers"))
+
+    messages.info(
+        request,
+        _("Set up an Evergo contractor first to load and manage assigned orders."),
+    )
+    return HttpResponseRedirect(reverse("admin:evergo_evergouser_login_on_evergo"))
 
 
 def _suite_service_status(base_dir: Path | None = None) -> dict[str, str | bool]:

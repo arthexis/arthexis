@@ -12,6 +12,7 @@ from django.urls import reverse
 from apps.actions.models import StaffTask
 from apps.actions.staff_tasks import ensure_default_staff_tasks_exist
 from apps.core.system.admin_views import TASK_PANEL_ROUTES
+from apps.evergo.models import EvergoUser
 from apps.ocpp.models import Charger
 
 
@@ -156,3 +157,24 @@ class AdminStaffTasksTests(TestCase):
         self.assertEqual(response.status_code, 200)
         mocked_resolver.assert_called_once_with(request=response.wsgi_request)
         self.assertContains(response, "wss://testserver/ws/&lt;charger-id&gt;/")
+
+    def test_evergo_shortcut_redirects_to_login_setup_when_no_assigned_contractor(self):
+        """Evergo shortcut should open setup wizard when user has no assigned contractor."""
+
+        response = self.client.get(reverse("admin:evergo"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("admin:evergo_evergouser_login_on_evergo"))
+
+    def test_evergo_shortcut_redirects_to_order_load_when_contractor_is_assigned(self):
+        """Evergo shortcut should open load-orders workflow for assigned contractor users."""
+
+        EvergoUser.objects.create(
+            user=self.user,
+            evergo_email="assigned-contractor@example.com",
+        )
+
+        response = self.client.get(reverse("admin:evergo"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("admin:evergo_evergocustomer_load_customers"))

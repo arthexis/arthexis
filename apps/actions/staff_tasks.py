@@ -38,6 +38,13 @@ DEFAULT_STAFF_TASKS: tuple[dict[str, object], ...] = (
         "order": 50,
     },
     {
+        "slug": "evergo",
+        "label": "Evergo",
+        "description": "Open the Evergo contractor setup or order load workspace.",
+        "action_name": "evergo",
+        "order": 52,
+    },
+    {
         "slug": "groups",
         "label": "Groups",
         "description": "Browse the current user's security groups.",
