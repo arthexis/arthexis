@@ -263,17 +263,21 @@ def test_generate_model_sigils_sets_default_user_safety_for_new_builtin_roots(mo
     monkeypatch.setattr(
         "apps.sigils.sigil_builder.BUILTIN_SIGIL_POLICIES",
         {
-            "REQ_TEST": {
+            "REQ_SAFE": {
                 "context_type": SigilRoot.Context.REQUEST,
                 "is_user_safe": True,
             },
+            "REQ_UNSAFE": {
+                "context_type": SigilRoot.Context.REQUEST,
+                "is_user_safe": False,
+            }
         },
     )
-    SigilRoot.all_objects.filter(prefix="REQ_TEST").delete()
 
     generate_model_sigils()
 
-    assert SigilRoot.objects.get(prefix="REQ_TEST").is_user_safe is True
+    assert SigilRoot.objects.get(prefix="REQ_SAFE").is_user_safe is True
+    assert SigilRoot.objects.get(prefix="REQ_UNSAFE").is_user_safe is False
 
 
 @pytest.mark.django_db
