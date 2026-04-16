@@ -243,5 +243,6 @@ def test_call_result_handler_package_exports_minimal_surface():
         "dispatch_call_result",
     }
     assert "CALL_RESULT_HANDLERS" not in package_api.__all__
+    assert not hasattr(package_api, "build_context")
     assert "build_legacy_registry" not in package_api.__all__
     assert "firmware" not in package_api.__all__

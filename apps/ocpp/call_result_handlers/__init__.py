@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .common import CallResultContext, build_context
+from .common import CallResultContext, build_context as _build_context
 from .registry import CALL_RESULT_HANDLER_REGISTRY
 
 
@@ -25,7 +25,7 @@ async def dispatch_call_result(
     handler = CALL_RESULT_HANDLER_REGISTRY.get(action)
     if not handler:
         return False
-    context = build_context(consumer, message_id, metadata, payload_data, log_key)
+    context = _build_context(consumer, message_id, metadata, payload_data, log_key)
     return await handler(context)
 
 

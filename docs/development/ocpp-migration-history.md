@@ -75,9 +75,9 @@ from apps.ocpp.call_result_handlers.firmware import handle_update_firmware_resul
 await handle_update_firmware_result(...)
 ```
 
-### Deprecation window
+### Compatibility timing
 
-For plugin and external integrations, treat this as a one minor release migration window. Update imports during the next minor release cycle so integrations stay compatible after the compatibility surface removal lands.
+The compatibility symbols above are removed effective immediately in this change. Plugin and external integrations should update imports now to remain compatible with this release.
 
 ## One-time shell migration example
 
