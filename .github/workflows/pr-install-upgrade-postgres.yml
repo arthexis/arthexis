@@ -1,0 +1,267 @@
+name: PR Install/Upgrade Postgres
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  NODE_OPTIONS: '--no-deprecation'
+  ARTHEXIS_DB_BACKEND: postgres
+  POSTGRES_DB: arthexis
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_HOST: localhost
+  POSTGRES_PORT: '5432'
+  PYTEST_WORKERS: 'auto'
+
+concurrency:
+  group: pr-install-upgrade-postgres-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths:
+      - '**/*.py'
+      - '**/*.json'
+      - '**/*.toml'
+      - '**/*.txt'
+      - '.github/workflows/pr-install-upgrade-postgres.yml'
+      - 'apps/**'
+      - 'config/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'manage.py'
+      - 'configure.sh'
+      - 'env-refresh.sh'
+      - 'install.sh'
+      - 'start.sh'
+      - 'stop.sh'
+      - 'upgrade.sh'
+  workflow_dispatch:
+
+jobs:
+  install-postgres:
+    name: Install flow (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: arthexis
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d arthexis"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Cache virtualenv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-postgres-pr-install-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh', 'env-refresh.sh') }}
+          restore-keys: |
+            venv-${{ runner.os }}-postgres-pr-install-
+
+      - name: Validate pyproject dependency ordering
+        run: |
+          python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
+
+      - name: Validate generated requirements
+        run: |
+          python "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
+
+      - name: Install suite from repository
+        run: |
+          ./install.sh --no-start
+
+      - name: Install CI dependencies
+        run: |
+          source .venv/bin/activate
+          python -m pip install --only-binary=:all: -r requirements-ci.txt
+
+      - name: Verify editable install import
+        run: |
+          source .venv/bin/activate
+          python scripts/check_editable_install_import.py
+
+      - name: Validate migrations
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          python scripts/check_migration_conflicts.py
+          python manage.py migrations check
+          python manage.py migrate --noinput --database default
+
+      - name: Detect pytest xdist arguments
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          pytest_help="$(python -m pytest --help)"
+          if grep -q -- '--dist' <<<"$pytest_help"; then
+            workers="${PYTEST_WORKERS:-auto}"
+            echo "PYTEST_XDIST_ARGS=-n ${workers} --dist loadfile" >> "${GITHUB_ENV}"
+          else
+            echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
+          fi
+
+      - name: Run install smoke tests
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
+          python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "not critical and not slow and not integration" | tee pytest-install.log
+
+      - name: Upload install pytest log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-install-postgres-pytest-log
+          path: pytest-install.log
+          if-no-files-found: warn
+
+  upgrade-postgres:
+    name: Upgrade flow (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: arthexis
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d arthexis"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      OCPP_STATE_REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Cache virtualenv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-postgres-pr-upgrade-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh', 'upgrade.sh') }}
+          restore-keys: |
+            venv-${{ runner.os }}-postgres-pr-upgrade-
+
+      - name: Validate pyproject dependency ordering
+        run: |
+          python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
+
+      - name: Validate generated requirements
+        run: |
+          python "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
+
+      - name: Install suite from repository
+        run: |
+          ./install.sh --no-start
+
+      - name: Install CI dependencies
+        run: |
+          source .venv/bin/activate
+          python -m pip install --only-binary=:all: -r requirements-ci.txt
+
+      - name: Verify editable install import
+        run: |
+          source .venv/bin/activate
+          python scripts/check_editable_install_import.py
+
+      - name: Apply upgrade smoke path
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          ./upgrade.sh --local --no-restart
+
+      - name: Validate upgraded migrations
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          python scripts/check_migration_conflicts.py
+          python manage.py migrations check
+          python manage.py migrate --noinput --database default
+
+      - name: Detect pytest xdist arguments
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          pytest_help="$(python -m pytest --help)"
+          if grep -q -- '--dist' <<<"$pytest_help"; then
+            workers="${PYTEST_WORKERS:-auto}"
+            echo "PYTEST_XDIST_ARGS=-n ${workers} --dist loadfile" >> "${GITHUB_ENV}"
+          else
+            echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
+          fi
+
+      - name: Run critical auto-upgrade checks
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
+          python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee pytest-upgrade.log
+
+      - name: Upload upgrade pytest log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-upgrade-postgres-pytest-log
+          path: pytest-upgrade.log
+          if-no-files-found: warn
