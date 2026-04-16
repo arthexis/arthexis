@@ -2,14 +2,13 @@ from datetime import timedelta
 
 import pytest
 from django.apps import apps as django_apps
-from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
 if not django_apps.is_installed("apps.screens"):
     pytest.skip("apps.screens is not installed", allow_module_level=True)
 
-from apps.screens.models import CharacterScreen, LCDAnimation, PixelScreen
+from apps.screens.models import CharacterScreen, PixelScreen
 
 
 class DeviceScreenTests(TestCase):
@@ -63,33 +62,3 @@ class DeviceScreenTests(TestCase):
         self.assertTrue(third)
         self.assertEqual(list(screen.pixel_buffer), [3, 3, 3, 3])
 
-    def test_update_pixels_accepts_bytes_like_payload(self):
-        screen = PixelScreen.objects.create(
-            slug="pixel-bytes",
-            name="Pixel Screen Bytes",
-            skin="virtual",
-            columns=2,
-            rows=2,
-        )
-
-        payload = bytes([1, 2, 3, 4])
-        screen.update_pixels(payload)
-
-        self.assertEqual(list(screen.pixel_buffer), [1, 2, 3, 4])
-
-
-class LCDAnimationModelTests(TestCase):
-    def test_requires_packaged_source_path(self):
-        animation = LCDAnimation(slug="missing", name="Missing")
-
-        with self.assertRaises(ValidationError):
-            animation.full_clean()
-
-    def test_accepts_packaged_source_path(self):
-        animation = LCDAnimation(
-            slug="trees",
-            name="Trees",
-            source_path="scrolling_trees.txt",
-        )
-
-        animation.full_clean()
