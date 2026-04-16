@@ -1,13 +1,11 @@
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const STATIC_CACHE_NAME = `arthexis-admin-static-${CACHE_VERSION}`;
-const ADMIN_DOCUMENT_CACHE_NAME = `arthexis-admin-document-${CACHE_VERSION}`;
 const PRECACHE_URLS = (new URL(self.location.href).searchParams.get("precache") || "")
   .split(",")
   .map((url) => url.trim())
   .filter(Boolean);
 const STATIC_PREFIX = "/static/";
-const ADMIN_PREFIX = "/admin/";
-const CACHE_NAMES = [ADMIN_DOCUMENT_CACHE_NAME, STATIC_CACHE_NAME];
+const CACHE_NAMES = [STATIC_CACHE_NAME];
 
 function isCacheableStaticRequest(request) {
   if (request.method !== "GET") {
@@ -16,21 +14,6 @@ function isCacheableStaticRequest(request) {
 
   const requestUrl = new URL(request.url);
   return requestUrl.origin === self.location.origin && requestUrl.pathname.startsWith(STATIC_PREFIX);
-}
-
-function isAdminDocumentRequest(request) {
-  if (request.method !== "GET") {
-    return false;
-  }
-
-  const requestUrl = new URL(request.url);
-  if (requestUrl.origin !== self.location.origin || !requestUrl.pathname.startsWith(ADMIN_PREFIX)) {
-    return false;
-  }
-
-  const destination = request.destination || "";
-  const accept = request.headers.get("accept") || "";
-  return destination === "document" || accept.includes("text/html");
 }
 
 function shouldBypassCaching(request) {
@@ -72,22 +55,6 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
 
   if (shouldBypassCaching(request)) {
-    return;
-  }
-
-  if (isAdminDocumentRequest(request)) {
-    event.respondWith(
-      caches.open(ADMIN_DOCUMENT_CACHE_NAME).then((cache) =>
-        fetch(request)
-          .then((response) => {
-            if (response && response.ok) {
-              cache.put(request, response.clone());
-            }
-            return response;
-          })
-          .catch(() => cache.match(request).then((response) => response || Response.error())),
-      ),
-    );
     return;
   }
 

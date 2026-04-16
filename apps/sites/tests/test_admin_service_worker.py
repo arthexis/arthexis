@@ -25,3 +25,12 @@ def test_admin_service_worker_script_imports_static_worker(client):
     body = response.content.decode()
     assert "importScripts(" in body
     assert staticfiles_storage.url("pages/js/admin-sw.js") in body
+
+
+def test_admin_service_worker_does_not_cache_admin_html(client):
+    response = client.get(staticfiles_storage.url("pages/js/admin-sw.js"))
+
+    assert response.status_code == 200
+    body = b"".join(response.streaming_content).decode()
+    assert "ADMIN_DOCUMENT_CACHE_NAME" not in body
+    assert "isAdminDocumentRequest" not in body
