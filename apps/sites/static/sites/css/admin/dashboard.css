@@ -85,11 +85,11 @@
         display: grid;
         row-gap: 0.25rem;
         align-content: start;
-        padding-bottom: 10px;
+        padding-bottom: 0.625rem;
     }
     .admin-home-operator-journey {
         margin: 0;
-        padding-left: 5px;
+        padding-left: 0.3125rem;
         font-size: 0.75rem;
         line-height: 1.05;
         border-radius: 4px;
