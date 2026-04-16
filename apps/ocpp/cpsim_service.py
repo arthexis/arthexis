@@ -14,6 +14,8 @@ from apps.features.utils import is_suite_feature_enabled
 
 CPSIM_FEATURE_SLUG = "ocpp-simulator"
 CPSIM_REQUEST_LOCK_NAME = "cpsim-service.lck"
+CPSIM_START_QUEUED_PREFIX = "cpsim-service start queued"
+CPSIM_START_REQUESTED_PREFIX = "cpsim-service start requested"
 CPSIM_START_QUEUED_STATUS = "cpsim-service start queued (awaiting worker)"
 CPSIM_STOP_QUEUED_STATUS = "cpsim-service stop queued (awaiting worker)"
 
@@ -121,4 +123,7 @@ def get_cpsim_request_metadata(*, base_dir: Path | None = None) -> dict[str, Any
 def is_cpsim_start_queued_status(status: str | None) -> bool:
     """Return whether simulator state reflects a cpsim start queue request."""
 
-    return str(status or "").startswith("cpsim-service start queued")
+    status_text = status or ""
+    return status_text.startswith(
+        (CPSIM_START_QUEUED_PREFIX, CPSIM_START_REQUESTED_PREFIX)
+    )

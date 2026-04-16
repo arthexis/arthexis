@@ -10,9 +10,11 @@ from apps.features.models import Feature
 from apps.nodes.models import Node
 from apps.ocpp.cpsim_service import (
     CPSIM_FEATURE_SLUG,
-    get_cpsim_request_metadata,
-    queue_cpsim_request,
+    CPSIM_START_QUEUED_STATUS,
     cpsim_service_enabled,
+    get_cpsim_request_metadata,
+    is_cpsim_start_queued_status,
+    queue_cpsim_request,
 )
 
 
@@ -98,3 +100,17 @@ def test_get_cpsim_request_metadata_handles_unreadable_lock_path(monkeypatch):
         "queued": False,
         "lock_path": "/workspace/arthexis/.locks/cpsim-service.lck",
     }
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (CPSIM_START_QUEUED_STATUS, True),
+        ("cpsim-service start requested", True),
+        ("cpsim-service start requested (awaiting worker)", True),
+        ("running", False),
+        (None, False),
+    ],
+)
+def test_is_cpsim_start_queued_status_supports_legacy_prefix(status, expected):
+    assert is_cpsim_start_queued_status(status) is expected

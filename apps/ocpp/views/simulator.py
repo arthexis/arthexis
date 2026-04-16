@@ -4,11 +4,7 @@ import ipaddress
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from ..cpsim_service import (
-    CPSIM_START_QUEUED_STATUS,
-    get_cpsim_request_metadata,
-    is_cpsim_start_queued_status,
-)
+from ..cpsim_service import get_cpsim_request_metadata, is_cpsim_start_queued_status
 from ..utils import resolve_ws_scheme
 from apps.core.notifications import LcdChannel
 from apps.screens.startup_notifications import format_lcd_lines
@@ -371,7 +367,7 @@ def cp_simulator(request):
                 lcd_channel_type=LcdChannel.LOW.value,
             )
             message = _("Simulator start requested")
-            if status == CPSIM_START_QUEUED_STATUS:
+            if is_cpsim_start_queued_status(status):
                 message = _("Simulator start queued for cpsim-service")
             if sim_params["demo_mode"]:
                 dashboard_link = reverse("ocpp:ocpp-dashboard")
