@@ -118,7 +118,7 @@ class CardFace(Entity):
             return str(override)
         from apps.sigils import sigil_resolver
 
-        resolved = sigil_resolver._resolve_token(token, current)  # type: ignore[attr-defined]
+        resolved = sigil_resolver.resolve_sigil(f"[{token}]", current)
         if resolved == f"[{token}]":
             return f"[{token.lower()}]"
         return resolved
