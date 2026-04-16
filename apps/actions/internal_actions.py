@@ -73,6 +73,12 @@ INTERNAL_ACTION_SPECS: tuple[InternalActionSpec, ...] = (
         admin_url_name="admin:log_viewer",
     ),
     InternalActionSpec(
+        name="release",
+        label="Release",
+        description="Prepare, review, and publish package releases.",
+        admin_url_name="admin:release_packagerelease_changelist",
+    ),
+    InternalActionSpec(
         name="reports",
         label="Reports",
         description="Run system reports and provide query parameters.",
