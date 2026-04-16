@@ -49,6 +49,36 @@ External plugin maintainers should update imports to use `apps.simulators.evcs` 
 | `from apps.ocpp.evcs import simulate, simulate_cp, view_simulator, view_cp_simulator` | `from apps.simulators.evcs import simulate, simulate_cp, view_simulator, view_cp_simulator` |
 | `from apps.ocpp.evcs import _simulator_status_json, _start_simulator, _stop_simulator, get_simulator_state, parse_repeat` | `from apps.simulators.evcs import _simulator_status_json, _start_simulator, _stop_simulator, get_simulator_state, parse_repeat` |
 
+## Call result handler package surface contraction
+
+The `apps.ocpp.call_result_handlers` package now exposes a minimal API:
+
+- `dispatch_call_result`
+- `CALL_RESULT_HANDLER_REGISTRY`
+- `CallResultContext`
+
+Removed compatibility exports:
+
+- `CALL_RESULT_HANDLERS`
+- `build_legacy_registry`
+- Package-level domain-module facade usage (`from apps.ocpp.call_result_handlers import firmware`, etc.)
+
+Import domain handlers directly from their domain modules instead:
+
+```python
+# old
+# from apps.ocpp.call_result_handlers import firmware
+# await firmware.handle_update_firmware_result(...)
+
+# new
+from apps.ocpp.call_result_handlers.firmware import handle_update_firmware_result
+await handle_update_firmware_result(...)
+```
+
+### Compatibility timing
+
+The compatibility symbols above are removed effective immediately in this change. Plugin and external integrations should update imports now to remain compatible with this release.
+
 ## One-time shell migration example
 
 For shell migration, a direct one-time update can be done with substitutions like:
