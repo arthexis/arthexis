@@ -15,7 +15,6 @@ from apps.repos.release_management import (
 
 
 @pytest.mark.django_db
-@pytest.mark.critical
 def test_release_management_uses_suite_api_by_default(monkeypatch):
     """Default suite mode should use API calls when token resolution succeeds."""
 
