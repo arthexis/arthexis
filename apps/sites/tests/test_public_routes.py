@@ -33,9 +33,14 @@ from apps.sites.utils import require_site_operator_or_staff
 pytestmark = [pytest.mark.django_db]
 
 
-def test_client_report_download_enforces_login_and_ownership(
-    client, monkeypatch, tmp_path
-):
+def _grant_docs_access(user):
+    release_manager_group, _ = SecurityGroup.objects.get_or_create(
+        name=RELEASE_MANAGER_GROUP_NAME
+    )
+    release_manager_group.user_set.add(user)
+
+
+def test_client_report_download_enforces_login_and_ownership(client, monkeypatch, tmp_path):
     user_model = get_user_model()
     owner = user_model.objects.create_user(
         username="report-owner", email="owner@example.com", password="secret"
@@ -419,6 +424,7 @@ def test_docs_library_renders_indexed_documents_before_other_documents(client):
         security_group=course_group,
         access=DocumentIndex.ACCESS_REQUIRED,
     )
+    _grant_docs_access(staff_user)
 
     client.force_login(staff_user)
     response = client.get(reverse("docs:docs-library"))
@@ -481,6 +487,7 @@ def test_readme_resolves_sigils_for_authenticated_user(client):
     )
     document = Path("docs/sigil-test.md")
     document.write_text("# Sigils\n\nCurrent path: [REQ.path]\n", encoding="utf-8")
+    _grant_docs_access(user)
     client.force_login(user)
     try:
         response = client.get(reverse("docs:docs-document", args=["sigil-test.md"]))
@@ -509,6 +516,7 @@ def test_docs_library_preserves_docs_prefix_for_indexed_document_matching(client
         security_group=course_group,
         access=DocumentIndex.ACCESS_REQUIRED,
     )
+    _grant_docs_access(staff_user)
 
     client.force_login(staff_user)
     response = client.get(reverse("docs:docs-library"))
@@ -539,6 +547,7 @@ def test_docs_library_hides_restricted_assignment_from_non_member_users(client):
         security_group=restricted_group,
         access=DocumentIndex.ACCESS_RESTRICTED,
     )
+    _grant_docs_access(user)
 
     client.force_login(user)
     try:
@@ -560,9 +569,8 @@ def test_docs_library_keeps_nested_docs_visible_and_shows_parent_navigation(clie
     )
     nested_document = Path("docs/library-test/subfolder/nested-visibility-test.md")
     nested_document.parent.mkdir(parents=True, exist_ok=True)
-    nested_document.write_text(
-        "# Nested visibility\n\nNested document.\n", encoding="utf-8"
-    )
+    nested_document.write_text("# Nested visibility\n\nNested document.\n", encoding="utf-8")
+    _grant_docs_access(user)
 
     client.force_login(user)
     try:
@@ -593,6 +601,7 @@ def test_docs_library_groups_root_documents_into_root_folder(client):
     )
     root_document = Path("docs/library-root-visibility-test.md")
     root_document.write_text("# Root visibility\n\nRoot document.\n", encoding="utf-8")
+    _grant_docs_access(user)
 
     client.force_login(user)
     try:
@@ -624,6 +633,7 @@ def test_docs_library_virtual_root_does_not_collide_with_real_root_named_folder(
     nested_document = Path("docs/__root__/folder-navigation-test.md")
     nested_document.parent.mkdir(parents=True, exist_ok=True)
     nested_document.write_text("# Root folder\n\nFolder document.\n", encoding="utf-8")
+    _grant_docs_access(user)
 
     client.force_login(user)
     try:
@@ -648,9 +658,8 @@ def test_docs_library_folder_view_includes_file_matching_prefix_exactly(client):
         is_staff=True,
     )
     prefixed_document = Path("docs/library-prefix-match.md")
-    prefixed_document.write_text(
-        "# Prefix match\n\nExact path document.\n", encoding="utf-8"
-    )
+    prefixed_document.write_text("# Prefix match\n\nExact path document.\n", encoding="utf-8")
+    _grant_docs_access(user)
 
     client.force_login(user)
     try:
@@ -677,6 +686,7 @@ def test_docs_library_folder_entries_include_content_blurbs(client):
     first_document.parent.mkdir(parents=True, exist_ok=True)
     first_document.write_text("# Alpha\n\nFolder blurb alpha.\n", encoding="utf-8")
     second_document.write_text("# Beta\n\nFolder blurb beta.\n", encoding="utf-8")
+    _grant_docs_access(user)
 
     client.force_login(user)
     try:
@@ -707,9 +717,8 @@ def test_docs_library_folder_blurb_ignores_index_only_nested_folders(client):
     parent_document.parent.mkdir(parents=True, exist_ok=True)
     nested_index_document.parent.mkdir(parents=True, exist_ok=True)
     parent_document.write_text("# Direct\n\nTop-level document.\n", encoding="utf-8")
-    nested_index_document.write_text(
-        "# Index\n\nHidden nested index.\n", encoding="utf-8"
-    )
+    nested_index_document.write_text("# Index\n\nHidden nested index.\n", encoding="utf-8")
+    _grant_docs_access(user)
 
     client.force_login(user)
     try:
