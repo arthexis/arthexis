@@ -49,26 +49,23 @@ def _build_security_group_rows(
 ) -> list[dict[str, object]]:
     """Return normalized rows for the security-group selection table."""
 
-    selected_group_ids = {
-        str(group_id)
-        for group_id in provision_superuser_form.data.getlist("security_groups")
-        if group_id
-    }
-    if not selected_group_ids and provision_superuser_form.is_bound:
-        cleaned_security_groups = provision_superuser_form.cleaned_data.get(
-            "security_groups"
-        )
-        selected_group_ids = {
-            str(group_id)
-            for group_id in getattr(
-                cleaned_security_groups, "values_list", lambda *_args, **_kwargs: []
-            )("pk", flat=True)
-        }
-    if not selected_group_ids and not provision_superuser_form.is_bound:
-        selected_group_ids = {
-            str(group.pk)
-            for group in provision_superuser_form.fields["security_groups"].initial or []
-        }
+    selected_group_ids: set[str] = set()
+    if provision_superuser_form.is_bound:
+        data = provision_superuser_form.data or {}
+        if hasattr(data, "getlist"):
+            raw_values = data.getlist("security_groups")
+        else:
+            value = data.get("security_groups", [])
+            raw_values = value if isinstance(value, list | tuple | set) else [value]
+        selected_group_ids = {str(value) for value in raw_values if value}
+    else:
+        initial = provision_superuser_form.fields["security_groups"].initial or []
+        if hasattr(initial, "values_list"):
+            selected_group_ids = {str(pk) for pk in initial.values_list("pk", flat=True)}
+        else:
+            selected_group_ids = {
+                str(value.pk if hasattr(value, "pk") else value) for value in initial
+            }
 
     rows: list[dict[str, object]] = []
     for group in provision_superuser_form.fields["security_groups"].queryset:
