@@ -265,6 +265,12 @@ class LCDRunner:
             if payload and _payload_has_text(payload):
                 refreshed = _refresh_uptime_payload(payload, base_dir=BASE_DIR, now=now_dt)
                 return self.apply_relief_if_needed("low", refreshed, base_payload, now_dt)
+            high_state = channel_info.get("high")
+            if high_state and len(high_state.payloads) >= 2:
+                high_payload = _peek_payload(high_state)
+                if high_payload and _payload_has_text(high_payload):
+                    self.reset_relief_state("low")
+                    return high_payload
             self.reset_relief_state("low")
             return base_payload
         if state_label == "clock":

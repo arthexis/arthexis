@@ -312,3 +312,93 @@ def test_render_event_frame_refreshes_static_event_periodically(monkeypatch):
     assert coordinator.scroll_scheduler.actions == [("sleep", None), ("advance", 0.5)]
 
 
+def test_low_slot_uses_second_high_payload_when_low_is_empty(monkeypatch):
+    """Low slot should borrow from HI queue when two or more HI payloads exist."""
+
+    coordinator = runner.LCDRunner()
+    now_dt = datetime(2026, 3, 20, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(
+        runner,
+        "_select_low_payload",
+        lambda *args, **kwargs: runner.locks.LockPayload("LO BASE", "", 0, is_base=True),
+    )
+
+    high_cycle = runner.ChannelCycle(
+        payloads=[
+            runner.locks.LockPayload("HI-1", "", 0),
+            runner.locks.LockPayload("HI-2", "", 0),
+        ],
+        signature=((0, 0.0), (1, 0.0)),
+        index=0,
+    )
+    low_cycle = runner.ChannelCycle(
+        payloads=[runner.locks.LockPayload("", "", 0)],
+        signature=((0, 0.0),),
+        index=0,
+    )
+    channel_info = {"high": high_cycle, "low": low_cycle}
+    channel_text = {"high": True, "low": False}
+
+    high_payload = coordinator.payload_for_state(
+        ("high", "low"),
+        0,
+        channel_info,
+        channel_text,
+        now_dt,
+    )
+    low_payload = coordinator.payload_for_state(
+        ("high", "low"),
+        1,
+        channel_info,
+        channel_text,
+        now_dt,
+    )
+
+    assert high_payload.line1 == "HI-1"
+    assert low_payload.line1 == "HI-2"
+
+
+def test_low_slot_keeps_default_when_only_one_high_payload_exists(monkeypatch):
+    """Low slot should show its default base payload when only one HI payload exists."""
+
+    coordinator = runner.LCDRunner()
+    now_dt = datetime(2026, 3, 20, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(
+        runner,
+        "_select_low_payload",
+        lambda *args, **kwargs: runner.locks.LockPayload("LO BASE", "", 0, is_base=True),
+    )
+
+    high_cycle = runner.ChannelCycle(
+        payloads=[runner.locks.LockPayload("HI-1", "", 0)],
+        signature=((0, 0.0),),
+        index=0,
+    )
+    low_cycle = runner.ChannelCycle(
+        payloads=[runner.locks.LockPayload("", "", 0)],
+        signature=((0, 0.0),),
+        index=0,
+    )
+    channel_info = {"high": high_cycle, "low": low_cycle}
+    channel_text = {"high": True, "low": False}
+
+    high_payload = coordinator.payload_for_state(
+        ("high", "low"),
+        0,
+        channel_info,
+        channel_text,
+        now_dt,
+    )
+    low_payload = coordinator.payload_for_state(
+        ("high", "low"),
+        1,
+        channel_info,
+        channel_text,
+        now_dt,
+    )
+
+    assert high_payload.line1 == "HI-1"
+    assert low_payload.line1 == "LO BASE"
+
