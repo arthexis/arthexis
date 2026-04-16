@@ -40,6 +40,8 @@ def test_whatsapp_webhook_verification(client):
     assert response.content.decode() == "abc123"
     assert response["Content-Type"].startswith("text/plain")
 
+
+@pytest.mark.django_db
 def test_whatsapp_webhook_disabled_feature_still_stores_messages_for_audit(client):
     """Disabled WhatsApp suite feature should keep audit storage but stop bridge activity."""
 

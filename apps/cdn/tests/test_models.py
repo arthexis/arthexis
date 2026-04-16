@@ -42,6 +42,8 @@ def test_database_constraint_requires_distribution_id_for_aws():
             base_url="https://d111111abcdef8.cloudfront.net/static/",
         )
 
+
+@pytest.mark.django_db
 def test_database_constraint_requires_https_base_url():
     """DB check constraint rejects non-HTTPS base URLs."""
 
