@@ -132,8 +132,7 @@ Prefer extending Arthexis directly through apps/models/migrations/admin when you
 - Node/admin enrollment tooling: `apps.nodes.admin.enrollment_admin`
 - Node operations: `apps.nodes.admin.node_admin`
 - OCPP transactional and charger admin surfaces:
-  - `apps.ocpp.admin.miscellaneous.transactions_admin`
-  - `apps.ocpp.admin.miscellaneous.core_admin`
+  - `apps.ocpp.admin.miscellaneous.registry`
 
 When adding new integration behavior, model it first (Django model + migration), expose admin discoverability, then wire endpoint/consumer logic.
 
