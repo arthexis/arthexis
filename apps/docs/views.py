@@ -7,25 +7,27 @@ from urllib.parse import urlencode, urlunsplit
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.utils.cache import patch_cache_control, patch_vary_headers
+from django.db.models import Q
 from django.http import FileResponse, Http404, HttpResponse
-from django.urls import NoReverseMatch, reverse
 from django.shortcuts import render
+from django.urls import NoReverseMatch, reverse
+from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.views.decorators.cache import never_cache
 
+from apps.gallery.models import GalleryImage
+from apps.gallery.permissions import can_manage_gallery
 from apps.groups.constants import (
     PRODUCT_DEVELOPER_GROUP_NAME,
     RELEASE_MANAGER_GROUP_NAME,
 )
 from apps.groups.decorators import security_group_required
+from apps.modules.models import Module
 from apps.nodes.models import Node
 from apps.nodes.utils import FeatureChecker
-from apps.modules.models import Module
 from apps.sites.utils import module_pill_link_validation
 
-from .models import DocumentIndex
 from . import assets, rendering
-
+from .models import DocumentIndex
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +63,9 @@ def _show_docs_navigation_link(*, request, landing) -> bool:
         return False
     if user.is_superuser:
         return True
-    return user.groups.filter(name__in=DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES).exists()
+    return user.groups.filter(
+        name__in=DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES
+    ).exists()
 
 
 def _is_allowed_doc_path(path: Path) -> bool:
@@ -115,7 +119,9 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
                     add_candidate(path.with_name(f"{path.stem}.{lang}{path.suffix}"))
                     short = lang.split("-")[0]
                     if short and short != lang:
-                        add_candidate(path.with_name(f"{path.stem}.{short}{path.suffix}"))
+                        add_candidate(
+                            path.with_name(f"{path.stem}.{short}{path.suffix}")
+                        )
             add_candidate(path)
 
         add_localized_candidates(doc_path)
@@ -179,7 +185,11 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
             candidates.append(root_default)
 
     readme_file = next(
-        (p for p in candidates if p.exists() and p.is_file() and _is_allowed_doc_path(p)),
+        (
+            p
+            for p in candidates
+            if p.exists() and p.is_file() and _is_allowed_doc_path(p)
+        ),
         None,
     )
     if readme_file is None:
@@ -323,7 +333,11 @@ def _normalize_library_prefix(prefix: str | None) -> str:
 
 def _build_library_query_url(parameter: str, prefix: str) -> str:
     query = urlencode({parameter: prefix}) if prefix else ""
-    return f"{reverse('docs:docs-library')}?{query}" if query else reverse("docs:docs-library")
+    return (
+        f"{reverse('docs:docs-library')}?{query}"
+        if query
+        else reverse("docs:docs-library")
+    )
 
 
 def _build_virtual_root_query_url(parameter: str) -> str:
@@ -482,7 +496,9 @@ def _build_library_section(
             {
                 "kind": "folder",
                 "label": f"{LIBRARY_ROOT_FOLDER_LABEL}/",
-                "url": _build_virtual_root_query_url(f"{parameter}_{LIBRARY_ROOT_QUERY_PARAMETER}"),
+                "url": _build_virtual_root_query_url(
+                    f"{parameter}_{LIBRARY_ROOT_QUERY_PARAMETER}"
+                ),
                 "description": "Browse root-level documents.",
             },
         )
@@ -523,7 +539,9 @@ def _collect_document_library(
     apps_docs_root = root_base / "apps" / "docs"
     sections: list[dict[str, object]] = []
 
-    docs_files = docs_files if docs_files is not None else _iter_document_paths(docs_root)
+    docs_files = (
+        docs_files if docs_files is not None else _iter_document_paths(docs_root)
+    )
     if docs_files:
         sections.append(
             _build_library_section(
@@ -539,7 +557,9 @@ def _collect_document_library(
         )
 
     apps_docs_files = (
-        apps_docs_files if apps_docs_files is not None else _iter_document_paths(apps_docs_root)
+        apps_docs_files
+        if apps_docs_files is not None
+        else _iter_document_paths(apps_docs_root)
     )
     if apps_docs_files:
         sections.append(
@@ -583,7 +603,9 @@ def _build_library_documents(
     return [item for item in documents if item["url"]]
 
 
-def _build_indexed_document_groups(request, documents: list[dict[str, str]]) -> list[dict[str, object]]:
+def _build_indexed_document_groups(
+    request, documents: list[dict[str, str]]
+) -> list[dict[str, object]]:
     """Group indexed documents by security-group course (and listable catch-all)."""
 
     document_by_path = {item["doc_path"]: item for item in documents}
@@ -630,10 +652,14 @@ def _build_indexed_document_groups(request, documents: list[dict[str, str]]) -> 
             group = ensure_group("Listable", description="General")
             group["items"].append({**item, "access": "Available"})
 
-    return [value for _, value in sorted(grouped.items(), key=lambda pair: pair[0].lower())]
+    return [
+        value for _, value in sorted(grouped.items(), key=lambda pair: pair[0].lower())
+    ]
 
 
-def _get_cached_document_library_paths(root_base: Path) -> tuple[list[Path], list[Path]]:
+def _get_cached_document_library_paths(
+    root_base: Path,
+) -> tuple[list[Path], list[Path]]:
     """Return cached document path lists to avoid repeated filesystem scans."""
 
     cache_key = f"{DOCUMENT_LIBRARY_CACHE_KEY}:paths:{root_base.as_posix()}"
@@ -680,6 +706,31 @@ def _get_cached_document_library(
     )
 
 
+def _latest_gallery_images_for_user(
+    user, *, limit: int = 4, is_gallery_manager: bool | None = None
+):
+    """Return latest gallery images visible to the user, limited to four by default.
+
+    Gallery managers can see all images. Other users see public images plus images
+    they own and images owned by one of their groups. Results are ordered newest
+    first by media upload time and primary key.
+    """
+
+    queryset = GalleryImage.objects.select_related("media_file")
+    if is_gallery_manager is None:
+        is_gallery_manager = can_manage_gallery(user)
+    if is_gallery_manager:
+        return queryset.order_by("-media_file__uploaded_at", "-pk")[:limit]
+
+    visibility_filter = Q(include_in_public_gallery=True)
+    if getattr(user, "is_authenticated", False):
+        visibility_filter |= Q(owner_user=user)
+        visibility_filter |= Q(owner_group__in=user.groups.all())
+    return queryset.filter(visibility_filter).order_by("-media_file__uploaded_at", "-pk")[
+        :limit
+    ]
+
+
 def _render_document_library(
     request,
     *,
@@ -691,7 +742,9 @@ def _render_document_library(
     root_base = Path(settings.BASE_DIR).resolve()
     docs_prefix = request.GET.get("docs_path", "")
     apps_docs_prefix = request.GET.get("apps_docs_path", "")
-    docs_virtual_root_selected = request.GET.get(f"docs_path_{LIBRARY_ROOT_QUERY_PARAMETER}") == "1"
+    docs_virtual_root_selected = (
+        request.GET.get(f"docs_path_{LIBRARY_ROOT_QUERY_PARAMETER}") == "1"
+    )
     apps_docs_virtual_root_selected = (
         request.GET.get(f"apps_docs_path_{LIBRARY_ROOT_QUERY_PARAMETER}") == "1"
     )
@@ -715,11 +768,20 @@ def _render_document_library(
         doc_path_prefix="apps/docs/",
     )
     indexed_groups = _build_indexed_document_groups(request, all_documents)
+    is_gallery_manager = can_manage_gallery(request.user)
+    gallery_images = _latest_gallery_images_for_user(
+        request.user,
+        is_gallery_manager=is_gallery_manager,
+    )
     context = {
         "canonical_url": _build_canonical_url(request),
         "document_index_admin_add_url": "",
         "document_index_admin_changelist_url": "",
+        "gallery_images": gallery_images,
+        "gallery_index_url": reverse("gallery:index"),
+        "gallery_upload_url": reverse("gallery:upload"),
         "indexed_groups": indexed_groups,
+        "is_gallery_manager": is_gallery_manager,
         "page_url": request.build_absolute_uri(),
         "sections": sections,
         "title": "Developer Documents",
@@ -729,7 +791,9 @@ def _render_document_library(
             context["document_index_admin_changelist_url"] = reverse(
                 "admin:docs_documentindex_changelist"
             )
-            context["document_index_admin_add_url"] = reverse("admin:docs_documentindex_add")
+            context["document_index_admin_add_url"] = reverse(
+                "admin:docs_documentindex_add"
+            )
         except NoReverseMatch:
             pass
     if missing_document:
@@ -796,7 +860,10 @@ def render_readme_page(
         initial_content = html
         remaining_content = ""
 
-    if request.headers.get("HX-Request") == "true" and request.GET.get("fragment") == "remaining":
+    if (
+        request.headers.get("HX-Request") == "true"
+        and request.GET.get("fragment") == "remaining"
+    ):
         response = HttpResponse(remaining_content)
         patch_vary_headers(response, ["Accept-Language", "Cookie"])
         return response
@@ -841,7 +908,9 @@ def document_library(request):
     return _render_document_library(request)
 
 
-def _render_missing_document(request, *, doc: str | None, prepend_docs: bool) -> HttpResponse:
+def _render_missing_document(
+    request, *, doc: str | None, prepend_docs: bool
+) -> HttpResponse:
     """Render a helpful fallback page when a documentation path is missing."""
 
     missing_path = _normalize_docs_path(doc, prepend_docs) or ""
