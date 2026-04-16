@@ -16,7 +16,11 @@ from django.utils.http import urlsafe_base64_encode
 from apps.docs.models import DocumentIndex, DocumentIndexAssignment
 from apps.energy.models import ClientReport
 from apps.features.models import Feature
-from apps.groups.constants import SITE_OPERATOR_GROUP_NAME
+from apps.groups.constants import (
+    PRODUCT_DEVELOPER_GROUP_NAME,
+    RELEASE_MANAGER_GROUP_NAME,
+    SITE_OPERATOR_GROUP_NAME,
+)
 from apps.groups.models import SecurityGroup
 from apps.modules.models import Module
 from apps.sites import context_processors
@@ -280,6 +284,45 @@ def test_docs_library_and_documents_require_login(client):
     assert apps_document_response.url.startswith(expected_prefix)
 
 
+@pytest.mark.parametrize(
+    ("group_name", "is_superuser"),
+    [
+        (PRODUCT_DEVELOPER_GROUP_NAME, False),
+        (RELEASE_MANAGER_GROUP_NAME, False),
+        (None, True),
+    ],
+)
+def test_docs_library_and_documents_require_developer_or_release_manager_group(
+    client, group_name, is_superuser
+):
+    user = get_user_model().objects.create_user(
+        username=f"docs-group-user-{group_name or 'superuser'}",
+        email=f"docs-group-user-{group_name or 'superuser'}@example.com",
+        password="secret",
+        is_staff=True,
+        is_superuser=is_superuser,
+    )
+    library_url = reverse("docs:docs-library")
+    document_url = reverse("docs:docs-document", args=["index.md"])
+    client.force_login(user)
+    library_response = client.get(library_url)
+    document_response = client.get(document_url)
+
+    expected_initial_status = 200 if is_superuser else 403
+    assert library_response.status_code == expected_initial_status
+    assert document_response.status_code == expected_initial_status
+
+    if group_name:
+        allowed_group, _ = SecurityGroup.objects.get_or_create(name=group_name)
+        allowed_group.user_set.add(user)
+
+    library_response = client.get(library_url)
+    document_response = client.get(document_url)
+
+    assert library_response.status_code == 200
+    assert document_response.status_code == 200
+
+
 def test_developers_module_pill_hidden_from_anonymous_users_when_landing_is_docs_library():
     module = Module.objects.create(path="/docs/", menu="Developers")
     Landing.objects.create(
@@ -294,6 +337,54 @@ def test_developers_module_pill_hidden_from_anonymous_users_when_landing_is_docs
     nav_modules = nav_context["nav_modules"]
 
     assert not any(candidate.path == "/docs/" for candidate in nav_modules)
+
+
+def test_developers_module_pill_hidden_from_non_member_users_when_landing_is_docs_library():
+    module = Module.objects.create(path="/docs/", menu="Developers")
+    Landing.objects.create(
+        module=module,
+        path=reverse("docs:docs-library"),
+        label="Developer Documents",
+    )
+    user = get_user_model().objects.create_user(
+        username="docs-non-member",
+        email="docs-non-member@example.com",
+        password="secret",
+    )
+    request = RequestFactory().get("/")
+    request.user = user
+
+    cache.clear()
+    nav_context = context_processors.nav_links(request)
+    nav_modules = nav_context["nav_modules"]
+
+    assert not any(candidate.path == "/docs/" for candidate in nav_modules)
+
+
+def test_developers_module_pill_visible_to_release_manager_users():
+    module = Module.objects.create(path="/docs/", menu="Developers")
+    Landing.objects.create(
+        module=module,
+        path=reverse("docs:docs-library"),
+        label="Developer Documents",
+    )
+    user = get_user_model().objects.create_user(
+        username="docs-release-manager",
+        email="docs-release-manager@example.com",
+        password="secret",
+    )
+    release_manager_group, _ = SecurityGroup.objects.get_or_create(
+        name=RELEASE_MANAGER_GROUP_NAME
+    )
+    release_manager_group.user_set.add(user)
+    request = RequestFactory().get("/")
+    request.user = user
+
+    cache.clear()
+    nav_context = context_processors.nav_links(request)
+    nav_modules = nav_context["nav_modules"]
+
+    assert any(candidate.path == "/docs/" for candidate in nav_modules)
 
 
 def test_docs_library_renders_indexed_documents_before_other_documents(client):
