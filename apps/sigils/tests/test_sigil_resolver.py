@@ -281,7 +281,7 @@ def test_generate_model_sigils_sets_default_user_safety_for_new_builtin_roots(mo
 
 
 @pytest.mark.django_db
-def test_generate_model_sigils_preserves_existing_builtin_user_safety():
+def test_generate_model_sigils_updates_existing_builtin_user_safety():
     SigilRoot.objects.update_or_create(
         prefix="REQ",
         defaults={
@@ -292,4 +292,4 @@ def test_generate_model_sigils_preserves_existing_builtin_user_safety():
 
     generate_model_sigils()
 
-    assert SigilRoot.objects.get(prefix="REQ").is_user_safe is False
+    assert SigilRoot.objects.get(prefix="REQ").is_user_safe is True

@@ -22,9 +22,8 @@
         align-items: center;
         align-content: right;
         gap: 0.5rem;
-        padding-block: 0;
-        padding-inline: 0.65rem;
-        margin-block: 0;
+        padding: 0;
+        margin-block: 0 var(--admin-ui-space-1, 0.25rem);
         border-radius: 6px;
         background: var(--darkened-bg);
         color: var(--body-fg);

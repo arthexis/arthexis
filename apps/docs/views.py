@@ -13,6 +13,11 @@ from django.urls import NoReverseMatch, reverse
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 
+from apps.groups.constants import (
+    PRODUCT_DEVELOPER_GROUP_NAME,
+    RELEASE_MANAGER_GROUP_NAME,
+)
+from apps.groups.decorators import security_group_required
 from apps.nodes.models import Node
 from apps.nodes.utils import FeatureChecker
 from apps.modules.models import Module
@@ -43,9 +48,20 @@ FULL_CONTENT_DEFAULT_DOCUMENTS = {
 }
 
 
+DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES = (
+    PRODUCT_DEVELOPER_GROUP_NAME,
+    RELEASE_MANAGER_GROUP_NAME,
+)
+
+
 def _show_docs_navigation_link(*, request, landing) -> bool:
     del landing
-    return bool(getattr(request, "user", None) and request.user.is_authenticated)
+    user = getattr(request, "user", None)
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    return user.groups.filter(name__in=DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES).exists()
 
 
 def _is_allowed_doc_path(path: Path) -> bool:
@@ -314,6 +330,40 @@ def _build_virtual_root_query_url(parameter: str) -> str:
     return f"{reverse('docs:docs-library')}?{urlencode({parameter: '1'})}"
 
 
+def _pluralize(count: int, singular: str) -> str:
+    """Return the singular/plural form for a count."""
+
+    return singular if count == 1 else f"{singular}s"
+
+
+def _preview_files(names: list[str]) -> tuple[str, str]:
+    """Build a deterministic two-item preview and overflow suffix."""
+
+    preview = ", ".join(sorted(names)[:2])
+    suffix = "…" if len(names) > 2 else ""
+    return preview, suffix
+
+
+def _build_folder_blurb(direct_files: list[str], nested_count: int) -> str:
+    """Return a short, data-backed summary for a folder entry."""
+
+    direct_count = len(direct_files)
+    total_documents = direct_count + nested_count
+    if total_documents == 0:
+        return "Folder overview and related references."
+
+    if direct_count == 0:
+        return f"{nested_count} nested {_pluralize(nested_count, 'folder')} with additional documentation."
+
+    preview, suffix = _preview_files(direct_files)
+    if nested_count:
+        return (
+            f"{direct_count} {_pluralize(direct_count, 'doc')} ({preview}{suffix}) "
+            f"and {nested_count} nested {_pluralize(nested_count, 'folder')}."
+        )
+    return f"{direct_count} {_pluralize(direct_count, 'doc')}: {preview}{suffix}."
+
+
 def _build_library_section(
     files: list[Path],
     *,
@@ -383,6 +433,34 @@ def _build_library_section(
             )
         )
 
+    folder_direct_files: dict[str, list[str]] = {}
+    folder_nested_folders: dict[str, dict[str, bool]] = {}
+    for path in files:
+        relative = path.relative_to(root).as_posix()
+        if prefix:
+            prefix_root = f"{prefix}/"
+            if not relative.startswith(prefix_root):
+                continue
+            scoped_relative = relative.removeprefix(prefix_root)
+        else:
+            scoped_relative = relative
+        if "/" not in scoped_relative:
+            continue
+
+        folder, remainder = scoped_relative.split("/", 1)
+        direct_files = folder_direct_files.setdefault(folder, [])
+        nested_folders = folder_nested_folders.setdefault(folder, {})
+        if "/" in remainder:
+            nested_folder = remainder.split("/", 1)[0]
+            if Path(remainder).stem.lower() != "index":
+                nested_folders[nested_folder] = True
+            else:
+                nested_folders.setdefault(nested_folder, False)
+            continue
+        if path.stem.lower() == "index":
+            continue
+        direct_files.append(Path(remainder).name)
+
     folder_items = [
         {
             "kind": "folder",
@@ -391,7 +469,10 @@ def _build_library_section(
                 parameter,
                 f"{prefix}/{folder}" if prefix else folder,
             ),
-            "description": f"Browse documents in {folder}.",
+            "description": _build_folder_blurb(
+                folder_direct_files.get(folder, []),
+                sum(folder_nested_folders.get(folder, {}).values()),
+            ),
         }
         for folder in sorted(folders)
     ]
@@ -753,7 +834,7 @@ def render_readme_page(
 
 
 @module_pill_link_validation(_show_docs_navigation_link)
-@login_required(login_url="pages:login")
+@security_group_required(*DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES)
 def document_library(request):
     """Render the developer documentation library index."""
 
@@ -769,7 +850,7 @@ def _render_missing_document(request, *, doc: str | None, prepend_docs: bool) ->
 
 @module_pill_link_validation(_show_docs_navigation_link)
 @never_cache
-@login_required(login_url="pages:login")
+@security_group_required(*DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES)
 def readme(request, doc=None, prepend_docs: bool = False):
     try:
         return render_readme_page(request, doc=doc, prepend_docs=prepend_docs)
