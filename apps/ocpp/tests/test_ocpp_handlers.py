@@ -9,7 +9,11 @@ from channels.db import database_sync_to_async
 from django.test import override_settings
 from django.utils import timezone
 
-from apps.ocpp import store, call_error_handlers, call_result_handlers
+from apps.ocpp import call_error_handlers, store
+from apps.ocpp.call_result_handlers.profiles import handle_clear_charging_profile_result
+from apps.ocpp.call_result_handlers.transactions import (
+    handle_request_start_transaction_result,
+)
 from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.consumers import base as consumers_base
 from apps.flows.models import Transition
@@ -129,7 +133,7 @@ async def test_handle_clear_charging_profile_result_updates_profile():
     payload = {"status": "Accepted", "statusInfo": {"detail": "ok"}}
     metadata = {"charging_profile_id": 9, "charger_id": charger.charger_id}
 
-    result = await call_result_handlers.handle_clear_charging_profile_result(
+    result = await handle_clear_charging_profile_result(
         consumer,
         "msg-clear-1",
         metadata,
@@ -1530,7 +1534,7 @@ async def test_request_start_transaction_result_tracks_status():
         },
     )
 
-    await call_result_handlers.handle_request_start_transaction_result(
+    await handle_request_start_transaction_result(
         consumer,
         "msg-req-1",
         {"action": "RequestStartTransaction"},
