@@ -24,7 +24,6 @@ def _poll_emails() -> None:
 
 
 poll_emails = shared_task(_poll_emails)
-poll_emails_legacy = shared_task(name="apps.core.tasks.poll_emails")(_poll_emails)
 
 
 def execute_scheduled_release(release_id: int) -> None:
@@ -53,9 +52,6 @@ def _run_scheduled_release(release_id: int) -> None:
 
 
 run_scheduled_release = shared_task(_run_scheduled_release)
-run_scheduled_release_legacy = shared_task(
-    name="apps.core.tasks.run_scheduled_release"
-)(_run_scheduled_release)
 
 
 def _run_client_report_schedule(schedule_id: int) -> None:
@@ -76,9 +72,6 @@ def _run_client_report_schedule(schedule_id: int) -> None:
 
 
 run_client_report_schedule = shared_task(_run_client_report_schedule)
-run_client_report_schedule_legacy = shared_task(
-    name="apps.core.tasks.run_client_report_schedule"
-)(_run_client_report_schedule)
 
 
 def _run_release_data_transform(transform_name: str) -> None:
@@ -102,6 +95,3 @@ def _run_release_data_transform(transform_name: str) -> None:
 
 
 run_release_data_transform = shared_task(_run_release_data_transform)
-run_release_data_transform_legacy = shared_task(
-    name="apps.core.tasks.run_release_data_transform"
-)(_run_release_data_transform)
