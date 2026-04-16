@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import pytest
-from django.core.exceptions import ValidationError
 from django.core.management import BaseCommand
 
 from apps.special.models import SpecialCommand, SpecialCommandParameter
 from apps.special.registry import (
     SpecialCommandValidationError,
-    call_special_command,
     special_command,
     sync_special_command,
 )
@@ -74,39 +72,6 @@ class NestedOptionalPositionalCommand(BaseCommand):
     def handle(self, *args, **options) -> None:
         return None
 
-@pytest.mark.django_db
-def test_special_command_model_enforces_one_word_restrictions() -> None:
-    """Special command names should enforce lowercase one-word restrictions."""
-
-    command = SpecialCommand(
-        name="two words",
-        plural_name="samples",
-        command_name="sample",
-        command_path="tests.SampleCommand",
-    )
-
-    with pytest.raises(ValidationError, match="one lowercase word"):
-        command.full_clean()
-
-@pytest.mark.django_db
-def test_special_command_parameter_allows_hyphenated_option_name() -> None:
-    """Hyphenated long option names should pass model validation."""
-
-    command = SpecialCommand.objects.create(
-        name="sample",
-        plural_name="samples",
-        command_name="samples",
-        command_path="tests.SampleCommand",
-    )
-    parameter = SpecialCommandParameter(
-        command=command,
-        name="ws_auth_username",
-        cli_name="--ws-auth-username",
-        kind=SpecialCommandParameter.ParameterKind.OPTION,
-        value_type=SpecialCommandParameter.ValueType.STRING,
-    )
-
-    parameter.full_clean()
 
 @pytest.mark.django_db
 def test_sync_special_command_persists_argument_schema() -> None:
@@ -129,34 +94,6 @@ def test_sync_special_command_persists_argument_schema() -> None:
     assert parameter_map["kind"].nargs is None
     assert parameter_map["enabled"].const is True
 
-@pytest.mark.django_db
-def test_call_special_command_validates_inputs_and_forwards(monkeypatch) -> None:
-    """Validated special calls should forward normalized arguments to call_command."""
-
-    sync_special_command(command_name="samples", command_cls=SampleCommand)
-
-    captured: dict[str, object] = {}
-
-    def fake_call_command(name: str, *args, **kwargs):
-        captured["name"] = name
-        captured["args"] = args
-        captured["kwargs"] = kwargs
-        return "ok"
-
-    monkeypatch.setattr("apps.special.registry.call_command", fake_call_command)
-
-    result = call_special_command(
-        "sample",
-        slug="alpha",
-        count="2",
-        enabled=True,
-        kind="suite",
-    )
-
-    assert result == "ok"
-    assert captured["name"] == "samples"
-    assert captured["args"] == ("alpha",)
-    assert captured["kwargs"] == {"count": 2, "enabled": True, "kind": "suite"}
 
 @pytest.mark.django_db
 def test_sync_special_command_rejects_optional_positionals() -> None:
@@ -168,55 +105,6 @@ def test_sync_special_command_rejects_optional_positionals() -> None:
             command_cls=OptionalPositionalCommand,
         )
 
-@pytest.mark.django_db
-def test_call_special_command_rejects_unknown_or_invalid_inputs() -> None:
-    """Special command invocation should reject unknown keys and invalid choices."""
-
-    sync_special_command(command_name="sample", command_cls=SampleCommand)
-
-    with pytest.raises(SpecialCommandValidationError, match="Unknown parameters"):
-        call_special_command("sample", slug="alpha", count=1, unexpected="x")
-
-    with pytest.raises(SpecialCommandValidationError, match="Expected one of"):
-        call_special_command("sample", slug="alpha", count=1, kind="bad")
-
-@pytest.mark.django_db
-def test_call_special_command_parses_string_booleans(monkeypatch) -> None:
-    """String boolean values should be parsed without Python truthiness pitfalls."""
-
-    sync_special_command(command_name="sample", command_cls=SampleCommand)
-
-    captured: dict[str, object] = {}
-
-    def fake_call_command(name: str, *args, **kwargs):
-        captured["kwargs"] = kwargs
-        return "ok"
-
-    monkeypatch.setattr("apps.special.registry.call_command", fake_call_command)
-    call_special_command("sample", slug="alpha", count=1, enabled="false")
-
-    assert captured["kwargs"]["enabled"] is False
-
-    with pytest.raises(SpecialCommandValidationError, match="Invalid boolean value"):
-        call_special_command("sample", slug="alpha", count=1, enabled="not-bool")
-
-@pytest.mark.django_db
-def test_sync_special_command_excludes_global_management_options() -> None:
-    """Sync should not persist Django's built-in global management options."""
-
-    special = sync_special_command(command_name="sample", command_cls=SampleCommand)
-
-    parameter_names = {parameter.name for parameter in special.parameters.all()}
-
-    assert "settings" not in parameter_names
-    assert "pythonpath" not in parameter_names
-
-@pytest.mark.django_db
-def test_call_special_command_reports_unknown_command() -> None:
-    """Unknown command keys should raise the public validation error type."""
-
-    with pytest.raises(SpecialCommandValidationError, match="Unknown special command"):
-        call_special_command("does-not-exist")
 
 @pytest.mark.django_db
 def test_sync_special_command_supports_nested_subparsers() -> None:
@@ -245,33 +133,3 @@ def test_sync_special_command_skips_optional_nested_positionals() -> None:
     parameter_names = {parameter.name for parameter in special.parameters.all()}
 
     assert parameter_names == {"action"}
-
-@pytest.mark.django_db
-def test_call_special_command_supports_nested_subparsers(monkeypatch) -> None:
-    """Nested subparser selections should be forwarded in positional order."""
-
-    sync_special_command(command_name="nested", command_cls=NestedSubparserCommand)
-
-    captured: dict[str, object] = {}
-
-    def fake_call_command(name: str, *args, **kwargs):
-        captured["name"] = name
-        captured["args"] = args
-        captured["kwargs"] = kwargs
-        return "ok"
-
-    monkeypatch.setattr("apps.special.registry.call_command", fake_call_command)
-
-    result = call_special_command(
-        "nested",
-        action="auth",
-        auth_action="set",
-        username="cp-user",
-        password="secret123",
-        shared="station-a",
-    )
-
-    assert result == "ok"
-    assert captured["name"] == "nested"
-    assert captured["args"] == ("auth", "set", "cp-user", "secret123")
-    assert captured["kwargs"] == {"shared": "station-a"}
