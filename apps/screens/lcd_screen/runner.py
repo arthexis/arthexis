@@ -127,6 +127,8 @@ class LCDRunner:
         default_factory=lambda: ThreadPoolExecutor(max_workers=1, thread_name_prefix="lcd-cycle")
     )
     cycle_state_lock: threading.Lock = field(default_factory=threading.Lock)
+    high_repeat_signature: tuple[tuple[int, float], ...] | None = None
+    high_repeat_count: int = 0
 
     def __post_init__(self) -> None:
         """Initialize the fallback frame writer."""
@@ -252,8 +254,22 @@ class LCDRunner:
                 return None
             return cycle.payloads[cycle.index % len(cycle.payloads)]
 
+        def _high_payload(cycle: ChannelCycle | None) -> locks.LockPayload | None:
+            if cycle is None or not cycle.payloads:
+                return None
+            if self.high_repeat_signature != cycle.signature:
+                self.high_repeat_signature = cycle.signature
+                self.high_repeat_count = 0
+            payload = cycle.payloads[cycle.index % len(cycle.payloads)]
+            if advance:
+                self.high_repeat_count += 1
+                if self.high_repeat_count >= 3:
+                    self.high_repeat_count = 0
+                    cycle.index = (cycle.index + 1) % len(cycle.payloads)
+            return payload
+
         if state_label == "high" and channel_state:
-            payload = _peek_payload(channel_state)
+            payload = _high_payload(channel_state)
             return payload or locks.LockPayload("", "", locks.DEFAULT_SCROLL_MS)
         if state_label in {"low", "uptime"} and channel_state:
             payload = _peek_payload(channel_state)
@@ -266,8 +282,8 @@ class LCDRunner:
                 refreshed = _refresh_uptime_payload(payload, base_dir=BASE_DIR, now=now_dt)
                 return self.apply_relief_if_needed("low", refreshed, base_payload, now_dt)
             high_state = channel_info.get("high")
-            if high_state and len(high_state.payloads) >= 2:
-                high_payload = _peek_payload(high_state)
+            if "high" in state_order and high_state and len(high_state.payloads) >= 2:
+                high_payload = _high_payload(high_state)
                 if high_payload and _payload_has_text(high_payload):
                     self.reset_relief_state("low")
                     return high_payload

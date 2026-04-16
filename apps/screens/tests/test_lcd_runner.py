@@ -312,8 +312,8 @@ def test_render_event_frame_refreshes_static_event_periodically(monkeypatch):
     assert coordinator.scroll_scheduler.actions == [("sleep", None), ("advance", 0.5)]
 
 
-def test_low_slot_uses_second_high_payload_when_low_is_empty(monkeypatch):
-    """Low slot should borrow from HI queue when two or more HI payloads exist."""
+def test_high_payloads_repeat_three_times_across_high_and_low_slots(monkeypatch):
+    """HI payloads should display three times before advancing to the next payload."""
 
     coordinator = runner.LCDRunner()
     now_dt = datetime(2026, 3, 20, tzinfo=timezone.utc)
@@ -340,23 +340,12 @@ def test_low_slot_uses_second_high_payload_when_low_is_empty(monkeypatch):
     channel_info = {"high": high_cycle, "low": low_cycle}
     channel_text = {"high": True, "low": False}
 
-    high_payload = coordinator.payload_for_state(
-        ("high", "low"),
-        0,
-        channel_info,
-        channel_text,
-        now_dt,
-    )
-    low_payload = coordinator.payload_for_state(
-        ("high", "low"),
-        1,
-        channel_info,
-        channel_text,
-        now_dt,
-    )
+    seen = [
+        coordinator.payload_for_state(("high", "low"), slot, channel_info, channel_text, now_dt).line1
+        for slot in (0, 1, 0, 1, 0, 1, 0)
+    ]
 
-    assert high_payload.line1 == "HI-1"
-    assert low_payload.line1 == "HI-2"
+    assert seen == ["HI-1", "HI-1", "HI-1", "HI-2", "HI-2", "HI-2", "HI-1"]
 
 
 def test_low_slot_keeps_default_when_only_one_high_payload_exists(monkeypatch):
@@ -402,3 +391,41 @@ def test_low_slot_keeps_default_when_only_one_high_payload_exists(monkeypatch):
     assert high_payload.line1 == "HI-1"
     assert low_payload.line1 == "LO BASE"
 
+
+def test_low_slot_does_not_mirror_high_when_rotation_order_excludes_high(monkeypatch):
+    """LO slot should respect configured channel order that excludes HI."""
+
+    coordinator = runner.LCDRunner()
+    now_dt = datetime(2026, 3, 20, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(
+        runner,
+        "_select_low_payload",
+        lambda *args, **kwargs: runner.locks.LockPayload("LO BASE", "", 0, is_base=True),
+    )
+
+    high_cycle = runner.ChannelCycle(
+        payloads=[
+            runner.locks.LockPayload("HI-1", "", 0),
+            runner.locks.LockPayload("HI-2", "", 0),
+        ],
+        signature=((0, 0.0), (1, 0.0)),
+        index=0,
+    )
+    low_cycle = runner.ChannelCycle(
+        payloads=[runner.locks.LockPayload("", "", 0)],
+        signature=((0, 0.0),),
+        index=0,
+    )
+    channel_info = {"high": high_cycle, "low": low_cycle}
+    channel_text = {"high": True, "low": False}
+
+    low_payload = coordinator.payload_for_state(
+        ("low", "stats", "clock"),
+        0,
+        channel_info,
+        channel_text,
+        now_dt,
+    )
+
+    assert low_payload.line1 == "LO BASE"
