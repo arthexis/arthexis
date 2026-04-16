@@ -400,7 +400,7 @@ def _validate_awg_parameters(params: _AwgParameters) -> None:
 def _base_vdrop(params: _AwgParameters) -> float:
     """Return the voltage drop baseline used in the AWG iteration."""
 
-    multiplier = math.sqrt(3) if params.phases in (2, 3) else 2
+    multiplier = math.sqrt(3) if params.phases == 3 else 2
     return multiplier * params.meters * params.amps / 1000
 
 
