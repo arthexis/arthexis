@@ -25,6 +25,7 @@ on:
       - '**/*.json'
       - '**/*.toml'
       - '**/*.txt'
+      - 'pytest.ini'
       - '.github/workflows/pr-install-upgrade-postgres.yml'
       - 'apps/**'
       - 'config/**'
@@ -224,6 +225,12 @@ jobs:
         run: |
           source .venv/bin/activate
           python scripts/check_editable_install_import.py
+
+      - name: Bootstrap schema before upgrade
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          python manage.py migrate --noinput --database default
 
       - name: Apply upgrade smoke path
         run: |
