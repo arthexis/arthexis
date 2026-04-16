@@ -4,7 +4,7 @@ import ipaddress
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from ..cpsim_service import get_cpsim_request_metadata
+from ..cpsim_service import get_cpsim_request_metadata, is_cpsim_start_queued_status
 from ..utils import resolve_ws_scheme
 from apps.core.notifications import LcdChannel
 from apps.screens.startup_notifications import format_lcd_lines
@@ -358,7 +358,7 @@ def cp_simulator(request):
             sim_params["meter_interval"] = _cast_value(
                 request.POST.get("meter_interval"), float, default_params["interval"]
             )
-            _start_simulator(sim_params, cp=simulator_slot)
+            status = _start_simulator(sim_params, cp=simulator_slot)[1]
             subject, body = _lcd_simulator_lines(name, sim_params)
             NetMessage.broadcast(
                 subject=subject,
@@ -367,6 +367,8 @@ def cp_simulator(request):
                 lcd_channel_type=LcdChannel.LOW.value,
             )
             message = _("Simulator start requested")
+            if is_cpsim_start_queued_status(status):
+                message = _("Simulator start queued for cpsim-service")
             if sim_params["demo_mode"]:
                 dashboard_link = reverse("ocpp:ocpp-dashboard")
             if sim_params.get("delay"):
@@ -426,7 +428,7 @@ def cp_simulator(request):
     is_service_queued = (
         state.get("running")
         and state.get("phase") == "Service"
-        and str(state.get("last_status") or "").startswith("cpsim-service start requested")
+        and is_cpsim_start_queued_status(state.get("last_status"))
     )
     cpsim_request = {"queued": False}
     if is_service_queued:

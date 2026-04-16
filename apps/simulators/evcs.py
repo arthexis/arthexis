@@ -46,7 +46,12 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
 from apps.ocpp import store
-from apps.ocpp.cpsim_service import cpsim_service_enabled, queue_cpsim_request
+from apps.ocpp.cpsim_service import (
+    CPSIM_START_QUEUED_STATUS,
+    CPSIM_STOP_QUEUED_STATUS,
+    cpsim_service_enabled,
+    queue_cpsim_request,
+)
 from apps.simulators.runtime import ChargePointRuntime, ChargePointRuntimeConfig
 from apps.simulators.evcs_mobilityhouse import MobilityHouseChargePointAdapter
 from apps.simulators.network import validate_simulator_endpoint
@@ -590,7 +595,7 @@ def _start_simulator(
             name=str(state.params.get("name") or f"Simulator {cp}"),
             source="landing",
         )
-        state.last_status = "cpsim-service start requested"
+        state.last_status = CPSIM_START_QUEUED_STATUS
         state.phase = "Service"
         _save_state_file(_simulators)
         return True, state.last_status, log_file
@@ -676,7 +681,7 @@ def _stop_simulator(cp: int = 1) -> bool:
             source="landing",
             params=state.params,
         )
-        state.last_status = "cpsim-service stop requested"
+        state.last_status = CPSIM_STOP_QUEUED_STATUS
         state.phase = "Service"
         _save_state_file(_simulators)
     return True
@@ -761,7 +766,6 @@ __all__ = [
     "view_cp_simulator",
     "view_simulator",
 ]
-
 
 
 
