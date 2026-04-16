@@ -126,6 +126,7 @@
               </div>
               {% endif %}
               <div class="small mb-0">
+                No websocket will open until a cpsim worker consumes this queue entry.
                 If this stays in Service phase, start or restart the cpsim worker and
                 {% if simulator_log_url %}
                 <a href="{{ simulator_log_url }}">check simulator logs</a>.
