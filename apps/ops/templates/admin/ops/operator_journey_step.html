@@ -172,6 +172,51 @@
         })();
       </script>
     {% elif provision_superuser_form %}
+      <style>
+        .operator-journey-provision-layout {
+          display: grid;
+          gap: 1rem;
+          grid-template-columns: minmax(380px, 1.2fr) minmax(320px, 1fr);
+          margin-top: 1rem;
+        }
+        .operator-journey-provision-panel {
+          border: 1px solid var(--hairline-color);
+          border-radius: 8px;
+          padding: 1rem;
+        }
+        .operator-journey-provision-panel h2 {
+          margin-top: 0;
+        }
+        .operator-journey-sg-table {
+          border-collapse: collapse;
+          width: 100%;
+        }
+        .operator-journey-sg-table th,
+        .operator-journey-sg-table td {
+          border-bottom: 1px solid var(--hairline-color);
+          padding: 0.6rem;
+          text-align: left;
+          vertical-align: top;
+        }
+        .operator-journey-sg-table td:first-child,
+        .operator-journey-sg-table th:first-child {
+          width: 72px;
+        }
+        .operator-journey-checkbox {
+          block-size: 1.15rem;
+          inline-size: 1.15rem;
+        }
+        .operator-journey-primary-button {
+          font-size: 0.95rem;
+          min-height: 2.25rem;
+          padding: 0.55rem 1.1rem;
+        }
+        @media (max-width: 980px) {
+          .operator-journey-provision-layout {
+            grid-template-columns: 1fr;
+          }
+        }
+      </style>
       <p>
         {% translate "Create an operational superuser for this node role and assign the required security groups." %}
       </p>
@@ -181,19 +226,60 @@
       <form method="post" action="{% url 'ops:operator-journey-step-complete' step.pk %}" style="margin-top: 1rem;">
         {% csrf_token %}
         {{ provision_superuser_form.non_field_errors }}
-        <fieldset class="module aligned" style="padding: 0.75rem;">
-          {% for field in provision_superuser_form %}
-            <div class="form-row" style="margin-bottom: 0.75rem;">
-              <label for="{{ field.id_for_label }}" style="display: block; font-weight: 600;">{{ field.label }}</label>
-              {{ field }}
-              {% if field.help_text %}
-                <p class="help" style="margin: 0.25rem 0 0;">{{ field.help_text }}</p>
-              {% endif %}
-              {{ field.errors }}
-            </div>
-          {% endfor %}
-        </fieldset>
-        <button type="submit" class="button default">{% translate "Create account and complete step" %}</button>
+        <div class="operator-journey-provision-layout">
+          <section class="operator-journey-provision-panel" aria-labelledby="security-groups-title">
+            <h2 id="security-groups-title">{{ provision_superuser_form.security_groups.label }}</h2>
+            {% if provision_superuser_form.security_groups.help_text %}
+              <p class="help">{{ provision_superuser_form.security_groups.help_text }}</p>
+            {% endif %}
+            {{ provision_superuser_form.security_groups.errors }}
+            <table class="operator-journey-sg-table">
+              <thead>
+                <tr>
+                  <th>{% translate "Select" %}</th>
+                  <th>{% translate "Security group" %}</th>
+                  <th>{% translate "Short description" %}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in security_group_rows %}
+                  <tr>
+                    <td>
+                      <input class="operator-journey-checkbox" id="id_security_groups_{{ row.id }}" type="checkbox" name="security_groups" value="{{ row.id }}" {% if row.selected %}checked{% endif %}>
+                    </td>
+                    <td>
+                      <label for="id_security_groups_{{ row.id }}"><strong>{{ row.name }}</strong></label>
+                    </td>
+                    <td>
+                      {{ row.security_model_label }}
+                      {% if row.app %}
+                        <br><span class="help">{% translate "App:" %} {{ row.app }}</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </section>
+          <section class="operator-journey-provision-panel" aria-labelledby="account-details-title">
+            <h2 id="account-details-title">{% translate "User details" %}</h2>
+            <fieldset class="module aligned" style="padding: 0;">
+              {% for field in provision_superuser_form %}
+                {% if field.name != "security_groups" %}
+                  <div class="form-row" style="margin-bottom: 0.75rem;">
+                    <label for="{{ field.id_for_label }}" style="display: block; font-weight: 600;">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}
+                      <p class="help" style="margin: 0.25rem 0 0;">{{ field.help_text }}</p>
+                    {% endif %}
+                    {{ field.errors }}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </fieldset>
+          </section>
+        </div>
+        <button type="submit" class="button default operator-journey-primary-button">{% translate "Create account and complete step" %}</button>
       </form>
     {% else %}
       <p>{{ step.instruction }}</p>

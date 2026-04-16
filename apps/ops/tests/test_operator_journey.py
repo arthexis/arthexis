@@ -8,9 +8,13 @@ from django.urls import reverse
 from apps.groups.constants import SITE_OPERATOR_GROUP_NAME
 from apps.groups.models import SecurityGroup
 from apps.nodes.models import NodeRole
+from apps.ops.forms import OperatorJourneyProvisionSuperuserForm
 from apps.ops.models import OperatorJourney, OperatorJourneyStep
 from apps.ops.operator_journey import complete_step_for_user, status_for_user
-from apps.ops.views import _build_node_role_validation_summary
+from apps.ops.views import (
+    _build_node_role_validation_summary,
+    _build_security_group_rows,
+)
 
 
 class OperatorJourneyFlowTests(TestCase):
@@ -261,7 +265,43 @@ class OperatorJourneyViewTests(TestCase):
         )
 
         self.assertContains(response, "Create account and complete step")
+        self.assertContains(response, "Security group")
+        self.assertContains(response, "Short description")
+        self.assertContains(response, "User details")
+        self.assertContains(response, "id=\"nav-sidebar\"", html=False)
         self.assertNotContains(response, "<iframe", html=False)
+
+    def test_security_group_rows_support_unbound_form_with_pk_initial_values(self):
+        extra_group = SecurityGroup.objects.create(name="Initial PK group")
+        provision_form = OperatorJourneyProvisionSuperuserForm()
+        provision_form.fields["security_groups"].initial = [
+            self.group.pk,
+            str(extra_group.pk),
+        ]
+
+        security_group_rows = _build_security_group_rows(provision_form)
+
+        selected_ids = {
+            row["id"] for row in security_group_rows if row.get("selected") is True
+        }
+        self.assertSetEqual(selected_ids, {self.group.pk, extra_group.pk})
+
+    def test_security_group_rows_read_selected_values_from_bound_form_data(self):
+        extra_group = SecurityGroup.objects.create(name="Bound data group")
+        provision_form = OperatorJourneyProvisionSuperuserForm(
+            data={
+                "username": "",
+                "password_mode": "random",
+                "security_groups": [str(extra_group.pk)],
+            }
+        )
+
+        security_group_rows = _build_security_group_rows(provision_form)
+
+        selected_ids = {
+            row["id"] for row in security_group_rows if row.get("selected") is True
+        }
+        self.assertSetEqual(selected_ids, {extra_group.pk})
 
     def test_provision_step_creates_superuser_with_assigned_groups(self):
         provision_step = OperatorJourneyStep.objects.create(
