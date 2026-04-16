@@ -261,6 +261,10 @@ class OperatorJourneyViewTests(TestCase):
         )
 
         self.assertContains(response, "Create account and complete step")
+        self.assertContains(response, "Security group")
+        self.assertContains(response, "Short description")
+        self.assertContains(response, "User details")
+        self.assertContains(response, "id=\"nav-sidebar\"", html=False)
         self.assertNotContains(response, "<iframe", html=False)
 
     def test_provision_step_creates_superuser_with_assigned_groups(self):

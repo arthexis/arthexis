@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib import admin
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
@@ -35,6 +36,52 @@ def _normalize_role_name(value: str) -> str:
     role_lookup = {role.lower(): role for role in KNOWN_NODE_ROLES}
     role_lookup.update(ROLE_ALIASES)
     return role_lookup.get(cleaned.lower(), cleaned)
+
+
+def _build_admin_context(request: HttpRequest) -> dict[str, object]:
+    """Return shared context needed by admin base templates."""
+
+    return admin.site.each_context(request)
+
+
+def _build_security_group_rows(
+    provision_superuser_form: OperatorJourneyProvisionSuperuserForm,
+) -> list[dict[str, object]]:
+    """Return normalized rows for the security-group selection table."""
+
+    selected_group_ids = {
+        str(group_id)
+        for group_id in provision_superuser_form.data.getlist("security_groups")
+        if group_id
+    }
+    if not selected_group_ids and provision_superuser_form.is_bound:
+        cleaned_security_groups = provision_superuser_form.cleaned_data.get(
+            "security_groups"
+        )
+        selected_group_ids = {
+            str(group_id)
+            for group_id in getattr(
+                cleaned_security_groups, "values_list", lambda *_args, **_kwargs: []
+            )("pk", flat=True)
+        }
+    if not selected_group_ids and not provision_superuser_form.is_bound:
+        selected_group_ids = {
+            str(group.pk)
+            for group in provision_superuser_form.fields["security_groups"].initial or []
+        }
+
+    rows: list[dict[str, object]] = []
+    for group in provision_superuser_form.fields["security_groups"].queryset:
+        rows.append(
+            {
+                "id": group.pk,
+                "name": group.name,
+                "app": group.app,
+                "security_model_label": group.security_model_label,
+                "selected": str(group.pk) in selected_group_ids,
+            }
+        )
+    return rows
 
 
 def _build_node_role_validation_summary() -> dict[str, object]:
@@ -177,13 +224,15 @@ def operator_journey_step(request: HttpRequest, step_id: int):
         )
         return redirect(reverse(OPERATOR_JOURNEY_STEP_URL_NAME, args=[next_step.pk]))
 
-    context = {"step": step}
+    context = {"step": step, **_build_admin_context(request)}
     if step.slug == ROLE_VALIDATION_STEP_SLUG:
         context["node_role_validation"] = _build_node_role_validation_summary()
     if step.slug == PROVISION_SUPERUSER_STEP_SLUG:
         if not request.user.is_superuser:
             raise PermissionDenied
-        context["provision_superuser_form"] = OperatorJourneyProvisionSuperuserForm()
+        provision_form = OperatorJourneyProvisionSuperuserForm()
+        context["provision_superuser_form"] = provision_form
+        context["security_group_rows"] = _build_security_group_rows(provision_form)
 
     return render(request, "admin/ops/operator_journey_step.html", context)
 
@@ -220,10 +269,16 @@ def complete_operator_journey_step(request: HttpRequest, step_id: int):
             raise PermissionDenied
         provision_form = OperatorJourneyProvisionSuperuserForm(request.POST)
         if not provision_form.is_valid():
+            context = {
+                **_build_admin_context(request),
+                "step": step,
+                "provision_superuser_form": provision_form,
+                "security_group_rows": _build_security_group_rows(provision_form),
+            }
             return render(
                 request,
                 "admin/ops/operator_journey_step.html",
-                {"step": step, "provision_superuser_form": provision_form},
+                context,
             )
         with transaction.atomic():
             request.user.__class__._default_manager.select_for_update().get(
