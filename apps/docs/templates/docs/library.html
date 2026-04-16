@@ -9,7 +9,7 @@
 
 {% block content %}
 <div class="row">
-  <div class="col-12">
+  <div class="col-12 col-xl-8">
     <div class="markdown-body">
       <h1>{{ title }}</h1>
       <p>{% trans "Browse curated developer references below with quick summaries to help you choose the right guide." %}</p>
@@ -74,5 +74,40 @@
       {% endif %}
     </div>
   </div>
+  <aside class="col-12 col-xl-4 mt-4 mt-xl-0">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h2 class="h5 mb-0">{% trans "Developer Gallery" %}</h2>
+          <a class="btn btn-sm btn-outline-primary" href="{{ gallery_index_url }}">{% trans "Open gallery" %}</a>
+        </div>
+        <p class="text-muted small mb-3">
+          {% trans "Preview the latest uploads and jump straight to the full gallery." %}
+        </p>
+        <p class="mb-3">
+          {% if is_gallery_manager %}
+            <a class="btn btn-sm btn-primary" href="{{ gallery_upload_url }}">{% trans "Create / upload image" %}</a>
+          {% else %}
+            <a class="btn btn-sm btn-outline-secondary" href="{{ gallery_upload_url }}">{% trans "Create / upload image" %}</a>
+            <span class="d-block text-muted small mt-2">{% trans "Upload requires Gallery Manager, staff, or superuser access." %}</span>
+          {% endif %}
+        </p>
+        <div class="row row-cols-2 g-2">
+          {% for image in gallery_images %}
+            <div class="col">
+              <a href="{% url 'gallery:detail' slug=image.slug %}" class="text-decoration-none">
+                <img src="{{ image.media_file.file.url }}" alt="{{ image.title }}" class="img-fluid rounded border">
+                <div class="small mt-1 text-truncate">{{ image.title }}</div>
+              </a>
+            </div>
+          {% empty %}
+            <div class="col-12">
+              <div class="alert alert-light border mb-0">{% trans "No gallery images are visible yet." %}</div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </aside>
 </div>
 {% endblock %}

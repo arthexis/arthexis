@@ -6,8 +6,9 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser, Group
 from django.contrib.sites.models import Site
-from django.core.exceptions import PermissionDenied
 from django.core.cache import cache
+from django.core.exceptions import PermissionDenied
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
 from django.urls import reverse
 from django.utils.encoding import force_bytes
@@ -16,12 +17,14 @@ from django.utils.http import urlsafe_base64_encode
 from apps.docs.models import DocumentIndex, DocumentIndexAssignment
 from apps.energy.models import ClientReport
 from apps.features.models import Feature
+from apps.gallery.models import GalleryImage
 from apps.groups.constants import (
     PRODUCT_DEVELOPER_GROUP_NAME,
     RELEASE_MANAGER_GROUP_NAME,
     SITE_OPERATOR_GROUP_NAME,
 )
 from apps.groups.models import SecurityGroup
+from apps.media.utils import create_media_file, ensure_media_bucket
 from apps.modules.models import Module
 from apps.sites import context_processors
 from apps.sites.models import Landing, SiteProfile
@@ -29,7 +32,10 @@ from apps.sites.utils import require_site_operator_or_staff
 
 pytestmark = [pytest.mark.django_db]
 
-def test_client_report_download_enforces_login_and_ownership(client, monkeypatch, tmp_path):
+
+def test_client_report_download_enforces_login_and_ownership(
+    client, monkeypatch, tmp_path
+):
     user_model = get_user_model()
     owner = user_model.objects.create_user(
         username="report-owner", email="owner@example.com", password="secret"
@@ -70,6 +76,7 @@ def test_client_report_download_enforces_login_and_ownership(client, monkeypatch
     assert staff_response.status_code == 200
     assert staff_response["Content-Type"] == "application/pdf"
 
+
 def test_invitation_login_invalid_tokens_are_handled_safely(client):
     user_model = get_user_model()
     user = user_model.objects.create_user(
@@ -89,6 +96,7 @@ def test_invitation_login_invalid_tokens_are_handled_safely(client):
     )
     assert malformed_uid_response.status_code == 400
 
+
 @pytest.mark.integration
 def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
     url = reverse("pages:whatsapp-webhook")
@@ -105,6 +113,7 @@ def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
         content_type="application/json",
     )
     assert disabled.status_code == 404
+
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -123,6 +132,7 @@ def test_legacy_language_redirect_rejects_scheme_relative_targets(
     assert response.status_code == expected_status
     if response.status_code in {301, 302, 307, 308}:
         assert not response["Location"].startswith("//")
+
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -146,6 +156,7 @@ def test_whatsapp_webhook_post_payload_validation(
     assert response.status_code == expected_status
     if expected_status == 201:
         assert response.json()["status"] == "ok"
+
 
 @pytest.mark.critical
 def test_require_site_operator_or_staff_enforces_admin_operator_boundary(rf):
@@ -213,6 +224,7 @@ def test_charge_points_module_hides_dashboard_and_simulator_links_from_anonymous
     nav_modules = nav_context["nav_modules"]
     assert not any(module.path == "/charge-points/" for module in nav_modules)
 
+
 def test_charge_points_module_shows_dashboard_and_simulator_links_to_site_operators():
     module = Module.objects.create(path="/charge-points/", menu="Charge Points")
     Landing.objects.create(
@@ -245,6 +257,7 @@ def test_charge_points_module_shows_dashboard_and_simulator_links_to_site_operat
         reverse("ocpp:ocpp-dashboard"),
         reverse("ocpp:cp-simulator"),
     }.issubset(visible_paths)
+
 
 def test_charge_points_module_hides_operator_only_map_link_from_anonymous_users():
     module = Module.objects.create(path="/charge-points/", menu="Charge Points")
@@ -420,6 +433,46 @@ def test_docs_library_renders_indexed_documents_before_other_documents(client):
     assert "Create indexed document" in body
 
 
+def test_docs_library_shows_gallery_sidebar_with_latest_four_images(client):
+    user = get_user_model().objects.create_user(
+        username="docs-gallery-sidebar-user",
+        email="docs-gallery-sidebar-user@example.com",
+        password="secret",
+    )
+    developer_group, _ = SecurityGroup.objects.get_or_create(
+        name=PRODUCT_DEVELOPER_GROUP_NAME
+    )
+    developer_group.user_set.add(user)
+    bucket = ensure_media_bucket(slug="gallery-images", name="Gallery Images")
+    for index in range(5):
+        upload = SimpleUploadedFile(
+            f"gallery-{index}.png",
+            b"\x89PNG\r\n\x1a\n",
+            content_type="image/png",
+        )
+        media_file = create_media_file(bucket=bucket, uploaded_file=upload)
+        GalleryImage.objects.create(
+            media_file=media_file,
+            title=f"Gallery image {index}",
+            include_in_public_gallery=True,
+            owner_user=user,
+        )
+
+    client.force_login(user)
+    response = client.get(reverse("docs:docs-library"))
+    body = response.content.decode()
+
+    assert response.status_code == 200
+    assert "Developer Gallery" in body
+    assert reverse("gallery:index") in body
+    assert reverse("gallery:upload") in body
+    assert "Gallery image 4" in body
+    assert "Gallery image 3" in body
+    assert "Gallery image 2" in body
+    assert "Gallery image 1" in body
+    assert "Gallery image 0" not in body
+
+
 def test_readme_resolves_sigils_for_authenticated_user(client):
     user = get_user_model().objects.create_user(
         username="docs-sigil-user",
@@ -507,13 +560,17 @@ def test_docs_library_keeps_nested_docs_visible_and_shows_parent_navigation(clie
     )
     nested_document = Path("docs/library-test/subfolder/nested-visibility-test.md")
     nested_document.parent.mkdir(parents=True, exist_ok=True)
-    nested_document.write_text("# Nested visibility\n\nNested document.\n", encoding="utf-8")
+    nested_document.write_text(
+        "# Nested visibility\n\nNested document.\n", encoding="utf-8"
+    )
 
     client.force_login(user)
     try:
         cache.clear()
         root_response = client.get(reverse("docs:docs-library"))
-        folder_response = client.get(reverse("docs:docs-library"), {"docs_path": "library-test/subfolder"})
+        folder_response = client.get(
+            reverse("docs:docs-library"), {"docs_path": "library-test/subfolder"}
+        )
 
         assert root_response.status_code == 200
         assert "library-test/" in root_response.content.decode()
@@ -550,7 +607,9 @@ def test_docs_library_groups_root_documents_into_root_folder(client):
         assert "root/" in root_response.content.decode()
         assert "library-root-visibility-test.md" not in root_response.content.decode()
         assert virtual_root_response.status_code == 200
-        assert "library-root-visibility-test.md" in virtual_root_response.content.decode()
+        assert (
+            "library-root-visibility-test.md" in virtual_root_response.content.decode()
+        )
     finally:
         root_document.unlink(missing_ok=True)
 
@@ -569,7 +628,9 @@ def test_docs_library_virtual_root_does_not_collide_with_real_root_named_folder(
     client.force_login(user)
     try:
         cache.clear()
-        folder_response = client.get(reverse("docs:docs-library"), {"docs_path": "__root__"})
+        folder_response = client.get(
+            reverse("docs:docs-library"), {"docs_path": "__root__"}
+        )
 
         assert folder_response.status_code == 200
         assert "folder-navigation-test.md" in folder_response.content.decode()
@@ -587,12 +648,16 @@ def test_docs_library_folder_view_includes_file_matching_prefix_exactly(client):
         is_staff=True,
     )
     prefixed_document = Path("docs/library-prefix-match.md")
-    prefixed_document.write_text("# Prefix match\n\nExact path document.\n", encoding="utf-8")
+    prefixed_document.write_text(
+        "# Prefix match\n\nExact path document.\n", encoding="utf-8"
+    )
 
     client.force_login(user)
     try:
         cache.clear()
-        response = client.get(reverse("docs:docs-library"), {"docs_path": "library-prefix-match.md"})
+        response = client.get(
+            reverse("docs:docs-library"), {"docs_path": "library-prefix-match.md"}
+        )
 
         assert response.status_code == 200
         assert "library-prefix-match.md" in response.content.decode()
@@ -642,7 +707,9 @@ def test_docs_library_folder_blurb_ignores_index_only_nested_folders(client):
     parent_document.parent.mkdir(parents=True, exist_ok=True)
     nested_index_document.parent.mkdir(parents=True, exist_ok=True)
     parent_document.write_text("# Direct\n\nTop-level document.\n", encoding="utf-8")
-    nested_index_document.write_text("# Index\n\nHidden nested index.\n", encoding="utf-8")
+    nested_index_document.write_text(
+        "# Index\n\nHidden nested index.\n", encoding="utf-8"
+    )
 
     client.force_login(user)
     try:
