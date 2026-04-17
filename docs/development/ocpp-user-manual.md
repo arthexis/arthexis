@@ -109,6 +109,22 @@ All active WebSocket connections, transactions, logs, and pending CSMS calls are
 ### Timeout and error handling
 Pending-call metadata is stored in-memory and mirrored to Redis so responses can be reconciled even after reconnects. Each outgoing call registers an event handle and an optional timeout timer; when a timeout fires, the scheduler adds a charger-log entry and marks the request as notified so duplicate alerts are suppressed. When the consumer records a result or error (including OCPP call errors), it clears timers, signals waiting threads, and persists the payload and error context, ensuring admin dashboards and logs accurately reflect both success and failure paths. The request/response lifecycle therefore surfaces clearly across the WebSocket logs, pending-call registries, and charger detail views.
 
+## Connection and subprotocol negotiation
+When a charger handshake succeeds, the CSMS accepts the socket and records a log entry (e.g., Connected (subprotocol=...)).
+
+- **Subprotocol Negotiation**: The system supports ocpp2.1, ocpp2.0.1, and OCPP 1.6. When a charger has a stored preferred OCPP version and offers it during handshake, that stored preference is selected first. Otherwise, the CSMS prefers the latest supported offered version (2.1, then 2.0.1, then 1.6). For OCPP 1.6, `ocpp1.6j` is preferred over the `ocpp1.6` alias when both are offered. If no supported subprotocol is offered, the connection is still accepted without a negotiated subprotocol token.
+- **Identity Extraction**: The charger serial number is extracted from the WebSocket path or query parameters (supporting cid, chargePointId, charge_point_id, chargeBoxId, charge_box_id, and chargerId).
+
+## Connection handshake troubleshooting
+Use this checklist when a charger does not appear as connected in Arthexis even though network connectivity exists:
+
+- Confirm the charger target uses `wss://` and points to the expected gateway host and TLS listener port.
+- Verify TLS negotiation completes end-to-end (look for both client and server handshake packets). If TLS does not complete, no WebSocket upgrade or OCPP frame can reach the CSMS.
+- If a reverse proxy or load balancer is present, validate that it forwards WebSocket upgrade requests and preserves required headers to Django/ASGI.
+- Check for middleboxes (firewalls, captive portals, TLS-inspecting proxies) that permit TCP but interfere with TLS or WebSocket upgrade traffic.
+- Validate TLS compatibility between charger and gateway (protocol versions, ciphers, and certificate chain expectations).
+- After transport succeeds, confirm the CSMS recorded a fresh connection event in the charger log to prove the application accepted the socket.
+
 ## Operational management commands
 Use the unified `ocpp` management command for operational workflows:
 
