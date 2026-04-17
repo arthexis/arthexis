@@ -118,9 +118,9 @@ class Command(BaseCommand):
                 )
             )
 
-        from utils.devtools import test_server
-
         try:
+            from utils.devtools import test_server
+
             exit_code = test_server.main([])
         except ModuleNotFoundError as exc:
             raise CommandError(

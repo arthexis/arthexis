@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import builtins
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -112,3 +114,34 @@ def test_migrations_retry_command_preserves_requested_options(
         f"{retry_prefix} manage.py migrations run billing 0012_auto "
         "--database 'reports replica'"
     )
+
+
+def test_test_server_emits_dependency_remediation_when_import_fails(
+    monkeypatch, tmp_path: Path
+) -> None:
+    command = TestCommand()
+    fake_venv_python = expected_venv_python(tmp_path)
+    fake_venv_python.parent.mkdir(parents=True)
+    fake_venv_python.write_text("", encoding="utf-8")
+    monkeypatch.setattr(command, "_base_dir", lambda: tmp_path)
+    original_import = builtins.__import__
+
+    def _fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "utils.devtools":
+            raise ModuleNotFoundError("No module named 'utils.devtools'")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _fake_import)
+    sys.modules.pop("utils.devtools", None)
+
+    with pytest.raises(CommandError) as excinfo:
+        command._run_test_server()
+
+    payload = json.loads(str(excinfo.value))
+    retry_prefix = expected_venv_python(tmp_path).relative_to(tmp_path).as_posix()
+    assert payload == {
+        "code": "missing_dependency",
+        "command": "./env-refresh.sh --deps-only",
+        "event": "arthexis.qa.remediation",
+        "retry": f"{retry_prefix} manage.py test server",
+    }
