@@ -1,12 +1,26 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    #content-main .config-section-links {
+      list-style: none;
+      margin: 0 0 var(--breadcrumbs-margin-bottom, 1em);
+      padding: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--breadcrumbs-gap, 1em);
+    }
+  </style>
+{% endblock %}
+
 {% block content %}
 <div id="content-main">
   <h2>{% trans "Django Config" %}</h2>
 
   {% if config_sections %}
-    <ul>
+    <ul class="config-section-links" aria-label="{% trans 'Configuration sections' %}">
       {% for section in config_sections %}
         <li><a href="#config-section-{{ forloop.counter }}">{{ section.name }}</a></li>
       {% endfor %}
