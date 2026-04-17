@@ -2,8 +2,6 @@
 
 This manual documents how the Arthexis control system implements each Open Charge Point Protocol (OCPP) 1.6 call that is currently supported. The focus is on the behaviour of the WebSocket consumer that represents our central system (CSMS) and the HTTP endpoints that emit CSMS initiated calls.
 
-For upgrade guidance from older releases (including removed wrappers and deprecated command/import migrations), see [OCPP migration history](./ocpp-migration-history.md).
-
 ## Charge point → CSMS calls
 
 ### BootNotification
