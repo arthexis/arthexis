@@ -112,7 +112,7 @@ Pending-call metadata is stored in-memory and mirrored to Redis so responses can
 ## Connection and subprotocol negotiation
 When a charger handshake succeeds, the CSMS accepts the socket and records a log entry (e.g., Connected (subprotocol=...)).
 
-- **Subprotocol Negotiation**: The system supports ocpp2.1, ocpp2.0.1, and OCPP 1.6. It prefers the latest version offered by the charger. For OCPP 1.6, ocpp1.6j is preferred over the ocpp1.6 alias. If no supported subprotocol is offered, the connection is still accepted and defaults to OCPP 1.6.
+- **Subprotocol Negotiation**: The system supports ocpp2.1, ocpp2.0.1, and OCPP 1.6. When a charger has a stored preferred OCPP version and offers it during handshake, that stored preference is selected first. Otherwise, the CSMS prefers the latest supported offered version (2.1, then 2.0.1, then 1.6). For OCPP 1.6, `ocpp1.6j` is preferred over the `ocpp1.6` alias when both are offered. If no supported subprotocol is offered, the connection is still accepted without a negotiated subprotocol token.
 - **Identity Extraction**: The charger serial number is extracted from the WebSocket path or query parameters (supporting cid, chargePointId, charge_point_id, chargeBoxId, charge_box_id, and chargerId).
 
 ## Connection handshake troubleshooting
