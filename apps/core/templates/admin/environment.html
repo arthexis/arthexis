@@ -74,6 +74,22 @@
   <div class="module environment-variables">
     <h2>{% trans "Environment Variables" %}</h2>
     <p class="help">{% trans "User values are stored in your personal .env file and apply after the next restart." %}</p>
+    <p class="help">
+      {% blocktrans with filename=personal_env_filename relative_path=personal_env_relative_path %}
+        Personal environment file: {{ filename }} ({{ relative_path }})
+      {% endblocktrans %}
+    </p>
+    <div class="submit-row">
+      <a class="button" href="{% url 'admin:environment-download' %}">{% trans "Download personal .env file" %}</a>
+    </div>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="submit-row">
+        <label for="personal-env-upload">{% trans "Upload personal .env file" %}</label>
+        <input id="personal-env-upload" type="file" name="personal_env_upload" accept=".env,text/plain" />
+        <input type="submit" value="{% trans 'Upload file' %}" />
+      </div>
+    </form>
     <form method="post">
       {% csrf_token %}
       <div class="submit-row" style="margin-bottom: 1rem;">

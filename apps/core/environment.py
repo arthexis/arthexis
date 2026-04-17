@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 from django.conf import settings
 from django.contrib import admin
 from django.contrib import messages
+from django.http import FileResponse, HttpResponse
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.translation import gettext_lazy as _
@@ -58,20 +60,14 @@ def _group_django_settings(settings_items: list[tuple[str, object]]) -> list[dic
 
 def _environment_view(request):
     env_vars = sorted(os.environ.items())
-    user_env_values = _load_user_env_values(request.user)
 
     if request.method == "POST":
-        loaded_values = _load_user_env_values(request.user)
-        submitted_values = _extract_user_values(request, env_vars)
-        loaded_values.update(submitted_values)
-        _write_user_env_values(request.user, loaded_values)
-        messages.success(
-            request,
-            _(
-                "Personal environment values saved. They are applied after the next restart."
-            ),
-        )
+        if request.FILES.get("personal_env_upload") is not None:
+            _handle_personal_env_upload(request)
+        else:
+            _handle_user_value_save(request, env_vars)
 
+    user_env_values = _load_user_env_values(request.user)
     env_rows = [
         {
             "key": key,
@@ -80,15 +76,85 @@ def _environment_view(request):
         }
         for key, value in env_vars
     ]
+
+    env_path = _user_env_path(request.user)
     context = admin.site.each_context(request)
     context.update(
         {
             "title": _("Environment"),
             "env_rows": env_rows,
             "environment_tasks": [],
+            "personal_env_filename": env_path.name,
+            "personal_env_relative_path": env_path.relative_to(settings.BASE_DIR),
         }
     )
     return TemplateResponse(request, "admin/environment.html", context)
+
+
+def _download_personal_env_view(request):
+    env_path = _user_env_path(request.user)
+    if env_path.exists():
+        response = FileResponse(
+            env_path.open("rb"),
+            as_attachment=True,
+            filename=env_path.name,
+            content_type="text/plain; charset=utf-8",
+        )
+        return response
+
+    return HttpResponse(
+        "",
+        content_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{env_path.name}"'},
+    )
+
+
+def _handle_user_value_save(request, env_vars: list[tuple[str, str]]) -> None:
+    loaded_values = _load_user_env_values(request.user)
+    submitted_values = _extract_user_values(request, env_vars)
+    loaded_values.update(submitted_values)
+    _write_user_env_values(request.user, loaded_values)
+    messages.success(
+        request,
+        _(
+            "Personal environment values saved. They are applied after the next restart."
+        ),
+    )
+
+
+def _handle_personal_env_upload(request) -> None:
+    upload = request.FILES.get("personal_env_upload")
+    if upload is None:
+        messages.error(request, _("Select an .env file to upload."))
+        return
+
+    try:
+        content = upload.read().decode("utf-8")
+    except UnicodeDecodeError:
+        messages.error(request, _("Upload failed: the .env file must be UTF-8 text."))
+        return
+
+    values = _parse_env_content(content)
+    _write_user_env_values(request.user, values)
+    messages.success(
+        request,
+        _("Personal .env file uploaded. Values are applied after the next restart."),
+    )
+
+
+def _parse_env_content(content: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key:
+            values[key] = value.strip().replace("\n", "").replace("\r", "")
+
+    return values
 
 
 def _user_env_dir() -> Path:
@@ -96,16 +162,33 @@ def _user_env_dir() -> Path:
     return Path(settings.BASE_DIR) / "var" / "user_env"
 
 
+def _safe_user_env_stem(user) -> str:
+    """Return a stable filename stem for the user-specific environment file."""
+    username = re.sub(r"[^a-zA-Z0-9_.-]", "-", str(user.username or "").strip()).strip("-.")
+    if username:
+        return username
+    return f"user-{user.pk}"
+
+
+def _legacy_user_env_path(user) -> Path:
+    """Return the legacy user environment path based on primary key."""
+    return _user_env_dir() / f"{user.pk}.env"
+
+
 def _user_env_path(user) -> Path:
     """Return the path to the current user's personal environment file."""
-    return _user_env_dir() / f"{user.pk}.env"
+    return _user_env_dir() / f"{_safe_user_env_stem(user)}.env"
 
 
 def _load_user_env_values(user) -> dict[str, str]:
     """Load key/value pairs from the user's personal ``.env`` file."""
     env_path = _user_env_path(user)
     if not env_path.exists():
-        return {}
+        legacy_path = _legacy_user_env_path(user)
+        if legacy_path.exists():
+            env_path = legacy_path
+        else:
+            return {}
 
     values: dict[str, str] = {}
     with env_path.open("r", encoding="utf-8") as env_file:
@@ -131,7 +214,6 @@ def _extract_user_values(request, env_vars: list[tuple[str, str]]) -> dict[str, 
     return submitted
 
 
-
 def _write_user_env_values(user, values: dict[str, str]) -> None:
     """Persist user-specific environment values to the personal ``.env`` file."""
     env_dir = _user_env_dir()
@@ -140,9 +222,12 @@ def _write_user_env_values(user, values: dict[str, str]) -> None:
 
     with env_path.open("w", encoding="utf-8") as env_file:
         for key in sorted(values):
-            # Remove newlines and carriage returns to prevent injection
-            safe_value = values[key].replace('\n', '').replace('\r', '')
+            safe_value = values[key].replace("\n", "").replace("\r", "")
             env_file.write(f"{key}={safe_value}\n")
+
+    legacy_path = _legacy_user_env_path(user)
+    if legacy_path != env_path and legacy_path.exists():
+        legacy_path.unlink()
 
 
 def _config_view(request):
@@ -168,6 +253,11 @@ def patch_admin_environment_view() -> None:
                 "environment/",
                 admin.site.admin_view(_environment_view),
                 name="environment",
+            ),
+            path(
+                "environment/download/",
+                admin.site.admin_view(_download_personal_env_view),
+                name="environment-download",
             ),
             path(
                 "config/",
