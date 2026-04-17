@@ -131,6 +131,12 @@ run the canonical release transform command after schema migration:
 This command is an ops alias for `release run-data-transforms` and can be
 rerun safely because transform progress is checkpointed.
 
+Important: the default run processes only one batch per transform
+(`--max-batches=1`). Keep rerunning the command until each transform reports
+`complete=True` in command output. For larger backfills, use an explicit batch
+budget per run (for example `./command.sh run_release_data_transforms --max-batches 10`)
+and continue rerunning until all transforms report completion.
+
 For node-specific deferred migration progress, use operator-facing status
 surfaces:
 
