@@ -82,16 +82,11 @@ class Command(BaseCommand):
                 )
             )
         python = resolve_project_python(base_dir)
-        try:
-            readiness = self._run_readiness_probe(base_dir, python)
-        except CommandError as exc:
-            raise CommandError(
-                emit_remediation(
-                    code="missing_dependency",
-                    command="./env-refresh.sh --deps-only",
-                    retry=retry_command,
-                )
-            ) from exc
+        readiness = self._run_readiness_probe(
+            base_dir,
+            python,
+            retry_command=retry_command,
+        )
         self._write_readiness_report(readiness)
 
         missing_dependencies = [
@@ -114,7 +109,13 @@ class Command(BaseCommand):
         if result.returncode != 0:
             raise CommandError(f"pytest exited with status {result.returncode}")
 
-    def _run_readiness_probe(self, base_dir: Path, python: str) -> dict[str, object]:
+    def _run_readiness_probe(
+        self,
+        base_dir: Path,
+        python: str,
+        *,
+        retry_command: str,
+    ) -> dict[str, object]:
         """Collect QA readiness details from the selected Python interpreter."""
 
         probe = subprocess.run(
@@ -141,7 +142,13 @@ class Command(BaseCommand):
             text=True,
         )
         if probe.returncode != 0:
-            raise CommandError("Unable to run QA readiness probe for test execution.")
+            raise CommandError(
+                emit_remediation(
+                    code="missing_dependency",
+                    command="./env-refresh.sh --deps-only",
+                    retry=retry_command,
+                )
+            )
         try:
             lines = probe.stdout.strip().splitlines()
             if not lines:

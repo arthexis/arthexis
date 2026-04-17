@@ -10,7 +10,7 @@ from apps.tests.management.commands import test as test_command
 
 
 def _create_expected_venv_python(base_dir):
-    venv_python = base_dir / ".venv" / "bin" / "python"
+    venv_python = test_command.expected_venv_python(base_dir)
     venv_python.parent.mkdir(parents=True, exist_ok=True)
     venv_python.touch()
 
@@ -85,5 +85,9 @@ def test_run_pytest_fails_before_pytest_when_dependency_missing(monkeypatch, tmp
 
     captured = capsys.readouterr().out
     assert "pytest-django=no" in captured
-    assert "\"code\": \"missing_dependency\"" in str(exc.value)
+    message = str(exc.value)
+    json_start = message.find("{")
+    json_end = message.rfind("}")
+    payload = json.loads(message[json_start : json_end + 1])
+    assert payload["code"] == "missing_dependency"
     assert len(calls) == 1
