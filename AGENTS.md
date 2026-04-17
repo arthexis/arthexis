@@ -130,9 +130,10 @@ Code within test modules is exempt unless a comment or docstring is needed to cl
 
 When implementing UI updates for Arthexis:
 
-* Avoid hardcoded `rem` values for touch target sizing.
+* Avoid hardcoded values (for example `rem` or `px`) for UI styling, especially touch target sizing.
 * Prefer shared CSS variables (design tokens) from the admin UI framework to keep sizing and spacing consistent across the suite.
 * Keep design choices aligned with Arthexis admin usability and consistency needs, prioritizing cohesive behavior across apps over one-off local styling.
+* Prioritize clarity over conciseness for UI labels; prefer descriptive labels over ambiguous short toggles when possible.
 
 ---
 
