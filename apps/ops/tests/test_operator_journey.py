@@ -266,7 +266,8 @@ class OperatorJourneyViewTests(TestCase):
 
         self.assertContains(response, "Create account and complete step")
         self.assertContains(response, "Security group")
-        self.assertContains(response, "Short description")
+        self.assertContains(response, "Staff")
+        self.assertContains(response, "Apps")
         self.assertContains(response, "User details")
         self.assertContains(response, "id=\"nav-sidebar\"", html=False)
         self.assertNotContains(response, "<iframe", html=False)
@@ -302,6 +303,22 @@ class OperatorJourneyViewTests(TestCase):
             row["id"] for row in security_group_rows if row.get("selected") is True
         }
         self.assertSetEqual(selected_ids, {extra_group.pk})
+
+    def test_security_group_rows_include_staff_flag_and_apps(self):
+        SecurityGroup.objects.create(name=SITE_OPERATOR_GROUP_NAME)
+        SecurityGroup.objects.create(
+            app="billing",
+            name="Custom app group",
+        )
+        provision_form = OperatorJourneyProvisionSuperuserForm()
+
+        security_group_rows = _build_security_group_rows(provision_form)
+
+        rows_by_name = {row["name"]: row for row in security_group_rows}
+        self.assertTrue(rows_by_name[SITE_OPERATOR_GROUP_NAME]["is_staff_group"])
+        self.assertEqual(rows_by_name[SITE_OPERATOR_GROUP_NAME]["apps"], "—")
+        self.assertFalse(rows_by_name["Custom app group"]["is_staff_group"])
+        self.assertEqual(rows_by_name["Custom app group"]["apps"], "billing")
 
     def test_provision_step_creates_superuser_with_assigned_groups(self):
         provision_step = OperatorJourneyStep.objects.create(

@@ -200,11 +200,24 @@
         }
         .operator-journey-sg-table td:first-child,
         .operator-journey-sg-table th:first-child {
-          width: 72px;
+          width: 84px;
         }
         .operator-journey-checkbox {
-          block-size: 1.15rem;
-          inline-size: 1.15rem;
+          block-size: 1.35rem;
+          cursor: pointer;
+          inline-size: 1.35rem;
+          margin: 0;
+        }
+        .operator-journey-checkbox-hitarea {
+          align-items: center;
+          border: 1px solid var(--hairline-color);
+          border-radius: 999px;
+          cursor: pointer;
+          display: inline-flex;
+          justify-content: center;
+          min-height: 2rem;
+          min-width: 2rem;
+          padding: 0.2rem;
         }
         .operator-journey-primary-button {
           font-size: 0.95rem;
@@ -238,23 +251,26 @@
                 <tr>
                   <th>{% translate "Select" %}</th>
                   <th>{% translate "Security group" %}</th>
-                  <th>{% translate "Short description" %}</th>
+                  <th>{% translate "Staff" %}</th>
+                  <th>{% translate "Apps" %}</th>
                 </tr>
               </thead>
               <tbody>
                 {% for row in security_group_rows %}
                   <tr>
                     <td>
-                      <input class="operator-journey-checkbox" id="id_security_groups_{{ row.id }}" type="checkbox" name="security_groups" value="{{ row.id }}" {% if row.selected %}checked{% endif %}>
+                      <label class="operator-journey-checkbox-hitarea" for="id_security_groups_{{ row.id }}">
+                        <input class="operator-journey-checkbox" id="id_security_groups_{{ row.id }}" type="checkbox" name="security_groups" value="{{ row.id }}" {% if row.selected %}checked{% endif %}>
+                      </label>
                     </td>
                     <td>
                       <label for="id_security_groups_{{ row.id }}"><strong>{{ row.name }}</strong></label>
                     </td>
                     <td>
-                      {{ row.security_model_label }}
-                      {% if row.app %}
-                        <br><span class="help">{% translate "App:" %} {{ row.app }}</span>
-                      {% endif %}
+                      {% if row.is_staff_group %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}
+                    </td>
+                    <td>
+                      {{ row.apps }}
                     </td>
                   </tr>
                 {% endfor %}

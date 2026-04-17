@@ -68,13 +68,24 @@ def _build_security_group_rows(
             }
 
     rows: list[dict[str, object]] = []
-    for group in provision_superuser_form.fields["security_groups"].queryset:
+    for group in (
+        provision_superuser_form.fields["security_groups"]
+        .queryset.prefetch_related("permissions__content_type")
+    ):
+        app_labels = {
+            permission.content_type.app_label
+            for permission in group.permissions.all()
+            if permission.content_type.app_label
+        }
+        if group.app:
+            app_labels.add(group.app)
+        app_names = ", ".join(sorted(app_labels)) if app_labels else "—"
         rows.append(
             {
                 "id": group.pk,
+                "apps": app_names,
+                "is_staff_group": group.is_canonical_staff_group,
                 "name": group.name,
-                "app": group.app,
-                "security_model_label": group.security_model_label,
                 "selected": str(group.pk) in selected_group_ids,
             }
         )
