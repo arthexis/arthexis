@@ -9,11 +9,18 @@ from django.core.management.base import CommandError
 from apps.tests.management.commands import test as test_command
 
 
+def _create_expected_venv_python(base_dir):
+    venv_python = base_dir / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True, exist_ok=True)
+    venv_python.touch()
+
+
 def test_run_pytest_prints_readiness_before_execution(monkeypatch, tmp_path, capsys):
     command = test_command.Command()
 
     monkeypatch.setattr(command, "_base_dir", lambda: tmp_path)
     monkeypatch.setattr(test_command, "resolve_project_python", lambda _base_dir: "python")
+    _create_expected_venv_python(tmp_path)
 
     probe_payload = {
         "python_executable": "/workspace/arthexis/.venv/bin/python",
@@ -48,12 +55,12 @@ def test_run_pytest_prints_readiness_before_execution(monkeypatch, tmp_path, cap
     assert calls[1] == ["python", "-m", "pytest", "apps/tests/test_test_command.py"]
 
 
-def test_run_pytest_fails_before_pytest_when_dependency_missing(monkeypatch, tmp_path):
+def test_run_pytest_fails_before_pytest_when_dependency_missing(monkeypatch, tmp_path, capsys):
     command = test_command.Command()
 
     monkeypatch.setattr(command, "_base_dir", lambda: tmp_path)
     monkeypatch.setattr(test_command, "resolve_project_python", lambda _base_dir: "python")
-
+    _create_expected_venv_python(tmp_path)
     probe_payload = {
         "python_executable": "/workspace/arthexis/.venv/bin/python",
         "virtualenv_active": True,
@@ -76,6 +83,7 @@ def test_run_pytest_fails_before_pytest_when_dependency_missing(monkeypatch, tmp
     with pytest.raises(CommandError) as exc:
         command._run_pytest(["--", "apps/tests/test_test_command.py"])
 
-    assert "Core test dependencies are missing" in str(exc.value)
-    assert "pytest-django" in str(exc.value)
+    captured = capsys.readouterr().out
+    assert "pytest-django=no" in captured
+    assert "\"code\": \"missing_dependency\"" in str(exc.value)
     assert len(calls) == 1
