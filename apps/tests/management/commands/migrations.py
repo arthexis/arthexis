@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
-from utils.qa_remediation import emit_remediation, expected_venv_python
+from utils.qa_remediation import (
+    emit_remediation,
+    expected_venv_python,
+    find_repo_root,
+)
 
 
 class Command(BaseCommand):
@@ -131,22 +136,39 @@ class Command(BaseCommand):
     def _base_dir() -> "Path":
         """Return the repository root directory."""
 
-        path = Path(__file__).resolve().parent
-        while path != path.parent:
-            if (path / "manage.py").is_file() or (path / "pyproject.toml").is_file():
-                return path
-            path = path.parent
-        raise FileNotFoundError("Repository root not found from command module path.")
+        return find_repo_root(Path(__file__).resolve().parent)
 
-    @staticmethod
-    def _retry_command_for_options(options: dict[str, object]) -> str:
+    def _retry_command_for_options(self, options: dict[str, object]) -> str:
         """Build retry guidance for the current migration subcommand."""
 
         action = options.get("action") or "run"
-        if action == "check":
-            return ".venv/bin/python manage.py migrations check"
-        if action == "server":
-            return ".venv/bin/python manage.py migrations server"
-        if action == "make":
-            return ".venv/bin/python manage.py migrations make"
-        return ".venv/bin/python manage.py migrations run"
+        base_dir = self._base_dir()
+        venv_rel = expected_venv_python(base_dir).relative_to(base_dir).as_posix()
+        command: list[str] = [venv_rel, "manage.py", "migrations", str(action)]
+
+        if action == "run":
+            app_label = options.get("app_label")
+            migration_name = options.get("migration_name")
+            database = options.get("database", "default")
+            if isinstance(app_label, str) and app_label:
+                command.append(app_label)
+                if isinstance(migration_name, str) and migration_name:
+                    command.append(migration_name)
+            if isinstance(database, str) and database:
+                command.extend(["--database", database])
+        elif action == "make":
+            app_labels = options.get("app_labels")
+            if isinstance(app_labels, list):
+                command.extend(
+                    label for label in app_labels if isinstance(label, str) and label
+                )
+            if options.get("check"):
+                command.append("--check")
+            if options.get("dry_run"):
+                command.append("--dry-run")
+        elif action == "server":
+            interval = options.get("interval", 1.0)
+            debounce = options.get("debounce", 1.0)
+            command.extend(["--interval", str(interval), "--debounce", str(debounce)])
+
+        return shlex.join(command)

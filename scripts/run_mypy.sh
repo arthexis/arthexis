@@ -8,6 +8,9 @@ export DEBUG="${DEBUG:-0}"
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings}"
 
 PYTHON_BIN=".venv/bin/python"
+if [[ "${OSTYPE:-}" == "msys" || "${OSTYPE:-}" == "cygwin" || "${OSTYPE:-}" == "win32" ]]; then
+  PYTHON_BIN=".venv/Scripts/python.exe"
+fi
 emit_remediation() {
   local code="$1"
   local command="$2"

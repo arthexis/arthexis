@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from django.db import transaction
 from apps.tests.discovery import TestDiscoveryError, discover_suite_tests
 from apps.tests.models import SuiteTest
 from utils.python_env import resolve_project_python
-from utils.qa_remediation import emit_remediation, expected_venv_python
+from utils.qa_remediation import emit_remediation, expected_venv_python, find_repo_root
 
 
 class Command(BaseCommand):
@@ -64,12 +65,13 @@ class Command(BaseCommand):
 
         base_dir = self._base_dir()
         venv_python = expected_venv_python(base_dir)
+        venv_rel = venv_python.relative_to(base_dir).as_posix()
         args = list(pytest_args)
         if args and args[0] == "--":
             args = args[1:]
-        retry_command = ".venv/bin/python manage.py test run"
+        retry_command = f"{venv_rel} manage.py test run"
         if args:
-            retry_command = f"{retry_command} -- {' '.join(args)}"
+            retry_command = f"{retry_command} -- {shlex.join(args)}"
         if not venv_python.exists():
             raise CommandError(
                 emit_remediation(
@@ -106,12 +108,13 @@ class Command(BaseCommand):
         """Start the long-running VS Code test server."""
 
         base_dir = self._base_dir()
+        venv_rel = expected_venv_python(base_dir).relative_to(base_dir).as_posix()
         if not expected_venv_python(base_dir).exists():
             raise CommandError(
                 emit_remediation(
                     code="missing_venv_python",
                     command="./install.sh --terminal",
-                    retry=".venv/bin/python manage.py test server",
+                    retry=f"{venv_rel} manage.py test server",
                 )
             )
 
@@ -124,7 +127,7 @@ class Command(BaseCommand):
                 emit_remediation(
                     code="missing_dependency",
                     command="./env-refresh.sh --deps-only",
-                    retry=".venv/bin/python manage.py test server",
+                    retry=f"{venv_rel} manage.py test server",
                 )
             ) from exc
         if exit_code != 0:
@@ -151,9 +154,4 @@ class Command(BaseCommand):
     def _base_dir() -> Path:
         """Return the repository root directory."""
 
-        path = Path(__file__).resolve().parent
-        while path != path.parent:
-            if (path / "manage.py").is_file() or (path / "pyproject.toml").is_file():
-                return path
-            path = path.parent
-        raise FileNotFoundError("Repository root not found from command module path.")
+        return find_repo_root(Path(__file__).resolve().parent)
