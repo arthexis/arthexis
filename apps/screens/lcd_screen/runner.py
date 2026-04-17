@@ -260,6 +260,7 @@ class LCDRunner:
             if self.high_repeat_signature != cycle.signature:
                 self.high_repeat_signature = cycle.signature
                 self.high_repeat_count = 0
+                cycle.index = 0
             payload = cycle.payloads[cycle.index % len(cycle.payloads)]
             if advance:
                 self.high_repeat_count += 1

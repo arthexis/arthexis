@@ -347,6 +347,20 @@ def test_high_payloads_repeat_three_times_across_high_and_low_slots(monkeypatch)
 
     assert seen == ["HI-1", "HI-1", "HI-1", "HI-2", "HI-2", "HI-2", "HI-1"]
 
+    high_cycle.signature = ((10, 0.0), (11, 0.0))
+    high_cycle.payloads = [
+        runner.locks.LockPayload("HI-NEW-1", "", 0),
+        runner.locks.LockPayload("HI-NEW-2", "", 0),
+    ]
+    high_cycle.index = 1
+
+    churn_seen = [
+        coordinator.payload_for_state(("high", "low"), slot, channel_info, channel_text, now_dt).line1
+        for slot in (0, 1, 0, 1)
+    ]
+
+    assert churn_seen == ["HI-NEW-1", "HI-NEW-1", "HI-NEW-1", "HI-NEW-2"]
+
 
 def test_low_slot_keeps_default_when_only_one_high_payload_exists(monkeypatch):
     """Low slot should show its default base payload when only one HI payload exists."""
@@ -429,3 +443,5 @@ def test_low_slot_does_not_mirror_high_when_rotation_order_excludes_high(monkeyp
     )
 
     assert low_payload.line1 == "LO BASE"
+    assert high_cycle.index == 0
+    assert coordinator.high_repeat_count == 0
