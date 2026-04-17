@@ -92,12 +92,12 @@ def _environment_view(request):
 
 
 def _download_personal_env_view(request):
-    env_path = _user_env_path(request.user)
+    env_path = _existing_user_env_path(request.user)
     if env_path.exists():
         response = FileResponse(
             env_path.open("rb"),
             as_attachment=True,
-            filename=env_path.name,
+            filename=_user_env_path(request.user).name,
             content_type="text/plain; charset=utf-8",
         )
         return response
@@ -152,7 +152,7 @@ def _parse_env_content(content: str) -> dict[str, str]:
         key, value = line.split("=", 1)
         key = key.strip()
         if key:
-            values[key] = value.strip().replace("\n", "").replace("\r", "")
+            values[key] = value.strip()
 
     return values
 
@@ -166,7 +166,7 @@ def _safe_user_env_stem(user) -> str:
     """Return a stable filename stem for the user-specific environment file."""
     username = re.sub(r"[^a-zA-Z0-9_.-]", "-", str(user.username or "").strip()).strip("-.")
     if username:
-        return username
+        return f"{username}-{user.pk}"
     return f"user-{user.pk}"
 
 
@@ -180,15 +180,24 @@ def _user_env_path(user) -> Path:
     return _user_env_dir() / f"{_safe_user_env_stem(user)}.env"
 
 
+def _existing_user_env_path(user) -> Path:
+    """Return the best available environment path for a user."""
+    env_path = _user_env_path(user)
+    if env_path.exists():
+        return env_path
+
+    legacy_path = _legacy_user_env_path(user)
+    if legacy_path.exists():
+        return legacy_path
+
+    return env_path
+
+
 def _load_user_env_values(user) -> dict[str, str]:
     """Load key/value pairs from the user's personal ``.env`` file."""
-    env_path = _user_env_path(user)
+    env_path = _existing_user_env_path(user)
     if not env_path.exists():
-        legacy_path = _legacy_user_env_path(user)
-        if legacy_path.exists():
-            env_path = legacy_path
-        else:
-            return {}
+        return {}
 
     values: dict[str, str] = {}
     with env_path.open("r", encoding="utf-8") as env_file:
