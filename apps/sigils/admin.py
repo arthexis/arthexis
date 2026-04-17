@@ -4,7 +4,7 @@ from django.contrib import admin
 from apps.locals.user_data import EntityModelAdmin
 
 from .builtin_policy import BUILTIN_SIGIL_POLICIES
-from .models import CustomSigil, SigilRoot
+from .models import CustomSigil, SigilRenderPolicy, SigilRoot
 
 
 class CustomSigilAdminForm(forms.ModelForm):
@@ -50,6 +50,32 @@ class SigilRootAdmin(EntityModelAdmin):
     @admin.display(boolean=True, description="Is Built-In")
     def is_built_in(self, obj):
         return obj.prefix.upper() in self.BUILTIN_PREFIXES
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(SigilRenderPolicy)
+class SigilRenderPolicyAdmin(admin.ModelAdmin):
+    fieldsets = (
+        (
+            "Safe-mode output handling",
+            {
+                "fields": ("unresolved_behavior",),
+                "description": (
+                    "User-safe template tags only execute roots/actions approved by sigil "
+                    "policy. Choose whether blocked or unresolved expressions keep a "
+                    "placeholder token or collapse to empty output."
+                ),
+            },
+        ),
+    )
+    list_display = ("singleton_key", "unresolved_behavior")
+
+    def has_add_permission(self, request):
+        if SigilRenderPolicy.objects.exists():
+            return False
+        return super().has_add_permission(request)
 
     def has_delete_permission(self, request, obj=None):
         return False

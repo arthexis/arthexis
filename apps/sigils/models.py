@@ -113,6 +113,35 @@ class SigilRoot(Entity):
         ]
 
 
+class SigilRenderPolicy(models.Model):
+    class UnresolvedBehavior(models.TextChoices):
+        EMPTY = "empty", _("Empty output")
+        PLACEHOLDER = "placeholder", _("Keep placeholder")
+
+    singleton_key = models.CharField(default="default", editable=False, max_length=20, unique=True)
+    unresolved_behavior = models.CharField(
+        choices=UnresolvedBehavior.choices,
+        default=UnresolvedBehavior.PLACEHOLDER,
+        help_text=_(
+            "Controls how unresolved/disallowed user-safe sigils render in templates."
+        ),
+        max_length=20,
+    )
+
+    @classmethod
+    def get_solo(cls):
+        policy, _ = cls.objects.get_or_create(singleton_key="default")
+        return policy
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return "Sigil Render Policy"
+
+    class Meta:
+        db_table = "core_sigilrenderpolicy"
+        verbose_name = _("Sigil Render Policy")
+        verbose_name_plural = _("Sigil Render Policy")
+
+
 class CustomSigil(SigilRoot):
     class Meta:
         proxy = True

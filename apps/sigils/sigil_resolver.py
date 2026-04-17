@@ -14,9 +14,9 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 
 from . import entity_lookup
-from .models import SigilRoot
+from .models import SigilRenderPolicy, SigilRoot
 from .scanner import scan_sigil_tokens
-from .sigil_context import get_context, get_request
+from .sigil_context import bind, get_context, get_request
 from .system import get_system_sigil_values, resolve_system_namespace_value
 
 logger = logging.getLogger(__name__)
@@ -1121,6 +1121,69 @@ def resolve_sigils(
     if cursor < len(text):
         parts.append(text[cursor:])
     return "".join(parts)
+
+
+
+
+def _strip_unresolved_tokens(text: str) -> str:
+    """Remove unresolved sigil placeholders from already-rendered text."""
+
+    if "[" not in text:
+        return text
+    parts: list[str] = []
+    cursor = 0
+    for span in scan_sigil_tokens(text):
+        if span.start > cursor:
+            parts.append(text[cursor:span.start])
+        cursor = span.end
+    if cursor < len(text):
+        parts.append(text[cursor:])
+    return "".join(parts)
+
+
+def get_user_safe_unresolved_behavior() -> str:
+    """Return user-safe unresolved token behavior for template rendering."""
+
+    configured = getattr(settings, "SIGILS_USER_SAFE_UNRESOLVED_BEHAVIOR", "").lower()
+    if configured in {
+        SigilRenderPolicy.UnresolvedBehavior.EMPTY,
+        SigilRenderPolicy.UnresolvedBehavior.PLACEHOLDER,
+    }:
+        return configured
+
+    try:
+        return SigilRenderPolicy.get_solo().unresolved_behavior
+    except Exception:
+        logger.exception("Failed to load sigil render policy; using placeholder mode")
+        return SigilRenderPolicy.UnresolvedBehavior.PLACEHOLDER
+
+
+def resolve_user_safe_sigils(
+    text: str,
+    current: models.Model | None = None,
+    *,
+    request=None,
+) -> str:
+    """Resolve text using user-safe root/action policy and safe degradation."""
+
+    try:
+        with bind(request=request, current=current):
+            resolved = resolve_sigils(
+                text,
+                current=current,
+                allowed_roots=get_user_safe_sigil_roots(),
+                allowed_actions=get_user_safe_sigil_actions(),
+            )
+    except Exception:
+        logger.exception("User-safe sigil rendering failed")
+        resolved = text
+
+    if (
+        get_user_safe_unresolved_behavior()
+        == SigilRenderPolicy.UnresolvedBehavior.EMPTY
+    ):
+        return _strip_unresolved_tokens(resolved)
+    return resolved
 
 
 def resolve_sigil(
