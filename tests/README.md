@@ -11,6 +11,7 @@ For release confidence criteria and maturity semantics, see the [Versioning and 
 For targeted notes about notable test-suite decisions and historical changes, see the dedicated testing notes document:
 
 - [Test Suite Notes](../docs/development/testing/test-suite-notes.md)
+- [Command Matrix](../docs/development/command-matrix.md)
 
 ## License and Sponsorship
 

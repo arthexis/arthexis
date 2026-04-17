@@ -146,7 +146,10 @@ Agents must run relevant tests after code changes.
 * Execute tests and **fix errors introduced by changes**.
 * Prefer validated repository entrypoints over ad-hoc interpreter calls. Run `./env-refresh.sh --deps-only` before Django or pytest commands when the environment may be unbootstrapped.
 * Use `.venv/bin/python` (or the repo's validated wrapper/management entrypoints) instead of bare `python` when invoking `manage.py` or `pytest` directly.
-* Prefer `.venv/bin/python manage.py test run -- ...` and `.venv/bin/python manage.py migrations check` when those entrypoints cover the task.
+* Canonical app-test command for this repository: `.venv/bin/python manage.py test run -- <target>`.
+* Use direct `pytest` only where this repository already requires it:
+  * CI workflow internals under `.github/workflows/`.
+  * pytest-backed command/helper implementation code (for example `apps/tests/management/commands/test.py` and `utils/devtools/test_server.py`).
 * Use `.venv/bin/python manage.py ...` for development and test workflows; use `./command.sh ...` only for operator-facing runtime actions when applicable.
 * If `.venv/bin/python` is unavailable, use the repository's validated wrapper or management entrypoint.
 * Avoid creating tests for **micro-behaviors** unless:
