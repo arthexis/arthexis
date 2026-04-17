@@ -302,6 +302,54 @@ def fetch_repository_pull_requests(
     yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
 
 
+def fetch_issue_comments(
+    *,
+    token: str,
+    owner: str,
+    name: str,
+    issue_number: int,
+) -> Iterator[Mapping[str, object]]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/issues/{issue_number}/comments"
+    params = {"per_page": 100}
+    yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
+
+
+def fetch_issue_comment_reactions(
+    *,
+    token: str,
+    owner: str,
+    name: str,
+    comment_id: int,
+) -> Iterator[Mapping[str, object]]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/issues/comments/{comment_id}/reactions"
+    params = {"per_page": 100}
+    yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
+
+
+def fetch_pull_request_review_comments(
+    *,
+    token: str,
+    owner: str,
+    name: str,
+    pull_number: int,
+) -> Iterator[Mapping[str, object]]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/pulls/{pull_number}/comments"
+    params = {"per_page": 100}
+    yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
+
+
+def fetch_pull_request_review_comment_reactions(
+    *,
+    token: str,
+    owner: str,
+    name: str,
+    comment_id: int,
+) -> Iterator[Mapping[str, object]]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/pulls/comments/{comment_id}/reactions"
+    params = {"per_page": 100}
+    yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
+
+
 def _ensure_issue_lock_dir() -> None:
     ISSUE_LOCK_DIR.mkdir(parents=True, exist_ok=True)
 

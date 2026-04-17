@@ -1,0 +1,73 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <div class="admin-ui-panel admin-ui-stack">
+    <h1>{{ title }}</h1>
+    <p><strong>{{ impact_note }}</strong></p>
+    <p>
+      {% translate "Target" %}:
+      {% if object_url %}
+        <a href="{{ object_url }}" target="_blank" rel="noopener noreferrer"><code>{{ target_label }}</code></a>
+      {% else %}
+        <code>{{ target_label }}</code>
+      {% endif %}
+    </p>
+
+    {% if summary_rows %}
+      <dl class="admin-ui-stack">
+        {% for label, value in summary_rows %}
+          <div>
+            <dt><strong>{{ label }}</strong></dt>
+            <dd>{{ value }}</dd>
+          </div>
+        {% endfor %}
+      </dl>
+    {% endif %}
+
+    <div class="admin-ui-actions">
+      {% for action in action_links %}
+        {% if action.url %}
+          <a href="{{ action.url }}" class="admin-ui-button admin-ui-button--primary">{{ action.label }}</a>
+        {% endif %}
+      {% endfor %}
+      <a href="{{ change_url }}" class="admin-ui-button">{% translate "Back" %}</a>
+    </div>
+
+    {% if activity %}
+      <div class="admin-ui-stack">
+        {% for item in activity %}
+          <section class="admin-ui-panel admin-ui-stack">
+            <div>
+              <strong>{{ item.kind_label }}</strong>
+              {% translate "by" %} <code>{{ item.author_name|default:"unknown" }}</code>
+              {% if item.created_at %}
+                {% translate "at" %} {{ item.created_at }}
+              {% endif %}
+              {% if item.path %}
+                <span>({{ item.path }}{% if item.line %}:{{ item.line }}{% endif %})</span>
+              {% endif %}
+              {% if item.html_url %}
+                <a href="{{ item.html_url }}" target="_blank" rel="noopener noreferrer">{% translate "GitHub" %}</a>
+              {% endif %}
+            </div>
+            {% if item.reactions %}
+              <div>
+                {% for reaction in item.reactions %}
+                  <span><strong>{{ reaction.display }}</strong></span>{% if not forloop.last %} | {% endif %}
+                {% endfor %}
+              </div>
+            {% endif %}
+            {% if item.body %}
+              <div style="white-space: pre-wrap;">{{ item.body }}</div>
+            {% else %}
+              <div><em>{% translate "No comment body." %}</em></div>
+            {% endif %}
+          </section>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p>{% translate "No GitHub comments found." %}</p>
+    {% endif %}
+  </div>
+{% endblock %}

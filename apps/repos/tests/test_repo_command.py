@@ -115,3 +115,54 @@ def test_repo_command_merges_pull_request_with_selected_method(monkeypatch):
     assert captured["number"] == 789
     assert captured["merge_method"] == "squash"
     assert "Pull request #789 merged with squash" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_repo_command_shows_pull_request_activity_with_reactions(monkeypatch):
+    """The repo command should print reviewer reaction icons in PR activity output."""
+
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "list_pull_requests",
+        lambda self, repository, state="all": [
+            {
+                "number": 456,
+                "state": "open",
+                "title": "Monitoring surface",
+                "url": "https://github.com/octo/demo/pull/456",
+                "isDraft": False,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "list_pull_request_activity",
+        lambda self, repository, number: [
+            {
+                "kind_label": "Review comment",
+                "author_name": "reviewer-1",
+                "created_at": "2026-04-17T21:00:00Z",
+                "path": "apps/repos/admin.py",
+                "line": 44,
+                "reactions": [{"display": "👀 reviewer-2"}],
+                "body": "I am looking at this.",
+            }
+        ],
+    )
+
+    stdout = StringIO()
+    call_command(
+        "repo",
+        "prs",
+        "show",
+        "456",
+        "--repo",
+        "octo/demo",
+        stdout=stdout,
+    )
+
+    output = stdout.getvalue()
+    assert "Pull request #456 [open] Monitoring surface" in output
+    assert "Review comment by reviewer-1" in output
+    assert "apps/repos/admin.py:44" in output
+    assert "👀 reviewer-2" in output

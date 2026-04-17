@@ -441,3 +441,90 @@ def test_release_management_defaults_merge_method_to_merge(monkeypatch):
     client.merge_pull_request(RepositoryRef(owner="octo", name="demo"), number=88)
 
     assert called["args"][-1] == f"--{MERGE_METHOD_MERGE}"
+
+
+@pytest.mark.django_db
+def test_release_management_lists_issue_activity_with_reactions(monkeypatch):
+    """Issue activity should normalize reactions into icon-rich summaries."""
+
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_resolve_token",
+        lambda self: "token-1",
+    )
+
+    from apps.repos.services import github as github_service
+
+    monkeypatch.setattr(
+        github_service,
+        "fetch_issue_comments",
+        lambda **kwargs: [
+            {
+                "id": 91,
+                "body": "Looking now",
+                "created_at": "2026-04-17T21:00:00Z",
+                "html_url": "https://example.com/issues/12#issuecomment-91",
+                "user": {"login": "reviewer-1"},
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        github_service,
+        "fetch_issue_comment_reactions",
+        lambda **kwargs: [
+            {"content": "eyes", "user": {"login": "reviewer-2"}},
+            {"content": "+1", "user": {"login": "reviewer-3"}},
+        ],
+    )
+
+    client = ReleaseManagementClient()
+    activity = client.list_issue_activity(RepositoryRef(owner="octo", name="demo"), number=12)
+
+    assert activity[0]["author_name"] == "reviewer-1"
+    assert activity[0]["reactions"][0]["display"] == "👀 reviewer-2"
+    assert activity[0]["reactions"][1]["display"] == "👍 reviewer-3"
+
+
+@pytest.mark.django_db
+def test_release_management_lists_pull_request_activity_with_gh_api(monkeypatch):
+    """Binary activity should flatten gh api pages and sort issue/review comments."""
+
+    def fake_api(self, endpoint: str) -> list[dict[str, Any]]:
+        if endpoint == "repos/octo/demo/issues/14/comments?per_page=100":
+            return [
+                {
+                    "id": 100,
+                    "body": "Top-level note",
+                    "created_at": "2026-04-17T21:00:00Z",
+                    "user": {"login": "reviewer-1"},
+                }
+            ]
+        if endpoint == "repos/octo/demo/pulls/14/comments?per_page=100":
+            return [
+                {
+                    "id": 101,
+                    "body": "Inline note",
+                    "created_at": "2026-04-17T21:01:00Z",
+                    "path": "apps/repos/admin.py",
+                    "line": 42,
+                    "user": {"login": "reviewer-2"},
+                }
+            ]
+        if endpoint == "repos/octo/demo/issues/comments/100/reactions?per_page=100":
+            return [{"content": "eyes", "user": {"login": "reviewer-3"}}]
+        if endpoint == "repos/octo/demo/pulls/comments/101/reactions?per_page=100":
+            return [{"content": "rocket", "user": {"login": "reviewer-4"}}]
+        raise AssertionError(f"unexpected endpoint {endpoint}")
+
+    monkeypatch.setattr(ReleaseManagementClient, "_run_gh_api_items", fake_api)
+
+    client = ReleaseManagementClient(mode=EXECUTION_MODE_BINARY)
+    activity = client.list_pull_request_activity(
+        RepositoryRef(owner="octo", name="demo"),
+        number=14,
+    )
+
+    assert [item["id"] for item in activity] == [100, 101]
+    assert activity[0]["reactions"][0]["display"] == "👀 reviewer-3"
+    assert activity[1]["path"] == "apps/repos/admin.py"
+    assert activity[1]["reactions"][0]["display"] == "🚀 reviewer-4"

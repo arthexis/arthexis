@@ -38,9 +38,11 @@ class Command(BaseCommand):
             """
             Examples:
               repo issues list --repo octo/demo
+              repo issues show 123 --repo octo/demo
               repo issues comment 123 --body "Please attach logs." --repo octo/demo
               repo issues close 123 --repo octo/demo
               repo prs list --repo octo/demo
+              repo prs show 456 --repo octo/demo
               repo prs comment 456 --body "Please rebase." --repo octo/demo
               repo prs ready 456 --repo octo/demo
               repo prs merge 456 --method squash --repo octo/demo
@@ -61,6 +63,11 @@ class Command(BaseCommand):
         issues_list = issues_subparsers.add_parser("list", help="List issues")
         issues_list.add_argument("--state", default="open")
         self._add_repository_argument(issues_list)
+        issues_show = issues_subparsers.add_parser(
+            "show", help="Show issue activity and reactions"
+        )
+        issues_show.add_argument("number", type=int)
+        self._add_repository_argument(issues_show)
         issues_comment = issues_subparsers.add_parser("comment", help="Comment on issue")
         issues_comment.add_argument("number", type=int)
         issues_comment.add_argument("--body", required=True)
@@ -78,6 +85,11 @@ class Command(BaseCommand):
         prs_list = prs_subparsers.add_parser("list", help="List pull requests")
         prs_list.add_argument("--state", default="open")
         self._add_repository_argument(prs_list)
+        prs_show = prs_subparsers.add_parser(
+            "show", help="Show pull request activity and reactions"
+        )
+        prs_show.add_argument("number", type=int)
+        self._add_repository_argument(prs_show)
         prs_comment = prs_subparsers.add_parser("comment", help="Comment on pull request")
         prs_comment.add_argument("number", type=int)
         prs_comment.add_argument("--body", required=True)
@@ -135,6 +147,18 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"Listed {len(rows)} issues from {repository.slug}"))
                 return
 
+            if resource == "issues" and action == "show":
+                number = int(options["number"])
+                issue = self._find_issue(client, repository, number=number)
+                activity = client.list_issue_activity(repository, number=number)
+                self._write_activity_report(
+                    "Issue",
+                    number=number,
+                    summary=issue,
+                    activity=activity,
+                )
+                return
+
             if resource == "issues" and action == "create":
                 url = client.create_issue(
                     repository,
@@ -177,6 +201,18 @@ class Command(BaseCommand):
                     )
                 self.stdout.write(
                     self.style.SUCCESS(f"Listed {len(rows)} pull requests from {repository.slug}")
+                )
+                return
+
+            if resource == "prs" and action == "show":
+                number = int(options["number"])
+                pull_request = self._find_pull_request(client, repository, number=number)
+                activity = client.list_pull_request_activity(repository, number=number)
+                self._write_activity_report(
+                    "Pull request",
+                    number=number,
+                    summary=pull_request,
+                    activity=activity,
                 )
                 return
 
@@ -323,3 +359,78 @@ class Command(BaseCommand):
         except ValueError as exc:
             raise CommandError(str(exc)) from exc
         return RepositoryRef(owner=active.owner, name=active.name)
+
+    @staticmethod
+    def _find_issue(
+        client: ReleaseManagementClient,
+        repository: RepositoryRef,
+        *,
+        number: int,
+    ) -> dict[str, object] | None:
+        rows = client.list_issues(repository, state="all")
+        return next((row for row in rows if row.get("number") == number), None)
+
+    @staticmethod
+    def _find_pull_request(
+        client: ReleaseManagementClient,
+        repository: RepositoryRef,
+        *,
+        number: int,
+    ) -> dict[str, object] | None:
+        rows = client.list_pull_requests(repository, state="all")
+        return next((row for row in rows if row.get("number") == number), None)
+
+    def _write_activity_report(
+        self,
+        label: str,
+        *,
+        number: int,
+        summary: dict[str, object] | None,
+        activity: list[dict[str, object]],
+    ) -> None:
+        state = str((summary or {}).get("state") or "unknown")
+        title = str((summary or {}).get("title") or "").strip()
+        suffix = ""
+        if bool((summary or {}).get("isDraft")):
+            suffix = " draft"
+        self.stdout.write(f"{label} #{number} [{state}{suffix}] {title}".rstrip())
+
+        url = str((summary or {}).get("url") or "").strip()
+        if url:
+            self.stdout.write(f"URL: {url}")
+
+        if not activity:
+            self.stdout.write("No GitHub comments found.")
+            return
+
+        self.stdout.write("Activity:")
+        for item in activity:
+            author_name = str(item.get("author_name") or "unknown")
+            kind_label = str(item.get("kind_label") or "Comment")
+            created_at = str(item.get("created_at") or "").strip()
+            location = str(item.get("path") or "").strip()
+            line = item.get("line")
+            header = f"- {kind_label} by {author_name}"
+            if created_at:
+                header += f" at {created_at}"
+            if location:
+                if isinstance(line, int):
+                    location = f"{location}:{line}"
+                header += f" [{location}]"
+            self.stdout.write(header)
+
+            reactions = item.get("reactions") or []
+            if isinstance(reactions, list) and reactions:
+                displays = [
+                    str(reaction.get("display") or "").strip()
+                    for reaction in reactions
+                    if isinstance(reaction, dict)
+                ]
+                displays = [display for display in displays if display]
+                if displays:
+                    self.stdout.write(f"  Reactions: {' | '.join(displays)}")
+
+            body = str(item.get("body") or "").strip()
+            if body:
+                for line_text in body.splitlines():
+                    self.stdout.write(f"  {line_text}")

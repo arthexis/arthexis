@@ -35,6 +35,7 @@ class FetchFromGitHubMixin(DjangoObjectActions):
     changelist_actions: list[str] = []
     dashboard_actions: list[str] = []
     operation_template_name = "admin/repos/github_operation.html"
+    observation_template_name = "admin/repos/github_observation.html"
 
     def _redirect_to_changelist(self):
         opts = self.model._meta
@@ -78,6 +79,33 @@ class FetchFromGitHubMixin(DjangoObjectActions):
         }
         return TemplateResponse(request, self.operation_template_name, context)
 
+    def _render_observation_view(
+        self,
+        request,
+        *,
+        obj,
+        title,
+        impact_note,
+        activity,
+        action_links,
+        summary_rows,
+    ):
+        opts = self.model._meta
+        context = {
+            **self.admin_site.each_context(request),
+            "action_links": action_links,
+            "activity": activity,
+            "change_url": self._change_url(obj),
+            "impact_note": impact_note,
+            "object_url": getattr(obj, "html_url", ""),
+            "opts": opts,
+            "original": obj,
+            "summary_rows": summary_rows,
+            "target_label": str(obj),
+            "title": title,
+        }
+        return TemplateResponse(request, self.observation_template_name, context)
+
     @staticmethod
     def _repository_ref(obj) -> RepositoryRef:
         return RepositoryRef(owner=obj.repository.owner, name=obj.repository.name)
@@ -92,7 +120,7 @@ class RepositoryIssueAdmin(
 ):
     actions = ["fetch_open_issues"]
     changelist_actions = ["fetch_open_issues"]
-    change_actions = ("configure_action", "comment_action", "close_action")
+    change_actions = ("configure_action", "observe_action", "comment_action", "close_action")
     list_display = (
         "number_link",
         "title",
@@ -152,6 +180,11 @@ class RepositoryIssueAdmin(
         urls = super().get_urls()
         custom_urls = [
             path(
+                "<path:object_id>/observe/",
+                self.admin_site.admin_view(self.observe_view),
+                name="repos_repositoryissue_observe",
+            ),
+            path(
                 "<path:object_id>/comment/",
                 self.admin_site.admin_view(self.comment_view),
                 name="repos_repositoryissue_comment",
@@ -176,6 +209,15 @@ class RepositoryIssueAdmin(
             reverse("admin:repos_repositoryissue_comment", args=[obj.pk])
         )
 
+    def observe_action(self, request, obj):
+        return HttpResponseRedirect(
+            reverse("admin:repos_repositoryissue_observe", args=[obj.pk])
+        )
+
+    observe_action.label = _("Observe")
+    observe_action.short_description = _("Observe")
+    observe_action.requires_queryset = False
+
     comment_action.label = _("Comment")
     comment_action.short_description = _("Comment")
     comment_action.requires_queryset = False
@@ -188,6 +230,48 @@ class RepositoryIssueAdmin(
     close_action.label = _("Close")
     close_action.short_description = _("Close")
     close_action.requires_queryset = False
+
+    def observe_view(self, request, object_id):
+        obj = self._get_change_object(request, object_id)
+        try:
+            activity = ReleaseManagementClient().list_issue_activity(
+                self._repository_ref(obj),
+                number=obj.number,
+            )
+        except ReleaseManagementError as exc:
+            self.message_user(
+                request,
+                _("Failed to load GitHub issue activity: %s") % (exc,),
+                level=messages.ERROR,
+            )
+            activity = []
+
+        return self._render_observation_view(
+            request,
+            obj=obj,
+            title=_("Observe GitHub issue"),
+            impact_note=_(
+                "This view shows live GitHub comments and reviewer reaction icons."
+            ),
+            activity=activity,
+            action_links=[
+                {
+                    "label": _("Comment"),
+                    "url": reverse("admin:repos_repositoryissue_comment", args=[obj.pk]),
+                },
+                {
+                    "label": _("Close"),
+                    "url": reverse("admin:repos_repositoryissue_close", args=[obj.pk]),
+                }
+                if obj.state == "open"
+                else {},
+            ],
+            summary_rows=[
+                (_("State"), obj.state),
+                (_("Author"), obj.author or _("Unknown")),
+                (_("Updated"), obj.updated_at),
+            ],
+        )
 
     def comment_view(self, request, object_id):
         obj = self._get_change_object(request, object_id)
@@ -264,7 +348,7 @@ class RepositoryIssueAdmin(
 class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
     actions = ["fetch_open_pull_requests"]
     changelist_actions = ["fetch_open_pull_requests"]
-    change_actions = ("comment_action", "ready_action", "merge_action")
+    change_actions = ("observe_action", "comment_action", "ready_action", "merge_action")
     list_display = (
         "number_link",
         "title",
@@ -327,6 +411,11 @@ class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
         urls = super().get_urls()
         custom_urls = [
             path(
+                "<path:object_id>/observe/",
+                self.admin_site.admin_view(self.observe_view),
+                name="repos_repositorypullrequest_observe",
+            ),
+            path(
                 "<path:object_id>/comment/",
                 self.admin_site.admin_view(self.comment_view),
                 name="repos_repositorypullrequest_comment",
@@ -357,6 +446,15 @@ class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
             actions.remove("ready_action")
         return actions
 
+    def observe_action(self, request, obj):
+        return HttpResponseRedirect(
+            reverse("admin:repos_repositorypullrequest_observe", args=[obj.pk])
+        )
+
+    observe_action.label = _("Observe")
+    observe_action.short_description = _("Observe")
+    observe_action.requires_queryset = False
+
     def comment_action(self, request, obj):
         return HttpResponseRedirect(
             reverse("admin:repos_repositorypullrequest_comment", args=[obj.pk])
@@ -383,6 +481,66 @@ class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
     merge_action.label = _("Merge")
     merge_action.short_description = _("Merge")
     merge_action.requires_queryset = False
+
+    def observe_view(self, request, object_id):
+        obj = self._get_change_object(request, object_id)
+        try:
+            activity = ReleaseManagementClient().list_pull_request_activity(
+                self._repository_ref(obj),
+                number=obj.number,
+            )
+        except ReleaseManagementError as exc:
+            self.message_user(
+                request,
+                _("Failed to load pull request activity: %s") % (exc,),
+                level=messages.ERROR,
+            )
+            activity = []
+
+        action_links = [
+            {
+                "label": _("Comment"),
+                "url": reverse(
+                    "admin:repos_repositorypullrequest_comment", args=[obj.pk]
+                ),
+            }
+        ]
+        if obj.state == "open" and obj.is_draft:
+            action_links.append(
+                {
+                    "label": _("Ready"),
+                    "url": reverse(
+                        "admin:repos_repositorypullrequest_ready", args=[obj.pk]
+                    ),
+                }
+            )
+        if obj.state == "open":
+            action_links.append(
+                {
+                    "label": _("Merge"),
+                    "url": reverse(
+                        "admin:repos_repositorypullrequest_merge", args=[obj.pk]
+                    ),
+                }
+            )
+
+        return self._render_observation_view(
+            request,
+            obj=obj,
+            title=_("Observe pull request"),
+            impact_note=_(
+                "This view shows live GitHub comments, review comments, and reviewer reaction icons."
+            ),
+            activity=activity,
+            action_links=action_links,
+            summary_rows=[
+                (_("State"), obj.state),
+                (_("Draft"), _("Yes") if obj.is_draft else _("No")),
+                (_("Source branch"), obj.source_branch or _("Unknown")),
+                (_("Target branch"), obj.target_branch or _("Unknown")),
+                (_("Updated"), obj.updated_at),
+            ],
+        )
 
     def comment_view(self, request, object_id):
         obj = self._get_change_object(request, object_id)

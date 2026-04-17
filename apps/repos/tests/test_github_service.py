@@ -61,6 +61,52 @@ def test_fetch_repository_pull_requests_raises_on_error(monkeypatch):
         list(github.fetch_repository_pull_requests(token="tok", owner="octo", name="demo"))
 
 
+def test_fetch_issue_comments_uses_issue_comments_endpoint(monkeypatch):
+    calls: list[dict[str, Any]] = []
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        calls.append({"url": url, "params": params, "headers": headers, "timeout": timeout})
+        return DummyResponse([{"id": 1, "body": "hello"}])
+
+    monkeypatch.setattr(github.requests, "get", fake_get)
+
+    items = list(
+        github.fetch_issue_comments(
+            token="tok",
+            owner="octo",
+            name="demo",
+            issue_number=12,
+        )
+    )
+
+    assert items[0]["id"] == 1
+    assert calls[0]["url"].endswith("/repos/octo/demo/issues/12/comments")
+    assert calls[0]["params"] == {"per_page": 100}
+
+
+def test_fetch_pull_request_review_comment_reactions_uses_review_endpoint(monkeypatch):
+    calls: list[dict[str, Any]] = []
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        calls.append({"url": url, "params": params, "headers": headers, "timeout": timeout})
+        return DummyResponse([{"content": "eyes"}])
+
+    monkeypatch.setattr(github.requests, "get", fake_get)
+
+    items = list(
+        github.fetch_pull_request_review_comment_reactions(
+            token="tok",
+            owner="octo",
+            name="demo",
+            comment_id=45,
+        )
+    )
+
+    assert items[0]["content"] == "eyes"
+    assert calls[0]["url"].endswith("/repos/octo/demo/pulls/comments/45/reactions")
+    assert calls[0]["params"] == {"per_page": 100}
+
+
 def test_resolve_repository_token_uses_latest_release_when_available(monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "")
     monkeypatch.setattr(github, "_get_latest_release_token", lambda: "release-token")

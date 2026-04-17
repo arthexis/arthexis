@@ -25,6 +25,18 @@ MERGE_METHOD_CHOICES = (
     MERGE_METHOD_SQUASH,
     MERGE_METHOD_REBASE,
 )
+COMMENT_KIND_ISSUE = "issue_comment"
+COMMENT_KIND_REVIEW = "review_comment"
+REACTION_EMOJI = {
+    "eyes": "👀",
+    "+1": "👍",
+    "heart": "❤️",
+    "rocket": "🚀",
+    "hooray": "🎉",
+    "laugh": "😄",
+    "confused": "😕",
+    "-1": "👎",
+}
 
 
 JSONPrimitive = str | int | float | bool | None
@@ -76,6 +88,34 @@ class GitHubReleasePayload(TypedDict, total=False):
     name: str
     publishedAt: str
     tagName: str
+    url: str
+
+
+class GitHubReactionSummaryPayload(TypedDict, total=False):
+    """Summary of reactions applied to a GitHub comment."""
+
+    content: str
+    count: int
+    display: str
+    emoji: str
+    users: list[str]
+
+
+class GitHubActivityPayload(TypedDict, total=False):
+    """Normalized activity item for issue and pull-request observation."""
+
+    author: GitHubAuthorPayload
+    author_name: str
+    body: str
+    created_at: str
+    html_url: str
+    id: int
+    kind: str
+    kind_label: str
+    line: int
+    path: str
+    reactions: list[GitHubReactionSummaryPayload]
+    updated_at: str
     url: str
 
 
@@ -186,6 +226,10 @@ class ReleaseManagementClient:
             message = completed.stderr.strip() or completed.stdout.strip() or "gh command failed"
             raise ReleaseManagementError(message)
         return completed.stdout.strip()
+
+    def _run_gh_api_items(self, endpoint: str) -> list[dict[str, JSONValue]]:
+        rows = self._run_gh_json(["api", "--paginate", "--slurp", endpoint])
+        return self._flatten_gh_api_items(rows)
 
     def _should_use_binary_first(self) -> bool:
         resolved = self.resolve_execution_mode(self._mode)
@@ -320,6 +364,60 @@ class ReleaseManagementClient:
 
         self._run_gh(["issue", "close", str(number), "--repo", repository.slug])
 
+    def list_issue_activity(
+        self,
+        repository: RepositoryRef,
+        *,
+        number: int,
+    ) -> list[GitHubActivityPayload]:
+        """Return live issue comments with reaction summaries."""
+
+        token = self._resolve_token()
+        if not self._should_use_binary_first() and token and self._can_use_suite_api():
+            comments = list(
+                github_service.fetch_issue_comments(
+                    token=token,
+                    owner=repository.owner,
+                    name=repository.name,
+                    issue_number=number,
+                )
+            )
+            return [
+                self._coerce_activity_payload(
+                    cast(dict[str, JSONValue], comment),
+                    kind=COMMENT_KIND_ISSUE,
+                    reactions=self._summarize_reactions(
+                        list(
+                            github_service.fetch_issue_comment_reactions(
+                                token=token,
+                                owner=repository.owner,
+                                name=repository.name,
+                                comment_id=int(comment.get("id") or 0),
+                            )
+                        )
+                    ),
+                )
+                for comment in comments
+                if isinstance(comment.get("id"), int)
+            ]
+
+        comments = self._run_gh_api_items(
+            f"repos/{repository.slug}/issues/{number}/comments?per_page=100"
+        )
+        return [
+            self._coerce_activity_payload(
+                comment,
+                kind=COMMENT_KIND_ISSUE,
+                reactions=self._summarize_reactions(
+                    self._run_gh_api_items(
+                        f"repos/{repository.slug}/issues/comments/{comment_id}/reactions?per_page=100"
+                    )
+                ),
+            )
+            for comment in comments
+            if isinstance((comment_id := comment.get("id")), int)
+        ]
+
     def list_pull_requests(
         self, repository: RepositoryRef, *, state: str = "open"
     ) -> list[GitHubPullRequestPayload]:
@@ -345,6 +443,110 @@ class ReleaseManagementClient:
             ["pr", "list", "--repo", repository.slug, "--state", state, "--json", query]
         )
         return cast(list[GitHubPullRequestPayload], rows) if isinstance(rows, list) else []
+
+    def list_pull_request_activity(
+        self,
+        repository: RepositoryRef,
+        *,
+        number: int,
+    ) -> list[GitHubActivityPayload]:
+        """Return live pull-request conversation and inline review comments."""
+
+        token = self._resolve_token()
+        if not self._should_use_binary_first() and token and self._can_use_suite_api():
+            issue_comments = list(
+                github_service.fetch_issue_comments(
+                    token=token,
+                    owner=repository.owner,
+                    name=repository.name,
+                    issue_number=number,
+                )
+            )
+            review_comments = list(
+                github_service.fetch_pull_request_review_comments(
+                    token=token,
+                    owner=repository.owner,
+                    name=repository.name,
+                    pull_number=number,
+                )
+            )
+            return self._sort_activity(
+                [
+                    *[
+                        self._coerce_activity_payload(
+                            cast(dict[str, JSONValue], comment),
+                            kind=COMMENT_KIND_ISSUE,
+                            reactions=self._summarize_reactions(
+                                list(
+                                    github_service.fetch_issue_comment_reactions(
+                                        token=token,
+                                        owner=repository.owner,
+                                        name=repository.name,
+                                        comment_id=int(comment.get("id") or 0),
+                                    )
+                                )
+                            ),
+                        )
+                        for comment in issue_comments
+                        if isinstance(comment.get("id"), int)
+                    ],
+                    *[
+                        self._coerce_activity_payload(
+                            cast(dict[str, JSONValue], comment),
+                            kind=COMMENT_KIND_REVIEW,
+                            reactions=self._summarize_reactions(
+                                list(
+                                    github_service.fetch_pull_request_review_comment_reactions(
+                                        token=token,
+                                        owner=repository.owner,
+                                        name=repository.name,
+                                        comment_id=int(comment.get("id") or 0),
+                                    )
+                                )
+                            ),
+                        )
+                        for comment in review_comments
+                        if isinstance(comment.get("id"), int)
+                    ],
+                ]
+            )
+
+        issue_comments = self._run_gh_api_items(
+            f"repos/{repository.slug}/issues/{number}/comments?per_page=100"
+        )
+        review_comments = self._run_gh_api_items(
+            f"repos/{repository.slug}/pulls/{number}/comments?per_page=100"
+        )
+        return self._sort_activity(
+            [
+                *[
+                    self._coerce_activity_payload(
+                        comment,
+                        kind=COMMENT_KIND_ISSUE,
+                        reactions=self._summarize_reactions(
+                            self._run_gh_api_items(
+                                f"repos/{repository.slug}/issues/comments/{comment_id}/reactions?per_page=100"
+                            )
+                        ),
+                    )
+                    for comment in issue_comments
+                    if isinstance((comment_id := comment.get("id")), int)
+                ],
+                *[
+                    self._coerce_activity_payload(
+                        comment,
+                        kind=COMMENT_KIND_REVIEW,
+                        reactions=self._summarize_reactions(
+                            self._run_gh_api_items(
+                                f"repos/{repository.slug}/pulls/comments/{comment_id}/reactions?per_page=100"
+                            )
+                        ),
+                    )
+                    for comment in review_comments
+                    if isinstance((comment_id := comment.get("id")), int)
+                ],
+            ]
+        )
 
     def comment_pull_request(
         self,
@@ -488,15 +690,119 @@ class ReleaseManagementClient:
             payload["isDraft"] = draft
         return payload
 
+    @staticmethod
+    def _flatten_gh_api_items(value: JSONValue) -> list[dict[str, JSONValue]]:
+        items: list[dict[str, JSONValue]] = []
+        if not isinstance(value, list):
+            return items
+        for entry in value:
+            if isinstance(entry, dict):
+                items.append(cast(dict[str, JSONValue], entry))
+                continue
+            if not isinstance(entry, list):
+                continue
+            for nested in entry:
+                if isinstance(nested, dict):
+                    items.append(cast(dict[str, JSONValue], nested))
+        return items
+
+    @staticmethod
+    def _summarize_reactions(
+        reactions: list[Mapping[str, object]],
+    ) -> list[GitHubReactionSummaryPayload]:
+        grouped: dict[str, list[str]] = {}
+        for reaction in reactions:
+            content = str(reaction.get("content") or "").strip()
+            if not content:
+                continue
+            user = reaction.get("user")
+            login = ""
+            if isinstance(user, dict):
+                login = str(user.get("login") or "").strip()
+            grouped.setdefault(content, [])
+            if login and login not in grouped[content]:
+                grouped[content].append(login)
+
+        summary: list[GitHubReactionSummaryPayload] = []
+        seen = set()
+        for content in (*REACTION_EMOJI.keys(), *grouped.keys()):
+            if content in seen or content not in grouped:
+                continue
+            seen.add(content)
+            users = grouped[content]
+            emoji = REACTION_EMOJI.get(content, content)
+            display = f"{emoji} {', '.join(users)}" if users else f"{emoji} x{len(users)}"
+            summary.append(
+                {
+                    "content": content,
+                    "count": len(users),
+                    "display": display,
+                    "emoji": emoji,
+                    "users": users,
+                }
+            )
+        return summary
+
+    @staticmethod
+    def _sort_activity(
+        activity: list[GitHubActivityPayload],
+    ) -> list[GitHubActivityPayload]:
+        return sorted(
+            activity,
+            key=lambda item: (
+                str(item.get("created_at") or ""),
+                str(item.get("kind") or ""),
+                int(item.get("id") or 0),
+            ),
+        )
+
+    @staticmethod
+    def _coerce_activity_payload(
+        item: dict[str, JSONValue],
+        *,
+        kind: str,
+        reactions: list[GitHubReactionSummaryPayload],
+    ) -> GitHubActivityPayload:
+        user = item.get("user")
+        author = cast(GitHubAuthorPayload, user) if isinstance(user, dict) else {}
+        html_url = item.get("html_url")
+        url = item.get("url")
+        line = item.get("line")
+        payload: GitHubActivityPayload = {
+            "author": author,
+            "author_name": str(author.get("login") or ""),
+            "body": str(item.get("body") or ""),
+            "created_at": str(item.get("created_at") or ""),
+            "html_url": str(html_url or url or ""),
+            "id": int(item.get("id") or 0),
+            "kind": kind,
+            "kind_label": "Review comment"
+            if kind == COMMENT_KIND_REVIEW
+            else "Issue comment",
+            "reactions": reactions,
+            "updated_at": str(item.get("updated_at") or ""),
+            "url": str(url or html_url or ""),
+        }
+        path = item.get("path")
+        if isinstance(path, str) and path.strip():
+            payload["path"] = path
+        if isinstance(line, int):
+            payload["line"] = line
+        return payload
+
 
 __all__ = [
+    "COMMENT_KIND_ISSUE",
+    "COMMENT_KIND_REVIEW",
     "EXECUTION_MODE_BINARY",
     "EXECUTION_MODE_KEY",
     "EXECUTION_MODE_SUITE",
+    "GitHubActivityPayload",
     "MERGE_METHOD_CHOICES",
     "MERGE_METHOD_MERGE",
     "MERGE_METHOD_REBASE",
     "MERGE_METHOD_SQUASH",
+    "REACTION_EMOJI",
     "RELEASE_MANAGEMENT_FEATURE_SLUG",
     "ReleaseManagementClient",
     "ReleaseManagementError",
