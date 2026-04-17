@@ -25,7 +25,7 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [Endpoint Documentation Inventory](integrations/endpoint-inventory.md)
 - [Endpoint Documentation Completeness Checklist](integrations/documentation-completeness-checklist.md)
 - [Integration Onboarding Tracks](integrations/onboarding-tracks.md)
-- [OCPP Coverage Artifact](../apps/ocpp/coverage.json)
+- [OCPP Coverage Artifact](ocpp/coverage.json)
 - [Ops Command Wrapper](operations/operational-commands.md)
 - [Reinstall + Data Import Runbook (1.0+)](operations/reinstall-data-import-runbook.md)
 - [Suite Services Report](suite-services-report.md)
