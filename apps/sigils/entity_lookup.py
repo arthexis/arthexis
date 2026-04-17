@@ -11,6 +11,14 @@ from django.core.exceptions import FieldDoesNotExist, FieldError
 from django.db import models
 from django.db.models import Count, Max, Min, Sum
 
+PIPELINE_AGGREGATE_ACTIONS = {
+    "COUNT": "count",
+    "MAX": "max",
+    "MIN": "min",
+    "SUM": "total",
+    "TOTAL": "total",
+}
+
 
 @lru_cache(maxsize=256)
 def model_field_map(model: type[models.Model]) -> dict[str, models.Field]:
@@ -34,10 +42,22 @@ def parse_aggregate_request(
     normalized_key: str | None,
 ) -> tuple[str | None, str | None]:
     """Parse entity aggregate syntax expressed as ``target:function``."""
-    if filter_field or instance_id is None or normalized_key is not None or ":" not in instance_id:
+    if (
+        filter_field
+        or instance_id is None
+        or normalized_key is not None
+        or ":" not in instance_id
+    ):
         return None, None
     aggregate_target, aggregate_func = instance_id.split(":", 1)
     return aggregate_target, (aggregate_func or "total").replace("-", "_").lower()
+
+
+def map_pipeline_action_to_aggregate(action: str | None) -> str | None:
+    """Map pipeline aggregate actions to entity aggregate function names."""
+    if not action:
+        return None
+    return PIPELINE_AGGREGATE_ACTIONS.get(action.upper())
 
 
 def resolve_entity_lookup(
@@ -77,11 +97,18 @@ def resolve_entity_lookup(
 
     if instance is None and instance_id is not None and not filter_field:
         for field_name in unique_char_fields(model):
-            instance = model.objects.filter(**{f"{field_name}__iexact": instance_id}).first()
+            instance = model.objects.filter(
+                **{f"{field_name}__iexact": instance_id}
+            ).first()
             if instance:
                 break
 
-    if instance is None and instance_id is None and current and isinstance(current, model):
+    if (
+        instance is None
+        and instance_id is None
+        and current
+        and isinstance(current, model)
+    ):
         instance = current
     return instance, invalid_lookup
 

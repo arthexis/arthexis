@@ -13,7 +13,7 @@ class SigilRootQuerySet(EntityQuerySet):
 
 class SigilRootManager(EntityManager.from_queryset(SigilRootQuerySet)):
     def get_by_natural_key(self, prefix: str):
-        return self.get(prefix=prefix)
+        return self.get(prefix__iexact=prefix)
 
 
 class SigilRoot(Entity):
@@ -25,9 +25,7 @@ class SigilRoot(Entity):
     prefix = models.CharField(max_length=50, unique=True)
     is_user_safe = models.BooleanField(
         default=False,
-        help_text=_(
-            "Allow this sigil root in user-facing rendering contexts."
-        ),
+        help_text=_("Allow this sigil root in user-facing rendering contexts."),
     )
     context_type = models.CharField(max_length=20, choices=Context.choices)
     content_type = models.ForeignKey(
@@ -35,6 +33,11 @@ class SigilRoot(Entity):
     )
 
     objects = SigilRootManager()
+
+    def save(self, *args, **kwargs):
+        if self.prefix:
+            self.prefix = self.prefix.upper()
+        super().save(*args, **kwargs)
 
     def default_instance(self):
         """Return the preferred instance for this sigil root's model.
@@ -59,14 +62,24 @@ class SigilRoot(Entity):
                 return candidate
             return None
 
-        for attr in ("default_instance", "get_default_instance", "default", "get_default"):
+        for attr in (
+            "default_instance",
+            "get_default_instance",
+            "default",
+            "get_default",
+        ):
             instance = _evaluate(getattr(model, attr, None))
             if instance:
                 return instance
 
         manager = getattr(model, "_default_manager", None)
         if manager:
-            for attr in ("default_instance", "get_default_instance", "default", "get_default"):
+            for attr in (
+                "default_instance",
+                "get_default_instance",
+                "default",
+                "get_default",
+            ):
                 instance = _evaluate(getattr(manager, attr, None))
                 if instance:
                     return instance
