@@ -119,6 +119,24 @@ bash -lc 'source scripts/helpers/runserver_preflight.sh && run_runserver_preflig
 .venv/bin/python manage.py test run -- apps/ocpp/tests/test_chargers_command.py apps/ocpp/tests/test_simulator_command.py
 ```
 
+## 4.1) Deferred data-transform follow-up (when required)
+
+If your release/import flow includes deferred data cleanup or backfill work,
+run the canonical release transform command after schema migration:
+
+```bash
+./command.sh run_release_data_transforms
+```
+
+This command is an ops alias for `release run-data-transforms` and can be
+rerun safely because transform progress is checkpointed.
+
+For node-specific deferred migration progress, use operator-facing status
+surfaces:
+
+- Admin: `Node migration checkpoints`
+- API: `GET /nodes/migration-status/`
+
 ## 5) Release gate for tag/publish
 
 Only tag/publish after all checks above pass and docs reflect current behavior:
