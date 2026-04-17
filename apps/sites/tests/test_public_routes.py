@@ -28,6 +28,7 @@ from apps.groups.models import SecurityGroup
 from apps.media.utils import create_media_file, ensure_media_bucket
 from apps.modules.models import Module
 from apps.repos.models.response_templates import GitHubResponseTemplate
+from apps.repos.services.github import GitHubRepositoryError
 from apps.sites import context_processors
 from apps.sites.models import Landing, SiteProfile
 from apps.sites.utils import require_site_operator_or_staff
@@ -617,6 +618,86 @@ def test_docs_github_detail_allows_posting_template_response(client, monkeypatch
 
     assert response.status_code == 200
     assert posted["body"] == "Please share reproducible steps."
+
+
+def test_docs_github_detail_rejects_invalid_template_id(client, monkeypatch):
+    user = get_user_model().objects.create_user(
+        username="docs-github-invalid-template-user",
+        email="docs-github-invalid-template-user@example.com",
+        password="secret",
+    )
+    _grant_docs_access(user)
+
+    monkeypatch.setattr(
+        "apps.docs.views._resolve_github_docs_connection",
+        lambda: SimpleNamespace(
+            connected=True,
+            owner="arthexis",
+            repo="arthexis",
+            slug="arthexis/arthexis",
+            token="tok",
+        ),
+    )
+    monkeypatch.setattr(
+        "apps.docs.views.github_service.fetch_issue_or_pull_request",
+        lambda **kwargs: {
+            "number": 56,
+            "title": "Improve diagnostics",
+            "state": "open",
+            "body": "Detailed description",
+        },
+    )
+    monkeypatch.setattr(
+        "apps.docs.views.github_service.fetch_issue_comments",
+        lambda **kwargs: iter([]),
+    )
+
+    client.force_login(user)
+    response = client.post(
+        reverse("docs:docs-github-item", kwargs={"number": 56}),
+        data={"template": "abc", "body": ""},
+    )
+
+    assert response.status_code == 200
+    assert "Selected response template is not available." in response.content.decode()
+
+
+def test_docs_github_detail_handles_fetch_errors(client, monkeypatch):
+    user = get_user_model().objects.create_user(
+        username="docs-github-fetch-error-user",
+        email="docs-github-fetch-error-user@example.com",
+        password="secret",
+    )
+    _grant_docs_access(user)
+
+    monkeypatch.setattr(
+        "apps.docs.views._resolve_github_docs_connection",
+        lambda: SimpleNamespace(
+            connected=True,
+            owner="arthexis",
+            repo="arthexis",
+            slug="arthexis/arthexis",
+            token="tok",
+        ),
+    )
+
+    def _raise_fetch_error(**kwargs):
+        raise GitHubRepositoryError("GitHub unavailable")
+
+    monkeypatch.setattr(
+        "apps.docs.views.github_service.fetch_issue_or_pull_request",
+        _raise_fetch_error,
+    )
+    monkeypatch.setattr(
+        "apps.docs.views.github_service.fetch_issue_comments",
+        lambda **kwargs: iter([]),
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("docs:docs-github-item", kwargs={"number": 57}))
+
+    assert response.status_code == 200
+    assert "GitHub unavailable" in response.content.decode()
 
 
 def test_readme_resolves_sigils_for_authenticated_user(client):

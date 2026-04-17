@@ -25,8 +25,8 @@ from apps.groups.decorators import security_group_required
 from apps.modules.models import Module
 from apps.nodes.models import Node
 from apps.nodes.utils import FeatureChecker
-from apps.repos.models.response_templates import GitHubResponseTemplate
 from apps.repos.models.repositories import GitHubRepository
+from apps.repos.models.response_templates import GitHubResponseTemplate
 from apps.repos.services import github as github_service
 from apps.repos.services.github import GitHubRepositoryError
 from apps.sites.utils import module_pill_link_validation
@@ -817,7 +817,7 @@ def _resolve_github_docs_connection() -> SimpleNamespace:
     try:
         repository = GitHubRepository.resolve_active_repository()
         token = github_service.get_github_issue_token()
-    except (GitHubRepositoryError, RuntimeError, ValueError):
+    except (GitHubRepositoryError, ValueError):
         return SimpleNamespace(connected=False, owner="", repo="", slug="", token="")
 
     return SimpleNamespace(
@@ -936,10 +936,14 @@ def _parse_github_comment_payload(
 
     template_choice = (request.POST.get("template") or "").strip()
     if template_choice:
+        try:
+            template_pk = int(template_choice)
+        except ValueError:
+            return True, "", "Selected response template is not available."
         template = (
             GitHubResponseTemplate.objects.filter(
                 user=request.user,
-                pk=template_choice,
+                pk=template_pk,
                 is_active=True,
             )
             .only("body")
@@ -1021,7 +1025,6 @@ def github_issue_detail(request, number: int):
         )
 
     post_error = ""
-    post_success = ""
     is_post, comment_body, payload_error = _parse_github_comment_payload(request)
     if is_post and payload_error:
         post_error = payload_error
@@ -1037,43 +1040,45 @@ def github_issue_detail(request, number: int):
             return redirect(reverse("docs:docs-github-item", kwargs={"number": number}))
         except GitHubRepositoryError as exc:
             post_error = str(exc)
-        else:  # pragma: no cover - unreachable, redirect above is expected
-            post_success = "Comment posted."
-
-    item = github_service.fetch_issue_or_pull_request(
-        token=connection.token,
-        owner=connection.owner,
-        name=connection.repo,
-        number=number,
-    )
-    is_pull_request = isinstance(item.get("pull_request"), dict)
-    comments = list(
-        github_service.fetch_issue_comments(
-            token=connection.token,
-            owner=connection.owner,
-            name=connection.repo,
-            issue_number=number,
-        )
-    )
+    item = None
+    comments = []
     checks_state = "not_applicable"
-    if is_pull_request:
-        pull = github_service.fetch_pull_request(
+    try:
+        item = github_service.fetch_issue_or_pull_request(
             token=connection.token,
             owner=connection.owner,
             name=connection.repo,
             number=number,
         )
-        head_sha = str((pull.get("head") or {}).get("sha") or "").strip()
-        if head_sha:
-            status_payload = github_service.fetch_commit_status_summary(
+        is_pull_request = isinstance(item.get("pull_request"), dict)
+        comments = list(
+            github_service.fetch_issue_comments(
                 token=connection.token,
                 owner=connection.owner,
                 name=connection.repo,
-                sha=head_sha,
+                issue_number=number,
             )
-            checks_state = str(status_payload.get("state") or "unknown")
-        else:
-            checks_state = "unknown"
+        )
+        if is_pull_request:
+            pull = github_service.fetch_pull_request(
+                token=connection.token,
+                owner=connection.owner,
+                name=connection.repo,
+                number=number,
+            )
+            head_sha = str((pull.get("head") or {}).get("sha") or "").strip()
+            if head_sha:
+                status_payload = github_service.fetch_commit_status_summary(
+                    token=connection.token,
+                    owner=connection.owner,
+                    name=connection.repo,
+                    sha=head_sha,
+                )
+                checks_state = str(status_payload.get("state") or "unknown")
+            else:
+                checks_state = "unknown"
+    except GitHubRepositoryError as exc:
+        post_error = post_error or str(exc)
 
     response_templates = GitHubResponseTemplate.objects.filter(
         user=request.user,
@@ -1085,7 +1090,6 @@ def github_issue_detail(request, number: int):
         "error_message": post_error,
         "github_connected": True,
         "item": item,
-        "post_success": post_success,
         "repository_slug": connection.slug,
         "response_templates": response_templates,
         "title": f"GitHub #{number}",

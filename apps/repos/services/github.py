@@ -315,6 +315,36 @@ def fetch_issue_comments(
     yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
 
 
+def _fetch_json_mapping(
+    *,
+    token: str,
+    endpoint: str,
+    timeout: int,
+    decode_error: str,
+) -> Mapping[str, object]:
+    headers = build_headers(token)
+    response = None
+    try:
+        try:
+            response = requests.get(endpoint, headers=headers, timeout=timeout)
+        except requests.RequestException as exc:  # pragma: no cover - network failure
+            raise GitHubRepositoryError(str(exc)) from exc
+
+        if not (200 <= response.status_code < 300):
+            raise GitHubRepositoryError(_extract_error_message(response))
+
+        payload = _safe_json(response)
+        if isinstance(payload, Mapping):
+            return payload
+        raise GitHubRepositoryError(decode_error)
+    finally:
+        if response is not None:
+            close = getattr(response, "close", None)
+            if callable(close):
+                with contextlib.suppress(Exception):
+                    close()
+
+
 def fetch_issue_or_pull_request(
     *,
     token: str,
@@ -324,26 +354,12 @@ def fetch_issue_or_pull_request(
     timeout: int = REQUEST_TIMEOUT,
 ) -> Mapping[str, object]:
     endpoint = f"{API_ROOT}/repos/{owner}/{name}/issues/{number}"
-    headers = build_headers(token)
-    response = None
-    try:
-        response = requests.get(endpoint, headers=headers, timeout=timeout)
-    except requests.RequestException as exc:  # pragma: no cover - network failure
-        raise GitHubRepositoryError(str(exc)) from exc
-
-    try:
-        if not (200 <= response.status_code < 300):
-            raise GitHubRepositoryError(_extract_error_message(response))
-
-        payload = _safe_json(response)
-        if isinstance(payload, Mapping):
-            return payload
-        raise GitHubRepositoryError("Unable to decode issue details from GitHub")
-    finally:
-        close = getattr(response, "close", None)
-        if callable(close):
-            with contextlib.suppress(Exception):
-                close()
+    return _fetch_json_mapping(
+        token=token,
+        endpoint=endpoint,
+        timeout=timeout,
+        decode_error="Unable to decode issue details from GitHub",
+    )
 
 
 def fetch_commit_status_summary(
@@ -355,26 +371,12 @@ def fetch_commit_status_summary(
     timeout: int = REQUEST_TIMEOUT,
 ) -> Mapping[str, object]:
     endpoint = f"{API_ROOT}/repos/{owner}/{name}/commits/{sha}/status"
-    headers = build_headers(token)
-    response = None
-    try:
-        response = requests.get(endpoint, headers=headers, timeout=timeout)
-    except requests.RequestException as exc:  # pragma: no cover - network failure
-        raise GitHubRepositoryError(str(exc)) from exc
-
-    try:
-        if not (200 <= response.status_code < 300):
-            raise GitHubRepositoryError(_extract_error_message(response))
-
-        payload = _safe_json(response)
-        if isinstance(payload, Mapping):
-            return payload
-        raise GitHubRepositoryError("Unable to decode commit status from GitHub")
-    finally:
-        close = getattr(response, "close", None)
-        if callable(close):
-            with contextlib.suppress(Exception):
-                close()
+    return _fetch_json_mapping(
+        token=token,
+        endpoint=endpoint,
+        timeout=timeout,
+        decode_error="Unable to decode commit status from GitHub",
+    )
 
 
 def fetch_pull_request(
@@ -386,26 +388,12 @@ def fetch_pull_request(
     timeout: int = REQUEST_TIMEOUT,
 ) -> Mapping[str, object]:
     endpoint = f"{API_ROOT}/repos/{owner}/{name}/pulls/{number}"
-    headers = build_headers(token)
-    response = None
-    try:
-        response = requests.get(endpoint, headers=headers, timeout=timeout)
-    except requests.RequestException as exc:  # pragma: no cover - network failure
-        raise GitHubRepositoryError(str(exc)) from exc
-
-    try:
-        if not (200 <= response.status_code < 300):
-            raise GitHubRepositoryError(_extract_error_message(response))
-
-        payload = _safe_json(response)
-        if isinstance(payload, Mapping):
-            return payload
-        raise GitHubRepositoryError("Unable to decode pull request details from GitHub")
-    finally:
-        close = getattr(response, "close", None)
-        if callable(close):
-            with contextlib.suppress(Exception):
-                close()
+    return _fetch_json_mapping(
+        token=token,
+        endpoint=endpoint,
+        timeout=timeout,
+        decode_error="Unable to decode pull request details from GitHub",
+    )
 
 
 def _ensure_issue_lock_dir() -> None:
@@ -478,7 +466,9 @@ def get_github_issue_token() -> str:
         if cleaned:
             return cleaned
 
-    raise RuntimeError(f"GitHub token is not configured; set one via {DEFAULT_PACKAGE.repository_url}")
+    raise GitHubRepositoryError(
+        f"GitHub token is not configured; set one via {DEFAULT_PACKAGE.repository_url}"
+    )
 
 
 def create_issue(

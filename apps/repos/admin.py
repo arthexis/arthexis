@@ -15,8 +15,8 @@ from apps.repos.models.events import GitHubEvent
 from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
 from apps.repos.models.github_tokens import GitHubToken
 from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
-from apps.repos.models.response_templates import GitHubResponseTemplate
 from apps.repos.models.repositories import GitHubRepository, PackageRepository
+from apps.repos.models.response_templates import GitHubResponseTemplate
 
 
 class FetchFromGitHubMixin(DjangoObjectActions):
@@ -249,6 +249,16 @@ class GitHubResponseTemplateAdmin(OwnableAdminMixin, admin.ModelAdmin):
     list_display = ("label", "user", "is_active")
     list_filter = ("is_active",)
     search_fields = ("label", "body", "user__username")
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        if request.user.is_superuser:
+            return queryset
+        return queryset.filter(user=request.user)
+
+    def save_model(self, request, obj, form, change):
+        obj.user = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(GitHubApp)
