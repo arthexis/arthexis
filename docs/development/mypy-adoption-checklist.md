@@ -17,7 +17,7 @@ signal without forcing a large rewrite.
 - Introduce small module-local type aliases for repeated shapes owned by that
   module.
 - Narrow command and collection inputs to `Mapping[str, object]`,
-  `Sequence[str]`, or similar concrete abstractions when callers do not require
+  `Sequence[str]`, or similar abstract collections when callers do not require
   mutability.
 
 ### Adoption notes
@@ -54,6 +54,14 @@ The current MyPy-owned paths are recorded in `pyproject.toml` under `[tool.mypy]
 - `apps/core/system/ui/network_probe.py`
 - `apps/core/system/ui/services.py`
 - `apps/core/system/ui/uptime.py`
+- `apps/ocpp/call_result_handlers/common.py`
+- `apps/ocpp/consumers/base/metering.py`
+- `apps/ocpp/consumers/base/notifications.py`
+- `apps/ocpp/consumers/base/routing.py`
+- `apps/ocpp/consumers/base/transactions.py`
+- `apps/ocpp/consumers/csms/dispatch.py`
+- `apps/ocpp/payload_types.py`
+- `apps/ocpp/services/certificate_status.py`
 
 Django-aware checking is enabled through the `mypy_django_plugin.main` plugin with `config.settings` as the settings module. Use the same environment assumptions as `scripts/run_mypy.sh` when invoking MyPy directly:
 
