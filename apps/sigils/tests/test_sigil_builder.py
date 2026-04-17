@@ -39,6 +39,10 @@ def test_sigil_builder_context_exposes_uppercase_actions_and_discoverability_met
         ":" in item["expression"] and "|" in item["expression"]
         for item in context["expression_examples"]
     )
+    assert any(
+        item["root"] == "REQ" and item["expression"] == "[REQ|GET:METHOD]"
+        for item in context["expression_examples"]
+    )
 
 
 @pytest.mark.django_db

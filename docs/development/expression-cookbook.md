@@ -41,8 +41,8 @@ Use placeholders when expressions are templated for owner-specific rendering.
 
 | Purpose | Legacy form | Canonical pipeline form |
 | --- | --- | --- |
-| Request query value (`id_tag`) | `[REQ.get=id_tag]` | `[REQ|GET:ID_TAG]` |
-| Request header (`Authorization`) | `[REQ.header=Authorization]` | `[REQ|GET:AUTHORIZATION]` |
+| Request method | `[REQ.method]` | `[REQ|GET:METHOD]` |
+| Request path | `[REQ.path]` | `[REQ|GET:PATH]` |
 | System version | `[SYS.VERSION]` | `[SYS|GET:VERSION]` |
 
 ## Migration guide: legacy dot/parenthesis to uppercase pipeline
@@ -58,7 +58,7 @@ When migrating existing expressions:
 | --- | --- | --- |
 | `[CP:hostname=SIM-CP-1.public_endpoint]` | `[CP:hostname:SIM-CP-1|FIELD:PUBLIC_ENDPOINT]` | Field projection from one charger row. |
 | `[CP:status=AVAILABLE.id=count]` | `[CP:status:AVAILABLE|COUNT:ID]` | Aggregate count over filtered rows. |
-| `[REQ.get=id_tag]` | `[REQ|GET:ID_TAG]` | Request metadata retrieval. |
+| `[REQ.method]` | `[REQ|GET:METHOD]` | Request metadata retrieval. |
 | `[SYS.VERSION]` | `[SYS|GET:VERSION]` | System metadata retrieval. |
 
 ## Policy reference by context

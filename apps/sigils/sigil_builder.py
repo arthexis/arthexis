@@ -24,6 +24,56 @@ SUPPORTED_PIPELINE_ACTIONS = (
     "TOTAL",
 )
 
+EXPRESSION_EXAMPLES = [
+    {
+        "context": "admin",
+        "root": "CP",
+        "action": "FIELD",
+        "expression": "[CP:hostname:SIM-CP-1|FIELD:PUBLIC_ENDPOINT]",
+        "legacy_expression": "[CP:hostname=SIM-CP-1.public_endpoint]",
+        "description": _("OCPP charger lookup by hostname."),
+    },
+    {
+        "context": "admin",
+        "root": "SESS",
+        "action": "COUNT",
+        "expression": "[SESS:status:ACTIVE|COUNT:ID]",
+        "legacy_expression": "[SESS:status=ACTIVE.id=count]",
+        "description": _("Count active charging sessions."),
+    },
+    {
+        "context": "user-safe",
+        "root": "CP",
+        "action": "FILTER",
+        "expression": "[CP:owner__name:__OWNER_NAME__|FILTER:STATUS:AVAILABLE]",
+        "legacy_expression": "[CP:owner__name=__OWNER_NAME__.status:AVAILABLE]",
+        "description": _("Ownership-aware charger filtering placeholder."),
+    },
+    {
+        "context": "request",
+        "root": "REQ",
+        "action": "GET",
+        "expression": "[REQ|GET:METHOD]",
+        "legacy_expression": "[REQ.method]",
+        "description": _("Request metadata lookup for HTTP method."),
+    },
+    {
+        "context": "admin",
+        "root": "SYS",
+        "action": "GET",
+        "expression": "[SYS|GET:VERSION]",
+        "legacy_expression": "[SYS.VERSION]",
+        "description": _("System metadata lookup for release/version details."),
+    },
+]
+EXAMPLE_ACTIONS = sorted({entry["action"] for entry in EXPRESSION_EXAMPLES})
+EXAMPLE_CONTEXTS = sorted({entry["context"] for entry in EXPRESSION_EXAMPLES})
+EXAMPLE_ROOTS = sorted({entry["root"] for entry in EXPRESSION_EXAMPLES})
+
+
+def _build_pipeline_field_example(root: str, field: str) -> str:
+    return f"[{root}:|FIELD:{field}]"
+
 
 class SigilBuilderResponse(TemplateResponse):
     @property
@@ -107,7 +157,7 @@ def _sigil_builder_view(request):
         entry["prefixes"].sort()
         canonical_root = entry["prefixes"][0] if entry["prefixes"] else "ROOT"
         canonical_field = entry["fields"][0] if entry["fields"] else "FIELD"
-        entry["example"] = f"[{canonical_root}:|FIELD:{canonical_field}]"
+        entry["example"] = _build_pipeline_field_example(canonical_root, canonical_field)
 
     auto_fields = []
     seen = set()
@@ -124,59 +174,11 @@ def _sigil_builder_view(request):
                         "model": model_name,
                         "roots": prefixes,
                         "field": field.name.upper(),
-                        "example": (
-                            f"[{prefixes[0]}:|FIELD:{field.name.upper()}]"
-                            if prefixes
-                            else ""
-                        ),
+                        "example": _build_pipeline_field_example(prefixes[0], field.name.upper())
+                        if prefixes
+                        else "",
                     }
                 )
-
-    expression_examples = [
-        {
-            "context": "admin",
-            "root": "CP",
-            "action": "FIELD",
-            "expression": "[CP:hostname:SIM-CP-1|FIELD:PUBLIC_ENDPOINT]",
-            "legacy_expression": "[CP:hostname=SIM-CP-1.public_endpoint]",
-            "description": _("OCPP charger lookup by hostname."),
-        },
-        {
-            "context": "admin",
-            "root": "SESS",
-            "action": "COUNT",
-            "expression": "[SESS:status:ACTIVE|COUNT:ID]",
-            "legacy_expression": "[SESS:status=ACTIVE.id=count]",
-            "description": _("Count active charging sessions."),
-        },
-        {
-            "context": "user-safe",
-            "root": "CP",
-            "action": "FILTER",
-            "expression": "[CP:owner__name:__OWNER_NAME__|FILTER:STATUS:AVAILABLE]",
-            "legacy_expression": "[CP:owner__name=__OWNER_NAME__.status:AVAILABLE]",
-            "description": _("Ownership-aware charger filtering placeholder."),
-        },
-        {
-            "context": "request",
-            "root": "REQ",
-            "action": "GET",
-            "expression": "[REQ|GET:ID_TAG]",
-            "legacy_expression": "[REQ.get=id_tag]",
-            "description": _("Request metadata lookup from query params."),
-        },
-        {
-            "context": "admin",
-            "root": "SYS",
-            "action": "GET",
-            "expression": "[SYS|GET:VERSION]",
-            "legacy_expression": "[SYS.VERSION]",
-            "description": _("System metadata lookup for release/version details."),
-        },
-    ]
-    example_roots = sorted({entry["root"] for entry in expression_examples})
-    example_actions = sorted({entry["action"] for entry in expression_examples})
-    example_contexts = sorted({entry["context"] for entry in expression_examples})
     policy_reference = [
         {
             "context": "admin",
@@ -235,10 +237,10 @@ def _sigil_builder_view(request):
             "sigil_roots": roots,
             "builtin_roots": builtin_roots,
             "auto_fields": auto_fields,
-            "expression_examples": expression_examples,
-            "example_roots": example_roots,
-            "example_actions": example_actions,
-            "example_contexts": example_contexts,
+            "expression_examples": EXPRESSION_EXAMPLES,
+            "example_roots": EXAMPLE_ROOTS,
+            "example_actions": EXAMPLE_ACTIONS,
+            "example_contexts": EXAMPLE_CONTEXTS,
             "policy_reference": policy_reference,
             "supported_pipeline_actions": SUPPORTED_PIPELINE_ACTIONS,
             "sigils_text": sigils_text,
