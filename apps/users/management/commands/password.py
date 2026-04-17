@@ -192,10 +192,13 @@ class Command(BaseCommand):
                 access_point_user=access_point_user,
             )
         if access_point_user:
+            resolved_groups = self._resolve_groups(groups) if groups else []
             self._configure_access_point_user(user)
-            self._harden_access_point_membership(user, groups)
+            self._harden_access_point_membership(user, resolved_groups)
             self.stdout.write(self.style.SUCCESS(f"Configured {user.username} as a local access point user."))
             return
+
+        self._disable_access_point_user_mode(user)
 
         if groups:
             self._assign_groups(user, groups)
@@ -340,11 +343,16 @@ class Command(BaseCommand):
         if fields:
             user.save(update_fields=fields)
 
-    def _harden_access_point_membership(self, user, groups: list[str]) -> None:
-        resolved_groups = self._resolve_groups(groups) if groups else []
+    def _disable_access_point_user_mode(self, user) -> None:
+        if not getattr(user, "allow_local_network_passwordless_login", False):
+            return
+        user.allow_local_network_passwordless_login = False
+        user.save(update_fields=["allow_local_network_passwordless_login"])
+
+    def _harden_access_point_membership(self, user, groups: list[Group]) -> None:
         user.groups.clear()
-        if resolved_groups:
-            user.groups.add(*resolved_groups)
+        if groups:
+            user.groups.add(*groups)
 
     def _delete_password(self, user) -> None:
         user.set_unusable_password()

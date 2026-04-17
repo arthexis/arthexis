@@ -263,7 +263,7 @@ class PasswordCommandTests(TestCase):
         assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
 
     def test_access_point_user_mode_preserves_groups_when_requested_group_is_unknown(self):
-        """Failed group reassignment should not clear existing memberships."""
+        """Failed AP group reassignment should not apply partial account hardening."""
 
         legacy_group = Group.objects.create(name="Legacy Admin")
         user = get_user_model().objects.create_user(
@@ -283,6 +283,28 @@ class PasswordCommandTests(TestCase):
 
         user.refresh_from_db()
         assert user.groups.filter(name=legacy_group.name).exists()
+        assert user.has_usable_password()
+        assert user.allow_local_network_passwordless_login is False
+
+    def test_permanent_password_disables_access_point_mode(self):
+        """Permanent-password updates should exit access-point passwordless mode."""
+
+        user = get_user_model().objects.create_user(
+            username="ap-disable-permanent",
+            email="ap-disable-permanent@example.com",
+            password="InitialPassword123",
+            allow_local_network_passwordless_login=True,
+        )
+
+        call_command(
+            "password",
+            user.username,
+            password="UpdatedPassword123",
+        )
+
+        user.refresh_from_db()
+        assert user.check_password("UpdatedPassword123")
+        assert user.allow_local_network_passwordless_login is False
 
     def test_configures_access_point_user_mode_clears_temporary_credentials(self):
         """Access-point mode should clear temporary-password state for hardened login."""

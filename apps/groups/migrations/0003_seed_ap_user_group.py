@@ -6,14 +6,14 @@ AP_USER_GROUP_NAME = "AP User"
 
 def seed_ap_user_group(apps, schema_editor):
     del schema_editor
+    Group = apps.get_model("auth", "Group")
     SecurityGroup = apps.get_model("groups", "SecurityGroup")
-    SecurityGroup.objects.get_or_create(name=AP_USER_GROUP_NAME)
+    group, _ = Group.objects.get_or_create(name=AP_USER_GROUP_NAME)
+    SecurityGroup.objects.get_or_create(group_ptr_id=group.pk)
 
 
 def unseed_ap_user_group(apps, schema_editor):
-    del schema_editor
-    SecurityGroup = apps.get_model("groups", "SecurityGroup")
-    SecurityGroup.objects.filter(name=AP_USER_GROUP_NAME).delete()
+    del apps, schema_editor
 
 
 class Migration(migrations.Migration):
