@@ -47,7 +47,6 @@ nav:
       - App Structure Policy: development/app-structure-policy.md
       - Admin UI Framework: development/admin-ui-framework.md
       - Create Local App: development/create-local-app.md
-      - Deferred Migration Audit: development/deferred_migration_audit.md
       - Dependency Management: development/dependency-management.md
       - Developer Devtools Entrypoints: development/devtools-entrypoints.md
       - Docker Compose Role Presets: development/docker-compose-role-presets.md
