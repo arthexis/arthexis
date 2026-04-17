@@ -1,3 +1,5 @@
+import ipaddress
+
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
 
@@ -70,6 +72,44 @@ class AccessPointLocalUserBackendTests(TestCase):
         )
 
         request = self._request("2001:db8::10")
+
+        authenticated = self.backend.authenticate(
+            request,
+            username=user.username,
+            password="anything",
+        )
+
+        assert authenticated is None
+
+    def test_rejects_inactive_access_point_user(self):
+        user = get_user_model().objects.create_user(
+            username="inactive-ap",
+            email="inactive-ap@example.com",
+            is_active=False,
+            is_staff=False,
+            is_superuser=False,
+            allow_local_network_passwordless_login=True,
+        )
+        request = self._request("127.0.0.1")
+
+        authenticated = self.backend.authenticate(
+            request,
+            username=user.username,
+            password="anything",
+        )
+
+        assert authenticated is None
+
+    def test_rejects_public_ipv4_prefix_match(self):
+        user = get_user_model().objects.create_user(
+            username="public-ap",
+            email="public-ap@example.com",
+            is_staff=False,
+            is_superuser=False,
+            allow_local_network_passwordless_login=True,
+        )
+        self.backend._LOCAL_IPS = (ipaddress.ip_address("8.8.1.10"),)
+        request = self._request("8.8.200.11")
 
         authenticated = self.backend.authenticate(
             request,

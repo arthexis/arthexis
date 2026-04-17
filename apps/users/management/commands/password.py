@@ -178,7 +178,11 @@ class Command(BaseCommand):
             )
 
         user = users[0]
-        if update_user or (create_user and not created and (staff or superuser or access_point_user)):
+        if (
+            update_user
+            or access_point_user
+            or (create_user and not created and (staff or superuser or access_point_user))
+        ):
             self._update_user(
                 user,
                 staff=staff,

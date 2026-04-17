@@ -600,7 +600,7 @@ class AccessPointLocalUserBackend(LocalhostAdminBackend):
         return user
 
     def _is_access_point_candidate(self, user) -> bool:
-        if not self.user_can_authenticate(user):
+        if not ModelBackend.user_can_authenticate(self, user):
             return False
         if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
             return False
@@ -611,6 +611,8 @@ class AccessPointLocalUserBackend(LocalhostAdminBackend):
     def _is_remote_allowed(self, ip):
         if isinstance(ip, ipaddress.IPv6Address):
             return ip.is_loopback
+        if not ip.is_private and not ip.is_loopback:
+            return False
         if ip.is_loopback:
             return True
 
@@ -620,6 +622,8 @@ class AccessPointLocalUserBackend(LocalhostAdminBackend):
 
         for local_ip in self._LOCAL_IPS:
             if not isinstance(local_ip, ipaddress.IPv4Address):
+                continue
+            if not local_ip.is_private and not local_ip.is_loopback:
                 continue
             local_octets = local_ip.exploded.split(".")
             if local_octets[:2] == remote_octets[:2]:

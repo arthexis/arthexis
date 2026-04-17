@@ -200,6 +200,34 @@ class PasswordCommandTests(TestCase):
         assert user.force_password_change is False
         assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
 
+    def test_configures_access_point_user_mode_without_update_flag(self):
+        """Access-point mode should demote privileges even without --update."""
+
+        Group.objects.create(name=AP_USER_GROUP_NAME)
+        user = get_user_model().objects.create_user(
+            username="ap-no-update",
+            email="ap-no-update@example.com",
+            password="InitialPassword123",
+            is_staff=True,
+            is_superuser=True,
+            force_password_change=True,
+        )
+
+        call_command(
+            "password",
+            user.username,
+            access_point_user=True,
+            group=AP_USER_GROUP_NAME,
+        )
+
+        user.refresh_from_db()
+        assert not user.is_staff
+        assert not user.is_superuser
+        assert not user.has_usable_password()
+        assert user.allow_local_network_passwordless_login is True
+        assert user.force_password_change is False
+        assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
+
     def test_access_point_user_mode_rejects_password_argument(self):
         """Access-point mode should reject contradictory password arguments."""
 
