@@ -15,6 +15,30 @@ Heartbeat requests reuse the same UTC timestamp response body. Each heartbeat re
 ### StatusNotification
 Status notifications update both the aggregate (connector-less) `Charger` row and any connector-specific row. The handler stores the status, error code, vendor info, and timestamp, mirrors those values on the in-memory objects, and logs the processed payload. It also derives an availability state (`Operative` or `Inoperative`) from the status text and persists the effective availability timestamp for downstream dashboards.
 
+For operator workflows, Arthexis currently expects the following OCPP status values from charge points and treats them as the canonical status set for admin badges, analytics, and log interpretation:
+
+- `Available`
+- `Preparing`
+- `Charging`
+- `SuspendedEVSE`
+- `SuspendedEV`
+- `Finishing`
+- `Faulted`
+- `Unavailable`
+- `Reserved`
+- `Occupied`
+- `OutOfService`
+
+Status labels are normalized to lowercase internally for consistent display and aggregation (for example, `SuspendedEVSE` becomes `suspendedevse`).
+
+Availability derivation is intentionally narrow and operator-visible:
+
+- **Operative**: `Available`, `Preparing`, `Charging`, `SuspendedEV`, `SuspendedEVSE`, `Finishing`, `Reserved`
+- **Inoperative**: `Unavailable`, `Faulted`
+- **No availability remap**: `Occupied`, `OutOfService`, or any other non-mapped status
+
+The charge point remains the source of truth for status text. Arthexis records and presents what was reported, and only applies the explicit availability mapping above. In UI presentation, active session context may override badge display to `Charging` when the raw status is empty/unknown or lags transaction activity, while error-bearing updates continue to surface fault context.
+
 ### Authorize
 Authorization requests are evaluated through the charger authorization policy (`strict`, `allowlist`, or explicit `open` insecure compatibility mode) with a global fallback when unset. `strict` requires an authorised linked account, `allowlist` also permits known allowed unlinked tags, and `open` accepts any token while clearly marking the mode as insecure compatibility behavior. Every decision returns a reason code for auditability.
 
