@@ -11,6 +11,11 @@ from apps.groups.security import ensure_default_staff_groups
 
 from .models import OperatorJourneyStep, OperatorJourneyStepCompletion
 
+ROLE_VALIDATION_STEP_SLUG = "validate-local-node-role"
+PROVISION_SUPERUSER_STEP_SLUG = "provision-ops-superuser"
+ONE_TIME_STEP_SLUGS = {PROVISION_SUPERUSER_STEP_SLUG, ROLE_VALIDATION_STEP_SLUG}
+BOOTSTRAP_ADMIN_USERNAMES = {"admin", "admi"}
+
 
 @dataclass(frozen=True)
 class OperatorJourneyStatus:
@@ -29,7 +34,7 @@ def next_step_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStep | None:
     if not user.is_authenticated:
         return None
 
-    return (
+    remaining_steps = (
         OperatorJourneyStep.objects.filter(
             is_active=True,
             journey__is_active=True,
@@ -38,8 +43,13 @@ def next_step_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStep | None:
         .exclude(completions__user=user)
         .select_related("journey")
         .order_by("journey__priority", "journey__name", "order", "id")
-        .first()
     )
+    for step in remaining_steps:
+        if _step_is_already_satisfied(user=user, step=step):
+            OperatorJourneyStepCompletion.objects.get_or_create(user=user, step=step)
+            continue
+        return step
+    return None
 
 
 def complete_step_for_user(*, user: AbstractBaseUser, step: OperatorJourneyStep) -> bool:
@@ -103,3 +113,33 @@ def _active_security_groups_for_user(user: AbstractBaseUser):
     if user.is_staff:
         ensure_default_staff_groups(user)
     return user.groups.all()
+
+
+def _step_is_already_satisfied(*, user: AbstractBaseUser, step: OperatorJourneyStep) -> bool:
+    """Return whether ``step`` was already completed at node level."""
+
+    if step.slug in ONE_TIME_STEP_SLUGS and step.completions.exists():
+        return True
+    if step.slug == ROLE_VALIDATION_STEP_SLUG:
+        return _local_node_role_is_available()
+    if step.slug == PROVISION_SUPERUSER_STEP_SLUG:
+        return _current_user_is_operational_staff(user=user)
+    return False
+
+
+def _local_node_role_is_available() -> bool:
+    try:
+        from apps.nodes.models import Node
+    except (ImportError, LookupError):
+        return False
+
+    local_node = Node.get_local()
+    return bool(local_node and getattr(local_node, "role_id", None))
+
+
+def _current_user_is_operational_staff(*, user: AbstractBaseUser) -> bool:
+    if not user.is_authenticated or not user.is_staff or user.is_superuser:
+        return False
+    if getattr(user, "is_deleted", False):
+        return False
+    return (user.username or "").strip().lower() not in BOOTSTRAP_ADMIN_USERNAMES

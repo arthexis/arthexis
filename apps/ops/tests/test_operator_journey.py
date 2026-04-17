@@ -1,5 +1,7 @@
 """Regression tests for operator journey progression and admin dashboard surfacing."""
 
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.template import Context, Template
@@ -10,7 +12,13 @@ from apps.groups.models import SecurityGroup
 from apps.nodes.models import NodeRole
 from apps.ops.forms import OperatorJourneyProvisionSuperuserForm
 from apps.ops.models import OperatorJourney, OperatorJourneyStep
-from apps.ops.operator_journey import complete_step_for_user, status_for_user
+from apps.ops.operator_journey import (
+    PROVISION_SUPERUSER_STEP_SLUG,
+    ROLE_VALIDATION_STEP_SLUG,
+    complete_step_for_user,
+    next_step_for_user,
+    status_for_user,
+)
 from apps.ops.views import (
     _build_node_role_validation_summary,
     _build_security_group_rows,
@@ -83,6 +91,77 @@ class OperatorJourneyFlowTests(TestCase):
         completed = complete_step_for_user(user=self.user, step=self.step_2)
 
         self.assertFalse(completed)
+
+    @patch("apps.ops.operator_journey._local_node_role_is_available", return_value=True)
+    def test_next_step_skips_provision_for_non_superuser_operational_staff(
+        self, _mock_role_check
+    ):
+        role_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Validate node",
+            slug=ROLE_VALIDATION_STEP_SLUG,
+            instruction="Validate local node role.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create operational superuser",
+            slug=PROVISION_SUPERUSER_STEP_SLUG,
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=4,
+        )
+        follow_up_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Follow-up",
+            slug="follow-up-step",
+            instruction="Continue setup.",
+            iframe_url="/admin/",
+            order=5,
+        )
+        staff_user = get_user_model().objects.create_user(
+            username="existing-operator",
+            password="x",
+            is_staff=True,
+        )
+        staff_user.groups.add(self.group)
+        complete_step_for_user(user=staff_user, step=self.step_1)
+        complete_step_for_user(user=staff_user, step=self.step_2)
+
+        next_step = next_step_for_user(user=staff_user)
+
+        self.assertEqual(next_step, follow_up_step)
+        self.assertTrue(provision_step.completions.filter(user=staff_user).exists())
+        self.assertTrue(role_step.completions.filter(user=staff_user).exists())
+
+    @patch("apps.ops.operator_journey._local_node_role_is_available", return_value=True)
+    def test_next_step_skips_role_validation_when_local_node_role_exists(
+        self, _mock_role_check
+    ):
+        role_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Validate node",
+            slug=ROLE_VALIDATION_STEP_SLUG,
+            instruction="Validate local node role.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        follow_up_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Follow-up",
+            slug="follow-up-step",
+            instruction="Continue setup.",
+            iframe_url="/admin/",
+            order=4,
+        )
+        complete_step_for_user(user=self.user, step=self.step_1)
+        complete_step_for_user(user=self.user, step=self.step_2)
+
+        next_step = next_step_for_user(user=self.user)
+
+        self.assertEqual(next_step, follow_up_step)
+        self.assertTrue(role_step.completions.filter(user=self.user).exists())
 
 
 class OperatorJourneyViewTests(TestCase):
@@ -587,7 +666,7 @@ class OperatorJourneyViewTests(TestCase):
             get_user_model().objects.filter(username="ops-not-allowed").exists()
         )
 
-    def test_non_superuser_staff_cannot_view_or_submit_provision_step(self):
+    def test_non_superuser_staff_auto_completes_provision_step(self):
         provision_step = OperatorJourneyStep.objects.create(
             journey=self.journey,
             title="Create ops superuser",
@@ -621,7 +700,8 @@ class OperatorJourneyViewTests(TestCase):
         view_response = self.client.get(
             reverse("ops:operator-journey-step", args=[provision_step.pk])
         )
-        self.assertEqual(view_response.status_code, 403)
+        self.assertEqual(view_response.status_code, 200)
+        self.assertContains(view_response, "Operator journey complete")
 
         submit_response = self.client.post(
             reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
@@ -631,7 +711,8 @@ class OperatorJourneyViewTests(TestCase):
                 "password_mode": "random",
             },
         )
-        self.assertEqual(submit_response.status_code, 403)
+        self.assertEqual(submit_response.status_code, 302)
+        self.assertRedirects(submit_response, reverse("admin:index"))
         self.assertFalse(
             get_user_model().objects.filter(username="ops-should-not-create").exists()
         )
