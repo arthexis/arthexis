@@ -200,29 +200,29 @@
         }
         .operator-journey-sg-table td:first-child,
         .operator-journey-sg-table th:first-child {
-          width: 84px;
+          width: calc(var(--admin-ui-control-height, 2.5rem) + var(--admin-ui-space-4, 1rem));
         }
         .operator-journey-checkbox {
-          block-size: 1.35rem;
+          block-size: calc(var(--admin-ui-control-height-sm, 2.125rem) - var(--admin-ui-space-3, 0.75rem));
           cursor: pointer;
-          inline-size: 1.35rem;
+          inline-size: calc(var(--admin-ui-control-height-sm, 2.125rem) - var(--admin-ui-space-3, 0.75rem));
           margin: 0;
         }
         .operator-journey-checkbox-hitarea {
           align-items: center;
-          border: 1px solid var(--hairline-color);
-          border-radius: 999px;
+          border: 1px solid var(--admin-ui-border-color, var(--hairline-color));
+          border-radius: var(--admin-ui-radius-md, 0.5rem);
           cursor: pointer;
           display: inline-flex;
           justify-content: center;
-          min-height: 2rem;
-          min-width: 2rem;
-          padding: 0.2rem;
+          min-height: var(--admin-ui-control-height-sm, 2.125rem);
+          min-width: var(--admin-ui-control-height-sm, 2.125rem);
+          padding: var(--admin-ui-space-1, 0.25rem);
         }
         .operator-journey-primary-button {
           font-size: 0.95rem;
-          min-height: 2.25rem;
-          padding: 0.55rem 1.1rem;
+          min-height: var(--admin-ui-control-height-sm, 2.125rem);
+          padding: 0 var(--admin-ui-control-padding-x, 0.875rem);
         }
         @media (max-width: 980px) {
           .operator-journey-provision-layout {
