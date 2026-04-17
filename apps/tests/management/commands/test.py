@@ -19,7 +19,7 @@ from utils.python_env import resolve_project_python
 class Command(BaseCommand):
     """Run local test workflows from a single command entrypoint."""
 
-    help = "Run pytest or launch the long-running VS Code test server."
+    help = "Run suite tests via the canonical manage.py entrypoint or launch the VS Code test server."
 
     def add_arguments(self, parser) -> None:
         """Register command arguments and subcommands."""
@@ -27,7 +27,7 @@ class Command(BaseCommand):
         subparsers = parser.add_subparsers(dest="action")
         parser.set_defaults(action="run", pytest_args=[])
 
-        run_parser = subparsers.add_parser("run", help="Run pytest.")
+        run_parser = subparsers.add_parser("run", help="Run tests (pytest-backed).")
         run_parser.add_argument(
             "pytest_args",
             nargs=argparse.REMAINDER,
