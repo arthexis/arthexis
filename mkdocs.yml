@@ -42,7 +42,6 @@ nav:
   - Engineering Reference:
       - Energy Transactions Ledger: energy-transactions-ledger.md
       - Upgrade Error Handling: upgrade-error-handling.md
-      - Runserver Log Duplication: runserver-log-duplication.md
       - Recipes: recipes.md
       - Benchmarking install, start, and upgrade: benchmarking.md
       - Release Notes: release-notes.md
