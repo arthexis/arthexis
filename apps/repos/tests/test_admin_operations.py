@@ -228,3 +228,5 @@ def test_repository_pull_request_observe_view_shows_reactions(client, db, monkey
     assert "👀 reviewer-2" in content
     assert "Tracking this change." in content
     assert "apps/repos/admin.py:52" in content
+    assert 'http-equiv="refresh" content="60"' in content
+    assert "refreshes automatically every 60 seconds" in content

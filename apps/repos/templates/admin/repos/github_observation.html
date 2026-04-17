@@ -1,10 +1,16 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block extrahead %}
+  {{ block.super }}
+  <meta http-equiv="refresh" content="60">
+{% endblock %}
+
 {% block content %}
   <div class="admin-ui-panel admin-ui-stack">
     <h1>{{ title }}</h1>
     <p><strong>{{ impact_note }}</strong></p>
+    <p>{% translate "This page refreshes automatically every 60 seconds." %}</p>
     <p>
       {% translate "Target" %}:
       {% if object_url %}
