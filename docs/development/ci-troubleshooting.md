@@ -46,11 +46,17 @@ If local preview generation fails because browser/screenshot tooling is unavaila
 
 ## Debugger/autoreload duplicate startup logs
 
-When running `manage.py runserver` with Django autoreload enabled, startup diagnostics can appear twice. This is expected: Django starts a watcher process and a child server process, and both emit startup output before the child keeps serving logs.
+In this repository, `manage.py runserver` injects `--noreload` by default, so the usual Django watcher/child autoreload duplication is normally disabled.
 
-For development debugging sessions where duplicate startup logs are noisy:
+If duplicate startup diagnostics still appear, it usually means one of these happened:
 
-- run with `--noreload` to use a single process
-- or keep autoreload and set `DJANGO_SUPPRESS_MIGRATION_CHECK=1` to reduce repeated migration-check output
+- the Arthexis `manage.py` wrapper was bypassed (for example by invoking Django tooling directly)
+- `runserver` was launched with custom arguments that re-enabled Django autoreload behavior
+- startup checks are repeating during a custom restart cycle
 
-If initialization code must run only once, guard it to run in the child process only (for example by checking `RUN_MAIN == "true"`).
+For development debugging sessions where startup logs are noisy:
+
+- prefer `manage.py runserver` (wrapper-managed `--noreload`) instead of bypassing the wrapper
+- set `DJANGO_SUPPRESS_MIGRATION_CHECK=1` to reduce repeated migration-check output
+
+`RUN_MAIN` is a Django autoreloader detail and is not a reliable guard for Arthexis' default runserver flow. If initialization must be single-run, use an explicit project-owned guard (for example a lock file, pid check, or idempotent startup routine).
