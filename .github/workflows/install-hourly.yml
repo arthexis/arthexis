@@ -83,6 +83,7 @@ jobs:
           ./install.sh ${{ matrix.install_args }} --no-start
       - name: Install CI dependencies
         run: |
+          ./scripts/preflight-env.sh
           source .venv/bin/activate
           python -m pip install --only-binary=:all: -r requirements-ci.txt
       - name: Verify editable install import
@@ -91,8 +92,8 @@ jobs:
           python scripts/check_editable_install_import.py
       - name: Validate migrations
         run: |
-          source .venv/bin/activate
           ./scripts/preflight-env.sh
+          source .venv/bin/activate
           python scripts/check_migration_conflicts.py
           python manage.py migrations check
           python manage.py migrate --noinput --database default
@@ -113,8 +114,8 @@ jobs:
           python scripts/check_import_resolution.py
       - name: Validate installed app manifests
         run: |
-          source .venv/bin/activate
           ./scripts/preflight-env.sh --pytest
+          source .venv/bin/activate
           manifest_test_file="tests/test_installed_apps_manifests.py"
           if [[ -f "$manifest_test_file" ]]; then
             python -m pytest "$manifest_test_file" -q
@@ -143,16 +144,16 @@ jobs:
       - name: Run install smoke tests
         run: |
           set -Eeuo pipefail
-          source .venv/bin/activate
           ./scripts/preflight-env.sh --pytest
+          source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
           python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 --junitxml=pytest-junit.xml -m "not critical and not slow and not integration" | tee pytest.log
       - name: Run install critical smoke tests
         if: always()
         run: |
           set -Eeuo pipefail
-          source .venv/bin/activate
           ./scripts/preflight-env.sh --pytest
+          source .venv/bin/activate
           critical_smoke_tests=(
             "apps/netmesh/tests/test_api.py::test_netmesh_token_lifecycle_errors_are_stable"
             "apps/ocpp/tests/test_charger_status_polling.py::test_dedupe_event_rows_keeps_newest_status_for_out_of_order_retry_collisions"

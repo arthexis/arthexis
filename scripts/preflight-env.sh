@@ -6,6 +6,11 @@ BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PYTHON_BIN="$BASE_DIR/.venv/bin/python"
 REQUIRED_MODULES=("django")
 
+if [[ $# -gt 1 ]]; then
+  echo "Too many arguments provided." >&2
+  exit 1
+fi
+
 if [[ "${1:-}" == "--pytest" ]]; then
   REQUIRED_MODULES+=("pytest")
 elif [[ "${1:-}" == "--help" ]]; then
@@ -34,11 +39,16 @@ fi
 if ! "$PYTHON_BIN" - "${REQUIRED_MODULES[@]}" <<'PY'
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import sys
 
 required_modules = tuple(sys.argv[1:])
-missing = [name for name in required_modules if importlib.util.find_spec(name) is None]
+missing = []
+for name in required_modules:
+    try:
+        importlib.import_module(name)
+    except ImportError:
+        missing.append(name)
 if missing:
     print(
         "Required Python tooling not importable: "

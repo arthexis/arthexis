@@ -82,14 +82,15 @@ jobs:
 
       - name: Install CI dependencies
         run: |
+          ./scripts/preflight-env.sh
           source .venv/bin/activate
           python -m pip install --only-binary=:all: -r requirements-ci.txt
 
       - name: Validate migrations
         run: |
           set -Eeuo pipefail
-          source .venv/bin/activate
           ./scripts/preflight-env.sh
+          source .venv/bin/activate
           python scripts/check_migration_conflicts.py
           python manage.py migrations check
           python manage.py migrate --noinput --database default
@@ -109,8 +110,8 @@ jobs:
       - name: Run critical tests
         run: |
           set -Eeuo pipefail
-          source .venv/bin/activate
           ./scripts/preflight-env.sh --pytest
+          source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
           python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee pytest.log
 
