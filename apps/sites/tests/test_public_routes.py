@@ -423,6 +423,13 @@ def test_visitors_page_requires_ap_user_group_membership(client):
     assert response.status_code == 403
 
 
+def test_visitors_page_redirects_anonymous_users_to_login(client):
+    response = client.get(reverse("pages:visitors"))
+
+    assert response.status_code == 302
+    assert reverse("pages:login") in response["Location"]
+
+
 def test_visitors_page_is_available_to_ap_user_group_members(client):
     url = reverse("pages:visitors")
     user = get_user_model().objects.create_user(

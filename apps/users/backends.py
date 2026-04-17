@@ -568,35 +568,74 @@ class AccessPointLocalUserBackend(LocalhostAdminBackend):
     """Allow selected non-staff users to sign in from local IPv4 /16 peers."""
 
     def authenticate(self, request, username=None, password=None, **kwargs):
-        if request is None or username is None:
+        del password, kwargs
+        normalized_username = str(username or "").strip()
+        remote_ip = self._get_remote_ip(request) if request is not None else None
+        remote_ip_text = str(remote_ip) if remote_ip is not None else "unknown"
+
+        if request is None or not normalized_username:
+            logger.warning(
+                "AccessPointLocalUserBackend.authenticate rejected before _get_remote_ip/%s: "
+                "request-or-username-missing remote_ip=%s",
+                "_resolve_user",
+                remote_ip_text,
+            )
             return None
 
         if not self._has_valid_host(request):
+            logger.warning(
+                "AccessPointLocalUserBackend.authenticate rejected by host validation "
+                "before _resolve_user remote_ip=%s username=%s",
+                remote_ip_text,
+                normalized_username,
+            )
             return None
 
-        remote_ip = self._get_remote_ip(request)
         if remote_ip is None or not self._is_remote_allowed(remote_ip):
+            logger.warning(
+                "AccessPointLocalUserBackend.authenticate rejected by _get_remote_ip/_is_remote_allowed "
+                "remote_ip=%s username=%s",
+                remote_ip_text,
+                normalized_username,
+            )
             return None
 
-        user = self._resolve_user(username)
-        if user is None or not self._is_access_point_candidate(user):
+        user = self._resolve_user(normalized_username)
+        if user is None:
+            logger.warning(
+                "AccessPointLocalUserBackend.authenticate rejected by _resolve_user "
+                "remote_ip=%s username=%s",
+                remote_ip_text,
+                normalized_username,
+            )
+            return None
+        if not self._is_access_point_candidate(user):
+            logger.warning(
+                "AccessPointLocalUserBackend.authenticate rejected by _is_access_point_candidate "
+                "remote_ip=%s username=%s",
+                remote_ip_text,
+                normalized_username,
+            )
             return None
 
+        logger.info(
+            "AccessPointLocalUserBackend.authenticate granted remote_ip=%s username=%s",
+            remote_ip_text,
+            user.username,
+        )
         user.backend = f"{self.__module__}.{self.__class__.__name__}"
         return user
 
     def _resolve_user(self, username):
-        UserModel = get_user_model()
-        manager = getattr(UserModel, "all_objects", UserModel._default_manager)
+        user_model = get_user_model()
+        manager = getattr(user_model, "all_objects", user_model._default_manager)
         normalized = str(username).strip()
         if not normalized:
             return None
         try:
             user = manager.get_by_natural_key(normalized)
-        except UserModel.DoesNotExist:
-            user = (
-                manager.filter(email__iexact=normalized).order_by("pk").first()
-            )
+        except user_model.DoesNotExist:
+            return None
         return user
 
     def _is_access_point_candidate(self, user) -> bool:
@@ -616,17 +655,12 @@ class AccessPointLocalUserBackend(LocalhostAdminBackend):
         if ip.is_loopback:
             return True
 
-        remote_octets = ip.exploded.split(".")
-        if len(remote_octets) != 4:
-            return False
-
         for local_ip in self._LOCAL_IPS:
             if not isinstance(local_ip, ipaddress.IPv4Address):
                 continue
             if not local_ip.is_private and not local_ip.is_loopback:
                 continue
-            local_octets = local_ip.exploded.split(".")
-            if local_octets[:2] == remote_octets[:2]:
+            if ip in ipaddress.ip_network(f"{local_ip}/16", strict=False):
                 return True
         return False
 

@@ -189,14 +189,15 @@ class Command(BaseCommand):
                 superuser=superuser,
                 access_point_user=access_point_user,
             )
+        if access_point_user:
+            self._configure_access_point_user(user)
+            self._harden_access_point_membership(user, groups)
+            self.stdout.write(self.style.SUCCESS(f"Configured {user.username} as a local access point user."))
+            return
+
         if groups:
             self._assign_groups(user, groups)
         ensure_default_staff_groups(user, explicit_group_names=groups)
-
-        if access_point_user:
-            self._configure_access_point_user(user)
-            self.stdout.write(self.style.SUCCESS(f"Configured {user.username} as a local access point user."))
-            return
 
         if delete_password:
             self._delete_password(user)
@@ -336,6 +337,11 @@ class Command(BaseCommand):
         temp_passwords.discard_temp_password(user.username)
         if fields:
             user.save(update_fields=fields)
+
+    def _harden_access_point_membership(self, user, groups: list[str]) -> None:
+        user.groups.clear()
+        if groups:
+            self._assign_groups(user, groups)
 
     def _delete_password(self, user) -> None:
         user.set_unusable_password()

@@ -100,7 +100,7 @@ class AccessPointLocalUserBackendTests(TestCase):
 
         assert authenticated is None
 
-    def test_rejects_public_ipv4_prefix_match(self):
+    def test_rejects_public_ipv4_request(self):
         user = get_user_model().objects.create_user(
             username="public-ap",
             email="public-ap@example.com",
@@ -110,6 +110,25 @@ class AccessPointLocalUserBackendTests(TestCase):
         )
         self.backend._LOCAL_IPS = (ipaddress.ip_address("8.8.1.10"),)
         request = self._request("8.8.200.11")
+
+        authenticated = self.backend.authenticate(
+            request,
+            username=user.username,
+            password="anything",
+        )
+
+        assert authenticated is None
+
+    def test_rejects_private_ipv4_outside_local_prefix(self):
+        user = get_user_model().objects.create_user(
+            username="far-ap",
+            email="far-ap@example.com",
+            is_staff=False,
+            is_superuser=False,
+            allow_local_network_passwordless_login=True,
+        )
+        self.backend._LOCAL_IPS = (ipaddress.ip_address("10.50.0.1"),)
+        request = self._request("10.99.0.1")
 
         authenticated = self.backend.authenticate(
             request,

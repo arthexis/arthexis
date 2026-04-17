@@ -15,26 +15,20 @@ def seed_visitors_module(apps, schema_editor):
 
     group, _ = SecurityGroup.objects.get_or_create(name=AP_USER_GROUP_NAME)
 
-    module, _ = Module.objects.get_or_create(
-        path=VISITORS_MODULE_PATH,
-        defaults={
-            "menu": VISITORS_MODULE_MENU,
-            "security_group": group,
-            "security_mode": "exclusive",
-        },
-    )
-
-    updates = {}
-    if module.menu != VISITORS_MODULE_MENU:
-        updates["menu"] = VISITORS_MODULE_MENU
-    if module.security_group_id != group.id:
-        updates["security_group"] = group
-    if module.security_mode != "exclusive":
-        updates["security_mode"] = "exclusive"
-    if updates:
-        for field, value in updates.items():
-            setattr(module, field, value)
-        module.save(update_fields=list(updates))
+    module = Module.objects.filter(path=VISITORS_MODULE_PATH).first()
+    if module is None:
+        module = Module.objects.create(
+            path=VISITORS_MODULE_PATH,
+            menu=VISITORS_MODULE_MENU,
+            security_group=group,
+            security_mode="exclusive",
+        )
+    elif (
+        module.menu != VISITORS_MODULE_MENU
+        or module.security_group_id != group.id
+        or module.security_mode != "exclusive"
+    ):
+        return
 
     Landing.objects.get_or_create(
         module=module,
@@ -52,7 +46,11 @@ def unseed_visitors_module(apps, schema_editor):
     Landing = apps.get_model("pages", "Landing")
 
     module = Module.objects.filter(path=VISITORS_MODULE_PATH).first()
-    if module is None:
+    if (
+        module is None
+        or module.menu != VISITORS_MODULE_MENU
+        or module.security_mode != "exclusive"
+    ):
         return
     Landing.objects.filter(module=module, path=VISITORS_MODULE_PATH).delete()
     if module.menu == VISITORS_MODULE_MENU:

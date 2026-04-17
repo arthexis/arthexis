@@ -228,6 +228,31 @@ class PasswordCommandTests(TestCase):
         assert user.force_password_change is False
         assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
 
+    def test_configures_access_point_user_mode_clears_existing_groups(self):
+        """Access-point mode should drop prior group access before reassignment."""
+
+        Group.objects.create(name=AP_USER_GROUP_NAME)
+        legacy_group = Group.objects.create(name="Legacy Admin")
+        user = get_user_model().objects.create_user(
+            username="ap-groups-clear",
+            email="ap-groups-clear@example.com",
+            password="InitialPassword123",
+            is_staff=True,
+            is_superuser=True,
+        )
+        user.groups.add(legacy_group)
+
+        call_command(
+            "password",
+            user.username,
+            access_point_user=True,
+            group=AP_USER_GROUP_NAME,
+        )
+
+        user.refresh_from_db()
+        assert not user.groups.filter(name=legacy_group.name).exists()
+        assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
+
     def test_configures_access_point_user_mode_clears_temporary_credentials(self):
         """Access-point mode should clear temporary-password state for hardened login."""
 
