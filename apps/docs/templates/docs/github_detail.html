@@ -1,0 +1,72 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="markdown-body">
+  {% if viewer_url %}
+    <p><a href="{{ viewer_url }}">← {% trans "Back to GitHub viewer" %}</a></p>
+  {% endif %}
+
+  {% if not github_connected %}
+    <div class="alert alert-info" role="alert">
+      {% trans "GitHub is not connected for the active repository." %}
+    </div>
+  {% elif item %}
+    <h1>
+      {% if item.pull_request %}{% trans "Pull Request" %}{% else %}{% trans "Issue" %}{% endif %}
+      #{{ item.number }}: {{ item.title }}
+    </h1>
+    <p class="text-muted mb-1">
+      {% trans "Repository" %}: {{ repository_slug }} · {% trans "State" %}: {{ item.state }}
+    </p>
+    {% if item.pull_request %}
+      <p class="text-muted mb-3">
+        {% trans "Overall checks" %}: <strong>{{ checks_state }}</strong>
+      </p>
+    {% endif %}
+
+    {% if error_message %}
+      <div class="alert alert-danger" role="alert">{{ error_message }}</div>
+    {% endif %}
+    <h2>{% trans "Description" %}</h2>
+    <pre class="border rounded p-3 bg-light" style="white-space: pre-wrap">{{ item.body|default:"" }}</pre>
+
+    <h2>{% trans "Respond" %}</h2>
+    <form method="post" class="mb-4">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label" for="template">{% trans "Template" %}</label>
+        <select class="form-select" id="template" name="template">
+          <option value="">{% trans "Custom response" %}</option>
+          {% for template in response_templates %}
+            <option value="{{ template.pk }}">{{ template.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="body">{% trans "Comment body" %}</label>
+        <textarea class="form-control" id="body" name="body" rows="5" placeholder="{% trans 'Optional when a template is selected.' %}"></textarea>
+      </div>
+      <button class="btn btn-primary" type="submit">{% trans "Post response" %}</button>
+    </form>
+
+    <h2>{% trans "Comments" %}</h2>
+    {% for comment in comments %}
+      <div class="card mb-3">
+        <div class="card-header small text-muted">
+          {{ comment.user.login|default:"Unknown" }} · {{ comment.updated_at|default:"" }}
+        </div>
+        <div class="card-body">
+          <pre class="mb-0" style="white-space: pre-wrap">{{ comment.body|default:"" }}</pre>
+        </div>
+      </div>
+    {% empty %}
+      <p class="text-muted">{% trans "No comments yet." %}</p>
+    {% endfor %}
+  {% elif error_message %}
+    <div class="alert alert-danger" role="alert">{{ error_message }}</div>
+  {% endif %}
+</div>
+{% endblock %}

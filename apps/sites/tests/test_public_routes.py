@@ -1,6 +1,7 @@
 import datetime
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -26,6 +27,8 @@ from apps.groups.constants import (
 from apps.groups.models import SecurityGroup
 from apps.media.utils import create_media_file, ensure_media_bucket
 from apps.modules.models import Module
+from apps.repos.models.response_templates import GitHubResponseTemplate
+from apps.repos.services.github import GitHubRepositoryError
 from apps.sites import context_processors
 from apps.sites.models import Landing, SiteProfile
 from apps.sites.utils import require_site_operator_or_staff
@@ -477,6 +480,224 @@ def test_docs_library_shows_gallery_sidebar_with_latest_four_images(client):
     assert "Gallery image 2" in body
     assert "Gallery image 1" in body
     assert "Gallery image 0" not in body
+
+
+def test_docs_library_shows_github_issue_viewer_entry_when_connected(client, monkeypatch):
+    user = get_user_model().objects.create_user(
+        username="docs-github-library-user",
+        email="docs-github-library-user@example.com",
+        password="secret",
+    )
+    _grant_docs_access(user)
+    monkeypatch.setattr(
+        "apps.docs.views._resolve_github_docs_connection",
+        lambda: SimpleNamespace(
+            connected=True,
+            owner="arthexis",
+            repo="arthexis",
+            slug="arthexis/arthexis",
+            token="tok",
+        ),
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("docs:docs-library"))
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "Open GitHub issue viewer" in body
+    assert reverse("docs:docs-github-viewer") in body
+
+
+def test_docs_github_viewer_lists_open_issues_and_pull_requests(client, monkeypatch):
+    user = get_user_model().objects.create_user(
+        username="docs-github-viewer-user",
+        email="docs-github-viewer-user@example.com",
+        password="secret",
+    )
+    _grant_docs_access(user)
+    monkeypatch.setattr(
+        "apps.docs.views._resolve_github_docs_connection",
+        lambda: SimpleNamespace(
+            connected=True,
+            owner="arthexis",
+            repo="arthexis",
+            slug="arthexis/arthexis",
+            token="tok",
+        ),
+    )
+    monkeypatch.setattr(
+        "apps.docs.views.github_service.fetch_repository_issues",
+        lambda **kwargs: iter(
+            [
+                {
+                    "number": 42,
+                    "title": "Issue title",
+                    "state": "open",
+                    "user": {"login": "octocat"},
+                },
+                {
+                    "number": 43,
+                    "title": "PR title",
+                    "state": "open",
+                    "user": {"login": "hubot"},
+                    "pull_request": {"url": "https://api.github.com/pr/43"},
+                },
+            ]
+        ),
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("docs:docs-github-viewer"))
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "Issue title" in body
+    assert "PR title" in body
+    assert reverse("docs:docs-github-item", kwargs={"number": 42}) in body
+
+
+def test_docs_github_detail_allows_posting_template_response(client, monkeypatch):
+    user = get_user_model().objects.create_user(
+        username="docs-github-detail-user",
+        email="docs-github-detail-user@example.com",
+        password="secret",
+    )
+    _grant_docs_access(user)
+    template = GitHubResponseTemplate.objects.create(
+        user=user,
+        label="Needs reproduction",
+        body="Please share reproducible steps.",
+    )
+
+    monkeypatch.setattr(
+        "apps.docs.views._resolve_github_docs_connection",
+        lambda: SimpleNamespace(
+            connected=True,
+            owner="arthexis",
+            repo="arthexis",
+            slug="arthexis/arthexis",
+            token="tok",
+        ),
+    )
+    monkeypatch.setattr(
+        "apps.docs.views.github_service.fetch_issue_or_pull_request",
+        lambda **kwargs: {
+            "number": 55,
+            "title": "Improve diagnostics",
+            "state": "open",
+            "body": "Detailed description",
+            "pull_request": {"url": "https://api.github.com/pr/55"},
+        },
+    )
+    monkeypatch.setattr(
+        "apps.docs.views.github_service.fetch_issue_comments",
+        lambda **kwargs: iter([]),
+    )
+    monkeypatch.setattr(
+        "apps.docs.views.github_service.fetch_pull_request",
+        lambda **kwargs: {"head": {"sha": "abc123"}},
+    )
+    monkeypatch.setattr(
+        "apps.docs.views.github_service.fetch_commit_status_summary",
+        lambda **kwargs: {"state": "success"},
+    )
+    posted = {}
+
+    def _capture_comment(*args, **kwargs):
+        posted["body"] = kwargs["body"]
+
+    monkeypatch.setattr("apps.docs.views.github_service.create_issue_comment", _capture_comment)
+
+    client.force_login(user)
+    response = client.post(
+        reverse("docs:docs-github-item", kwargs={"number": 55}),
+        data={"template": str(template.pk), "body": ""},
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert posted["body"] == "Please share reproducible steps."
+
+
+def test_docs_github_detail_rejects_invalid_template_id(client, monkeypatch):
+    user = get_user_model().objects.create_user(
+        username="docs-github-invalid-template-user",
+        email="docs-github-invalid-template-user@example.com",
+        password="secret",
+    )
+    _grant_docs_access(user)
+
+    monkeypatch.setattr(
+        "apps.docs.views._resolve_github_docs_connection",
+        lambda: SimpleNamespace(
+            connected=True,
+            owner="arthexis",
+            repo="arthexis",
+            slug="arthexis/arthexis",
+            token="tok",
+        ),
+    )
+    monkeypatch.setattr(
+        "apps.docs.views.github_service.fetch_issue_or_pull_request",
+        lambda **kwargs: {
+            "number": 56,
+            "title": "Improve diagnostics",
+            "state": "open",
+            "body": "Detailed description",
+        },
+    )
+    monkeypatch.setattr(
+        "apps.docs.views.github_service.fetch_issue_comments",
+        lambda **kwargs: iter([]),
+    )
+
+    client.force_login(user)
+    response = client.post(
+        reverse("docs:docs-github-item", kwargs={"number": 56}),
+        data={"template": "abc", "body": ""},
+    )
+
+    assert response.status_code == 200
+    assert "Selected response template is not available." in response.content.decode()
+
+
+def test_docs_github_detail_handles_fetch_errors(client, monkeypatch):
+    user = get_user_model().objects.create_user(
+        username="docs-github-fetch-error-user",
+        email="docs-github-fetch-error-user@example.com",
+        password="secret",
+    )
+    _grant_docs_access(user)
+
+    monkeypatch.setattr(
+        "apps.docs.views._resolve_github_docs_connection",
+        lambda: SimpleNamespace(
+            connected=True,
+            owner="arthexis",
+            repo="arthexis",
+            slug="arthexis/arthexis",
+            token="tok",
+        ),
+    )
+
+    def _raise_fetch_error(**kwargs):
+        raise GitHubRepositoryError("GitHub unavailable")
+
+    monkeypatch.setattr(
+        "apps.docs.views.github_service.fetch_issue_or_pull_request",
+        _raise_fetch_error,
+    )
+    monkeypatch.setattr(
+        "apps.docs.views.github_service.fetch_issue_comments",
+        lambda **kwargs: iter([]),
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("docs:docs-github-item", kwargs={"number": 57}))
+
+    assert response.status_code == 200
+    assert "GitHub unavailable" in response.content.decode()
 
 
 def test_readme_resolves_sigils_for_authenticated_user(client):

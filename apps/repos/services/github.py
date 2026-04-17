@@ -303,6 +303,99 @@ def fetch_repository_pull_requests(
     yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
 
 
+def fetch_issue_comments(
+    *,
+    token: str,
+    owner: str,
+    name: str,
+    issue_number: int,
+) -> Iterator[Mapping[str, object]]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/issues/{issue_number}/comments"
+    params: dict[str, RequestParamValue] = {"per_page": 100}
+    yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
+
+
+def _fetch_json_mapping(
+    *,
+    token: str,
+    endpoint: str,
+    timeout: int,
+    decode_error: str,
+) -> Mapping[str, object]:
+    headers = build_headers(token)
+    response = None
+    try:
+        try:
+            response = requests.get(endpoint, headers=headers, timeout=timeout)
+        except requests.RequestException as exc:  # pragma: no cover - network failure
+            raise GitHubRepositoryError(str(exc)) from exc
+
+        if not (200 <= response.status_code < 300):
+            raise GitHubRepositoryError(_extract_error_message(response))
+
+        payload = _safe_json(response)
+        if isinstance(payload, Mapping):
+            return payload
+        raise GitHubRepositoryError(decode_error)
+    finally:
+        if response is not None:
+            close = getattr(response, "close", None)
+            if callable(close):
+                with contextlib.suppress(Exception):
+                    close()
+
+
+def fetch_issue_or_pull_request(
+    *,
+    token: str,
+    owner: str,
+    name: str,
+    number: int,
+    timeout: int = REQUEST_TIMEOUT,
+) -> Mapping[str, object]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/issues/{number}"
+    return _fetch_json_mapping(
+        token=token,
+        endpoint=endpoint,
+        timeout=timeout,
+        decode_error="Unable to decode issue details from GitHub",
+    )
+
+
+def fetch_commit_status_summary(
+    *,
+    token: str,
+    owner: str,
+    name: str,
+    sha: str,
+    timeout: int = REQUEST_TIMEOUT,
+) -> Mapping[str, object]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/commits/{sha}/status"
+    return _fetch_json_mapping(
+        token=token,
+        endpoint=endpoint,
+        timeout=timeout,
+        decode_error="Unable to decode commit status from GitHub",
+    )
+
+
+def fetch_pull_request(
+    *,
+    token: str,
+    owner: str,
+    name: str,
+    number: int,
+    timeout: int = REQUEST_TIMEOUT,
+) -> Mapping[str, object]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/pulls/{number}"
+    return _fetch_json_mapping(
+        token=token,
+        endpoint=endpoint,
+        timeout=timeout,
+        decode_error="Unable to decode pull request details from GitHub",
+    )
+
+
 def _ensure_issue_lock_dir() -> None:
     ISSUE_LOCK_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -373,7 +466,9 @@ def get_github_issue_token() -> str:
         if cleaned:
             return cleaned
 
-    raise RuntimeError(f"GitHub token is not configured; set one via {DEFAULT_PACKAGE.repository_url}")
+    raise GitHubRepositoryError(
+        f"GitHub token is not configured; set one via {DEFAULT_PACKAGE.repository_url}"
+    )
 
 
 def create_issue(
@@ -509,6 +604,52 @@ def create_pull_request_comment(
         owner,
         repository,
         pull_number,
+        response.status_code,
+    )
+    return response
+
+
+def create_issue_comment(
+    owner: str,
+    repository: str,
+    *,
+    issue_number: int,
+    token: str,
+    body: str,
+    timeout: int = REQUEST_TIMEOUT,
+) -> requests.Response:
+    """Post a comment on a specific issue or pull request and return the API response."""
+
+    cleaned_body = body.strip()
+    if not cleaned_body:
+        raise ValueError("Issue comment body must not be empty")
+
+    headers = build_headers(token, user_agent="arthexis-runtime-reporter")
+    url = f"{API_ROOT}/repos/{owner}/{repository}/issues/{issue_number}/comments"
+    response = None
+    try:
+        response = requests.post(
+            url,
+            json={"body": cleaned_body},
+            headers=headers,
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        raise GitHubRepositoryError(str(exc)) from exc
+
+    if not (200 <= response.status_code < 300):
+        try:
+            message = _extract_error_message(response)
+        finally:
+            with contextlib.suppress(Exception):
+                response.close()
+        raise GitHubRepositoryError(message)
+
+    logger.info(
+        "GitHub issue comment created for %s/%s#%s with status %s",
+        owner,
+        repository,
+        issue_number,
         response.status_code,
     )
     return response

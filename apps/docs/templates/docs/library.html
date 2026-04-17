@@ -84,6 +84,11 @@
         <p class="text-muted small mb-3">
           {% trans "Preview the latest uploads and jump straight to the full gallery." %}
         </p>
+        {% if github_connected %}
+          <p class="mb-3">
+            <a class="btn btn-sm btn-outline-dark" href="{{ github_issue_viewer_url }}">{% trans "Open GitHub issue viewer" %}</a>
+          </p>
+        {% endif %}
         <p class="mb-3">
           {% if is_gallery_manager %}
             <a class="btn btn-sm btn-primary" href="{{ gallery_upload_url }}">{% trans "Create / upload image" %}</a>
