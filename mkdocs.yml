@@ -60,7 +60,6 @@ nav:
       - Secret Scanning: development/secret-scanning.md
       - Test Suite Notes: development/testing/test-suite-notes.md
       - Typing Conventions: development/typing-conventions.md
-      - Video Device Admin: development/video-device-admin.md
       - Watchtower Attack Simulation: development/watchtower-attack-simulation.md
       - CodeQL Configuration: development/codeql.md
       - CI Troubleshooting: development/ci-troubleshooting.md
