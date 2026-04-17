@@ -182,6 +182,97 @@ If a test fails **multiple times across runs**, it must be:
 
 ---
 
+## Plan Generation for Agents
+
+When generating execution plans, agents must assume that downstream task runs may not include full planning-chat context.
+
+### Plan Task Card Format
+
+Every generated task must include:
+
+1. Intent
+2. Scope (apps/files)
+3. Constraints
+4. Acceptance Criteria
+5. Verification Commands
+6. Out of Scope
+
+### Arthexis Planning Guardrails
+
+Generated plans must:
+
+* Prefer extending existing Arthexis apps over detached side systems.
+* Model external processes via Django models and migrations when appropriate.
+* Preserve admin power unless there is a clear security concern.
+* Avoid speculative futureproofing and overengineering.
+* Include adjacent health improvements when touching related areas (tests/docs/cruft/security).
+
+### Model-Change Requirements in Plans
+
+If a task changes models, that task must explicitly include:
+
+* migration creation/update
+* migration validation command(s)
+* relevant test updates/additions
+
+### Verification Requirements
+
+Every generated task must include explicit verification commands, preferring repository entrypoints such as:
+
+* `.venv/bin/python manage.py migrations check`
+* `.venv/bin/python manage.py test run -- <target>`
+
+### Context Carry-Forward Rule
+
+Do not assume execution steps inherit planning-chat context.
+Each generated task must restate non-obvious constraints needed for correct implementation.
+
+### Task Dependency Annotation
+
+Each generated task must declare:
+
+* Depends on: `<task ids or none>`
+* Blocks: `<task ids or none>`
+* Parallel-safe: `yes/no`
+
+### Risk and Rollback
+
+For non-trivial tasks, include:
+
+* Risk level (low/med/high)
+* Primary failure mode
+* Rollback approach
+
+### Plan Quality Checklist
+
+A plan is valid only if:
+
+* Every task includes Intent/Scope/Constraints/Acceptance Criteria/Verification Commands/Out of Scope.
+* App/file targets are explicit.
+* Tests and migrations are covered when applicable.
+* No task relies on implicit chat memory.
+
+### Task Template
+
+Use this template when drafting plan tasks:
+
+```md
+### Task <ID>: <Short Title>
+
+* Intent:
+* Scope:
+* Constraints:
+* Acceptance Criteria:
+* Verification Commands:
+* Out of Scope:
+* Depends on:
+* Blocks:
+* Parallel-safe:
+* Risk/Rollback:
+```
+
+---
+
 ### Fixture Changes
 
 Any modification to database models must include appropriate migrations.
