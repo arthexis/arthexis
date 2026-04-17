@@ -43,3 +43,14 @@ If local preview generation fails because browser/screenshot tooling is unavaila
 - Add the route (starting with `/`, one per line) to `.github/screenshot-paths.authenticated.txt` (requires login) or `.github/screenshot-paths.public.txt` (public route).
 - Push the change and rely on the screenshot workflow artifacts as the preview source of truth.
 - Prefer this CI route-registration flow over ad-hoc local browser setup in constrained environments.
+
+## Debugger/autoreload duplicate startup logs
+
+When running `manage.py runserver` with Django autoreload enabled, startup diagnostics can appear twice. This is expected: Django starts a watcher process and a child server process, and both emit startup output before the child keeps serving logs.
+
+For development debugging sessions where duplicate startup logs are noisy:
+
+- run with `--noreload` to use a single process
+- or keep autoreload and set `DJANGO_SUPPRESS_MIGRATION_CHECK=1` to reduce repeated migration-check output
+
+If initialization code must run only once, guard it to run in the child process only (for example by checking `RUN_MAIN == "true"`).
