@@ -132,3 +132,13 @@ If saved AWS credentials are stale/invalid, refresh them inline before setup/fet
   --instance-name ops-node-1 \
   --skip-create
 ```
+
+### Benchmarking command references
+
+For benchmarking workflows, treat command help text as the canonical documentation source:
+
+- `scripts/benchmark-suite.sh --help`
+- `.venv/bin/python manage.py benchmark_ocpp_memory --help`
+
+Keep long-form benchmark guidance anchored to these help outputs rather than a standalone benchmarking page.
+
