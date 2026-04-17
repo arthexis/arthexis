@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -13,12 +15,13 @@ from django.db import transaction
 from apps.tests.discovery import TestDiscoveryError, discover_suite_tests
 from apps.tests.models import SuiteTest
 from utils.python_env import resolve_project_python
+from utils.qa_remediation import emit_remediation, expected_venv_python, find_repo_root
 
 
 class Command(BaseCommand):
     """Run local test workflows from a single command entrypoint."""
 
-    help = "Run pytest or launch the long-running VS Code test server."
+    help = "Run suite tests via the canonical manage.py entrypoint or launch the VS Code test server."
 
     def add_arguments(self, parser) -> None:
         """Register command arguments and subcommands."""
@@ -26,7 +29,7 @@ class Command(BaseCommand):
         subparsers = parser.add_subparsers(dest="action")
         parser.set_defaults(action="run", pytest_args=[])
 
-        run_parser = subparsers.add_parser("run", help="Run pytest.")
+        run_parser = subparsers.add_parser("run", help="Run tests (pytest-backed).")
         run_parser.add_argument(
             "pytest_args",
             nargs=argparse.REMAINDER,
@@ -62,37 +65,133 @@ class Command(BaseCommand):
         """Execute pytest as a subprocess."""
 
         base_dir = self._base_dir()
-        python = resolve_project_python(base_dir)
-        probe = subprocess.run(
-            [
-                python,
-                "-c",
-                "import importlib.util,sys;sys.exit(0 if importlib.util.find_spec('pytest') else 1)",
-            ],
-            cwd=base_dir,
-            env=os.environ.copy(),
-        )
-        if probe.returncode != 0:
-            raise CommandError(
-                "pytest is not installed in the active environment. "
-                "Install test dependencies (for example: "
-                "`.venv/bin/pip install -r requirements-ci.txt`) and retry."
-            )
-
+        venv_python = expected_venv_python(base_dir)
+        venv_rel = venv_python.relative_to(base_dir).as_posix()
         args = list(pytest_args)
         if args and args[0] == "--":
             args = args[1:]
+        retry_command = f"{venv_rel} manage.py test run"
+        if args:
+            retry_command = f"{retry_command} -- {shlex.join(args)}"
+        if not venv_python.exists():
+            raise CommandError(
+                emit_remediation(
+                    code="missing_venv_python",
+                    command="./install.sh --terminal",
+                    retry=retry_command,
+                )
+            )
+        python = resolve_project_python(base_dir)
+        readiness = self._run_readiness_probe(base_dir, python)
+        self._write_readiness_report(readiness)
+
+        missing_dependencies = [
+            dependency
+            for dependency, available in readiness["dependencies"].items()
+            if not available
+        ]
+        if missing_dependencies:
+            dependency_list = ", ".join(missing_dependencies)
+            raise CommandError(
+                emit_remediation(
+                    code="missing_dependency",
+                    command="./env-refresh.sh --deps-only",
+                    retry=retry_command,
+                )
+            )
+
         command = [python, "-m", "pytest", *args]
         result = subprocess.run(command, cwd=base_dir, env=os.environ.copy())
         if result.returncode != 0:
             raise CommandError(f"pytest exited with status {result.returncode}")
 
+    def _run_readiness_probe(self, base_dir: Path, python: str) -> dict[str, object]:
+        """Collect QA readiness details from the selected Python interpreter."""
+
+        probe = subprocess.run(
+            [
+                python,
+                "-c",
+                (
+                    "import importlib.util,json,os,sys;"
+                    "deps={'pytest':'pytest','pytest-django':'pytest_django',"
+                    "'pytest-timeout':'pytest_timeout'};"
+                    "print(json.dumps({"
+                    "'python_executable':sys.executable,"
+                    "'virtualenv_active':bool(os.environ.get('VIRTUAL_ENV')) "
+                    "or sys.prefix!=getattr(sys,'base_prefix',sys.prefix),"
+                    "'virtualenv_path':os.environ.get('VIRTUAL_ENV'),"
+                    "'dependencies':{pkg:bool(importlib.util.find_spec(mod)) "
+                    "for pkg, mod in deps.items()}}))"
+                ),
+            ],
+            capture_output=True,
+            check=False,
+            cwd=base_dir,
+            env=os.environ.copy(),
+            text=True,
+        )
+        if probe.returncode != 0:
+            raise CommandError("Unable to run QA readiness probe for test execution.")
+        try:
+            lines = probe.stdout.strip().splitlines()
+            if not lines:
+                raise CommandError("QA readiness probe produced no output.")
+            readiness = json.loads(lines[-1])
+        except json.JSONDecodeError as exc:
+            raise CommandError("QA readiness probe returned invalid output.") from exc
+        if not isinstance(readiness, dict):
+            raise CommandError("QA readiness probe returned malformed output.")
+        return readiness
+
+    def _write_readiness_report(self, readiness: dict[str, object]) -> None:
+        """Print a compact readiness report before any pytest execution."""
+
+        dependencies = readiness.get("dependencies", {})
+        if not isinstance(dependencies, dict):
+            dependencies = {}
+        dependency_report = ", ".join(
+            f"{dependency}={'yes' if bool(available) else 'no'}"
+            for dependency, available in dependencies.items()
+        )
+        if not dependency_report:
+            dependency_report = "none detected"
+
+        self.stdout.write("QA readiness:")
+        self.stdout.write(
+            f"- virtualenv active: {'yes' if readiness.get('virtualenv_active') else 'no'}"
+        )
+        self.stdout.write(
+            f"- python executable: {readiness.get('python_executable', 'unknown')}"
+        )
+        self.stdout.write(f"- core test dependencies: {dependency_report}")
+
     def _run_test_server(self) -> None:
         """Start the long-running VS Code test server."""
 
-        from utils.devtools import test_server
+        base_dir = self._base_dir()
+        venv_rel = expected_venv_python(base_dir).relative_to(base_dir).as_posix()
+        if not expected_venv_python(base_dir).exists():
+            raise CommandError(
+                emit_remediation(
+                    code="missing_venv_python",
+                    command="./install.sh --terminal",
+                    retry=f"{venv_rel} manage.py test server",
+                )
+            )
 
-        exit_code = test_server.main([])
+        try:
+            from utils.devtools import test_server
+
+            exit_code = test_server.main([])
+        except ModuleNotFoundError as exc:
+            raise CommandError(
+                emit_remediation(
+                    code="missing_dependency",
+                    command="./env-refresh.sh --deps-only",
+                    retry=f"{venv_rel} manage.py test server",
+                )
+            ) from exc
         if exit_code != 0:
             raise CommandError(f"test server exited with status {exit_code}")
 
@@ -117,9 +216,4 @@ class Command(BaseCommand):
     def _base_dir() -> Path:
         """Return the repository root directory."""
 
-        path = Path(__file__).resolve().parent
-        while path != path.parent:
-            if (path / "manage.py").is_file() or (path / "pyproject.toml").is_file():
-                return path
-            path = path.parent
-        raise FileNotFoundError("Repository root not found from command module path.")
+        return find_repo_root(Path(__file__).resolve().parent)

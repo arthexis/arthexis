@@ -2,6 +2,8 @@
 
 This site aggregates operator guides, architecture notes, and development references for the Arthexis software suite.
 
+Release notes and changelog reporting are available in the built-in Arthexis changelog UI, accessible via the Admin Dashboard.
+
 In Arthexis terminology, the **suite** is the collection of applications, while the **Constellation** is the fleet of nodes running that suite.
 
 ## Suite goals
@@ -21,10 +23,9 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [LCD Screen Hardware](lcd-screen-hardware.md)
 - [App Structure Policy](development/app-structure-policy.md)
 - [Endpoint Documentation Inventory](integrations/endpoint-inventory.md)
-- [GitHub Monitoring Suite Proposal](integrations/github-monitoring-suite.md)
 - [Endpoint Documentation Completeness Checklist](integrations/documentation-completeness-checklist.md)
 - [Integration Onboarding Tracks](integrations/onboarding-tracks.md)
-- [OCPP 1.6 Compliance Review](ocpp16_compliance_review.md)
+- OCPP 1.6 coverage artifact: `apps/ocpp/coverage.json`
 - [Ops Command Wrapper](operations/operational-commands.md)
 - [Reinstall + Data Import Runbook (1.0+)](operations/reinstall-data-import-runbook.md)
 - [Suite Services Report](suite-services-report.md)

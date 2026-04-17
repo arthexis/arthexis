@@ -52,19 +52,25 @@ jobs:
       - name: Install suite from repository
         run: |
           ./install.sh --no-start
+      - name: Refresh environment dependencies
+        run: |
+          ./env-refresh.sh
       - name: Validate migrations
         run: |
+          ./scripts/preflight-env.sh
           source .venv/bin/activate
           python scripts/check_migration_conflicts.py
           python manage.py migrations check
           python manage.py migrate --noinput --database default
       - name: Install CI dependencies
         run: |
+          ./scripts/preflight-env.sh
           source .venv/bin/activate
           python -m pip install --only-binary=:all: -r requirements-ci.txt
       - name: Run tests
         run: |
           set -o pipefail
+          ./scripts/preflight-env.sh --pytest
           source .venv/bin/activate
           python -m pytest --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
       - name: Upload pytest log

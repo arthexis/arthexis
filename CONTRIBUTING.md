@@ -123,6 +123,13 @@ Install test dependencies, then run tests before opening a PR:
 ./.venv/bin/python manage.py test run
 ```
 
+`manage.py test run` now begins with a QA readiness step before any targeted pytest execution. It reports:
+- virtualenv presence,
+- the Python executable path used for the run,
+- core test dependency availability (`pytest`, `pytest-django`, `pytest-timeout`).
+
+If any core dependency is missing, the command fails fast before attempting any tests.
+
 `requirements.txt` is intentionally runtime-only, so `pytest` may be missing until the QA extras are installed. See [Dependency management](docs/development/dependency-management.md) for details.
 
 Useful subsets:

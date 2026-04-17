@@ -62,8 +62,8 @@ Review reconciliation output after the run; it reports copied tables plus skippe
 
 ### Optional: safe fallback `--reconcile`
 
-For standard upgrades where you want to keep manual behavior by default but allow
-automatic rescue for migration graph/version mismatches:
+For upgrades where you want automatic rescue for migration graph/version
+mismatches:
 
 ```bash
 ./upgrade.sh --reconcile
@@ -76,8 +76,8 @@ When enabled, if `env-refresh.py` detects mismatch failures (for example
 2. fallback engaged,
 3. reconciliation summary (`copied=`, `skipped=`, `missing=`).
 
-Without this flag, behavior stays manual and fail-fast, and operators must rerun
-with explicit reconciliation (for example `./upgrade.sh --migrate`).
+Without this flag, upgrade remains fail-fast for mismatch failures, and operators
+must rerun with explicit reconciliation (for example `./upgrade.sh --migrate`).
 
 #### Rollback steps after fallback
 
@@ -85,7 +85,7 @@ with explicit reconciliation (for example `./upgrade.sh --migrate`).
 2. Restore from your pre-upgrade DB backup/snapshot (or from the generated
    `.locks/*.pre_major_migrate.*` artifact if that is your approved rollback
    source).
-3. Re-run upgrade in manual mode and inspect migration health before continuing.
+3. Re-run upgrade and inspect migration health before continuing.
 
 #### Post-check steps after fallback
 
@@ -97,6 +97,29 @@ bash -lc 'source scripts/helpers/runserver_preflight.sh && run_runserver_preflig
 .venv/bin/python manage.py health --group core --group ocpp --force
 .venv/bin/python manage.py test run -- apps/ocpp/tests/test_chargers_command.py apps/ocpp/tests/test_simulator_command.py
 ```
+
+### Upgrade troubleshooting: in-progress merge/rebase state
+
+If `upgrade.sh` is interrupted and Git reports an unfinished merge/rebase,
+prefer rerunning the same upgrade command first. Control and Watchtower upgrade
+flows already attempt to abort incomplete Git operations and realign to
+`origin/<branch>` before pulling.
+
+Use manual Git recovery only for niche/operator workflows (for example, Terminal
+nodes or direct Git operations outside `upgrade.sh`):
+
+1. Check the active Git operation and conflicted files:
+   ```bash
+   git status
+   ```
+2. Either complete conflict resolution (`git add ...` + `git rebase --continue`
+   / `git merge --continue`) or abort the active operation (`git rebase --abort`
+   / `git merge --abort`).
+3. After `git status` is clean, switch back to the tracked branch:
+   ```bash
+   git switch <branch>
+   ```
+4. Rerun the intended upgrade command.
 
 ## 3) Import approved data payloads
 
@@ -118,6 +141,24 @@ bash -lc 'source scripts/helpers/runserver_preflight.sh && run_runserver_preflig
 .venv/bin/python manage.py health --group core --group ocpp --force
 .venv/bin/python manage.py test run -- apps/ocpp/tests/test_chargers_command.py apps/ocpp/tests/test_simulator_command.py
 ```
+
+## 4.1) Deferred data-transform follow-up (when required)
+
+If your release/import flow includes deferred data cleanup or backfill work,
+run the canonical release transform command after schema migration:
+
+```bash
+./command.sh run_release_data_transforms
+```
+
+This command is an ops alias for `release run-data-transforms` and can be
+rerun safely because transform progress is checkpointed.
+
+For node-specific deferred migration progress, use operator-facing status
+surfaces:
+
+- Admin: `Node migration checkpoints`
+- API: `GET /nodes/migration-status/`
 
 ## 5) Release gate for tag/publish
 
