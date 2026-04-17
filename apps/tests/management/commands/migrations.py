@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
+
+from utils.qa_remediation import emit_remediation, expected_venv_python
 
 
 class Command(BaseCommand):
@@ -47,6 +51,15 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options) -> None:
         """Dispatch to the selected migration subcommand."""
+
+        if not expected_venv_python(self._base_dir()).exists():
+            raise CommandError(
+                emit_remediation(
+                    code="missing_venv_python",
+                    command="./install.sh --terminal",
+                    retry=self._retry_command_for_options(options),
+                )
+            )
 
         action = options["action"]
         if action == "run":
@@ -92,7 +105,16 @@ class Command(BaseCommand):
     def _run_migration_server(self, options: dict[str, object]) -> None:
         """Run the VS Code migration server watcher."""
 
-        from utils.devtools import migration_server
+        try:
+            from utils.devtools import migration_server
+        except ModuleNotFoundError as exc:
+            raise CommandError(
+                emit_remediation(
+                    code="missing_dependency",
+                    command="./env-refresh.sh --deps-only",
+                    retry=self._retry_command_for_options(options),
+                )
+            ) from exc
 
         argv = [
             "--watch",
@@ -104,3 +126,27 @@ class Command(BaseCommand):
         exit_code = migration_server.main(argv)
         if exit_code != 0:
             raise CommandError(f"migration server exited with status {exit_code}")
+
+    @staticmethod
+    def _base_dir() -> "Path":
+        """Return the repository root directory."""
+
+        path = Path(__file__).resolve().parent
+        while path != path.parent:
+            if (path / "manage.py").is_file() or (path / "pyproject.toml").is_file():
+                return path
+            path = path.parent
+        raise FileNotFoundError("Repository root not found from command module path.")
+
+    @staticmethod
+    def _retry_command_for_options(options: dict[str, object]) -> str:
+        """Build retry guidance for the current migration subcommand."""
+
+        action = options.get("action") or "run"
+        if action == "check":
+            return ".venv/bin/python manage.py migrations check"
+        if action == "server":
+            return ".venv/bin/python manage.py migrations server"
+        if action == "make":
+            return ".venv/bin/python manage.py migrations make"
+        return ".venv/bin/python manage.py migrations run"

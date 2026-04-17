@@ -13,6 +13,7 @@ from django.db import transaction
 from apps.tests.discovery import TestDiscoveryError, discover_suite_tests
 from apps.tests.models import SuiteTest
 from utils.python_env import resolve_project_python
+from utils.qa_remediation import emit_remediation, expected_venv_python
 
 
 class Command(BaseCommand):
@@ -62,6 +63,21 @@ class Command(BaseCommand):
         """Execute pytest as a subprocess."""
 
         base_dir = self._base_dir()
+        venv_python = expected_venv_python(base_dir)
+        args = list(pytest_args)
+        if args and args[0] == "--":
+            args = args[1:]
+        retry_command = ".venv/bin/python manage.py test run"
+        if args:
+            retry_command = f"{retry_command} -- {' '.join(args)}"
+        if not venv_python.exists():
+            raise CommandError(
+                emit_remediation(
+                    code="missing_venv_python",
+                    command="./install.sh --terminal",
+                    retry=retry_command,
+                )
+            )
         python = resolve_project_python(base_dir)
         probe = subprocess.run(
             [
@@ -74,14 +90,13 @@ class Command(BaseCommand):
         )
         if probe.returncode != 0:
             raise CommandError(
-                "pytest is not installed in the active environment. "
-                "Install test dependencies (for example: "
-                "`.venv/bin/pip install -r requirements-ci.txt`) and retry."
+                emit_remediation(
+                    code="missing_dependency",
+                    command="./env-refresh.sh --deps-only",
+                    retry=retry_command,
+                )
             )
 
-        args = list(pytest_args)
-        if args and args[0] == "--":
-            args = args[1:]
         command = [python, "-m", "pytest", *args]
         result = subprocess.run(command, cwd=base_dir, env=os.environ.copy())
         if result.returncode != 0:
@@ -90,9 +105,28 @@ class Command(BaseCommand):
     def _run_test_server(self) -> None:
         """Start the long-running VS Code test server."""
 
+        base_dir = self._base_dir()
+        if not expected_venv_python(base_dir).exists():
+            raise CommandError(
+                emit_remediation(
+                    code="missing_venv_python",
+                    command="./install.sh --terminal",
+                    retry=".venv/bin/python manage.py test server",
+                )
+            )
+
         from utils.devtools import test_server
 
-        exit_code = test_server.main([])
+        try:
+            exit_code = test_server.main([])
+        except ModuleNotFoundError as exc:
+            raise CommandError(
+                emit_remediation(
+                    code="missing_dependency",
+                    command="./env-refresh.sh --deps-only",
+                    retry=".venv/bin/python manage.py test server",
+                )
+            ) from exc
         if exit_code != 0:
             raise CommandError(f"test server exited with status {exit_code}")
 

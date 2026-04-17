@@ -8,6 +8,23 @@ export DEBUG="${DEBUG:-0}"
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings}"
 
 PYTHON_BIN=".venv/bin/python"
+emit_remediation() {
+  local code="$1"
+  local command="$2"
+  local retry="$3"
+  printf '{"code":"%s","command":"%s","event":"arthexis.qa.remediation","retry":"%s"}\n' "$code" "$command" "$retry" >&2
+}
+
+if [ ! -x "$PYTHON_BIN" ]; then
+  emit_remediation "missing_venv_python" "./install.sh --terminal" "./scripts/run_mypy.sh"
+  exit 1
+fi
+
+if ! "$PYTHON_BIN" -c "import importlib.util,sys;sys.exit(0 if importlib.util.find_spec('mypy') else 1)" >/dev/null 2>&1; then
+  emit_remediation "missing_dependency" "./env-refresh.sh --deps-only" "./scripts/run_mypy.sh"
+  exit 1
+fi
+
 mypy_output="$(mktemp)"
 cleanup() {
   rm -f "$mypy_output"
