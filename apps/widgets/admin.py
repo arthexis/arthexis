@@ -28,6 +28,7 @@ class WidgetAdmin(EntityModelAdmin):
         "priority",
     )
     list_filter = ("zone", "is_enabled")
+    list_select_related = ("zone", "required_feature")
     search_fields = ("name", "slug", "renderer_path")
     ordering = ("priority", "name")
 
