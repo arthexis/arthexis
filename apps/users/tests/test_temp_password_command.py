@@ -119,6 +119,15 @@ class PasswordCommandTests(TestCase):
         with self.assertRaisesMessage(CommandError, "identifier is required when using --group."):
             call_command("password", group="operators")
 
+    def test_access_point_user_requires_identifier(self):
+        """Access-point mode should reject invocations without an identifier."""
+
+        with self.assertRaisesMessage(
+            CommandError,
+            "identifier is required when using --access-point-user.",
+        ):
+            call_command("password", access_point_user=True)
+
     def test_assigns_group_with_group_option(self):
         """A user should be assignable to existing groups from the password command."""
 
@@ -252,6 +261,28 @@ class PasswordCommandTests(TestCase):
         user.refresh_from_db()
         assert not user.groups.filter(name=legacy_group.name).exists()
         assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
+
+    def test_access_point_user_mode_preserves_groups_when_requested_group_is_unknown(self):
+        """Failed group reassignment should not clear existing memberships."""
+
+        legacy_group = Group.objects.create(name="Legacy Admin")
+        user = get_user_model().objects.create_user(
+            username="ap-groups-unknown",
+            email="ap-groups-unknown@example.com",
+            password="InitialPassword123",
+        )
+        user.groups.add(legacy_group)
+
+        with self.assertRaisesMessage(CommandError, "Unknown groups: missing-ap"):
+            call_command(
+                "password",
+                user.username,
+                access_point_user=True,
+                group="missing-ap",
+            )
+
+        user.refresh_from_db()
+        assert user.groups.filter(name=legacy_group.name).exists()
 
     def test_configures_access_point_user_mode_clears_temporary_credentials(self):
         """Access-point mode should clear temporary-password state for hardened login."""

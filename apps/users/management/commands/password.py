@@ -152,6 +152,8 @@ class Command(BaseCommand):
                 raise CommandError("identifier is required when using --delete.")
             if groups:
                 raise CommandError("identifier is required when using --group.")
+            if access_point_user:
+                raise CommandError("identifier is required when using --access-point-user.")
             generated_password = raw_password or temp_passwords.generate_password()
             self.stdout.write(f"Generated password: {generated_password}")
             self.stdout.write(self.style.SUCCESS("Password generated."))
@@ -339,9 +341,10 @@ class Command(BaseCommand):
             user.save(update_fields=fields)
 
     def _harden_access_point_membership(self, user, groups: list[str]) -> None:
+        resolved_groups = self._resolve_groups(groups) if groups else []
         user.groups.clear()
-        if groups:
-            self._assign_groups(user, groups)
+        if resolved_groups:
+            user.groups.add(*resolved_groups)
 
     def _delete_password(self, user) -> None:
         user.set_unusable_password()
@@ -358,6 +361,11 @@ class Command(BaseCommand):
     def _assign_groups(self, user, groups: list[str]) -> None:
         """Assign a user to one or more existing auth groups."""
 
+        user.groups.add(*self._resolve_groups(groups))
+
+    def _resolve_groups(self, groups: list[str]) -> list[Group]:
+        """Resolve requested group names and raise when any are unknown."""
+
         existing_groups = {
             group.name: group for group in Group.objects.filter(name__in=groups).order_by("name")
         }
@@ -365,8 +373,7 @@ class Command(BaseCommand):
         if missing_groups:
             missing_names = ", ".join(missing_groups)
             raise CommandError(f"Unknown groups: {missing_names}")
-
-        user.groups.add(*[existing_groups[name] for name in groups])
+        return [existing_groups[name] for name in groups]
 
     def _set_force_password_change(self, user, force_change: bool) -> None:
         if user.force_password_change == force_change:
