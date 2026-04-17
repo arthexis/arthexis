@@ -172,6 +172,8 @@ Do not open, update, or push a pull request from `main`, `master`, or any other 
 
 If changes already exist on a shared branch, create a fresh task branch from the current `HEAD` before continuing work or opening the pull request.
 
+After a pull request is merged, switch back to `main` (or the appropriate shared branch) and sync it with upstream before starting the next task.
+
 ---
 
 ## Branch Naming
