@@ -90,6 +90,10 @@ jobs:
         run: |
           ./install.sh --no-start
 
+      - name: Refresh environment dependencies
+        run: |
+          ./env-refresh.sh --deps-only
+
       - name: Install CI dependencies
         run: |
           ./scripts/preflight-env.sh

@@ -81,6 +81,9 @@ jobs:
       - name: Install suite from repository
         run: |
           ./install.sh ${{ matrix.install_args }} --no-start
+      - name: Refresh environment dependencies
+        run: |
+          ./env-refresh.sh --deps-only
       - name: Install CI dependencies
         run: |
           ./scripts/preflight-env.sh

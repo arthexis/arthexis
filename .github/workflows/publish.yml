@@ -52,6 +52,9 @@ jobs:
       - name: Install suite from repository
         run: |
           ./install.sh --no-start
+      - name: Refresh environment dependencies
+        run: |
+          ./env-refresh.sh --deps-only
       - name: Validate migrations
         run: |
           ./scripts/preflight-env.sh
