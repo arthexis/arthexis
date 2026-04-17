@@ -124,20 +124,22 @@
         padding-top: 0;
         padding-bottom: 0;
         margin-top: 0;
+        text-decoration: none;
         border: 1px solid
             var(
                 --admin-home-action-button-border,
                 color-mix(in srgb, var(--link-fg, #2563eb) 78%, black 22%)
             );
-        background: var(
+        background-color: var(
             --admin-home-action-button-bg,
             color-mix(in srgb, var(--link-fg, #2563eb) 92%, white 8%)
         );
-        color: var(--admin-home-action-button-fg, #ffffff);
+        color: var(--admin-home-action-button-fg, var(--body-bg, #ffffff));
         box-shadow: var(
             --admin-home-action-button-shadow,
             0 1px 2px color-mix(in srgb, var(--link-fg, #2563eb) 32%, transparent)
         );
+        transform: translateY(0);
         transition:
             background-color 140ms ease,
             border-color 140ms ease,
@@ -150,11 +152,10 @@
             --admin-home-action-button-hover-border,
             color-mix(in srgb, var(--link-fg, #2563eb) 68%, black 32%)
         );
-        background: var(
+        background-color: var(
             --admin-home-action-button-hover-bg,
             color-mix(in srgb, var(--link-fg, #2563eb) 84%, black 16%)
         );
-        color: var(--admin-home-action-button-fg, #ffffff);
         box-shadow: var(
             --admin-home-action-button-hover-shadow,
             0 4px 10px color-mix(in srgb, var(--link-fg, #2563eb) 34%, transparent)
@@ -196,6 +197,9 @@
     }
     [data-theme="dark"] .admin-home-net-message {
         --net-message-text-color: #ffffff;
+    }
+    [data-theme="dark"] .admin-home-actions .button {
+        --admin-home-action-button-fg: var(--body-bg, #0f172a);
     }
     [data-theme="dark"] .admin-dashboard-warning {
         border-color: rgba(240, 129, 15, 0.5);
