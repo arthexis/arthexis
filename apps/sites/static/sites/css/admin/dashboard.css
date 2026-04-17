@@ -124,6 +124,43 @@
         padding-top: 0;
         padding-bottom: 0;
         margin-top: 0;
+        border: 1px solid
+            var(
+                --admin-home-action-button-border,
+                color-mix(in srgb, var(--link-fg, #2563eb) 78%, black 22%)
+            );
+        background: var(
+            --admin-home-action-button-bg,
+            color-mix(in srgb, var(--link-fg, #2563eb) 92%, white 8%)
+        );
+        color: var(--admin-home-action-button-fg, #ffffff);
+        box-shadow: var(
+            --admin-home-action-button-shadow,
+            0 1px 2px color-mix(in srgb, var(--link-fg, #2563eb) 32%, transparent)
+        );
+        transition:
+            background-color 140ms ease,
+            border-color 140ms ease,
+            box-shadow 140ms ease,
+            transform 140ms ease;
+    }
+    .admin-home-actions .button:hover,
+    .admin-home-actions .button:focus-visible {
+        border-color: var(
+            --admin-home-action-button-hover-border,
+            color-mix(in srgb, var(--link-fg, #2563eb) 68%, black 32%)
+        );
+        background: var(
+            --admin-home-action-button-hover-bg,
+            color-mix(in srgb, var(--link-fg, #2563eb) 84%, black 16%)
+        );
+        color: var(--admin-home-action-button-fg, #ffffff);
+        box-shadow: var(
+            --admin-home-action-button-hover-shadow,
+            0 4px 10px color-mix(in srgb, var(--link-fg, #2563eb) 34%, transparent)
+        );
+        text-decoration: none;
+        transform: translateY(-1px);
     }
     .admin-home-actions__form {
         margin: 0;
