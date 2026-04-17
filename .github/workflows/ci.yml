@@ -109,6 +109,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
+          ./scripts/preflight-env.sh
           python scripts/check_migration_conflicts.py
           python manage.py migrations check
           python manage.py migrate --noinput --database default
@@ -129,6 +130,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
+          ./scripts/preflight-env.sh --pytest
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
           python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee pytest.log
 

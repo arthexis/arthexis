@@ -55,6 +55,7 @@ jobs:
       - name: Validate migrations
         run: |
           source .venv/bin/activate
+          ./scripts/preflight-env.sh
           python scripts/check_migration_conflicts.py
           python manage.py migrations check
           python manage.py migrate --noinput --database default
@@ -66,6 +67,7 @@ jobs:
         run: |
           set -o pipefail
           source .venv/bin/activate
+          ./scripts/preflight-env.sh --pytest
           python -m pytest --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
       - name: Upload pytest log
         if: always()
