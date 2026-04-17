@@ -37,7 +37,6 @@ nav:
       - Suite Services Report: suite-services-report.md
   - Hardware & Field Guides:
       - LCD Screen Hardware: lcd-screen-hardware.md
-      - DS3231 RTC Wiring: ds3231-rtc-wiring.md
       - USB Camera Power-Off: usb-camera-power-off.md
   - Engineering Reference:
       - Energy Transactions Ledger: energy-transactions-ledger.md
