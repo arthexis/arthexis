@@ -17,6 +17,7 @@ In Arthexis terminology, the **suite** is the collection of applications, while 
 - [Cookbook QA Checklist](../apps/docs/cookbooks/cookbook-qa-checklist.md)
 - [Good Command](operations/good-command.md)
 - [Install & Lifecycle Scripts Manual](development/install-lifecycle-scripts-manual.md)
+- [Sigil Script Command](development/sigil-script-command.md)
 - [LCD Screen Hardware](lcd-screen-hardware.md)
 - [App Structure Policy](development/app-structure-policy.md)
 - [Endpoint Documentation Inventory](integrations/endpoint-inventory.md)
