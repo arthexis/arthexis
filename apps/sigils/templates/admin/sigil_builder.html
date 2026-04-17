@@ -33,6 +33,13 @@
   <label for="resolved_text">{% trans "Result" %}</label>
   <textarea id="resolved_text" rows="10" cols="80" style="width:100%;" readonly>{{ resolved_text }}</textarea>
   {% endif %}
+  <h2>{% trans "Canonical Pipeline Actions" %}</h2>
+  <p>{% trans "Use uppercase action heads with the canonical ':' + '|' sigil form." %}</p>
+  <ul>
+    {% for action in supported_pipeline_actions %}
+      <li><code>{{ action }}</code></li>
+    {% endfor %}
+  </ul>
   <h2>{% trans "Built-in Sigil Roots" %}</h2>
   <ul>
     {% for root in builtin_roots %}
@@ -42,7 +49,7 @@
   <input type="text" id="sigil-filter" placeholder="{% trans 'Filter' %}" />
   <table id="sigil-table">
     <thead>
-      <tr><th>{% trans "Prefixes" %}</th><th>{% trans "Model" %}</th><th>{% trans "Fields" %}</th></tr>
+      <tr><th>{% trans "Prefixes" %}</th><th>{% trans "Model" %}</th><th>{% trans "Fields" %}</th><th>{% trans "Example" %}</th></tr>
     </thead>
     <tbody>
     {% for root in sigil_roots %}
@@ -52,9 +59,10 @@
         </td>
         <td>{{ root.model }}</td>
         <td>{% for field in root.fields %}{{ field }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+        <td><code>{{ root.example }}</code></td>
       </tr>
     {% empty %}
-      <tr><td colspan="3">{% trans "No Sigil Roots." %}</td></tr>
+      <tr><td colspan="4">{% trans "No Sigil Roots." %}</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -62,7 +70,7 @@
   <input type="text" id="auto-filter" placeholder="{% trans 'Filter' %}" />
   <table id="auto-table">
     <thead>
-      <tr><th>{% trans "Model" %}</th><th>{% trans "Root" %}</th><th>{% trans "Field" %}</th></tr>
+      <tr><th>{% trans "Model" %}</th><th>{% trans "Root" %}</th><th>{% trans "Field" %}</th><th>{% trans "Example" %}</th></tr>
     </thead>
     <tbody>
     {% for item in auto_fields %}
@@ -70,10 +78,74 @@
         <td>{{ item.model }}</td>
         <td>{% for root in item.roots %}[{{ root }}]{% if not forloop.last %}, {% endif %}{% endfor %}</td>
         <td>{{ item.field }}</td>
+        <td>{% if item.example %}<code>{{ item.example }}</code>{% endif %}</td>
       </tr>
     {% empty %}
-      <tr><td colspan="3">{% trans "No auto-resolvable fields." %}</td></tr>
+      <tr><td colspan="4">{% trans "No auto-resolvable fields." %}</td></tr>
     {% endfor %}
+    </tbody>
+  </table>
+  <h2 style="margin-top:1em;">{% trans "Policy Reference by Context" %}</h2>
+  <table>
+    <thead>
+      <tr><th>{% trans "Context" %}</th><th>{% trans "Allowed Roots" %}</th><th>{% trans "Allowed Actions" %}</th></tr>
+    </thead>
+    <tbody>
+      {% for row in policy_reference %}
+      <tr>
+        <td><strong>{{ row.context|upper }}</strong></td>
+        <td>{{ row.roots }}</td>
+        <td>{{ row.actions }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <h2 style="margin-top:1em;">{% trans "Expression Discoverability" %}</h2>
+  <label for="example-root-filter">{% trans "Root" %}</label>
+  <select id="example-root-filter">
+    <option value="">{% trans "All roots" %}</option>
+    {% for root in example_roots %}
+      <option value="{{ root }}">{{ root }}</option>
+    {% endfor %}
+  </select>
+  <label for="example-action-filter">{% trans "Action" %}</label>
+  <select id="example-action-filter">
+    <option value="">{% trans "All actions" %}</option>
+    {% for action in example_actions %}
+      <option value="{{ action }}">{{ action }}</option>
+    {% endfor %}
+  </select>
+  <label for="example-context-filter">{% trans "Context" %}</label>
+  <select id="example-context-filter">
+    <option value="">{% trans "All contexts" %}</option>
+    {% for context in example_contexts %}
+      <option value="{{ context }}">{{ context|upper }}</option>
+    {% endfor %}
+  </select>
+  <table id="example-table">
+    <thead>
+      <tr>
+        <th>{% trans "Context" %}</th>
+        <th>{% trans "Root" %}</th>
+        <th>{% trans "Action" %}</th>
+        <th>{% trans "Expression" %}</th>
+        <th>{% trans "Legacy Equivalent" %}</th>
+        <th>{% trans "Description" %}</th>
+        <th>{% trans "Copy" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in expression_examples %}
+      <tr data-root="{{ item.root }}" data-action="{{ item.action }}" data-context="{{ item.context }}">
+        <td>{{ item.context|upper }}</td>
+        <td>{{ item.root }}</td>
+        <td>{{ item.action }}</td>
+        <td><code class="copy-target">{{ item.expression }}</code></td>
+        <td><code>{{ item.legacy_expression }}</code></td>
+        <td>{{ item.description }}</td>
+        <td><button type="button" class="copy-example-button">{% trans "Copy" %}</button></td>
+      </tr>
+      {% endfor %}
     </tbody>
   </table>
 </div>
@@ -111,6 +183,49 @@
     setupFilter('sigil-filter', 'sigil-table');
     setupFilter('auto-filter', 'auto-table');
     setupAutoGrow(document.getElementById('sigils_text'), 20);
+
+    const rootFilter = document.getElementById('example-root-filter');
+    const actionFilter = document.getElementById('example-action-filter');
+    const contextFilter = document.getElementById('example-context-filter');
+    const exampleTable = document.getElementById('example-table');
+    const applyExampleFilters = () => {
+      if (!exampleTable) return;
+      const selectedRoot = (rootFilter && rootFilter.value) || '';
+      const selectedAction = (actionFilter && actionFilter.value) || '';
+      const selectedContext = (contextFilter && contextFilter.value) || '';
+      for (const row of exampleTable.tBodies[0].rows) {
+        const matchesRoot = !selectedRoot || row.dataset.root === selectedRoot;
+        const matchesAction = !selectedAction || row.dataset.action === selectedAction;
+        const matchesContext = !selectedContext || row.dataset.context === selectedContext;
+        row.style.display = matchesRoot && matchesAction && matchesContext ? '' : 'none';
+      }
+    };
+    for (const filter of [rootFilter, actionFilter, contextFilter]) {
+      if (filter) {
+        filter.addEventListener('change', applyExampleFilters);
+      }
+    }
+    applyExampleFilters();
+
+    for (const button of document.querySelectorAll('.copy-example-button')) {
+      button.addEventListener('click', function () {
+        const row = this.closest('tr');
+        if (!row) return;
+        const target = row.querySelector('.copy-target');
+        const expression = target ? target.textContent.trim() : '';
+        if (!expression) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(expression);
+        } else {
+          const helper = document.createElement('textarea');
+          helper.value = expression;
+          document.body.appendChild(helper);
+          helper.select();
+          document.execCommand('copy');
+          document.body.removeChild(helper);
+        }
+      });
+    }
   });
 </script>
 {% endblock %}

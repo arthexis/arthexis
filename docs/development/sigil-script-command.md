@@ -71,6 +71,21 @@ Use cached execution for repeated automation runs:
   --context user
 ```
 
+## Contributor onboarding for roots and actions
+
+When adding new sigil roots or pipeline actions:
+
+1. Register/update built-in root policy in `apps/sigils/builtin_policy.py` and ensure model-backed roots are present through fixtures/admin.
+2. Implement parser/resolver behavior in `apps/sigils/sigil_resolver.py` using uppercase canonical action heads.
+3. Add or update tests in `apps/sigils/tests/` for:
+   - parsing behavior,
+   - policy context gating (`admin`, `user`, `request`),
+   - runtime resolution semantics.
+4. Keep documentation synchronized:
+   - `docs/development/expression-cookbook.md` for expression patterns, migration pairs, and context policy table.
+   - this command guide for runnable CLI examples.
+5. Refresh admin discoverability metadata in `apps/sigils/sigil_builder.py` and `apps/sigils/templates/admin/sigil_builder.html` so new roots/actions are filterable and copyable from `/admin/sigil-builder/`.
+
 ## Error behavior
 
 The command exits non-zero for:

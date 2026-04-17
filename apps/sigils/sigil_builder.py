@@ -10,7 +10,19 @@ from .builtin_policy import BUILTIN_SIGIL_POLICIES
 from .fields import SigilAutoFieldMixin
 from .loader import load_fixture_sigil_roots
 from .models import SigilRoot
+from .sigil_resolver import get_user_safe_sigil_actions, get_user_safe_sigil_roots
 from .sigil_resolver import resolve_sigils as resolve_sigils_in_text
+
+SUPPORTED_PIPELINE_ACTIONS = (
+    "COUNT",
+    "FIELD",
+    "FILTER",
+    "GET",
+    "MAX",
+    "MIN",
+    "SUM",
+    "TOTAL",
+)
 
 
 class SigilBuilderResponse(TemplateResponse):
@@ -93,6 +105,9 @@ def _sigil_builder_view(request):
     roots = sorted(grouped.values(), key=lambda r: r["model"])
     for entry in roots:
         entry["prefixes"].sort()
+        canonical_root = entry["prefixes"][0] if entry["prefixes"] else "ROOT"
+        canonical_field = entry["fields"][0] if entry["fields"] else "FIELD"
+        entry["example"] = f"[{canonical_root}:|FIELD:{canonical_field}]"
 
     auto_fields = []
     seen = set()
@@ -109,8 +124,76 @@ def _sigil_builder_view(request):
                         "model": model_name,
                         "roots": prefixes,
                         "field": field.name.upper(),
+                        "example": (
+                            f"[{prefixes[0]}:|FIELD:{field.name.upper()}]"
+                            if prefixes
+                            else ""
+                        ),
                     }
                 )
+
+    expression_examples = [
+        {
+            "context": "admin",
+            "root": "CP",
+            "action": "FIELD",
+            "expression": "[CP:hostname:SIM-CP-1|FIELD:PUBLIC_ENDPOINT]",
+            "legacy_expression": "[CP:hostname=SIM-CP-1.public_endpoint]",
+            "description": _("OCPP charger lookup by hostname."),
+        },
+        {
+            "context": "admin",
+            "root": "SESS",
+            "action": "COUNT",
+            "expression": "[SESS:status:ACTIVE|COUNT:ID]",
+            "legacy_expression": "[SESS:status=ACTIVE.id=count]",
+            "description": _("Count active charging sessions."),
+        },
+        {
+            "context": "user-safe",
+            "root": "CP",
+            "action": "FILTER",
+            "expression": "[CP:owner__name:__OWNER_NAME__|FILTER:STATUS:AVAILABLE]",
+            "legacy_expression": "[CP:owner__name=__OWNER_NAME__.status:AVAILABLE]",
+            "description": _("Ownership-aware charger filtering placeholder."),
+        },
+        {
+            "context": "request",
+            "root": "REQ",
+            "action": "GET",
+            "expression": "[REQ|GET:ID_TAG]",
+            "legacy_expression": "[REQ.get=id_tag]",
+            "description": _("Request metadata lookup from query params."),
+        },
+        {
+            "context": "admin",
+            "root": "SYS",
+            "action": "GET",
+            "expression": "[SYS|GET:VERSION]",
+            "legacy_expression": "[SYS.VERSION]",
+            "description": _("System metadata lookup for release/version details."),
+        },
+    ]
+    example_roots = sorted({entry["root"] for entry in expression_examples})
+    example_actions = sorted({entry["action"] for entry in expression_examples})
+    example_contexts = sorted({entry["context"] for entry in expression_examples})
+    policy_reference = [
+        {
+            "context": "admin",
+            "roots": _("All registered SigilRoot prefixes (canonical uppercase)."),
+            "actions": _("Any uppercase action token; recommended actions listed above."),
+        },
+        {
+            "context": "user-safe",
+            "roots": ", ".join(sorted(get_user_safe_sigil_roots())) or _("None"),
+            "actions": ", ".join(sorted(get_user_safe_sigil_actions())) or _("None"),
+        },
+        {
+            "context": "request",
+            "roots": "REQ",
+            "actions": "GET",
+        },
+    ]
 
     errors: list[str] = []
     sigils_text = ""
@@ -152,6 +235,12 @@ def _sigil_builder_view(request):
             "sigil_roots": roots,
             "builtin_roots": builtin_roots,
             "auto_fields": auto_fields,
+            "expression_examples": expression_examples,
+            "example_roots": example_roots,
+            "example_actions": example_actions,
+            "example_contexts": example_contexts,
+            "policy_reference": policy_reference,
+            "supported_pipeline_actions": SUPPORTED_PIPELINE_ACTIONS,
             "sigils_text": sigils_text,
             "resolved_text": resolved_text,
             "errors": errors,
