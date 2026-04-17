@@ -1,0 +1,21 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <div class="admin-ui-panel admin-ui-stack">
+    <h1>{{ title }}</h1>
+    <p><strong>{{ impact_note }}</strong></p>
+    <p>
+      {% translate "Target" %}:
+      <code>{{ target_label }}</code>
+    </p>
+    <form method="post" class="admin-ui-stack">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="admin-ui-actions">
+        <button type="submit" class="admin-ui-button admin-ui-button--primary">{{ action_name }}</button>
+        <a href="{{ change_url }}" class="admin-ui-button">{% translate "Cancel" %}</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

@@ -6,6 +6,11 @@ from django import forms
 from django.utils.translation import gettext_lazy as _
 
 from apps.repos.models.github_apps import GitHubApp
+from apps.repos.release_management import (
+    MERGE_METHOD_MERGE,
+    MERGE_METHOD_REBASE,
+    MERGE_METHOD_SQUASH,
+)
 
 
 class PackageRepositoryForm(forms.Form):
@@ -105,3 +110,28 @@ class GitHubAppAdminForm(forms.ModelForm):
                 cleaned.get("webhook_slug")
             )
         return cleaned
+
+
+class GitHubCommentForm(forms.Form):
+    body = forms.CharField(
+        label=_("Comment"),
+        widget=forms.Textarea(attrs={"rows": 8}),
+        help_text=_("Markdown comment that will be posted to GitHub."),
+    )
+
+
+class GitHubConfirmForm(forms.Form):
+    """Empty confirmation form for GitHub operations without additional fields."""
+
+
+class GitHubPullRequestMergeForm(forms.Form):
+    merge_method = forms.ChoiceField(
+        label=_("Merge method"),
+        choices=(
+            (MERGE_METHOD_MERGE, _("Merge commit")),
+            (MERGE_METHOD_SQUASH, _("Squash")),
+            (MERGE_METHOD_REBASE, _("Rebase")),
+        ),
+        initial=MERGE_METHOD_MERGE,
+        help_text=_("Choose how GitHub should merge the pull request."),
+    )

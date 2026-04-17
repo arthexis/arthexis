@@ -4,10 +4,11 @@ import contextlib
 import hashlib
 import logging
 import os
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, Protocol, TypeAlias
+from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
 
 import requests
 from django.conf import settings
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 API_ROOT = "https://api.github.com"
+GRAPHQL_ROOT = f"{API_ROOT}/graphql"
 REQUEST_TIMEOUT = 10
 ISSUE_LOCK_TTL = timedelta(hours=1)
 
@@ -353,8 +355,8 @@ def build_issue_payload(
 def get_github_issue_token() -> str:
     """Return the configured GitHub token for issue reporting."""
 
-    from apps.release.models import PackageRelease
     from apps.release import DEFAULT_PACKAGE
+    from apps.release.models import PackageRelease
 
     latest_release = PackageRelease.latest()
     if latest_release:
@@ -422,6 +424,93 @@ def create_issue(
     return response
 
 
+def create_issue_comment(
+    owner: str,
+    repository: str,
+    *,
+    issue_number: int,
+    token: str,
+    body: str,
+    timeout: int = REQUEST_TIMEOUT,
+) -> requests.Response:
+    """Post a comment on an issue and return the API response."""
+
+    cleaned_body = body.strip()
+    if not cleaned_body:
+        raise ValueError("Issue comment body must not be empty")
+
+    headers = build_headers(token, user_agent="arthexis-runtime-reporter")
+    url = f"{API_ROOT}/repos/{owner}/{repository}/issues/{issue_number}/comments"
+    response = None
+    try:
+        response = requests.post(
+            url,
+            json={"body": cleaned_body},
+            headers=headers,
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        raise GitHubRepositoryError(str(exc)) from exc
+
+    if not (200 <= response.status_code < 300):
+        try:
+            message = _extract_error_message(response)
+        finally:
+            with contextlib.suppress(Exception):
+                response.close()
+        raise GitHubRepositoryError(message)
+
+    logger.info(
+        "GitHub issue comment created for %s/%s#%s with status %s",
+        owner,
+        repository,
+        issue_number,
+        response.status_code,
+    )
+    return response
+
+
+def close_issue(
+    owner: str,
+    repository: str,
+    *,
+    issue_number: int,
+    token: str,
+    timeout: int = REQUEST_TIMEOUT,
+) -> requests.Response:
+    """Close an issue and return the API response."""
+
+    headers = build_headers(token, user_agent="arthexis-runtime-reporter")
+    url = f"{API_ROOT}/repos/{owner}/{repository}/issues/{issue_number}"
+    response = None
+    try:
+        response = requests.patch(
+            url,
+            json={"state": "closed"},
+            headers=headers,
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        raise GitHubRepositoryError(str(exc)) from exc
+
+    if not (200 <= response.status_code < 300):
+        try:
+            message = _extract_error_message(response)
+        finally:
+            with contextlib.suppress(Exception):
+                response.close()
+        raise GitHubRepositoryError(message)
+
+    logger.info(
+        "GitHub issue closed for %s/%s#%s with status %s",
+        owner,
+        repository,
+        issue_number,
+        response.status_code,
+    )
+    return response
+
+
 def _pull_request_is_open(
     owner: str,
     repository: str,
@@ -480,13 +569,146 @@ def create_pull_request_comment(
         raise GitHubRepositoryError(
             f"Cannot comment on PR #{pull_number} because it is not open"
         )
+    return create_issue_comment(
+        owner,
+        repository,
+        issue_number=pull_number,
+        token=token,
+        body=cleaned_body,
+        timeout=timeout,
+    )
 
-    url = f"{API_ROOT}/repos/{owner}/{repository}/issues/{pull_number}/comments"
+
+def _fetch_pull_request_payload(
+    owner: str,
+    repository: str,
+    *,
+    pull_number: int,
+    headers: Mapping[str, str],
+    timeout: int,
+) -> JSONMapping:
+    """Return the pull request payload for the provided PR number."""
+
+    url = f"{API_ROOT}/repos/{owner}/{repository}/pulls/{pull_number}"
+    response = None
+    try:
+        response = requests.get(url, headers=headers, timeout=timeout)
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        raise GitHubRepositoryError(str(exc)) from exc
+
+    try:
+        if not (200 <= response.status_code < 300):
+            raise GitHubRepositoryError(_extract_error_message(response))
+
+        payload = _safe_json(response)
+        if not isinstance(payload, dict):
+            raise GitHubRepositoryError(
+                f"Unexpected pull request payload for PR #{pull_number}"
+            )
+        return payload
+    finally:
+        close = getattr(response, "close", None)
+        if callable(close):
+            with contextlib.suppress(Exception):
+                close()
+
+
+def mark_pull_request_ready(
+    owner: str,
+    repository: str,
+    *,
+    pull_number: int,
+    token: str,
+    timeout: int = REQUEST_TIMEOUT,
+) -> requests.Response:
+    """Move a draft pull request to ready-for-review."""
+
+    headers = {
+        **build_headers(token, user_agent="arthexis-runtime-reporter"),
+        "Content-Type": "application/json",
+    }
+    payload = _fetch_pull_request_payload(
+        owner,
+        repository,
+        pull_number=pull_number,
+        headers=headers,
+        timeout=timeout,
+    )
+    node_id = payload.get("node_id")
+    if not isinstance(node_id, str) or not node_id.strip():
+        raise GitHubRepositoryError(
+            f"Unable to resolve pull request node id for PR #{pull_number}"
+        )
+
     response = None
     try:
         response = requests.post(
+            GRAPHQL_ROOT,
+            json={
+                "query": (
+                    "mutation($pullRequestId: ID!) {"
+                    " markPullRequestReadyForReview(input: {pullRequestId: $pullRequestId}) {"
+                    "  pullRequest { number isDraft state url }"
+                    " }"
+                    "}"
+                ),
+                "variables": {"pullRequestId": node_id},
+            },
+            headers=headers,
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        raise GitHubRepositoryError(str(exc)) from exc
+
+    if not (200 <= response.status_code < 300):
+        try:
+            message = _extract_error_message(response)
+        finally:
+            with contextlib.suppress(Exception):
+                response.close()
+        raise GitHubRepositoryError(message)
+
+    data = _safe_json(response)
+    if isinstance(data, Mapping):
+        errors = data.get("errors")
+        if isinstance(errors, list) and errors:
+            messages = []
+            for entry in errors:
+                if isinstance(entry, Mapping):
+                    message = entry.get("message")
+                    if message:
+                        messages.append(str(message))
+            raise GitHubRepositoryError(
+                "; ".join(messages) or "Failed to mark pull request ready for review"
+            )
+
+    logger.info(
+        "GitHub pull request %s/%s#%s marked ready for review",
+        owner,
+        repository,
+        pull_number,
+    )
+    return response
+
+
+def merge_pull_request(
+    owner: str,
+    repository: str,
+    *,
+    pull_number: int,
+    token: str,
+    merge_method: str,
+    timeout: int = REQUEST_TIMEOUT,
+) -> requests.Response:
+    """Merge a pull request using the supplied merge method."""
+
+    headers = build_headers(token, user_agent="arthexis-runtime-reporter")
+    url = f"{API_ROOT}/repos/{owner}/{repository}/pulls/{pull_number}/merge"
+    response = None
+    try:
+        response = requests.put(
             url,
-            json={"body": cleaned_body},
+            json={"merge_method": merge_method},
             headers=headers,
             timeout=timeout,
         )
@@ -502,11 +724,11 @@ def create_pull_request_comment(
         raise GitHubRepositoryError(message)
 
     logger.info(
-        "GitHub pull request comment created for %s/%s#%s with status %s",
+        "GitHub pull request %s/%s#%s merged with method %s",
         owner,
         repository,
         pull_number,
-        response.status_code,
+        merge_method,
     )
     return response
 
@@ -525,7 +747,7 @@ class GitHubIssue:
     REQUEST_TIMEOUT = REQUEST_TIMEOUT
 
     @classmethod
-    def from_active_repository(cls) -> "GitHubIssue":
+    def from_active_repository(cls) -> GitHubIssue:
         from apps.repos.models.repositories import GitHubRepository
 
         repository = GitHubRepository.resolve_active_repository()

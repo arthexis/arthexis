@@ -11,6 +11,7 @@ from apps.release import DEFAULT_PACKAGE
 from apps.repos.release_management import (
     EXECUTION_MODE_BINARY,
     EXECUTION_MODE_SUITE,
+    MERGE_METHOD_CHOICES,
     ReleaseManagementClient,
     ReleaseManagementError,
     RepositoryRef,
@@ -36,20 +37,17 @@ class Command(BaseCommand):
         parser.epilog = dedent(
             """
             Examples:
-              repo issues list octo/demo
-              repo prs list octo/demo
-              repo releases create octo/demo --tag v1.2.3 --title "Release v1.2.3"
+              repo issues list --repo octo/demo
+              repo issues comment 123 --body "Please attach logs." --repo octo/demo
+              repo issues close 123 --repo octo/demo
+              repo prs list --repo octo/demo
+              repo prs comment 456 --body "Please rebase." --repo octo/demo
+              repo prs ready 456 --repo octo/demo
+              repo prs merge 456 --method squash --repo octo/demo
+              repo releases create --repo octo/demo --tag v1.2.3 --title "Release v1.2.3"
               repo issues list --repo octo/demo
             """
         ).strip()
-        parser.add_argument(
-            "--repo",
-            default="",
-            help=(
-                "Repository slug in owner/name format. Defaults to active package repository "
-                f"or {DEFAULT_PACKAGE.repository_url}."
-            ),
-        )
         parser.add_argument(
             "--mode",
             choices=(EXECUTION_MODE_SUITE, EXECUTION_MODE_BINARY),
@@ -63,6 +61,13 @@ class Command(BaseCommand):
         issues_list = issues_subparsers.add_parser("list", help="List issues")
         issues_list.add_argument("--state", default="open")
         self._add_repository_argument(issues_list)
+        issues_comment = issues_subparsers.add_parser("comment", help="Comment on issue")
+        issues_comment.add_argument("number", type=int)
+        issues_comment.add_argument("--body", required=True)
+        self._add_repository_argument(issues_comment)
+        issues_close = issues_subparsers.add_parser("close", help="Close issue")
+        issues_close.add_argument("number", type=int)
+        self._add_repository_argument(issues_close)
         issues_create = issues_subparsers.add_parser("create", help="Create issue")
         issues_create.add_argument("--title", required=True)
         issues_create.add_argument("--body", required=True)
@@ -73,6 +78,23 @@ class Command(BaseCommand):
         prs_list = prs_subparsers.add_parser("list", help="List pull requests")
         prs_list.add_argument("--state", default="open")
         self._add_repository_argument(prs_list)
+        prs_comment = prs_subparsers.add_parser("comment", help="Comment on pull request")
+        prs_comment.add_argument("number", type=int)
+        prs_comment.add_argument("--body", required=True)
+        self._add_repository_argument(prs_comment)
+        prs_ready = prs_subparsers.add_parser(
+            "ready", help="Move pull request out of draft"
+        )
+        prs_ready.add_argument("number", type=int)
+        self._add_repository_argument(prs_ready)
+        prs_merge = prs_subparsers.add_parser("merge", help="Merge pull request")
+        prs_merge.add_argument("number", type=int)
+        prs_merge.add_argument(
+            "--method",
+            choices=MERGE_METHOD_CHOICES,
+            default=MERGE_METHOD_CHOICES[0],
+        )
+        self._add_repository_argument(prs_merge)
 
         releases_parser = subparsers.add_parser("releases", help="Release operations")
         releases_subparsers = releases_parser.add_subparsers(dest="action", required=True)
@@ -122,12 +144,78 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"Issue created: {url}"))
                 return
 
+            if resource == "issues" and action == "comment":
+                number = int(options["number"])
+                client.comment_issue(
+                    repository,
+                    number=number,
+                    body=str(options["body"]),
+                )
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Comment added to issue #{number} in {repository.slug}"
+                    )
+                )
+                return
+
+            if resource == "issues" and action == "close":
+                number = int(options["number"])
+                client.close_issue(repository, number=number)
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Issue #{number} closed in {repository.slug}"
+                    )
+                )
+                return
+
             if resource == "prs" and action == "list":
                 rows = client.list_pull_requests(repository, state=str(options.get("state") or "open"))
                 for item in rows:
-                    self.stdout.write(f"#{item.get('number')} [{item.get('state')}] {item.get('title')}")
+                    draft_label = " draft" if item.get("isDraft") else ""
+                    self.stdout.write(
+                        f"#{item.get('number')} [{item.get('state')}{draft_label}] {item.get('title')}"
+                    )
                 self.stdout.write(
                     self.style.SUCCESS(f"Listed {len(rows)} pull requests from {repository.slug}")
+                )
+                return
+
+            if resource == "prs" and action == "comment":
+                number = int(options["number"])
+                client.comment_pull_request(
+                    repository,
+                    number=number,
+                    body=str(options["body"]),
+                )
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Comment added to pull request #{number} in {repository.slug}"
+                    )
+                )
+                return
+
+            if resource == "prs" and action == "ready":
+                number = int(options["number"])
+                client.mark_pull_request_ready(repository, number=number)
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Pull request #{number} is ready for review in {repository.slug}"
+                    )
+                )
+                return
+
+            if resource == "prs" and action == "merge":
+                number = int(options["number"])
+                merge_method = str(options["method"])
+                client.merge_pull_request(
+                    repository,
+                    number=number,
+                    merge_method=merge_method,
+                )
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Pull request #{number} merged with {merge_method} in {repository.slug}"
+                    )
                 )
                 return
 
@@ -166,6 +254,14 @@ class Command(BaseCommand):
             None.
         """
 
+        parser.add_argument(
+            "--repo",
+            default="",
+            help=(
+                "Repository slug in owner/name format. Defaults to active package repository "
+                f"or {DEFAULT_PACKAGE.repository_url}."
+            ),
+        )
         parser.add_argument(
             "repository",
             nargs="?",

@@ -2,31 +2,85 @@ import ipaddress
 from urllib.parse import urlparse
 
 from django.contrib import admin, messages
-from django.http import HttpResponseRedirect
-from django.urls import path
-from django.urls import reverse
+from django.core.exceptions import PermissionDenied
+from django.http import Http404, HttpResponseRedirect
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
+from django.utils import timezone
+from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
 from apps.core.admin import OwnableAdminMixin
-from apps.repos.forms import GitHubAppAdminForm
 from apps.repos.admin_feedback_config import FeedbackIssueConfigurationAdminMixin
+from apps.repos.forms import (
+    GitHubAppAdminForm,
+    GitHubCommentForm,
+    GitHubConfirmForm,
+    GitHubPullRequestMergeForm,
+)
 from apps.repos.models.events import GitHubEvent
 from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
 from apps.repos.models.github_tokens import GitHubToken
 from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
 from apps.repos.models.repositories import GitHubRepository, PackageRepository
+from apps.repos.release_management import (
+    ReleaseManagementClient,
+    ReleaseManagementError,
+    RepositoryRef,
+)
 
 
 class FetchFromGitHubMixin(DjangoObjectActions):
     changelist_actions: list[str] = []
     dashboard_actions: list[str] = []
+    operation_template_name = "admin/repos/github_operation.html"
 
     def _redirect_to_changelist(self):
         opts = self.model._meta
         return HttpResponseRedirect(
             reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
         )
+
+    def _change_url(self, obj):
+        opts = self.model._meta
+        return reverse(f"admin:{opts.app_label}_{opts.model_name}_change", args=[obj.pk])
+
+    def _get_change_object(self, request, object_id):
+        obj = self.get_object(request, object_id)
+        if obj is None:
+            raise Http404(_("Object not found."))
+        if not self.has_change_permission(request, obj):
+            raise PermissionDenied
+        return obj
+
+    def _render_operation_view(
+        self,
+        request,
+        *,
+        obj,
+        form,
+        title,
+        impact_note,
+        submit_label,
+    ):
+        opts = self.model._meta
+        context = {
+            **self.admin_site.each_context(request),
+            "action_name": submit_label,
+            "change_url": self._change_url(obj),
+            "form": form,
+            "impact_note": impact_note,
+            "opts": opts,
+            "original": obj,
+            "target_label": str(obj),
+            "title": title,
+        }
+        return TemplateResponse(request, self.operation_template_name, context)
+
+    @staticmethod
+    def _repository_ref(obj) -> RepositoryRef:
+        return RepositoryRef(owner=obj.repository.owner, name=obj.repository.name)
 
     def get_dashboard_actions(self, request):
         return getattr(self, "dashboard_actions", [])
@@ -38,9 +92,9 @@ class RepositoryIssueAdmin(
 ):
     actions = ["fetch_open_issues"]
     changelist_actions = ["fetch_open_issues"]
-    change_actions = ("configure_action",)
+    change_actions = ("configure_action", "comment_action", "close_action")
     list_display = (
-        "number",
+        "number_link",
         "title",
         "repository",
         "state",
@@ -55,6 +109,16 @@ class RepositoryIssueAdmin(
         "repository__name",
     )
     raw_id_fields = ("repository",)
+
+    @admin.display(description=_("Issue"), ordering="number")
+    def number_link(self, obj):
+        if obj.html_url:
+            return format_html(
+                '<a href="{}" target="_blank" rel="noopener noreferrer">#{}</a>',
+                obj.html_url,
+                obj.number,
+            )
+        return f"#{obj.number}"
 
     def fetch_open_issues(self, request, queryset=None):
         try:
@@ -84,16 +148,129 @@ class RepositoryIssueAdmin(
     fetch_open_issues.short_description = _("Fetch Open")
     fetch_open_issues.requires_queryset = False
 
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<path:object_id>/comment/",
+                self.admin_site.admin_view(self.comment_view),
+                name="repos_repositoryissue_comment",
+            ),
+            path(
+                "<path:object_id>/close/",
+                self.admin_site.admin_view(self.close_view),
+                name="repos_repositoryissue_close",
+            ),
+        ]
+        return custom_urls + urls
+
+    def get_change_actions(self, request, object_id, form_url):
+        actions = list(super().get_change_actions(request, object_id, form_url))
+        obj = self.get_object(request, object_id)
+        if obj is not None and obj.state != "open" and "close_action" in actions:
+            actions.remove("close_action")
+        return actions
+
+    def comment_action(self, request, obj):
+        return HttpResponseRedirect(
+            reverse("admin:repos_repositoryissue_comment", args=[obj.pk])
+        )
+
+    comment_action.label = _("Comment")
+    comment_action.short_description = _("Comment")
+    comment_action.requires_queryset = False
+
+    def close_action(self, request, obj):
+        return HttpResponseRedirect(
+            reverse("admin:repos_repositoryissue_close", args=[obj.pk])
+        )
+
+    close_action.label = _("Close")
+    close_action.short_description = _("Close")
+    close_action.requires_queryset = False
+
+    def comment_view(self, request, object_id):
+        obj = self._get_change_object(request, object_id)
+        form = GitHubCommentForm(request.POST if request.method == "POST" else None)
+        if request.method == "POST" and form.is_valid():
+            try:
+                ReleaseManagementClient().comment_issue(
+                    self._repository_ref(obj),
+                    number=obj.number,
+                    body=form.cleaned_data["body"],
+                )
+            except ReleaseManagementError as exc:
+                self.message_user(
+                    request,
+                    _("Failed to add GitHub issue comment: %s") % (exc,),
+                    level=messages.ERROR,
+                )
+            else:
+                obj.updated_at = timezone.now()
+                obj.save(update_fields=["updated_at"])
+                self.message_user(
+                    request,
+                    _("Comment added to GitHub issue #%(number)s.") % {
+                        "number": obj.number,
+                    },
+                    level=messages.SUCCESS,
+                )
+                return HttpResponseRedirect(self._change_url(obj))
+        return self._render_operation_view(
+            request,
+            obj=obj,
+            form=form,
+            title=_("Comment on GitHub issue"),
+            impact_note=_("This posts a public comment to the linked GitHub issue."),
+            submit_label=_("Post comment"),
+        )
+
+    def close_view(self, request, object_id):
+        obj = self._get_change_object(request, object_id)
+        form = GitHubConfirmForm(request.POST if request.method == "POST" else None)
+        if request.method == "POST" and form.is_valid():
+            try:
+                ReleaseManagementClient().close_issue(
+                    self._repository_ref(obj),
+                    number=obj.number,
+                )
+            except ReleaseManagementError as exc:
+                self.message_user(
+                    request,
+                    _("Failed to close GitHub issue: %s") % (exc,),
+                    level=messages.ERROR,
+                )
+            else:
+                obj.state = "closed"
+                obj.updated_at = timezone.now()
+                obj.save(update_fields=["state", "updated_at"])
+                self.message_user(
+                    request,
+                    _("GitHub issue #%(number)s closed.") % {"number": obj.number},
+                    level=messages.SUCCESS,
+                )
+                return HttpResponseRedirect(self._change_url(obj))
+        return self._render_operation_view(
+            request,
+            obj=obj,
+            form=form,
+            title=_("Close GitHub issue"),
+            impact_note=_("This will close the linked GitHub issue."),
+            submit_label=_("Close issue"),
+        )
+
 
 @admin.register(RepositoryPullRequest)
 class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
     actions = ["fetch_open_pull_requests"]
     changelist_actions = ["fetch_open_pull_requests"]
+    change_actions = ("comment_action", "ready_action", "merge_action")
     list_display = (
-        "number",
+        "number_link",
         "title",
         "repository",
         "state",
+        "is_draft",
         "author",
         "updated_at",
     )
@@ -105,6 +282,16 @@ class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
         "repository__name",
     )
     raw_id_fields = ("repository",)
+
+    @admin.display(description=_("Pull request"), ordering="number")
+    def number_link(self, obj):
+        if obj.html_url:
+            return format_html(
+                '<a href="{}" target="_blank" rel="noopener noreferrer">PR #{}</a>',
+                obj.html_url,
+                obj.number,
+            )
+        return f"PR #{obj.number}"
 
     def fetch_open_pull_requests(self, request, queryset=None):
         try:
@@ -135,6 +322,185 @@ class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
     fetch_open_pull_requests.label = _("Fetch Open")
     fetch_open_pull_requests.short_description = _("Fetch Open")
     fetch_open_pull_requests.requires_queryset = False
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<path:object_id>/comment/",
+                self.admin_site.admin_view(self.comment_view),
+                name="repos_repositorypullrequest_comment",
+            ),
+            path(
+                "<path:object_id>/ready/",
+                self.admin_site.admin_view(self.ready_view),
+                name="repos_repositorypullrequest_ready",
+            ),
+            path(
+                "<path:object_id>/merge/",
+                self.admin_site.admin_view(self.merge_view),
+                name="repos_repositorypullrequest_merge",
+            ),
+        ]
+        return custom_urls + urls
+
+    def get_change_actions(self, request, object_id, form_url):
+        actions = list(super().get_change_actions(request, object_id, form_url))
+        obj = self.get_object(request, object_id)
+        if obj is None:
+            return actions
+        if obj.state != "open":
+            for action_name in ("comment_action", "ready_action", "merge_action"):
+                if action_name in actions:
+                    actions.remove(action_name)
+        elif not obj.is_draft and "ready_action" in actions:
+            actions.remove("ready_action")
+        return actions
+
+    def comment_action(self, request, obj):
+        return HttpResponseRedirect(
+            reverse("admin:repos_repositorypullrequest_comment", args=[obj.pk])
+        )
+
+    comment_action.label = _("Comment")
+    comment_action.short_description = _("Comment")
+    comment_action.requires_queryset = False
+
+    def ready_action(self, request, obj):
+        return HttpResponseRedirect(
+            reverse("admin:repos_repositorypullrequest_ready", args=[obj.pk])
+        )
+
+    ready_action.label = _("Ready")
+    ready_action.short_description = _("Ready")
+    ready_action.requires_queryset = False
+
+    def merge_action(self, request, obj):
+        return HttpResponseRedirect(
+            reverse("admin:repos_repositorypullrequest_merge", args=[obj.pk])
+        )
+
+    merge_action.label = _("Merge")
+    merge_action.short_description = _("Merge")
+    merge_action.requires_queryset = False
+
+    def comment_view(self, request, object_id):
+        obj = self._get_change_object(request, object_id)
+        form = GitHubCommentForm(request.POST if request.method == "POST" else None)
+        if request.method == "POST" and form.is_valid():
+            try:
+                ReleaseManagementClient().comment_pull_request(
+                    self._repository_ref(obj),
+                    number=obj.number,
+                    body=form.cleaned_data["body"],
+                )
+            except ReleaseManagementError as exc:
+                self.message_user(
+                    request,
+                    _("Failed to add pull request comment: %s") % (exc,),
+                    level=messages.ERROR,
+                )
+            else:
+                obj.updated_at = timezone.now()
+                obj.save(update_fields=["updated_at"])
+                self.message_user(
+                    request,
+                    _("Comment added to pull request #%(number)s.") % {
+                        "number": obj.number,
+                    },
+                    level=messages.SUCCESS,
+                )
+                return HttpResponseRedirect(self._change_url(obj))
+        return self._render_operation_view(
+            request,
+            obj=obj,
+            form=form,
+            title=_("Comment on pull request"),
+            impact_note=_("This posts a public comment to the linked GitHub pull request."),
+            submit_label=_("Post comment"),
+        )
+
+    def ready_view(self, request, object_id):
+        obj = self._get_change_object(request, object_id)
+        form = GitHubConfirmForm(request.POST if request.method == "POST" else None)
+        if request.method == "POST" and form.is_valid():
+            try:
+                ReleaseManagementClient().mark_pull_request_ready(
+                    self._repository_ref(obj),
+                    number=obj.number,
+                )
+            except ReleaseManagementError as exc:
+                self.message_user(
+                    request,
+                    _("Failed to move pull request out of draft: %s") % (exc,),
+                    level=messages.ERROR,
+                )
+            else:
+                obj.is_draft = False
+                obj.updated_at = timezone.now()
+                obj.save(update_fields=["is_draft", "updated_at"])
+                self.message_user(
+                    request,
+                    _("Pull request #%(number)s is ready for review.") % {
+                        "number": obj.number,
+                    },
+                    level=messages.SUCCESS,
+                )
+                return HttpResponseRedirect(self._change_url(obj))
+        return self._render_operation_view(
+            request,
+            obj=obj,
+            form=form,
+            title=_("Move pull request out of draft"),
+            impact_note=_("This marks the linked GitHub pull request as ready for review."),
+            submit_label=_("Ready for review"),
+        )
+
+    def merge_view(self, request, object_id):
+        obj = self._get_change_object(request, object_id)
+        form = GitHubPullRequestMergeForm(
+            request.POST if request.method == "POST" else None
+        )
+        if request.method == "POST" and form.is_valid():
+            merge_method = form.cleaned_data["merge_method"]
+            try:
+                ReleaseManagementClient().merge_pull_request(
+                    self._repository_ref(obj),
+                    number=obj.number,
+                    merge_method=merge_method,
+                )
+            except ReleaseManagementError as exc:
+                self.message_user(
+                    request,
+                    _("Failed to merge pull request: %s") % (exc,),
+                    level=messages.ERROR,
+                )
+            else:
+                merged_at = timezone.now()
+                obj.is_draft = False
+                obj.merged_at = merged_at
+                obj.state = "closed"
+                obj.updated_at = merged_at
+                obj.save(
+                    update_fields=["is_draft", "merged_at", "state", "updated_at"]
+                )
+                self.message_user(
+                    request,
+                    _(
+                        "Pull request #%(number)s merged with %(method)s."
+                    )
+                    % {"number": obj.number, "method": merge_method},
+                    level=messages.SUCCESS,
+                )
+                return HttpResponseRedirect(self._change_url(obj))
+        return self._render_operation_view(
+            request,
+            obj=obj,
+            form=form,
+            title=_("Merge pull request"),
+            impact_note=_("This merges the linked GitHub pull request using the selected method."),
+            submit_label=_("Merge pull request"),
+        )
 
 
 @admin.register(GitHubRepository)

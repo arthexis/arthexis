@@ -9,7 +9,10 @@ import pytest
 from apps.repos.release_management import (
     EXECUTION_MODE_BINARY,
     EXECUTION_MODE_SUITE,
+    MERGE_METHOD_MERGE,
+    MERGE_METHOD_SQUASH,
     ReleaseManagementClient,
+    ReleaseManagementError,
     RepositoryRef,
 )
 
@@ -269,3 +272,172 @@ def test_release_management_normalizes_suite_pull_request_payload(monkeypatch):
     rows = client.list_pull_requests(RepositoryRef(owner="octo", name="demo"))
 
     assert rows[0]["isDraft"] is True
+
+
+@pytest.mark.django_db
+def test_release_management_comments_issue_via_suite_api(monkeypatch):
+    """Issue comments should use suite API helpers when suite mode is available."""
+
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_resolve_token",
+        lambda self: "token-1",
+    )
+
+    called: dict[str, Any] = {}
+
+    def fail_gh(self, args: list[str]) -> str:  # pragma: no cover - explicit failure branch
+        raise AssertionError(f"gh fallback should not run, got {args}")
+
+    monkeypatch.setattr(ReleaseManagementClient, "_run_gh", fail_gh)
+
+    from apps.repos.services import github as github_service
+
+    def fake_comment_issue(owner, name, *, issue_number, token, body):
+        called.update(
+            {
+                "owner": owner,
+                "name": name,
+                "issue_number": issue_number,
+                "token": token,
+                "body": body,
+            }
+        )
+
+    monkeypatch.setattr(github_service, "create_issue_comment", fake_comment_issue)
+
+    client = ReleaseManagementClient()
+    client.comment_issue(
+        RepositoryRef(owner="octo", name="demo"),
+        number=23,
+        body="Please attach logs.",
+    )
+
+    assert called == {
+        "owner": "octo",
+        "name": "demo",
+        "issue_number": 23,
+        "token": "token-1",
+        "body": "Please attach logs.",
+    }
+
+
+@pytest.mark.django_db
+def test_release_management_closes_issue_via_gh_when_binary_mode(monkeypatch):
+    """Binary mode should close issues via gh."""
+
+    called: dict[str, Any] = {}
+
+    def fake_gh(self, args: list[str]) -> str:
+        called["args"] = args
+        return ""
+
+    monkeypatch.setattr(ReleaseManagementClient, "_run_gh", fake_gh)
+
+    client = ReleaseManagementClient(mode=EXECUTION_MODE_BINARY)
+    client.close_issue(RepositoryRef(owner="octo", name="demo"), number=24)
+
+    assert called["args"] == ["issue", "close", "24", "--repo", "octo/demo"]
+
+
+@pytest.mark.django_db
+def test_release_management_marks_pull_request_ready_via_suite_api(monkeypatch):
+    """Ready-for-review should use suite API helpers when available."""
+
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_resolve_token",
+        lambda self: "token-1",
+    )
+
+    called: dict[str, Any] = {}
+
+    def fail_gh(self, args: list[str]) -> str:  # pragma: no cover - explicit failure branch
+        raise AssertionError(f"gh fallback should not run, got {args}")
+
+    monkeypatch.setattr(ReleaseManagementClient, "_run_gh", fail_gh)
+
+    from apps.repos.services import github as github_service
+
+    def fake_ready(owner, name, *, pull_number, token):
+        called.update(
+            {
+                "owner": owner,
+                "name": name,
+                "pull_number": pull_number,
+                "token": token,
+            }
+        )
+
+    monkeypatch.setattr(github_service, "mark_pull_request_ready", fake_ready)
+
+    client = ReleaseManagementClient()
+    client.mark_pull_request_ready(RepositoryRef(owner="octo", name="demo"), number=31)
+
+    assert called == {
+        "owner": "octo",
+        "name": "demo",
+        "pull_number": 31,
+        "token": "token-1",
+    }
+
+
+@pytest.mark.django_db
+def test_release_management_merges_pull_request_via_gh_with_selected_method(monkeypatch):
+    """Binary merge should forward the selected gh merge flag."""
+
+    called: dict[str, Any] = {}
+
+    def fake_gh(self, args: list[str]) -> str:
+        called["args"] = args
+        return ""
+
+    monkeypatch.setattr(ReleaseManagementClient, "_run_gh", fake_gh)
+
+    client = ReleaseManagementClient(mode=EXECUTION_MODE_BINARY)
+    client.merge_pull_request(
+        RepositoryRef(owner="octo", name="demo"),
+        number=77,
+        merge_method=MERGE_METHOD_SQUASH,
+    )
+
+    assert called["args"] == [
+        "pr",
+        "merge",
+        "77",
+        "--repo",
+        "octo/demo",
+        "--squash",
+    ]
+
+
+@pytest.mark.django_db
+def test_release_management_rejects_invalid_merge_method():
+    """Unsupported merge methods should raise a release-management error."""
+
+    client = ReleaseManagementClient(mode=EXECUTION_MODE_BINARY)
+
+    with pytest.raises(ReleaseManagementError, match="Unsupported merge method"):
+        client.merge_pull_request(
+            RepositoryRef(owner="octo", name="demo"),
+            number=77,
+            merge_method="invalid",
+        )
+
+
+@pytest.mark.django_db
+def test_release_management_defaults_merge_method_to_merge(monkeypatch):
+    """Omitted merge methods should default to a normal merge."""
+
+    called: dict[str, Any] = {}
+
+    def fake_gh(self, args: list[str]) -> str:
+        called["args"] = args
+        return ""
+
+    monkeypatch.setattr(ReleaseManagementClient, "_run_gh", fake_gh)
+
+    client = ReleaseManagementClient(mode=EXECUTION_MODE_BINARY)
+    client.merge_pull_request(RepositoryRef(owner="octo", name="demo"), number=88)
+
+    assert called["args"][-1] == f"--{MERGE_METHOD_MERGE}"

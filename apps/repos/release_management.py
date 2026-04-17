@@ -6,7 +6,7 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass
-from typing import cast, TypedDict
+from typing import TypedDict, cast
 
 from typing_extensions import NotRequired
 
@@ -17,6 +17,14 @@ RELEASE_MANAGEMENT_FEATURE_SLUG = "release-management"
 EXECUTION_MODE_KEY = "execution_mode"
 EXECUTION_MODE_SUITE = "suite"
 EXECUTION_MODE_BINARY = "binary"
+MERGE_METHOD_MERGE = "merge"
+MERGE_METHOD_SQUASH = "squash"
+MERGE_METHOD_REBASE = "rebase"
+MERGE_METHOD_CHOICES = (
+    MERGE_METHOD_MERGE,
+    MERGE_METHOD_SQUASH,
+    MERGE_METHOD_REBASE,
+)
 
 
 JSONPrimitive = str | int | float | bool | None
@@ -186,6 +194,16 @@ class ReleaseManagementClient:
     def _can_use_suite_api(self) -> bool:
         return bool(self._resolve_token()) and self._feature_enabled()
 
+    @staticmethod
+    def _normalize_merge_method(merge_method: str) -> str:
+        normalized = str(merge_method or MERGE_METHOD_MERGE).strip().lower()
+        if normalized not in MERGE_METHOD_CHOICES:
+            allowed = ", ".join(MERGE_METHOD_CHOICES)
+            raise ReleaseManagementError(
+                f"Unsupported merge method '{merge_method}'. Expected one of: {allowed}"
+            )
+        return normalized
+
     def list_issues(self, repository: RepositoryRef, *, state: str = "open") -> list[GitHubIssuePayload]:
         """List issues using suite API first unless binary mode is selected."""
 
@@ -251,6 +269,57 @@ class ReleaseManagementClient:
             ]
         )
 
+    def comment_issue(
+        self,
+        repository: RepositoryRef,
+        *,
+        number: int,
+        body: str,
+    ) -> None:
+        """Add a comment to an issue."""
+
+        cleaned_body = str(body or "").strip()
+        if not cleaned_body:
+            raise ReleaseManagementError("Issue comment body must not be empty")
+
+        token = self._resolve_token()
+        if not self._should_use_binary_first() and token and self._can_use_suite_api():
+            github_service.create_issue_comment(
+                repository.owner,
+                repository.name,
+                issue_number=number,
+                token=token,
+                body=cleaned_body,
+            )
+            return
+
+        self._run_gh(
+            [
+                "issue",
+                "comment",
+                str(number),
+                "--repo",
+                repository.slug,
+                "--body",
+                cleaned_body,
+            ]
+        )
+
+    def close_issue(self, repository: RepositoryRef, *, number: int) -> None:
+        """Close an issue."""
+
+        token = self._resolve_token()
+        if not self._should_use_binary_first() and token and self._can_use_suite_api():
+            github_service.close_issue(
+                repository.owner,
+                repository.name,
+                issue_number=number,
+                token=token,
+            )
+            return
+
+        self._run_gh(["issue", "close", str(number), "--repo", repository.slug])
+
     def list_pull_requests(
         self, repository: RepositoryRef, *, state: str = "open"
     ) -> list[GitHubPullRequestPayload]:
@@ -276,6 +345,94 @@ class ReleaseManagementClient:
             ["pr", "list", "--repo", repository.slug, "--state", state, "--json", query]
         )
         return cast(list[GitHubPullRequestPayload], rows) if isinstance(rows, list) else []
+
+    def comment_pull_request(
+        self,
+        repository: RepositoryRef,
+        *,
+        number: int,
+        body: str,
+    ) -> None:
+        """Add a comment to a pull request."""
+
+        cleaned_body = str(body or "").strip()
+        if not cleaned_body:
+            raise ReleaseManagementError("Pull request comment body must not be empty")
+
+        token = self._resolve_token()
+        if not self._should_use_binary_first() and token and self._can_use_suite_api():
+            github_service.create_pull_request_comment(
+                repository.owner,
+                repository.name,
+                pull_number=number,
+                token=token,
+                body=cleaned_body,
+            )
+            return
+
+        self._run_gh(
+            [
+                "pr",
+                "comment",
+                str(number),
+                "--repo",
+                repository.slug,
+                "--body",
+                cleaned_body,
+            ]
+        )
+
+    def mark_pull_request_ready(
+        self,
+        repository: RepositoryRef,
+        *,
+        number: int,
+    ) -> None:
+        """Move a draft pull request to ready-for-review."""
+
+        token = self._resolve_token()
+        if not self._should_use_binary_first() and token and self._can_use_suite_api():
+            github_service.mark_pull_request_ready(
+                repository.owner,
+                repository.name,
+                pull_number=number,
+                token=token,
+            )
+            return
+
+        self._run_gh(["pr", "ready", str(number), "--repo", repository.slug])
+
+    def merge_pull_request(
+        self,
+        repository: RepositoryRef,
+        *,
+        number: int,
+        merge_method: str = MERGE_METHOD_MERGE,
+    ) -> None:
+        """Merge a pull request using the selected merge method."""
+
+        normalized_method = self._normalize_merge_method(merge_method)
+        token = self._resolve_token()
+        if not self._should_use_binary_first() and token and self._can_use_suite_api():
+            github_service.merge_pull_request(
+                repository.owner,
+                repository.name,
+                pull_number=number,
+                token=token,
+                merge_method=normalized_method,
+            )
+            return
+
+        self._run_gh(
+            [
+                "pr",
+                "merge",
+                str(number),
+                "--repo",
+                repository.slug,
+                f"--{normalized_method}",
+            ]
+        )
 
     def create_release(self, repository: RepositoryRef, *, tag: str, title: str, notes: str) -> str:
         """Create a GitHub release via gh CLI."""
@@ -334,7 +491,12 @@ class ReleaseManagementClient:
 
 __all__ = [
     "EXECUTION_MODE_BINARY",
+    "EXECUTION_MODE_KEY",
     "EXECUTION_MODE_SUITE",
+    "MERGE_METHOD_CHOICES",
+    "MERGE_METHOD_MERGE",
+    "MERGE_METHOD_REBASE",
+    "MERGE_METHOD_SQUASH",
     "RELEASE_MANAGEMENT_FEATURE_SLUG",
     "ReleaseManagementClient",
     "ReleaseManagementError",

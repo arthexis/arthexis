@@ -117,3 +117,124 @@ def test_create_pull_request_comment_rejects_closed_pr(monkeypatch):
             token="tok",
             body="Please merge",
         )
+
+
+def test_create_issue_comment_posts_to_issue_comments(monkeypatch):
+    calls: dict[str, dict[str, Any]] = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls["post"] = {
+            "url": url,
+            "json": json,
+            "headers": headers,
+            "timeout": timeout,
+        }
+        return DummyResponse({"id": 2}, status_code=201)
+
+    monkeypatch.setattr(github.requests, "post", fake_post)
+
+    response = github.create_issue_comment(
+        "octo",
+        "demo",
+        issue_number=34,
+        token="tok",
+        body="Please attach logs.",
+    )
+
+    assert response.status_code == 201
+    assert calls["post"]["url"].endswith("/repos/octo/demo/issues/34/comments")
+    assert calls["post"]["json"] == {"body": "Please attach logs."}
+
+
+def test_close_issue_patches_closed_state(monkeypatch):
+    calls: dict[str, dict[str, Any]] = {}
+
+    def fake_patch(url, json=None, headers=None, timeout=None):
+        calls["patch"] = {
+            "url": url,
+            "json": json,
+            "headers": headers,
+            "timeout": timeout,
+        }
+        return DummyResponse({"state": "closed"}, status_code=200)
+
+    monkeypatch.setattr(github.requests, "patch", fake_patch)
+
+    response = github.close_issue(
+        "octo",
+        "demo",
+        issue_number=35,
+        token="tok",
+    )
+
+    assert response.status_code == 200
+    assert calls["patch"]["url"].endswith("/repos/octo/demo/issues/35")
+    assert calls["patch"]["json"] == {"state": "closed"}
+
+
+def test_mark_pull_request_ready_uses_graphql_mutation(monkeypatch):
+    calls: dict[str, dict[str, Any]] = {}
+
+    def fake_get(url, headers=None, timeout=None):
+        calls["get"] = {"url": url, "headers": headers, "timeout": timeout}
+        return DummyResponse({"node_id": "PR_node_123", "state": "open"})
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls["post"] = {
+            "url": url,
+            "json": json,
+            "headers": headers,
+            "timeout": timeout,
+        }
+        return DummyResponse(
+            {
+                "data": {
+                    "markPullRequestReadyForReview": {
+                        "pullRequest": {"number": 36, "isDraft": False}
+                    }
+                }
+            },
+            status_code=200,
+        )
+
+    monkeypatch.setattr(github.requests, "get", fake_get)
+    monkeypatch.setattr(github.requests, "post", fake_post)
+
+    response = github.mark_pull_request_ready(
+        "octo",
+        "demo",
+        pull_number=36,
+        token="tok",
+    )
+
+    assert response.status_code == 200
+    assert calls["get"]["url"].endswith("/repos/octo/demo/pulls/36")
+    assert calls["post"]["url"] == github.GRAPHQL_ROOT
+    assert calls["post"]["json"]["variables"] == {"pullRequestId": "PR_node_123"}
+
+
+def test_merge_pull_request_puts_selected_method(monkeypatch):
+    calls: dict[str, dict[str, Any]] = {}
+
+    def fake_put(url, json=None, headers=None, timeout=None):
+        calls["put"] = {
+            "url": url,
+            "json": json,
+            "headers": headers,
+            "timeout": timeout,
+        }
+        return DummyResponse({"merged": True}, status_code=200)
+
+    monkeypatch.setattr(github.requests, "put", fake_put)
+
+    response = github.merge_pull_request(
+        "octo",
+        "demo",
+        pull_number=37,
+        token="tok",
+        merge_method="squash",
+    )
+
+    assert response.status_code == 200
+    assert calls["put"]["url"].endswith("/repos/octo/demo/pulls/37/merge")
+    assert calls["put"]["json"] == {"merge_method": "squash"}
