@@ -8,8 +8,9 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.db.models import Q
+from django.http import HttpRequest
 from django.http import FileResponse, Http404, HttpResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.urls import NoReverseMatch, reverse
 from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.views.decorators.cache import never_cache
@@ -24,6 +25,10 @@ from apps.groups.decorators import security_group_required
 from apps.modules.models import Module
 from apps.nodes.models import Node
 from apps.nodes.utils import FeatureChecker
+from apps.repos.models.response_templates import GitHubResponseTemplate
+from apps.repos.models.repositories import GitHubRepository
+from apps.repos.services import github as github_service
+from apps.repos.services.github import GitHubRepositoryError
 from apps.sites.utils import module_pill_link_validation
 
 from . import assets, rendering
@@ -769,6 +774,7 @@ def _render_document_library(
     )
     indexed_groups = _build_indexed_document_groups(request, all_documents)
     is_gallery_manager = can_manage_gallery(request.user)
+    github_connection = _resolve_github_docs_connection()
     gallery_images = _latest_gallery_images_for_user(
         request.user,
         is_gallery_manager=is_gallery_manager,
@@ -784,6 +790,8 @@ def _render_document_library(
         "is_gallery_manager": is_gallery_manager,
         "page_url": request.build_absolute_uri(),
         "sections": sections,
+        "github_connected": github_connection.connected,
+        "github_issue_viewer_url": reverse("docs:docs-github-viewer"),
         "title": "Developer Documents",
     }
     if request.user.is_staff:
@@ -801,6 +809,24 @@ def _render_document_library(
     response = render(request, "docs/library.html", context, status=status)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
     return response
+
+
+def _resolve_github_docs_connection() -> SimpleNamespace:
+    """Return repository/token context for docs GitHub viewer pages."""
+
+    try:
+        repository = GitHubRepository.resolve_active_repository()
+        token = github_service.get_github_issue_token()
+    except (GitHubRepositoryError, RuntimeError, ValueError):
+        return SimpleNamespace(connected=False, owner="", repo="", slug="", token="")
+
+    return SimpleNamespace(
+        connected=True,
+        owner=repository.owner,
+        repo=repository.name,
+        slug=repository.slug,
+        token=token,
+    )
 
 
 def _canonicalize_docs_host(host: str) -> str:
@@ -898,6 +924,174 @@ def render_readme_page(
     response = render(request, "docs/readme.html", context)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
     return response
+
+
+def _parse_github_comment_payload(
+    request: HttpRequest,
+) -> tuple[bool, str, str | None]:
+    """Return ``(is_post, body, error)`` for comment submissions."""
+
+    if request.method != "POST":
+        return False, "", None
+
+    template_choice = (request.POST.get("template") or "").strip()
+    if template_choice:
+        template = (
+            GitHubResponseTemplate.objects.filter(
+                user=request.user,
+                pk=template_choice,
+                is_active=True,
+            )
+            .only("body")
+            .first()
+        )
+        if template is None:
+            return True, "", "Selected response template is not available."
+        body = template.body.strip()
+    else:
+        body = (request.POST.get("body") or "").strip()
+
+    if not body:
+        return True, "", "Comment body is required."
+
+    return True, body, None
+
+
+@module_pill_link_validation(_show_docs_navigation_link)
+@security_group_required(*DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES)
+def github_issue_viewer(request):
+    """Render open GitHub issues and pull requests for connected repositories."""
+
+    connection = _resolve_github_docs_connection()
+    entries: list[dict[str, object]] = []
+    error_message = ""
+    if connection.connected:
+        try:
+            for item in github_service.fetch_repository_issues(
+                token=connection.token,
+                owner=connection.owner,
+                name=connection.repo,
+                state="open",
+            ):
+                number = item.get("number")
+                if not isinstance(number, int):
+                    continue
+                is_pull_request = isinstance(item.get("pull_request"), dict)
+                entries.append(
+                    {
+                        "number": number,
+                        "title": str(item.get("title") or ""),
+                        "author": str((item.get("user") or {}).get("login") or ""),
+                        "kind": "pull_request" if is_pull_request else "issue",
+                        "state": str(item.get("state") or ""),
+                        "updated_at": item.get("updated_at"),
+                        "detail_url": reverse(
+                            "docs:docs-github-item", kwargs={"number": number}
+                        ),
+                    }
+                )
+        except GitHubRepositoryError as exc:
+            error_message = str(exc)
+
+    context = {
+        "entries": entries,
+        "error_message": error_message,
+        "github_connected": connection.connected,
+        "repository_slug": connection.slug,
+        "title": "GitHub Issues & Pull Requests",
+    }
+    return render(request, "docs/github_viewer.html", context)
+
+
+@module_pill_link_validation(_show_docs_navigation_link)
+@security_group_required(*DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES)
+def github_issue_detail(request, number: int):
+    """Render issue/PR details including comments and optional response actions."""
+
+    connection = _resolve_github_docs_connection()
+    if not connection.connected:
+        return render(
+            request,
+            "docs/github_detail.html",
+            {
+                "github_connected": False,
+                "item": None,
+                "title": "GitHub Item",
+            },
+        )
+
+    post_error = ""
+    post_success = ""
+    is_post, comment_body, payload_error = _parse_github_comment_payload(request)
+    if is_post and payload_error:
+        post_error = payload_error
+    elif is_post:
+        try:
+            github_service.create_issue_comment(
+                connection.owner,
+                connection.repo,
+                issue_number=number,
+                token=connection.token,
+                body=comment_body,
+            )
+            return redirect(reverse("docs:docs-github-item", kwargs={"number": number}))
+        except GitHubRepositoryError as exc:
+            post_error = str(exc)
+        else:  # pragma: no cover - unreachable, redirect above is expected
+            post_success = "Comment posted."
+
+    item = github_service.fetch_issue_or_pull_request(
+        token=connection.token,
+        owner=connection.owner,
+        name=connection.repo,
+        number=number,
+    )
+    is_pull_request = isinstance(item.get("pull_request"), dict)
+    comments = list(
+        github_service.fetch_issue_comments(
+            token=connection.token,
+            owner=connection.owner,
+            name=connection.repo,
+            issue_number=number,
+        )
+    )
+    checks_state = "not_applicable"
+    if is_pull_request:
+        pull = github_service.fetch_pull_request(
+            token=connection.token,
+            owner=connection.owner,
+            name=connection.repo,
+            number=number,
+        )
+        head_sha = str((pull.get("head") or {}).get("sha") or "").strip()
+        if head_sha:
+            status_payload = github_service.fetch_commit_status_summary(
+                token=connection.token,
+                owner=connection.owner,
+                name=connection.repo,
+                sha=head_sha,
+            )
+            checks_state = str(status_payload.get("state") or "unknown")
+        else:
+            checks_state = "unknown"
+
+    response_templates = GitHubResponseTemplate.objects.filter(
+        user=request.user,
+        is_active=True,
+    ).order_by("label")
+    context = {
+        "checks_state": checks_state,
+        "comments": comments,
+        "error_message": post_error,
+        "github_connected": True,
+        "item": item,
+        "post_success": post_success,
+        "repository_slug": connection.slug,
+        "response_templates": response_templates,
+        "title": f"GitHub #{number}",
+        "viewer_url": reverse("docs:docs-github-viewer"),
+    }
+    return render(request, "docs/github_detail.html", context)
 
 
 @module_pill_link_validation(_show_docs_navigation_link)
