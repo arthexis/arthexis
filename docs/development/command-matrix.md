@@ -12,6 +12,10 @@ For local app-targeted test runs, use:
 
 Use this as the default in local QA and agent workflows.
 
+## Migration graph policy
+
+Maintain a **single canonical migrations graph only** under `apps/*/migrations/`; do not introduce parallel `migrations_v*` module trees.
+
 ## Allowed commands by context
 
 | Context | Allowed command(s) | Notes |

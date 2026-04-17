@@ -20,7 +20,6 @@ nav:
       - Logging Domain: logging-domain.md
       - Startup Sequence: startup-sequence.md
   - Charging Protocols:
-      - CP Statuses and Transitions: ocpp_cp_statuses.md
       - OCPP Connection Status: ocpp_connection_status.md
       - OCPP 1.6 Compliance Review: ocpp16_compliance_review.md
       - OCPP 1.6 User Manual: development/ocpp-user-manual.md
@@ -47,7 +46,6 @@ nav:
       - App Structure Policy: development/app-structure-policy.md
       - Admin UI Framework: development/admin-ui-framework.md
       - Create Local App: development/create-local-app.md
-      - Deferred Migration Audit: development/deferred_migration_audit.md
       - Dependency Management: development/dependency-management.md
       - Developer Devtools Entrypoints: development/devtools-entrypoints.md
       - Docker Compose Role Presets: development/docker-compose-role-presets.md
@@ -61,11 +59,8 @@ nav:
       - Secret Scanning: development/secret-scanning.md
       - Test Suite Notes: development/testing/test-suite-notes.md
       - Typing Conventions: development/typing-conventions.md
-      - Video Device Admin: development/video-device-admin.md
       - Watchtower Attack Simulation: development/watchtower-attack-simulation.md
       - CodeQL Configuration: development/codeql.md
       - CI Troubleshooting: development/ci-troubleshooting.md
-  - Performance:
-      - Public Charger Optimizations: performance/public_charger_optimizations.md
   - Legal:
       - Third-Party Licenses: legal/THIRD_PARTY_LICENSES.md
