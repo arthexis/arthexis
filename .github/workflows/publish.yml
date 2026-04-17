@@ -54,7 +54,7 @@ jobs:
           ./install.sh --no-start
       - name: Refresh environment dependencies
         run: |
-          ./env-refresh.sh --deps-only
+          ./env-refresh.sh
       - name: Validate migrations
         run: |
           ./scripts/preflight-env.sh

@@ -83,7 +83,7 @@ jobs:
           ./install.sh ${{ matrix.install_args }} --no-start
       - name: Refresh environment dependencies
         run: |
-          ./env-refresh.sh --deps-only
+          ./env-refresh.sh
       - name: Install CI dependencies
         run: |
           ./scripts/preflight-env.sh

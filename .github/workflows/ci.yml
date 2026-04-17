@@ -92,7 +92,7 @@ jobs:
 
       - name: Refresh environment dependencies
         run: |
-          ./env-refresh.sh --deps-only
+          ./env-refresh.sh
 
       - name: Install CI dependencies
         run: |
