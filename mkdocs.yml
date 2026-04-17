@@ -51,7 +51,6 @@ nav:
       - Docker Compose Role Presets: development/docker-compose-role-presets.md
       - Dual-Major Migrations: development/dual-major-migrations.md
       - Health Checks: development/health-checks.md
-      - Management Command Deprecation Pattern: development/management-command-deprecation-pattern.md
       - Marker Governance Policy: development/marker-governance-policy.md
       - MyPy Adoption Checklist: development/mypy-adoption-checklist.md
       - Nodes Admin Package Reference: development/nodes-admin-package-reference.md
