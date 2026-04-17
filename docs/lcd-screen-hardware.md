@@ -36,6 +36,10 @@ The logic is evaluated in the following order:
 To override automatic detection, set `LCD_DRIVER` (or `LCD_I2C_DRIVER`) to one of
 `pcf8574` or `aip31068` before starting the service.
 
+Arthexis LCD operation does not require DS3231 RTC setup. Link DS3231 hardware
+appendix/archive guidance from this page only when an active product dependency
+exists.
+
 ## Timing calibration lock file
 
 If a panel still flickers or shows garbled frames, the LCD calibrate command can
