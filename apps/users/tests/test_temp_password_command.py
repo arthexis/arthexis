@@ -9,6 +9,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from django.utils import timezone
 
+from apps.groups.constants import AP_USER_GROUP_NAME
 from apps.groups.constants import EXTERNAL_AGENT_GROUP_NAME
 from apps.users import temp_passwords
 from apps.users.backends import TempPasswordBackend
@@ -169,3 +170,52 @@ class PasswordCommandTests(TestCase):
 
         with self.assertRaisesMessage(CommandError, "Unknown groups: missing"):
             call_command("password", user.username, password="valid-pass-123", group="missing")
+
+    def test_configures_access_point_user_mode(self):
+        """Access-point mode should disable passwords and keep the user non-staff."""
+
+        Group.objects.create(name=AP_USER_GROUP_NAME)
+        user = get_user_model().objects.create_user(
+            username="ap-user",
+            email="ap-user@example.com",
+            password="InitialPassword123",
+            is_staff=True,
+            is_superuser=True,
+            force_password_change=True,
+        )
+
+        call_command(
+            "password",
+            user.username,
+            update=True,
+            access_point_user=True,
+            group=AP_USER_GROUP_NAME,
+        )
+
+        user.refresh_from_db()
+        assert not user.is_staff
+        assert not user.is_superuser
+        assert not user.has_usable_password()
+        assert user.allow_local_network_passwordless_login is True
+        assert user.force_password_change is False
+        assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
+
+    def test_access_point_user_mode_rejects_password_argument(self):
+        """Access-point mode should reject contradictory password arguments."""
+
+        user = get_user_model().objects.create_user(
+            username="ap-invalid",
+            email="ap-invalid@example.com",
+        )
+
+        with self.assertRaisesMessage(
+            CommandError,
+            "--access-point-user cannot be combined with --password.",
+        ):
+            call_command(
+                "password",
+                user.username,
+                update=True,
+                access_point_user=True,
+                password="AnyPassword123",
+            )

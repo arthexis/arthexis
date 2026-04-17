@@ -18,6 +18,7 @@ from apps.core import changelog
 from apps.docs import views as docs_views
 from apps.features.utils import is_suite_feature_enabled
 from apps.docs import rendering
+from apps.groups.constants import AP_USER_GROUP_NAME
 from apps.links.templatetags.ref_tags import build_footer_context
 from apps.modules.models import Module
 from apps.nodes.models import Node
@@ -28,7 +29,7 @@ from apps.ocpp.consumers.constants import (
     OCPP_VERSION_21,
 )
 from apps.ocpp.utils.websocket import resolve_ws_scheme
-from utils.decorators import staff_required
+from utils.decorators import security_group_required, staff_required
 from utils.sites import get_site
 
 from ..forms import UserStoryForm
@@ -296,6 +297,12 @@ def changelog_report(request):
     response = render(request, "pages/changelog.html", context)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
     return response
+
+
+@landing(_("Access Point Visitors"))
+@security_group_required(AP_USER_GROUP_NAME)
+def visitors(request):
+    return render(request, "pages/visitors.html")
 
 
 def changelog_report_data(request):

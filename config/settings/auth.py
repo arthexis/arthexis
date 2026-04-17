@@ -8,6 +8,7 @@ AUTH_USER_MODEL = "users.User"
 # or OTP authentication.
 AUTHENTICATION_BACKENDS = [
     "apps.users.backends.LocalhostAdminBackend",
+    "apps.users.backends.AccessPointLocalUserBackend",
     "apps.users.backends.PasswordOrOTPBackend",
     "apps.users.backends.TempPasswordBackend",
     "apps.users.backends.RFIDBackend",

@@ -20,6 +20,7 @@ from apps.energy.models import ClientReport
 from apps.features.models import Feature
 from apps.gallery.models import GalleryImage
 from apps.groups.constants import (
+    AP_USER_GROUP_NAME,
     PRODUCT_DEVELOPER_GROUP_NAME,
     RELEASE_MANAGER_GROUP_NAME,
     SITE_OPERATOR_GROUP_NAME,
@@ -406,6 +407,37 @@ def test_developers_module_pill_visible_to_release_manager_users():
     nav_modules = nav_context["nav_modules"]
 
     assert any(candidate.path == "/docs/" for candidate in nav_modules)
+
+
+def test_visitors_page_requires_ap_user_group_membership(client):
+    url = reverse("pages:visitors")
+    user = get_user_model().objects.create_user(
+        username="visitor-no-group",
+        email="visitor-no-group@example.com",
+        password="secret",
+    )
+    client.force_login(user)
+
+    response = client.get(url)
+
+    assert response.status_code == 403
+
+
+def test_visitors_page_is_available_to_ap_user_group_members(client):
+    url = reverse("pages:visitors")
+    user = get_user_model().objects.create_user(
+        username="visitor-member",
+        email="visitor-member@example.com",
+        password="secret",
+    )
+    ap_group, _ = SecurityGroup.objects.get_or_create(name=AP_USER_GROUP_NAME)
+    ap_group.user_set.add(user)
+    client.force_login(user)
+
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert "Arthexis Access Point" in response.content.decode()
 
 
 def test_docs_library_renders_indexed_documents_before_other_documents(client):

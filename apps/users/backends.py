@@ -564,6 +564,69 @@ class LocalhostAdminBackend(ModelBackend):
         return user
 
 
+class AccessPointLocalUserBackend(LocalhostAdminBackend):
+    """Allow selected non-staff users to sign in from local IPv4 /16 peers."""
+
+    def authenticate(self, request, username=None, password=None, **kwargs):
+        if request is None or username is None:
+            return None
+
+        if not self._has_valid_host(request):
+            return None
+
+        remote_ip = self._get_remote_ip(request)
+        if remote_ip is None or not self._is_remote_allowed(remote_ip):
+            return None
+
+        user = self._resolve_user(username)
+        if user is None or not self._is_access_point_candidate(user):
+            return None
+
+        user.backend = f"{self.__module__}.{self.__class__.__name__}"
+        return user
+
+    def _resolve_user(self, username):
+        UserModel = get_user_model()
+        manager = getattr(UserModel, "all_objects", UserModel._default_manager)
+        normalized = str(username).strip()
+        if not normalized:
+            return None
+        try:
+            user = manager.get_by_natural_key(normalized)
+        except UserModel.DoesNotExist:
+            user = (
+                manager.filter(email__iexact=normalized).order_by("pk").first()
+            )
+        return user
+
+    def _is_access_point_candidate(self, user) -> bool:
+        if not self.user_can_authenticate(user):
+            return False
+        if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
+            return False
+        return bool(
+            getattr(user, "allow_local_network_passwordless_login", False)
+        )
+
+    def _is_remote_allowed(self, ip):
+        if isinstance(ip, ipaddress.IPv6Address):
+            return ip.is_loopback
+        if ip.is_loopback:
+            return True
+
+        remote_octets = ip.exploded.split(".")
+        if len(remote_octets) != 4:
+            return False
+
+        for local_ip in self._LOCAL_IPS:
+            if not isinstance(local_ip, ipaddress.IPv4Address):
+                continue
+            local_octets = local_ip.exploded.split(".")
+            if local_octets[:2] == remote_octets[:2]:
+                return True
+        return False
+
+
 class TempPasswordBackend(ModelBackend):
     """Authenticate using a temporary password stored in a lockfile."""
 
