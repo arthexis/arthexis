@@ -29,15 +29,26 @@ For operator workflows, Arthexis currently expects the following OCPP status val
 - `Occupied`
 - `OutOfService`
 
-Status labels are normalized to lowercase internally for consistent display and aggregation (for example, `SuspendedEVSE` becomes `suspendedevse`).
+Status values are normalized to lowercase internally for consistent display and aggregation (for example, `SuspendedEVSE` becomes `suspendedevse`).
 
 Availability derivation is intentionally narrow and operator-visible:
 
 - **Operative**: `Available`, `Preparing`, `Charging`, `SuspendedEV`, `SuspendedEVSE`, `Finishing`, `Reserved`
 - **Inoperative**: `Unavailable`, `Faulted`
-- **No availability remap**: `Occupied`, `OutOfService`, or any other non-mapped status
+- **No availability state change**: `Occupied`, `OutOfService`, or any other non-mapped status
 
-The charge point remains the source of truth for status text. Arthexis records and presents what was reported, and only applies the explicit availability mapping above. In UI presentation, active session context may override badge display to `Charging` when the raw status is empty/unknown or lags transaction activity, while error-bearing updates continue to surface fault context.
+The charge point remains the source of truth for status text. Arthexis records and presents what was reported, and only applies the explicit availability mapping above.
+
+```mermaid
+flowchart TD
+    Input[Status + Active Session + Error Code]
+    Input -->|Session active & no error & status empty/unknown/Available| DisplayCharging[Display Charging badge]
+    Input -->|No session & no error & status Charging/Finishing & derived state not Available| DisplayChargingFallback[Display Charging badge]
+    Input -->|Error code present| DisplayFault[Display status + error badge]
+    Input -->|Otherwise| DisplayRaw[Display normalized status badge]
+```
+
+In UI presentation, active session context may override badge display to `Charging` when the raw status is empty/unknown or lags transaction activity, while error-bearing updates continue to surface fault context.
 
 ### Authorize
 Authorization requests are evaluated through the charger authorization policy (`strict`, `allowlist`, or explicit `open` insecure compatibility mode) with a global fallback when unset. `strict` requires an authorised linked account, `allowlist` also permits known allowed unlinked tags, and `open` accepts any token while clearly marking the mode as insecure compatibility behavior. Every decision returns a reason code for auditability.
