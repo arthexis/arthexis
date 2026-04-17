@@ -126,6 +126,16 @@ Code within test modules is exempt unless a comment or docstring is needed to cl
 
 ---
 
+## UI Design Notes
+
+When implementing UI updates for Arthexis:
+
+* Avoid hardcoded `rem` values for touch target sizing.
+* Prefer shared CSS variables (design tokens) from the admin UI framework to keep sizing and spacing consistent across the suite.
+* Keep design choices aligned with Arthexis admin usability and consistency needs, prioritizing cohesive behavior across apps over one-off local styling.
+
+---
+
 # Testing Policy
 
 Agents must run relevant tests after code changes.
