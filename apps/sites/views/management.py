@@ -446,6 +446,11 @@ class CustomLoginView(LoginView):
         initial = super().get_initial()
         if getattr(self, "_login_check_mode", False):
             initial.setdefault("username", self.request.user.get_username())
+            return initial
+
+        username_prefill = str(self.request.GET.get("username", "")).strip()
+        if username_prefill:
+            initial.setdefault("username", username_prefill)
         return initial
 
     def get_context_data(self, **kwargs):
