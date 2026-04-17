@@ -74,6 +74,11 @@ All active WebSocket connections, transactions, logs, and pending CSMS calls are
 ### Timeout and error handling
 Pending-call metadata is stored in-memory and mirrored to Redis so responses can be reconciled even after reconnects. Each outgoing call registers an event handle and an optional timeout timer; when a timeout fires, the scheduler adds a charger-log entry and marks the request as notified so duplicate alerts are suppressed. When the consumer records a result or error (including OCPP call errors), it clears timers, signals waiting threads, and persists the payload and error context, ensuring admin dashboards and logs accurately reflect both success and failure paths. The request/response lifecycle therefore surfaces clearly across the WebSocket logs, pending-call registries, and charger detail views.
 
+## Connection and subprotocol negotiation
+When a charger handshake succeeds, the CSMS accepts the socket and records a log entry (e.g., Connected (subprotocol=...)).
+
+- **Subprotocol Negotiation**: The system supports ocpp2.1, ocpp2.0.1, and OCPP 1.6. It prefers the latest version offered by the charger. For OCPP 1.6, ocpp1.6j is preferred over the ocpp1.6 alias. If no supported subprotocol is offered, the connection is still accepted and defaults to OCPP 1.6.
+- **Identity Extraction**: The charger serial number is extracted from the WebSocket path or query parameters (supporting cid, chargePointId, charge_point_id, chargeBoxId, charge_box_id, and chargerId).
 
 ## Connection handshake troubleshooting
 Use this checklist when a charger does not appear as connected in Arthexis even though network connectivity exists:
