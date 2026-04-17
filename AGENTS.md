@@ -164,6 +164,16 @@ Any modification to database models must include appropriate migrations.
 
 # Pull Requests
 
+## Branch Management
+
+Any work that may become a pull request must move to a fresh task branch before commits, pushes, or PR creation.
+
+Do not open, update, or push a pull request from `main`, `master`, or any other shared long-lived branch.
+
+If changes already exist on a shared branch, create a fresh task branch from the current `HEAD` before continuing work or opening the pull request.
+
+---
+
 ## Branch Naming
 
 Branch names must include the **affected apps**.
