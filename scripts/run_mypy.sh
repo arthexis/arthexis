@@ -8,7 +8,6 @@ export DEBUG="${DEBUG:-0}"
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"$SCRIPT_DIR/preflight-env.sh"
 
 PYTHON_BIN=".venv/bin/python"
 if [[ "${OSTYPE:-}" == "msys" || "${OSTYPE:-}" == "cygwin" || "${OSTYPE:-}" == "win32" ]]; then
@@ -30,6 +29,8 @@ if ! "$PYTHON_BIN" -c "import importlib.util,sys;sys.exit(0 if importlib.util.fi
   emit_remediation "missing_dependency" "./env-refresh.sh --deps-only" "./scripts/run_mypy.sh"
   exit 1
 fi
+
+"$SCRIPT_DIR/preflight-env.sh"
 
 mypy_output="$(mktemp)"
 cleanup() {
