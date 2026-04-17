@@ -5,7 +5,7 @@ When a command is absorbed into a newer surface, keep the compatibility guidance
 
 ## Minimal migration note template
 
-Use a short mapping table in docs/changelog content so operators can update automation scripts:
+Use a short mapping table in the built-in Arthexis changelog/report UI so operators can update automation scripts:
 
 | Removed command | Replacement |
 | --- | --- |

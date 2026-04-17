@@ -2,7 +2,7 @@
 
 This site aggregates operator guides, architecture notes, and development references for the Arthexis software suite.
 
-Release notes and changelog reporting are maintained in the built-in Arthexis changelog/report UI to avoid duplicate static changelog sources.
+Release notes and changelog reporting are available in the built-in Arthexis changelog UI, accessible via the Admin Dashboard.
 
 In Arthexis terminology, the **suite** is the collection of applications, while the **Constellation** is the fleet of nodes running that suite.
 
