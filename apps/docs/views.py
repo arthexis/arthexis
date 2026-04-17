@@ -792,6 +792,7 @@ def _render_document_library(
         "sections": sections,
         "github_connected": github_connection.connected,
         "github_issue_viewer_url": reverse("docs:docs-github-viewer"),
+        "jobs_board_url": reverse("jobs:public-board"),
         "title": "Developer Documents",
     }
     if request.user.is_staff:

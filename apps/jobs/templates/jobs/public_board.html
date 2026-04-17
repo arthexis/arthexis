@@ -1,0 +1,57 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Jobs" %}{% endblock %}
+
+{% block content %}
+  <div class="row g-4">
+    <div class="col-12 col-xl-7">
+      <h1>{% trans "Open Roles" %}</h1>
+      <p class="text-muted mb-4">{% trans "Explore current Arthexis opportunities and apply by sharing your CV." %}</p>
+      {% for posting in job_postings %}
+        <article class="card shadow-sm mb-3">
+          <div class="card-body">
+            <h2 class="h5 mb-1">{{ posting.title }}</h2>
+            <p class="text-muted small mb-2">
+              {% if posting.team %}{{ posting.team }} · {% endif %}
+              {% if posting.location %}{{ posting.location }}{% else %}{% trans "Location flexible" %}{% endif %}
+            </p>
+            <p class="mb-2">{{ posting.summary }}</p>
+            {% if posting.requirements %}
+              <h3 class="h6 mb-1">{% trans "Requirements" %}</h3>
+              <p class="small mb-2">{{ posting.requirements|linebreaksbr }}</p>
+            {% endif %}
+            {% if posting.responsibilities %}
+              <h3 class="h6 mb-1">{% trans "Responsibilities" %}</h3>
+              <p class="small mb-0">{{ posting.responsibilities|linebreaksbr }}</p>
+            {% endif %}
+          </div>
+        </article>
+      {% empty %}
+        <div class="alert alert-light border">{% trans "No public job postings are available right now." %}</div>
+      {% endfor %}
+    </div>
+
+    <div class="col-12 col-xl-5">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h4">{% trans "Submit your CV" %}</h2>
+          <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+              <div class="mb-3">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                {% for error in field.errors %}
+                  <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+              </div>
+            {% endfor %}
+            <button type="submit" class="btn btn-primary">{% trans "Send CV" %}</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

@@ -57,6 +57,7 @@ PROJECT_LOCAL_APPS = [
     "apps.gallery",
     "apps.groups",
     "apps.imager",
+    "apps.jobs",
     "apps.leads",
     "apps.links",
     "apps.locale",

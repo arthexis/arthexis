@@ -90,6 +90,10 @@
           </p>
         {% endif %}
         <p class="mb-3">
+          <a class="btn btn-sm btn-outline-success" href="{{ jobs_board_url }}">{% trans "Open jobs board" %}</a>
+          <span class="d-block text-muted small mt-2">{% trans "Share this public board with candidates to browse roles and submit CVs." %}</span>
+        </p>
+        <p class="mb-3">
           {% if is_gallery_manager %}
             <a class="btn btn-sm btn-primary" href="{{ gallery_upload_url }}">{% trans "Create / upload image" %}</a>
           {% else %}
