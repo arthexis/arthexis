@@ -43,7 +43,6 @@ nav:
       - Energy Transactions Ledger: energy-transactions-ledger.md
       - Upgrade Error Handling: upgrade-error-handling.md
       - Recipes: recipes.md
-      - Benchmarking install, start, and upgrade: benchmarking.md
       - Release Notes: release-notes.md
   - Development:
       - App Structure Policy: development/app-structure-policy.md
