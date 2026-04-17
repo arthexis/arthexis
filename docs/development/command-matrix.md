@@ -20,7 +20,7 @@ Use this as the default in local QA and agent workflows.
 | Local QA (suite-wide/marker runs) | `.venv/bin/python manage.py test run -- -m "<expr>"` | Keep using the same management entrypoint; pass pytest args after `--`. |
 | Local QA (migration validation) | `.venv/bin/python manage.py migrations check` | Preferred migration guardrail before PRs. |
 | CI pipelines | `python -m pytest ...` inside workflow jobs | Valid in CI workflow implementation where jobs already manage interpreter/bootstrap lifecycle. |
-| Troubleshooting missing deps | `./env-refresh.sh --deps-only` then rerun canonical command | Run when environment may be unbootstrapped. |
+| Troubleshooting missing deps | `./env-refresh.sh --deps-only` | Run when environment may be unbootstrapped; then rerun the canonical command. |
 | Troubleshooting command behavior | `.venv/bin/python manage.py test run -- <target> -k <pattern>` | Troubleshoot through the same canonical entrypoint first. |
 | Direct local pytest | `.venv/bin/python -m pytest ...` | Allowed only for low-level debugging of pytest/plugin behavior or when developing pytest-backed helpers. Prefer recording reproductions with the canonical management command in PR notes. |
 
