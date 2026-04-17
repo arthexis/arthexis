@@ -8,8 +8,10 @@ from django.core.management.base import CommandError
 from apps.nodes.models import Node, NodeRole
 from apps.sigils.models import SigilRoot
 from apps.sigils.script_runtime import (
+    ScriptPolicyError,
     ScriptParseError,
     clear_script_execution_cache,
+    execute_script,
     parse_script,
 )
 
@@ -151,3 +153,46 @@ def test_solve_disables_cache_by_default(monkeypatch):
     call_command("solve", expr="hello")
 
     assert calls["count"] == 2
+
+
+@pytest.mark.django_db
+def test_execute_script_interpolates_longest_variable_name_first(monkeypatch):
+    monkeypatch.setattr("apps.sigils.script_runtime.resolve_sigils", lambda *args, **kwargs: args[0])
+
+    outputs = execute_script(
+        parse_script(
+            "\n".join(
+                [
+                    "LET A = foo",
+                    "LET AB = bar",
+                    "EMIT $AB",
+                ]
+            )
+        ),
+        context="admin",
+    )
+
+    assert outputs == ["bar"]
+
+
+@pytest.mark.django_db
+def test_execute_script_allows_bracketed_json_payload(monkeypatch):
+    monkeypatch.setattr(
+        "apps.sigils.script_runtime.resolve_sigils",
+        lambda *args, **kwargs: '[{"id": 1}]',
+    )
+
+    outputs = execute_script(parse_script("EMIT anything"), context="admin")
+
+    assert outputs == ['[{"id": 1}]']
+
+
+@pytest.mark.django_db
+def test_execute_script_rejects_unresolved_sigil_token(monkeypatch):
+    monkeypatch.setattr(
+        "apps.sigils.script_runtime.resolve_sigils",
+        lambda *args, **kwargs: "[CP:hostname=SIM-CP-1.public_endpoint]",
+    )
+
+    with pytest.raises(ScriptPolicyError, match="blocked or unresolved"):
+        execute_script(parse_script("EMIT anything"), context="admin")

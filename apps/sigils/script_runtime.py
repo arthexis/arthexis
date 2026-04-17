@@ -37,6 +37,7 @@ class ScriptInstruction:
 
 
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_UNRESOLVED_SIGIL_RE = re.compile(r"\[[A-Za-z0-9_-]+(?:[:=.]|\||->)")
 
 
 def parse_script(text: str) -> list[ScriptInstruction]:
@@ -110,10 +111,12 @@ def _resolve_policy(context: str) -> tuple[set[str] | None, set[str] | None]:
 
 
 def _interpolate_variables(expression: str, variables: dict[str, str]) -> str:
-    rendered = expression
-    for key in sorted(variables):
-        rendered = rendered.replace(f"${key}", variables[key])
-    return rendered
+    if not variables:
+        return expression
+
+    sorted_keys = sorted(variables, key=len, reverse=True)
+    pattern = re.compile("|".join(re.escape(f"${key}") for key in sorted_keys))
+    return pattern.sub(lambda match: variables[match.group()[1:]], expression)
 
 
 def execute_script(
@@ -134,7 +137,7 @@ def execute_script(
             allowed_roots=allowed_roots,
             allowed_actions=allowed_actions,
         )
-        if "[" in resolved and "]" in resolved:
+        if _UNRESOLVED_SIGIL_RE.search(resolved):
             raise ScriptPolicyError(
                 f"line {instruction.line_number}: expression blocked or unresolved"
             )
