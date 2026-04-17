@@ -70,6 +70,13 @@ class User(Entity, AbstractUser):
         default=False,
         help_text=_("Require this user to change their password at the next login."),
     )
+    allow_local_network_passwordless_login = models.BooleanField(
+        _("allow local network passwordless login"),
+        default=False,
+        help_text=_(
+            "Allow this non-staff user to sign in from local IPv4 /16 peers without a password check."
+        ),
+    )
     temporary_expires_at = models.DateTimeField(
         null=True,
         blank=True,

@@ -106,6 +106,14 @@ class Command(BaseCommand):
             dest="groups",
             help="Assign the user to the provided group. May be passed multiple times.",
         )
+        parser.add_argument(
+            "--access-point-user",
+            action="store_true",
+            help=(
+                "Configure a non-staff account for local-network access point login "
+                "without password verification."
+            ),
+        )
         parser.set_defaults(force_change=None)
 
     def handle(self, *args, **options):
@@ -120,6 +128,7 @@ class Command(BaseCommand):
         raw_password = options.get("raw_password")
         force_change = options.get("force_change")
         groups = coerce_option_list(options.get("groups"))
+        access_point_user = bool(options.get("access_point_user"))
 
         if delete_password and raw_password:
             raise CommandError("--password cannot be used together with --delete.")
@@ -129,12 +138,22 @@ class Command(BaseCommand):
             raise CommandError(
                 "--staff and --superuser can only be used with --create or --update."
             )
+        if access_point_user and (staff or superuser):
+            raise CommandError("--access-point-user cannot be combined with --staff or --superuser.")
+        if access_point_user and temporary:
+            raise CommandError("--access-point-user cannot be combined with --temporary.")
+        if access_point_user and delete_password:
+            raise CommandError("--access-point-user cannot be combined with --delete.")
+        if access_point_user and raw_password:
+            raise CommandError("--access-point-user cannot be combined with --password.")
 
         if identifier is None:
             if delete_password:
                 raise CommandError("identifier is required when using --delete.")
             if groups:
                 raise CommandError("identifier is required when using --group.")
+            if access_point_user:
+                raise CommandError("identifier is required when using --access-point-user.")
             generated_password = raw_password or temp_passwords.generate_password()
             self.stdout.write(f"Generated password: {generated_password}")
             self.stdout.write(self.style.SUCCESS("Password generated."))
@@ -161,8 +180,26 @@ class Command(BaseCommand):
             )
 
         user = users[0]
-        if update_user or (create_user and not created and (staff or superuser)):
-            self._update_user(user, staff=staff, superuser=superuser)
+        if (
+            update_user
+            or access_point_user
+            or (create_user and not created and (staff or superuser or access_point_user))
+        ):
+            self._update_user(
+                user,
+                staff=staff,
+                superuser=superuser,
+                access_point_user=access_point_user,
+            )
+        if access_point_user:
+            resolved_groups = self._resolve_groups(groups) if groups else []
+            self._configure_access_point_user(user)
+            self._harden_access_point_membership(user, resolved_groups)
+            self.stdout.write(self.style.SUCCESS(f"Configured {user.username} as a local access point user."))
+            return
+
+        self._disable_access_point_user_mode(user)
+
         if groups:
             self._assign_groups(user, groups)
         ensure_default_staff_groups(user, explicit_group_names=groups)
@@ -257,7 +294,14 @@ class Command(BaseCommand):
         user.save(update_fields=list(fields))
         return user
 
-    def _update_user(self, user, *, staff: bool = False, superuser: bool = False) -> None:
+    def _update_user(
+        self,
+        user,
+        *,
+        staff: bool = False,
+        superuser: bool = False,
+        access_point_user: bool = False,
+    ) -> None:
         fields = []
         if staff and not user.is_staff:
             user.is_staff = True
@@ -269,8 +313,46 @@ class Command(BaseCommand):
             user.is_staff = True
             if "is_staff" not in fields:
                 fields.append("is_staff")
+        if access_point_user:
+            if user.is_staff:
+                user.is_staff = False
+                if "is_staff" not in fields:
+                    fields.append("is_staff")
+            if user.is_superuser:
+                user.is_superuser = False
+                if "is_superuser" not in fields:
+                    fields.append("is_superuser")
         if fields:
             user.save(update_fields=fields)
+
+    def _configure_access_point_user(self, user) -> None:
+        fields = []
+        if not getattr(user, "allow_local_network_passwordless_login", False):
+            user.allow_local_network_passwordless_login = True
+            fields.append("allow_local_network_passwordless_login")
+        if user.force_password_change:
+            user.force_password_change = False
+            fields.append("force_password_change")
+        if user.has_usable_password():
+            user.set_unusable_password()
+            fields.append("password")
+        if getattr(user, "temporary_expires_at", None) is not None:
+            user.temporary_expires_at = None
+            fields.append("temporary_expires_at")
+        temp_passwords.discard_temp_password(user.username)
+        if fields:
+            user.save(update_fields=fields)
+
+    def _disable_access_point_user_mode(self, user) -> None:
+        if not getattr(user, "allow_local_network_passwordless_login", False):
+            return
+        user.allow_local_network_passwordless_login = False
+        user.save(update_fields=["allow_local_network_passwordless_login"])
+
+    def _harden_access_point_membership(self, user, groups: list[Group]) -> None:
+        user.groups.clear()
+        if groups:
+            user.groups.add(*groups)
 
     def _delete_password(self, user) -> None:
         user.set_unusable_password()
@@ -287,6 +369,11 @@ class Command(BaseCommand):
     def _assign_groups(self, user, groups: list[str]) -> None:
         """Assign a user to one or more existing auth groups."""
 
+        user.groups.add(*self._resolve_groups(groups))
+
+    def _resolve_groups(self, groups: list[str]) -> list[Group]:
+        """Resolve requested group names and raise when any are unknown."""
+
         existing_groups = {
             group.name: group for group in Group.objects.filter(name__in=groups).order_by("name")
         }
@@ -294,8 +381,7 @@ class Command(BaseCommand):
         if missing_groups:
             missing_names = ", ".join(missing_groups)
             raise CommandError(f"Unknown groups: {missing_names}")
-
-        user.groups.add(*[existing_groups[name] for name in groups])
+        return [existing_groups[name] for name in groups]
 
     def _set_force_password_change(self, user, force_change: bool) -> None:
         if user.force_password_change == force_change:
