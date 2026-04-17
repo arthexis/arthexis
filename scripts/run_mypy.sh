@@ -7,6 +7,9 @@ export CELERY_LOG_LEVEL="${CELERY_LOG_LEVEL:-WARNING}"
 export DEBUG="${DEBUG:-0}"
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+"$SCRIPT_DIR/preflight-env.sh"
+
 PYTHON_BIN=".venv/bin/python"
 if [[ "${OSTYPE:-}" == "msys" || "${OSTYPE:-}" == "cygwin" || "${OSTYPE:-}" == "win32" ]]; then
   PYTHON_BIN=".venv/Scripts/python.exe"
