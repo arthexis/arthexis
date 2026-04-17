@@ -97,14 +97,15 @@ class Command(BaseCommand):
                 "-c",
                 (
                     "import importlib.util,json,os,sys;"
-                    "deps=('pytest','pytest_django','pytest_timeout');"
+                    "deps={'pytest':'pytest','pytest-django':'pytest_django',"
+                    "'pytest-timeout':'pytest_timeout'};"
                     "print(json.dumps({"
                     "'python_executable':sys.executable,"
                     "'virtualenv_active':bool(os.environ.get('VIRTUAL_ENV')) "
                     "or sys.prefix!=getattr(sys,'base_prefix',sys.prefix),"
                     "'virtualenv_path':os.environ.get('VIRTUAL_ENV'),"
-                    "'dependencies':{dep:bool(importlib.util.find_spec(dep)) "
-                    "for dep in deps}}))"
+                    "'dependencies':{pkg:bool(importlib.util.find_spec(mod)) "
+                    "for pkg, mod in deps.items()}}))"
                 ),
             ],
             capture_output=True,
@@ -116,7 +117,10 @@ class Command(BaseCommand):
         if probe.returncode != 0:
             raise CommandError("Unable to run QA readiness probe for test execution.")
         try:
-            readiness = json.loads(probe.stdout.strip())
+            lines = probe.stdout.strip().splitlines()
+            if not lines:
+                raise CommandError("QA readiness probe produced no output.")
+            readiness = json.loads(lines[-1])
         except json.JSONDecodeError as exc:
             raise CommandError("QA readiness probe returned invalid output.") from exc
         if not isinstance(readiness, dict):

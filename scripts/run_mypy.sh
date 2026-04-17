@@ -8,6 +8,13 @@ export DEBUG="${DEBUG:-0}"
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings}"
 
 PYTHON_BIN=".venv/bin/python"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="$(command -v python3 || true)"
+fi
+if [[ -z "$PYTHON_BIN" ]]; then
+  echo "Error: no Python interpreter found (.venv/bin/python or python3)." >&2
+  exit 127
+fi
 mypy_output="$(mktemp)"
 cleanup() {
   rm -f "$mypy_output"

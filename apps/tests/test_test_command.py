@@ -21,8 +21,8 @@ def test_run_pytest_prints_readiness_before_execution(monkeypatch, tmp_path, cap
         "virtualenv_path": "/workspace/arthexis/.venv",
         "dependencies": {
             "pytest": True,
-            "pytest_django": True,
-            "pytest_timeout": True,
+            "pytest-django": True,
+            "pytest-timeout": True,
         },
     }
 
@@ -60,8 +60,8 @@ def test_run_pytest_fails_before_pytest_when_dependency_missing(monkeypatch, tmp
         "virtualenv_path": "/workspace/arthexis/.venv",
         "dependencies": {
             "pytest": True,
-            "pytest_django": False,
-            "pytest_timeout": True,
+            "pytest-django": False,
+            "pytest-timeout": True,
         },
     }
 
@@ -77,5 +77,5 @@ def test_run_pytest_fails_before_pytest_when_dependency_missing(monkeypatch, tmp
         command._run_pytest(["--", "apps/tests/test_test_command.py"])
 
     assert "Core test dependencies are missing" in str(exc.value)
-    assert "pytest_django" in str(exc.value)
+    assert "pytest-django" in str(exc.value)
     assert len(calls) == 1
