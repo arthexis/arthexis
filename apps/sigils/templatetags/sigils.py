@@ -13,7 +13,7 @@ def sigil_expr(context, expression: str, current=None):
 
     request = context.get("request")
     active_object = current or context.get("object")
-    source = expression or ""
+    source = "" if expression is None else str(expression)
     if "[" not in source:
         source = f"[{source}]"
     return resolve_user_safe_sigils(source, current=active_object, request=request)

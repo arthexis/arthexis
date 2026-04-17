@@ -161,6 +161,13 @@ def _normalize_allowed_roots(allowed_roots: Collection[str] | None) -> set[str] 
     return {_normalize_name(root).upper() for root in allowed_roots if root}
 
 
+def clear_user_safe_policy_caches() -> None:
+    """Clear cached user-safe policy data after admin updates."""
+    get_user_safe_sigil_actions.cache_clear()
+    get_user_safe_sigil_roots.cache_clear()
+
+
+@lru_cache(maxsize=1)
 def get_user_safe_sigil_roots() -> set[str]:
     """Return sigil roots marked safe for user-facing resolution."""
     return {
@@ -171,6 +178,7 @@ def get_user_safe_sigil_roots() -> set[str]:
     }
 
 
+@lru_cache(maxsize=1)
 def get_user_safe_sigil_actions() -> set[str]:
     """Return user-safe pipeline actions for user-facing resolution."""
     has_safe_entity_root = SigilRoot.objects.filter(
@@ -1087,6 +1095,7 @@ def resolve_sigils(
     *,
     allowed_roots: Collection[str] | None = None,
     allowed_actions: Collection[str] | None = None,
+    unresolved_token_replacement: str | None = None,
 ) -> str:
     """Resolve every sigil token found in the given text.
 
@@ -1109,42 +1118,29 @@ def resolve_sigils(
         if span.start > cursor:
             parts.append(text[cursor : span.start])
         token = text[span.start + 1 : span.end - 1]
-        parts.append(
-            _resolve_token_with_policy(
-                token,
-                current,
-                allowed_roots=normalized_allowed_roots,
-                allowed_actions=normalized_allowed_actions,
-            )
+        resolved = _resolve_token_with_policy(
+            token,
+            current,
+            allowed_roots=normalized_allowed_roots,
+            allowed_actions=normalized_allowed_actions,
         )
+        if (
+            unresolved_token_replacement is not None
+            and resolved == _failed_resolution(token)
+        ):
+            parts.append(unresolved_token_replacement)
+        else:
+            parts.append(resolved)
         cursor = span.end
     if cursor < len(text):
         parts.append(text[cursor:])
     return "".join(parts)
-
-
-
-
-def _strip_unresolved_tokens(text: str) -> str:
-    """Remove unresolved sigil placeholders from already-rendered text."""
-
-    if "[" not in text:
-        return text
-    parts: list[str] = []
-    cursor = 0
-    for span in scan_sigil_tokens(text):
-        if span.start > cursor:
-            parts.append(text[cursor:span.start])
-        cursor = span.end
-    if cursor < len(text):
-        parts.append(text[cursor:])
-    return "".join(parts)
-
-
 def get_user_safe_unresolved_behavior() -> str:
     """Return user-safe unresolved token behavior for template rendering."""
 
-    configured = getattr(settings, "SIGILS_USER_SAFE_UNRESOLVED_BEHAVIOR", "").lower()
+    configured = str(
+        getattr(settings, "SIGILS_USER_SAFE_UNRESOLVED_BEHAVIOR", "") or ""
+    ).lower()
     if configured in {
         SigilRenderPolicy.UnresolvedBehavior.EMPTY,
         SigilRenderPolicy.UnresolvedBehavior.PLACEHOLDER,
@@ -1166,6 +1162,12 @@ def resolve_user_safe_sigils(
 ) -> str:
     """Resolve text using user-safe root/action policy and safe degradation."""
 
+    unresolved_behavior = get_user_safe_unresolved_behavior()
+    unresolved_token_replacement = (
+        ""
+        if unresolved_behavior == SigilRenderPolicy.UnresolvedBehavior.EMPTY
+        else None
+    )
     try:
         with bind(request=request, current=current):
             resolved = resolve_sigils(
@@ -1173,16 +1175,12 @@ def resolve_user_safe_sigils(
                 current=current,
                 allowed_roots=get_user_safe_sigil_roots(),
                 allowed_actions=get_user_safe_sigil_actions(),
+                unresolved_token_replacement=unresolved_token_replacement,
             )
     except Exception:
         logger.exception("User-safe sigil rendering failed")
         resolved = text
 
-    if (
-        get_user_safe_unresolved_behavior()
-        == SigilRenderPolicy.UnresolvedBehavior.EMPTY
-    ):
-        return _strip_unresolved_tokens(resolved)
     return resolved
 
 

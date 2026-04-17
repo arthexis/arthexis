@@ -6,6 +6,12 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.entity import Entity, EntityManager, EntityQuerySet
 
 
+def _clear_sigil_policy_caches() -> None:
+    from apps.sigils.sigil_resolver import clear_user_safe_policy_caches
+
+    clear_user_safe_policy_caches()
+
+
 class SigilRootQuerySet(EntityQuerySet):
     def delete(self):  # pragma: no cover - protected from deletion
         raise ProtectedError(_("Sigil Roots cannot be deleted."), list(self))
@@ -38,6 +44,7 @@ class SigilRoot(Entity):
         if self.prefix:
             self.prefix = self.prefix.upper()
         super().save(*args, **kwargs)
+        _clear_sigil_policy_caches()
 
     def default_instance(self):
         """Return the preferred instance for this sigil root's model.
@@ -118,7 +125,12 @@ class SigilRenderPolicy(models.Model):
         EMPTY = "empty", _("Empty output")
         PLACEHOLDER = "placeholder", _("Keep placeholder")
 
-    singleton_key = models.CharField(default="default", editable=False, max_length=20, unique=True)
+    singleton_key = models.CharField(
+        default="default",
+        editable=False,
+        max_length=20,
+        unique=True,
+    )
     unresolved_behavior = models.CharField(
         choices=UnresolvedBehavior.choices,
         default=UnresolvedBehavior.PLACEHOLDER,
@@ -132,6 +144,10 @@ class SigilRenderPolicy(models.Model):
     def get_solo(cls):
         policy, _ = cls.objects.get_or_create(singleton_key="default")
         return policy
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        _clear_sigil_policy_caches()
 
     def __str__(self):  # pragma: no cover - simple representation
         return "Sigil Render Policy"
