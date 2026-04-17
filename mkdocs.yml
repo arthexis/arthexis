@@ -22,7 +22,6 @@ nav:
   - Charging Protocols:
       - CP Statuses and Transitions: ocpp_cp_statuses.md
       - OCPP Connection Status: ocpp_connection_status.md
-      - OCPP 1.6 Compliance Review: ocpp16_compliance_review.md
       - OCPP 1.6 User Manual: development/ocpp-user-manual.md
   - Features:
       - Feature Overview: feature/index.md
