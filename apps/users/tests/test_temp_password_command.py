@@ -228,6 +228,29 @@ class PasswordCommandTests(TestCase):
         assert user.force_password_change is False
         assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
 
+    def test_configures_access_point_user_mode_clears_temporary_credentials(self):
+        """Access-point mode should clear temporary-password state for hardened login."""
+
+        Group.objects.create(name=AP_USER_GROUP_NAME)
+        user = get_user_model().objects.create_user(
+            username="ap-temp-clear",
+            email="ap-temp-clear@example.com",
+            password="InitialPassword123",
+            temporary_expires_at=timezone.now() + timedelta(hours=1),
+        )
+        temp_passwords.store_temp_password(user.username, "TemporaryPassword123")
+
+        call_command(
+            "password",
+            user.username,
+            access_point_user=True,
+            group=AP_USER_GROUP_NAME,
+        )
+
+        user.refresh_from_db()
+        assert user.temporary_expires_at is None
+        assert temp_passwords.load_temp_password(user.username) is None
+
     def test_access_point_user_mode_rejects_password_argument(self):
         """Access-point mode should reject contradictory password arguments."""
 

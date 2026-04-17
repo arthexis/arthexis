@@ -330,6 +330,10 @@ class Command(BaseCommand):
         if user.has_usable_password():
             user.set_unusable_password()
             fields.append("password")
+        if getattr(user, "temporary_expires_at", None) is not None:
+            user.temporary_expires_at = None
+            fields.append("temporary_expires_at")
+        temp_passwords.discard_temp_password(user.username)
         if fields:
             user.save(update_fields=fields)
 
