@@ -54,7 +54,6 @@ nav:
       - Management Command Deprecation Pattern: development/management-command-deprecation-pattern.md
       - Marker Governance Policy: development/marker-governance-policy.md
       - MyPy Adoption Checklist: development/mypy-adoption-checklist.md
-      - Nodes Admin Package Reference: development/nodes-admin-package-reference.md
       - Package Release Process: development/package-release-process.md
       - Release Package Options: development/release-package-options.md
       - Secret Scanning: development/secret-scanning.md

@@ -10,9 +10,7 @@ The Django admin setup for the nodes app is split across focused modules to keep
 
 For release confidence criteria and maturity semantics, see the [Versioning and Maturity Policy](../../../docs/development/versioning-maturity-policy.md).
 
-For a module-by-module map, see the dedicated reference:
-
-- [`docs/development/nodes-admin-package-reference.md`](../../../docs/development/nodes-admin-package-reference.md)
+For admin extension and customization patterns, see the [Admin UI Framework guide](../../../docs/development/admin-ui-framework.md).
 
 Import `apps.nodes.admin` (the package) to ensure all admin registrations are evaluated; `__init__.py` re-exports the registered admin classes for convenience.
 
