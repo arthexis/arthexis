@@ -74,6 +74,17 @@ All active WebSocket connections, transactions, logs, and pending CSMS calls are
 ### Timeout and error handling
 Pending-call metadata is stored in-memory and mirrored to Redis so responses can be reconciled even after reconnects. Each outgoing call registers an event handle and an optional timeout timer; when a timeout fires, the scheduler adds a charger-log entry and marks the request as notified so duplicate alerts are suppressed. When the consumer records a result or error (including OCPP call errors), it clears timers, signals waiting threads, and persists the payload and error context, ensuring admin dashboards and logs accurately reflect both success and failure paths. The request/response lifecycle therefore surfaces clearly across the WebSocket logs, pending-call registries, and charger detail views.
 
+
+## Connection handshake troubleshooting
+Use this checklist when a charger does not appear as connected in Arthexis even though network connectivity exists:
+
+- Confirm the charger target uses `wss://` and points to the expected gateway host and TLS listener port.
+- Verify TLS negotiation completes end-to-end (look for both client and server handshake packets). If TLS does not complete, no WebSocket upgrade or OCPP frame can reach the CSMS.
+- If a reverse proxy or load balancer is present, validate that it forwards WebSocket upgrade requests and preserves required headers to Django/ASGI.
+- Check for middleboxes (firewalls, captive portals, TLS-inspecting proxies) that permit TCP but interfere with TLS or WebSocket upgrade traffic.
+- Validate TLS compatibility between charger and gateway (protocol versions, ciphers, and certificate chain expectations).
+- After transport succeeds, confirm the CSMS recorded a fresh connection event in the charger log to prove the application accepted the socket.
+
 ## Operational management commands
 Use the unified `ocpp` management command for operational workflows:
 
