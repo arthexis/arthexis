@@ -80,7 +80,7 @@ def resolve_entity_lookup(
             except FieldDoesNotExist:
                 invalid_lookup = True
                 field_obj = None
-            if field_obj and isinstance(field_obj, models.CharField):
+            if field_obj and isinstance(field_obj, (models.CharField, models.TextField)):
                 lookup = {f"{field_name}__iexact": instance_id}
             else:
                 lookup = {field_name: instance_id}

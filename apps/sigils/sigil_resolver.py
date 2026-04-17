@@ -10,6 +10,7 @@ from functools import lru_cache
 from django.conf import settings
 from django.core import serializers
 from django.core.exceptions import FieldDoesNotExist, FieldError
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 
 from . import entity_lookup
@@ -22,6 +23,17 @@ logger = logging.getLogger(__name__)
 
 ATTRIBUTE_RESOLUTION_TIMEOUT = float(os.environ.get("SIGIL_ATTRIBUTE_TIMEOUT", 2.0))
 ATTRIBUTE_RESOLUTION_WORKERS = int(os.environ.get("SIGIL_ATTRIBUTE_WORKERS", 4)) or 1
+PIPELINE_FILTER_DEFAULT_LIMIT = 50
+PIPELINE_FILTER_MAX_LIMIT = 200
+PIPELINE_FILTER_SENSITIVE_FIELD_TOKENS = (
+    "api_key",
+    "hash",
+    "key",
+    "password",
+    "private",
+    "secret",
+    "token",
+)
 _ATTRIBUTE_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
     max_workers=ATTRIBUTE_RESOLUTION_WORKERS,
     thread_name_prefix="sigil-attr",
@@ -417,6 +429,10 @@ def _normalize_pipeline_segment(segment: str) -> str:
     return f"{head.upper()}:{tail}"
 
 
+def _is_valid_pipeline_head(name: str) -> bool:
+    return bool(name) and all(char.isalnum() or char in {"_", "-"} for char in name)
+
+
 def _parse_pipeline_token_parts(token: str) -> tuple[SigilTokenParts, str | None]:
     if "|" not in token:
         raise TokenParseError("Sigil token is not a pipeline token")
@@ -424,10 +440,18 @@ def _parse_pipeline_token_parts(token: str) -> tuple[SigilTokenParts, str | None
     normalized_root_segment = _normalize_pipeline_segment(root_segment)
     normalized_action_segment = _normalize_pipeline_segment(action_segment)
     root_name, separator, root_payload = normalized_root_segment.partition(":")
+    if not separator:
+        root_name = normalized_root_segment
+        root_payload = ""
     action_name, action_separator, action_payload = normalized_action_segment.partition(
         ":"
     )
-    if not root_name or not separator or not action_name or not action_separator:
+    if not action_separator:
+        action_name = normalized_action_segment
+        action_payload = ""
+    if not _is_valid_pipeline_head(root_name) or not _is_valid_pipeline_head(
+        action_name
+    ):
         raise TokenParseError("Sigil pipeline token is malformed")
 
     filter_field = None
@@ -450,8 +474,7 @@ def _parse_pipeline_token_parts(token: str) -> tuple[SigilTokenParts, str | None
         key = key_head
         param = key_tail
     elif action_upper in {"COUNT", "MAX", "MIN", "SUM", "TOTAL"}:
-        key = action_payload or None
-        instance_target = key or ""
+        instance_target = action_payload or ""
         instance_id = f"{instance_target}:{entity_lookup.map_pipeline_action_to_aggregate(action_upper)}"
     elif action_upper in {"GET", "FIELD"}:
         key = action_payload or None
@@ -820,7 +843,7 @@ def _resolve_entity_root(
             field_obj = model._meta.get_field(filter_field)
         except FieldDoesNotExist:
             return _failed_resolution(context.original_token)
-        if isinstance(field_obj, models.CharField):
+        if isinstance(field_obj, (models.CharField, models.TextField)):
             lookup = {f"{filter_field}__iexact": context.param}
         else:
             lookup = {filter_field: context.param}
@@ -828,7 +851,34 @@ def _resolve_entity_root(
             qs = model.objects.filter(**lookup)
         except (FieldError, TypeError, ValueError):
             return _failed_resolution(context.original_token)
-        return serializers.serialize("json", qs)
+        filter_limit = getattr(
+            settings,
+            "SIGILS_PIPELINE_FILTER_LIMIT",
+            PIPELINE_FILTER_DEFAULT_LIMIT,
+        )
+        try:
+            filter_limit = int(filter_limit)
+        except (TypeError, ValueError):
+            filter_limit = PIPELINE_FILTER_DEFAULT_LIMIT
+        filter_limit = max(1, min(filter_limit, PIPELINE_FILTER_MAX_LIMIT))
+
+        safe_fields = []
+        for model_field in model._meta.fields:
+            if model_field.is_relation:
+                continue
+            lower_name = model_field.name.lower()
+            if any(
+                token in lower_name for token in PIPELINE_FILTER_SENSITIVE_FIELD_TOKENS
+            ):
+                continue
+            safe_fields.append(model_field.name)
+        if model._meta.pk.name not in safe_fields:
+            safe_fields.insert(0, model._meta.pk.name)
+        if filter_field not in safe_fields and not field_obj.is_relation:
+            safe_fields.append(filter_field)
+
+        payload = list(qs.values(*safe_fields)[:filter_limit])
+        return json.dumps(payload, cls=DjangoJSONEncoder)
 
     aggregate_target, aggregate_func = entity_lookup.parse_aggregate_request(
         context.token_parts.filter_field,
@@ -902,7 +952,10 @@ def _build_resolution_context(
     """Build normalized token resolution context from a raw token."""
     pipeline_action = None
     if _is_pipeline_v2_enabled() and "|" in token:
-        token_parts, pipeline_action = _parse_pipeline_token_parts(token)
+        try:
+            token_parts, pipeline_action = _parse_pipeline_token_parts(token)
+        except TokenParseError:
+            token_parts = _parse_token_parts(token)
     else:
         token_parts = _parse_token_parts(token)
     normalized_root = _normalize_name(token_parts.root_name)

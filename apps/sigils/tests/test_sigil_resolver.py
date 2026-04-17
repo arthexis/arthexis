@@ -108,6 +108,91 @@ def test_pipeline_v2_coexists_with_dot_and_parenthesis_sigils(settings, node_roo
 
 
 @pytest.mark.django_db
+def test_pipeline_v2_aggregate_action_payload_resolves(settings, node_root):
+    settings.SIGILS_PIPELINE_V2_ENABLED = True
+    role = NodeRole.objects.create(name="Counter")
+    Node.objects.create(
+        hostname="SIM-CP-AGG-1",
+        address="127.0.1.1",
+        mac_address="00:11:22:33:44:31",
+        port=9011,
+        public_endpoint="SIM-CP-AGG-1",
+        role=role,
+    )
+    Node.objects.create(
+        hostname="SIM-CP-AGG-2",
+        address="127.0.1.2",
+        mac_address="00:11:22:33:44:32",
+        port=9012,
+        public_endpoint="SIM-CP-AGG-2",
+        role=role,
+    )
+
+    resolved = sigil_resolver.resolve_sigils("[CP:|COUNT:port]")
+
+    assert resolved == "2"
+
+
+@pytest.mark.django_db
+def test_pipeline_v2_root_and_action_can_omit_colons(settings, node_root):
+    settings.SIGILS_PIPELINE_V2_ENABLED = True
+    role = NodeRole.objects.create(name="No-Colon")
+    Node.objects.create(
+        hostname="SIM-CP-NC-1",
+        address="127.0.1.3",
+        mac_address="00:11:22:33:44:33",
+        port=9013,
+        public_endpoint="SIM-CP-NC-1",
+        role=role,
+    )
+
+    resolved = sigil_resolver.resolve_sigils("[CP|COUNT:port]")
+
+    assert resolved == "1"
+
+
+@pytest.mark.django_db
+def test_pipeline_v2_filter_uses_safe_bounded_serialization(settings, user_root):
+    settings.SIGILS_PIPELINE_V2_ENABLED = True
+    settings.SIGILS_PIPELINE_FILTER_LIMIT = 1
+    user_model = get_user_model()
+    user_model.objects.create_user(
+        username="filter-a",
+        email="filter@example.com",
+        password="abc12345",
+    )
+    user_model.objects.create_user(
+        username="filter-b",
+        email="filter@example.com",
+        password="abc12345",
+    )
+
+    resolved = sigil_resolver.resolve_sigils("[USR:|FILTER:email:filter@example.com]")
+    payload = json.loads(resolved)
+
+    assert len(payload) == 1
+    assert payload[0]["email"] == "filter@example.com"
+    assert "password" not in payload[0]
+
+
+@pytest.mark.django_db
+def test_pipeline_v2_falls_back_to_legacy_parser_for_pipe_parameters(settings):
+    settings.SIGILS_PIPELINE_V2_ENABLED = True
+    SigilRoot.objects.update_or_create(
+        prefix="REQ", defaults={"context_type": SigilRoot.Context.REQUEST}
+    )
+    factory = RequestFactory()
+    request = factory.get("/example/path?foo%7Cbar=baz")
+    set_request(request)
+    try:
+        resolved = sigil_resolver.resolve_sigils("[REQ.query=foo|bar]")
+    finally:
+        clear_request()
+
+    assert resolved == "baz"
+
+
+@pytest.mark.django_db
 def test_pipeline_v2_user_safe_gating_degrades_disallowed_action(settings, node_root):
     settings.SIGILS_PIPELINE_V2_ENABLED = True
     role = NodeRole.objects.create(name="Charging")
