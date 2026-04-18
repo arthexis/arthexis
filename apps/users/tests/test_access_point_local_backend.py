@@ -182,6 +182,7 @@ class AccessPointLocalUserBackendTests(TestCase):
         user = get_user_model().objects.create_user(
             username="far-ap",
             email="far-ap@example.com",
+            password="correct-password",
             is_staff=False,
             is_superuser=False,
             allow_local_network_passwordless_login=True,
@@ -192,7 +193,7 @@ class AccessPointLocalUserBackendTests(TestCase):
         authenticated = self.backend.authenticate(
             request,
             username=user.username,
-            password="anything",
+            password="correct-password",
         )
 
         assert authenticated is None

@@ -74,7 +74,7 @@ class User(Entity, AbstractUser):
         _("allow local network passwordless login"),
         default=False,
         help_text=_(
-            "Allow this non-staff user to sign in from local IPv4 /16 peers without a password check."
+            "Allow this non-staff user to sign in from local IPv4 /16 peers; users with a usable password must still provide it."
         ),
     )
     temporary_expires_at = models.DateTimeField(
