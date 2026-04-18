@@ -20,8 +20,7 @@ nav:
       - Logging Domain: logging-domain.md
       - Startup Sequence: startup-sequence.md
   - Charging Protocols:
-      - OCPP Connection Status: ocpp_connection_status.md
-      - OCPP 1.6 Compliance Review: ocpp16_compliance_review.md
+      - CP Statuses and Transitions: ocpp_cp_statuses.md
       - OCPP 1.6 User Manual: development/ocpp-user-manual.md
   - Features:
       - Feature Overview: feature/index.md

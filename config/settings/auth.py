@@ -5,9 +5,12 @@ AUTH_USER_MODEL = "users.User"
 
 # Enable RFID authentication backend and restrict default admin login to localhost
 # Keep LocalhostAdminBackend first so the localhost/IP checks run before password
-# or OTP authentication.
+# or OTP authentication. AccessPointLocalUserBackend follows immediately after
+# because its localhost/local-network gate must run before credential-based
+# backends (PasswordOrOTPBackend, TempPasswordBackend, and RFIDBackend).
 AUTHENTICATION_BACKENDS = [
     "apps.users.backends.LocalhostAdminBackend",
+    "apps.users.backends.AccessPointLocalUserBackend",
     "apps.users.backends.PasswordOrOTPBackend",
     "apps.users.backends.TempPasswordBackend",
     "apps.users.backends.RFIDBackend",
