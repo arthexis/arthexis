@@ -2,3 +2,5 @@
 # One path per line. Comments and blank lines are ignored.
 # Example:
 # /admin/links/reference/
+
+/ocpp/c/SIM-CP-1/
