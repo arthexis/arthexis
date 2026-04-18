@@ -146,15 +146,20 @@ fi
 
 if [ ! -f "$PYTHON" ]; then
   if bootstrap_python="$(arthexis_python_bin 2>/dev/null)"; then
-    if "$bootstrap_python" -m venv "$VENV_DIR" >/dev/null 2>&1; then
+    venv_bootstrap_log="$(mktemp)"
+    if "$bootstrap_python" -m venv "$VENV_DIR" >"$venv_bootstrap_log" 2>&1; then
+      rm -f "$venv_bootstrap_log"
       PYTHON="$VENV_DIR/bin/python"
       USE_SYSTEM_PYTHON=0
       FORCE_REQUIREMENTS_INSTALL=1
       echo "Virtual environment not found. Bootstrapping new virtual environment." >&2
     else
+      echo "Virtual environment not found and automatic creation failed. Using system Python." >&2
+      echo "Failed command: $bootstrap_python -m venv $VENV_DIR" >&2
+      sed -e 's/^/venv bootstrap error: /' "$venv_bootstrap_log" >&2
+      rm -f "$venv_bootstrap_log"
       PYTHON="$bootstrap_python"
       USE_SYSTEM_PYTHON=1
-      echo "Virtual environment not found and automatic creation failed. Using system Python." >&2
     fi
   else
     echo "Python interpreter not found. Run ./install.sh first. Skipping." >&2
