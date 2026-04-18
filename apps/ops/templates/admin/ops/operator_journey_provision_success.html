@@ -20,7 +20,7 @@
     <p><code>{{ one_time_password }}</code></p>
     {% if next_step %}
       <p>
-        <a class="button default" href="{% url 'ops:operator-journey-step' next_step.pk %}">{% translate "Continue to next step" %}</a>
+        <a class="button default" href="{% url 'ops:operator-journey-step' journey_slug=next_step.journey.slug step_slug=next_step.slug %}">{% translate "Continue to next step" %}</a>
       </p>
     {% else %}
       <p>

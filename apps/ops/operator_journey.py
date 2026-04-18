@@ -105,7 +105,13 @@ def status_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStatus:
         is_complete=False,
         message=next_step.title,
         task_title=next_step.title,
-        url=reverse("ops:operator-journey-step", args=[next_step.pk]),
+        url=reverse(
+            "ops:operator-journey-step",
+            kwargs={
+                "journey_slug": next_step.journey.slug,
+                "step_slug": next_step.slug,
+            },
+        ),
     )
 
 
