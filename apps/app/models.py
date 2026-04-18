@@ -28,6 +28,7 @@ class Application(Entity):
     class Importance(models.TextChoices):
         CRITICAL = "critical", _("Critical")
         BASELINE = "baseline", _("Baseline")
+        LEGACY = "legacy", _("Legacy")
         PROTOTYPE = "prototype", _("Prototype")
 
     name = models.CharField(max_length=100, unique=True, blank=True)
