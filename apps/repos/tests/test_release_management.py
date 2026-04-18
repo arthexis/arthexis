@@ -486,6 +486,36 @@ def test_release_management_lists_issue_activity_with_reactions(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_release_management_wraps_suite_errors_for_issue_activity_reactions(monkeypatch):
+    """Issue activity should normalize reaction fetch errors in suite mode."""
+
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_resolve_token",
+        lambda self: "token-1",
+    )
+
+    from apps.repos.services import github as github_service
+
+    monkeypatch.setattr(
+        github_service,
+        "fetch_issue_comments",
+        lambda **kwargs: [{"id": 91, "body": "Looking now", "user": {"login": "reviewer-1"}}],
+    )
+    monkeypatch.setattr(
+        github_service,
+        "fetch_issue_comment_reactions",
+        lambda **kwargs: (_ for _ in ()).throw(
+            github_service.GitHubRepositoryError("reactions denied")
+        ),
+    )
+
+    client = ReleaseManagementClient()
+    with pytest.raises(ReleaseManagementError, match="reactions denied"):
+        client.list_issue_activity(RepositoryRef(owner="octo", name="demo"), number=12)
+
+
+@pytest.mark.django_db
 def test_release_management_lists_pull_request_activity_with_gh_api(monkeypatch):
     """Binary activity should flatten gh api pages and sort issue/review comments."""
 
@@ -528,6 +558,41 @@ def test_release_management_lists_pull_request_activity_with_gh_api(monkeypatch)
     assert activity[0]["reactions"][0]["display"] == "👀 reviewer-3"
     assert activity[1]["path"] == "apps/repos/admin.py"
     assert activity[1]["reactions"][0]["display"] == "🚀 reviewer-4"
+
+
+@pytest.mark.django_db
+def test_release_management_wraps_suite_errors_for_pull_request_activity_reactions(monkeypatch):
+    """Pull-request activity should normalize reaction fetch errors in suite mode."""
+
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_resolve_token",
+        lambda self: "token-1",
+    )
+
+    from apps.repos.services import github as github_service
+
+    monkeypatch.setattr(
+        github_service,
+        "fetch_issue_comments",
+        lambda **kwargs: [{"id": 100, "body": "Top-level note", "user": {"login": "reviewer-1"}}],
+    )
+    monkeypatch.setattr(
+        github_service,
+        "fetch_pull_request_review_comments",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr(
+        github_service,
+        "fetch_issue_comment_reactions",
+        lambda **kwargs: (_ for _ in ()).throw(
+            github_service.GitHubRepositoryError("comment reactions denied")
+        ),
+    )
+
+    client = ReleaseManagementClient()
+    with pytest.raises(ReleaseManagementError, match="comment reactions denied"):
+        client.list_pull_request_activity(RepositoryRef(owner="octo", name="demo"), number=14)
 
 
 @pytest.mark.django_db

@@ -416,12 +416,14 @@ class ReleaseManagementClient:
                     cast(dict[str, JSONValue], comment),
                     kind=COMMENT_KIND_ISSUE,
                     reactions=self._summarize_reactions(
-                        list(
-                            github_service.fetch_issue_comment_reactions(
-                                token=token,
-                                owner=repository.owner,
-                                name=repository.name,
-                                comment_id=int(comment.get("id") or 0),
+                        self._run_suite_operation(
+                            lambda: list(
+                                github_service.fetch_issue_comment_reactions(
+                                    token=token,
+                                    owner=repository.owner,
+                                    name=repository.name,
+                                    comment_id=int(comment.get("id") or 0),
+                                )
                             )
                         )
                     ),
@@ -512,12 +514,14 @@ class ReleaseManagementClient:
                             cast(dict[str, JSONValue], comment),
                             kind=COMMENT_KIND_ISSUE,
                             reactions=self._summarize_reactions(
-                                list(
-                                    github_service.fetch_issue_comment_reactions(
-                                        token=token,
-                                        owner=repository.owner,
-                                        name=repository.name,
-                                        comment_id=int(comment.get("id") or 0),
+                                self._run_suite_operation(
+                                    lambda: list(
+                                        github_service.fetch_issue_comment_reactions(
+                                            token=token,
+                                            owner=repository.owner,
+                                            name=repository.name,
+                                            comment_id=int(comment.get("id") or 0),
+                                        )
                                     )
                                 )
                             ),
@@ -530,12 +534,14 @@ class ReleaseManagementClient:
                             cast(dict[str, JSONValue], comment),
                             kind=COMMENT_KIND_REVIEW,
                             reactions=self._summarize_reactions(
-                                list(
-                                    github_service.fetch_pull_request_review_comment_reactions(
-                                        token=token,
-                                        owner=repository.owner,
-                                        name=repository.name,
-                                        comment_id=int(comment.get("id") or 0),
+                                self._run_suite_operation(
+                                    lambda: list(
+                                        github_service.fetch_pull_request_review_comment_reactions(
+                                            token=token,
+                                            owner=repository.owner,
+                                            name=repository.name,
+                                            comment_id=int(comment.get("id") or 0),
+                                        )
                                     )
                                 )
                             ),
