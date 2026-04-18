@@ -10,6 +10,7 @@ from apps.rates.mixins import RateLimitedViewMixin
 from apps.sites.utils import landing
 
 from .forms import ChargerVendorSubmissionForm, MaintenanceRequestForm
+from .models import ChargerVendorSubmission
 
 
 @login_required(login_url="pages:login")
@@ -43,6 +44,7 @@ class ChargerVendorSubmissionView(RateLimitedViewMixin, FormView):
     template_name = "tasks/charger_vendor_submission.html"
     form_class = ChargerVendorSubmissionForm
     success_url = reverse_lazy("tasks:charger-vendor-submission-thanks")
+    rate_limit_target = ChargerVendorSubmission
     rate_limit_scope = "charger-vendor-submission"
     rate_limit_fallback = 5
     rate_limit_window = 3600
