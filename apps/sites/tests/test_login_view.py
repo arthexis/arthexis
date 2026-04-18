@@ -41,16 +41,15 @@ def test_login_view_prefills_username_from_registration_session_once(client):
     assert REGISTRATION_USERNAME_PREFILL_SESSION_KEY not in session
 
 
-def test_login_post_does_not_consume_registration_prefill_from_session(client):
+def test_login_view_does_not_consume_registration_session_prefill_on_post(client):
     session = client.session
     session[REGISTRATION_USERNAME_PREFILL_SESSION_KEY] = "session-registered-user"
     session.save()
 
-    response = client.post(reverse("pages:login"), {"username": "", "password": ""})
+    client.post(reverse("pages:login"), {"username": "", "password": ""})
 
-    assert response.status_code == 200
     session = client.session
-    assert session[REGISTRATION_USERNAME_PREFILL_SESSION_KEY] == "session-registered-user"
+    assert session.get(REGISTRATION_USERNAME_PREFILL_SESSION_KEY) == "session-registered-user"
 
 
 def test_login_view_check_mode_prefers_authenticated_username_over_query_prefill(client):

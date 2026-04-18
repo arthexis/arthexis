@@ -60,7 +60,6 @@ These pages now use common panel, stack, action row, and button primitives to el
 - Audit all templates under `apps/*/templates/admin/**` for ad-hoc button/link sizing.
 - Migrate pages incrementally to framework primitives.
 - Introduce new primitives in `admin_ui_framework.css` only when reused by at least two templates.
-- Add visual checks (screenshots) for representative admin pages when changing primitives.
 
 
 ## Enforcement for new changes
@@ -88,5 +87,3 @@ Use the staged rollout below when upgrading legacy admin templates:
    - When two or more apps need the same styling pattern, promote it into `admin_ui_framework.css`.
 5. **Burn down allowlist entries**
    - Remove migrated templates from the legacy allowlist so regressions are prevented automatically.
-6. **Verify visually for high-impact pages**
-   - Capture screenshots of representative admin pages when changing shared primitives.

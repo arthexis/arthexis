@@ -445,7 +445,12 @@ class CustomLoginView(LoginView):
         return form
 
     def get_initial(self):
-        """Return initial values using query-prefill first, then GET-only session prefill."""
+        """Prefill username, consuming registration session prefill on GET only.
+
+        Query params take priority (`registration_username`, then `username`), and
+        the one-time session prefill is consumed only for non-check GET requests.
+        """
+
         initial = super().get_initial()
         if getattr(self, "_login_check_mode", False):
             initial.setdefault("username", self.request.user.get_username())
@@ -457,7 +462,7 @@ class CustomLoginView(LoginView):
         ).strip()
         if not username_prefill and self.request.method == "GET":
             username_prefill = str(
-                self.request.session.pop(self.registration_username_session_key, "")
+                self.request.session.pop(self.registration_username_session_key, "") or ""
             ).strip()
         if username_prefill:
             initial.setdefault("username", username_prefill)
