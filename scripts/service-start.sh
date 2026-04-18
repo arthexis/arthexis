@@ -16,6 +16,8 @@ export TZ="${TZ:-America/Monterrey}"
 . "$BASE_DIR/scripts/helpers/suite-uptime-lock.sh"
 # shellcheck source=scripts/helpers/debug_toolbar.sh
 . "$BASE_DIR/scripts/helpers/debug_toolbar.sh"
+# shellcheck source=scripts/helpers/timing.sh
+. "$BASE_DIR/scripts/helpers/timing.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 ERROR_LOG="$LOG_DIR/error.log"
@@ -146,8 +148,97 @@ clear_pid_files() {
 
 clear_pid_files
 
+declare -Ag STARTUP_PHASE_STARTED_MS
+declare -Ag STARTUP_PHASE_FINISHED_MS
+declare -Ag STARTUP_PHASE_STATUS
+declare -ag STARTUP_PHASE_ORDER
+
+startup_phase_begin() {
+  local phase_name="$1"
+  if [ -z "$phase_name" ]; then
+    return 0
+  fi
+  if [ -z "${STARTUP_PHASE_STARTED_MS[$phase_name]:-}" ]; then
+    STARTUP_PHASE_ORDER+=("$phase_name")
+  fi
+  STARTUP_PHASE_STARTED_MS["$phase_name"]="$(arthexis_timing_now_ms)"
+}
+
+startup_phase_finish() {
+  local phase_name="$1"
+  local status="${2:-completed}"
+  local started_ms="${STARTUP_PHASE_STARTED_MS[$phase_name]:-}"
+  if [ -z "$phase_name" ] || [ -z "$started_ms" ]; then
+    return 0
+  fi
+  STARTUP_PHASE_FINISHED_MS["$phase_name"]="$(arthexis_timing_now_ms)"
+  STARTUP_PHASE_STATUS["$phase_name"]="$status"
+}
+
+startup_phase_timings_json() {
+  {
+    local phase_name
+    for phase_name in "${STARTUP_PHASE_ORDER[@]}"; do
+      local started_ms="${STARTUP_PHASE_STARTED_MS[$phase_name]:-}"
+      local finished_ms="${STARTUP_PHASE_FINISHED_MS[$phase_name]:-}"
+      local status="${STARTUP_PHASE_STATUS[$phase_name]:-completed}"
+      if [ -z "$started_ms" ] || [ -z "$finished_ms" ]; then
+        continue
+      fi
+      printf '%s\t%s\t%s\t%s\n' "$phase_name" "$started_ms" "$finished_ms" "$status"
+    done
+  } | python - <<'PY'
+import json
+import sys
+from datetime import datetime, timezone
+
+entries = []
+for raw_line in sys.stdin:
+    line = raw_line.rstrip("\n")
+    if not line:
+        continue
+    try:
+        name, started_ms, finished_ms, status = line.split("\t", 3)
+    except ValueError:
+        continue
+    started_value = int(started_ms)
+    finished_value = int(finished_ms)
+    duration_ms = max(finished_value - started_value, 0)
+    entries.append(
+        {
+            "name": name,
+            "started_at": datetime.fromtimestamp(
+                started_value / 1000, tz=timezone.utc
+            ).isoformat(),
+            "finished_at": datetime.fromtimestamp(
+                finished_value / 1000, tz=timezone.utc
+            ).isoformat(),
+            "duration_ms": duration_ms,
+            "status": status,
+        }
+    )
+
+print(json.dumps(entries, sort_keys=False))
+PY
+}
+
+wait_for_suite_startup_timed() {
+  local port="$1"
+  local server_pid="$2"
+  local timeout_seconds="$3"
+  startup_phase_begin "readiness_wait"
+  if wait_for_suite_startup "$port" "$server_pid" "$timeout_seconds"; then
+    startup_phase_finish "readiness_wait"
+    return 0
+  fi
+  startup_phase_finish "readiness_wait" "error"
+  return 1
+}
+
 # Ensure virtual environment is available
+startup_phase_begin "runtime_bootstrap"
 if [ ! -d .venv ]; then
+  startup_phase_finish "runtime_bootstrap" "error"
   echo "Virtual environment not found. Run ./install.sh first." >&2
   exit 1
 fi
@@ -160,6 +251,7 @@ for env_file in *.env; do
   . "$env_file"
   set +a
 done
+startup_phase_finish "runtime_bootstrap"
 
 SOFT_FD_LIMIT="$(ulimit -Sn 2>/dev/null || echo "unknown")"
 HARD_FD_LIMIT="$(ulimit -Hn 2>/dev/null || echo "unknown")"
@@ -287,6 +379,7 @@ STATIC_HASH=""
 STORED_HASH=""
 [ -f "$STATIC_MD5_FILE" ] && STORED_HASH=$(cat "$STATIC_MD5_FILE")
 
+startup_phase_begin "staticfiles"
 if [ "$FORCE_COLLECTSTATIC" = false ]; then
   set +e
   STATIC_HASH=$(arthexis_staticfiles_snapshot_check "$STATIC_MD5_FILE" "$STATIC_META_FILE")
@@ -324,6 +417,7 @@ else
   arthexis_staticfiles_clear_staged_lock
   echo "Static files unchanged. Skipping collectstatic."
 fi
+startup_phase_finish "staticfiles"
 
 arthexis_suite_reachable() {
   local port="$1"
@@ -406,8 +500,11 @@ record_startup_duration() {
   local end_time
   end_time=$(date +%s)
   local duration=$((end_time - STARTUP_STARTED_AT))
-  python - "$STARTUP_DURATION_LOCK" "$STARTUP_STARTED_AT" "$end_time" "$duration" "$status" "$PORT" <<'PY'
+  local phase_timings_json
+  phase_timings_json="$(startup_phase_timings_json)"
+  STARTUP_PHASE_TIMINGS_JSON="$phase_timings_json" python - "$STARTUP_DURATION_LOCK" "$STARTUP_STARTED_AT" "$end_time" "$duration" "$status" "$PORT" <<'PY'
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -418,6 +515,15 @@ finished_at = int(sys.argv[3])
 duration = int(sys.argv[4])
 status = int(sys.argv[5])
 port = sys.argv[6] if len(sys.argv) > 6 else ""
+phase_timings = []
+raw_phase_timings = os.environ.get("STARTUP_PHASE_TIMINGS_JSON", "")
+if raw_phase_timings:
+    try:
+        parsed_phase_timings = json.loads(raw_phase_timings)
+    except json.JSONDecodeError:
+        parsed_phase_timings = []
+    if isinstance(parsed_phase_timings, list):
+        phase_timings = parsed_phase_timings
 
 payload = {
     "started_at": datetime.fromtimestamp(started_at, tz=timezone.utc).isoformat(),
@@ -425,6 +531,7 @@ payload = {
     "duration_seconds": duration,
     "status": status,
     "port": port,
+    "phase_timings": phase_timings,
 }
 
 lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -434,17 +541,20 @@ PY
 
 STARTUP_STARTED_AT=$(date +%s)
 ORCHESTRATE_OUTPUT_FILE="$(mktemp)"
+startup_phase_begin "startup_orchestrate"
 if ! python manage.py startup_orchestrate \
   --port "$PORT" \
   --lock-dir "$LOCK_DIR" \
   --service-name "$SERVICE_NAME" \
   --service-mode "$SERVICE_MANAGEMENT_MODE" \
   --celery-mode "$CELERY_MANAGEMENT_MODE" > "$ORCHESTRATE_OUTPUT_FILE"; then
+  startup_phase_finish "startup_orchestrate" "error"
   echo "Startup orchestration failed; aborting startup." >&2
   cat "$ORCHESTRATE_OUTPUT_FILE" >&2 || true
   rm -f "$ORCHESTRATE_OUTPUT_FILE"
   exit 1
 fi
+startup_phase_finish "startup_orchestrate"
 
 readarray -t ORCHESTRATE_EXPORTS < <(
   python - "$ORCHESTRATE_OUTPUT_FILE" <<'PY'
@@ -483,11 +593,15 @@ if [ "$STARTUP_STARTED_AT" -le 0 ]; then
 fi
 
 if [ "$LCD_TARGET_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] || [ "$LCD_EMBEDDED" = true ]; then
+  startup_phase_begin "lcd_coordination"
   arthexis_disable_lcd_modes "$LOCK_DIR" "$SERVICE_NAME"
+  startup_phase_finish "lcd_coordination"
 fi
 
 if [ "$LCD_TARGET_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && [ -n "$SERVICE_NAME" ]; then
+  startup_phase_begin "lcd_target_activation"
   arthexis_start_systemd_unit_if_present "lcd-${SERVICE_NAME}.service"
+  startup_phase_finish "lcd_target_activation"
 elif [ "$LCD_EMBEDDED" = true ] && [ "$LCD_SYSTEMD_UNIT" = true ]; then
   echo "Skipping systemd-managed LCD service because embedded mode is enabled. Reinstall with --systemd to manage the LCD via systemd."
 fi
@@ -495,6 +609,7 @@ fi
 RUNSERVER_EXTRA_ARGS=()
 
 # Start Celery components to handle queued email if enabled
+startup_phase_begin "celery_coordination"
 if [ "$CELERY_EMBEDDED" = true ]; then
   CELERY_NODE_SERVICE_NAME="${SERVICE_NAME:-}"
   if [ -z "$CELERY_NODE_SERVICE_NAME" ]; then
@@ -513,14 +628,18 @@ elif [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && \
   arthexis_start_systemd_unit_if_present "celery-${SERVICE_NAME}.service"
   arthexis_start_systemd_unit_if_present "celery-beat-${SERVICE_NAME}.service"
 fi
+startup_phase_finish "celery_coordination"
 
 if [ "$LCD_EMBEDDED" = true ]; then
+  startup_phase_begin "lcd_launch"
   python -m apps.screens.lcd_screen.runner &
   LCD_PROCESS_PID=$!
   record_pid_file "$LCD_PROCESS_PID" "$LCD_PID_FILE"
+  startup_phase_finish "lcd_launch"
 fi
 
 if [ "$AWAIT_START" = true ]; then
+  startup_phase_begin "runserver_spawn"
   if [ "$RELOAD" = true ]; then
     python manage.py runserver 0.0.0.0:"$PORT" "${RUNSERVER_EXTRA_ARGS[@]}" &
   else
@@ -528,8 +647,9 @@ if [ "$AWAIT_START" = true ]; then
   fi
   DJANGO_SERVER_PID=$!
   record_pid_file "$DJANGO_SERVER_PID" "$DJANGO_PID_FILE"
+  startup_phase_finish "runserver_spawn"
 
-  if wait_for_suite_startup "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
+  if wait_for_suite_startup_timed "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
     record_startup_duration 0
     arthexis_log_suite_uptime "$BASE_DIR" || true
     wait "$DJANGO_SERVER_PID"
@@ -538,6 +658,7 @@ if [ "$AWAIT_START" = true ]; then
     exit 1
   fi
 else
+  startup_phase_begin "runserver_spawn"
   if [ "$RELOAD" = true ]; then
     python manage.py runserver 0.0.0.0:"$PORT" "${RUNSERVER_EXTRA_ARGS[@]}" &
   else
@@ -545,8 +666,9 @@ else
   fi
   DJANGO_SERVER_PID=$!
   record_pid_file "$DJANGO_SERVER_PID" "$DJANGO_PID_FILE"
+  startup_phase_finish "runserver_spawn"
   (
-    if wait_for_suite_startup "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
+    if wait_for_suite_startup_timed "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
       record_startup_duration 0
       arthexis_log_suite_uptime "$BASE_DIR" || true
     else

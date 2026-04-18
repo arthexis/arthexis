@@ -58,6 +58,7 @@ class Command(BaseCommand):
         started_monotonic = time.monotonic()
         started_at_epoch = int(time.time())
         started_at_iso = datetime.now(timezone.utc).isoformat()
+        phase_timings: list[dict[str, object]] = []
 
         base_dir = Path(settings.BASE_DIR)
         lock_dir = Path(options.get("lock_dir") or (base_dir / ".locks"))
@@ -105,16 +106,40 @@ class Command(BaseCommand):
 
         self._write_startup_started_lock(startup_started_lock, started_at_epoch)
 
-        preflight_ok, preflight_status = self._run_preflight(lock_dir=lock_dir, base_dir=base_dir)
+        preflight_ok, preflight_status = self._timed_step(
+            "runserver_preflight",
+            lambda: self._run_preflight(lock_dir=lock_dir, base_dir=base_dir),
+            orchestrate_started_monotonic=started_monotonic,
+        )
         payload["checks"].append(preflight_status)
+        phase_timings.append(preflight_status)
 
-        maintenance_ok, maintenance_status = self._run_startup_maintenance()
+        maintenance_ok, maintenance_status = self._timed_step(
+            "startup_maintenance",
+            self._run_startup_maintenance,
+            orchestrate_started_monotonic=started_monotonic,
+        )
         payload["checks"].append(maintenance_status)
+        phase_timings.append(maintenance_status)
 
         startup_message_status = "skipped:lcd-disabled"
         if lcd_enabled:
-            startup_message_status = self._queue_startup_message(str(options["port"]))
+            startup_message_status, startup_message_timing = self._timed_startup_message(
+                port=str(options["port"]),
+                orchestrate_started_monotonic=started_monotonic,
+            )
+        else:
+            startup_message_timing = self._build_phase_timing(
+                name="startup_message",
+                detail=startup_message_status,
+                phase_started_epoch=time.time(),
+                phase_finished_epoch=time.time(),
+                phase_started_monotonic=time.monotonic(),
+                orchestrate_started_monotonic=started_monotonic,
+                status="skipped",
+            )
         payload["startup_message_status"] = startup_message_status
+        phase_timings.append(startup_message_timing)
 
         celery_embedded = self._resolve_celery_embedded(
             celery_mode=celery_mode,
@@ -131,6 +156,7 @@ class Command(BaseCommand):
             "lcd_embedded": lcd_enabled and lcd_target_mode == ARTHEXIS_SERVICE_MODE_EMBEDDED,
             "lcd_target_mode": lcd_target_mode,
         }
+        payload["phase_timings"] = phase_timings
 
         if not preflight_ok or not maintenance_ok:
             payload["status"] = "error"
@@ -143,6 +169,7 @@ class Command(BaseCommand):
             status=0 if payload["status"] == "ok" else 1,
             phase="orchestration",
             port=str(options["port"]),
+            phase_timings=phase_timings,
         )
         self.stdout.write(json.dumps(payload, sort_keys=True))
 
@@ -207,6 +234,78 @@ class Command(BaseCommand):
         except Exception as exc:
             return f"error:{exc}"
 
+    def _timed_startup_message(
+        self,
+        *,
+        port: str,
+        orchestrate_started_monotonic: float,
+    ) -> tuple[str, dict[str, object]]:
+        phase_started_monotonic = time.monotonic()
+        phase_started_epoch = time.time()
+        detail = self._queue_startup_message(port)
+        phase_finished_epoch = time.time()
+        status = "error" if str(detail).startswith("error:") else "ok"
+        return detail, self._build_phase_timing(
+            name="startup_message",
+            detail=detail,
+            phase_started_epoch=phase_started_epoch,
+            phase_finished_epoch=phase_finished_epoch,
+            phase_started_monotonic=phase_started_monotonic,
+            orchestrate_started_monotonic=orchestrate_started_monotonic,
+            status=status,
+        )
+
+    def _timed_step(
+        self,
+        name: str,
+        callback,
+        *,
+        orchestrate_started_monotonic: float,
+    ) -> tuple[bool, dict[str, object]]:
+        phase_started_monotonic = time.monotonic()
+        phase_started_epoch = time.time()
+        ok, status = callback()
+        phase_finished_epoch = time.time()
+        status_payload = dict(status)
+        status_payload.update(
+            self._build_phase_timing(
+                name=name,
+                detail=str(status.get("detail") or ""),
+                phase_started_epoch=phase_started_epoch,
+                phase_finished_epoch=phase_finished_epoch,
+                phase_started_monotonic=phase_started_monotonic,
+                orchestrate_started_monotonic=orchestrate_started_monotonic,
+                status=str(status.get("status") or ("ok" if ok else "error")),
+            )
+        )
+        return ok, status_payload
+
+    @staticmethod
+    def _build_phase_timing(
+        *,
+        name: str,
+        detail: str,
+        phase_started_epoch: float,
+        phase_finished_epoch: float,
+        phase_started_monotonic: float,
+        orchestrate_started_monotonic: float,
+        status: str,
+    ) -> dict[str, object]:
+        duration_ms = max(int(round((phase_finished_epoch - phase_started_epoch) * 1000)), 0)
+        started_offset_ms = max(
+            int(round((phase_started_monotonic - orchestrate_started_monotonic) * 1000)),
+            0,
+        )
+        return {
+            "name": name,
+            "detail": detail,
+            "status": status,
+            "duration_ms": duration_ms,
+            "started_offset_ms": started_offset_ms,
+            "started_at": datetime.fromtimestamp(phase_started_epoch, tz=timezone.utc).isoformat(),
+            "finished_at": datetime.fromtimestamp(phase_finished_epoch, tz=timezone.utc).isoformat(),
+        }
+
     @staticmethod
     def _read_lock_line(path: Path) -> str:
         try:
@@ -267,6 +366,7 @@ class Command(BaseCommand):
         status: int,
         phase: str,
         port: str,
+        phase_timings: list[dict[str, object]] | None = None,
     ) -> None:
         finished_at_epoch = int(time.time())
         payload = {
@@ -276,5 +376,6 @@ class Command(BaseCommand):
             "status": status,
             "phase": phase,
             "port": port,
+            "phase_timings": phase_timings or [],
         }
         lock_path.write_text(json.dumps(payload), encoding="utf-8")

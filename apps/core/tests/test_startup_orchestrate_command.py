@@ -69,6 +69,11 @@ def test_startup_orchestrate_outputs_json_contract_and_writes_locks(tmp_path, mo
     assert payload["launch"]["celery_embedded"] is True
     assert payload["launch"]["lcd_embedded"] is True
     assert payload["startup_message_status"] == "queued:8899"
+    assert [phase["name"] for phase in payload["phase_timings"]] == [
+        "runserver_preflight",
+        "startup_maintenance",
+        "startup_message",
+    ]
 
     started_at = (lock_dir / "startup_started_at.lck").read_text(encoding="utf-8").strip()
     assert started_at.isdigit()
@@ -76,6 +81,11 @@ def test_startup_orchestrate_outputs_json_contract_and_writes_locks(tmp_path, mo
     duration_payload = json.loads((lock_dir / "startup_orchestrate_status.lck").read_text(encoding="utf-8"))
     assert duration_payload["phase"] == "orchestration"
     assert duration_payload["status"] == 0
+    assert [phase["name"] for phase in duration_payload["phase_timings"]] == [
+        "runserver_preflight",
+        "startup_maintenance",
+        "startup_message",
+    ]
 
 
 def test_startup_orchestrate_uses_systemd_decisions_when_requested(tmp_path, monkeypatch):

@@ -1,9 +1,45 @@
+import json
 from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from apps.core.system_ui import read_startup_report
+
+
+def _read_timing_lock(path: Path) -> dict[str, object] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _phase_timings(payload: dict[str, object] | None) -> list[dict[str, object]]:
+    if not isinstance(payload, dict):
+        return []
+    phases = payload.get("phase_timings")
+    if not isinstance(phases, list):
+        return []
+    return [phase for phase in phases if isinstance(phase, dict)]
+
+
+def _format_duration_seconds(value: object) -> str:
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return "unknown"
+    return f"{seconds:.3f}s"
+
+
+def _format_duration_ms(value: object) -> str:
+    try:
+        milliseconds = int(value)
+    except (TypeError, ValueError):
+        return "unknown"
+    return f"{milliseconds / 1000:.3f}s"
 
 
 class Command(BaseCommand):
@@ -22,8 +58,17 @@ class Command(BaseCommand):
                 "(default: 10)."
             ),
         )
+        parser.add_argument(
+            "--timings",
+            action="store_true",
+            help="Show the most recent startup timing breakdown from lock files.",
+        )
 
     def handle(self, *args, **options):  # noqa: D401 - inherited docstring
+        if options.get("timings"):
+            self._handle_timings()
+            return
+
         limit = options["limit"]
         if limit < 1:
             limit = 10
@@ -57,3 +102,62 @@ class Command(BaseCommand):
             if detail:
                 message = f"{message} — {detail}"
             self.stdout.write(message)
+
+    def _handle_timings(self) -> None:
+        base_dir = Path(settings.BASE_DIR)
+        lock_dir = base_dir / ".locks"
+        startup_payload = _read_timing_lock(lock_dir / "startup_duration.lck")
+        orchestration_payload = _read_timing_lock(lock_dir / "startup_orchestrate_status.lck")
+        if not startup_payload and not orchestration_payload:
+            self.stdout.write("No startup timing data has been recorded yet.")
+            return
+
+        if startup_payload:
+            status_value = "ok" if int(startup_payload.get("status") or 0) == 0 else "error"
+            self.stdout.write("Startup timing summary:")
+            self.stdout.write(
+                f"  Measured readiness window: {_format_duration_seconds(startup_payload.get('duration_seconds'))}"
+            )
+            self.stdout.write(f"  Status: {status_value}")
+            self.stdout.write(f"  Started at: {startup_payload.get('started_at') or 'unknown'}")
+            self.stdout.write(f"  Finished at: {startup_payload.get('finished_at') or 'unknown'}")
+            if startup_payload.get("port"):
+                self.stdout.write(f"  Port: {startup_payload.get('port')}")
+
+            phase_timings = _phase_timings(startup_payload)
+            if phase_timings:
+                self.stdout.write("")
+                self.stdout.write("Service-start phases:")
+                for phase in phase_timings:
+                    message = (
+                        f"  - {phase.get('name') or 'phase'}: "
+                        f"{_format_duration_ms(phase.get('duration_ms'))} "
+                        f"[{phase.get('status') or 'unknown'}]"
+                    )
+                    self.stdout.write(message)
+
+        orchestration_phases = _phase_timings(orchestration_payload)
+        if orchestration_payload:
+            self.stdout.write("")
+            self.stdout.write("Orchestration phase:")
+            self.stdout.write(
+                f"  Total: {_format_duration_seconds(orchestration_payload.get('duration_seconds'))}"
+            )
+            self.stdout.write(
+                f"  Started at: {orchestration_payload.get('started_at') or 'unknown'}"
+            )
+            self.stdout.write(
+                f"  Finished at: {orchestration_payload.get('finished_at') or 'unknown'}"
+            )
+            if orchestration_phases:
+                self.stdout.write("  Steps:")
+                for phase in orchestration_phases:
+                    detail = phase.get("detail") or ""
+                    message = (
+                        f"    - {phase.get('name') or 'phase'}: "
+                        f"{_format_duration_ms(phase.get('duration_ms'))} "
+                        f"[{phase.get('status') or 'unknown'}]"
+                    )
+                    if detail:
+                        message = f"{message} — {detail}"
+                    self.stdout.write(message)
