@@ -97,7 +97,7 @@
           <li>
             <strong>{% translate "Credential validation" %}:</strong>
             {% if setup_results.validated %}
-              {{ setup_results.validated.message }}
+              {{ setup_results.validated.message|safe }}
             {% else %}
               {% translate "Skipped." %}
             {% endif %}
@@ -105,11 +105,21 @@
           <li>
             <strong>{% translate "Customer load" %}:</strong>
             {% if setup_results.loaded %}
-              {{ setup_results.loaded.message }}
+              {{ setup_results.loaded.message|safe }}
             {% else %}
               {% translate "Skipped." %}
             {% endif %}
           </li>
+          {% if setup_results.admin_messages %}
+            <li>
+              <strong>{% translate "Admin Messages" %}:</strong>
+              <ul>
+                {% for entry in setup_results.admin_messages %}
+                  <li><strong>{{ entry.status }}:</strong> {{ entry.message|safe }}</li>
+                {% endfor %}
+              </ul>
+            </li>
+          {% endif %}
         </ul>
         {% if setup_results.loaded.summary and setup_results.loaded.summary.unresolved %}
           <p>

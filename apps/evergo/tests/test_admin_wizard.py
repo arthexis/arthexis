@@ -118,6 +118,8 @@ def test_run_contract_login_validation_uses_order_numbers_when_full_load_disable
         captured_queries.append(raw_queries)
         return {
             "customers_loaded": 1,
+            "loaded_customer_ids": [11],
+            "loaded_order_ids": [22],
             "orders_created": 1,
             "orders_updated": 0,
             "placeholders_created": 0,
@@ -143,3 +145,8 @@ def test_run_contract_login_validation_uses_order_numbers_when_full_load_disable
 
     assert result is not None
     assert captured_queries == ["J00123, J00456"]
+    assert len(messages) == 2
+    assert "id__in=11" in messages[1][1]
+    assert "id__in=22" in messages[1][1]
+    assert result["admin_messages"][0]["status"] == "success"
+    assert result["admin_messages"][1]["status"] == "success"
