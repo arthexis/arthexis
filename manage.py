@@ -99,9 +99,7 @@ def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
             http_scheme = "https" if getattr(self, "ssl_options", None) else "http"
             from django.conf import settings
 
-            from config.admin_urls import normalize_admin_url_path
-
-            admin_mount_path = f"/{normalize_admin_url_path(settings.ADMIN_URL_PATH)}"
+            admin_mount_path = f"/{settings.ADMIN_URL_PATH}"
             self.stdout.write(
                 f"Admin available at {http_scheme}://{host}:{server_port}{admin_mount_path}"
             )
