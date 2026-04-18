@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arthexis Access</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <p class="eyebrow">ARTHEXIS-1</p>
+        <h1>Internet access opens after consent.</h1>
+        <p class="lede">
+          Use either a contact email or an existing Arthexis login, then accept the
+          access terms. Once approved, this device gets access immediately.
+        </p>
+
+        <form id="portal-form" class="stack">
+          <label class="field">
+            <span>Contact email</span>
+            <input id="email" name="email" type="email" autocomplete="email" />
+            <small class="field-hint">Use this for a normal visitor registration.</small>
+          </label>
+
+          <div class="choice-divider" aria-hidden="true">or</div>
+
+          <label class="field">
+            <span>Existing Arthexis user</span>
+            <input
+              id="existing-user"
+              name="existing_user"
+              type="text"
+              autocomplete="username"
+            />
+            <small class="field-hint">
+              Enter an existing username or email to jump into the suite login.
+            </small>
+          </label>
+
+          <label class="consent">
+            <input id="accept_terms" name="accept_terms" type="checkbox" required />
+            <span>
+              I accept that my internet experience may be altered and recorded for
+              quality of life purposes while using this access point.
+            </span>
+          </label>
+
+          <button id="submit-button" type="submit">Request Access</button>
+        </form>
+
+        <div id="status" class="status" aria-live="polite"></div>
+
+        <section id="access-links" class="access-links" hidden>
+          <p class="access-links-eyebrow">Access granted</p>
+          <h2>Choose where to go next.</h2>
+          <p class="access-links-copy">
+            Internet access is now enabled for this device. If you already have an
+            Arthexis account, you can use your same login on the local Arthexis
+            instance.
+          </p>
+          <div class="access-links-grid">
+            <a
+              id="google-link"
+              class="access-link-card"
+              href="https://google.com/"
+              rel="noreferrer"
+            >
+              <span class="access-link-label">Google</span>
+              <span id="google-target" class="access-link-target">https://google.com/</span>
+            </a>
+            <a
+              id="local-arthexis-link"
+              class="access-link-card"
+              href="http://10.42.0.1:8000/"
+            >
+              <span class="access-link-label">Local Arthexis</span>
+              <span id="local-arthexis-target" class="access-link-target">http://10.42.0.1:8000/</span>
+            </a>
+          </div>
+        </section>
+
+        <section class="note">
+          <p>What we keep:</p>
+          <p>Email or existing login, device MAC address, IP address, acceptance time, and user agent.</p>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+  </body>
+  </html>
