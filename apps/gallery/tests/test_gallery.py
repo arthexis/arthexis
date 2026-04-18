@@ -5,6 +5,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from PIL import Image
 
+from apps.content.models import ContentSample
 from apps.groups.models import SecurityGroup
 
 from ..constants import GALLERY_MANAGER_GROUP_NAME
@@ -42,6 +43,22 @@ class GalleryVisibilityTests(TestCase):
         self.assertTrue(image.can_view(self.user))
         self.assertFalse(image.can_view(self.other))
 
+    def test_optional_content_sample_link_is_created_when_requested(self):
+        image = create_gallery_image(
+            uploaded_file=self._upload("sampled.jpg"),
+            title="Sampled",
+            create_content_sample=True,
+            owner_user=self.user,
+        )
+        self.assertIsNotNone(image.content_sample_id)
+        self.assertTrue(
+            ContentSample.objects.filter(
+                pk=image.content_sample_id,
+                kind=ContentSample.IMAGE,
+                method="GALLERY_UPLOAD",
+            ).exists()
+        )
+
 
 class GalleryManagementPermissionTests(TestCase):
     def setUp(self):
@@ -78,6 +95,23 @@ class GalleryManagementPermissionTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(GalleryImage.objects.filter(title="Denied").exists())
+
+    def test_upload_view_creates_content_sample_when_checkbox_is_selected(self):
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            "/gallery/upload/",
+            {
+                "image": self._upload("sampled-managed.jpg"),
+                "title": "Managed With Sample",
+                "description": "",
+                "include_in_public_gallery": True,
+                "create_content_sample": True,
+                "owner_user": self.manager.username,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        image = GalleryImage.objects.get(title="Managed With Sample")
+        self.assertIsNotNone(image.content_sample_id)
 
     def test_gallery_manager_can_view_private_image(self):
         image = create_gallery_image(

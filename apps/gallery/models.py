@@ -5,12 +5,14 @@ from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
+from apps.content.models import ContentSample
 from apps.core.entity import Entity
 from apps.groups.models import SecurityGroup
 from apps.media.models import MediaFile
 
 from .constants import GALLERY_MANAGER_GROUP_NAME
 from .permissions import can_manage_gallery
+
 
 class GalleryCategory(Entity):
     name = models.CharField(max_length=120)
@@ -43,6 +45,13 @@ class GalleryTrait(Entity):
 class GalleryImage(Entity):
     slug = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     media_file = models.ForeignKey(MediaFile, on_delete=models.PROTECT, related_name="gallery_images")
+    content_sample = models.ForeignKey(
+        ContentSample,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="gallery_images",
+    )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     include_in_public_gallery = models.BooleanField(default=False)
