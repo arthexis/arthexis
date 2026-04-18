@@ -1,9 +1,11 @@
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from django.contrib.sites.models import Site
 
 from apps.features.models import Feature
+from apps.nodes import utils as nodes_utils
 from apps.nodes.feature_detection import node_feature_detection_registry
 from apps.nodes.models import Node, NodeFeature
 from apps.nodes.models import utils as node_utils
@@ -168,6 +170,59 @@ def test_refresh_features_auto_enables_when_linked_suite_feature_enabled(
 
     node.refresh_features()
 
+    assert node.features.filter(pk=feature.pk).exists()
+
+
+@pytest.mark.django_db
+def test_refresh_features_skips_lazy_rfid_auto_detection(monkeypatch, tmp_path):
+    """Feature refresh should not probe lazy RFID scanner auto-detection."""
+
+    node = Node.objects.create(
+        hostname="lazy-rfid-node",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+        public_endpoint="lazy-rfid-node",
+        base_path=str(tmp_path),
+    )
+    feature = NodeFeature.objects.create(slug="rfid-scanner", display="RFID Scanner")
+    calls: list[str] = []
+
+    def _detect(slug: str, *, base_dir: Path, base_path: Path) -> bool:
+        calls.append(slug)
+        if slug == "rfid-scanner":
+            raise AssertionError("rfid-scanner should be lazily detected")
+        return False
+
+    monkeypatch.setattr(node, "_detect_auto_feature", _detect)
+
+    node.refresh_features()
+
+    assert "rfid-scanner" not in calls
+    assert not node.features.filter(pk=feature.pk).exists()
+
+
+@pytest.mark.django_db
+def test_ensure_feature_enabled_lazily_detects_rfid(monkeypatch, tmp_path):
+    """On-demand feature checks should detect and assign RFID scanner when needed."""
+
+    node = Node.objects.create(
+        hostname="ensure-rfid-node",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+        public_endpoint="ensure-rfid-node",
+        base_path=str(tmp_path),
+    )
+    feature = NodeFeature.objects.create(slug="rfid-scanner", display="RFID Scanner")
+    calls: list[str] = []
+
+    def _detect(slug: str, *, base_dir: Path, base_path: Path) -> bool:
+        calls.append(slug)
+        return slug == "rfid-scanner"
+
+    monkeypatch.setattr(node, "_detect_auto_feature", _detect)
+
+    assert nodes_utils.ensure_feature_enabled("rfid-scanner", node=node) is True
+    assert calls == ["rfid-scanner"]
     assert node.features.filter(pk=feature.pk).exists()
 
 

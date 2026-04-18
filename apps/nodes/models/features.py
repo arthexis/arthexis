@@ -219,6 +219,7 @@ class NodeFeatureMixin:
         "playwright-browser-webkit",
         "video-cam",
     }
+    LAZY_AUTO_DETECTION_FEATURE_SLUGS = {"rfid-scanner"}
     MANUAL_FEATURE_SLUGS = {"screenshot-poll"}
     ROLE_AUTO_FEATURE_SLUGS: set[str] = set()
     AUTO_ENABLE_FOOTPRINT = NodeFeature.Footprint.LIGHT
@@ -322,10 +323,11 @@ class NodeFeatureMixin:
         if not self.is_local:
             self.sync_feature_tasks()
             return
+        managed_slugs = self.AUTO_MANAGED_FEATURES - self.LAZY_AUTO_DETECTION_FEATURE_SLUGS
         detected_slugs = set()
         base_path = self.get_base_path()
         base_dir = Path(settings.BASE_DIR)
-        for slug in self.AUTO_MANAGED_FEATURES:
+        for slug in managed_slugs:
             try:
                 if self._detect_auto_feature(
                     slug, base_dir=base_dir, base_path=base_path
@@ -335,7 +337,7 @@ class NodeFeatureMixin:
                 logger.exception("Automatic detection failed for feature %s", slug)
         current_slugs = set(
             self.features.filter(
-                slug__in=self.AUTO_MANAGED_FEATURES,
+                slug__in=managed_slugs,
                 footprint=self.AUTO_ENABLE_FOOTPRINT,
             ).values_list("slug", flat=True)
         )

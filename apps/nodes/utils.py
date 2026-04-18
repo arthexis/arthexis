@@ -1,10 +1,11 @@
 import logging
 from pathlib import Path
 
+from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
 
 from apps.content import utils as content_utils
-from apps.nodes.models import Node, NodeFeature
+from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
 SCREENSHOT_DIR = content_utils.SCREENSHOT_DIR
 DEFAULT_SCREENSHOT_RESOLUTION = content_utils.DEFAULT_SCREENSHOT_RESOLUTION
@@ -47,6 +48,15 @@ def ensure_feature_enabled(
 
     if target.has_feature(slug):
         return True
+
+    lazy_slugs = getattr(target, "LAZY_AUTO_DETECTION_FEATURE_SLUGS", set())
+    if slug in lazy_slugs:
+        base_dir = Path(settings.BASE_DIR)
+        base_path = target.get_base_path()
+        if target._detect_auto_feature(slug, base_dir=base_dir, base_path=base_path):
+            NodeFeatureAssignment.objects.update_or_create(node=target, feature=feature)
+            return True
+        return False
 
     try:
         target.refresh_features()
