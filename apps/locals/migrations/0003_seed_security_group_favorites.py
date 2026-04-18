@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import migrations
 from django.db.models import Max
+from django.utils import timezone
 
 PRODUCT_DEVELOPER_GROUP_NAME = "Product Developer"
 SITE_OPERATOR_GROUP_NAME = "Site Operator"
@@ -28,6 +29,7 @@ def _favorite_targets_for_user(user, group_name_map: dict[int, set[str]]) -> tup
 
 
 def seed_security_group_favorites(apps, schema_editor):
+    CacheStore = apps.get_model("locals", "CacheStore")
     Favorite = apps.get_model("locals", "Favorite")
     ContentType = apps.get_model("contenttypes", "ContentType")
     SecurityGroup = apps.get_model("groups", "SecurityGroup")
@@ -72,6 +74,7 @@ def seed_security_group_favorites(apps, schema_editor):
         .annotate(max_priority=Max("priority"))
     }
 
+    updated_user_ids: list[int] = []
     for user in users:
         user_targets = _favorite_targets_for_user(user, group_name_map)
         content_type_ids = [
@@ -103,6 +106,19 @@ def seed_security_group_favorites(apps, schema_editor):
 
         if new_favorites:
             Favorite.objects.bulk_create(new_favorites)
+            updated_user_ids.append(user.pk)
+
+    if updated_user_ids:
+        cache_keys = [
+            f"admin:favorites:block:{user_id}:{show_changelinks}:{show_model_badges}"
+            for user_id in updated_user_ids
+            for show_changelinks in (0, 1)
+            for show_model_badges in (0, 1)
+        ]
+        CacheStore.objects.filter(key__in=cache_keys).update(
+            payload=None,
+            refreshed_at=timezone.now(),
+        )
 
 
 class Migration(migrations.Migration):

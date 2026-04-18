@@ -33,7 +33,11 @@ def _on_user_created(sender, instance, created, **kwargs):
 
 
 @receiver(m2m_changed, sender=get_user_model().groups.through)
-def _on_user_groups_changed(sender, instance, action, reverse, pk_set, **kwargs):
-    if reverse or action != "post_add" or not pk_set:
+def _on_user_groups_changed(sender, instance, action, reverse, model, pk_set, **kwargs):
+    if action != "post_add" or not pk_set:
+        return
+    if reverse:
+        for user in model.objects.filter(pk__in=pk_set):
+            ensure_security_group_favorites(user)
         return
     ensure_security_group_favorites(instance)

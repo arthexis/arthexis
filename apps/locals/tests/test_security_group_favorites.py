@@ -72,3 +72,15 @@ def test_user_group_assignment_seeds_favorites():
 
     target_count = len(SITE_OPERATOR_FAVORITE_TARGETS)
     assert Favorite.objects.filter(user=user).count() == target_count
+
+
+@pytest.mark.django_db
+def test_group_user_set_assignment_seeds_favorites():
+    user_model = get_user_model()
+    user = user_model.objects.create_user(username="group-reverse-user", password="pw", is_staff=True)
+    site_operator, _ = SecurityGroup.objects.get_or_create(name="Site Operator")
+
+    site_operator.user_set.add(user)
+
+    target_count = len(SITE_OPERATOR_FAVORITE_TARGETS)
+    assert Favorite.objects.filter(user=user).count() == target_count
