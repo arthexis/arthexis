@@ -2,6 +2,7 @@ name: Upgrade Gate
 
 permissions:
   contents: read
+  issues: write
 
 env:
   PYTHONDONTWRITEBYTECODE: '1'
@@ -59,6 +60,9 @@ jobs:
   upgrade:
     name: Upgrade safety gate
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     services:
       redis:
         image: redis:7
@@ -97,38 +101,46 @@ jobs:
             venv-${{ runner.os }}-
 
       - name: Validate pyproject dependency ordering
+        id: validate_pyproject_ordering
         run: |
           python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
 
       - name: Validate generated requirements
+        id: validate_generated_requirements
         run: |
           python "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
 
       - name: Install suite from repository
+        id: install_suite
         run: |
           ./install.sh --no-start
 
       - name: Refresh environment dependencies
+        id: refresh_dependencies
         run: |
           ./env-refresh.sh
 
       - name: Install CI dependencies
+        id: install_ci_dependencies
         run: |
           ./scripts/preflight-env.sh
           source .venv/bin/activate
           python -m pip install --only-binary=:all: -r requirements-ci.txt
       - name: Verify editable install import
+        id: verify_editable_install
         run: |
           source .venv/bin/activate
           python scripts/check_editable_install_import.py
 
       - name: Apply upgrade smoke path
+        id: apply_upgrade_smoke
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
           ./upgrade.sh --local --no-restart
 
       - name: Validate upgraded migrations
+        id: validate_upgraded_migrations
         run: |
           set -Eeuo pipefail
           ./scripts/preflight-env.sh
@@ -138,6 +150,7 @@ jobs:
           python manage.py migrate --noinput --database default
 
       - name: Detect pytest xdist arguments
+        id: detect_pytest_xdist
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
@@ -150,6 +163,7 @@ jobs:
           fi
 
       - name: Run auto-upgrade checks
+        id: run_auto_upgrade_checks
         run: |
           set -Eeuo pipefail
           ./scripts/preflight-env.sh --pytest
@@ -157,10 +171,124 @@ jobs:
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
           python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow and not integration" | tee pytest.log
 
+      - name: Summarize failure context
+        if: failure()
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY' > ci-failure-summary.md
+          import os
+          import textwrap
+          from pathlib import Path
+
+          step_status = [
+              ("Validate pyproject dependency ordering", "${{ steps.validate_pyproject_ordering.conclusion }}"),
+              ("Validate generated requirements", "${{ steps.validate_generated_requirements.conclusion }}"),
+              ("Install suite from repository", "${{ steps.install_suite.conclusion }}"),
+              ("Refresh environment dependencies", "${{ steps.refresh_dependencies.conclusion }}"),
+              ("Install CI dependencies", "${{ steps.install_ci_dependencies.conclusion }}"),
+              ("Verify editable install import", "${{ steps.verify_editable_install.conclusion }}"),
+              ("Apply upgrade smoke path", "${{ steps.apply_upgrade_smoke.conclusion }}"),
+              ("Validate upgraded migrations", "${{ steps.validate_upgraded_migrations.conclusion }}"),
+              ("Detect pytest xdist arguments", "${{ steps.detect_pytest_xdist.conclusion }}"),
+              ("Run auto-upgrade checks", "${{ steps.run_auto_upgrade_checks.conclusion }}"),
+          ]
+
+          failed_step_name = "Unknown"
+          for name, conclusion in step_status:
+              if conclusion == "failure":
+                  failed_step_name = name
+                  break
+
+          summary_lines = [
+              "## Upgrade Gate failure details",
+              "",
+              f"- Workflow run: https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              f"- Commit: `{os.environ['GITHUB_SHA']}`",
+              f"- Failed step: **{failed_step_name}**",
+          ]
+
+          if failed_step_name == "Run auto-upgrade checks":
+              pytest_log = Path("pytest.log")
+              if pytest_log.exists():
+                  lines = pytest_log.read_text(encoding="utf-8", errors="replace").splitlines()
+                  failure_candidates = [line.strip() for line in lines if "FAILED " in line]
+                  if failure_candidates:
+                      summary_lines.append("")
+                      summary_lines.append("### Failed test(s)")
+                      summary_lines.extend(f"- `{line}`" for line in failure_candidates[:5])
+
+                  tail = "\n".join(lines[-40:])
+                  if tail.strip():
+                      summary_lines.append("")
+                      summary_lines.append("### Pytest log tail")
+                      summary_lines.append("```text")
+                      summary_lines.append(tail)
+                      summary_lines.append("```")
+              else:
+                  summary_lines.append("")
+                  summary_lines.append("- `pytest.log` was not found in the runner workspace.")
+
+          summary = "\n".join(summary_lines).strip() + "\n"
+          print(textwrap.shorten(summary, width=65000, placeholder="\n... (truncated)"))
+          PY
+
+      - name: Comment on pull request with failure details
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'ci-failure-summary.md';
+            if (!fs.existsSync(path)) {
+              core.warning('No ci-failure-summary.md found; skipping PR comment.');
+              return;
+            }
+
+            const summary = fs.readFileSync(path, 'utf8').trim();
+            const marker = '<!-- upgrade-gate-failure-comment -->';
+            const body = `${marker}\n${summary}`;
+            const issue_number = context.issue.number;
+            const { owner, repo } = context.repo;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+
+            const existing = comments.find((comment) =>
+              comment.user?.type === 'Bot' && comment.body?.includes(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
+
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: upgrade-gate-pytest-log
           path: pytest.log
+          if-no-files-found: warn
+
+      - name: Upload failure summary
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: upgrade-gate-failure-summary
+          path: ci-failure-summary.md
           if-no-files-found: warn
