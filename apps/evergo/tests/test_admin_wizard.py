@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
 from apps.chats.models import ChatAvatar
-from apps.evergo.admin import _run_contract_login_validation
+from apps.evergo.admin import _build_loaded_entities_links, _run_contract_login_validation
 from apps.evergo.forms import EvergoContractorLoginWizardForm
 from apps.evergo.models import EvergoUser
 from apps.groups.models import SecurityGroup
@@ -150,3 +150,31 @@ def test_run_contract_login_validation_uses_order_numbers_when_full_load_disable
     assert "id__in=22" in messages[1][1]
     assert result["admin_messages"][0]["status"] == "success"
     assert result["admin_messages"][1]["status"] == "success"
+
+
+@pytest.mark.django_db
+def test_build_loaded_entities_links_only_includes_present_entities():
+    """Link helper should omit entity links when no IDs were loaded for that entity type."""
+    links = _build_loaded_entities_links(
+        {
+            "loaded_customer_ids": [11],
+            "loaded_order_ids": [],
+        }
+    )
+
+    assert "id__in=11" in links
+    assert "Customers" in links
+    assert "Orders" not in links
+
+
+@pytest.mark.django_db
+def test_build_loaded_entities_links_returns_empty_when_no_entities_loaded():
+    """Link helper should not render generic changelist links when nothing was loaded."""
+    links = _build_loaded_entities_links(
+        {
+            "loaded_customer_ids": [],
+            "loaded_order_ids": [],
+        }
+    )
+
+    assert links == ""

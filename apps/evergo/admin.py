@@ -8,7 +8,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import CharField, Prefetch, Q, Value
 from django.db.models.functions import Coalesce, NullIf
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
@@ -74,19 +74,19 @@ def _build_loaded_entities_links(summary: dict[str, list[int]]) -> str:
     """Build customer/order changelist links for the imported entities."""
     customer_ids = [str(value) for value in summary.get("loaded_customer_ids", [])]
     order_ids = [str(value) for value in summary.get("loaded_order_ids", [])]
-    customers_url = reverse("admin:evergo_evergocustomer_changelist")
-    orders_url = reverse("admin:evergo_evergoorder_changelist")
+    links: list[tuple[str, str]] = []
     if customer_ids:
-        customers_url = f"{customers_url}?id__in={','.join(customer_ids)}"
+        customers_url = reverse("admin:evergo_evergocustomer_changelist")
+        links.append((f"{customers_url}?id__in={','.join(customer_ids)}", _("Customers")))
     if order_ids:
-        orders_url = f"{orders_url}?id__in={','.join(order_ids)}"
+        orders_url = reverse("admin:evergo_evergoorder_changelist")
+        links.append((f"{orders_url}?id__in={','.join(order_ids)}", _("Orders")))
+    if not links:
+        return ""
     return format_html(
-        '{} <a href="{}">{}</a> | <a href="{}">{}</a>',
+        "{} {}",
         _("View loaded items:"),
-        customers_url,
-        _("Customers"),
-        orders_url,
-        _("Orders"),
+        format_html_join(" | ", '<a href="{}">{}</a>', links),
     )
 
 
@@ -146,7 +146,8 @@ def _run_contract_login_validation(admin_instance, request, form, contractor, *,
         "updated": summary["orders_updated"],
         "placeholders": summary["placeholders_created"],
     }
-    load_message_with_links = format_html("{} {}", load_message, _build_loaded_entities_links(summary))
+    loaded_entities_links = _build_loaded_entities_links(summary)
+    load_message_with_links = format_html("{} {}", load_message, loaded_entities_links) if loaded_entities_links else load_message
     _message_user_with_feedback(
         admin_instance,
         request,
