@@ -475,11 +475,9 @@ def _parse_pipeline_token_parts(token: str) -> tuple[SigilTokenParts, str | None
             raise TokenParseError("FILTER action is missing field/value")
         key = key_head
         param = key_tail
-    elif action_upper in PIPELINE_WINDOW_ACTIONS - {"FILTER"}:
+    elif action_upper in PIPELINE_WINDOW_ACTIONS:
         instance_target = action_payload or ""
         instance_id = f"{instance_target}:{entity_lookup.map_pipeline_action_to_aggregate(action_upper)}"
-    elif action_upper in PIPELINE_INSTANCE_ACTIONS:
-        key = action_payload or None
     else:
         key = action_payload or None
 
