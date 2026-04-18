@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TypedDict, cast
+from typing import TypedDict, TypeVar, cast
 
 from typing_extensions import NotRequired
 
@@ -121,6 +122,9 @@ class GitHubActivityPayload(TypedDict, total=False):
 
 class ReleaseManagementError(RuntimeError):
     """Raised when Release Management operations fail."""
+
+
+T = TypeVar("T")
 
 
 @dataclass(slots=True, frozen=True)
@@ -239,6 +243,21 @@ class ReleaseManagementClient:
         return bool(self._resolve_token()) and self._feature_enabled()
 
     @staticmethod
+    def _normalize_suite_error(exc: Exception) -> ReleaseManagementError:
+        if isinstance(exc, ReleaseManagementError):
+            return exc
+        if isinstance(exc, github_service.GitHubRepositoryError):
+            return ReleaseManagementError(str(exc))
+        return ReleaseManagementError("GitHub operation failed")
+
+    @classmethod
+    def _run_suite_operation(cls, operation: Callable[[], T]) -> T:
+        try:
+            return operation()
+        except (ReleaseManagementError, github_service.GitHubRepositoryError) as exc:
+            raise cls._normalize_suite_error(exc) from exc
+
+    @staticmethod
     def _normalize_merge_method(merge_method: str) -> str:
         normalized = str(merge_method or MERGE_METHOD_MERGE).strip().lower()
         if normalized not in MERGE_METHOD_CHOICES:
@@ -253,12 +272,14 @@ class ReleaseManagementClient:
 
         token = self._resolve_token()
         if not self._should_use_binary_first() and token and self._can_use_suite_api():
-            issues = list(
-                github_service.fetch_repository_issues(
-                    token=token,
-                    owner=repository.owner,
-                    name=repository.name,
-                    state=state,
+            issues = self._run_suite_operation(
+                lambda: list(
+                    github_service.fetch_repository_issues(
+                        token=token,
+                        owner=repository.owner,
+                        name=repository.name,
+                        state=state,
+                    )
                 )
             )
             return [
@@ -287,12 +308,14 @@ class ReleaseManagementClient:
 
         token = self._resolve_token()
         if not self._should_use_binary_first() and token and self._can_use_suite_api():
-            response = github_service.create_issue(
-                repository.owner,
-                repository.name,
-                token=token,
-                title=title,
-                body=body,
+            response = self._run_suite_operation(
+                lambda: github_service.create_issue(
+                    repository.owner,
+                    repository.name,
+                    token=token,
+                    title=title,
+                    body=body,
+                )
             )
             if response is not None:
                 raw_payload = response.json()
@@ -328,12 +351,14 @@ class ReleaseManagementClient:
 
         token = self._resolve_token()
         if not self._should_use_binary_first() and token and self._can_use_suite_api():
-            github_service.create_issue_comment(
-                repository.owner,
-                repository.name,
-                issue_number=number,
-                token=token,
-                body=cleaned_body,
+            self._run_suite_operation(
+                lambda: github_service.create_issue_comment(
+                    repository.owner,
+                    repository.name,
+                    issue_number=number,
+                    token=token,
+                    body=cleaned_body,
+                )
             )
             return
 
@@ -354,11 +379,13 @@ class ReleaseManagementClient:
 
         token = self._resolve_token()
         if not self._should_use_binary_first() and token and self._can_use_suite_api():
-            github_service.close_issue(
-                repository.owner,
-                repository.name,
-                issue_number=number,
-                token=token,
+            self._run_suite_operation(
+                lambda: github_service.close_issue(
+                    repository.owner,
+                    repository.name,
+                    issue_number=number,
+                    token=token,
+                )
             )
             return
 
@@ -374,12 +401,14 @@ class ReleaseManagementClient:
 
         token = self._resolve_token()
         if not self._should_use_binary_first() and token and self._can_use_suite_api():
-            comments = list(
-                github_service.fetch_issue_comments(
-                    token=token,
-                    owner=repository.owner,
-                    name=repository.name,
-                    issue_number=number,
+            comments = self._run_suite_operation(
+                lambda: list(
+                    github_service.fetch_issue_comments(
+                        token=token,
+                        owner=repository.owner,
+                        name=repository.name,
+                        issue_number=number,
+                    )
                 )
             )
             return [
@@ -425,12 +454,14 @@ class ReleaseManagementClient:
 
         token = self._resolve_token()
         if not self._should_use_binary_first() and token and self._can_use_suite_api():
-            pull_requests = list(
-                github_service.fetch_repository_pull_requests(
-                    token=token,
-                    owner=repository.owner,
-                    name=repository.name,
-                    state=state,
+            pull_requests = self._run_suite_operation(
+                lambda: list(
+                    github_service.fetch_repository_pull_requests(
+                        token=token,
+                        owner=repository.owner,
+                        name=repository.name,
+                        state=state,
+                    )
                 )
             )
             return [
@@ -454,20 +485,24 @@ class ReleaseManagementClient:
 
         token = self._resolve_token()
         if not self._should_use_binary_first() and token and self._can_use_suite_api():
-            issue_comments = list(
-                github_service.fetch_issue_comments(
-                    token=token,
-                    owner=repository.owner,
-                    name=repository.name,
-                    issue_number=number,
+            issue_comments = self._run_suite_operation(
+                lambda: list(
+                    github_service.fetch_issue_comments(
+                        token=token,
+                        owner=repository.owner,
+                        name=repository.name,
+                        issue_number=number,
+                    )
                 )
             )
-            review_comments = list(
-                github_service.fetch_pull_request_review_comments(
-                    token=token,
-                    owner=repository.owner,
-                    name=repository.name,
-                    pull_number=number,
+            review_comments = self._run_suite_operation(
+                lambda: list(
+                    github_service.fetch_pull_request_review_comments(
+                        token=token,
+                        owner=repository.owner,
+                        name=repository.name,
+                        pull_number=number,
+                    )
                 )
             )
             return self._sort_activity(
@@ -563,12 +598,14 @@ class ReleaseManagementClient:
 
         token = self._resolve_token()
         if not self._should_use_binary_first() and token and self._can_use_suite_api():
-            github_service.create_pull_request_comment(
-                repository.owner,
-                repository.name,
-                pull_number=number,
-                token=token,
-                body=cleaned_body,
+            self._run_suite_operation(
+                lambda: github_service.create_pull_request_comment(
+                    repository.owner,
+                    repository.name,
+                    pull_number=number,
+                    token=token,
+                    body=cleaned_body,
+                )
             )
             return
 
@@ -594,11 +631,13 @@ class ReleaseManagementClient:
 
         token = self._resolve_token()
         if not self._should_use_binary_first() and token and self._can_use_suite_api():
-            github_service.mark_pull_request_ready(
-                repository.owner,
-                repository.name,
-                pull_number=number,
-                token=token,
+            self._run_suite_operation(
+                lambda: github_service.mark_pull_request_ready(
+                    repository.owner,
+                    repository.name,
+                    pull_number=number,
+                    token=token,
+                )
             )
             return
 
@@ -616,12 +655,14 @@ class ReleaseManagementClient:
         normalized_method = self._normalize_merge_method(merge_method)
         token = self._resolve_token()
         if not self._should_use_binary_first() and token and self._can_use_suite_api():
-            github_service.merge_pull_request(
-                repository.owner,
-                repository.name,
-                pull_number=number,
-                token=token,
-                merge_method=normalized_method,
+            self._run_suite_operation(
+                lambda: github_service.merge_pull_request(
+                    repository.owner,
+                    repository.name,
+                    pull_number=number,
+                    token=token,
+                    merge_method=normalized_method,
+                )
             )
             return
 
@@ -635,6 +676,86 @@ class ReleaseManagementClient:
                 f"--{normalized_method}",
             ]
         )
+
+    def get_issue(
+        self,
+        repository: RepositoryRef,
+        *,
+        number: int,
+    ) -> GitHubIssuePayload | None:
+        """Return issue metadata for a specific issue number."""
+
+        token = self._resolve_token()
+        if not self._should_use_binary_first() and token and self._can_use_suite_api():
+            issues = self._run_suite_operation(
+                lambda: list(
+                    github_service.fetch_repository_issues(
+                        token=token,
+                        owner=repository.owner,
+                        name=repository.name,
+                        state="all",
+                    )
+                )
+            )
+            row = next(
+                (
+                    item
+                    for item in issues
+                    if item.get("number") == number and "pull_request" not in item
+                ),
+                None,
+            )
+            if isinstance(row, dict):
+                return self._coerce_issue_payload(cast(dict[str, JSONValue], row))
+            return None
+
+        query = "number,title,state,url,author"
+        rows = self._run_gh_json(
+            ["issue", "view", str(number), "--repo", repository.slug, "--json", query]
+        )
+        if isinstance(rows, dict):
+            return cast(GitHubIssuePayload, rows)
+        return None
+
+    def get_pull_request(
+        self,
+        repository: RepositoryRef,
+        *,
+        number: int,
+    ) -> GitHubPullRequestPayload | None:
+        """Return pull-request metadata for a specific pull request number."""
+
+        token = self._resolve_token()
+        if not self._should_use_binary_first() and token and self._can_use_suite_api():
+            pull_requests = self._run_suite_operation(
+                lambda: list(
+                    github_service.fetch_repository_pull_requests(
+                        token=token,
+                        owner=repository.owner,
+                        name=repository.name,
+                        state="all",
+                    )
+                )
+            )
+            row = next((item for item in pull_requests if item.get("number") == number), None)
+            if isinstance(row, dict):
+                return self._coerce_pull_request_payload(cast(dict[str, JSONValue], row))
+            return None
+
+        rows = self._run_gh_json(
+            [
+                "pr",
+                "view",
+                str(number),
+                "--repo",
+                repository.slug,
+                "--json",
+                "number,title,state,url,isDraft",
+            ]
+        )
+        if isinstance(rows, dict):
+            return cast(GitHubPullRequestPayload, rows)
+        return None
 
     def create_release(self, repository: RepositoryRef, *, tag: str, title: str, notes: str) -> str:
         """Create a GitHub release via gh CLI."""

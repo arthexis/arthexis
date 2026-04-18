@@ -55,6 +55,14 @@ class Command(BaseCommand):
             choices=(EXECUTION_MODE_SUITE, EXECUTION_MODE_BINARY),
             help="Execution mode: suite (token/API first) or binary (gh/git first).",
         )
+        parser.add_argument(
+            "--repo",
+            default="",
+            help=(
+                "Repository slug in owner/name format. Defaults to active package repository "
+                f"or {DEFAULT_PACKAGE.repository_url}."
+            ),
+        )
 
         subparsers = parser.add_subparsers(dest="resource", required=True)
 
@@ -367,8 +375,7 @@ class Command(BaseCommand):
         *,
         number: int,
     ) -> dict[str, object] | None:
-        rows = client.list_issues(repository, state="all")
-        return next((row for row in rows if row.get("number") == number), None)
+        return client.get_issue(repository, number=number)
 
     @staticmethod
     def _find_pull_request(
@@ -377,8 +384,7 @@ class Command(BaseCommand):
         *,
         number: int,
     ) -> dict[str, object] | None:
-        rows = client.list_pull_requests(repository, state="all")
-        return next((row for row in rows if row.get("number") == number), None)
+        return client.get_pull_request(repository, number=number)
 
     def _write_activity_report(
         self,

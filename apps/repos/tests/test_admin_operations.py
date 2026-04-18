@@ -230,3 +230,35 @@ def test_repository_pull_request_observe_view_shows_reactions(client, db, monkey
     assert "apps/repos/admin.py:52" in content
     assert 'http-equiv="refresh" content="60"' in content
     assert "refreshes automatically every 60 seconds" in content
+
+
+def test_repository_pull_request_observe_view_hides_comment_action_for_closed_pr(
+    client, db, monkeypatch
+):
+    user = _admin_user()
+    client.force_login(user)
+
+    repository = _repository()
+    pr = RepositoryPullRequest.objects.create(
+        repository=repository,
+        number=109,
+        title="Observe closed check",
+        state="closed",
+        is_draft=False,
+        html_url="https://github.com/arthexis/arthexis/pull/109",
+        created_at=timezone.now(),
+        updated_at=timezone.now(),
+    )
+
+    monkeypatch.setattr(
+        "apps.repos.admin.ReleaseManagementClient.list_pull_request_activity",
+        lambda self, repository, number: [],
+    )
+
+    response = client.get(
+        reverse("admin:repos_repositorypullrequest_observe", args=[pr.pk]),
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert f"/{pr.pk}/comment/" not in content

@@ -123,16 +123,14 @@ def test_repo_command_shows_pull_request_activity_with_reactions(monkeypatch):
 
     monkeypatch.setattr(
         ReleaseManagementClient,
-        "list_pull_requests",
-        lambda self, repository, state="all": [
-            {
-                "number": 456,
-                "state": "open",
-                "title": "Monitoring surface",
-                "url": "https://github.com/octo/demo/pull/456",
-                "isDraft": False,
-            }
-        ],
+        "get_pull_request",
+        lambda self, repository, number: {
+            "number": number,
+            "state": "open",
+            "title": "Monitoring surface",
+            "url": f"https://github.com/octo/demo/pull/{number}",
+            "isDraft": False,
+        },
     )
     monkeypatch.setattr(
         ReleaseManagementClient,
@@ -166,3 +164,29 @@ def test_repo_command_shows_pull_request_activity_with_reactions(monkeypatch):
     assert "Review comment by reviewer-1" in output
     assert "apps/repos/admin.py:44" in output
     assert "👀 reviewer-2" in output
+
+
+@pytest.mark.django_db
+def test_repo_command_supports_top_level_repo_option(monkeypatch):
+    """The repo command should keep compatibility with top-level --repo usage."""
+
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "list_issues",
+        lambda self, repository, state="open": [
+            {"number": 1, "state": state, "title": "Issue from top-level repo"}
+        ],
+    )
+
+    stdout = StringIO()
+    call_command(
+        "repo",
+        "--repo",
+        "octo/demo",
+        "issues",
+        "list",
+        stdout=stdout,
+    )
+
+    output = stdout.getvalue()
+    assert "#1 [open] Issue from top-level repo" in output

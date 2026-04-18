@@ -497,14 +497,16 @@ class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
             )
             activity = []
 
-        action_links = [
-            {
-                "label": _("Comment"),
-                "url": reverse(
-                    "admin:repos_repositorypullrequest_comment", args=[obj.pk]
-                ),
-            }
-        ]
+        action_links = []
+        if obj.state == "open":
+            action_links.append(
+                {
+                    "label": _("Comment"),
+                    "url": reverse(
+                        "admin:repos_repositorypullrequest_comment", args=[obj.pk]
+                    ),
+                }
+            )
         if obj.state == "open" and obj.is_draft:
             action_links.append(
                 {

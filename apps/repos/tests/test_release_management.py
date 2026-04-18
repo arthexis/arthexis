@@ -528,3 +528,99 @@ def test_release_management_lists_pull_request_activity_with_gh_api(monkeypatch)
     assert activity[0]["reactions"][0]["display"] == "👀 reviewer-3"
     assert activity[1]["path"] == "apps/repos/admin.py"
     assert activity[1]["reactions"][0]["display"] == "🚀 reviewer-4"
+
+
+@pytest.mark.django_db
+def test_release_management_wraps_suite_errors_for_issue_operations(monkeypatch):
+    """Suite issue operations should normalize service exceptions."""
+
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_resolve_token",
+        lambda self: "token-1",
+    )
+
+    from apps.repos.services import github as github_service
+
+    monkeypatch.setattr(
+        github_service,
+        "create_issue_comment",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            github_service.GitHubRepositoryError("permission denied")
+        ),
+    )
+
+    client = ReleaseManagementClient()
+    with pytest.raises(ReleaseManagementError, match="permission denied"):
+        client.comment_issue(RepositoryRef(owner="octo", name="demo"), number=10, body="note")
+
+
+@pytest.mark.django_db
+def test_release_management_wraps_suite_errors_for_pull_request_operations(monkeypatch):
+    """Suite PR operations should normalize service exceptions."""
+
+    monkeypatch.setattr(
+        ReleaseManagementClient,
+        "_resolve_token",
+        lambda self: "token-1",
+    )
+
+    from apps.repos.services import github as github_service
+
+    monkeypatch.setattr(
+        github_service,
+        "merge_pull_request",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            github_service.GitHubRepositoryError("merge conflict")
+        ),
+    )
+
+    client = ReleaseManagementClient()
+    with pytest.raises(ReleaseManagementError, match="merge conflict"):
+        client.merge_pull_request(RepositoryRef(owner="octo", name="demo"), number=11)
+
+
+@pytest.mark.django_db
+def test_release_management_get_issue_uses_gh_issue_view(monkeypatch):
+    """Issue lookups should query gh issue view directly."""
+
+    captured: dict[str, Any] = {}
+
+    def fake_gh_json(self, args: list[str]) -> dict[str, Any]:
+        captured["args"] = args
+        return {"number": 77, "state": "open", "title": "Older issue", "url": "https://example.com/77"}
+
+    monkeypatch.setattr(ReleaseManagementClient, "_run_gh_json", fake_gh_json)
+
+    client = ReleaseManagementClient(mode=EXECUTION_MODE_BINARY)
+    issue = client.get_issue(RepositoryRef(owner="octo", name="demo"), number=77)
+
+    assert issue is not None
+    assert issue["number"] == 77
+    assert captured["args"][0:2] == ["issue", "view"]
+
+
+@pytest.mark.django_db
+def test_release_management_get_pull_request_uses_gh_pr_view(monkeypatch):
+    """Pull-request lookups should query gh pr view directly."""
+
+    captured: dict[str, Any] = {}
+
+    def fake_gh_json(self, args: list[str]) -> dict[str, Any]:
+        captured["args"] = args
+        return {
+            "number": 88,
+            "state": "open",
+            "title": "Older PR",
+            "url": "https://example.com/88",
+            "isDraft": False,
+        }
+
+    monkeypatch.setattr(ReleaseManagementClient, "_run_gh_json", fake_gh_json)
+
+    client = ReleaseManagementClient(mode=EXECUTION_MODE_BINARY)
+    pull_request = client.get_pull_request(RepositoryRef(owner="octo", name="demo"), number=88)
+
+    assert pull_request is not None
+    assert pull_request["number"] == 88
+    assert captured["args"][0:2] == ["pr", "view"]
