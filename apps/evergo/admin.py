@@ -23,6 +23,8 @@ from .exceptions import EvergoAPIError
 from .forms import EvergoContractorLoginWizardForm, EvergoLoadCustomersForm, EvergoUserAdminForm
 from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
 
+LOADED_ENTITIES_LINK_ID_LIMIT = 100
+
 
 def _parse_selected_ids_query_param(request) -> list[int]:
     """Return validated integer IDs from a comma-separated ``id__in`` query parameter."""
@@ -72,8 +74,8 @@ def _message_user_with_feedback(admin_instance, request, setup_results, message,
 
 def _build_loaded_entities_links(summary: dict[str, list[int]]) -> str:
     """Build customer/order changelist links for the imported entities."""
-    customer_ids = [str(value) for value in summary.get("loaded_customer_ids", [])]
-    order_ids = [str(value) for value in summary.get("loaded_order_ids", [])]
+    customer_ids = [str(value) for value in summary.get("loaded_customer_ids", [])[:LOADED_ENTITIES_LINK_ID_LIMIT]]
+    order_ids = [str(value) for value in summary.get("loaded_order_ids", [])[:LOADED_ENTITIES_LINK_ID_LIMIT]]
     links: list[tuple[str, str]] = []
     if customer_ids:
         customers_url = reverse("admin:evergo_evergocustomer_changelist")

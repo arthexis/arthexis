@@ -9,7 +9,11 @@ from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
 from apps.chats.models import ChatAvatar
-from apps.evergo.admin import _build_loaded_entities_links, _run_contract_login_validation
+from apps.evergo.admin import (
+    LOADED_ENTITIES_LINK_ID_LIMIT,
+    _build_loaded_entities_links,
+    _run_contract_login_validation,
+)
 from apps.evergo.forms import EvergoContractorLoginWizardForm
 from apps.evergo.models import EvergoUser
 from apps.groups.models import SecurityGroup
@@ -178,3 +182,17 @@ def test_build_loaded_entities_links_returns_empty_when_no_entities_loaded():
     )
 
     assert links == ""
+
+
+@pytest.mark.django_db
+def test_build_loaded_entities_links_limits_query_ids_to_prevent_overlong_urls():
+    """Link helper should cap IDs so large imports do not emit overlong changelist URLs."""
+    links = _build_loaded_entities_links(
+        {
+            "loaded_customer_ids": list(range(1, LOADED_ENTITIES_LINK_ID_LIMIT + 50)),
+            "loaded_order_ids": [],
+        }
+    )
+
+    assert f",{LOADED_ENTITIES_LINK_ID_LIMIT}" in links
+    assert f",{LOADED_ENTITIES_LINK_ID_LIMIT + 1}" not in links
