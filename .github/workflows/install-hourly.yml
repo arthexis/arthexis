@@ -86,7 +86,6 @@ jobs:
           ./env-refresh.sh
       - name: Install CI dependencies
         run: |
-          ./scripts/preflight-env.sh
           source .venv/bin/activate
           python -m pip install --only-binary=:all: -r requirements-ci.txt
       - name: Verify editable install import
@@ -95,7 +94,6 @@ jobs:
           python scripts/check_editable_install_import.py
       - name: Validate migrations
         run: |
-          ./scripts/preflight-env.sh
           source .venv/bin/activate
           python scripts/check_migration_conflicts.py
           python manage.py migrations check
@@ -117,7 +115,6 @@ jobs:
           python scripts/check_import_resolution.py
       - name: Validate installed app manifests
         run: |
-          ./scripts/preflight-env.sh --pytest
           source .venv/bin/activate
           manifest_test_file="tests/test_installed_apps_manifests.py"
           if [[ -f "$manifest_test_file" ]]; then
@@ -147,7 +144,6 @@ jobs:
       - name: Run install smoke tests
         run: |
           set -Eeuo pipefail
-          ./scripts/preflight-env.sh --pytest
           source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
           python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 --junitxml=pytest-junit.xml -m "not critical and not slow and not integration" | tee pytest.log
@@ -155,7 +151,6 @@ jobs:
         if: always()
         run: |
           set -Eeuo pipefail
-          ./scripts/preflight-env.sh --pytest
           source .venv/bin/activate
           critical_smoke_tests=(
             "apps/netmesh/tests/test_api.py::test_netmesh_token_lifecycle_errors_are_stable"

@@ -17,7 +17,6 @@ Arthexis keeps settings module import lean by validating `PROJECT_LOCAL_APPS` wi
 Run this check locally before opening a PR and in CI guardrail steps:
 
 ```bash
-./scripts/preflight-env.sh
 .venv/bin/python manage.py check --tag core
 ```
 

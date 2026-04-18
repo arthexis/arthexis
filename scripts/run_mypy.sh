@@ -6,9 +6,6 @@ export ARTHEXIS_DISABLE_CELERY="${ARTHEXIS_DISABLE_CELERY:-1}"
 export CELERY_LOG_LEVEL="${CELERY_LOG_LEVEL:-WARNING}"
 export DEBUG="${DEBUG:-0}"
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings}"
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 PYTHON_BIN=".venv/bin/python"
 if [[ "${OSTYPE:-}" == "msys" || "${OSTYPE:-}" == "cygwin" || "${OSTYPE:-}" == "win32" ]]; then
   PYTHON_BIN=".venv/Scripts/python.exe"
@@ -29,8 +26,6 @@ if ! "$PYTHON_BIN" -c "import importlib.util,sys;sys.exit(0 if importlib.util.fi
   emit_remediation "missing_dependency" "./env-refresh.sh --deps-only" "./scripts/run_mypy.sh"
   exit 1
 fi
-
-"$SCRIPT_DIR/preflight-env.sh"
 
 mypy_output="$(mktemp)"
 cleanup() {
