@@ -4,24 +4,33 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PYTHON_BIN="$BASE_DIR/.venv/bin/python"
+PYTHON_LABEL=".venv/bin/python"
+if [[ "${OSTYPE:-}" == "msys" || "${OSTYPE:-}" == "cygwin" || "${OSTYPE:-}" == "win32" ]]; then
+  PYTHON_BIN="$BASE_DIR/.venv/Scripts/python.exe"
+  PYTHON_LABEL=".venv/Scripts/python.exe"
+fi
 REQUIRED_MODULES=("django")
 ENV_REFRESH_CMD=("$BASE_DIR/env-refresh.sh" "--deps-only")
 
+python_is_usable() {
+  [[ -x "$PYTHON_BIN" ]] && "$PYTHON_BIN" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >/dev/null 2>&1
+}
+
 ensure_venv_python() {
-  local needs_refresh=0
-
-  if [[ ! -x "$PYTHON_BIN" ]]; then
-    needs_refresh=1
-  elif ! "$PYTHON_BIN" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >/dev/null 2>&1; then
-    needs_refresh=1
-  fi
-
-  if [[ "$needs_refresh" -eq 0 ]]; then
+  if python_is_usable; then
     return 0
   fi
 
-  echo ".venv/bin/python missing or unusable at $PYTHON_BIN; running ${ENV_REFRESH_CMD[*]}" >&2
+  echo "$PYTHON_LABEL missing or unusable at $PYTHON_BIN; running ${ENV_REFRESH_CMD[*]}" >&2
   "${ENV_REFRESH_CMD[@]}"
+
+  if python_is_usable; then
+    return 0
+  fi
+
+  echo "$PYTHON_LABEL missing: expected executable at $PYTHON_BIN after ${ENV_REFRESH_CMD[*]}" >&2
+  echo "Run ./env-refresh.sh --deps-only" >&2
+  return 1
 }
 
 if [[ $# -gt 1 ]]; then
@@ -48,17 +57,7 @@ elif [[ $# -gt 0 ]]; then
   exit 1
 fi
 
-ensure_venv_python
-
-if [[ ! -x "$PYTHON_BIN" ]]; then
-  echo ".venv/bin/python missing: expected executable at $PYTHON_BIN after ${ENV_REFRESH_CMD[*]}" >&2
-  echo "Run ./env-refresh.sh --deps-only" >&2
-  exit 1
-fi
-
-if ! "$PYTHON_BIN" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >/dev/null 2>&1; then
-  echo ".venv/bin/python is not runnable at $PYTHON_BIN after ${ENV_REFRESH_CMD[*]}" >&2
-  echo "Run ./env-refresh.sh --deps-only" >&2
+if ! ensure_venv_python; then
   exit 1
 fi
 

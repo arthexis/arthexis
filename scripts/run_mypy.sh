@@ -21,9 +21,7 @@ emit_remediation() {
   printf '{"code":"%s","command":"%s","event":"arthexis.qa.remediation","retry":"%s"}\n' "$code" "$command" "$retry" >&2
 }
 
-"$SCRIPT_DIR/preflight-env.sh"
-
-if [ ! -x "$PYTHON_BIN" ]; then
+if ! "$SCRIPT_DIR/preflight-env.sh"; then
   emit_remediation "missing_venv_python" "./env-refresh.sh --deps-only" "./scripts/run_mypy.sh"
   exit 1
 fi
