@@ -52,11 +52,27 @@ When new apps are created:
 
 * Always create the **admin configuration** for the app using suite commands.
 * Prefer short application names, ideally a single word whenever possible.
+* Use the canonical scaffold commands:
 
-## Retiring legacy apps
+  * `.venv/bin/python manage.py create app <app_name>`
+  * `.venv/bin/python manage.py create app <app_name> --backend-only`
+* Every new app must include `manifest.py`.
+* Backend-only apps that intentionally omit `views.py`, `urls.py`, and `routes.py` must include this marker comment:
 
-When retiring an app that still needs migration compatibility, move it to the
-legacy migration-only pattern instead of deleting it in place:
+  * `# APP_STRUCTURE: backend-only (intentionally omits views.py, urls.py, and routes.py)`
+* Web-capable apps should include `views.py`, `urls.py`, and `routes.py` unless they are intentionally backend-only.
+* Follow and keep this policy aligned with:
+
+  * `docs/development/create-local-app.md`
+  * `docs/development/app-structure-policy.md`
+
+## Removal requests and legacy app retirement
+
+When a developer asks to remove something, perform an actual removal by default.
+Do not archive, deprecate, or soft-retire the target unless explicitly asked.
+
+If the request is to retire an app that still needs migration compatibility,
+follow this legacy migration-only retirement process instead of hard deletion:
 
 1. Create or reuse `apps/_legacy/<app>_migration_only/` with an `AppConfig`.
 2. Register that config in `LEGACY_MIGRATION_APPS`.
@@ -64,8 +80,9 @@ legacy migration-only pattern instead of deleting it in place:
    historical migrations stay runnable.
 4. Remove the runtime app from normal app discovery/runtime wiring.
 
-This keeps upgrade paths intact now and ensures the retired app is positioned
-to be dropped cleanly on the next **major** version.
+This policy keeps merge impact clear for removals while preserving upgrade
+paths for legacy-app retirement, and positions retired apps to be dropped
+cleanly on the next **major** version.
 
 ---
 
@@ -109,6 +126,17 @@ Code within test modules is exempt unless a comment or docstring is needed to cl
 
 ---
 
+## UI Design Notes
+
+When implementing UI updates for Arthexis:
+
+* Avoid hardcoded values (for example `rem` or `px`) for UI styling, especially touch target sizing.
+* Prefer shared CSS variables (design tokens) from the admin UI framework to keep sizing and spacing consistent across the suite.
+* Keep design choices aligned with Arthexis admin usability and consistency needs, prioritizing cohesive behavior across apps over one-off local styling.
+* Prioritize clarity over conciseness for UI labels; prefer descriptive labels over ambiguous short toggles when possible.
+
+---
+
 # Testing Policy
 
 Agents must run relevant tests after code changes.
@@ -118,7 +146,12 @@ Agents must run relevant tests after code changes.
 * Execute tests and **fix errors introduced by changes**.
 * Prefer validated repository entrypoints over ad-hoc interpreter calls. Run `./env-refresh.sh --deps-only` before Django or pytest commands when the environment may be unbootstrapped.
 * Use `.venv/bin/python` (or the repo's validated wrapper/management entrypoints) instead of bare `python` when invoking `manage.py` or `pytest` directly.
-* Prefer `python manage.py test run -- ...` and `python manage.py migrations check` over raw `python -m pytest` / `makemigrations --check` when those entrypoints cover the task.
+* Use the canonical app-test command for this repository: `.venv/bin/python manage.py test run -- <target>`.
+* Use direct `pytest` only where this repository already requires it:
+  * CI workflow internals under `.github/workflows/`.
+  * pytest-backed command/helper implementation code (for example `apps/tests/management/commands/test.py` and `utils/devtools/test_server.py`).
+* Use `.venv/bin/python manage.py ...` for development and test workflows; use `./command.sh ...` only for operator-facing runtime actions when applicable.
+* If `.venv/bin/python` is unavailable, use the repository's validated wrapper or management entrypoint.
 * Avoid creating tests for **micro-behaviors** unless:
 
   * they are security-relevant, or
@@ -128,6 +161,7 @@ Agents must run relevant tests after code changes.
 
 * Do **not** take manual screenshots in the agent runtime.
 * The Screenshot CI workflow is the source of truth for previews and artifacts.
+* Leave screenshot generation to Screenshot CI, even when making visual/UI changes; do not use manual capture skills unless a maintainer explicitly asks for a one-off capture for a specific debugging need.
 * If you need extra screenshot coverage, add route paths (one per line) to:
   * `.github/screenshot-paths.authenticated.txt` for pages that require login.
   * `.github/screenshot-paths.public.txt` for public pages.
@@ -145,6 +179,12 @@ Agents must run relevant tests after code changes.
 
 Styling will be validated through previews.
 
+## Review Notifications
+
+When a task leaves reviewable local changes or artifacts, agents must run `./scripts/review-notify.sh --actor Codex` before the final response.
+
+Treat `LCD unavailable` fallback behavior as informational, not as a failure. If the notifier reports `Skipped review notification`, do not force it unless the user explicitly asked for a notification without file changes.
+
 ---
 
 ### Regression Handling
@@ -153,6 +193,97 @@ If a test fails **multiple times across runs**, it must be:
 
 * marked as a **regression**
 * documented accordingly.
+
+---
+
+## Plan Generation for Agents
+
+When generating execution plans, agents must assume that downstream task runs may not include full planning-chat context.
+
+### Plan Task Card Format
+
+Every generated task must include:
+
+1. Intent
+2. Scope (apps/files)
+3. Constraints
+4. Acceptance Criteria
+5. Verification Commands
+6. Out of Scope
+
+### Arthexis Planning Guardrails
+
+Generated plans must:
+
+* Prefer extending existing Arthexis apps over detached side systems.
+* Model external processes via Django models and migrations when appropriate.
+* Preserve admin power unless there is a clear security concern.
+* Avoid speculative futureproofing and overengineering.
+* Include adjacent health improvements when touching related areas (tests/docs/cruft/security).
+
+### Model-Change Requirements in Plans
+
+If a task changes models, that task must explicitly include:
+
+* migration creation/update
+* migration validation command(s)
+* relevant test updates/additions
+
+### Verification Requirements
+
+Every generated task must include explicit verification commands, preferring repository entrypoints such as:
+
+* `.venv/bin/python manage.py migrations check`
+* `.venv/bin/python manage.py test run -- <target>`
+
+### Context Carry-Forward Rule
+
+Do not assume execution steps inherit planning-chat context.
+Each generated task must restate non-obvious constraints needed for correct implementation.
+
+### Task Dependency Annotation
+
+Each generated task must declare:
+
+* Depends on: `<task ids or none>`
+* Blocks: `<task ids or none>`
+* Parallel-safe: `yes/no`
+
+### Risk and Rollback
+
+For non-trivial tasks, include:
+
+* Risk level (low/med/high)
+* Primary failure mode
+* Rollback approach
+
+### Plan Quality Checklist
+
+A plan is valid only if:
+
+* Every task includes Intent/Scope/Constraints/Acceptance Criteria/Verification Commands/Out of Scope.
+* App/file targets are explicit.
+* Tests and migrations are covered when applicable.
+* No task relies on implicit chat memory.
+
+### Task Template
+
+Use this template when drafting plan tasks:
+
+```md
+### Task <ID>: <Short Title>
+
+* Intent:
+* Scope:
+* Constraints:
+* Acceptance Criteria:
+* Verification Commands:
+* Out of Scope:
+* Depends on:
+* Blocks:
+* Parallel-safe:
+* Risk/Rollback:
+```
 
 ---
 

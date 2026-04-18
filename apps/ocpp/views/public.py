@@ -1,19 +1,16 @@
 import logging
 from pathlib import Path
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.utils import OperationalError, ProgrammingError
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import translation
+from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.docs import rendering
 from apps.features.utils import get_cached_feature_enabled, get_cached_feature_parameter
-from apps.locale.models import Language
 from apps.ocpp.models.location import Location
 from apps.ocpp.services import ChargerAccessDeniedError, build_charger_chart_payload
 from apps.sites.utils import (
@@ -22,7 +19,7 @@ from apps.sites.utils import (
     require_site_operator_or_staff,
 )
 
-from ..models import StationModel, Transaction
+from ..models import annotate_transaction_energy_bounds, StationModel, Transaction
 from .common import *  # noqa: F401,F403
 from .common import (
     _charger_state,
@@ -30,7 +27,6 @@ from .common import (
     _clear_stale_statuses_for_view,
     _connector_overview,
     _connector_set,
-    _default_language_code,
     _ensure_charger_access,
     _get_charger,
     _important_non_transaction_events,
@@ -39,7 +35,7 @@ from .common import (
     _landing_visibility_params,
     _live_sessions,
     _reverse_connector_url,
-    _supported_language_codes,
+    _status_badge_class,
     _transaction_rfid_details,
     _usage_timeline,
     _visible_chargers,
@@ -175,41 +171,7 @@ def charger_page(request, cid, connector=None):
         tx if charger.connector_id is not None else (sessions if sessions else None)
     )
     state, color = _charger_state(charger, state_source)
-    language_cookie = request.COOKIES.get(settings.LANGUAGE_COOKIE_NAME)
-    available_languages = _supported_language_codes()
-    supported_languages = set(available_languages)
-    language_candidates: list[str] = []
-    connector_language = charger.language_code()
-    if connector_language:
-        language_candidates.append(connector_language)
-    if charger.connector_id is not None:
-        parent_language = (
-            Charger.objects.filter(charger_id=charger.charger_id, connector_id=None)
-            .values_list("language__code", flat=True)
-            .first()
-            or ""
-        ).strip()
-        if parent_language:
-            language_candidates.append(parent_language)
-    fallback_language = _default_language_code()
-    if fallback_language and fallback_language in supported_languages:
-        language_candidates.append(fallback_language)
-    elif available_languages:
-        language_candidates.append(available_languages[0])
-    charger_language = ""
-    for code in language_candidates:
-        if code in supported_languages:
-            charger_language = code
-            break
-    if charger_language and (
-        not language_cookie
-        or language_cookie not in supported_languages
-        or language_cookie != charger_language
-    ):
-        translation.activate(charger_language)
-    current_language = translation.get_language()
-    request.LANGUAGE_CODE = current_language
-    preferred_language = charger_language or current_language
+    preferred_language = "en"
     connector_links = [
         {
             "slug": item["slug"],
@@ -269,6 +231,7 @@ def charger_page(request, cid, connector=None):
             "preferred_language": preferred_language,
             "state": state,
             "color": color,
+            "status_badge_class": _status_badge_class(state, color),
             "charger_error_code": _visible_error_code(charger.last_error_code),
         },
     )
@@ -448,6 +411,7 @@ def charger_status(request, cid, connector=None):
             "tx_rfid_details": tx_rfid_details,
             "state": state,
             "color": color,
+            "status_badge_class": _status_badge_class(state, color),
             "transactions": transactions,
             "non_transaction_events": non_transaction_events,
             "page_obj": None,
@@ -542,6 +506,7 @@ def charger_session_search(request, cid, connector=None):
         return access_response
     connectors = _connector_set(charger)
     date_str = request.GET.get("date")
+    quick_range = request.GET.get("range", "").lower()
     date_view = request.GET.get("dates", "charger").lower()
     if date_view not in {"charger", "received"}:
         date_view = "charger"
@@ -565,21 +530,37 @@ def charger_session_search(request, cid, connector=None):
         }.items()
     ]
     transactions = None
-    if date_str:
+    filtered_count = 0
+    filtered_total_kw = 0.0
+    if date_str or quick_range:
         try:
-            date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-            start = datetime.combine(
-                date_obj, datetime.min.time(), tzinfo=dt_timezone.utc
-            )
-            end = start + timedelta(days=1)
+            if quick_range == "today":
+                start_date = timezone.localdate()
+                end_date = start_date + timedelta(days=1)
+            elif quick_range == "yesterday":
+                end_date = timezone.localdate()
+                start_date = end_date - timedelta(days=1)
+            elif quick_range == "last7":
+                end_date = timezone.localdate() + timedelta(days=1)
+                start_date = end_date - timedelta(days=7)
+            else:
+                if not date_str:
+                    raise ValueError("Missing date")
+                date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+                start_date = date_obj
+                end_date = start_date + timedelta(days=1)
+                quick_range = ""
+            start = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+            end = timezone.make_aware(datetime.combine(end_date, datetime.min.time()))
             qs = Transaction.objects.filter(start_time__gte=start, start_time__lt=end)
             if charger.connector_id is None:
                 qs = qs.filter(charger__charger_id=cid)
             else:
                 qs = qs.filter(charger=charger)
-            transactions = qs.order_by("-start_time")
+            transactions = annotate_transaction_energy_bounds(qs).order_by("-start_time")
         except ValueError:
             transactions = []
+            quick_range = ""
     if transactions is not None:
         transactions = list(transactions)
         rfid_cache: dict[str, dict[str, str | None]] = {}
@@ -589,6 +570,8 @@ def charger_session_search(request, cid, connector=None):
             if details:
                 label_value = str(details.get("label") or "").strip() or None
             tx.rfid_label = label_value
+        filtered_count = len(transactions)
+        filtered_total_kw = sum(tx.kw or 0 for tx in transactions)
     overview = _connector_overview(charger, request.user, connectors=connectors)
     connector_links = [
         {
@@ -612,6 +595,9 @@ def charger_session_search(request, cid, connector=None):
             "status_url": status_url,
             "date_view": date_view,
             "date_toggle_links": date_toggle_links,
+            "quick_range": quick_range,
+            "filtered_count": filtered_count,
+            "filtered_total_kw": filtered_total_kw,
             "hide_default_footer": True,
         },
     )

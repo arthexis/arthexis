@@ -6,8 +6,8 @@ from datetime import datetime, time, timedelta
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Prefetch, Q
-from django.db.models.functions import Coalesce
+from django.db.models import CharField, Prefetch, Q, Value
+from django.db.models.functions import Coalesce, NullIf
 from django.utils.html import format_html
 from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
@@ -58,15 +58,18 @@ def _run_contract_login_validation(admin_instance, request, form, contractor, *,
     if setup_results is not None:
         setup_results["validated"] = {"ok": True, "message": success_message}
 
-    if not form.cleaned_data.get("load_all_customers"):
+    order_numbers = (form.cleaned_data.get("order_numbers") or "").strip()
+    if not form.cleaned_data.get("load_all_customers") and not order_numbers:
         return setup_results
 
     try:
-        summary = contractor.load_customers_from_queries(raw_queries="")
+        summary = contractor.load_customers_from_queries(
+            raw_queries="" if form.cleaned_data.get("load_all_customers") else order_numbers
+        )
     except EvergoAPIError as exc:
         admin_instance.message_user(
             request,
-            _("Initial customer load failed for %(contractor)s: %(error)s")
+            _("Customer load failed for %(contractor)s: %(error)s")
             % {"contractor": str(contractor), "error": exc},
             level=messages.ERROR,
         )
@@ -74,11 +77,13 @@ def _run_contract_login_validation(admin_instance, request, form, contractor, *,
             setup_results["loaded"] = {"ok": False, "message": str(exc)}
         return setup_results
 
+    load_label = _("Full load completed") if form.cleaned_data.get("load_all_customers") else _("Order load completed")
     load_message = _(
-        "Initial load completed. Customers: %(customers)s | "
+        "%(label)s. Customers: %(customers)s | "
         "Orders created: %(created)s | Orders updated: %(updated)s | "
         "Placeholders: %(placeholders)s"
     ) % {
+        "label": load_label,
         "customers": summary["customers_loaded"],
         "created": summary["orders_created"],
         "updated": summary["orders_updated"],
@@ -92,7 +97,11 @@ def _run_contract_login_validation(admin_instance, request, form, contractor, *,
 
 def _save_contractor_and_maybe_validate(admin_instance, request, form, profile):
     """Persist wizard changes and rollback validation failures for both create and update flows."""
-    show_setup_results = form.cleaned_data.get("validate_credentials") or form.cleaned_data.get("load_all_customers")
+    show_setup_results = (
+        form.cleaned_data.get("validate_credentials")
+        or form.cleaned_data.get("load_all_customers")
+        or bool((form.cleaned_data.get("order_numbers") or "").strip())
+    )
 
     try:
         with transaction.atomic():
@@ -971,7 +980,11 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     def get_queryset(self, request):
         """Limit customer rows to the signed-in owner unless user is superuser."""
         queryset = super().get_queryset(request).annotate(
-            brand_sort_value=Coalesce("latest_order__site_name", "raw_payload__orden_instalacion__marca_cargador")
+            brand_sort_value=Coalesce(
+                NullIf("latest_order__site_name", Value("")),
+                "raw_payload__orden_instalacion__marca_cargador__text",
+                output_field=CharField(),
+            )
         )
         selected_ids = _parse_selected_ids_query_param(request)
         if selected_ids:

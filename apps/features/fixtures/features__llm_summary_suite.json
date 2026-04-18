@@ -21,7 +21,9 @@
         "summary"
       ],
       "metadata": {},
-      "node_feature": null,
+      "node_feature": [
+        "lcd-screen"
+      ],
       "protocol_coverage": {},
       "public_requirements": "No direct public interface; summarization updates internal displays.",
       "public_views": [],

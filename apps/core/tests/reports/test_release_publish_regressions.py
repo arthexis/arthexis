@@ -14,6 +14,7 @@ from apps.core.views.reports.release_publish.workflow import ReleasePublishConte
 
 def test_publish_workflow_polling_pauses_when_run_in_progress(monkeypatch, tmp_path: Path):
     class DummyRelease:
+        pk = 1
         version = "1.2.3"
 
     ctx: dict[str, object] = {}
@@ -92,6 +93,7 @@ def test_broadcast_release_message_logs_failures(monkeypatch, caplog):
 
 def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path: Path):
     class DummyRelease:
+        pk = 1
         version = "1.2.3"
 
         @staticmethod
@@ -191,3 +193,467 @@ def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path
     assert response.status_code == 200
     assert captured["ctx"].paused is True
     assert captured["ctx"].extras["pending_git_push"] == {"branch": "main"}
+
+
+def test_publish_steps_match_documented_release_flow():
+    assert [name for name, _func in pipeline.PUBLISH_STEPS] == [
+        "Check version number availability",
+        "Freeze, squash and approve migrations",
+        "Execute pre-release actions",
+        "Build release artifacts",
+        "Complete test suite with --all flag",
+        "Confirm PyPI Trusted Publisher settings",
+        "Verify release environment",
+        "Export artifacts and push release tag",
+        "Wait for GitHub Actions publish",
+        "Record publish URLs & update fixtures",
+        "Capture PyPI publish logs",
+    ]
+
+
+def test_publish_step_compatibility_resets_inflight_session():
+    typed_ctx = ReleasePublishContext(
+        step=3,
+        started=True,
+        paused=True,
+        extras={"publish_steps_schema": "old-step-order"},
+    )
+
+    result = pipeline._ensure_publish_step_compatibility(typed_ctx, pipeline.PUBLISH_STEPS)
+
+    assert result.step == 0
+    assert result.started is False
+    assert result.paused is False
+    assert result.error == (
+        "Release publish steps changed after an upgrade. Restart the publish workflow to continue safely."
+    )
+    assert result.extras["publish_steps_schema"] == "|".join(
+        name for name, _func in pipeline.PUBLISH_STEPS
+    )
+
+
+def test_publish_step_compatibility_records_schema_for_new_session():
+    typed_ctx = ReleasePublishContext(step=0, started=False, paused=False, extras={})
+
+    result = pipeline._ensure_publish_step_compatibility(typed_ctx, pipeline.PUBLISH_STEPS)
+
+    assert result.step == 0
+    assert result.started is False
+    assert result.error is None
+    assert result.extras["publish_steps_schema"] == "|".join(
+        name for name, _func in pipeline.PUBLISH_STEPS
+    )
+
+
+def test_resolve_safe_child_path_rejects_parent_traversal(tmp_path: Path):
+    with pytest.raises(ValueError):
+        pipeline._resolve_safe_child_path(tmp_path, "../escape.txt")
+
+
+def test_release_progress_returns_400_for_invalid_state_path(monkeypatch):
+    class DummyRelease:
+        pk = 1
+
+    def raise_unsafe_path(*_args, **_kwargs):
+        raise ValueError("unsafe")
+
+    monkeypatch.setattr(pipeline, "_get_release_or_response", lambda *_args: (DummyRelease(), None))
+    monkeypatch.setattr(
+        pipeline,
+        "_resolve_safe_child_path",
+        raise_unsafe_path,
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_render_release_progress_error",
+        lambda *_args, **_kwargs: HttpResponse("bad path", status=400),
+    )
+
+    request = RequestFactory().get("/release/publish")
+    request.user = type("User", (), {"is_authenticated": False})()
+
+    response = pipeline.release_progress_impl(request, pk=1, action="publish")
+
+    assert response.status_code == 400
+
+
+def test_step_run_tests_accepts_recorded_successful_test_evidence(tmp_path: Path):
+    ctx = {
+        "tests_verified_at": "2026-04-10T00:00:00+00:00",
+        "tests_command": "python manage.py test run -- --all",
+        "tests_result": {"success": True},
+    }
+
+    pipeline._step_run_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert ctx["tests_result"]["success"] is True
+
+
+def test_step_run_tests_requires_evidence_or_configured_command(
+    monkeypatch, settings, tmp_path: Path
+):
+    ctx: dict[str, object] = {}
+    settings.RELEASE_PUBLISH_VALIDATION_COMMAND = ""
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+
+    with pytest.raises(PublishPending):
+        pipeline._step_run_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert "tests_verified_at" in ctx["error"]
+
+
+def test_step_run_tests_executes_configured_validation_command(
+    monkeypatch, settings, tmp_path: Path
+):
+    ctx: dict[str, object] = {}
+    settings.RELEASE_PUBLISH_VALIDATION_COMMAND = "echo 'release tests ok'"
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+
+    pipeline._step_run_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert ctx["tests_result"]["success"] is True
+    assert ctx["tests_result"]["source"] == "pipeline_command"
+    assert ctx["tests_command"] == "echo 'release tests ok'"
+    assert "tests_verified_at" in ctx
+
+
+def test_step_run_tests_passes_configured_timeout_to_subprocess_run(
+    monkeypatch, settings, tmp_path: Path
+):
+    ctx: dict[str, object] = {}
+    settings.RELEASE_PUBLISH_VALIDATION_COMMAND = "echo release tests ok"
+    settings.RELEASE_PUBLISH_VALIDATION_TIMEOUT_SECONDS = 42
+    call: dict[str, object] = {}
+
+    class Completed:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(command, **kwargs):
+        call["command"] = command
+        call["kwargs"] = kwargs
+        return Completed()
+
+    monkeypatch.setattr(pipeline.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+
+    pipeline._step_run_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert call["command"] == ["echo", "release", "tests", "ok"]
+    assert call["kwargs"]["timeout"] == 42
+    assert ctx["tests_result"]["success"] is True
+
+
+def test_step_run_tests_records_timeout_result_and_logs_gate_failure(
+    monkeypatch, settings, tmp_path: Path
+):
+    ctx: dict[str, object] = {}
+    settings.RELEASE_PUBLISH_VALIDATION_COMMAND = "echo timeout"
+    settings.RELEASE_PUBLISH_VALIDATION_TIMEOUT_SECONDS = 15
+    logged_messages: list[str] = []
+
+    def fake_run(command, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=command, timeout=kwargs["timeout"])
+
+    monkeypatch.setattr(pipeline.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda _path, message: logged_messages.append(message),
+    )
+
+    with pytest.raises(PublishPending):
+        pipeline._step_run_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert ctx["paused"] is True
+    assert ctx["tests_result"] == {
+        "success": False,
+        "reason": "timeout",
+        "source": "pipeline_command",
+        "timeout_seconds": 15,
+    }
+    assert "echo timeout" in ctx["error"]
+    assert "15 seconds" in ctx["error"]
+    assert any("timeout=15s" in message for message in logged_messages)
+    assert any("timed out after 15 seconds" in message for message in logged_messages)
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_validates_expected_workflow_metadata(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "v*"\n'
+        "jobs:\n  publish-to-pypi:\n    permissions:\n      id-token: write\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n      - uses: pypa/gh-action-pypi-publish@release/v1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+
+    ctx: dict[str, object] = {}
+    pipeline._step_confirm_pypi_trusted_publisher_settings(
+        object(), ctx, tmp_path / "publish.log"
+    )
+
+    assert ctx["trusted_publisher_workflow_file"] == "publish.yml"
+    assert ctx["trusted_publisher_ref"] == "refs/tags/v*"
+    assert ctx["trusted_publisher_environment"] == "pypi"
+    assert "trusted_publisher_verified_at" in ctx
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_accepts_yaml_variants(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        "on:\n  push:\n    tags: ['v*']\n"
+        "jobs:\n  publish-to-pypi:\n    permissions:\n      id-token: write\n"
+        "    environment: pypi\n"
+        "    steps:\n      - uses: pypa/gh-action-pypi-publish\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+
+    ctx: dict[str, object] = {}
+    pipeline._step_confirm_pypi_trusted_publisher_settings(
+        object(), ctx, tmp_path / "publish.log"
+    )
+
+    assert ctx["trusted_publisher_ref"] == "refs/tags/v*"
+    assert ctx["trusted_publisher_environment"] == "pypi"
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_fails_on_mismatch(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "release-*"\n'
+        "jobs:\n  publish-to-pypi:\n    permissions:\n      id-token: write\n"
+        "    environment:\n      name: production\n"
+        "    steps:\n      - uses: pypa/gh-action-pypi-publish@release/v1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    with pytest.raises(PublishPending):
+        pipeline._step_confirm_pypi_trusted_publisher_settings(
+            object(), ctx, tmp_path / "publish.log"
+        )
+
+    assert "workflow tag pattern must be refs/tags/v*" in ctx["error"]
+    assert "jobs.publish-to-pypi.environment.name" in ctx["error"]
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_rejects_mixed_tag_patterns(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        "on:\n  push:\n    tags: ['v*', 'release-*']\n"
+        "jobs:\n  publish-to-pypi:\n    permissions:\n      id-token: write\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n      - uses: pypa/gh-action-pypi-publish@release/v1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    with pytest.raises(PublishPending):
+        pipeline._step_confirm_pypi_trusted_publisher_settings(
+            object(), ctx, tmp_path / "publish.log"
+        )
+
+    assert "workflow tag pattern must be refs/tags/v*" in ctx["error"]
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_requires_oidc_permissions_and_action(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "v*"\n'
+        "jobs:\n  publish-to-pypi:\n"
+        "    permissions:\n      id-token: read\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n      - uses: actions/checkout@v4\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    with pytest.raises(PublishPending):
+        pipeline._step_confirm_pypi_trusted_publisher_settings(
+            object(), ctx, tmp_path / "publish.log"
+        )
+
+    assert "jobs.publish-to-pypi.permissions.id-token" in ctx["error"]
+    assert "jobs.publish-to-pypi.steps[*].uses" in ctx["error"]
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_rejects_static_publish_tokens(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "v*"\n'
+        "jobs:\n  publish-to-pypi:\n"
+        "    permissions:\n      id-token: write\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n"
+        "      - uses: pypa/gh-action-pypi-publish@release/v1\n"
+        "        with:\n"
+        "          password: ${{ secrets.PYPI_API_TOKEN }}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    with pytest.raises(PublishPending):
+        pipeline._step_confirm_pypi_trusted_publisher_settings(
+            object(), ctx, tmp_path / "publish.log"
+        )
+
+    assert "must not set static token credentials" in ctx["error"]
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_allows_non_publish_step_tokens(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "v*"\n'
+        "jobs:\n  publish-to-pypi:\n"
+        "    permissions:\n      id-token: write\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "        with:\n"
+        "          token: ${{ secrets.GITHUB_TOKEN }}\n"
+        "      - uses: pypa/gh-action-pypi-publish@release/v1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    pipeline._step_confirm_pypi_trusted_publisher_settings(
+        object(), ctx, tmp_path / "publish.log"
+    )
+
+    assert "trusted_publisher_verified_at" in ctx
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_rejects_twine_upload_path(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "v*"\n'
+        "jobs:\n  publish-to-pypi:\n"
+        "    permissions:\n      id-token: write\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n"
+        "      - run: python -m twine upload dist/*\n"
+        "      - uses: pypa/gh-action-pypi-publish@release/v1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    with pytest.raises(PublishPending):
+        pipeline._step_confirm_pypi_trusted_publisher_settings(
+            object(), ctx, tmp_path / "publish.log"
+        )
+
+    assert "must use only pypa/gh-action-pypi-publish for package upload" in ctx["error"]
+
+
+def test_step_confirm_pypi_trusted_publisher_settings_accepts_workflow_permissions(
+    monkeypatch, tmp_path: Path
+):
+    workflows_dir = tmp_path / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True)
+    (workflows_dir / "publish.yml").write_text(
+        'on:\n  push:\n    tags:\n      - "v*"\n'
+        "permissions:\n  id-token: write\n"
+        "jobs:\n  publish-to-pypi:\n"
+        "    environment:\n      name: pypi\n"
+        "    steps:\n      - uses: pypa/gh-action-pypi-publish@release/v1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        pipeline,
+        "_append_log",
+        lambda *_args, **_kwargs: None,
+    )
+    ctx: dict[str, object] = {}
+
+    pipeline._step_confirm_pypi_trusted_publisher_settings(
+        object(), ctx, tmp_path / "publish.log"
+    )
+
+    assert "trusted_publisher_verified_at" in ctx

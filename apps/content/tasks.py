@@ -1,4 +1,4 @@
-"""Compatibility Celery tasks for retired content samplers."""
+"""Backward-compatible Celery task entrypoints for the content app."""
 
 from __future__ import annotations
 
@@ -11,15 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(name="apps.content.tasks.run_scheduled_web_samplers")
-def run_scheduled_web_samplers() -> list[int]:
-    """Preserve the retired sampler task name as a no-op compatibility alias.
+def run_scheduled_web_samplers() -> None:
+    """No-op shim for the retired web sampler periodic task."""
 
-    Returns:
-        An empty list because generic web samplers have been retired.
-    """
-
-    logger.warning(
-        "Ignoring retired task alias apps.content.tasks.run_scheduled_web_samplers; "
-        "migrate stored schedules and triggers to dedicated collector tasks."
-    )
-    return []
+    logger.info("run_scheduled_web_samplers was called after task retirement; ignoring")

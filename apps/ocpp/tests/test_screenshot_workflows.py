@@ -28,7 +28,10 @@ def test_dashboard_snapshot_after_simulated_session(client, settings, monkeypatc
     )
 
     user = get_user_model().objects.create_user(
-        username="snapshot-user", email="snapshots@example.com", password="pass"
+        username="snapshot-user",
+        email="snapshots@example.com",
+        password="pass",
+        is_staff=True,
     )
     client.force_login(user)
 

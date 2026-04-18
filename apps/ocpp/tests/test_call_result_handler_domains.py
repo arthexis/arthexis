@@ -4,16 +4,23 @@ import pytest
 from channels.db import database_sync_to_async
 from django.utils import timezone
 
-from apps.ocpp.consumers import CSMSConsumer
-from apps.ocpp.call_result_handlers import (
-    authorization,
-    certificates,
-    configuration,
-    diagnostics,
-    firmware,
-    profiles,
-    transactions,
+from apps.ocpp.call_result_handlers.authorization import handle_get_local_list_version_result
+from apps.ocpp.call_result_handlers.certificates import handle_certificate_signed_result
+from apps.ocpp.call_result_handlers.configuration import (
+    handle_change_availability_result,
+    handle_change_configuration_result,
 )
+from apps.ocpp.call_result_handlers.diagnostics import (
+    handle_get_diagnostics_result,
+    handle_get_log_result,
+)
+from apps.ocpp.call_result_handlers.firmware import handle_update_firmware_result
+from apps.ocpp.call_result_handlers.profiles import (
+    handle_clear_charging_profile_result,
+    handle_get_variables_result,
+)
+from apps.ocpp.call_result_handlers.transactions import handle_reserve_now_result
+from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.models.location import Location
 
 from apps.ocpp.models import (
@@ -35,14 +42,14 @@ async def test_configuration_domain_tracks_status_and_resilience():
     consumer.charger_id = "CFG-1"
     consumer.store_key = "CFG-1"
 
-    ok = await configuration.handle_change_availability_result(
+    ok = await handle_change_availability_result(
         consumer,
         "cfg-msg",
         {"requested_at": timezone.now(), "connector_id": 1, "availability_type": "Inoperative"},
         {"status": "Accepted"},
         consumer.store_key,
     )
-    malformed = await configuration.handle_change_configuration_result(
+    malformed = await handle_change_configuration_result(
         consumer,
         "cfg-msg-2",
         {},
@@ -69,7 +76,7 @@ async def test_firmware_domain_updates_deployment():
     consumer.charger_id = charger.charger_id
     consumer.store_key = charger.charger_id
 
-    result = await firmware.handle_update_firmware_result(
+    result = await handle_update_firmware_result(
         consumer,
         "fw-msg",
         {"deployment_pk": deployment.pk},
@@ -98,7 +105,7 @@ async def test_transactions_domain_updates_reservation_and_status_mapping():
     consumer.charger_id = charger.charger_id
     consumer.store_key = charger.charger_id
 
-    result = await transactions.handle_reserve_now_result(
+    result = await handle_reserve_now_result(
         consumer,
         "trx-msg",
         {"reservation_pk": reservation.pk},
@@ -121,7 +128,7 @@ async def test_authorization_domain_handles_unknown_payloads():
     consumer.charger = None
     consumer.aggregate_charger = None
 
-    result = await authorization.handle_get_local_list_version_result(
+    result = await handle_get_local_list_version_result(
         consumer,
         "auth-msg",
         {},
@@ -149,14 +156,14 @@ async def test_profiles_domain_updates_profile_and_ignores_malformed_variable_pa
     consumer.charger_id = charger.charger_id
     consumer.store_key = charger.charger_id
 
-    ok = await profiles.handle_clear_charging_profile_result(
+    ok = await handle_clear_charging_profile_result(
         consumer,
         "prof-msg",
         {"charging_profile_id": profile_obj.charging_profile_id, "charger_id": charger.charger_id},
         {"status": "Accepted", "statusInfo": {"detail": "ok"}},
         consumer.store_key,
     )
-    malformed = await profiles.handle_get_variables_result(
+    malformed = await handle_get_variables_result(
         consumer,
         "prof-msg-2",
         {"charger_id": charger.charger_id},
@@ -180,7 +187,7 @@ async def test_certificates_domain_updates_operation_status():
     consumer.charger_id = charger.charger_id
     consumer.store_key = charger.charger_id
 
-    result = await certificates.handle_certificate_signed_result(
+    result = await handle_certificate_signed_result(
         consumer,
         "cert-msg",
         {"operation_pk": operation.pk},
@@ -206,14 +213,14 @@ async def test_diagnostics_domain_updates_log_request_and_diagnostics_metadata()
     consumer.charger_id = charger.charger_id
     consumer.store_key = charger.charger_id
 
-    log_result = await diagnostics.handle_get_log_result(
+    log_result = await handle_get_log_result(
         consumer,
         "diag-msg-1",
         {"log_request_pk": request.pk},
         {"status": "Uploaded", "filename": "logs.txt"},
         consumer.store_key,
     )
-    diag_result = await diagnostics.handle_get_diagnostics_result(
+    diag_result = await handle_get_diagnostics_result(
         consumer,
         "diag-msg-2",
         {"charger_id": charger.charger_id},
@@ -225,3 +232,17 @@ async def test_diagnostics_domain_updates_log_request_and_diagnostics_metadata()
     assert diag_result is True
     refreshed = await database_sync_to_async(ChargerLogRequest.objects.get)(pk=request.pk)
     assert refreshed.status == "Uploaded"
+
+
+def test_call_result_handler_package_exports_minimal_surface():
+    import apps.ocpp.call_result_handlers as package_api
+
+    assert set(package_api.__all__) == {
+        "CALL_RESULT_HANDLER_REGISTRY",
+        "CallResultContext",
+        "dispatch_call_result",
+    }
+    assert "CALL_RESULT_HANDLERS" not in package_api.__all__
+    assert not hasattr(package_api, "build_context")
+    assert "build_legacy_registry" not in package_api.__all__
+    assert "firmware" not in package_api.__all__

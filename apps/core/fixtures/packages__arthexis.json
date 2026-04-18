@@ -8,7 +8,7 @@
       "is_active": true,
       "is_deleted": false,
       "is_seed_data": false,
-      "license": "Arthexis Reciprocity License 1.0",
+      "license": "Arthexis Reciprocity General License 1.0",
       "name": "arthexis",
       "oidc_publish_enabled": true,
       "python_requires": ">=3.10",

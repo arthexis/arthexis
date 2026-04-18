@@ -1,4 +1,4 @@
-Arthexis Reciprocity License 1.0
+Arthexis Reciprocity General License 1.0
 
 Copyright (c) 2026 Arthexis contributors
 
@@ -22,7 +22,8 @@ modify, and distribute the Software, subject to the conditions below.
       security fixes;
    b. documentation improvements, operational guidance, or issue triage;
    c. review, maintenance, or other concrete project work accepted by the
-      maintainers.
+      maintainers;
+   d. sponsoring the Arthexis project or one of its dependencies.
 
 3. Timing of contributions.
    Required contributions under Section 2 must be offered to the upstream

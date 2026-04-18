@@ -56,8 +56,17 @@ class ShopAdmin(PublicViewLinksAdminMixin, admin.ModelAdmin):
 class ShopProductAdmin(admin.ModelAdmin):
     """Admin configuration for sellable products."""
 
-    list_display = ("name", "shop", "sku", "unit_price", "currency", "stock_quantity", "is_active")
-    list_filter = ("is_active", "currency", "shop")
+    list_display = (
+        "name",
+        "shop",
+        "sku",
+        "unit_price",
+        "currency",
+        "stock_quantity",
+        "supports_soul_seed_preload",
+        "is_active",
+    )
+    list_filter = ("is_active", "supports_soul_seed_preload", "currency", "shop")
     search_fields = ("name", "sku")
 
 

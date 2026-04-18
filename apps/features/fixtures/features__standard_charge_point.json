@@ -10,7 +10,7 @@
         "apps/ocpp/consumers/base/connection_flow.py"
       ],
       "created_at": "2024-03-01T00:00:00Z",
-      "display": "Standard Charge Point Creation",
+      "display": "CP Auto-enrollment",
       "is_deleted": false,
       "is_enabled": true,
       "is_seed_data": true,
@@ -26,7 +26,7 @@
       "service_views": [
         "apps.ocpp.consumers.base.connection_flow.CSMSConnectionFlow._is_creation_allowed"
       ],
-      "slug": "standard-charge-point",
+      "slug": "cp-auto-enrollment",
       "source": "mainstream",
       "summary": "Controls baseline charge-point creation admission for websocket connections.",
       "updated_at": "2024-03-01T00:00:00Z"

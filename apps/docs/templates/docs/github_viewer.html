@@ -1,0 +1,54 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="markdown-body">
+  <h1>{{ title }}</h1>
+  {% if not github_connected %}
+    <div class="alert alert-info" role="alert">
+      {% trans "GitHub is not connected for the active repository. Configure an active repository and token to enable this viewer." %}
+    </div>
+  {% else %}
+    <p class="text-muted">{% blocktrans with repository_slug=repository_slug %}Showing all open issues and pull requests for {{ repository_slug }}.{% endblocktrans %}</p>
+    {% if error_message %}
+      <div class="alert alert-danger" role="alert">{{ error_message }}</div>
+    {% endif %}
+    {% if entries %}
+      <div class="table-responsive">
+        <table class="table table-striped align-middle">
+          <thead>
+            <tr>
+              <th>{% trans "Type" %}</th>
+              <th>{% trans "Number" %}</th>
+              <th>{% trans "Title" %}</th>
+              <th>{% trans "Author" %}</th>
+              <th>{% trans "State" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in entries %}
+              <tr>
+                <td>
+                  {% if entry.kind == "pull_request" %}
+                    <span class="badge text-bg-primary">PR</span>
+                  {% else %}
+                    <span class="badge text-bg-secondary">Issue</span>
+                  {% endif %}
+                </td>
+                <td><a href="{{ entry.detail_url }}">#{{ entry.number }}</a></td>
+                <td><a href="{{ entry.detail_url }}">{{ entry.title }}</a></td>
+                <td>{{ entry.author|default:"-" }}</td>
+                <td>{{ entry.state|default:"-" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-muted">{% trans "No open issues or pull requests were found." %}</p>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

@@ -13,6 +13,8 @@ mkdir -p "$LOCK_DIR"
 . "$BASE_DIR/scripts/helpers/service_manager.sh"
 # shellcheck source=scripts/helpers/suite-uptime-lock.sh
 . "$BASE_DIR/scripts/helpers/suite-uptime-lock.sh"
+# shellcheck source=scripts/helpers/ports.sh
+. "$BASE_DIR/scripts/helpers/ports.sh"
 arthexis_load_env_file "$BASE_DIR"
 STARTUP_SCRIPT_NAME="$(basename "$0")"
 arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "start" "invoked"
@@ -141,6 +143,9 @@ wait_for_systemd_service() {
 
     if [ "$active_state" = "active" ]; then
       echo "Service '$service_name' is active."
+      if [ "$service_name" = "$SERVICE_NAME" ]; then
+        arthexis_service_access_message "$BASE_DIR"
+      fi
       "${SYSTEMCTL_CMD[@]}" status "$service_name" --no-pager --lines 10 || true
       return 0
     fi
@@ -220,16 +225,42 @@ if [ "$CAMERA_SERVICE_CONFIGURED" = true ]; then
   arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "camera-status" "initial_status=$CAMERA_INITIAL_STATUS"
 fi
 
+reconcile_companion_units() {
+  if [ "$RFID_SERVICE_CONFIGURED" = true ] && [ "$RFID_UNIT_PRESENT" = true ]; then
+    if ! RFID_INITIAL_STATUS=$("${SYSTEMCTL_CMD[@]}" is-active "$RFID_SERVICE_UNIT" 2>/dev/null); then
+      RFID_INITIAL_STATUS="${RFID_INITIAL_STATUS:-unknown}"
+    fi
+    if [ "$RFID_INITIAL_STATUS" = "failed" ]; then
+      "${SYSTEMCTL_CMD[@]}" restart "$RFID_SERVICE_UNIT"
+    elif [ "$RFID_INITIAL_STATUS" != "active" ]; then
+      "${SYSTEMCTL_CMD[@]}" start "$RFID_SERVICE_UNIT"
+    fi
+  fi
+  if [ "$CAMERA_SERVICE_CONFIGURED" = true ] && [ "$CAMERA_UNIT_PRESENT" = true ]; then
+    if ! CAMERA_INITIAL_STATUS=$("${SYSTEMCTL_CMD[@]}" is-active "$CAMERA_SERVICE_UNIT" 2>/dev/null); then
+      CAMERA_INITIAL_STATUS="${CAMERA_INITIAL_STATUS:-unknown}"
+    fi
+    if [ "$CAMERA_INITIAL_STATUS" = "failed" ]; then
+      "${SYSTEMCTL_CMD[@]}" restart "$CAMERA_SERVICE_UNIT"
+    elif [ "$CAMERA_INITIAL_STATUS" != "active" ]; then
+      "${SYSTEMCTL_CMD[@]}" start "$CAMERA_SERVICE_UNIT"
+    fi
+  fi
+}
+
 if [ "$DEBUG_MODE" = false ] && [ -z "$SHOW_LEVEL" ] && [ "$RELOAD_REQUESTED" = false ] \
   && [ -n "$SERVICE_NAME" ] && [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] \
   && _arthexis_systemd_unit_present "${SERVICE_NAME}.service"; then
+  if ! MAIN_INITIAL_STATUS=$("${SYSTEMCTL_CMD[@]}" is-active "$SERVICE_NAME" 2>/dev/null); then
+    MAIN_INITIAL_STATUS="${MAIN_INITIAL_STATUS:-unknown}"
+  fi
+  if [ "$MAIN_INITIAL_STATUS" = "active" ]; then
+    reconcile_companion_units
+    exit 0
+  fi
+
   "${SYSTEMCTL_CMD[@]}" restart "$SERVICE_NAME"
-  if [ "$RFID_SERVICE_CONFIGURED" = true ] && [ "$RFID_UNIT_PRESENT" = true ]; then
-    "${SYSTEMCTL_CMD[@]}" restart "$RFID_SERVICE_UNIT"
-  fi
-  if [ "$CAMERA_SERVICE_CONFIGURED" = true ] && [ "$CAMERA_UNIT_PRESENT" = true ]; then
-    "${SYSTEMCTL_CMD[@]}" restart "$CAMERA_SERVICE_UNIT"
-  fi
+  reconcile_companion_units
   if [ "$SILENT" = true ]; then
     exit 0
   fi

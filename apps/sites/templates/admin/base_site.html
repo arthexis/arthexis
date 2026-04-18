@@ -85,6 +85,30 @@
     loadLocalHtmx(loadHtmxExtensions);
   })();
 </script>
+<script>
+  (function registerAdminServiceWorker() {
+    if (!('serviceWorker' in navigator) || !window.isSecureContext) {
+      return;
+    }
+
+    const precacheUrls = [
+      '{% static "core/vendor/chart.umd.min.js" %}',
+      '{% static "htmx/htmx.min.js" %}',
+      '{% static "htmx/intersect.js" %}',
+      '{% static "htmx/reveal.js" %}',
+      '{% static "admin/css/base.css" %}',
+      '{% static "admin/css/nav_sidebar.css" %}',
+      '{% static "admin/css/dark_mode.css" %}',
+      '{% static "admin/js/core.js" %}',
+      '{% static "admin/js/nav_sidebar.js" %}',
+      '{% static "admin/js/theme.js" %}',
+    ];
+
+    const precacheParam = encodeURIComponent(precacheUrls.join(','));
+    const serviceWorkerUrl = `{% url "admin-service-worker" %}?precache=${precacheParam}`;
+    navigator.serviceWorker.register(serviceWorkerUrl);
+  })();
+</script>
 {% if badge_role %}
   {% if badge_role.name == "Control" %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_control.txt' %}">
@@ -109,6 +133,133 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     const modules = Array.from(sidebar.querySelectorAll('.module'));
+    const storage = (function resolveStorage() {
+        try {
+            return window.localStorage;
+        } catch (error) {
+            return null;
+        }
+    })();
+    const storagePrefix = [
+        'arthexis',
+        'admin',
+        'sidebar',
+        '{{ current_site_domain|default:"default-site"|escapejs }}',
+        '{{ request.user.pk|default:"anonymous"|escapejs }}',
+    ].join('.');
+    const keys = {
+        filter: `${storagePrefix}.filter`,
+        collapsed: `${storagePrefix}.collapsed`,
+        recentTargets: `${storagePrefix}.recent_targets`,
+    };
+    const writeTimers = {};
+    const pendingWrites = {};
+    const recentTargetLimit = 12;
+
+    function readJson(key, fallback) {
+        if (!storage) {
+            return fallback;
+        }
+        try {
+            const value = storage.getItem(key);
+            return value ? JSON.parse(value) : fallback;
+        } catch (error) {
+            return fallback;
+        }
+    }
+
+    function writeStorageNow(key, value) {
+        if (!storage) {
+            return;
+        }
+        if (writeTimers[key]) {
+            window.clearTimeout(writeTimers[key]);
+            delete writeTimers[key];
+        }
+        if (Object.prototype.hasOwnProperty.call(pendingWrites, key)) {
+            delete pendingWrites[key];
+        }
+        try {
+            storage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+        } catch (error) {
+            // Ignore storage quota and serialization errors.
+        }
+    }
+
+    function flushPendingStorageWrites() {
+        Object.keys(writeTimers).forEach(function (key) {
+            if (writeTimers[key]) {
+                window.clearTimeout(writeTimers[key]);
+                delete writeTimers[key];
+            }
+            if (Object.prototype.hasOwnProperty.call(pendingWrites, key)) {
+                writeStorageNow(key, pendingWrites[key]);
+                delete pendingWrites[key];
+            }
+        });
+    }
+
+    function writeStorageDebounced(key, value) {
+        if (!storage) {
+            return;
+        }
+
+        if (writeTimers[key]) {
+            window.clearTimeout(writeTimers[key]);
+        }
+
+        pendingWrites[key] = value;
+        writeTimers[key] = window.setTimeout(function () {
+            writeStorageNow(key, pendingWrites[key]);
+            delete pendingWrites[key];
+            delete writeTimers[key];
+        }, 150);
+    }
+
+    function getAppLabel(module) {
+        if (module.dataset && module.dataset.appLabel) {
+            return module.dataset.appLabel;
+        }
+        const appClass = Array.from(module.classList).find(function (token) {
+            return token.indexOf('app-') === 0;
+        });
+        return appClass ? appClass.replace('app-', '') : null;
+    }
+
+    function getCollapsedMap() {
+        const value = readJson(keys.collapsed, {});
+        return value && typeof value === 'object' ? value : {};
+    }
+
+    function applyCollapsedMap(collapsedMap) {
+        modules.forEach(function (module) {
+            const appLabel = getAppLabel(module);
+            if (!appLabel) {
+                return;
+            }
+            if (collapsedMap[appLabel]) {
+                module.classList.add('collapsed');
+            } else {
+                module.classList.remove('collapsed');
+            }
+        });
+    }
+
+    function persistCollapsedState(immediate) {
+        const collapsedMap = {};
+        modules.forEach(function (module) {
+            const appLabel = getAppLabel(module);
+            if (!appLabel) {
+                return;
+            }
+            collapsedMap[appLabel] = module.classList.contains('collapsed');
+        });
+        if (immediate) {
+            writeStorageNow(keys.collapsed, collapsedMap);
+            return;
+        }
+        writeStorageDebounced(keys.collapsed, collapsedMap);
+    }
 
     function toggleEmptyGroups() {
         const query = nav.value.trim().toLowerCase();
@@ -127,17 +278,121 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        // Ensure modules remain expanded while filtering and during normal navigation.
-        visibleModules.forEach(function (module) {
-            module.classList.remove('collapsed');
+        if (query) {
+            visibleModules.forEach(function (module) {
+                module.classList.remove('collapsed');
+            });
+        } else {
+            applyCollapsedMap(getCollapsedMap());
+        }
+    }
+
+    function persistFilterValue() {
+        writeStorageDebounced(keys.filter, nav.value);
+    }
+
+    function normalizeRecentTargets(value) {
+        if (!Array.isArray(value)) {
+            return [];
+        }
+        return value
+            .filter(function (target) {
+                return typeof target === 'string' && target.length > 0;
+            })
+            .slice(0, recentTargetLimit);
+    }
+
+    function persistRecentTarget(url, immediate) {
+        if (!url) {
+            return;
+        }
+        const dedupedTargets = normalizeRecentTargets(readJson(keys.recentTargets, []))
+            .filter(function (target) {
+                return target !== url;
+            });
+        dedupedTargets.unshift(url);
+        if (immediate) {
+            writeStorageNow(keys.recentTargets, dedupedTargets.slice(0, recentTargetLimit));
+            return;
+        }
+        writeStorageDebounced(keys.recentTargets, dedupedTargets.slice(0, recentTargetLimit));
+    }
+
+    function prefetchRecentTargets() {
+        const targets = normalizeRecentTargets(readJson(keys.recentTargets, []));
+        window.__adminRecentAppTargets = targets;
+        targets.slice(0, 4).forEach(function (url) {
+            const prefetch = document.createElement('link');
+            prefetch.rel = 'prefetch';
+            prefetch.href = url;
+            prefetch.as = 'document';
+            document.head.appendChild(prefetch);
         });
     }
 
-    nav.addEventListener('change', toggleEmptyGroups);
-    nav.addEventListener('input', toggleEmptyGroups);
+    const restoredFilter = storage ? storage.getItem(keys.filter) : '';
+    const shouldReapplyFilter = typeof restoredFilter === 'string' && Boolean(restoredFilter.trim());
+    if (typeof restoredFilter === 'string') {
+        nav.value = restoredFilter;
+    }
+    applyCollapsedMap(getCollapsedMap());
+    prefetchRecentTargets();
+
+    nav.addEventListener('change', function () {
+        persistFilterValue();
+        toggleEmptyGroups();
+    });
+    nav.addEventListener('input', function () {
+        persistFilterValue();
+        toggleEmptyGroups();
+    });
     nav.addEventListener('keyup', toggleEmptyGroups);
 
-    toggleEmptyGroups();
+    sidebar.addEventListener('click', function (event) {
+        const link = event.target.closest('a[href]');
+        const toggleButton = event.target.closest('.app-collapse-toggle');
+
+        if (link && sidebar.contains(link)) {
+            persistRecentTarget(link.href, true);
+            persistCollapsedState(true);
+            return;
+        }
+
+        if (!toggleButton || !sidebar.contains(toggleButton)) {
+            return;
+        }
+
+        window.setTimeout(function () {
+            persistCollapsedState(true);
+        }, 0);
+    });
+
+    const observer = new MutationObserver(function (records) {
+        if (!nav.value.trim()) {
+            return;
+        }
+        records.forEach(function (record) {
+            if (
+                record.type === 'attributes'
+                && record.attributeName === 'class'
+                && record.target.classList.contains('collapsed')
+            ) {
+                record.target.classList.remove('collapsed');
+            }
+        });
+    });
+    observer.observe(sidebar, { attributes: true, attributeFilter: ['class'], subtree: true });
+
+    if (storage) {
+        window.addEventListener('pagehide', flushPendingStorageWrites);
+        window.addEventListener('beforeunload', flushPendingStorageWrites);
+    }
+
+    if (shouldReapplyFilter) {
+        nav.dispatchEvent(new Event('input', { bubbles: true }));
+    } else {
+        toggleEmptyGroups();
+    }
 });
 </script>
 <script id="admin-sidebar-collapse-toggle-visibility">
@@ -440,7 +695,6 @@ document.addEventListener('DOMContentLoaded', function () {
   {% endif %}
   {% include "admin/ops/active_operation_banner.html" %}
 
-  {% include_if_exists "shortcuts/includes/client_shortcuts_setup.html" %}
 
   {% if request.user.is_authenticated and request.user.is_staff %}
     <div

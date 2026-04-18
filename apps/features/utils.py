@@ -10,6 +10,7 @@ from .models import Feature
 from .parameters import get_feature_parameter
 
 PAGES_CHAT_FEATURE_SLUG = "pages-chat"
+QUICK_WEB_SHARE_FEATURE_SLUG = "quick-web-share"
 STAFF_CHAT_BRIDGE_FEATURE_SLUG = "staff-chat-bridge"
 
 
@@ -100,13 +101,14 @@ def is_pages_chat_runtime_enabled(*, default: bool = False) -> bool:
         public pages chat to run.
     """
 
-    return bool(getattr(settings, "PAGES_CHAT_ENABLED", False)) and is_pages_chat_enabled(
-        default=default
-    )
+    return bool(
+        getattr(settings, "PAGES_CHAT_ENABLED", False)
+    ) and is_pages_chat_enabled(default=default)
 
 
 __all__ = [
     "PAGES_CHAT_FEATURE_SLUG",
+    "QUICK_WEB_SHARE_FEATURE_SLUG",
     "STAFF_CHAT_BRIDGE_FEATURE_SLUG",
     "get_cached_feature_enabled",
     "get_cached_feature_parameter",

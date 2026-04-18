@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
-import shlex
 import shutil
 import subprocess
 import sys
@@ -13,11 +13,26 @@ from typing import Optional, Sequence
 from .defaults import DEFAULT_PACKAGE
 from .models import Credentials, Package, ReleaseError
 from .network import requires_network
+from .test_commands import normalize_test_command
 
 try:  # pragma: no cover - optional dependency
     import toml  # type: ignore
 except Exception:  # pragma: no cover - fallback when missing
     toml = None  # type: ignore
+
+ARG_LICENSE_NAMES = (
+    "Arthexis Reciprocity General License 1.0",
+    "Arthexis Reciprocity License 1.0",
+)
+ARG_LICENSE_REF = "LicenseRef-ARG-1.0"
+RELEASE_METADATA_PATHS = (
+    Path("VERSION"),
+    Path("pyproject.toml"),
+)
+RELEASE_FIXTURE_ROOT = Path("apps/core/fixtures")
+RELEASE_FIXTURE_PREFIX = "releases__"
+
+logger = logging.getLogger(__name__)
 
 
 class TestsFailed(ReleaseError):
@@ -207,6 +222,91 @@ def _git_has_staged_changes() -> bool:
     return proc.returncode != 0
 
 
+def _git_staged_paths() -> list[Path]:
+    """Return staged file paths in the current repository."""
+
+    proc = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [Path(line.strip()) for line in proc.stdout.splitlines() if line.strip()]
+
+
+def _git_modified_paths() -> set[Path]:
+    """Return modified or untracked working-tree paths from porcelain output."""
+
+    base_dir = Path.cwd().resolve()
+    ignored_paths = _ignored_working_tree_paths(base_dir)
+    proc = subprocess.run(
+        ["git", "status", "--porcelain", "-z"],
+        capture_output=True,
+        check=True,
+    )
+    paths: set[Path] = set()
+    entries = iter(proc.stdout.split(b"\0"))
+    for entry in entries:
+        if not entry:
+            continue
+        status = entry[:2]
+        path_bytes = entry[3:]
+        if status.startswith((b"R", b"C")):
+            path_bytes = next(entries, b"")
+        if not path_bytes:
+            continue
+
+        path = Path(path_bytes.decode("utf-8", errors="surrogateescape"))
+        with contextlib.suppress(OSError):
+            resolved = (base_dir / path).resolve()
+            if any(
+                resolved == ignored or resolved.is_relative_to(ignored)
+                for ignored in ignored_paths
+            ):
+                continue
+        paths.add(path)
+    return paths
+
+
+def _is_release_metadata_path(path: Path, *, metadata_paths: set[Path]) -> bool:
+    """Return True when ``path`` should be staged for release promotion."""
+
+    if path in metadata_paths:
+        return True
+    try:
+        relative = path.relative_to(RELEASE_FIXTURE_ROOT)
+    except ValueError:
+        return False
+    return (
+        relative.suffix == ".json"
+        and relative.parent == Path(".")
+        and relative.name.startswith(RELEASE_FIXTURE_PREFIX)
+    )
+
+
+def _release_metadata_paths_for_promote(package: Package) -> tuple[list[Path], list[Path]]:
+    """Return expected and unexpected modified paths for ``promote`` commits."""
+
+    version_path = (
+        Path(package.version_path)
+        if package.version_path
+        else Path("VERSION")
+    )
+    metadata_paths = {*RELEASE_METADATA_PATHS, version_path}
+    modified = _git_modified_paths()
+    expected = sorted(
+        path
+        for path in modified
+        if _is_release_metadata_path(path, metadata_paths=metadata_paths)
+    )
+    unexpected = sorted(
+        path
+        for path in modified
+        if not _is_release_metadata_path(path, metadata_paths=metadata_paths)
+    )
+    return expected, unexpected
+
+
 def run_tests(
     log_path: Optional[Path] = None,
     command: Optional[Sequence[str]] = None,
@@ -235,9 +335,9 @@ def _pep639_license_metadata(license_name: str) -> dict[str, object]:
         Mapping of ``project`` metadata keys for the license declaration.
     """
 
-    if license_name == "Arthexis Reciprocity License 1.0":
+    if license_name in ARG_LICENSE_NAMES:
         return {
-            "license": "LicenseRef-ARL-1.0",
+            "license": ARG_LICENSE_REF,
             "license-files": ["LICENSE"],
         }
     return {"license": license_name}
@@ -385,9 +485,10 @@ def build(
 
         if tests:
             log_path = Path("logs/test.log")
-            test_command = (
-                shlex.split(package.test_command) if package.test_command else None
-            )
+            try:
+                test_command = normalize_test_command(package.test_command)
+            except ValueError as err:
+                raise ReleaseError(str(err)) from err
             proc = run_tests(log_path=log_path, command=test_command)
             if proc.returncode != 0:
                 raise TestsFailed(log_path, proc.stdout + proc.stderr)
@@ -483,7 +584,21 @@ def promote(
             tag=False,
             stash=stash,
         )
-        _run(["git", "add", "."])  # add all changes
+        expected_paths, unexpected_paths = _release_metadata_paths_for_promote(package)
+        if unexpected_paths:
+            unexpected = "\n".join(f"- {path.as_posix()}" for path in unexpected_paths)
+            raise ReleaseError(
+                "Unexpected modified files detected during promotion:\n"
+                f"{unexpected}\n"
+                "Clean, commit, or stash these files separately before promoting."
+            )
+
+        if expected_paths:
+            _run(["git", "add", *(path.as_posix() for path in expected_paths)])
+
+        staged_paths = _git_staged_paths()
+        staged_display = ", ".join(path.as_posix() for path in staged_paths) or "(none)"
+        logger.info("Promotion staged files: %s", staged_display)
         if _git_has_staged_changes():
             _run(["git", "commit", "-m", f"Release v{version}"])
     finally:

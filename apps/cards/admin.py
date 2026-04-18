@@ -6,8 +6,13 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from apps.cards.forms import CardFaceAdminForm, CardFacePreviewForm, CardSetUploadForm
-from apps.cards.models import CardDesign, CardFace, CardSet, RFID, RFIDAttempt
+from apps.cards.forms import (
+    CardFaceAdminForm,
+    CardFacePreviewForm,
+    CardSetUploadForm,
+    OfferingSoulUploadForm,
+)
+from apps.cards.models import CardDesign, CardFace, CardSet, OfferingSoul, RFID, RFIDAttempt
 from apps.core.admin import RFIDAdmin
 from apps.locals.user_data import EntityModelAdmin
 
@@ -252,3 +257,65 @@ class CardDesignAdmin(admin.ModelAdmin):
     list_filter = ("card_set",)
     search_fields = ("name", "card_set__name")
     readonly_fields = ("created_on",)
+
+
+@admin.register(OfferingSoul)
+class OfferingSoulAdmin(admin.ModelAdmin):
+    list_display = (
+        "core_hash_short",
+        "mime_type",
+        "extension",
+        "file_size_bytes",
+        "schema_version",
+    )
+    search_fields = ("core_hash", "filename", "mime_type", "extension")
+    readonly_fields = (
+        "schema_version",
+        "hash_algorithm",
+        "core_hash",
+        "filename",
+        "extension",
+        "mime_type",
+        "file_size_bytes",
+        "package",
+        "structural_traits",
+        "type_traits",
+    )
+    change_list_template = "admin/cards/offeringsoul/change_list.html"
+
+    def get_urls(self):
+        custom = [
+            path(
+                "upload/",
+                self.admin_site.admin_view(self.upload_view),
+                name="cards_offeringsoul_upload",
+            ),
+        ]
+        return custom + super().get_urls()
+
+    @admin.display(description=_("Core hash"))
+    def core_hash_short(self, obj: OfferingSoul) -> str:
+        return obj.core_hash[:12]
+
+    def upload_view(self, request: HttpRequest) -> HttpResponse:
+        if not self.has_add_permission(request):
+            messages.error(request, _("You do not have permission to upload offerings."))
+            return redirect("admin:index")
+
+        form = OfferingSoulUploadForm(request.POST or None, request.FILES or None)
+        if request.method == "POST" and form.is_valid():
+            soul = form.save()
+            messages.success(
+                request,
+                _("Derived Soul Seed package %(hash)s from uploaded offering.")
+                % {"hash": soul.core_hash[:12]},
+            )
+            return redirect(reverse("admin:cards_offeringsoul_change", args=[soul.pk]))
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "form": form,
+            "title": _("Upload offering"),
+        }
+        return TemplateResponse(request, "admin/cards/offeringsoul/upload.html", context)

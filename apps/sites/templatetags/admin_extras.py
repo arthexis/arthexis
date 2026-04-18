@@ -207,7 +207,9 @@ def admin_profile_url(context, user) -> str:
         pass
 
     if teams_user and teams_user in admin.site._registry:
-        return model_profile_url(teams_user)
+        teams_url = model_profile_url(teams_user)
+        if teams_url:
+            return teams_url
 
     candidate_models = (
         ("core", "User"),

@@ -1,11 +1,19 @@
 """Widgets exposed by the operations app."""
 
+from django.urls import NoReverseMatch, reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.widgets import register_widget
 from apps.widgets.models import WidgetZone
 
 from .security_alerts import build_security_alerts
+
+
+def _dashboard_rules_report_url() -> str:
+    try:
+        return reverse("admin:system-dashboard-rules-report")
+    except NoReverseMatch:
+        return "/admin/system/dashboard-rules-report/"
 
 
 def _is_authenticated_staff(*, request, **_kwargs) -> bool:
@@ -19,10 +27,13 @@ def _is_authenticated_staff(*, request, **_kwargs) -> bool:
     zone=WidgetZone.ZONE_SIDEBAR,
     template_name="widgets/security_alerts.html",
     description=_("Critical operational and security readiness alerts."),
-    order=5,
+    order=-100,
     permission=_is_authenticated_staff,
 )
 def security_alerts_widget(**_kwargs):
     """Render normalized security alerts for the sidebar."""
 
-    return {"alerts": build_security_alerts()}
+    return {
+        "alerts": build_security_alerts(),
+        "dashboard_rules_report_url": _dashboard_rules_report_url(),
+    }

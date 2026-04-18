@@ -5,19 +5,34 @@ from types import SimpleNamespace
 from urllib.parse import urlencode, urlunsplit
 
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.utils.cache import patch_cache_control, patch_vary_headers
+from django.db.models import Q
+from django.http import HttpRequest
 from django.http import FileResponse, Http404, HttpResponse
+from django.shortcuts import redirect, render
 from django.urls import NoReverseMatch, reverse
-from django.shortcuts import render
+from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.views.decorators.cache import never_cache
 
+from apps.gallery.models import GalleryImage
+from apps.gallery.permissions import can_manage_gallery
+from apps.groups.constants import (
+    PRODUCT_DEVELOPER_GROUP_NAME,
+    RELEASE_MANAGER_GROUP_NAME,
+)
+from apps.groups.decorators import security_group_required
+from apps.modules.models import Module
 from apps.nodes.models import Node
 from apps.nodes.utils import FeatureChecker
-from apps.modules.models import Module
+from apps.repos.models.repositories import GitHubRepository
+from apps.repos.models.response_templates import GitHubResponseTemplate
+from apps.repos.services import github as github_service
+from apps.repos.services.github import GitHubRepositoryError
+from apps.sites.utils import module_pill_link_validation
 
 from . import assets, rendering
-
+from .models import DocumentIndex
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +48,29 @@ DOCUMENT_LIBRARY_CACHE_TIMEOUT = 300
 DOCS_CANONICAL_HOST_OVERRIDES = {
     "m.arthexis.com": "arthexis.com",
 }
+LIBRARY_ROOT_FOLDER_LABEL = "root"
+LIBRARY_ROOT_QUERY_PARAMETER = "virtual_root"
 FULL_CONTENT_DEFAULT_DOCUMENTS = {
     "docs/development/install-lifecycle-scripts-manual.md",
 }
+
+
+DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES = (
+    PRODUCT_DEVELOPER_GROUP_NAME,
+    RELEASE_MANAGER_GROUP_NAME,
+)
+
+
+def _show_docs_navigation_link(*, request, landing) -> bool:
+    del landing
+    user = getattr(request, "user", None)
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    return user.groups.filter(
+        name__in=DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES
+    ).exists()
 
 
 def _is_allowed_doc_path(path: Path) -> bool:
@@ -89,7 +124,9 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
                     add_candidate(path.with_name(f"{path.stem}.{lang}{path.suffix}"))
                     short = lang.split("-")[0]
                     if short and short != lang:
-                        add_candidate(path.with_name(f"{path.stem}.{short}{path.suffix}"))
+                        add_candidate(
+                            path.with_name(f"{path.stem}.{short}{path.suffix}")
+                        )
             add_candidate(path)
 
         add_localized_candidates(doc_path)
@@ -153,7 +190,11 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
             candidates.append(root_default)
 
     readme_file = next(
-        (p for p in candidates if p.exists() and p.is_file() and _is_allowed_doc_path(p)),
+        (
+            p
+            for p in candidates
+            if p.exists() and p.is_file() and _is_allowed_doc_path(p)
+        ),
         None,
     )
     if readme_file is None:
@@ -259,6 +300,7 @@ def _build_library_item(
     root: Path,
     route_name: str,
     *,
+    doc_path_prefix: str = "",
     label: str | None = None,
 ) -> dict[str, str]:
     """Build a single document-library item with URL and blurb metadata."""
@@ -272,7 +314,9 @@ def _build_library_item(
     except NoReverseMatch:
         logger.warning("Unable to reverse %r for %s", route_name, relative)
         url = ""
+    stored_doc_path = f"{doc_path_prefix}{relative}" if doc_path_prefix else relative
     return {
+        "doc_path": stored_doc_path,
         "label": label or relative,
         "url": url,
         "description": description,
@@ -294,7 +338,49 @@ def _normalize_library_prefix(prefix: str | None) -> str:
 
 def _build_library_query_url(parameter: str, prefix: str) -> str:
     query = urlencode({parameter: prefix}) if prefix else ""
-    return f"{reverse('docs:docs-library')}?{query}" if query else reverse("docs:docs-library")
+    return (
+        f"{reverse('docs:docs-library')}?{query}"
+        if query
+        else reverse("docs:docs-library")
+    )
+
+
+def _build_virtual_root_query_url(parameter: str) -> str:
+    return f"{reverse('docs:docs-library')}?{urlencode({parameter: '1'})}"
+
+
+def _pluralize(count: int, singular: str) -> str:
+    """Return the singular/plural form for a count."""
+
+    return singular if count == 1 else f"{singular}s"
+
+
+def _preview_files(names: list[str]) -> tuple[str, str]:
+    """Build a deterministic two-item preview and overflow suffix."""
+
+    preview = ", ".join(sorted(names)[:2])
+    suffix = "…" if len(names) > 2 else ""
+    return preview, suffix
+
+
+def _build_folder_blurb(direct_files: list[str], nested_count: int) -> str:
+    """Return a short, data-backed summary for a folder entry."""
+
+    direct_count = len(direct_files)
+    total_documents = direct_count + nested_count
+    if total_documents == 0:
+        return "Folder overview and related references."
+
+    if direct_count == 0:
+        return f"{nested_count} nested {_pluralize(nested_count, 'folder')} with additional documentation."
+
+    preview, suffix = _preview_files(direct_files)
+    if nested_count:
+        return (
+            f"{direct_count} {_pluralize(direct_count, 'doc')} ({preview}{suffix}) "
+            f"and {nested_count} nested {_pluralize(nested_count, 'folder')}."
+        )
+    return f"{direct_count} {_pluralize(direct_count, 'doc')}: {preview}{suffix}."
 
 
 def _build_library_section(
@@ -302,22 +388,48 @@ def _build_library_section(
     *,
     root: Path,
     route_name: str,
+    doc_path_prefix: str,
     title: str,
     prefix: str,
     parameter: str,
+    virtual_root_selected: bool,
 ) -> dict[str, object]:
     """Build a section index scoped to one folder level."""
 
     folders: set[str] = set()
     items: list[dict[str, str]] = []
+    root_items: list[dict[str, str]] = []
+    show_root_folder = prefix == ""
+    in_virtual_root_folder = virtual_root_selected and prefix == ""
 
     for path in files:
         relative = path.relative_to(root).as_posix()
+        if in_virtual_root_folder:
+            if "/" in relative or path.stem.lower() == "index":
+                continue
+            items.append(
+                _build_library_item(
+                    path,
+                    root,
+                    route_name,
+                    doc_path_prefix=doc_path_prefix,
+                    label=Path(relative).name,
+                )
+            )
+            continue
         if prefix:
             if relative == prefix:
                 if path.stem.lower() == "index":
                     continue
-                items.append(_build_library_item(path, root, route_name, label=Path(relative).name))
+                items.append(
+                    _build_library_item(
+                        path,
+                        root,
+                        route_name,
+                        doc_path_prefix=doc_path_prefix,
+                        label=Path(relative).name,
+                    )
+                )
                 continue
             if not relative.startswith(f"{prefix}/"):
                 continue
@@ -330,7 +442,43 @@ def _build_library_section(
             continue
         if path.stem.lower() == "index":
             continue
-        items.append(_build_library_item(path, root, route_name, label=Path(relative).name))
+        root_items.append(
+            _build_library_item(
+                path,
+                root,
+                route_name,
+                doc_path_prefix=doc_path_prefix,
+                label=Path(relative).name,
+            )
+        )
+
+    folder_direct_files: dict[str, list[str]] = {}
+    folder_nested_folders: dict[str, dict[str, bool]] = {}
+    for path in files:
+        relative = path.relative_to(root).as_posix()
+        if prefix:
+            prefix_root = f"{prefix}/"
+            if not relative.startswith(prefix_root):
+                continue
+            scoped_relative = relative.removeprefix(prefix_root)
+        else:
+            scoped_relative = relative
+        if "/" not in scoped_relative:
+            continue
+
+        folder, remainder = scoped_relative.split("/", 1)
+        direct_files = folder_direct_files.setdefault(folder, [])
+        nested_folders = folder_nested_folders.setdefault(folder, {})
+        if "/" in remainder:
+            nested_folder = remainder.split("/", 1)[0]
+            if Path(remainder).stem.lower() != "index":
+                nested_folders[nested_folder] = True
+            else:
+                nested_folders.setdefault(nested_folder, False)
+            continue
+        if path.stem.lower() == "index":
+            continue
+        direct_files.append(Path(remainder).name)
 
     folder_items = [
         {
@@ -340,11 +488,29 @@ def _build_library_section(
                 parameter,
                 f"{prefix}/{folder}" if prefix else folder,
             ),
-            "description": f"Browse documents in {folder}.",
+            "description": _build_folder_blurb(
+                folder_direct_files.get(folder, []),
+                sum(folder_nested_folders.get(folder, {}).values()),
+            ),
         }
         for folder in sorted(folders)
     ]
+    if show_root_folder and root_items:
+        folder_items.insert(
+            0,
+            {
+                "kind": "folder",
+                "label": f"{LIBRARY_ROOT_FOLDER_LABEL}/",
+                "url": _build_virtual_root_query_url(
+                    f"{parameter}_{LIBRARY_ROOT_QUERY_PARAMETER}"
+                ),
+                "description": "Browse root-level documents.",
+            },
+        )
+
     folder_items.extend(item for item in items if item["url"])
+    if prefix != "":
+        folder_items.extend(item for item in root_items if item["url"])
 
     section: dict[str, object] = {
         "title": title,
@@ -352,8 +518,13 @@ def _build_library_section(
     }
     if prefix:
         parent_prefix = prefix.rsplit("/", 1)[0] if "/" in prefix else ""
+        if in_virtual_root_folder:
+            parent_prefix = ""
         section["current_prefix"] = prefix
         section["parent_url"] = _build_library_query_url(parameter, parent_prefix)
+    elif in_virtual_root_folder:
+        section["current_prefix"] = LIBRARY_ROOT_FOLDER_LABEL
+        section["parent_url"] = _build_library_query_url(parameter, "")
     return section
 
 
@@ -362,30 +533,38 @@ def _collect_document_library(
     *,
     docs_prefix: str = "",
     apps_docs_prefix: str = "",
+    docs_virtual_root_selected: bool = False,
+    apps_docs_virtual_root_selected: bool = False,
     docs_files: list[Path] | None = None,
     apps_docs_files: list[Path] | None = None,
 ) -> list[dict[str, object]]:
-    """Build a library index for docs and apps/docs content."""
+    """Build a flat library index for docs and apps/docs content."""
 
     docs_root = root_base / "docs"
     apps_docs_root = root_base / "apps" / "docs"
     sections: list[dict[str, object]] = []
 
-    docs_files = docs_files if docs_files is not None else _iter_document_paths(docs_root)
+    docs_files = (
+        docs_files if docs_files is not None else _iter_document_paths(docs_root)
+    )
     if docs_files:
         sections.append(
             _build_library_section(
                 docs_files,
                 root=docs_root,
                 route_name="docs:docs-document",
+                doc_path_prefix="docs/",
                 title="Documentation",
                 prefix=_normalize_library_prefix(docs_prefix),
                 parameter="docs_path",
+                virtual_root_selected=docs_virtual_root_selected,
             )
         )
 
     apps_docs_files = (
-        apps_docs_files if apps_docs_files is not None else _iter_document_paths(apps_docs_root)
+        apps_docs_files
+        if apps_docs_files is not None
+        else _iter_document_paths(apps_docs_root)
     )
     if apps_docs_files:
         sections.append(
@@ -393,16 +572,99 @@ def _collect_document_library(
                 apps_docs_files,
                 root=apps_docs_root,
                 route_name="docs:apps-docs-document",
+                doc_path_prefix="apps/docs/",
                 title="Application Docs",
                 prefix=_normalize_library_prefix(apps_docs_prefix),
                 parameter="apps_docs_path",
+                virtual_root_selected=apps_docs_virtual_root_selected,
             )
         )
 
     return sections
 
 
-def _get_cached_document_library_paths(root_base: Path) -> tuple[list[Path], list[Path]]:
+def _build_library_documents(
+    files: list[Path],
+    *,
+    root: Path,
+    route_name: str,
+    doc_path_prefix: str,
+) -> list[dict[str, str]]:
+    """Build all document entries for indexed grouping and fallback listing."""
+
+    documents: list[dict[str, str]] = []
+    for path in files:
+        if path.stem.lower() == "index":
+            continue
+        documents.append(
+            _build_library_item(
+                path,
+                root,
+                route_name,
+                doc_path_prefix=doc_path_prefix,
+                label=path.name,
+            )
+        )
+    return [item for item in documents if item["url"]]
+
+
+def _build_indexed_document_groups(
+    request, documents: list[dict[str, str]]
+) -> list[dict[str, object]]:
+    """Group indexed documents by security-group course (and listable catch-all)."""
+
+    document_by_path = {item["doc_path"]: item for item in documents}
+    indexed_documents = (
+        DocumentIndex.objects.filter(doc_path__in=document_by_path.keys())
+        .prefetch_related("assignments__security_group")
+        .order_by("title", "doc_path")
+    )
+    user_group_ids = set(request.user.groups.values_list("id", flat=True))
+    grouped: dict[str, dict[str, object]] = {}
+
+    def ensure_group(title: str, *, description: str = "") -> dict[str, object]:
+        if title not in grouped:
+            grouped[title] = {"title": title, "description": description, "items": []}
+        return grouped[title]
+
+    for indexed in indexed_documents:
+        item = document_by_path.get(indexed.doc_path)
+        if not item:
+            continue
+
+        has_assignments = False
+        has_visible_assignment = False
+        for assignment in indexed.assignments.all():
+            has_assignments = True
+            if (
+                assignment.access == DocumentIndex.ACCESS_RESTRICTED
+                and assignment.security_group_id not in user_group_ids
+            ):
+                continue
+            has_visible_assignment = True
+            group = ensure_group(
+                assignment.security_group.name,
+                description="Course",
+            )
+            group["items"].append(
+                {
+                    **item,
+                    "access": assignment.get_access_display(),
+                }
+            )
+
+        if indexed.listable and not has_assignments and not has_visible_assignment:
+            group = ensure_group("Listable", description="General")
+            group["items"].append({**item, "access": "Available"})
+
+    return [
+        value for _, value in sorted(grouped.items(), key=lambda pair: pair[0].lower())
+    ]
+
+
+def _get_cached_document_library_paths(
+    root_base: Path,
+) -> tuple[list[Path], list[Path]]:
     """Return cached document path lists to avoid repeated filesystem scans."""
 
     cache_key = f"{DOCUMENT_LIBRARY_CACHE_KEY}:paths:{root_base.as_posix()}"
@@ -432,6 +694,8 @@ def _get_cached_document_library(
     *,
     docs_prefix: str = "",
     apps_docs_prefix: str = "",
+    docs_virtual_root_selected: bool = False,
+    apps_docs_virtual_root_selected: bool = False,
 ) -> list[dict[str, object]]:
     """Return a cached library index to avoid repeated filesystem scans."""
 
@@ -440,9 +704,36 @@ def _get_cached_document_library(
         root_base,
         docs_prefix=docs_prefix,
         apps_docs_prefix=apps_docs_prefix,
+        docs_virtual_root_selected=docs_virtual_root_selected,
+        apps_docs_virtual_root_selected=apps_docs_virtual_root_selected,
         docs_files=docs_paths,
         apps_docs_files=apps_docs_paths,
     )
+
+
+def _latest_gallery_images_for_user(
+    user, *, limit: int = 4, is_gallery_manager: bool | None = None
+):
+    """Return latest gallery images visible to the user, limited to four by default.
+
+    Gallery managers can see all images. Other users see public images plus images
+    they own and images owned by one of their groups. Results are ordered newest
+    first by media upload time and primary key.
+    """
+
+    queryset = GalleryImage.objects.select_related("media_file")
+    if is_gallery_manager is None:
+        is_gallery_manager = can_manage_gallery(user)
+    if is_gallery_manager:
+        return queryset.order_by("-media_file__uploaded_at", "-pk")[:limit]
+
+    visibility_filter = Q(include_in_public_gallery=True)
+    if getattr(user, "is_authenticated", False):
+        visibility_filter |= Q(owner_user=user)
+        visibility_filter |= Q(owner_group__in=user.groups.all())
+    return queryset.filter(visibility_filter).order_by("-media_file__uploaded_at", "-pk")[
+        :limit
+    ]
 
 
 def _render_document_library(
@@ -456,21 +747,86 @@ def _render_document_library(
     root_base = Path(settings.BASE_DIR).resolve()
     docs_prefix = request.GET.get("docs_path", "")
     apps_docs_prefix = request.GET.get("apps_docs_path", "")
+    docs_virtual_root_selected = (
+        request.GET.get(f"docs_path_{LIBRARY_ROOT_QUERY_PARAMETER}") == "1"
+    )
+    apps_docs_virtual_root_selected = (
+        request.GET.get(f"apps_docs_path_{LIBRARY_ROOT_QUERY_PARAMETER}") == "1"
+    )
+    sections = _get_cached_document_library(
+        root_base,
+        docs_prefix=docs_prefix,
+        apps_docs_prefix=apps_docs_prefix,
+        docs_virtual_root_selected=docs_virtual_root_selected,
+        apps_docs_virtual_root_selected=apps_docs_virtual_root_selected,
+    )
+    docs_paths, apps_docs_paths = _get_cached_document_library_paths(root_base)
+    all_documents = _build_library_documents(
+        docs_paths,
+        root=root_base / "docs",
+        route_name="docs:docs-document",
+        doc_path_prefix="docs/",
+    ) + _build_library_documents(
+        apps_docs_paths,
+        root=root_base / "apps" / "docs",
+        route_name="docs:apps-docs-document",
+        doc_path_prefix="apps/docs/",
+    )
+    indexed_groups = _build_indexed_document_groups(request, all_documents)
+    is_gallery_manager = can_manage_gallery(request.user)
+    github_connection = _resolve_github_docs_connection()
+    gallery_images = _latest_gallery_images_for_user(
+        request.user,
+        is_gallery_manager=is_gallery_manager,
+    )
     context = {
         "canonical_url": _build_canonical_url(request),
-        "sections": _get_cached_document_library(
-            root_base,
-            docs_prefix=docs_prefix,
-            apps_docs_prefix=apps_docs_prefix,
-        ),
+        "document_index_admin_add_url": "",
+        "document_index_admin_changelist_url": "",
+        "gallery_images": gallery_images,
+        "gallery_index_url": reverse("gallery:index"),
+        "gallery_upload_url": reverse("gallery:upload"),
+        "indexed_groups": indexed_groups,
+        "is_gallery_manager": is_gallery_manager,
         "page_url": request.build_absolute_uri(),
+        "sections": sections,
+        "github_connected": github_connection.connected,
+        "github_issue_viewer_url": reverse("docs:docs-github-viewer"),
         "title": "Developer Documents",
     }
+    if request.user.is_staff:
+        try:
+            context["document_index_admin_changelist_url"] = reverse(
+                "admin:docs_documentindex_changelist"
+            )
+            context["document_index_admin_add_url"] = reverse(
+                "admin:docs_documentindex_add"
+            )
+        except NoReverseMatch:
+            pass
     if missing_document:
         context["missing_document"] = missing_document
     response = render(request, "docs/library.html", context, status=status)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
     return response
+
+
+def _resolve_github_docs_connection() -> SimpleNamespace:
+    """Return repository/token context for docs GitHub viewer pages."""
+
+    try:
+        repository = GitHubRepository.resolve_active_repository()
+        token = github_service.get_github_issue_token()
+    except (GitHubRepositoryError, ValueError):
+        return SimpleNamespace(connected=False, owner="", repo="", slug="", token="")
+
+    return SimpleNamespace(
+        connected=True,
+        owner=repository.owner,
+        repo=repository.name,
+        slug=repository.slug,
+        token=token,
+    )
 
 
 def _canonicalize_docs_host(host: str) -> str:
@@ -530,7 +886,10 @@ def render_readme_page(
         initial_content = html
         remaining_content = ""
 
-    if request.headers.get("HX-Request") == "true" and request.GET.get("fragment") == "remaining":
+    if (
+        request.headers.get("HX-Request") == "true"
+        and request.GET.get("fragment") == "remaining"
+    ):
         response = HttpResponse(remaining_content)
         patch_vary_headers(response, ["Accept-Language", "Cookie"])
         return response
@@ -567,20 +926,198 @@ def render_readme_page(
     return response
 
 
+def _parse_github_comment_payload(
+    request: HttpRequest,
+) -> tuple[bool, str, str | None]:
+    """Return ``(is_post, body, error)`` for comment submissions."""
+
+    if request.method != "POST":
+        return False, "", None
+
+    template_choice = (request.POST.get("template") or "").strip()
+    if template_choice:
+        try:
+            template_pk = int(template_choice)
+        except ValueError:
+            return True, "", "Selected response template is not available."
+        template = (
+            GitHubResponseTemplate.objects.filter(
+                user=request.user,
+                pk=template_pk,
+                is_active=True,
+            )
+            .only("body")
+            .first()
+        )
+        if template is None:
+            return True, "", "Selected response template is not available."
+        body = template.body.strip()
+    else:
+        body = (request.POST.get("body") or "").strip()
+
+    if not body:
+        return True, "", "Comment body is required."
+
+    return True, body, None
+
+
+@module_pill_link_validation(_show_docs_navigation_link)
+@security_group_required(*DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES)
+def github_issue_viewer(request):
+    """Render open GitHub issues and pull requests for connected repositories."""
+
+    connection = _resolve_github_docs_connection()
+    entries: list[dict[str, object]] = []
+    error_message = ""
+    if connection.connected:
+        try:
+            for item in github_service.fetch_repository_issues(
+                token=connection.token,
+                owner=connection.owner,
+                name=connection.repo,
+                state="open",
+            ):
+                number = item.get("number")
+                if not isinstance(number, int):
+                    continue
+                is_pull_request = isinstance(item.get("pull_request"), dict)
+                entries.append(
+                    {
+                        "number": number,
+                        "title": str(item.get("title") or ""),
+                        "author": str((item.get("user") or {}).get("login") or ""),
+                        "kind": "pull_request" if is_pull_request else "issue",
+                        "state": str(item.get("state") or ""),
+                        "updated_at": item.get("updated_at"),
+                        "detail_url": reverse(
+                            "docs:docs-github-item", kwargs={"number": number}
+                        ),
+                    }
+                )
+        except GitHubRepositoryError as exc:
+            error_message = str(exc)
+
+    context = {
+        "entries": entries,
+        "error_message": error_message,
+        "github_connected": connection.connected,
+        "repository_slug": connection.slug,
+        "title": "GitHub Issues & Pull Requests",
+    }
+    return render(request, "docs/github_viewer.html", context)
+
+
+@module_pill_link_validation(_show_docs_navigation_link)
+@security_group_required(*DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES)
+def github_issue_detail(request, number: int):
+    """Render issue/PR details including comments and optional response actions."""
+
+    connection = _resolve_github_docs_connection()
+    if not connection.connected:
+        return render(
+            request,
+            "docs/github_detail.html",
+            {
+                "github_connected": False,
+                "item": None,
+                "title": "GitHub Item",
+            },
+        )
+
+    post_error = ""
+    is_post, comment_body, payload_error = _parse_github_comment_payload(request)
+    if is_post and payload_error:
+        post_error = payload_error
+    elif is_post:
+        try:
+            github_service.create_issue_comment(
+                connection.owner,
+                connection.repo,
+                issue_number=number,
+                token=connection.token,
+                body=comment_body,
+            )
+            return redirect(reverse("docs:docs-github-item", kwargs={"number": number}))
+        except GitHubRepositoryError as exc:
+            post_error = str(exc)
+    item = None
+    comments = []
+    checks_state = "not_applicable"
+    try:
+        item = github_service.fetch_issue_or_pull_request(
+            token=connection.token,
+            owner=connection.owner,
+            name=connection.repo,
+            number=number,
+        )
+        is_pull_request = isinstance(item.get("pull_request"), dict)
+        comments = list(
+            github_service.fetch_issue_comments(
+                token=connection.token,
+                owner=connection.owner,
+                name=connection.repo,
+                issue_number=number,
+            )
+        )
+        if is_pull_request:
+            pull = github_service.fetch_pull_request(
+                token=connection.token,
+                owner=connection.owner,
+                name=connection.repo,
+                number=number,
+            )
+            head_sha = str((pull.get("head") or {}).get("sha") or "").strip()
+            if head_sha:
+                status_payload = github_service.fetch_commit_status_summary(
+                    token=connection.token,
+                    owner=connection.owner,
+                    name=connection.repo,
+                    sha=head_sha,
+                )
+                checks_state = str(status_payload.get("state") or "unknown")
+            else:
+                checks_state = "unknown"
+    except GitHubRepositoryError as exc:
+        post_error = post_error or str(exc)
+
+    response_templates = GitHubResponseTemplate.objects.filter(
+        user=request.user,
+        is_active=True,
+    ).order_by("label")
+    context = {
+        "checks_state": checks_state,
+        "comments": comments,
+        "error_message": post_error,
+        "github_connected": True,
+        "item": item,
+        "repository_slug": connection.slug,
+        "response_templates": response_templates,
+        "title": f"GitHub #{number}",
+        "viewer_url": reverse("docs:docs-github-viewer"),
+    }
+    return render(request, "docs/github_detail.html", context)
+
+
+@module_pill_link_validation(_show_docs_navigation_link)
+@security_group_required(*DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES)
 def document_library(request):
     """Render the developer documentation library index."""
 
     return _render_document_library(request)
 
 
-def _render_missing_document(request, *, doc: str | None, prepend_docs: bool) -> HttpResponse:
+def _render_missing_document(
+    request, *, doc: str | None, prepend_docs: bool
+) -> HttpResponse:
     """Render a helpful fallback page when a documentation path is missing."""
 
     missing_path = _normalize_docs_path(doc, prepend_docs) or ""
     return _render_document_library(request, status=404, missing_document=missing_path)
 
 
+@module_pill_link_validation(_show_docs_navigation_link)
 @never_cache
+@security_group_required(*DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES)
 def readme(request, doc=None, prepend_docs: bool = False):
     try:
         return render_readme_page(request, doc=doc, prepend_docs=prepend_docs)
@@ -591,6 +1128,7 @@ def readme(request, doc=None, prepend_docs: bool = False):
         raise
 
 
+@login_required(login_url="pages:login")
 def readme_asset(request, source: str, asset: str):
     source_normalized = (source or "").lower()
     if source_normalized == "static":

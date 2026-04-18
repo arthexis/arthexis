@@ -13,6 +13,41 @@ Heartbeat requests reuse the same UTC timestamp response body. Each heartbeat re
 ### StatusNotification
 Status notifications update both the aggregate (connector-less) `Charger` row and any connector-specific row. The handler stores the status, error code, vendor info, and timestamp, mirrors those values on the in-memory objects, and logs the processed payload. It also derives an availability state (`Operative` or `Inoperative`) from the status text and persists the effective availability timestamp for downstream dashboards.
 
+For operator workflows, Arthexis currently expects the following OCPP status values from charge points and treats them as the canonical status set for admin badges, analytics, and log interpretation:
+
+- `Available`
+- `Preparing`
+- `Charging`
+- `SuspendedEVSE`
+- `SuspendedEV`
+- `Finishing`
+- `Faulted`
+- `Unavailable`
+- `Reserved`
+- `Occupied`
+- `OutOfService`
+
+Status values are normalized to lowercase internally for consistent display and aggregation (for example, `SuspendedEVSE` becomes `suspendedevse`).
+
+Availability derivation is intentionally narrow and operator-visible:
+
+- **Operative**: `Available`, `Preparing`, `Charging`, `SuspendedEV`, `SuspendedEVSE`, `Finishing`, `Reserved`
+- **Inoperative**: `Unavailable`, `Faulted`
+- **No availability state change**: `Occupied`, `OutOfService`, or any other non-mapped status
+
+The charge point remains the source of truth for status text. Arthexis records and presents what was reported, and only applies the explicit availability mapping above.
+
+```mermaid
+flowchart TD
+    Input[Status + Active Session + Error Code]
+    Input -->|Session active & no error & status empty/unknown/Available| DisplayCharging[Display Charging badge]
+    Input -->|No session & no error & status Charging/Finishing & derived state not Available| DisplayChargingFallback[Display Charging badge]
+    Input -->|Error code present| DisplayFault[Display status + error badge]
+    Input -->|Otherwise| DisplayRaw[Display normalized status badge]
+```
+
+In UI presentation, active session context may override badge display to `Charging` when the raw status is empty/unknown or lags transaction activity, while error-bearing updates continue to surface fault context.
+
 ### Authorize
 Authorization requests are evaluated through the charger authorization policy (`strict`, `allowlist`, or explicit `open` insecure compatibility mode) with a global fallback when unset. `strict` requires an authorised linked account, `allowlist` also permits known allowed unlinked tags, and `open` accepts any token while clearly marking the mode as insecure compatibility behavior. Every decision returns a reason code for auditability.
 
@@ -67,10 +102,26 @@ When a charger replies to `ChangeAvailability`, the consumer matches the message
 The CSMS keeps per-session logs and broadcasts consumption summaries for active transactions. When a transaction starts, the consumer creates a NetMessage broadcast and schedules periodic refreshes. Stopping the transaction cancels the task and closes the session log to prevent stale updates from leaking after the charge point disconnects.
 
 ## In-memory coordination
-All active WebSocket connections, transactions, logs, and pending CSMS calls are tracked in the shared `ocpp.store` module. Helper functions provide consistent identity keys per charger/connector pair, enforce a two-connection-per-IP rate limit, and expose lookups used by both the WebSocket consumer and the control endpoint. This lightweight store allows the manual operations above to find the correct charger session instantly without hitting the database.
+All active WebSocket connections, transactions, logs, and pending CSMS calls are tracked in the shared `ocpp.store` module. Helper functions provide consistent identity keys per charger/connector pair, enforce a default four-connection-per-IP concurrent connection cap (configurable via `OCPP_MAX_CONNECTIONS_PER_IP`), and expose lookups used by both the WebSocket consumer and the control endpoint. This lightweight store allows the manual operations above to find the correct charger session instantly without hitting the database.
 
 ### Timeout and error handling
 Pending-call metadata is stored in-memory and mirrored to Redis so responses can be reconciled even after reconnects. Each outgoing call registers an event handle and an optional timeout timer; when a timeout fires, the scheduler adds a charger-log entry and marks the request as notified so duplicate alerts are suppressed. When the consumer records a result or error (including OCPP call errors), it clears timers, signals waiting threads, and persists the payload and error context, ensuring admin dashboards and logs accurately reflect both success and failure paths. The request/response lifecycle therefore surfaces clearly across the WebSocket logs, pending-call registries, and charger detail views.
+
+## Connection and subprotocol negotiation
+When a charger handshake succeeds, the CSMS accepts the socket and records a log entry (e.g., Connected (subprotocol=...)).
+
+- **Subprotocol Negotiation**: The system supports ocpp2.1, ocpp2.0.1, and OCPP 1.6. When a charger has a stored preferred OCPP version and offers it during handshake, that stored preference is selected first. Otherwise, the CSMS prefers the latest supported offered version (2.1, then 2.0.1, then 1.6). For OCPP 1.6, `ocpp1.6j` is preferred over the `ocpp1.6` alias when both are offered. If no supported subprotocol is offered, the connection is still accepted without a negotiated subprotocol token.
+- **Identity Extraction**: The charger serial number is extracted from the WebSocket path or query parameters (supporting cid, chargePointId, charge_point_id, chargeBoxId, charge_box_id, and chargerId).
+
+## Connection handshake troubleshooting
+Use this checklist when a charger does not appear as connected in Arthexis even though network connectivity exists:
+
+- Confirm the charger target uses `wss://` and points to the expected gateway host and TLS listener port.
+- Verify TLS negotiation completes end-to-end (look for both client and server handshake packets). If TLS does not complete, no WebSocket upgrade or OCPP frame can reach the CSMS.
+- If a reverse proxy or load balancer is present, validate that it forwards WebSocket upgrade requests and preserves required headers to Django/ASGI.
+- Check for middleboxes (firewalls, captive portals, TLS-inspecting proxies) that permit TCP but interfere with TLS or WebSocket upgrade traffic.
+- Validate TLS compatibility between charger and gateway (protocol versions, ciphers, and certificate chain expectations).
+- After transport succeeds, confirm the CSMS recorded a fresh connection event in the charger log to prove the application accepted the socket.
 
 ## Operational management commands
 Use the unified `ocpp` management command for operational workflows:
@@ -85,50 +136,3 @@ Use the unified `ocpp` management command for operational workflows:
 - Trace tools:
   - `.venv/bin/python manage.py ocpp trace extract [--txn ... --out ... --log ...]`
   - `.venv/bin/python manage.py ocpp trace replay <extract.json>`
-
-Legacy single-purpose commands (`coverage_ocpp16`, `coverage_ocpp201`, `coverage_ocpp21`, `import_transactions`, `export_transactions`, and `ocpp_replay`) have been removed; use the unified `ocpp` command surface above.
-
-### Release migration notes (deprecated command removal)
-If your automation still calls legacy entrypoints, update scripts to the canonical `ocpp` subcommands:
-
-| Removed command | Replacement |
-| --- | --- |
-| `.venv/bin/python manage.py coverage_ocpp16` | `.venv/bin/python manage.py ocpp coverage --version 1.6` |
-| `.venv/bin/python manage.py coverage_ocpp201` | `.venv/bin/python manage.py ocpp coverage --version 2.0.1` |
-| `.venv/bin/python manage.py coverage_ocpp21` | `.venv/bin/python manage.py ocpp coverage --version 2.1` |
-| `.venv/bin/python manage.py import_transactions <input.json>` | `.venv/bin/python manage.py ocpp transactions import <input.json>` |
-| `.venv/bin/python manage.py export_transactions <output.json> [--start ... --end ... --chargers ...]` | `.venv/bin/python manage.py ocpp transactions export <output.json> [--start ... --end ... --chargers ...]` |
-| `.venv/bin/python manage.py ocpp_replay <extract.json>` | `.venv/bin/python manage.py ocpp trace replay <extract.json>` |
-
-### Release migration notes (simulator import path removal)
-The compatibility package at `apps.ocpp.simulator` has been removed.
-
-If external integrations still import the legacy module path, update imports to `apps.simulators`:
-
-| Removed import path | Replacement import path |
-| --- | --- |
-| `from apps.ocpp.simulator import ChargePointSimulator, SimulatorConfig` | `from apps.simulators import ChargePointSimulator, SimulatorConfig` |
-
-For shell migration, a direct one-time update can be done with substitutions like:
-
-```bash
-# GNU sed
-sed -i \
-  -e 's|.venv/bin/python manage.py coverage_ocpp16|.venv/bin/python manage.py ocpp coverage --version 1.6|g' \
-  -e 's|.venv/bin/python manage.py coverage_ocpp201|.venv/bin/python manage.py ocpp coverage --version 2.0.1|g' \
-  -e 's|.venv/bin/python manage.py coverage_ocpp21|.venv/bin/python manage.py ocpp coverage --version 2.1|g' \
-  -e 's|.venv/bin/python manage.py import_transactions|.venv/bin/python manage.py ocpp transactions import|g' \
-  -e 's|.venv/bin/python manage.py export_transactions|.venv/bin/python manage.py ocpp transactions export|g' \
-  -e 's|.venv/bin/python manage.py ocpp_replay|.venv/bin/python manage.py ocpp trace replay|g' \
-  path/to/ops-script.sh
-
-# BSD/macOS sed
-sed -i '' \
-  -e 's|.venv/bin/python manage.py coverage_ocpp16|.venv/bin/python manage.py ocpp coverage --version 1.6|g' \
-  -e 's|.venv/bin/python manage.py coverage_ocpp201|.venv/bin/python manage.py ocpp coverage --version 2.0.1|g' \
-  -e 's|.venv/bin/python manage.py coverage_ocpp21|.venv/bin/python manage.py ocpp coverage --version 2.1|g' \
-  -e 's|.venv/bin/python manage.py import_transactions|.venv/bin/python manage.py ocpp transactions import|g' \
-  -e 's|.venv/bin/python manage.py export_transactions|.venv/bin/python manage.py ocpp transactions export|g' \
-  -e 's|.venv/bin/python manage.py ocpp_replay|.venv/bin/python manage.py ocpp trace replay|g' \
-  path/to/ops-script.sh
-```

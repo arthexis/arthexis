@@ -29,6 +29,7 @@ from apps.repos.release_management import (
     ReleaseManagementError,
     RepositoryRef,
 )
+from apps.repos.models.response_templates import GitHubResponseTemplate
 
 
 class FetchFromGitHubMixin(DjangoObjectActions):
@@ -767,6 +768,23 @@ class GitHubEventAdmin(admin.ModelAdmin):
         "user_agent",
     )
     raw_id_fields = ("repository",)
+
+
+@admin.register(GitHubResponseTemplate)
+class GitHubResponseTemplateAdmin(OwnableAdminMixin, admin.ModelAdmin):
+    list_display = ("label", "user", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("label", "body", "user__username")
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        if request.user.is_superuser:
+            return queryset
+        return queryset.filter(user=request.user)
+
+    def save_model(self, request, obj, form, change):
+        obj.user = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(GitHubApp)

@@ -13,7 +13,6 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from apps.energy.models import CustomerAccount
-from apps.links.models import Reference
 from apps.cards.models import RFID as CoreRFID, RFIDAttempt
 from apps.core.notifications import LcdChannel
 from apps.nodes.models import NetMessage
@@ -60,6 +59,7 @@ from apps.ocpp.models import (
     ClearedChargingLimitEvent,
 )
 from apps.links.reference_utils import host_is_local_loopback
+from apps.links.models import Reference
 from apps.screens.startup_notifications import format_lcd_lines
 from apps.ocpp.evcs_discovery import (
     DEFAULT_CONSOLE_PORT,
@@ -97,6 +97,7 @@ from apps.ocpp.consumers.base.legacy_transactions import LegacyTransactionHandle
 from apps.ocpp.consumers.base.rfid import RfidMixin
 from apps.ocpp.consumers.base.connection import ConnectionHandler
 from apps.ocpp.consumers.base.forwarding import ForwardingHandler
+from apps.ocpp.consumers.csms.handlers.availability import AvailabilityHandlersMixin
 from apps.ocpp.consumers.csms.handlers.metering import MeteringHandlersMixin
 from apps.ocpp.consumers.csms.handlers.notifications import (
     NotificationHandlersMixin as CsmsNotificationHandlersMixin,
@@ -191,6 +192,7 @@ class SinkConsumer(AsyncWebsocketConsumer):
 
 class CSMSConsumer(
     CSMSTransportMixin,
+    AvailabilityHandlersMixin,
     StatusHandlersMixin,
     MeteringHandlersMixin,
     CsmsNotificationHandlersMixin,
@@ -422,26 +424,24 @@ class CSMSConsumer(
         secure = port in HTTPS_PORTS
         url = build_console_url(host, port, secure)
         alt_text = f"{serial} Console"
+        if self.charger is None:
+            return
+        from apps.links.services import attach_reference
+
         reference = Reference.objects.filter(alt_text=alt_text).order_by("id").first()
-        if reference is None:
-            reference = Reference.objects.create(
-                alt_text=alt_text,
-                value=url,
-                show_in_header=True,
-                method="link",
-            )
-        updated_fields: list[str] = []
-        if reference.value != url:
+        if reference is not None and reference.value != url:
             reference.value = url
-            updated_fields.append("value")
-        if reference.method != "link":
-            reference.method = "link"
-            updated_fields.append("method")
-        if not reference.show_in_header:
-            reference.show_in_header = True
-            updated_fields.append("show_in_header")
-        if updated_fields:
-            reference.save(update_fields=updated_fields)
+            reference.save(update_fields=["value"])
+
+        attach_reference(
+            self.charger,
+            alt_text=alt_text,
+            value=url,
+            slot="console",
+            primary=True,
+            method="link",
+            show_in_header=True,
+        )
 
     async def _store_meter_values(self, payload: dict, raw_message: str) -> None:
         """Parse a MeterValues payload into MeterValue rows."""
@@ -454,25 +454,45 @@ class CSMSConsumer(
                 connector_value = None
         await self._assign_connector(connector_value)
         tx_id = payload.get("transactionId")
-        tx_obj = None
+        tx_pk: int | None = None
         if tx_id is not None:
-            tx_obj = store.transactions.get(self.store_key)
-            if not tx_obj or tx_obj.pk != int(tx_id):
-                tx_obj = await database_sync_to_async(
-                    Transaction.objects.filter(pk=tx_id, charger=self.charger).first
-                )()
-            if tx_obj is None:
+            try:
+                tx_pk = int(tx_id)
+            except (TypeError, ValueError):
+                tx_pk = None
+        tx_obj = store.transactions.get(self.store_key)
+        if tx_id is not None:
+            needs_lookup = False
+            if tx_pk is not None:
+                if not tx_obj or tx_obj.pk != tx_pk:
+                    needs_lookup = True
+            elif not tx_obj or tx_obj.ocpp_transaction_id != str(tx_id):
+                needs_lookup = True
+
+            if needs_lookup:
+                if tx_pk is not None:
+                    tx_obj = await database_sync_to_async(
+                        Transaction.objects.filter(pk=tx_pk, charger=self.charger).first
+                    )()
+                else:
+                    tx_obj = await Transaction.aget_by_ocpp_id(self.charger, str(tx_id))
+
+            tx_id_value = str(tx_id).strip()
+            if tx_obj is None and tx_id_value:
+                create_kwargs = {
+                    "charger": self.charger,
+                    "ocpp_transaction_id": tx_id_value,
+                    "start_time": timezone.now(),
+                }
+                if tx_pk is not None:
+                    create_kwargs["pk"] = tx_pk
                 tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                    pk=tx_id,
-                    charger=self.charger,
-                    start_time=timezone.now(),
-                    ocpp_transaction_id=str(tx_id),
+                    **create_kwargs
                 )
                 store.start_session_log(self.store_key, tx_obj.pk)
                 store.add_session_message(self.store_key, raw_message)
-            store.transactions[self.store_key] = tx_obj
-        else:
-            tx_obj = store.transactions.get(self.store_key)
+            if tx_obj is not None:
+                store.transactions[self.store_key] = tx_obj
 
         await self._ensure_ocpp_transaction_identifier(
             tx_obj, str(tx_id) if tx_id else None
@@ -1150,8 +1170,31 @@ class CSMSConsumer(
 
         return await database_sync_to_async(_apply)()
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     async def _handle_boot_notification_action(self, payload, msg_id, raw, text_data):
+        payload_data = payload if isinstance(payload, dict) else {}
+        normalized_payload = payload_data
+        ocpp_version = str(getattr(self, "ocpp_version", "") or "")
+        if ocpp_version.startswith("ocpp2."):
+            normalized_payload = dict(payload_data)
+            charging_station = payload_data.get("chargingStation")
+            if isinstance(charging_station, dict):
+                charge_point_vendor = str(charging_station.get("vendorName") or "").strip()
+                charge_point_model = str(charging_station.get("model") or "").strip()
+                if charge_point_vendor and "chargePointVendor" not in normalized_payload:
+                    normalized_payload["chargePointVendor"] = charge_point_vendor
+                if charge_point_model and "chargePointModel" not in normalized_payload:
+                    normalized_payload["chargePointModel"] = charge_point_model
+            boot_reason = str(payload_data.get("reason") or "").strip()
+            if boot_reason and "bootReason" not in normalized_payload:
+                normalized_payload["bootReason"] = boot_reason
+        logger.debug(
+            "BootNotification payload normalized for %s.",
+            ocpp_version or "unknown",
+            extra={"payload": normalized_payload},
+        )
         current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
         return {
             "currentTime": current_time,
@@ -1159,16 +1202,43 @@ class CSMSConsumer(
             "status": "Accepted",
         }
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "DataTransfer")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "DataTransfer")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "DataTransfer")
     async def _handle_data_transfer_action(self, payload, msg_id, raw, text_data):
         return await self._handle_data_transfer(msg_id, payload)
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "Authorize")
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Authorize")
     @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "Authorize")
     async def _handle_authorize_action(self, payload, msg_id, raw, text_data):
-        return await self._action_handler("Authorize").handle(
-            payload, msg_id, raw, text_data
+        payload_data = payload if isinstance(payload, dict) else {}
+        normalized_payload = payload_data
+        if "idTag" not in payload_data:
+            id_token = payload_data.get("idToken")
+            if isinstance(id_token, dict):
+                token_value = str(id_token.get("idToken") or "").strip()
+                if token_value:
+                    normalized_payload = {**payload_data, "idTag": token_value}
+
+        response = await self._action_handler("Authorize").handle(
+            normalized_payload, msg_id, raw, text_data
         )
+        if not isinstance(response, dict):
+            return response
+
+        ocpp_version = str(getattr(self, "ocpp_version", "") or "")
+        if not ocpp_version.startswith("ocpp2."):
+            return response
+
+        if isinstance(response.get("idTokenInfo"), dict):
+            return response
+        id_tag_info = response.get("idTagInfo")
+        if not isinstance(id_tag_info, dict):
+            return response
+        return {
+            key: value for key, value in response.items() if key != "idTagInfo"
+        } | {"idTokenInfo": id_tag_info}
 
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit")
@@ -1911,6 +1981,7 @@ class CSMSConsumer(
                     log_type="charger",
                 )
 
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "CostUpdated")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "CostUpdated")
     async def _handle_cost_updated_action(self, payload, msg_id, raw, text_data):
         self._log_ocpp201_notification("CostUpdated", payload)
@@ -1987,6 +2058,11 @@ class CSMSConsumer(
         return {}
 
     @protocol_call(
+        "ocpp201",
+        ProtocolCallModel.CP_TO_CSMS,
+        "ReservationStatusUpdate",
+    )
+    @protocol_call(
         "ocpp21",
         ProtocolCallModel.CP_TO_CSMS,
         "ReservationStatusUpdate",
@@ -2058,6 +2134,7 @@ class CSMSConsumer(
 
         return {}
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyChargingLimit")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyChargingLimit")
     async def _handle_notify_charging_limit_action(
         self, payload, msg_id, raw, text_data
@@ -2067,6 +2144,11 @@ class CSMSConsumer(
         )
 
 
+    @protocol_call(
+        "ocpp21",
+        ProtocolCallModel.CP_TO_CSMS,
+        "NotifyCustomerInformation",
+    )
     @protocol_call(
         "ocpp201",
         ProtocolCallModel.CP_TO_CSMS,
@@ -2205,6 +2287,7 @@ class CSMSConsumer(
         except Exception:  # pragma: no cover - defensive safeguard
             logger.exception("Unable to route customer-care acknowledgement")
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyDisplayMessages")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyDisplayMessages")
     async def _handle_notify_display_messages_action(
         self, payload, msg_id, raw, text_data
@@ -2214,6 +2297,7 @@ class CSMSConsumer(
         )
 
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingNeeds")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingNeeds")
     async def _handle_notify_ev_charging_needs_action(
         self, payload, msg_id, raw, text_data
@@ -2280,6 +2364,7 @@ class CSMSConsumer(
         )
         return {}
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingSchedule")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingSchedule")
     async def _handle_notify_ev_charging_schedule_action(
         self, payload, msg_id, raw, text_data
@@ -2395,6 +2480,11 @@ class CSMSConsumer(
         )
 
     @protocol_call(
+        "ocpp21",
+        ProtocolCallModel.CP_TO_CSMS,
+        "PublishFirmwareStatusNotification",
+    )
+    @protocol_call(
         "ocpp201",
         ProtocolCallModel.CP_TO_CSMS,
         "PublishFirmwareStatusNotification",
@@ -2448,6 +2538,7 @@ class CSMSConsumer(
         self._log_ocpp201_notification("PublishFirmwareStatusNotification", payload)
         return {}
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "ReportChargingProfiles")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ReportChargingProfiles")
     async def _handle_report_charging_profiles_action(
         self, payload, msg_id, raw, text_data
@@ -2606,6 +2697,7 @@ class CSMSConsumer(
                 store.add_log(aggregate_key, log_message, log_type="charger")
         return {}
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "LogStatusNotification")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "LogStatusNotification")
     async def _handle_log_status_notification_action_legacy(
         self, payload, msg_id, raw, text_data

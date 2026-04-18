@@ -117,6 +117,7 @@ def _handle_change_configuration(context: ActionContext, data: dict) -> JsonResp
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetVariables")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetVariables")
 def _handle_get_variables(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     raw_entries = data.get("getVariableData") or data.get("variables") or data.get("get_variable_data")
@@ -160,6 +161,7 @@ def _handle_get_variables(context: ActionContext, data: dict) -> JsonResponse | 
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "SetVariables")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetVariables")
 def _handle_set_variables(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     raw_entries = data.get("setVariableData") or data.get("variables") or data.get("set_variable_data")
@@ -208,6 +210,7 @@ def _handle_set_variables(context: ActionContext, data: dict) -> JsonResponse | 
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetBaseReport")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetBaseReport")
 def _handle_get_base_report(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     request_id_value = data.get("requestId") or data.get("request_id")
@@ -251,6 +254,7 @@ def _handle_get_base_report(context: ActionContext, data: dict) -> JsonResponse 
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetReport")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetReport")
 def _handle_get_report(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     request_id_value = data.get("requestId") or data.get("request_id")

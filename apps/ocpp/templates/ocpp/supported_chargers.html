@@ -3,74 +3,259 @@
 
 {% block title %}{% trans "Supported Chargers" %}{% endblock %}
 
+{% block extra_head %}
+<style>
+  .supported-toolbar {
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: var(--landing-card-radius);
+    background: #fff;
+    padding: 1rem;
+  }
+  .supported-toolbar .chip-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0.5rem;
+  }
+  .supported-chip-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .supported-chip {
+    border-radius: 999px;
+  }
+  .supported-card {
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 1rem;
+    background-color: #fff;
+    box-shadow: 0 0.5rem 1rem rgba(15, 23, 42, 0.04);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .supported-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0.8rem 1.25rem rgba(15, 23, 42, 0.08);
+  }
+  .rating-pill {
+    border-radius: 0.85rem;
+    min-width: 5.6rem;
+    text-align: center;
+    padding: 0.45rem 0.55rem;
+    background: linear-gradient(135deg, rgba(var(--bs-primary-rgb), 0.16), rgba(var(--bs-primary-rgb), 0.05));
+    border: 1px solid rgba(var(--bs-primary-rgb), 0.3);
+    color: var(--bs-primary-text-emphasis);
+  }
+  .rating-pill .rating-value {
+    display: block;
+    font-size: 1.1rem;
+    line-height: 1;
+    font-weight: 700;
+  }
+  .rating-pill .rating-caption {
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .rating-stars {
+    color: #f5c74e;
+    letter-spacing: 0.1rem;
+    font-size: 0.85rem;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container px-3 px-sm-4">
-  <div class="row justify-content-center mt-2 mt-sm-4">
-    <div class="col-12">
-      <div class="card shadow-sm border-0 overflow-hidden">
-        <div class="card-header">
-          <h1 class="h4 mb-1">{% trans "Supported Chargers" %}</h1>
-          <p class="text-muted mb-0">
-            {% trans "Browse supported charge point models and open each entry for manuals, instructions, and images." %}
-          </p>
+  <section class="mb-4 mt-2 mt-sm-4">
+    <div class="card shadow-sm border-0 overflow-hidden">
+      <div class="card-header">
+        <h1 class="h4 mb-1">{% trans "Supported Chargers" %}</h1>
+        <p class="text-muted mb-0">
+          {% trans "Browse supported charge point models and open each entry for manuals, instructions, and images." %}
+        </p>
+      </div>
+      <div class="card-body pt-2">
+        <div class="supported-toolbar mb-3 mb-sm-4" data-supported-filter-toolbar>
+          <div class="row g-3 align-items-start">
+            <div class="col-12 col-md-4">
+              <p class="chip-label mb-0">{% trans "Vendor" %}</p>
+              <div class="supported-chip-group" data-chip-group="vendor"></div>
+            </div>
+            <div class="col-12 col-md-4">
+              <p class="chip-label mb-0">{% trans "OCPP preference" %}</p>
+              <div class="supported-chip-group" data-chip-group="ocpp"></div>
+            </div>
+            <div class="col-12 col-md-4">
+              <p class="chip-label mb-0">{% trans "Integration rating" %}</p>
+              <div class="supported-chip-group" data-chip-group="rating"></div>
+            </div>
+          </div>
         </div>
-        <div class="card-body">
-          {% if station_models %}
-          <div class="row g-3">
-            {% for model in station_models %}
-            <div class="col-12 col-lg-6">
-              <div class="card h-100 shadow-sm">
-                <div class="card-body">
-                  <div class="d-flex justify-content-between align-items-start gap-2">
-                    <div>
-                      <h2 class="h6 mb-1">{{ model.vendor }} {{ model.model_family }} {{ model.model }}</h2>
-                      <p class="text-muted small mb-2">
-                        {% if model.preferred_ocpp_version %}
-                          {% trans "Preferred OCPP" %}: {{ model.preferred_ocpp_version }}
-                        {% else %}
-                          {% trans "Preferred OCPP" %}: {% trans "Not specified" %}
-                        {% endif %}
-                      </p>
-                    </div>
-                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
-                      {% trans "Rating" %}: {{ model.integration_rating }}/5
-                    </span>
-                  </div>
-                  <dl class="landing-meta-list mb-3">
-                    <div>
-                      <dt>{% trans "Connector" %}</dt>
-                      <dd>{{ model.connector_type|default:"-" }}</dd>
-                    </div>
-                    <div>
-                      <dt>{% trans "Max Power" %}</dt>
-                      <dd>
-                        {% if model.max_power_kw %}{{ model.max_power_kw }} kW{% else %}-{% endif %}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{% trans "Max Voltage" %}</dt>
-                      <dd>
-                        {% if model.max_voltage_v %}{{ model.max_voltage_v }} V{% else %}-{% endif %}
-                      </dd>
-                    </div>
-                  </dl>
-                  {% if model.notes %}
-                  <p class="small text-muted mb-3">{{ model.notes|truncatewords:24 }}</p>
-                  {% endif %}
-                  <a class="btn btn-outline-primary btn-sm" href="{% url 'ocpp:supported-charger-detail' model.pk %}">
-                    {% trans "View details" %}
-                  </a>
+
+        {% if station_models %}
+        <div class="row g-3" data-supported-card-grid>
+          {% for model in station_models %}
+          <div
+            class="col-12 col-lg-6"
+            data-supported-card
+            data-vendor="{{ model.vendor|default:'Unknown vendor' }}"
+            data-ocpp="{{ model.preferred_ocpp_version|default:'Not specified' }}"
+            data-rating="{{ model.integration_rating|default:0 }}"
+          >
+            <article class="supported-card h-100 p-3 p-sm-4">
+              <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                <div>
+                  <h2 class="h5 mb-1">{{ model.vendor }} {{ model.model_family }} {{ model.model }}</h2>
+                  <p class="text-muted small mb-0">
+                    {% if model.preferred_ocpp_version %}
+                      {% trans "Preferred OCPP" %}: {{ model.preferred_ocpp_version }}
+                    {% else %}
+                      {% trans "Preferred OCPP" %}: {% trans "Not specified" %}
+                    {% endif %}
+                  </p>
+                </div>
+                <div class="rating-pill">
+                  <span class="rating-value">{{ model.integration_rating }}/5</span>
+                  <span class="rating-caption">{% trans "Integration" %}</span>
                 </div>
               </div>
-            </div>
-            {% endfor %}
+
+              <div class="rating-stars mb-3" aria-hidden="true">
+                {% with "12345" as stars %}
+                  {% for _ in stars %}
+                    {% if forloop.counter <= model.integration_rating %}★{% else %}☆{% endif %}
+                  {% endfor %}
+                {% endwith %}
+              </div>
+
+              <dl class="landing-meta-list mb-3">
+                <div>
+                  <dt>{% trans "Connector" %}</dt>
+                  <dd>{{ model.connector_type|default:"-" }}</dd>
+                </div>
+                <div>
+                  <dt>{% trans "Max Power" %}</dt>
+                  <dd>
+                    {% if model.max_power_kw %}{{ model.max_power_kw }} kW{% else %}-{% endif %}
+                  </dd>
+                </div>
+                <div>
+                  <dt>{% trans "Max Voltage" %}</dt>
+                  <dd>
+                    {% if model.max_voltage_v %}{{ model.max_voltage_v }} V{% else %}-{% endif %}
+                  </dd>
+                </div>
+              </dl>
+
+              {% if model.notes %}
+              <p class="small text-muted mb-3">{{ model.notes|truncatewords:24 }}</p>
+              {% endif %}
+
+              <a class="btn btn-outline-primary btn-sm" href="{% url 'ocpp:supported-charger-detail' model.pk %}">
+                {% trans "View details" %}
+              </a>
+            </article>
           </div>
-          {% else %}
-          <p class="text-muted mb-0">{% trans "No supported chargers have been added yet." %}</p>
-          {% endif %}
+          {% endfor %}
         </div>
+        {% else %}
+        <p class="text-muted mb-0">{% trans "No supported chargers have been added yet." %}</p>
+        {% endif %}
       </div>
     </div>
-  </div>
+  </section>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (() => {
+    const cards = Array.from(document.querySelectorAll('[data-supported-card]'));
+    const groups = {
+      vendor: document.querySelector('[data-chip-group="vendor"]'),
+      ocpp: document.querySelector('[data-chip-group="ocpp"]'),
+      rating: document.querySelector('[data-chip-group="rating"]'),
+    };
+    const state = { vendor: 'all', ocpp: 'all', rating: 'all' };
+
+    if (!cards.length) {
+      return;
+    }
+
+    const collectValues = (field) => {
+      const values = cards.map((card) => {
+        if (field === 'vendor') {
+          return card.dataset.vendor;
+        }
+        if (field === 'ocpp') {
+          return card.dataset.ocpp;
+        }
+        return card.dataset.rating;
+      });
+      return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    };
+
+    const labels = {
+      all: '{% trans "All" %}',
+      'not specified': '{% trans "Not specified" %}',
+      'Not specified': '{% trans "Not specified" %}',
+    };
+
+    const createChip = (field, value, label) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-sm btn-outline-secondary supported-chip';
+      button.textContent = label;
+      button.dataset.field = field;
+      button.dataset.value = value;
+      button.addEventListener('click', () => {
+        state[field] = value;
+        applyFilters();
+      });
+      return button;
+    };
+
+    const formatRatingLabel = (value) => `${value}/5`;
+
+    const buildGroup = (field, values) => {
+      const group = groups[field];
+      if (!group) {
+        return;
+      }
+      group.innerHTML = '';
+      group.appendChild(createChip(field, 'all', labels.all));
+      values.forEach((value) => {
+        const label = field === 'rating' ? formatRatingLabel(value) : (labels[value] || value);
+        group.appendChild(createChip(field, value, label));
+      });
+    };
+
+    const applyFilters = () => {
+      cards.forEach((card) => {
+        const matchesVendor = state.vendor === 'all' || card.dataset.vendor === state.vendor;
+        const matchesOcpp = state.ocpp === 'all' || card.dataset.ocpp === state.ocpp;
+        const matchesRating = state.rating === 'all' || card.dataset.rating === state.rating;
+        card.classList.toggle('d-none', !(matchesVendor && matchesOcpp && matchesRating));
+      });
+
+      Object.entries(state).forEach(([field, value]) => {
+        const group = groups[field];
+        if (!group) {
+          return;
+        }
+        group.querySelectorAll('button').forEach((chip) => {
+          const active = chip.dataset.value === value;
+          chip.classList.toggle('btn-primary', active);
+          chip.classList.toggle('btn-outline-secondary', !active);
+        });
+      });
+    };
+
+    buildGroup('vendor', collectValues('vendor'));
+    buildGroup('ocpp', collectValues('ocpp'));
+    buildGroup('rating', collectValues('rating').sort((a, b) => Number(b) - Number(a)));
+    applyFilters();
+  })();
+</script>
 {% endblock %}

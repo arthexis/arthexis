@@ -5,6 +5,7 @@ from apps.ocpp.management.coverage_ocpp16_impl import (
     _implemented_cp_to_csms,
     _implemented_csms_to_cp,
 )
+from apps.ocpp.management.coverage_ocpp201_impl import _collect_real_decorated_actions
 from apps.protocols.services import load_protocol_spec_from_file, spec_path
 from utils.coverage import coverage_color, render_badge
 
@@ -22,6 +23,10 @@ def run_coverage_ocpp21(*, badge_path=None, json_path=None, stdout=None, stderr=
     spec = _load_spec()
     implemented_cp_to_csms = _implemented_cp_to_csms(app_dir)
     implemented_csms_to_cp = _implemented_csms_to_cp(app_dir)
+    real_cp_to_csms_201, real_csms_to_cp_201 = _collect_real_decorated_actions(app_dir, "ocpp201")
+    real_cp_to_csms_21, real_csms_to_cp_21 = _collect_real_decorated_actions(app_dir, "ocpp21")
+    implemented_cp_to_csms |= real_cp_to_csms_201 | real_cp_to_csms_21
+    implemented_csms_to_cp |= real_csms_to_cp_201 | real_csms_to_cp_21
     spec_cp_to_csms = set(spec["cp_to_csms"])
     spec_csms_to_cp = set(spec["csms_to_cp"])
     cp_to_csms_coverage = sorted(spec_cp_to_csms & implemented_cp_to_csms)

@@ -33,6 +33,7 @@ _last_not_configured_log = 0.0
 _auto_detect_lock = threading.Lock()
 _log_throttle_lock = threading.Lock()
 _suite_marker = f"{os.getpid()}:{int(time.time())}"
+_hardware_disabled_reason: str | None = None
 
 try:  # pragma: no cover - debugging helper not available on all platforms
     import resource
@@ -143,6 +144,20 @@ def _record_setup_failure(reason: str) -> None:
     )
 
 
+def _disable_hardware(reason: str) -> None:
+    """Permanently disable RFID hardware setup for this process."""
+
+    global _hardware_disabled_reason
+
+    if _hardware_disabled_reason:
+        return
+    _hardware_disabled_reason = reason
+    logger.warning(
+        "RFID hardware disabled for this process after setup failure: %s",
+        reason,
+    )
+
+
 def _lock_path() -> Path:
     """Return the sentinel file that marks an installed RFID reader."""
 
@@ -222,6 +237,7 @@ def _ensure_gpio_loaded() -> bool:
         import RPi.GPIO as gpio_mod  # type: ignore
     except Exception as exc:  # pragma: no cover - hardware dependent
         logger.debug("RFID auto-detect: RPi.GPIO unavailable: %s", exc)
+        _disable_hardware("GPIO library not available")
         return False
     GPIO = gpio_mod
     return True
@@ -324,12 +340,13 @@ def _irq_callback(channel):  # pragma: no cover - hardware dependent
 def _setup_hardware():  # pragma: no cover - hardware dependent
     global _reader
     if GPIO is None:
-        logger.warning("GPIO library not available; RFID reader disabled")
+        _disable_hardware("GPIO library not available")
         return False
     try:
         from mfrc522 import MFRC522  # type: ignore
     except Exception as exc:
-        logger.warning("MFRC522 library not available: %s", exc)
+        logger.debug("MFRC522 library not available: %s", exc)
+        _disable_hardware("MFRC522 library not available")
         return False
 
     try:
@@ -410,6 +427,12 @@ def _worker():  # pragma: no cover - background thread
 def start():
     """Start the background RFID reader."""
     global _thread
+    if _hardware_disabled_reason:
+        logger.debug(
+            "RFID background reader start skipped; hardware disabled (%s)",
+            _hardware_disabled_reason,
+        )
+        return
     now = time.monotonic()
     if (
         _last_setup_failure is not None
@@ -428,7 +451,13 @@ def start():
     if not is_configured():
         logger.debug("RFID not configured; background reader not started")
         return
-    if GPIO is None:
+    if _hardware_disabled_reason:
+        logger.debug(
+            "RFID background reader start skipped; hardware disabled (%s)",
+            _hardware_disabled_reason,
+        )
+        return
+    if not _ensure_gpio_loaded():
         return
     if _thread and _thread.is_alive():
         return

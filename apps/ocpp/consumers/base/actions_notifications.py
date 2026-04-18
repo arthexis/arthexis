@@ -17,6 +17,7 @@ class NotificationActionsMixin:
             self._cached_notification_handler = handler
         return handler
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "PublishFirmwareStatusNotification")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "PublishFirmwareStatusNotification")
     async def _handle_publish_firmware_status_notification_action(self, payload, msg_id, raw, text_data):
         """Route firmware publish notifications through notification handler."""
@@ -31,6 +32,7 @@ class NotificationActionsMixin:
             payload, msg_id, raw, text_data
         )
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "LogStatusNotification")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "LogStatusNotification")
     async def _handle_log_status_notification_action(self, payload, msg_id, raw, text_data):
         """Route log notifications through notification handler."""
@@ -47,6 +49,7 @@ class NotificationActionsMixin:
             payload, msg_id, raw, text_data
         )
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "SecurityEventNotification")
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "SecurityEventNotification")
     async def _handle_security_event_notification_action(self, payload, msg_id, raw, text_data):
         """Route security event notifications through notification handler."""

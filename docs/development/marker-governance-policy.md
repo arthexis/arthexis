@@ -12,14 +12,12 @@ Use marker updates to keep critical paths protected while allowing slower checks
 
 - Treat `critical` as install/upgrade and safety-sensitive coverage.
 - Use `integration` for slower, broader behavior checks that remain important but do not need to block every fast gate.
-- Record marker promotions/demotions in a dated ledger file under `docs/non-canonical/archive/testing/`.
-- Keep ledgers append-only historical records; do not rewrite past decisions unless correcting factual errors.
+- Record marker promotions/demotions in dated entries within `docs/development/testing/test-suite-notes.md`.
+- Keep ledger entries append-only historical records; do not rewrite past decisions unless correcting factual errors.
 - When demoting tests, ensure representative coverage for the same behavior remains in a fast path.
 
 ## Historical ledgers
 
-Historical marker-change ledgers live in:
+Historical marker-change decisions are kept in the testing notes document:
 
-- [`docs/non-canonical/archive/testing/`](../non-canonical/archive/testing/index.md)
-
-The previous 2026-03-01 critical demotion ledger has been archived there.
+- [`docs/development/testing/test-suite-notes.md`](testing/test-suite-notes.md)

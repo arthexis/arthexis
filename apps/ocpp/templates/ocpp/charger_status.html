@@ -4,6 +4,10 @@
 
 {% block title %}{{ charger.display_name|default:charger.name|default:charger.charger_id }} - {% trans "Status" %}{% endblock %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'ocpp/charger_status.css' %}">
+{% endblock %}
+
 {% block content %}
 <div id="status-content" data-chart-animate="{{ chart_should_animate|yesno:'true,false,false' }}" data-status-should-poll="{{ status_should_poll|yesno:'true,false,false' }}" data-chart-url="{{ chart_data_url }}"{% if chart_session %} data-chart-session="{{ chart_session }}"{% endif %}>
   {% if show_connector_tabs and connector_links %}
@@ -15,397 +19,345 @@
     </div>
   </div>
   {% endif %}
-  <style>
-    @keyframes text-update-fade {
-      0% {
-        color: #FFD700;
-        text-shadow: 0 0 8px rgba(255,215,0,0.8);
-      }
-      100% {
-        color: inherit;
-        text-shadow: none;
-      }
-    }
-    .text-update {
-      animation: text-update-fade 1s ease-out;
-    }
-    .usage-timeline-card {
-      background: var(--bs-body-bg, #fff);
-    }
-    .usage-timeline-legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-    }
-    .usage-legend-item {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-    }
-    .usage-legend-swatch {
-      width: 18px;
-      height: 8px;
-      border-radius: 999px;
-      display: inline-block;
-    }
-    .usage-legend-swatch.usage-offline,
-    .usage-timeline-segment.usage-offline {
-      background-image: repeating-linear-gradient(
-        135deg,
-        rgba(0, 0, 0, 0.85),
-        rgba(0, 0, 0, 0.85) 8px,
-        rgba(0, 0, 0, 0.45) 8px,
-        rgba(0, 0, 0, 0.45) 16px
-      );
-      background-color: rgba(0, 0, 0, 0.85);
-    }
-    .usage-legend-swatch.usage-untracked,
-    .usage-timeline-segment.usage-untracked {
-      background-color: #343a40;
-    }
-    .usage-legend-swatch.usage-available,
-    .usage-timeline-segment.usage-available {
-      background-color: #0b3d91;
-    }
-    .usage-legend-swatch.usage-charging,
-    .usage-timeline-segment.usage-charging {
-      background-color: #198754;
-    }
-    .usage-timeline-entry:not(:last-child) {
-      margin-bottom: 1.25rem;
-    }
-    .usage-timeline-bar {
-      display: flex;
-      align-items: stretch;
-      min-height: 18px;
-      border-radius: 999px;
-      overflow: hidden;
-      background-color: rgba(0, 0, 0, 0.05);
-    }
-    .usage-timeline-segment {
-      flex-basis: 0;
-      min-width: 2px;
-      display: block;
-    }
-    .charger-meta {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.125rem;
-    }
-    .charger-meta-label {
-      font-size: 0.75rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--bs-secondary-color, rgba(108, 117, 125, 0.85));
-    }
-    .charger-meta-value {
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--bs-body-color);
-      max-width: 16rem;
-      word-break: break-word;
-      text-align: left;
-    }
-    @media (min-width: 768px) {
-      .charger-meta {
-        align-items: flex-end;
-      }
-      .charger-meta-value {
-        text-align: right;
-      }
-    }
-  </style>
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
-      <div class="flex-grow-1">
-        <h1 class="mb-1">{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
-      </div>
-      <div class="d-flex flex-column align-items-start align-items-md-end gap-2 flex-shrink-0">
-        <div class="d-flex align-items-center">
-          <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
-          <strong id="charger-state">{{ state }}</strong>
-        </div>
-        <div class="charger-meta text-muted">
-          <span class="charger-meta-label">{% trans "Serial Number" %}</span>
-          <span class="charger-meta-value">{{ charger.charger_id }}</span>
-        </div>
-      </div>
+
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
+    <div class="flex-grow-1">
+      <h1 class="mb-1">{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
     </div>
-    {% if past_session %}
+    <div class="charger-meta">
+      <span class="charger-meta-label">{% trans "Serial Number" %}</span>
+      <span class="charger-meta-value">{{ charger.charger_id }}</span>
+    </div>
+  </div>
+
+  {% if past_session %}
   <div class="alert alert-info" role="alert">
     {% trans "Viewing past session" %} {{ tx.id }}. <a href="{{ page_url }}">{% trans "Back to live" %}</a>
   </div>
   {% endif %}
-  <div class="row mb-4">
-    <div class="col-md-4">
-      {% if charger_error_code %}
-      <p class="text-muted small mb-1" id="last-status-error">{% trans "Error code" %}: {{ charger_error_code }}</p>
-      {% endif %}
-      {% if charger.last_status_timestamp %}
-      <p class="text-muted small mb-1" id="last-status-timestamp">{% trans "Last status update" %}: {{ charger.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</p>
-      {% endif %}
-      {% if charger.last_status_vendor_info %}
-        {% if charger.last_status_vendor_info.vendorId %}
-        <p class="text-muted small mb-1" id="last-status-vendor">{% trans "Vendor" %}: {{ charger.last_status_vendor_info.vendorId }}</p>
-        {% endif %}
-        {% if charger.last_status_vendor_info.info %}
-        <p class="text-muted small mb-1" id="last-status-info">{% trans "Info" %}: {{ charger.last_status_vendor_info.info }}</p>
-        {% endif %}
-      {% endif %}
-      <p>{% trans "Total Energy" %}: <span id="total-kw">{{ charger.total_kw|floatformat:2 }}</span> kW</p>
+
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-lg-4">
+      <section class="status-card card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <h2 class="status-card-title">{% trans "State" %}</h2>
+          <div class="d-flex align-items-center mb-3">
+            <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
+            <strong id="charger-state">{{ state }}</strong>
+          </div>
+          {% if charger_error_code %}
+          <p class="text-muted small mb-1" id="last-status-error">{% trans "Error code" %}: {{ charger_error_code }}</p>
+          {% endif %}
+          {% if charger.last_status_timestamp %}
+          <p class="text-muted small mb-1" id="last-status-timestamp">{% trans "Last status update" %}: {{ charger.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</p>
+          {% endif %}
+          {% if charger.last_status_vendor_info %}
+            {% if charger.last_status_vendor_info.vendorId %}
+            <p class="text-muted small mb-1" id="last-status-vendor">{% trans "Vendor" %}: {{ charger.last_status_vendor_info.vendorId }}</p>
+            {% endif %}
+            {% if charger.last_status_vendor_info.info %}
+            <p class="text-muted small mb-1" id="last-status-info">{% trans "Info" %}: {{ charger.last_status_vendor_info.info }}</p>
+            {% endif %}
+          {% endif %}
+          <p class="mb-0">{% trans "Total Energy" %}: <span id="total-kw">{{ charger.total_kw|floatformat:2 }}</span> kW</p>
+          {% if charger.temperature is not None %}
+          <p class="mb-0 mt-2">{% trans "Temperature" %}: <span id="temperature">{{ charger.temperature }}</span> {{ charger.temperature_unit }}</p>
+          {% endif %}
+        </div>
+      </section>
+
       {% if charger.diagnostics_status or charger.diagnostics_timestamp or charger.diagnostics_location %}
-      <div class="mb-3">
-        <h2 class="h6 mb-1">{% trans "Diagnostics" %}</h2>
-        {% if charger.diagnostics_status %}
-        <p class="mb-1">
-          {% trans "Status" %}: <span id="diagnostics-status">{{ charger.diagnostics_status }}</span>
-        </p>
-        {% endif %}
-        {% if charger.diagnostics_timestamp %}
-        <p class="mb-1 text-muted">
-          <small>{% trans "Reported" %}: <span id="diagnostics-timestamp">{{ charger.diagnostics_timestamp|date:"SHORT_DATETIME_FORMAT" }}</span></small>
-        </p>
-        {% endif %}
-        {% if charger.diagnostics_location %}
-        <p class="mb-0 text-break">
-          <small>{% trans "Location" %}: <span id="diagnostics-location">{{ charger.diagnostics_location }}</span></small>
-        </p>
-        {% endif %}
-      </div>
+      <section class="status-card card shadow-sm border-0 mt-3">
+        <div class="card-body">
+          <h2 class="status-card-title">{% trans "Diagnostics" %}</h2>
+          {% if charger.diagnostics_status %}
+          <p class="mb-1">{% trans "Status" %}: <span id="diagnostics-status">{{ charger.diagnostics_status }}</span></p>
+          {% endif %}
+          {% if charger.diagnostics_timestamp %}
+          <p class="mb-1 text-muted"><small>{% trans "Reported" %}: <span id="diagnostics-timestamp">{{ charger.diagnostics_timestamp|date:"SHORT_DATETIME_FORMAT" }}</span></small></p>
+          {% endif %}
+          {% if charger.diagnostics_location %}
+          <p class="mb-0 text-break"><small>{% trans "Location" %}: <span id="diagnostics-location">{{ charger.diagnostics_location }}</span></small></p>
+          {% endif %}
+        </div>
+      </section>
       {% endif %}
+
       {% if charging_limit %}
-      <div class="mb-3">
-        <h2 class="h6 mb-1">{% trans "Charging Limit" %}</h2>
-        {% if charging_limit.source %}
-        <p class="mb-1" id="charging-limit-source">{% trans "Source" %}: {{ charging_limit.source }}</p>
-        {% endif %}
-        {% if charging_limit.is_grid_critical is not None %}
-        <p class="mb-1" id="charging-limit-grid">{% trans "Grid critical" %}: {{ charging_limit.is_grid_critical|yesno:_("Yes,No") }}</p>
-        {% endif %}
-        {% if charging_limit.schedules %}
-        <ul class="mb-1" id="charging-limit-schedules">
-          {% for summary in charging_limit.schedules %}
-          <li>{{ summary }}</li>
-          {% endfor %}
-        </ul>
-        {% elif charging_limit.evse_id %}
-        <p class="mb-1">{% blocktrans with evse=charging_limit.evse_id %}Applies to EVSE {{ evse }}{% endblocktrans %}</p>
-        {% endif %}
-        {% if charging_limit.timestamp %}
-        <p class="mb-0 text-muted">
-          <small>{% trans "Reported" %}: <span id="charging-limit-timestamp">{{ charging_limit.timestamp|date:"SHORT_DATETIME_FORMAT" }}</span></small>
-        </p>
-        {% endif %}
-      </div>
-      {% endif %}
-      {% if charger.temperature is not None %}
-      <p>{% trans "Temperature" %}: <span id="temperature">{{ charger.temperature }}</span> {{ charger.temperature_unit }}</p>
-      {% endif %}
-      {% if tx %}
-      <h2>{% if past_session %}{% trans "Session" %}{% else %}{% trans "Current Transaction" %}{% endif %}</h2>
-      <ul>
-        <li>{% trans "Transaction ID" %}: {{ tx.id }}</li>
-        <li>{% trans "Meter Start" %}: {{ tx.meter_start }}</li>
-        {% if date_view == "received" %}
-        <li>{% trans "Start Time" %}: {{ tx.received_start_time|default:tx.start_time }}</li>
-        {% else %}
-        <li>{% trans "Start Time" %}: {{ tx.start_time }}</li>
-        {% endif %}
-        {% if tx_rfid_details %}
-        <li>
-          {% if tx_rfid_details.display_label %}
-          {{ tx_rfid_details.display_label }}:
-          {% else %}
-          {% trans "RFID" %}:
+      <section class="status-card card shadow-sm border-0 mt-3">
+        <div class="card-body">
+          <h2 class="status-card-title">{% trans "Charging Limit" %}</h2>
+          {% if charging_limit.source %}
+          <p class="mb-1" id="charging-limit-source">{% trans "Source" %}: {{ charging_limit.source }}</p>
           {% endif %}
-          {% if tx_rfid_details.url %}
-          <a href="{{ tx_rfid_details.url }}">{{ tx_rfid_details.value }}</a>
-          {% else %}
-          {{ tx_rfid_details.value }}
+          {% if charging_limit.is_grid_critical is not None %}
+          <p class="mb-1" id="charging-limit-grid">{% trans "Grid critical" %}: {{ charging_limit.is_grid_critical|yesno:_("Yes,No") }}</p>
           {% endif %}
-        </li>
-        {% endif %}
-        <li>{% trans "Session Energy" %}: <span id="session-kw">{{ tx.kw|floatformat:2 }}</span> kW</li>
-      </ul>
-      {% elif not past_session %}
-      <p>{% trans "No active transaction" %}</p>
+          {% if charging_limit.schedules %}
+          <ul class="mb-1" id="charging-limit-schedules">
+            {% for summary in charging_limit.schedules %}
+            <li>{{ summary }}</li>
+            {% endfor %}
+          </ul>
+          {% elif charging_limit.evse_id %}
+          <p class="mb-1">{% blocktrans with evse=charging_limit.evse_id %}Applies to EVSE {{ evse }}{% endblocktrans %}</p>
+          {% endif %}
+          {% if charging_limit.timestamp %}
+          <p class="mb-0 text-muted"><small>{% trans "Reported" %}: <span id="charging-limit-timestamp">{{ charging_limit.timestamp|date:"SHORT_DATETIME_FORMAT" }}</span></small></p>
+          {% endif %}
+        </div>
+      </section>
       {% endif %}
     </div>
-    <div class="col-md-8">
-      {% if show_chart %}
-      <canvas id="kw-chart" style="width:100%;height:300px;"></canvas>
-      {{ chart_data|json_script:"chart-data" }}
-      {% else %}
-      {% if usage_timeline %}
-      <div class="usage-timeline-card border rounded-3 p-3">
-        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mb-3">
-          <h2 class="h5 mb-0">{% trans "Usage (last 48 hours)" %}</h2>
-          {% if usage_timeline_window %}
-          <div class="small text-muted">{{ usage_timeline_window.0 }} &ndash; {{ usage_timeline_window.1 }}</div>
+
+    <div class="col-12 col-lg-8">
+      <section class="status-card card shadow-sm border-0 mb-3">
+        <div class="card-body">
+          <h2 class="status-card-title">{% if past_session %}{% trans "Session" %}{% else %}{% trans "Current Transaction" %}{% endif %}</h2>
+          {% if tx %}
+          <ul class="mb-0">
+            <li>{% trans "Transaction ID" %}: {{ tx.id }}</li>
+            <li>{% trans "Meter Start" %}: {{ tx.meter_start }}</li>
+            {% if date_view == "received" %}
+            <li>{% trans "Start Time" %}: {{ tx.received_start_time|default:tx.start_time }}</li>
+            {% else %}
+            <li>{% trans "Start Time" %}: {{ tx.start_time }}</li>
+            {% endif %}
+            {% if tx_rfid_details %}
+            <li>
+              {% if tx_rfid_details.display_label %}
+              {{ tx_rfid_details.display_label }}:
+              {% else %}
+              {% trans "RFID" %}:
+              {% endif %}
+              {% if tx_rfid_details.url %}
+              <a href="{{ tx_rfid_details.url }}">{{ tx_rfid_details.value }}</a>
+              {% else %}
+              {{ tx_rfid_details.value }}
+              {% endif %}
+            </li>
+            {% endif %}
+            <li>{% trans "Session Energy" %}: <span id="session-kw">{{ tx.kw|floatformat:2 }}</span> kW</li>
+          </ul>
+          {% elif not past_session %}
+          <div class="status-empty">
+            <div class="status-empty-icon" aria-hidden="true">🔌</div>
+            <p class="mb-0">{% trans "No active transaction" %}</p>
+          </div>
           {% endif %}
         </div>
-        <div class="usage-timeline-legend small text-muted mb-3">
-          <span class="usage-legend-item"><span class="usage-legend-swatch usage-offline"></span> {% trans "Offline" %}</span>
-          <span class="usage-legend-item"><span class="usage-legend-swatch usage-untracked"></span> {% trans "Untracked" %}</span>
-          <span class="usage-legend-item"><span class="usage-legend-swatch usage-available"></span> {% trans "Available" %}</span>
-          <span class="usage-legend-item"><span class="usage-legend-swatch usage-charging"></span> {% trans "Charging" %}</span>
-        </div>
-        <div class="usage-timeline-list">
-          {% for entry in usage_timeline %}
-          <div class="usage-timeline-entry">
-            <div class="fw-semibold mb-2">{{ entry.label }}</div>
-            <div class="usage-timeline-bar" role="list">
-              {% for segment in entry.segments %}
-              <span class="usage-timeline-segment usage-{{ segment.status }}" role="listitem" style="flex-grow: {{ segment.duration }};" title="{{ segment.label }} · {{ segment.start_display }} → {{ segment.end_display }}" aria-label="{{ segment.label }} · {{ segment.start_display }} → {{ segment.end_display }}"></span>
-              {% endfor %}
+      </section>
+
+      <section class="status-card card shadow-sm border-0">
+        <div class="card-body">
+          <h2 class="status-card-title">{% trans "Live Power" %}</h2>
+          {% if show_chart %}
+          <canvas id="kw-chart" style="width:100%;height:300px;"></canvas>
+          {{ chart_data|json_script:"chart-data" }}
+          {% else %}
+            {% if usage_timeline %}
+            <div class="usage-timeline-card border rounded-3 p-3">
+              <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mb-3">
+                <h3 class="h6 mb-0">{% trans "Usage (last 48 hours)" %}</h3>
+                {% if usage_timeline_window %}
+                <div class="small text-muted">{{ usage_timeline_window.0 }} &ndash; {{ usage_timeline_window.1 }}</div>
+                {% endif %}
+              </div>
+              <div class="usage-timeline-legend small text-muted mb-3">
+                <span class="usage-legend-item"><span class="usage-legend-swatch usage-offline"></span> {% trans "Offline" %}</span>
+                <span class="usage-legend-item"><span class="usage-legend-swatch usage-untracked"></span> {% trans "Untracked" %}</span>
+                <span class="usage-legend-item"><span class="usage-legend-swatch usage-available"></span> {% trans "Available" %}</span>
+                <span class="usage-legend-item"><span class="usage-legend-swatch usage-charging"></span> {% trans "Charging" %}</span>
+              </div>
+              <div class="usage-timeline-list">
+                {% for entry in usage_timeline %}
+                <div class="usage-timeline-entry">
+                  <div class="fw-semibold mb-2">{{ entry.label }}</div>
+                  <div class="usage-timeline-bar" role="list">
+                    {% for segment in entry.segments %}
+                    <span class="usage-timeline-segment usage-{{ segment.status }}" role="listitem" style="flex-grow: {{ segment.duration }};" title="{{ segment.label }} · {{ segment.start_display }} → {{ segment.end_display }}" aria-label="{{ segment.label }} · {{ segment.start_display }} → {{ segment.end_display }}"></span>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+              {% if usage_timeline_window %}
+              <div class="d-flex justify-content-between small text-muted mt-3">
+                <span>{{ usage_timeline_window.0 }}</span>
+                <span>{{ usage_timeline_window.1 }}</span>
+              </div>
+              {% endif %}
             </div>
-          </div>
-          {% endfor %}
+            {% else %}
+            <div class="status-empty">
+              <div class="status-empty-icon" aria-hidden="true">📈</div>
+              <p class="mb-0">{% trans "Live chart data will appear when sessions are active." %}</p>
+            </div>
+            {% endif %}
+          {% endif %}
         </div>
-        {% if usage_timeline_window %}
-        <div class="d-flex justify-content-between small text-muted mt-3">
-          <span>{{ usage_timeline_window.0 }}</span>
-          <span>{{ usage_timeline_window.1 }}</span>
-        </div>
-        {% endif %}
-      </div>
-      {% else %}
-      <div class="alert alert-info" role="alert">
-        {% trans "Live chart data will appear when sessions are active." %}
-      </div>
-      {% endif %}
-      {% endif %}
+      </section>
     </div>
   </div>
 
   {% if show_connector_overview_cards %}
-  <h2 class="h5">{% trans "Connectors" %}</h2>
-  <div class="row g-3 mb-4">
-    {% for item in connector_overview %}
-    <div class="col-12 col-lg-6">
-      <div class="border rounded-3 p-3 h-100">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <span class="fw-semibold">{{ item.label }}</span>
-          <span class="badge" style="background-color: {{ item.color }};">{{ item.status }}</span>
-        </div>
-        {% if item.last_error_code or item.last_status_timestamp or item.last_status_vendor_info %}
-        <div class="mb-2">
-          {% if item.last_error_code %}<p class="mb-1 text-muted"><small>{% trans "Error code" %}: {{ item.last_error_code }}</small></p>{% endif %}
-          {% if item.last_status_timestamp %}<p class="mb-1 text-muted"><small>{% trans "Last status update" %}: {{ item.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</small></p>{% endif %}
-          {% if item.last_status_vendor_info %}
-            {% if item.last_status_vendor_info.vendorId %}<p class="mb-1 text-muted"><small>{% trans "Vendor" %}: {{ item.last_status_vendor_info.vendorId }}</small></p>{% endif %}
-            {% if item.last_status_vendor_info.info %}<p class="mb-1 text-muted"><small>{% trans "Info" %}: {{ item.last_status_vendor_info.info }}</small></p>{% endif %}
+  <section class="mb-4">
+    <h2 class="h5">{% trans "Connectors" %}</h2>
+    <div class="row g-3">
+      {% for item in connector_overview %}
+      <div class="col-12 col-lg-6">
+        <div class="border rounded-3 p-3 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-semibold">{{ item.label }}</span>
+            <span class="badge" style="background-color: {{ item.color }};">{{ item.status }}</span>
+          </div>
+          {% if item.last_error_code or item.last_status_timestamp or item.last_status_vendor_info %}
+          <div class="mb-2">
+            {% if item.last_error_code %}<p class="mb-1 text-muted"><small>{% trans "Error code" %}: {{ item.last_error_code }}</small></p>{% endif %}
+            {% if item.last_status_timestamp %}<p class="mb-1 text-muted"><small>{% trans "Last status update" %}: {{ item.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</small></p>{% endif %}
+            {% if item.last_status_vendor_info %}
+              {% if item.last_status_vendor_info.vendorId %}<p class="mb-1 text-muted"><small>{% trans "Vendor" %}: {{ item.last_status_vendor_info.vendorId }}</small></p>{% endif %}
+              {% if item.last_status_vendor_info.info %}<p class="mb-1 text-muted"><small>{% trans "Info" %}: {{ item.last_status_vendor_info.info }}</small></p>{% endif %}
+            {% endif %}
+          </div>
+          {% endif %}
+          {% if item.tx %}
+          <p class="mb-1"><small>{% trans "Energy" %}: {{ item.tx.kw|floatformat:2 }} kW</small></p>
+          {% if date_view == "received" %}
+          {% with display_start=item.tx.received_start_time|default:item.tx.start_time %}
+          <p class="mb-0 text-muted"><small>{% trans "Started" %}: {{ display_start|date:"SHORT_DATETIME_FORMAT" }}</small></p>
+          {% endwith %}
+          {% else %}
+          <p class="mb-0 text-muted"><small>{% trans "Started" %}: {{ item.tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</small></p>
+          {% endif %}
+          {% else %}
+          <p class="mb-0 text-muted"><small>{% trans "No active transaction" %}</small></p>
           {% endif %}
         </div>
-        {% endif %}
-        {% if item.tx %}
-        <p class="mb-1"><small>{% trans "Energy" %}: {{ item.tx.kw|floatformat:2 }} kW</small></p>
-        {% if date_view == "received" %}
-        {% with display_start=item.tx.received_start_time|default:item.tx.start_time %}
-        <p class="mb-0 text-muted"><small>{% trans "Started" %}: {{ display_start|date:"SHORT_DATETIME_FORMAT" }}</small></p>
-        {% endwith %}
-        {% else %}
-        <p class="mb-0 text-muted"><small>{% trans "Started" %}: {{ item.tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</small></p>
-        {% endif %}
-        {% else %}
-        <p class="mb-0 text-muted"><small>{% trans "No active transaction" %}</small></p>
-        {% endif %}
       </div>
+      {% endfor %}
     </div>
-    {% endfor %}
-  </div>
+  </section>
   {% endif %}
 
-  <div class="d-flex flex-column flex-md-row gap-2 justify-content-between align-items-md-center">
-    <h2 class="mb-0">{% trans "Sessions" %}</h2>
-    {% if date_toggle_links %}
-    <div class="btn-group" role="group" aria-label="{% trans 'Date display' %}">
-      {% for link in date_toggle_links %}
-      <a class="btn btn-outline-secondary{% if link.active %} active{% endif %}" href="{{ link.url }}">{{ link.label }}</a>
-      {% endfor %}
+  <section class="status-card card shadow-sm border-0 mb-3">
+    <div class="card-body">
+      <div class="d-flex flex-column flex-md-row gap-2 justify-content-between align-items-md-center mb-2">
+        <h2 class="h5 mb-0">{% trans "Sessions" %}</h2>
+        {% if date_toggle_links %}
+        <div class="btn-group" role="group" aria-label="{% trans 'Date display' %}">
+          {% for link in date_toggle_links %}
+          <a class="btn btn-outline-secondary{% if link.active %} active{% endif %}" href="{{ link.url }}">{{ link.label }}</a>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      <div class="status-table-wrap">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-light status-table-head">
+            <tr>
+              <th>{% trans "Start" %}</th>
+              {% if charger.connector_id is None %}
+              <th>{% trans "Connector" %}</th>
+              {% endif %}
+              <th>{% trans "Stop" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
+              <th>{% trans "ID" %}</th>
+              <th>{% trans "Stop reason" %}</th>
+              <th>{% trans "Energy (kW)" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tx in transactions %}
+            <tr class="text-body-secondary status-row-subdued">
+              {% if date_view == "received" %}
+              <td>{{ tx.received_start_time|default:tx.start_time|date:"Y-m-d H:i" }}</td>
+              {% else %}
+              <td>{{ tx.start_time|date:"Y-m-d H:i" }}</td>
+              {% endif %}
+              {% if charger.connector_id is None %}
+              <td>{{ tx.charger.connector_label|default:tx.charger.connector_letter|default:tx.charger.connector_id }}</td>
+              {% endif %}
+              {% if date_view == "received" %}<td>{{ tx.received_stop_time|default:tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>{% else %}<td>{{ tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>{% endif %}
+              <td>
+                {% if can_view_transaction_links %}
+                <a class="link-secondary" href="?session={{ tx.id }}{% if session_query %}&{{ session_query }}{% endif %}">{{ tx.id }}</a>
+                {% else %}
+                {{ tx.id }}
+                {% endif %}
+              </td>
+              <td>{{ tx.stop_reason|default:"-" }}</td>
+              <td>{{ tx.kw|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="{% if charger.connector_id is None %}6{% else %}5{% endif %}">
+                <div class="status-empty py-3">
+                  <div class="status-empty-icon" aria-hidden="true">🧾</div>
+                  <p class="mb-0">{% trans "No sessions found." %}</p>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
-    {% endif %}
-  </div>
-  <table class="table">
-    <thead>
-      <tr>
-        <th>{% trans "Start" %}</th>
-        {% if charger.connector_id is None %}
-        <th>{% trans "Connector" %}</th>
-        {% endif %}
-        <th>{% trans "Stop" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
-        <th>{% trans "ID" %}</th>
-        <th>{% trans "Stop reason" %}</th>
-        <th>{% trans "Energy (kW)" %}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for tx in transactions %}
-      <tr class="text-body-secondary">
-        {% if date_view == "received" %}
-        <td>{{ tx.received_start_time|default:tx.start_time|date:"Y-m-d H:i" }}</td>
-        {% else %}
-        <td>{{ tx.start_time|date:"Y-m-d H:i" }}</td>
-        {% endif %}
-        {% if charger.connector_id is None %}
-        <td>{{ tx.charger.connector_label|default:tx.charger.connector_letter|default:tx.charger.connector_id }}</td>
-        {% endif %}
-        {% if date_view == "received" %}<td>{{ tx.received_stop_time|default:tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>{% else %}<td>{{ tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>{% endif %}
-        <td>
-          {% if can_view_transaction_links %}
-          <a class="link-secondary" href="?session={{ tx.id }}{% if session_query %}&{{ session_query }}{% endif %}">{{ tx.id }}</a>
-          {% else %}
-          {{ tx.id }}
-          {% endif %}
-        </td>
-        <td>{{ tx.stop_reason|default:"-" }}</td>
-        <td>{{ tx.kw|floatformat:2 }}</td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="{% if charger.connector_id is None %}6{% else %}5{% endif %}">{% trans "No sessions found." %}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <h2>{% trans "Events" %}</h2>
-  <table class="table">
-    <thead>
-      <tr>
-        <th>{% trans "Date" %}</th>
-        <th>{% trans "Severity" %}</th>
-        <th>{% trans "ID" %}</th>
-        <th>{% trans "Event" %}</th>
-        <th>{% trans "Details" %}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for event in non_transaction_events %}
-      <tr class="text-body-secondary">
-        <td>{{ event.timestamp|date:"Y-m-d H:i" }}</td>
-        <td>
-          <span class="d-inline-flex align-items-center gap-2">
-            <span aria-hidden="true" style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background-color: {{ event.severity_color }};"></span>
-            <span>{{ event.severity_label }}</span>
-          </span>
-        </td>
-        <td>
-          {% if event.event_id %}
-            {% if can_view_transaction_links %}
-            <a class="link-secondary" href="{{ transactions_admin_url }}{{ event.event_id }}/change/">{{ event.event_id }}</a>
-            {% else %}
-            {{ event.event_id }}
-            {% endif %}
-          {% else %}
-          -
-          {% endif %}
-        </td>
-        <td>{{ event.event }}</td>
-        <td>{{ event.details }}</td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="5">{% trans "No events found." %}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  </section>
+
+  <section class="status-card card shadow-sm border-0 mb-3">
+    <div class="card-body">
+      <h2 class="h5 mb-2">{% trans "Events" %}</h2>
+      <div class="status-table-wrap">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-light status-table-head">
+            <tr>
+              <th>{% trans "Date" %}</th>
+              <th>{% trans "Severity" %}</th>
+              <th>{% trans "ID" %}</th>
+              <th>{% trans "Event" %}</th>
+              <th>{% trans "Details" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for event in non_transaction_events %}
+            <tr class="text-body-secondary status-row-subdued">
+              <td>{{ event.timestamp|date:"Y-m-d H:i" }}</td>
+              <td>
+                <span class="d-inline-flex align-items-center gap-2">
+                  <span aria-hidden="true" style="display:inline-block;width:0.625rem;height:0.625rem;border-radius:50%;background-color: {{ event.severity_color }};"></span>
+                  <span>{{ event.severity_label }}</span>
+                </span>
+              </td>
+              <td>
+                {% if event.event_id %}
+                  {% if can_view_transaction_links %}
+                  <a class="link-secondary" href="{{ transactions_admin_url }}{{ event.event_id }}/change/">{{ event.event_id }}</a>
+                  {% else %}
+                  {{ event.event_id }}
+                  {% endif %}
+                {% else %}
+                -
+                {% endif %}
+              </td>
+              <td>{{ event.event }}</td>
+              <td>{{ event.details }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5">
+                <div class="status-empty py-3">
+                  <div class="status-empty-icon" aria-hidden="true">📭</div>
+                  <p class="mb-0">{% trans "No events found." %}</p>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <div class="d-flex align-items-center gap-3">
     <a href="{{ page_url }}">{% trans "Landing page" %}</a>
     <a href="{{ search_url }}">{% trans "Search" %}</a>
@@ -416,7 +368,7 @@
     <a href="{{ transactions_admin_url }}">{% trans "Transactions" %}</a>
     {% endif %}
   </div>
- </div>
+</div>
 {% if show_chart %}
 <script src="{% static 'core/vendor/chart.umd.min.js' %}" data-chartjs="true"></script>
 <script>

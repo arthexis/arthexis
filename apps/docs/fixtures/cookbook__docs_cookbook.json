@@ -74,16 +74,6 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "slug": "ocpp-roadmap",
-      "title": "OCPP Roadmap Cookbook",
-      "file_name": "ocpp-roadmap.md"
-    }
-  },
-  {
-    "model": "docs.cookbook",
-    "fields": {
-      "is_seed_data": true,
-      "is_deleted": false,
       "slug": "odoo-integrations",
       "title": "Odoo Integrations Cookbook",
       "file_name": "odoo-integrations.md"

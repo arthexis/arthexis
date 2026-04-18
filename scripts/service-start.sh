@@ -185,16 +185,21 @@ CELERY_EMBEDDED=false
 CELERY_WORKER_PID=""
 CELERY_BEAT_PID=""
 LCD_PROCESS_PID=""
+LCD_STARTED=false
 DJANGO_SERVER_PID=""
 cleanup_background_processes() {
+  local lcd_pid="${LCD_PROCESS_PID:-}"
   if [ -n "$CELERY_WORKER_PID" ]; then
     kill "$CELERY_WORKER_PID" 2>/dev/null || true
   fi
   if [ -n "$CELERY_BEAT_PID" ]; then
     kill "$CELERY_BEAT_PID" 2>/dev/null || true
   fi
-  if [ -n "$LCD_PROCESS_PID" ]; then
-    kill "$LCD_PROCESS_PID" 2>/dev/null || true
+  if [ -z "$lcd_pid" ] && [ -f "$LCD_PID_FILE" ]; then
+    lcd_pid=$(tr -d '\r\n' < "$LCD_PID_FILE")
+  fi
+  if [ -n "$lcd_pid" ]; then
+    kill "$lcd_pid" 2>/dev/null || true
   fi
   if [ -n "$DJANGO_SERVER_PID" ]; then
     kill "$DJANGO_SERVER_PID" 2>/dev/null || true
@@ -205,6 +210,17 @@ cleanup_background_processes() {
   clear_pid_files
 }
 trap cleanup_background_processes EXIT
+
+start_embedded_lcd_if_needed() {
+  if [ "$LCD_EMBEDDED" != true ] || [ "$LCD_STARTED" = true ]; then
+    return 0
+  fi
+
+  python -m apps.screens.lcd_screen.runner &
+  LCD_PROCESS_PID=$!
+  LCD_STARTED=true
+  record_pid_file "$LCD_PROCESS_PID" "$LCD_PID_FILE"
+}
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --port)
@@ -287,6 +303,37 @@ STATIC_HASH=""
 STORED_HASH=""
 [ -f "$STATIC_MD5_FILE" ] && STORED_HASH=$(cat "$STATIC_MD5_FILE")
 
+resolve_collectstatic_policy() {
+  local configured_policy="${ARTHEXIS_COLLECTSTATIC_POLICY:-}"
+
+  if [ -z "$configured_policy" ]; then
+    echo "apply"
+    return 0
+  fi
+
+  case "${configured_policy,,}" in
+    apply|check|skip)
+      echo "${configured_policy,,}"
+      ;;
+    *)
+      echo "Unsupported ARTHEXIS_COLLECTSTATIC_POLICY value '${configured_policy}'. Expected one of: apply, check, skip." >&2
+      return 1
+      ;;
+  esac
+}
+
+if [ "$FORCE_COLLECTSTATIC" = true ]; then
+  if [ -n "${ARTHEXIS_COLLECTSTATIC_POLICY:-}" ] && [ "${ARTHEXIS_COLLECTSTATIC_POLICY,,}" != "apply" ]; then
+    echo "Forcing collectstatic due to --force-collectstatic (overriding ARTHEXIS_COLLECTSTATIC_POLICY=${ARTHEXIS_COLLECTSTATIC_POLICY})."
+  fi
+  COLLECTSTATIC_POLICY="apply"
+else
+  COLLECTSTATIC_POLICY="$(resolve_collectstatic_policy)"
+fi
+
+if [ "$COLLECTSTATIC_POLICY" = "skip" ]; then
+  echo "Skipping collectstatic (ARTHEXIS_COLLECTSTATIC_POLICY=skip)."
+else
 if [ "$FORCE_COLLECTSTATIC" = false ]; then
   set +e
   STATIC_HASH=$(arthexis_staticfiles_snapshot_check "$STATIC_MD5_FILE" "$STATIC_META_FILE")
@@ -305,6 +352,12 @@ fi
 
 if [ -z "$STATIC_HASH" ]; then
   if ! STATIC_HASH=$(arthexis_staticfiles_compute_hash "$STATIC_MD5_FILE" "$STATIC_META_FILE" "$FORCE_COLLECTSTATIC"); then
+    if [ "$COLLECTSTATIC_POLICY" = "check" ]; then
+      echo "Static files preflight failed: unable to compute hash while ARTHEXIS_COLLECTSTATIC_POLICY=check." >&2
+      arthexis_staticfiles_clear_staged_lock
+      exit 1
+    fi
+
     echo "Failed to compute static files hash; running collectstatic."
     arthexis_staticfiles_clear_staged_lock
     python manage.py collectstatic --noinput
@@ -313,6 +366,12 @@ if [ -z "$STATIC_HASH" ]; then
 fi
 
 if [ "$FORCE_COLLECTSTATIC" = true ] || [ -z "$STATIC_HASH" ] || [ "$STATIC_HASH" != "$STORED_HASH" ]; then
+  if [ "$COLLECTSTATIC_POLICY" = "check" ]; then
+    echo "Collectstatic preflight failed: static assets are stale and policy is check-only." >&2
+    arthexis_staticfiles_clear_staged_lock
+    exit 1
+  fi
+
   if python manage.py collectstatic --noinput; then
     arthexis_staticfiles_commit_staged_lock "$STATIC_MD5_FILE" "$STATIC_META_FILE"
   else
@@ -323,6 +382,7 @@ if [ "$FORCE_COLLECTSTATIC" = true ] || [ -z "$STATIC_HASH" ] || [ "$STATIC_HASH
 else
   arthexis_staticfiles_clear_staged_lock
   echo "Static files unchanged. Skipping collectstatic."
+fi
 fi
 
 arthexis_suite_reachable() {
@@ -382,7 +442,7 @@ wait_for_suite_startup() {
     fi
 
     if arthexis_suite_reachable "$port"; then
-      echo "Suite is reachable at http://localhost:$port"
+      arthexis_service_access_message_for_port "localhost" "$port"
       return 0
     fi
 
@@ -514,12 +574,6 @@ elif [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && \
   arthexis_start_systemd_unit_if_present "celery-beat-${SERVICE_NAME}.service"
 fi
 
-if [ "$LCD_EMBEDDED" = true ]; then
-  python -m apps.screens.lcd_screen.runner &
-  LCD_PROCESS_PID=$!
-  record_pid_file "$LCD_PROCESS_PID" "$LCD_PID_FILE"
-fi
-
 if [ "$AWAIT_START" = true ]; then
   if [ "$RELOAD" = true ]; then
     python manage.py runserver 0.0.0.0:"$PORT" "${RUNSERVER_EXTRA_ARGS[@]}" &
@@ -530,6 +584,7 @@ if [ "$AWAIT_START" = true ]; then
   record_pid_file "$DJANGO_SERVER_PID" "$DJANGO_PID_FILE"
 
   if wait_for_suite_startup "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
+    start_embedded_lcd_if_needed
     record_startup_duration 0
     arthexis_log_suite_uptime "$BASE_DIR" || true
     wait "$DJANGO_SERVER_PID"
@@ -547,6 +602,7 @@ else
   record_pid_file "$DJANGO_SERVER_PID" "$DJANGO_PID_FILE"
   (
     if wait_for_suite_startup "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
+      start_embedded_lcd_if_needed
       record_startup_duration 0
       arthexis_log_suite_uptime "$BASE_DIR" || true
     else

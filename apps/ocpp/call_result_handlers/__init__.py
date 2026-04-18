@@ -1,18 +1,9 @@
-"""Facade and compatibility exports for OCPP call result handling."""
+"""Minimal package API for OCPP call result handling."""
 
 from __future__ import annotations
 
-from .authorization import *
-from .certificates import *
-from .common import CallResultContext, HandlerContext, build_context
-from .configuration import *
-from .diagnostics import *
-from .firmware import *
-from .profiles import *
-from .registry import CALL_RESULT_HANDLER_REGISTRY, build_legacy_registry
-from .transactions import *
-
-CALL_RESULT_HANDLERS = build_legacy_registry()
+from .common import CallResultContext, build_context as _build_context
+from .registry import CALL_RESULT_HANDLER_REGISTRY
 
 
 async def dispatch_call_result(
@@ -34,5 +25,12 @@ async def dispatch_call_result(
     handler = CALL_RESULT_HANDLER_REGISTRY.get(action)
     if not handler:
         return False
-    context = build_context(consumer, message_id, metadata, payload_data, log_key)
+    context = _build_context(consumer, message_id, metadata, payload_data, log_key)
     return await handler(context)
+
+
+__all__ = [
+    "CALL_RESULT_HANDLER_REGISTRY",
+    "CallResultContext",
+    "dispatch_call_result",
+]

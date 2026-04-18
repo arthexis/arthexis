@@ -48,6 +48,7 @@ ROOT_URLPATTERNS = [
         RedirectView.as_view(pattern_name="django-admindocs-docroot"),
     ),
     path("version/", core_views.version_info, name="version-info"),
+    path("core/impersonation/stop/", core_views.stop_impersonation, name="stop-impersonation"),
     path(
         admin_route("core/releases/<int:pk>/<str:action>/"),
         core_views.release_progress,

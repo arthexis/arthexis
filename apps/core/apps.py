@@ -369,6 +369,44 @@ def _configure_lock_dependent_tasks(config):
         except (OperationalError, ProgrammingError):
             return
 
+    def migrate_maintenance_task_names(**kwargs):
+        del kwargs
+        try:  # pragma: no cover - optional dependency
+            from django_celery_beat.models import PeriodicTask, PeriodicTasks
+        except ImportError:
+            return
+
+        legacy_to_canonical_task_names = {
+            "apps.core.tasks.poll_emails": "apps.core.tasks.maintenance._poll_emails",
+            "apps.core.tasks.run_client_report_schedule": "apps.core.tasks.maintenance._run_client_report_schedule",
+            "apps.core.tasks.run_release_data_transform": "apps.core.tasks.maintenance._run_release_data_transform",
+            "apps.core.tasks.run_scheduled_release": "apps.core.tasks.maintenance._run_scheduled_release",
+            "apps.core.tasks.maintenance.poll_emails": "apps.core.tasks.maintenance._poll_emails",
+            "apps.core.tasks.maintenance.run_client_report_schedule": "apps.core.tasks.maintenance._run_client_report_schedule",
+            "apps.core.tasks.maintenance.run_release_data_transform": "apps.core.tasks.maintenance._run_release_data_transform",
+            "apps.core.tasks.maintenance.run_scheduled_release": "apps.core.tasks.maintenance._run_scheduled_release",
+        }
+
+        try:
+            if not PeriodicTask.objects.filter(
+                task__in=legacy_to_canonical_task_names
+            ).exists():
+                return
+
+            updated = False
+            for legacy_name, canonical_name in legacy_to_canonical_task_names.items():
+                if (
+                    PeriodicTask.objects.filter(task=legacy_name).update(
+                        task=canonical_name
+                    )
+                    > 0
+                ):
+                    updated = True
+            if updated:
+                PeriodicTasks.update_changed()
+        except (OperationalError, ProgrammingError):
+            return
+
     def ensure_email_collector_task(**kwargs):
         try:  # pragma: no cover - optional dependency
             from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -388,7 +426,7 @@ def _configure_lock_dependent_tasks(config):
                 name=task_name,
                 defaults={
                     "interval": schedule,
-                    "task": "apps.core.tasks.maintenance.poll_emails",
+                    "task": "apps.core.tasks.maintenance._poll_emails",
                 },
             )
         except (OperationalError, ProgrammingError):
@@ -396,6 +434,7 @@ def _configure_lock_dependent_tasks(config):
 
     post_migrate.connect(ensure_email_collector_task, sender=config)
     post_migrate.connect(migrate_legacy_heartbeat_task, sender=config)
+    post_migrate.connect(migrate_maintenance_task_names, sender=config)
     post_migrate.connect(ensure_auto_upgrade_periodic_task, sender=config)
 
     auto_upgrade_dispatch_uid = "apps.core.apps.ensure_auto_upgrade_periodic_task"
@@ -412,6 +451,7 @@ def _configure_lock_dependent_tasks(config):
         try:
             ensure_auto_upgrade_periodic_task()
             migrate_legacy_heartbeat_task()
+            migrate_maintenance_task_names()
         finally:
             connection_created.disconnect(
                 receiver=ensure_auto_upgrade_on_connection,

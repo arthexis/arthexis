@@ -1,3 +1,4 @@
+import ast
 import json
 from pathlib import Path
 
@@ -15,6 +16,81 @@ def _load_spec() -> dict[str, list[str]]:
     return data["calls"]
 
 
+def _is_not_implemented_stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    statements = list(node.body)
+    if statements and isinstance(statements[0], ast.Expr) and isinstance(
+        statements[0].value, ast.Constant
+    ) and isinstance(statements[0].value.value, str):
+        statements = statements[1:]
+    if len(statements) != 1 or not isinstance(statements[0], ast.Raise):
+        return False
+    exception = statements[0].exc
+    if isinstance(exception, ast.Name):
+        return exception.id == "NotImplementedError"
+    if isinstance(exception, ast.Call):
+        func = exception.func
+        return isinstance(func, ast.Name) and func.id == "NotImplementedError"
+    return False
+
+
+def _collect_real_decorated_actions(app_dir: Path, protocol_slug: str) -> tuple[set[str], set[str]]:
+    """Collect protocol actions mapped to non-stub handlers for the target protocol."""
+
+    cp_to_csms: set[str] = set()
+    csms_to_cp: set[str] = set()
+
+    for path in app_dir.rglob("*.py"):
+        if "tests" in path.parts:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if _is_not_implemented_stub(node):
+                continue
+            for decorator in node.decorator_list:
+                if not isinstance(decorator, ast.Call):
+                    continue
+                func = decorator.func
+                is_protocol_call = (
+                    isinstance(func, ast.Name) and func.id == "protocol_call"
+                ) or (
+                    isinstance(func, ast.Attribute) and func.attr == "protocol_call"
+                )
+                if not is_protocol_call or len(decorator.args) < 3:
+                    continue
+                slug_arg = decorator.args[0]
+                direction_arg = decorator.args[1]
+                action_arg = decorator.args[2]
+                if not (
+                    isinstance(slug_arg, ast.Constant)
+                    and isinstance(slug_arg.value, str)
+                    and slug_arg.value == protocol_slug
+                ):
+                    continue
+                if not (
+                    isinstance(action_arg, ast.Constant) and isinstance(action_arg.value, str)
+                ):
+                    continue
+                if (
+                    isinstance(direction_arg, ast.Constant)
+                    and direction_arg.value == "cp_to_csms"
+                ) or (
+                    isinstance(direction_arg, ast.Attribute)
+                    and direction_arg.attr == "CP_TO_CSMS"
+                ):
+                    cp_to_csms.add(action_arg.value)
+                elif (
+                    isinstance(direction_arg, ast.Constant)
+                    and direction_arg.value == "csms_to_cp"
+                ) or (
+                    isinstance(direction_arg, ast.Attribute)
+                    and direction_arg.attr == "CSMS_TO_CP"
+                ):
+                    csms_to_cp.add(action_arg.value)
+    return cp_to_csms, csms_to_cp
+
+
 def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr=None) -> None:
     """Generate OCPP 2.0.1 coverage output and badge."""
     app_dir = Path(__file__).resolve().parents[1]
@@ -22,6 +98,9 @@ def run_coverage_ocpp201(*, badge_path=None, json_path=None, stdout=None, stderr
     spec = _load_spec()
     implemented_cp_to_csms = _implemented_cp_to_csms(app_dir)
     implemented_csms_to_cp = _implemented_csms_to_cp(app_dir)
+    real_cp_to_csms, real_csms_to_cp = _collect_real_decorated_actions(app_dir, "ocpp201")
+    implemented_cp_to_csms |= real_cp_to_csms
+    implemented_csms_to_cp |= real_csms_to_cp
     spec_cp_to_csms = set(spec["cp_to_csms"])
     spec_csms_to_cp = set(spec["csms_to_cp"])
     cp_to_csms_coverage = sorted(spec_cp_to_csms & implemented_cp_to_csms)

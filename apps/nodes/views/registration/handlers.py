@@ -19,12 +19,11 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from config.request_utils import is_https_request
-from utils.api import api_login_required
-
 from apps.nodes.logging import get_register_visitor_logger
 from apps.nodes.models import Node, NodeRole, node_information_updated
 from apps.nodes.services.enrollment import submit_public_key
+from config.request_utils import is_https_request
+from utils.api import api_login_required
 
 from .auth import (
     _enforce_authentication,
@@ -45,9 +44,18 @@ from .network import (
     iter_port_fallback_urls,
 )
 from .network_utils import _get_route_address
-from .payload import NodeRegistrationPayload, parse_registration_request, validate_payload
+from .payload import (
+    NodeRegistrationPayload,
+    parse_registration_request,
+    validate_payload,
+)
 from .policy import is_allowed_visitor_url
-from .sanitization import redact_mac, redact_network_value, redact_token_value, redact_url_token
+from .sanitization import (
+    redact_mac,
+    redact_network_value,
+    redact_token_value,
+    redact_url_token,
+)
 
 logger = logging.getLogger("apps.nodes.views")
 registration_logger = get_register_visitor_logger()
@@ -68,6 +76,15 @@ def _extract_response_detail(response) -> str:
     if isinstance(payload, Mapping) and payload.get("detail"):
         return str(payload["detail"])
     return decoded_body
+
+
+def _parse_json_response_mapping(response) -> Mapping[str, object]:
+    """Parse a JSON response body as a mapping."""
+
+    payload = json.loads(response.content.decode() or "{}")
+    if not isinstance(payload, Mapping):
+        raise ValueError("expected JSON object")
+    return payload
 
 
 def _sign_token_for_node(data: dict[str, object], node: Node, token: str):
@@ -92,7 +109,9 @@ def _sign_token_for_node(data: dict[str, object], node: Node, token: str):
         return
 
     try:
-        private_key = serialization.load_pem_private_key(private_key_bytes, password=None)
+        private_key = serialization.load_pem_private_key(
+            private_key_bytes, password=None
+        )
     except (TypeError, ValueError) as exc:
         registration_logger.warning(
             "Visitor registration: unable to parse signing key for %s",
@@ -193,9 +212,7 @@ def node_info(request):
     advertised_port = node.port or preferred_port
     base_domain = node.get_base_domain()
     base_site_profile = getattr(node.base_site, "profile", None)
-    base_site_requires_https = bool(
-        getattr(base_site_profile, "require_https", False)
-    )
+    base_site_requires_https = bool(getattr(base_site_profile, "require_https", False))
     if base_domain:
         advertised_port = node._preferred_site_port(True)
     if host_domain and not base_domain:
@@ -235,8 +252,6 @@ def node_info(request):
         "ipv6_address": node.ipv6_address,
         "port": advertised_port,
         "mac_address": node.mac_address,
-        "host_instance_id": node.host_instance_id,
-        "uuid": str(node.uuid),
         "public_key": node.public_key,
         "features": list(node.features.values_list("slug", flat=True)),
         "role": node.role.name if node.role_id else "",
@@ -322,7 +337,14 @@ def _refresh_last_updated(node: Node, update_fields: list[str]):
         update_fields.append("last_updated")
 
 
-def _log_registration_event(status: str, payload: NodeRegistrationPayload, request, *, detail: str | None = None, level: int = logging.INFO):
+def _log_registration_event(
+    status: str,
+    payload: NodeRegistrationPayload,
+    request,
+    *,
+    detail: str | None = None,
+    level: int = logging.INFO,
+):
     """Record registration lifecycle logs with redacted identifiers."""
 
     registration_logger.log(
@@ -349,7 +371,10 @@ def _deactivate_user_if_requested(request, deactivate_user: bool):
 
 
 def _is_self_host_conflict_error(
-    error: IntegrityError, *, relation_value: Node.Relation | None, host_instance_id: str
+    error: IntegrityError,
+    *,
+    relation_value: Node.Relation | None,
+    host_instance_id: str,
 ) -> bool:
     """Return True when a write failed due to SELF host uniqueness conflict."""
 
@@ -364,7 +389,20 @@ def _is_self_host_conflict_error(
     )
 
 
-def _update_existing_node(node: Node, *, payload: NodeRegistrationPayload, relation_value: Node.Relation | None, address_value: str, ipv4_value: str, ipv6_value: str, verified: bool, desired_role, trusted_allowed: bool, base_site: Site | None, request):
+def _update_existing_node(
+    node: Node,
+    *,
+    payload: NodeRegistrationPayload,
+    relation_value: Node.Relation | None,
+    address_value: str,
+    ipv4_value: str,
+    ipv6_value: str,
+    verified: bool,
+    desired_role,
+    trusted_allowed: bool,
+    base_site: Site | None,
+    request,
+):
     """Update an existing node while preserving response compatibility."""
 
     previous_version = (node.installed_version or "").strip()
@@ -448,9 +486,17 @@ def _update_existing_node(node: Node, *, payload: NodeRegistrationPayload, relat
         current_revision=(node.installed_revision or "").strip(),
         request=request,
     )
-    _update_features(node, payload.features, allow_update=verified or request.user.is_authenticated)
+    _update_features(
+        node, payload.features, allow_update=verified or request.user.is_authenticated
+    )
     _deactivate_user_if_requested(request, payload.deactivate_user)
-    return JsonResponse({"id": node.id, "uuid": str(node.uuid), "detail": f"Node already exists (id: {node.id})"})
+    return JsonResponse(
+        {
+            "id": node.id,
+            "uuid": str(node.uuid),
+            "detail": f"Node already exists (id: {node.id})",
+        }
+    )
 
 
 @csrf_exempt
@@ -467,7 +513,9 @@ def register_node(request):
     if request.method == "OPTIONS":
         return add_cors_headers(request, JsonResponse({"detail": "ok"}))
     if request.method != "POST":
-        return add_cors_headers(request, JsonResponse({"detail": "POST required"}, status=400))
+        return add_cors_headers(
+            request, JsonResponse({"detail": "POST required"}, status=400)
+        )
 
     ensure_authenticated_user(request)
     dto = parse_registration_request(request)
@@ -478,7 +526,9 @@ def register_node(request):
     validation = validate_payload(payload)
     validation_response = validation.to_response()
     if validation_response:
-        _log_registration_event("failed", payload, request, detail=validation.detail, level=logging.WARNING)
+        _log_registration_event(
+            "failed", payload, request, detail=validation.detail, level=logging.WARNING
+        )
         return add_cors_headers(request, validation_response)
 
     verified, signature_error = _verify_signature(payload)
@@ -487,25 +537,49 @@ def register_node(request):
         signature_error = None
 
     if signature_error:
-        _log_registration_event("failed", payload, request, detail=_extract_response_detail(signature_error), level=logging.WARNING)
+        _log_registration_event(
+            "failed",
+            payload,
+            request,
+            detail=_extract_response_detail(signature_error),
+            level=logging.WARNING,
+        )
         return add_cors_headers(request, signature_error)
 
     auth_error = _enforce_authentication(request, verified=verified)
     if auth_error:
-        _log_registration_event("denied", payload, request, detail=_extract_response_detail(auth_error), level=logging.WARNING)
+        _log_registration_event(
+            "denied",
+            payload,
+            request,
+            detail=_extract_response_detail(auth_error),
+            level=logging.WARNING,
+        )
         return add_cors_headers(request, auth_error)
 
     mac_address, address_value, ipv6_value, ipv4_value = _normalize_addresses(payload)
-    trusted_allowed = bool(payload.trusted_requested) and (verified or request.user.is_authenticated)
-    desired_role = _resolve_role(payload.role_name, can_assign=verified or request.user.is_authenticated)
-    base_site = Site.objects.filter(domain__iexact=payload.base_site_domain).first() if payload.base_site_domain else None
+    trusted_allowed = bool(payload.trusted_requested) and (
+        verified or request.user.is_authenticated
+    )
+    desired_role = _resolve_role(
+        payload.role_name, can_assign=verified or request.user.is_authenticated
+    )
+    base_site = (
+        Site.objects.filter(domain__iexact=payload.base_site_domain).first()
+        if payload.base_site_domain
+        else None
+    )
     existing_node = Node.objects.filter(mac_address=mac_address).first()
     relation_value = payload.relation_value
     if relation_value == Node.Relation.SELF and payload.host_instance_id:
-        other_self_exists = Node.objects.filter(
-            current_relation=Node.Relation.SELF,
-            host_instance_id=payload.host_instance_id,
-        ).exclude(mac_address=mac_address).exists()
+        other_self_exists = (
+            Node.objects.filter(
+                current_relation=Node.Relation.SELF,
+                host_instance_id=payload.host_instance_id,
+            )
+            .exclude(mac_address=mac_address)
+            .exists()
+        )
         if other_self_exists:
             relation_value = Node.Relation.SIBLING
 
@@ -566,7 +640,9 @@ def register_node(request):
     if payload.mesh_enrollment_state is not None:
         defaults["mesh_enrollment_state"] = payload.mesh_enrollment_state
     if payload.mesh_key_fingerprint_metadata:
-        defaults["mesh_key_fingerprint_metadata"] = payload.mesh_key_fingerprint_metadata
+        defaults["mesh_key_fingerprint_metadata"] = (
+            payload.mesh_key_fingerprint_metadata
+        )
     if payload.last_mesh_heartbeat is not None:
         defaults["last_mesh_heartbeat"] = payload.last_mesh_heartbeat
     if payload.mesh_capability_flags:
@@ -627,10 +703,14 @@ def register_node(request):
                 base_site=base_site,
                 request=request,
             )
-        _log_registration_event("succeeded", payload, request, detail=f"updated node {node.id}")
+        _log_registration_event(
+            "succeeded", payload, request, detail=f"updated node {node.id}"
+        )
         return add_cors_headers(request, response)
 
-    _update_features(node, payload.features, allow_update=verified or request.user.is_authenticated)
+    _update_features(
+        node, payload.features, allow_update=verified or request.user.is_authenticated
+    )
     node_information_updated.send(
         sender=Node,
         node=node,
@@ -642,7 +722,9 @@ def register_node(request):
     )
     _deactivate_user_if_requested(request, payload.deactivate_user)
     response = JsonResponse({"id": node.id, "uuid": str(node.uuid)})
-    _log_registration_event("succeeded", payload, request, detail=f"created node {node.id}")
+    _log_registration_event(
+        "succeeded", payload, request, detail=f"created node {node.id}"
+    )
     return add_cors_headers(request, response)
 
 
@@ -656,11 +738,7 @@ def submit_enrollment_public_key(request):
     mac_address = (payload.mac_address or "").strip().lower()
     if not mac_address or not payload.enrollment_token or not payload.public_key:
         return JsonResponse(
-            {
-                "detail": (
-                    "mac_address, enrollment_token, and public_key are required"
-                )
-            },
+            {"detail": ("mac_address, enrollment_token, and public_key are required")},
             status=400,
         )
 
@@ -689,7 +767,9 @@ def submit_enrollment_public_key(request):
     )
 
 
-def _build_registration_payload(info: Mapping[str, object] | None, relation: str | None):
+def _build_registration_payload(
+    info: Mapping[str, object] | None, relation: str | None
+):
     """Build host/visitor relay payload preserving legacy fields."""
 
     payload = {
@@ -728,7 +808,9 @@ def _build_registration_payload(info: Mapping[str, object] | None, relation: str
     return payload
 
 
-def _apply_token_signature(payload: dict, info: Mapping[str, object] | None, token: str):
+def _apply_token_signature(
+    payload: dict, info: Mapping[str, object] | None, token: str
+):
     """Copy token signature from info payload when present."""
 
     if info and token and info.get("token_signature"):
@@ -759,7 +841,10 @@ def _try_proxy_json_request(
             attempt += 1
             try:
                 parsed_target = urlsplit(target.url)
-                session.mount(f"{parsed_target.scheme}://{parsed_target.netloc}", HostNameSSLAdapter(target.server_hostname))
+                session.mount(
+                    f"{parsed_target.scheme}://{parsed_target.netloc}",
+                    HostNameSSLAdapter(target.server_hostname),
+                )
                 if method == "post":
                     response = session.post(
                         target.url,
@@ -825,31 +910,57 @@ def register_visitor_proxy(request):
     token = str(data.get("token") or "").strip()
 
     if not visitor_info_url or not visitor_register_url:
-        return JsonResponse({"detail": "visitor info/register URLs required"}, status=400)
-    if not is_allowed_visitor_url(visitor_info_url) or not is_allowed_visitor_url(visitor_register_url):
+        return JsonResponse(
+            {"detail": "visitor info/register URLs required"}, status=400
+        )
+    if not is_allowed_visitor_url(visitor_info_url) or not is_allowed_visitor_url(
+        visitor_register_url
+    ):
         return JsonResponse({"detail": "invalid visitor info/register URL"}, status=400)
-    if not (get_public_targets(visitor_info_url) and get_public_targets(visitor_register_url)):
-        return JsonResponse({"detail": "visitor info/register URL must resolve to a public IP address"}, status=400)
+    if not (
+        get_public_targets(visitor_info_url)
+        and get_public_targets(visitor_register_url)
+    ):
+        return JsonResponse(
+            {"detail": "visitor info/register URL must resolve to a public IP address"},
+            status=400,
+        )
 
     visitor_info_url = append_token(visitor_info_url, token)
     factory = RequestFactory()
     host_info_request = factory.get("/nodes/info/", {"token": token} if token else {})
     host_info_request.user = request.user
     host_info_request._cached_user = request.user
-    host_info = json.loads(node_info(host_info_request).content.decode() or "{}")
+    try:
+        host_info = _parse_json_response_mapping(node_info(host_info_request))
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return JsonResponse({"detail": "host info unavailable"}, status=502)
 
     session = requests.Session()
     timeout_seconds = 45
 
-    visitor_info, visitor_info_url, last_error, info_attempt = _try_proxy_json_request(
-        session=session,
-        url=visitor_info_url,
-        timeout_seconds=timeout_seconds,
-        method="get",
-        log_prefix="Visitor registration proxy",
-        request_error_message="info request failed",
-        response_error_message="info response json parse failed",
-    )
+    try:
+        visitor_info, visitor_info_url, last_error, info_attempt = (
+            _try_proxy_json_request(
+                session=session,
+                url=visitor_info_url,
+                timeout_seconds=timeout_seconds,
+                method="get",
+                log_prefix="Visitor registration proxy",
+                request_error_message="info request failed",
+                response_error_message="info response json parse failed",
+            )
+        )
+    except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
+        registration_logger.warning(
+            "Visitor registration proxy: unexpected visitor info proxy failure",
+            extra={
+                "target": redact_url_token(visitor_info_url),
+                "attempt": "visitor_info_proxy",
+                "exception_class": exc.__class__.__name__,
+            },
+        )
+        return JsonResponse({"detail": "visitor info unavailable"}, status=502)
     if visitor_info is None:
         registration_logger.warning(
             "Visitor registration proxy: unable to fetch visitor info from %s: %s",
@@ -858,34 +969,62 @@ def register_visitor_proxy(request):
             extra={
                 "target": redact_url_token(visitor_info_url),
                 "attempt": info_attempt,
-                "exception_class": (last_error.__class__.__name__ if last_error else ""),
+                "exception_class": (
+                    last_error.__class__.__name__ if last_error else ""
+                ),
             },
         )
         return JsonResponse({"detail": "visitor info unavailable"}, status=502)
 
     host_payload = _build_registration_payload(visitor_info, "Downstream")
     _apply_token_signature(host_payload, visitor_info, token)
-    host_register_request = factory.post("/nodes/register/", data=json.dumps(host_payload), content_type="application/json")
+    host_register_request = factory.post(
+        "/nodes/register/",
+        data=json.dumps(host_payload),
+        content_type="application/json",
+    )
     host_register_request.user = request.user
     host_register_request._cached_user = request.user
     host_register_response = register_node(host_register_request)
-    host_register_body = json.loads(host_register_response.content.decode() or "{}")
+    try:
+        host_register_body = _parse_json_response_mapping(host_register_response)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return JsonResponse({"detail": "host registration failed"}, status=502)
     if host_register_response.status_code != 200 or not host_register_body.get("id"):
-        return JsonResponse({"detail": host_register_body.get("detail") or "host registration failed"}, status=host_register_response.status_code or 400)
+        status_code = host_register_response.status_code or 400
+        if 200 <= status_code < 300:
+            status_code = 400
+        return JsonResponse(
+            {"detail": "host registration failed"},
+            status=status_code,
+        )
 
     visitor_payload = _build_registration_payload(host_info, "Upstream")
     _apply_token_signature(visitor_payload, host_info, token)
 
-    visitor_register_body, visitor_register_url, last_error, register_attempt = _try_proxy_json_request(
-        session=session,
-        url=visitor_register_url,
-        timeout_seconds=timeout_seconds,
-        method="post",
-        payload=visitor_payload,
-        log_prefix="Visitor registration proxy",
-        request_error_message="visitor notification request failed",
-        response_error_message="visitor response json parse failed",
-    )
+    try:
+        visitor_register_body, visitor_register_url, last_error, register_attempt = (
+            _try_proxy_json_request(
+                session=session,
+                url=visitor_register_url,
+                timeout_seconds=timeout_seconds,
+                method="post",
+                payload=visitor_payload,
+                log_prefix="Visitor registration proxy",
+                request_error_message="visitor notification request failed",
+                response_error_message="visitor response json parse failed",
+            )
+        )
+    except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
+        registration_logger.warning(
+            "Visitor registration proxy: unexpected visitor confirmation proxy failure",
+            extra={
+                "target": redact_url_token(visitor_register_url),
+                "attempt": "visitor_register_proxy",
+                "exception_class": exc.__class__.__name__,
+            },
+        )
+        return JsonResponse({"detail": "visitor confirmation failed"}, status=502)
     if visitor_register_body is None:
         registration_logger.warning(
             "Visitor registration proxy: unable to notify visitor at %s: %s",
@@ -894,17 +1033,32 @@ def register_visitor_proxy(request):
             extra={
                 "target": redact_url_token(visitor_register_url),
                 "attempt": register_attempt,
-                "exception_class": (last_error.__class__.__name__ if last_error else ""),
+                "exception_class": (
+                    last_error.__class__.__name__ if last_error else ""
+                ),
             },
         )
         return JsonResponse({"detail": "visitor confirmation failed"}, status=502)
 
+    visitor_id = visitor_register_body.get("id")
+    visitor_detail = (
+        "visitor confirmation accepted" if visitor_id else "visitor confirmation failed"
+    )
+
     return JsonResponse(
         {
-            "host": {"detail": host_register_body.get("detail", ""), "id": host_register_body.get("id")},
-            "visitor": {"detail": visitor_register_body.get("detail", ""), "id": visitor_register_body.get("id")},
+            "host": {
+                "detail": "host registration accepted",
+                "id": host_register_body.get("id"),
+            },
+            "visitor": {
+                "detail": visitor_detail,
+                "id": visitor_id,
+            },
             "host_requires_https": bool(host_info.get("base_site_requires_https")),
-            "visitor_requires_https": bool(visitor_info.get("base_site_requires_https")),
+            "visitor_requires_https": bool(
+                visitor_info.get("base_site_requires_https")
+            ),
         }
     )
 
@@ -930,7 +1084,9 @@ def register_visitor_telemetry(request):
     try:
         parsed_target = urlsplit(target)
         target_host = parsed_target.hostname or ""
-        target_port = parsed_target.port or (443 if parsed_target.scheme == "https" else 80)
+        target_port = parsed_target.port or (
+            443 if parsed_target.scheme == "https" else 80
+        )
     except Exception:
         pass
 
@@ -938,7 +1094,11 @@ def register_visitor_telemetry(request):
     if target_host:
         route_ip = _get_route_address(target_host, target_port or 0)
 
-    extra_fields = {k: v for k, v in payload.items() if k not in {"stage", "message", "target", "token"}}
+    extra_fields = {
+        k: v
+        for k, v in payload.items()
+        if k not in {"stage", "message", "target", "token"}
+    }
     if target_host and "target_host" not in extra_fields:
         extra_fields["target_host"] = target_host
     if target_port and "target_port" not in extra_fields:

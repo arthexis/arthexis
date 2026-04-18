@@ -133,3 +133,104 @@ class ModelDocumentation(Entity):
                 }
             )
         return links
+
+
+class DocumentIndex(Entity):
+    """Classify and track documents for targeted course-style access."""
+
+    ACCESS_AVAILABLE = "available"
+    ACCESS_RECOMMENDED = "recommended"
+    ACCESS_REQUIRED = "required"
+    ACCESS_RESTRICTED = "restricted"
+    ACCESS_CHOICES = (
+        (ACCESS_AVAILABLE, "Available"),
+        (ACCESS_RECOMMENDED, "Recommended"),
+        (ACCESS_REQUIRED, "Required"),
+        (ACCESS_RESTRICTED, "Restricted"),
+    )
+
+    title = models.CharField(max_length=255, blank=True)
+    doc_path = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text=(
+            "Relative documentation path (for example: docs/platform/overview.md or "
+            "apps/docs/integrations/api.md)."
+        ),
+    )
+    listable = models.BooleanField(
+        default=True,
+        help_text="Allow display in Indexed Documents even when no course group is assigned.",
+    )
+
+    class Meta:
+        ordering = ["title", "doc_path"]
+        verbose_name = "Document index"
+        verbose_name_plural = "Document index"
+        db_table = "docs_document_index"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.title or self.doc_path
+
+    def clean(self):
+        super().clean()
+        normalized = ModelDocumentation.normalize_doc_path(self.doc_path)
+        extension = Path(normalized).suffix.lower()
+        if extension not in DOC_FILE_EXTENSIONS:
+            raise ValidationError(
+                {"doc_path": "Documentation path must point to a Markdown file."}
+            )
+
+        base_dir = Path(settings.BASE_DIR).resolve()
+        candidate = (base_dir / normalized).resolve(strict=False)
+        try:
+            candidate.relative_to(base_dir)
+        except ValueError as exc:
+            raise ValidationError(
+                {"doc_path": "Documentation path must remain inside the project root."}
+            ) from exc
+        if not candidate.is_file():
+            raise ValidationError({"doc_path": "Documentation file does not exist."})
+        self.doc_path = normalized
+        if not self.title:
+            self.title = Path(normalized).stem.replace("-", " ").replace("_", " ").title()
+
+    def document_url(self) -> str:
+        if self.doc_path.startswith("apps/docs/"):
+            relative = self.doc_path.removeprefix("apps/docs/")
+            return reverse("docs:apps-docs-document", args=[relative])
+        if self.doc_path.startswith("docs/"):
+            relative = self.doc_path.removeprefix("docs/")
+            return reverse("docs:docs-document", args=[relative])
+        return reverse("docs:docs-document", args=[self.doc_path])
+
+
+class DocumentIndexAssignment(Entity):
+    """Map a document to a security-group course with an access level."""
+
+    document = models.ForeignKey(
+        DocumentIndex,
+        on_delete=models.CASCADE,
+        related_name="assignments",
+    )
+    security_group = models.ForeignKey(
+        "groups.SecurityGroup",
+        on_delete=models.CASCADE,
+        related_name="document_assignments",
+    )
+    access = models.CharField(max_length=16, choices=DocumentIndex.ACCESS_CHOICES)
+
+    class Meta:
+        ordering = ["security_group__name", "document__title", "document__doc_path"]
+        verbose_name = "Document index assignment"
+        verbose_name_plural = "Document index assignments"
+        db_table = "docs_document_index_assignment"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["document", "security_group"],
+                name="docs_unique_document_security_group_assignment",
+            )
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.document} → {self.security_group} ({self.get_access_display()})"

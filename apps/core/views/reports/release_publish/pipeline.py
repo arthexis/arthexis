@@ -14,6 +14,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import shlex
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -21,6 +22,7 @@ from typing import NoReturn
 from urllib.parse import urlencode, urlparse
 
 import requests
+import yaml
 from django.conf import settings
 from django.contrib import messages
 from django.db import DatabaseError
@@ -36,6 +38,13 @@ from packaging.version import InvalidVersion, Version
 import apps.release as release_utils
 from apps.nodes.models import NetMessage, Node
 from apps.release import git_utils
+from apps.release.domain import (
+    BUILD_RELEASE_ARTIFACTS_STEP_NAME,
+    FIXTURE_REVIEW_STEP_NAME,
+)
+from apps.release.domain import (
+    PUBLISH_STEPS as DOMAIN_PUBLISH_STEPS,
+)
 from apps.release.models import PackageRelease
 from apps.release.services import builder as release_builder
 from apps.release.services import uploader as release_uploader
@@ -115,6 +124,12 @@ from .workflow import ReleasePublishContext, ReleasePublishWorkflow
 
 logger = logging.getLogger(__name__)
 GIT_ADAPTER = SubprocessGitAdapter()
+EXPECTED_PUBLISH_WORKFLOW_FILE = "publish.yml"
+EXPECTED_PUBLISH_REF_PATTERN = "refs/tags/v*"
+EXPECTED_PUBLISH_ENVIRONMENT = "pypi"
+RELEASE_VALIDATION_COMMAND_SETTING = "RELEASE_PUBLISH_VALIDATION_COMMAND"
+RELEASE_VALIDATION_TIMEOUT_SETTING = "RELEASE_PUBLISH_VALIDATION_TIMEOUT_SECONDS"
+DEFAULT_RELEASE_VALIDATION_TIMEOUT_SECONDS = 900
 
 
 def _resolve_github_token(
@@ -246,6 +261,18 @@ def _get_release_or_response(request, pk: int, action: str):
         )
 
     return release, None
+
+
+def _resolve_safe_child_path(root: Path, child: str) -> Path:
+    """Resolve ``child`` under ``root`` and reject path traversal."""
+
+    normalized_root = root.resolve(strict=False)
+    normalized_path = (normalized_root / child).resolve(strict=False)
+    try:
+        normalized_path.relative_to(normalized_root)
+    except ValueError as exc:
+        raise ValueError(f"Unsafe path outside {normalized_root}: {child}") from exc
+    return normalized_path
 
 
 def _handle_release_sync(
@@ -1241,6 +1268,193 @@ def _major_minor_version_changed(previous: str, current: str) -> bool:
     )
 
 
+def _summarize_fixture_file(path: str) -> dict[str, object]:
+    fixture_path = Path(path)
+    try:
+        data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, ValueError):
+        count = 0
+        models: list[str] = []
+    else:
+        if isinstance(data, list):
+            count = len(data)
+            models = sorted(
+                {obj.get("model", "") for obj in data if isinstance(obj, dict)}
+            )
+        elif isinstance(data, dict):
+            count = 1
+            models = [data.get("model", "")]
+        else:  # pragma: no cover - unexpected structure
+            count = 0
+            models = []
+    return {"path": path, "count": count, "models": models}
+
+
+def _commit_release_prep_changes(
+    *,
+    ctx: dict,
+    log_path: Path,
+    fixture_files: list[str],
+    version_dirty: bool,
+) -> None:
+    ctx["fixtures"] = [_summarize_fixture_file(path) for path in fixture_files]
+    commit_paths = [*fixture_files]
+    if version_dirty:
+        commit_paths.append("VERSION")
+
+    log_fragments = []
+    if fixture_files:
+        log_fragments.append("fixtures " + ", ".join(fixture_files))
+    if version_dirty:
+        log_fragments.append("VERSION")
+    details = ", ".join(log_fragments) if log_fragments else "changes"
+    _append_log(log_path, f"Committing release prep changes: {details}")
+    GIT_ADAPTER.run(["git", "add", *commit_paths], check=True)
+
+    if version_dirty and fixture_files:
+        commit_message = "chore: update version and fixtures"
+    elif version_dirty:
+        commit_message = "chore: update version"
+    else:
+        commit_message = "chore: update fixtures"
+
+    GIT_ADAPTER.run(["git", "commit", "-m", commit_message], check=True)
+    _append_log(log_path, f"Release prep changes committed ({commit_message})")
+    ctx.pop("dirty_files", None)
+    ctx.pop("dirty_commit_error", None)
+    ctx.pop("dirty_log_message", None)
+
+
+def _handle_version_step_dirty_repository(ctx: dict, log_path: Path) -> bool:
+    if release_builder._git_clean():
+        ctx.pop("dirty_files", None)
+        ctx.pop("dirty_commit_error", None)
+        ctx.pop("dirty_log_message", None)
+        return False
+
+    dirty_entries = _collect_dirty_files()
+    files = [entry["path"] for entry in dirty_entries]
+    fixture_files = [
+        path
+        for path in files
+        if "fixtures" in Path(path).parts and Path(path).suffix == ".json"
+    ]
+    version_dirty = "VERSION" in files
+    allowed_dirty_files = set(fixture_files)
+    if version_dirty:
+        allowed_dirty_files.add("VERSION")
+
+    if files and len(allowed_dirty_files) == len(files):
+        _commit_release_prep_changes(
+            ctx=ctx,
+            log_path=log_path,
+            fixture_files=fixture_files,
+            version_dirty=version_dirty,
+        )
+        return True
+
+    ctx["dirty_files"] = dirty_entries
+    ctx.setdefault("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE)
+    ctx.pop("fixtures", None)
+    ctx.pop("dirty_commit_error", None)
+    details = ", ".join(entry["path"] for entry in dirty_entries) if dirty_entries else ""
+    message = "Git repository has uncommitted changes"
+    if details:
+        message += f": {details}"
+    if ctx.get("dirty_log_message") != message:
+        _append_log(log_path, message)
+        ctx["dirty_log_message"] = message
+    raise DirtyRepository()
+
+
+def _ensure_release_version_is_not_older(release) -> None:
+    version_path = Path("VERSION")
+    if not version_path.exists():
+        return
+
+    current = version_path.read_text(encoding="utf-8").strip()
+    if not current:
+        return
+
+    current_clean = PackageRelease.strip_dev_suffix(current) or "0.0.0"
+    try:
+        left = Version(release.version)
+        right = Version(current_clean)
+    except InvalidVersion as exc:
+        raise ValueError(f"Invalid release.version '{release.version}': {exc}") from exc
+
+    if left < right:
+        raise ValueError(f"Version {release.version} is older than existing {current}")
+
+
+def _check_release_version_not_on_pypi(release, log_path: Path) -> None:
+    _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
+    if not release_utils.network_available():
+        _append_log(log_path, "Network unavailable, skipping PyPI check")
+        return
+
+    resp = None
+    try:
+        resp = requests.get(
+            f"https://pypi.org/pypi/{release.package.name}/json",
+            timeout=PYPI_REQUEST_TIMEOUT,
+        )
+        if not resp.ok:
+            return
+
+        data = resp.json()
+        releases = data.get("releases", {})
+        try:
+            target_version = Version(release.version)
+        except InvalidVersion:
+            target_version = None
+
+        for candidate, files in releases.items():
+            if not _versions_match(
+                candidate=candidate,
+                release_version=release.version,
+                target_version=target_version,
+            ):
+                continue
+
+            if _has_non_yanked_files(files):
+                raise RuntimeError(f"Version {release.version} already on PyPI")
+    except RuntimeError:
+        raise
+    except (requests.exceptions.RequestException, ValueError) as exc:
+        _append_log(log_path, f"PyPI check failed: {exc}")
+        return
+    else:
+        _append_log(log_path, f"Version {release.version} not published on PyPI")
+    finally:
+        if resp is not None:
+            resp.close()
+
+
+def _versions_match(
+    *,
+    candidate: str,
+    release_version: str,
+    target_version: Version | None,
+) -> bool:
+    if candidate == release_version:
+        return True
+    if target_version is None:
+        return False
+
+    try:
+        return Version(candidate) == target_version
+    except InvalidVersion:
+        return False
+
+
+def _has_non_yanked_files(files: object) -> bool:
+    return any(
+        isinstance(file_data, dict) and not file_data.get("yanked", False)
+        for file_data in files or []
+    )
+
+
 def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
     """Validate release version preconditions before publish.
 
@@ -1255,98 +1469,7 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
     except RuntimeError as exc:
         sync_error = exc
 
-    if not release_builder._git_clean():
-        dirty_entries = _collect_dirty_files()
-        files = [entry["path"] for entry in dirty_entries]
-        fixture_files = [
-            f
-            for f in files
-            if "fixtures" in Path(f).parts and Path(f).suffix == ".json"
-        ]
-        version_dirty = "VERSION" in files
-        allowed_dirty_files = set(fixture_files)
-        if version_dirty:
-            allowed_dirty_files.add("VERSION")
-
-        if files and len(allowed_dirty_files) == len(files):
-            summary = []
-            for f in fixture_files:
-                path = Path(f)
-                try:
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                except (json.JSONDecodeError, OSError, ValueError):
-                    count = 0
-                    models: list[str] = []
-                else:
-                    if isinstance(data, list):
-                        count = len(data)
-                        models = sorted(
-                            {
-                                obj.get("model", "")
-                                for obj in data
-                                if isinstance(obj, dict)
-                            }
-                        )
-                    elif isinstance(data, dict):
-                        count = 1
-                        models = [data.get("model", "")]
-                    else:  # pragma: no cover - unexpected structure
-                        count = 0
-                        models = []
-                summary.append({"path": f, "count": count, "models": models})
-
-            ctx["fixtures"] = summary
-            commit_paths = [*fixture_files]
-            if version_dirty:
-                commit_paths.append("VERSION")
-
-            log_fragments = []
-            if fixture_files:
-                log_fragments.append("fixtures " + ", ".join(fixture_files))
-            if version_dirty:
-                log_fragments.append("VERSION")
-            details = ", ".join(log_fragments) if log_fragments else "changes"
-            _append_log(
-                log_path,
-                f"Committing release prep changes: {details}",
-            )
-            GIT_ADAPTER.run(["git", "add", *commit_paths], check=True)
-
-            if version_dirty and fixture_files:
-                commit_message = "chore: update version and fixtures"
-            elif version_dirty:
-                commit_message = "chore: update version"
-            else:
-                commit_message = "chore: update fixtures"
-
-            GIT_ADAPTER.run(["git", "commit", "-m", commit_message], check=True)
-            _append_log(
-                log_path,
-                f"Release prep changes committed ({commit_message})",
-            )
-            ctx.pop("dirty_files", None)
-            ctx.pop("dirty_commit_error", None)
-            retry_sync = True
-        else:
-            ctx["dirty_files"] = dirty_entries
-            ctx.setdefault("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE)
-            ctx.pop("fixtures", None)
-            ctx.pop("dirty_commit_error", None)
-            if dirty_entries:
-                details = ", ".join(entry["path"] for entry in dirty_entries)
-            else:
-                details = ""
-            message = "Git repository has uncommitted changes"
-            if details:
-                message += f": {details}"
-            if ctx.get("dirty_log_message") != message:
-                _append_log(log_path, message)
-                ctx["dirty_log_message"] = message
-            raise DirtyRepository()
-    else:
-        ctx.pop("dirty_files", None)
-        ctx.pop("dirty_commit_error", None)
-        ctx.pop("dirty_log_message", None)
+    retry_sync = _handle_version_step_dirty_repository(ctx, log_path)
 
     if retry_sync and sync_error is not None:
         try:
@@ -1359,76 +1482,8 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
     if sync_error is not None:
         raise sync_error
 
-    version_path = Path("VERSION")
-    if version_path.exists():
-        current = version_path.read_text(encoding="utf-8").strip()
-        if current:
-            current_clean = PackageRelease.strip_dev_suffix(current) or "0.0.0"
-            try:
-                left = Version(release.version)
-                right = Version(current_clean)
-            except InvalidVersion as exc:
-                raise ValueError(
-                    f"Invalid release.version '{release.version}': {exc}"
-                ) from exc
-            if left < right:
-                raise ValueError(
-                    f"Version {release.version} is older than existing {current}"
-                )
-
-    _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
-    if release_utils.network_available():
-        resp = None
-        try:
-            resp = requests.get(
-                f"https://pypi.org/pypi/{release.package.name}/json",
-                timeout=PYPI_REQUEST_TIMEOUT,
-            )
-            if resp.ok:
-                data = resp.json()
-                releases = data.get("releases", {})
-                try:
-                    target_version = Version(release.version)
-                except InvalidVersion:
-                    target_version = None
-
-                for candidate, files in releases.items():
-                    same_version = candidate == release.version
-                    if target_version is not None and not same_version:
-                        try:
-                            same_version = Version(candidate) == target_version
-                        except InvalidVersion:
-                            same_version = False
-                    if not same_version:
-                        continue
-
-                    has_available_files = any(
-                        isinstance(file_data, dict)
-                        and not file_data.get("yanked", False)
-                        for file_data in files or []
-                    )
-                    if has_available_files:
-                        raise RuntimeError(
-                            f"Version {release.version} already on PyPI"
-                        )
-        except RuntimeError:
-            raise
-        except (requests.exceptions.RequestException, ValueError) as exc:
-            # network errors should be logged but not crash
-            _append_log(log_path, f"PyPI check failed: {exc}")
-        else:
-            _append_log(
-                log_path,
-                f"Version {release.version} not published on PyPI",
-            )
-        finally:
-            if resp is not None:
-                close = getattr(resp, "close", None)
-                if callable(close):
-                    with contextlib.suppress(Exception):
-                        close()
-    else:
-        _append_log(log_path, "Network unavailable, skipping PyPI check")
+    _ensure_release_version_is_not_older(release)
+    _check_release_version_not_on_pypi(release, log_path)
 
 
 def _step_handle_migrations(release, ctx, log_path: Path, *, user=None) -> None:
@@ -1506,8 +1561,294 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
     Side effects: writes test output to release log.
     Rollback expectations: no rollback; failures pause progression.
     """
+    _ = release, user
     _append_log(log_path, "Complete test suite with --all flag")
-    _append_log(log_path, "Test suite completion acknowledged")
+    tests_result = ctx.get("tests_result")
+    if isinstance(tests_result, dict) and tests_result.get("success") is True:
+        _append_log(
+            log_path,
+            "Test gate passed using recorded test evidence "
+            f"(command={ctx.get('tests_command') or 'unknown'}, "
+            f"verified_at={ctx.get('tests_verified_at') or 'unknown'})",
+        )
+        return
+
+    validation_command = getattr(settings, RELEASE_VALIDATION_COMMAND_SETTING, None)
+    if not validation_command:
+        _fail_release_gate(
+            ctx,
+            log_path,
+            "Release test gate failed: provide successful test evidence "
+            "(tests_verified_at, tests_command, tests_result.success=true) "
+            f"or configure {RELEASE_VALIDATION_COMMAND_SETTING} to run tests automatically.",
+        )
+
+    command = _normalize_validation_command(validation_command)
+    command_text = shlex.join(command)
+    configured_timeout = int(
+        getattr(
+            settings,
+            RELEASE_VALIDATION_TIMEOUT_SETTING,
+            DEFAULT_RELEASE_VALIDATION_TIMEOUT_SECONDS,
+        )
+    )
+    _append_log(
+        log_path,
+        "Running release validation command: "
+        f"{command_text} (timeout={configured_timeout}s)",
+    )
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=configured_timeout,
+        )
+    except subprocess.TimeoutExpired:
+        ctx["tests_command"] = command_text
+        ctx["tests_result"] = {
+            "success": False,
+            "reason": "timeout",
+            "source": "pipeline_command",
+            "timeout_seconds": configured_timeout,
+        }
+        _fail_release_gate(
+            ctx,
+            log_path,
+            "Release test gate failed: configured validation command "
+            f"'{command_text}' timed out after {configured_timeout} seconds. "
+            "Fix the stalled tests and rerun the step.",
+        )
+    if result.stdout.strip():
+        _append_log(log_path, "Validation command stdout:\n" + result.stdout.strip())
+    if result.stderr.strip():
+        _append_log(log_path, "Validation command stderr:\n" + result.stderr.strip())
+    if result.returncode != 0:
+        _fail_release_gate(
+            ctx,
+            log_path,
+            "Release test gate failed: configured validation command exited "
+            f"with status {result.returncode}. Fix the failing tests and rerun the step.",
+        )
+
+    ctx["tests_verified_at"] = timezone.now().isoformat()
+    ctx["tests_command"] = command_text
+    ctx["tests_result"] = {
+        "success": True,
+        "returncode": result.returncode,
+        "source": "pipeline_command",
+    }
+    _append_log(log_path, "Release test gate passed")
+
+
+def _step_confirm_pypi_trusted_publisher_settings(
+    release, ctx, log_path: Path, *, user=None
+) -> None:
+    """Confirm PyPI Trusted Publisher release prerequisites.
+
+    Prerequisites: full release test suite acknowledgement complete.
+    Side effects: records confirmation message in release logs.
+    Rollback expectations: no rollback; this is a publish gate acknowledgement.
+    """
+    _ = release, user
+    _append_log(log_path, "Confirm PyPI Trusted Publisher settings")
+    workflow_path = Path(".github/workflows") / EXPECTED_PUBLISH_WORKFLOW_FILE
+    if not workflow_path.exists():
+        _fail_release_gate(
+            ctx,
+            log_path,
+            f"Trusted Publisher gate failed: {workflow_path} is missing. "
+            "Add the publish workflow before publishing.",
+        )
+
+    workflow_data: dict = {}
+    yaml_error = False
+    try:
+        loaded_workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        if isinstance(loaded_workflow, dict):
+            workflow_data = loaded_workflow
+    except yaml.YAMLError:
+        yaml_error = True
+
+    mismatches: list[str] = []
+    if yaml_error:
+        mismatches.append(
+            f"workflow YAML in {workflow_path} must be valid and parseable"
+        )
+
+    on_section = workflow_data.get("on", workflow_data.get(True, {}))
+    push_section = on_section.get("push", {}) if isinstance(on_section, dict) else {}
+    raw_tags = push_section.get("tags") if isinstance(push_section, dict) else None
+    tags: list[str] = []
+    if isinstance(raw_tags, str):
+        tags = [raw_tags]
+    elif isinstance(raw_tags, list):
+        tags = [str(tag).strip() for tag in raw_tags if str(tag).strip()]
+    elif raw_tags is not None:
+        tags = [str(raw_tags).strip()] if str(raw_tags).strip() else []
+    if raw_tags is None or not tags:
+        mismatches.append(
+            f"{workflow_path} must define non-empty on.push.tags"
+            " (missing key: on.push.tags)"
+        )
+    expected_tag = EXPECTED_PUBLISH_REF_PATTERN.removeprefix("refs/tags/")
+    if tags and set(tags) != {expected_tag}:
+        mismatches.append(
+            f"workflow tag pattern must be {EXPECTED_PUBLISH_REF_PATTERN} "
+            f"(check key: on.push.tags in {workflow_path})"
+        )
+
+    jobs = workflow_data.get("jobs", {})
+    publish_job = jobs.get("publish-to-pypi", {}) if isinstance(jobs, dict) else {}
+    if not isinstance(publish_job, dict) or not publish_job:
+        mismatches.append(
+            f"{workflow_path} must define jobs.publish-to-pypi"
+            " (missing key: jobs.publish-to-pypi)"
+        )
+
+    environment = (
+        publish_job.get("environment", "") if isinstance(publish_job, dict) else ""
+    )
+    observed_environment_name = ""
+    if isinstance(environment, str):
+        observed_environment_name = environment.strip()
+    elif isinstance(environment, dict):
+        observed_environment_name = str(environment.get("name", "")).strip()
+    if not observed_environment_name:
+        mismatches.append(
+            f"{workflow_path} must define non-empty publish job environment.name"
+            " (missing key: jobs.publish-to-pypi.environment.name)"
+        )
+    elif observed_environment_name != EXPECTED_PUBLISH_ENVIRONMENT:
+        mismatches.append(
+            f"workflow environment must be {EXPECTED_PUBLISH_ENVIRONMENT} "
+            f"(check key: jobs.publish-to-pypi.environment.name in {workflow_path})"
+        )
+
+    job_permissions = (
+        publish_job.get("permissions") if isinstance(publish_job, dict) else None
+    )
+    permissions = (
+        job_permissions
+        if job_permissions is not None
+        else workflow_data.get("permissions", {})
+    )
+    id_token_permission = ""
+    if isinstance(permissions, dict):
+        id_token_permission = str(permissions.get("id-token", "")).strip()
+    elif isinstance(permissions, str) and permissions == "write-all":
+        id_token_permission = "write"
+    if id_token_permission != "write":
+        mismatches.append(
+            f"{workflow_path} must set jobs.publish-to-pypi.permissions.id-token to"
+            " 'write' (missing/invalid key: jobs.publish-to-pypi.permissions.id-token)"
+        )
+
+    steps = publish_job.get("steps", []) if isinstance(publish_job, dict) else []
+    uses_entries = []
+    if isinstance(steps, list):
+        uses_entries = [
+            str(step.get("uses", "")).strip()
+            for step in steps
+            if isinstance(step, dict) and str(step.get("uses", "")).strip()
+        ]
+    has_publish_action = any(
+        action.startswith("pypa/gh-action-pypi-publish@")
+        or action == "pypa/gh-action-pypi-publish"
+        for action in uses_entries
+    )
+    if not has_publish_action:
+        mismatches.append(
+            f"{workflow_path} must include pypa/gh-action-pypi-publish in"
+            " jobs.publish-to-pypi.steps[*].uses"
+            " (missing key family: jobs.publish-to-pypi.steps[*].uses)"
+        )
+
+    static_token_keys = (
+        "password",
+        "token",
+        "api_token",
+        "repository_password",
+        "user",
+        "username",
+    )
+    has_static_token_field = False
+    has_non_oidc_publish_path = False
+    for step in steps if isinstance(steps, list) else []:
+        if not isinstance(step, dict):
+            continue
+        uses = str(step.get("uses", "")).strip()
+        if uses:
+            normalized_uses = uses.lower()
+            if (
+                "pypa/gh-action-pypi-publish" not in normalized_uses
+                and "pypi-publish" in normalized_uses
+            ):
+                has_non_oidc_publish_path = True
+                break
+        run_command = str(step.get("run", "")).strip().lower()
+        if "twine upload" in run_command:
+            has_non_oidc_publish_path = True
+            break
+        if not (
+            uses.startswith("pypa/gh-action-pypi-publish@")
+            or uses == "pypa/gh-action-pypi-publish"
+        ):
+            continue
+        step_with = step.get("with", {})
+        if not isinstance(step_with, dict):
+            continue
+        if any(str(step_with.get(key, "")).strip() for key in static_token_keys):
+            has_static_token_field = True
+            break
+    if has_static_token_field:
+        mismatches.append(
+            f"{workflow_path} must not set static token credentials in"
+            " jobs.publish-to-pypi.steps[*].with when Trusted Publisher OIDC is expected"
+            " (remove keys like password/token/api_token)"
+        )
+    if has_non_oidc_publish_path:
+        mismatches.append(
+            f"{workflow_path} jobs.publish-to-pypi.steps must use only"
+            " pypa/gh-action-pypi-publish for package upload"
+            " (remove twine upload and other publish actions)"
+        )
+
+    if mismatches:
+        _fail_release_gate(
+            ctx,
+            log_path,
+            "Trusted Publisher gate failed: " + "; ".join(mismatches) + ".",
+        )
+
+    ctx["trusted_publisher_verified_at"] = timezone.now().isoformat()
+    ctx["trusted_publisher_workflow_file"] = EXPECTED_PUBLISH_WORKFLOW_FILE
+    ctx["trusted_publisher_ref"] = EXPECTED_PUBLISH_REF_PATTERN
+    ctx["trusted_publisher_environment"] = EXPECTED_PUBLISH_ENVIRONMENT
+    _append_log(
+        log_path,
+        "Trusted Publisher gate passed "
+        f"(workflow={EXPECTED_PUBLISH_WORKFLOW_FILE}, "
+        f"ref={EXPECTED_PUBLISH_REF_PATTERN}, environment={EXPECTED_PUBLISH_ENVIRONMENT})",
+    )
+
+
+def _normalize_validation_command(command: str | Sequence[str]) -> list[str]:
+    if isinstance(command, str):
+        parts = shlex.split(command)
+    else:
+        parts = [str(part) for part in command if str(part).strip()]
+    if not parts:
+        raise ValueError("Validation command is empty")
+    return parts
+
+
+def _fail_release_gate(ctx: dict, log_path: Path, message: str) -> NoReturn:
+    ctx["paused"] = True
+    ctx["error"] = _(message)
+    _append_log(log_path, message)
+    raise PublishPending()
 
 
 def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
@@ -1714,6 +2055,101 @@ def _step_export_and_dispatch(release, ctx, log_path: Path, *, user=None) -> Non
     )
 
 
+def _wait_for_publish_workflow_completion(
+    release,
+    ctx: dict[str, object],
+    log_path: Path,
+    *,
+    token: str | None,
+) -> dict[str, object]:
+    owner, repo = _resolve_github_repository(release)
+    ctx["github_owner"] = owner
+    ctx["github_repo"] = repo
+    tag_name = f"v{release.version}"
+    run = _fetch_publish_workflow_run(
+        owner=owner,
+        repo=repo,
+        tag_name=tag_name,
+        token=token,
+    )
+    if not run:
+        _pause_for_publish_pending(
+            release,
+            ctx,
+            log_path,
+            token=token,
+            message=(
+                "Publish workflow run not found yet; resume after GitHub Actions completes."
+            ),
+        )
+
+    run_url = run.get("html_url") if isinstance(run.get("html_url"), str) else ""
+    run_id = run.get("id")
+    if isinstance(run_id, int):
+        ctx["publish_workflow_run_id"] = run_id
+    if run_url:
+        ctx["publish_workflow_url"] = run_url
+
+    status = run.get("status")
+    if status != "completed":
+        if run_url:
+            message = "Publish workflow still running; monitor at"
+        else:
+            message = (
+                "Publish workflow still running; resume after GitHub Actions completes."
+            )
+        _pause_for_publish_pending(
+            release,
+            ctx,
+            log_path,
+            token=token,
+            message=message,
+            run_url=run_url,
+        )
+
+    ctx["publish_workflow_status"] = status
+    conclusion = run.get("conclusion")
+    if isinstance(conclusion, str) and conclusion:
+        ctx["publish_workflow_conclusion"] = conclusion
+    return run
+
+
+def _step_wait_for_github_actions_publish(
+    release, ctx, log_path: Path, *, user=None
+) -> None:
+    """Pause until GitHub Actions publish workflow completes.
+
+    Prerequisites: release artifacts exported and tag pushed.
+    Side effects: stores workflow run details in context/logs.
+    Rollback expectations: no rollback; retries continue polling.
+    """
+    if ctx.get("dry_run"):
+        _append_log(log_path, "Dry run: skipping GitHub Actions publish wait")
+        return
+    token = _require_github_token(
+        release,
+        ctx,
+        log_path,
+        message=_(
+            "GitHub token missing. Provide a token to continue publishing."
+        ),
+        user=user,
+    )
+    run = _wait_for_publish_workflow_completion(
+        release,
+        ctx,
+        log_path,
+        token=token,
+    )
+    run_url = ctx.get("publish_workflow_url", "")
+    if not isinstance(run_url, str):
+        run_url = ""
+    if run_url:
+        _append_log(log_path, f"Publish workflow completed: {run_url}")
+    else:
+        _append_log(log_path, "Publish workflow completed")
+
+
 def _pypi_release_available(release) -> bool:
     if not release_utils.network_available():
         return False
@@ -1758,7 +2194,7 @@ def _pypi_release_available(release) -> bool:
 def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) -> None:
     """Persist publish metadata after external publish completion.
 
-    Prerequisites: package is visible on distribution channel.
+    Prerequisites: GitHub Actions publish workflow completion.
     Side effects: updates PackageRelease timestamps/urls and commits fixtures.
     Rollback expectations: metadata commits can be reverted with standard git workflow.
     """
@@ -1808,7 +2244,7 @@ def _step_record_publish_metadata(release, ctx, log_path: Path, *, user=None) ->
         skipped_message=(
             "No release metadata updates detected after publish; skipping commit"
         ),
-        step_name="Record publish metadata",
+        step_name="Record publish URLs & update fixtures",
     )
     _append_log(log_path, "Publish metadata recorded")
 
@@ -1841,46 +2277,17 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
         _append_log(log_path, "GitHub token missing; skipping publish log capture")
         return
 
-    owner, repo = _resolve_github_repository(release)
-    tag_name = f"v{release.version}"
-    run = _fetch_publish_workflow_run(
-        owner=owner,
-        repo=repo,
-        tag_name=tag_name,
+    run = _wait_for_publish_workflow_completion(
+        release,
+        ctx,
+        log_path,
         token=token,
     )
-    if not run:
-        _pause_for_publish_pending(
-            release,
-            ctx,
-            log_path,
-            token=token,
-            message=(
-                "Publish workflow run not found yet; resume after GitHub Actions completes."
-            ),
-        )
-
-    status = run.get("status")
-    if status != "completed":
-        run_url = run.get("html_url") if isinstance(run.get("html_url"), str) else ""
-        if run_url:
-            message = "Publish workflow still running; monitor at"
-        else:
-            message = (
-                "Publish workflow still running; resume after GitHub Actions completes."
-            )
-        _pause_for_publish_pending(
-            release,
-            ctx,
-            log_path,
-            token=token,
-            message=message,
-            run_url=run_url,
-        )
 
     run_id = run.get("id")
     if not isinstance(run_id, int):
         raise ValueError("Publish workflow run ID missing")
+    owner, repo = ctx["github_owner"], ctx["github_repo"]
 
     raw_log = _download_publish_workflow_logs(
         owner=owner, repo=repo, run_id=run_id, token=token
@@ -1898,7 +2305,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
     conclusion = run.get("conclusion") or ""
     summary_lines = [
         f"Workflow run: {run_url or run_id}",
-        f"Status: {status}",
+        f"Status: {run.get('status')}",
     ]
     if conclusion:
         summary_lines.append(f"Conclusion: {conclusion}")
@@ -1923,34 +2330,77 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
         _append_log(log_path, "Publish logs already recorded")
 
 
-BUILD_RELEASE_ARTIFACTS_STEP_NAME = "Build release artifacts"
-FIXTURE_REVIEW_STEP_NAME = "Freeze, squash and approve migrations"
-
+_STEP_HANDLER_MAP = {
+    "_step_capture_publish_logs": _step_capture_publish_logs,
+    "_step_check_version": _step_check_version,
+    "_step_confirm_pypi_trusted_publisher_settings": _step_confirm_pypi_trusted_publisher_settings,
+    "_step_export_and_dispatch": _step_export_and_dispatch,
+    "_step_handle_migrations": _step_handle_migrations,
+    "_step_pre_release_actions": _step_pre_release_actions,
+    "_step_promote_build": _step_promote_build,
+    "_step_record_publish_metadata": _step_record_publish_metadata,
+    "_step_run_tests": _step_run_tests,
+    "_step_verify_release_environment": _step_verify_release_environment,
+    "_step_wait_for_github_actions_publish": _step_wait_for_github_actions_publish,
+}
 
 PUBLISH_STEPS = [
-    ("Check version number availability", _step_check_version),
-    (FIXTURE_REVIEW_STEP_NAME, _step_handle_migrations),
-    ("Execute pre-release actions", _step_pre_release_actions),
-    (BUILD_RELEASE_ARTIFACTS_STEP_NAME, _step_promote_build),
-    ("Complete test suite with --all flag", _step_run_tests),
-    ("Verify release environment", _step_verify_release_environment),
-    (
-        "Export artifacts and trigger GitHub Actions publish",
-        _step_export_and_dispatch,
-    ),
-    ("Record publish metadata", _step_record_publish_metadata),
-    ("Capture PyPI publish logs", _step_capture_publish_logs),
+    (name, _STEP_HANDLER_MAP[handler_name])
+    for name, handler_name in DOMAIN_PUBLISH_STEPS
 ]
+
+
+def _ensure_publish_step_compatibility(
+    typed_ctx: ReleasePublishContext,
+    steps: list[tuple[str, object]],
+) -> ReleasePublishContext:
+    expected_schema = "|".join(name for name, _func in steps)
+    recorded_schema = typed_ctx.extras.get("publish_steps_schema")
+    if recorded_schema is None:
+        typed_ctx.extras["publish_steps_schema"] = expected_schema
+        return typed_ctx
+
+    if (
+        recorded_schema != expected_schema
+        and typed_ctx.started
+        and typed_ctx.step < len(steps)
+    ):
+        typed_ctx.step = 0
+        typed_ctx.started = False
+        typed_ctx.paused = False
+        typed_ctx.error = _(
+            "Release publish steps changed after an upgrade. Restart the publish workflow to continue safely."
+        )
+
+    typed_ctx.extras["publish_steps_schema"] = expected_schema
+    return typed_ctx
 
 
 def release_progress_impl(request, pk: int, action: str):
     release, error_response = _get_release_or_response(request, pk, action)
     if error_response:
         return error_response
-    session_key = f"release_publish_{pk}"
+    release_pk = release.pk
+    session_key = f"release_publish_{release_pk}"
     lock_dir = Path(settings.BASE_DIR) / ".locks"
-    lock_path = lock_dir / f"release_publish_{pk}.json"
-    restart_path = lock_dir / f"release_publish_{pk}.restarts"
+    try:
+        lock_path = _resolve_safe_child_path(
+            lock_dir,
+            f"release_publish_{release_pk}.json",
+        )
+        restart_path = _resolve_safe_child_path(
+            lock_dir,
+            f"release_publish_{release_pk}.restarts",
+        )
+    except ValueError:
+        return _render_release_progress_error(
+            request,
+            release,
+            action,
+            _("Invalid release state path."),
+            status=400,
+            debug_info={"pk": release_pk, "action": action},
+        )
     log_dir, log_dir_warning = _resolve_release_log_dir(Path(settings.LOG_DIR))
     log_dir_warning_message = log_dir_warning
 
@@ -1996,6 +2446,8 @@ def release_progress_impl(request, pk: int, action: str):
     ctx = workflow.template_state(typed_ctx)
 
     steps = PUBLISH_STEPS
+    typed_ctx = _ensure_publish_step_compatibility(typed_ctx, steps)
+    ctx = workflow.template_state(typed_ctx)
     step_count = typed_ctx.step
     start_enabled = _is_release_start_enabled(ctx, step_count, len(steps))
 

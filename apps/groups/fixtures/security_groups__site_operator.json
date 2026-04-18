@@ -1,7 +1,6 @@
 [
   {
     "model": "auth.group",
-    "pk": 1,
     "fields": {
       "name": "Site Operator",
       "permissions": []
@@ -9,14 +8,15 @@
   },
   {
     "model": "groups.securitygroup",
-    "pk": 1,
     "fields": {
-      "parent": null
+      "name": "Site Operator",
+      "app": "",
+      "parent": null,
+      "site_template": null
     }
   },
   {
     "model": "auth.group",
-    "pk": 2,
     "fields": {
       "name": "Network Operator",
       "permissions": []
@@ -24,14 +24,15 @@
   },
   {
     "model": "groups.securitygroup",
-    "pk": 2,
     "fields": {
-      "parent": null
+      "name": "Network Operator",
+      "app": "",
+      "parent": null,
+      "site_template": null
     }
   },
   {
     "model": "auth.group",
-    "pk": 3,
     "fields": {
       "name": "Product Developer",
       "permissions": []
@@ -39,14 +40,15 @@
   },
   {
     "model": "groups.securitygroup",
-    "pk": 3,
     "fields": {
-      "parent": null
+      "name": "Product Developer",
+      "app": "",
+      "parent": null,
+      "site_template": null
     }
   },
   {
     "model": "auth.group",
-    "pk": 4,
     "fields": {
       "name": "Release Manager",
       "permissions": []
@@ -54,14 +56,15 @@
   },
   {
     "model": "groups.securitygroup",
-    "pk": 4,
     "fields": {
-      "parent": null
+      "name": "Release Manager",
+      "app": "",
+      "parent": null,
+      "site_template": null
     }
   },
   {
     "model": "auth.group",
-    "pk": 5,
     "fields": {
       "name": "External Agent",
       "permissions": []
@@ -69,9 +72,11 @@
   },
   {
     "model": "groups.securitygroup",
-    "pk": 5,
     "fields": {
-      "parent": null
+      "name": "External Agent",
+      "app": "",
+      "parent": null,
+      "site_template": null
     }
   }
 ]

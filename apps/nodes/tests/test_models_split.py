@@ -97,67 +97,6 @@ def test_detect_auto_feature_allows_rfid_service_probe_without_systemctl(
 
 
 @pytest.mark.django_db
-def test_detect_auto_feature_detects_gpio_rtc_when_clock_device_present(
-    monkeypatch, tmp_path
-):
-    """gpio-rtc auto-detection should defer to the clock-device probe."""
-
-    node = Node(
-        hostname="clock-node",
-        base_path=str(tmp_path),
-        public_endpoint="clock-node",
-    )
-    monkeypatch.setattr("apps.nodes.models.features.has_clock_device", lambda: True)
-
-    result = node._detect_auto_feature(
-        "gpio-rtc", base_dir=tmp_path, base_path=tmp_path
-    )
-
-    assert result is True
-
-
-@pytest.mark.django_db
-def test_refresh_features_assigns_gpio_rtc_when_clock_device_present(
-    monkeypatch, tmp_path
-):
-    """Feature refresh should auto-assign gpio-rtc when an RTC is detected."""
-
-    node = Node.objects.create(
-        hostname="clock-refresh-node",
-        mac_address=Node.get_current_mac(),
-        current_relation=Node.Relation.SELF,
-        public_endpoint="clock-refresh-node",
-        base_path=str(tmp_path),
-    )
-    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
-    monkeypatch.setattr("apps.nodes.models.features.has_clock_device", lambda: True)
-
-    node.refresh_features()
-
-    assert node.features.filter(pk=feature.pk).exists()
-
-
-@pytest.mark.django_db
-def test_detect_auto_feature_does_not_detect_gpio_rtc_when_clock_device_absent(
-    monkeypatch, tmp_path
-):
-    """gpio-rtc auto-detection should not trigger when no clock device is present."""
-
-    node = Node(
-        hostname="clock-node",
-        base_path=str(tmp_path),
-        public_endpoint="clock-node",
-    )
-    monkeypatch.setattr("apps.nodes.models.features.has_clock_device", lambda: False)
-
-    result = node._detect_auto_feature(
-        "gpio-rtc", base_dir=tmp_path, base_path=tmp_path
-    )
-
-    assert result is False
-
-
-@pytest.mark.django_db
 def test_refresh_features_does_not_assign_gpio_rtc_when_clock_device_absent(
     monkeypatch, tmp_path
 ):

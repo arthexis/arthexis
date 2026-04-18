@@ -1,0 +1,73 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ image.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <h1 class="h3">{{ image.title }}</h1>
+  <img src="{{ image.media_file.file.url }}" alt="{{ image.title }}" class="img-fluid rounded mb-3">
+  {% if image.description %}<p>{{ image.description }}</p>{% endif %}
+
+  <h2 class="h5 mt-4">{% trans "Credits" %}</h2>
+  {% for credit in image.credits.all %}
+    <div class="mb-2">
+      <strong>{{ credit.display_name }}</strong>
+      {% if credit.artist %} · {% trans "Artist" %}: {{ credit.artist }}{% endif %}
+      {% if credit.series %} · {% trans "Series" %}: {{ credit.series }}{% endif %}
+      {% if credit.era %} · {% trans "Era" %}: {{ credit.era }}{% endif %}
+      {% if credit.link_url %} · <a href="{{ credit.link_url }}" target="_blank" rel="noreferrer noopener">{{ credit.link_url }}</a>{% endif %}
+      {% if credit.apa_citation %}<div class="text-muted small">{{ credit.apa_citation }}</div>{% endif %}
+      {% if credit.contributed_elements %}<div class="small">{% trans "Contributed" %}: {{ credit.contributed_elements }}</div>{% endif %}
+      {% if credit.excluded_elements %}<div class="small">{% trans "Not contributed" %}: {{ credit.excluded_elements }}</div>{% endif %}
+    </div>
+  {% empty %}
+    <p class="text-muted">{% trans "No credits recorded." %}</p>
+  {% endfor %}
+
+  {% if can_view_metadata %}
+  <h2 class="h5 mt-4">{% trans "Metadata" %}</h2>
+  <ul>
+    {% for category in image.categories.all %}<li>{{ category.name }}</li>{% empty %}<li>{% trans "No categories" %}</li>{% endfor %}
+  </ul>
+  <ul>
+    {% for value in image.trait_values.all %}
+      <li>
+        {% if value.category %}{{ value.category.name }} / {% endif %}{{ value.trait.name }}
+        {% if value.qualitative_value %} = {{ value.qualitative_value }}{% endif %}
+        ({{ value.float_value }})
+      </li>
+    {% empty %}
+      <li>{% trans "No traits" %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if can_manage %}
+    <hr>
+    <h2 class="h5">{% trans "Edit Image" %}</h2>
+    <form method="post" class="card card-body mb-3">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="update-image">
+      {{ image_form.as_p }}
+      <button class="btn btn-primary" type="submit">{% trans "Save" %}</button>
+    </form>
+
+    <h2 class="h5">{% trans "Add Trait" %}</h2>
+    <form method="post" class="card card-body mb-3">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add-trait">
+      {{ trait_form.as_p }}
+      <button class="btn btn-outline-primary" type="submit">{% trans "Add trait" %}</button>
+    </form>
+
+    <h2 class="h5">{% trans "Add Credit" %}</h2>
+    <form method="post" class="card card-body">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add-credit">
+      {{ credit_form.as_p }}
+      <button class="btn btn-outline-primary" type="submit">{% trans "Add credit" %}</button>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

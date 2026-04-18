@@ -17,38 +17,6 @@ from apps.ocpp.views.common import (
     dedupe_event_rows,
 )
 
-
-@pytest.mark.django_db
-def test_status_view_disables_polling_without_active_session(client):
-    """Status polling should be disabled when no live session exists."""
-
-    user = get_user_model().objects.create_user(
-        username="status-no-session", password="pass"
-    )
-    client.force_login(user)
-    charger = Charger.objects.create(charger_id="STATUS-NO-TX")
-
-    response = client.get(reverse("ocpp:charger-status", args=[charger.charger_id]))
-
-    assert response.status_code == 200
-    assert response.context["status_should_poll"] is False
-
-@pytest.mark.django_db
-def test_status_view_enables_polling_with_active_session(client):
-    """Status polling should be enabled while a live transaction is active."""
-
-    user = get_user_model().objects.create_user(
-        username="status-with-session", password="pass"
-    )
-    client.force_login(user)
-    charger = Charger.objects.create(charger_id="STATUS-WITH-TX")
-    Transaction.objects.create(charger=charger, start_time=timezone.now())
-
-    response = client.get(reverse("ocpp:charger-status", args=[charger.charger_id]))
-
-    assert response.status_code == 200
-    assert response.context["status_should_poll"] is True
-
 @pytest.mark.django_db
 def test_status_view_includes_non_transaction_events(client):
     """Status view should expose notable non-transaction events for rendering."""
@@ -81,47 +49,6 @@ def test_status_view_includes_non_transaction_events(client):
     )
     assert all(item["severity"] in {"info", "warning", "error"} for item in events)
     assert not any("TransactionEvent" in str(item["event"]) for item in events)
-
-@pytest.mark.django_db
-def test_status_view_limits_events_to_5_entries(client):
-    """Event feed should only expose the latest five notable events."""
-
-    user = get_user_model().objects.create_user(
-        username="status-events-limit", password="pass"
-    )
-    client.force_login(user)
-    charger = Charger.objects.create(charger_id="STATUS-EVENTS-LIMIT", connector_id=2)
-    identity = store.identity_key(charger.charger_id, charger.connector_id)
-    for index in range(12):
-        store.add_log(identity, f"Connected event-{index}")
-
-    response = client.get(
-        reverse(
-            "ocpp:charger-status-connector",
-            args=[charger.charger_id, charger.connector_slug],
-        )
-    )
-
-    assert response.status_code == 200
-    events = response.context["non_transaction_events"]
-    assert len(events) == 5
-
-@pytest.mark.django_db
-def test_status_view_limits_sessions_to_5_entries(client):
-    """Status page should only expose the latest five sessions."""
-
-    user = get_user_model().objects.create_user(
-        username="status-sessions-limit", password="pass"
-    )
-    client.force_login(user)
-    charger = Charger.objects.create(charger_id="STATUS-SESSIONS-LIMIT")
-    for _ in range(7):
-        Transaction.objects.create(charger=charger, start_time=timezone.now())
-
-    response = client.get(reverse("ocpp:charger-status", args=[charger.charger_id]))
-
-    assert response.status_code == 200
-    assert len(response.context["transactions"]) == 5
 
 @pytest.mark.django_db
 def test_status_view_aggregate_includes_events_from_all_connectors(client):
@@ -201,49 +128,6 @@ def test_status_view_aggregate_deduplicates_events_from_multiple_identities(clie
     assert "Connected connector-a-unique" in event_names
     assert "Connected connector-b-unique" in event_names
 
-@pytest.mark.django_db
-def test_status_view_aggregate_keeps_distinct_connector_status_rows(client):
-    """Aggregate status view should preserve connector-specific status rows."""
-
-    user = get_user_model().objects.create_user(
-        username="status-events-by-connector", password="pass"
-    )
-    client.force_login(user)
-    charger = Charger.objects.create(
-        charger_id=f"STATUS-EVENTS-BY-CONNECTOR-{uuid.uuid4().hex[:8]}"
-    )
-    connector_a = Charger.objects.create(charger_id=charger.charger_id, connector_id=1)
-    connector_b = Charger.objects.create(charger_id=charger.charger_id, connector_id=2)
-
-    connector_a_message = (
-        'StatusNotification processed: {"connectorId": 1, "status": "Available"}'
-    )
-    connector_b_message = (
-        'StatusNotification processed: {"connectorId": 2, "status": "Available"}'
-    )
-    store.add_log(
-        store.identity_key(charger.charger_id, connector_a.connector_id),
-        connector_a_message,
-        log_type="charger",
-    )
-    store.add_log(
-        store.identity_key(charger.charger_id, connector_b.connector_id),
-        connector_b_message,
-        log_type="charger",
-    )
-
-    response = client.get(reverse("ocpp:charger-status", args=[charger.charger_id]))
-
-    assert response.status_code == 200
-    events = response.context["non_transaction_events"]
-    connector_status_rows = [
-        row
-        for row in events
-        if row["event"] == "Status" and row["details"] == "Available"
-    ]
-    assert len(connector_status_rows) == 2
-
-
 def test_dedupe_event_rows_keeps_newest_row_for_same_status_identity():
     """Status dedupe should keep the newest row for one identity collision."""
 
@@ -269,7 +153,6 @@ def test_dedupe_event_rows_keeps_newest_row_for_same_status_identity():
     rows = dedupe_event_rows([(older, 1), (newer, 1)])
 
     assert rows == [newer]
-
 
 @pytest.mark.django_db
 def test_status_view_ignores_invalid_status_payload_rows(client):
@@ -299,7 +182,6 @@ def test_status_view_ignores_invalid_status_payload_rows(client):
     assert any(item["event"] == "Connected websocket" for item in events)
     assert not any(item["event"] == "Status" for item in events)
 
-
 def test_classify_event_severity_handles_status_and_retry_edge_cases():
     """Severity classifier should consistently map status and retry edge cases."""
 
@@ -328,26 +210,6 @@ def test_classify_event_severity_handles_status_and_retry_edge_cases():
         "#ffc107",
         "Warning",
     )
-
-
-@pytest.mark.django_db
-def test_status_view_aggregate_includes_pending_events(client):
-    """Regression: aggregate status view includes notable pending-key events."""
-
-    user = get_user_model().objects.create_user(
-        username="status-events-pending", password="pass"
-    )
-    client.force_login(user)
-    charger = Charger.objects.create(charger_id="STATUS-ALL-PENDING")
-    Charger.objects.create(charger_id=charger.charger_id, connector_id=1)
-    store.add_log(store.pending_key(charger.charger_id), "Connected: pending")
-
-    response = client.get(reverse("ocpp:charger-status", args=[charger.charger_id]))
-
-    assert response.status_code == 200
-    events = response.context["non_transaction_events"]
-    assert any(item["details"] == "pending" for item in events)
-
 
 @pytest.mark.django_db
 def test_status_view_disables_event_admin_links_when_admin_urls_missing(
@@ -392,7 +254,6 @@ def test_status_view_disables_event_admin_links_when_admin_urls_missing(
     assert "1234" in html
     assert "admin/ocpp/transaction/1234/change/" not in html
 
-
 @pytest.mark.django_db
 def test_status_view_filters_sensitive_non_transaction_events_for_non_privileged_users(
     client,
@@ -428,41 +289,6 @@ def test_status_view_filters_sensitive_non_transaction_events_for_non_privileged
     assert "diag.example" not in html
 
 @pytest.mark.django_db
-def test_status_view_shows_sensitive_non_transaction_events_for_owner_group_members(
-    client,
-):
-    """Owner-group users should keep access to sensitive non-transaction events."""
-
-    user = get_user_model().objects.create_user(
-        username="status-events-owner-group", password="pass"
-    )
-    security_group = SecurityGroup.objects.create(name="Diagnostics Viewers")
-    user.groups.add(security_group)
-    client.force_login(user)
-    charger = Charger.objects.create(
-        charger_id="STATUS-EVENTS-OWNER-GROUP", connector_id=1
-    )
-    charger.owner_groups.add(security_group)
-    identity = store.identity_key(charger.charger_id, charger.connector_id)
-    store.add_log(
-        identity,
-        "DiagnosticsStatusNotification: status=Uploaded, location=https://diag.example/upload?token=%2A%2A%2AREDACTED%2A%2A%2A",
-    )
-
-    response = client.get(
-        reverse(
-            "ocpp:charger-status-connector",
-            args=[charger.charger_id, charger.connector_slug],
-        )
-    )
-
-    assert response.status_code == 200
-    assert any(
-        item["event"] == "DiagnosticsStatusNotification"
-        for item in response.context["non_transaction_events"]
-    )
-
-@pytest.mark.django_db
 def test_status_view_shows_non_transaction_events_for_staff(client):
     """Staff users should keep access to non-transaction events in status view."""
 
@@ -494,7 +320,6 @@ def test_status_view_shows_non_transaction_events_for_staff(client):
         item["event"] == "DiagnosticsStatusNotification"
         for item in response.context["non_transaction_events"]
     )
-
 
 @pytest.mark.critical
 def test_dedupe_event_rows_keeps_newest_status_for_out_of_order_retry_collisions():

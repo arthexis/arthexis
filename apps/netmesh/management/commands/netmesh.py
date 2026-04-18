@@ -13,7 +13,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from apps.netmesh.metrics import snapshot
-from apps.netmesh.models import NodeEndpoint, NodeKeyMaterial, PeerPolicy
+from apps.netmesh.models import NodeKeyMaterial, PeerPolicy
 from apps.nodes.models import Node, NodeEnrollmentEvent
 from apps.nodes.services.enrollment import issue_enrollment_token
 
@@ -21,7 +21,7 @@ from apps.nodes.services.enrollment import issue_enrollment_token
 class Command(BaseCommand):
     """Provide a single-word command for common netmesh operations."""
 
-    help = "Netmesh operations: token enrollment, key rotation scheduling, endpoint cleanup, policy checks, and health metrics."
+    help = "Netmesh operations: token enrollment, key rotation scheduling, policy checks, and health metrics."
 
     def add_arguments(self, parser):
         subparsers = parser.add_subparsers(dest="action")
@@ -40,13 +40,6 @@ class Command(BaseCommand):
         rotate_parser.add_argument("--max-age-days", type=int, default=30, help="Key age threshold in days.")
         rotate_parser.add_argument("--dry-run", action="store_true", help="Report candidates without writing events.")
 
-        cleanup_parser = subparsers.add_parser(
-            "cleanup-endpoints",
-            help="Delete stale node endpoints based on last_seen age.",
-        )
-        cleanup_parser.add_argument("--stale-hours", type=int, default=24, help="Staleness threshold in hours.")
-        cleanup_parser.add_argument("--dry-run", action="store_true", help="Report stale endpoints without deleting.")
-
         policy_parser = subparsers.add_parser("policy", help="Compile and validate policy rules.")
         policy_parser.add_argument("mode", choices=("compile", "check"))
         policy_parser.add_argument("--tenant", default="", help="Optional tenant filter.")
@@ -54,6 +47,10 @@ class Command(BaseCommand):
 
         health_parser = subparsers.add_parser("health", help="Emit monitoring-friendly health and metrics output.")
         health_parser.add_argument("--json", action="store_true", help="Emit JSON.")
+        subparsers.add_parser(
+            "cleanup-endpoints",
+            help="Deprecated no-op retained for upgrade compatibility; remove scheduled invocations.",
+        )
 
     def handle(self, *args, **options):
         action = options["action"]
@@ -61,12 +58,12 @@ class Command(BaseCommand):
             return self._handle_enroll_token(**options)
         if action == "schedule-rotation":
             return self._handle_schedule_rotation(**options)
-        if action == "cleanup-endpoints":
-            return self._handle_cleanup_endpoints(**options)
         if action == "policy":
             return self._handle_policy(**options)
         if action == "health":
             return self._handle_health(**options)
+        if action == "cleanup-endpoints":
+            return self._handle_cleanup_endpoints()
         raise CommandError(f"Unsupported action: {action}")
 
     def _resolve_node(self, selector: str) -> Node:
@@ -121,7 +118,11 @@ class Command(BaseCommand):
         now = timezone.now()
         cutoff = now - timedelta(days=max_age_days)
         due_keys = list(
-            NodeKeyMaterial.objects.filter(revoked=False, created_at__lt=cutoff)
+            NodeKeyMaterial.objects.filter(
+                key_state=NodeKeyMaterial.KeyState.ACTIVE,
+                key_type=NodeKeyMaterial.KeyType.X25519,
+                created_at__lt=cutoff,
+            )
             .select_related("node")
             .order_by("created_at")
         )
@@ -144,27 +145,6 @@ class Command(BaseCommand):
             )
             scheduled += 1
         self.stdout.write(json.dumps({"scheduled": scheduled, "threshold_days": max_age_days}))
-
-    def _handle_cleanup_endpoints(self, **options):
-        stale_hours = int(options["stale_hours"])
-        if stale_hours <= 0:
-            raise CommandError("--stale-hours must be greater than zero.")
-        cutoff = timezone.now() - timedelta(hours=stale_hours)
-        queryset = NodeEndpoint.objects.filter(Q(last_seen__isnull=True) | Q(last_seen__lt=cutoff))
-        stale_ids = list(queryset.values_list("id", flat=True))
-        deleted = 0
-        if not options["dry_run"] and stale_ids:
-            deleted, _ = queryset.delete()
-        self.stdout.write(
-            json.dumps(
-                {
-                    "stale_hours": stale_hours,
-                    "stale_endpoint_ids": stale_ids,
-                    "deleted_rows": deleted,
-                },
-                sort_keys=True,
-            )
-        )
 
     def _handle_policy(self, **options):
         tenant = str(options["tenant"] or "").strip()
@@ -227,3 +207,8 @@ class Command(BaseCommand):
         self.stdout.write(f"status={health_payload['status']}")
         self.stdout.write(f"timestamp={health_payload['timestamp']}")
         self.stdout.write(json.dumps(health_payload["metrics"], sort_keys=True))
+
+    def _handle_cleanup_endpoints(self):
+        self.stdout.write(
+            "cleanup-endpoints is deprecated and now a no-op; remove this invocation from scheduled automation."
+        )

@@ -57,6 +57,9 @@ JSONScalar: TypeAlias = str | int | float | bool | None
 JSONMapping: TypeAlias = dict[str, Any]
 JSONList: TypeAlias = list[Any]
 JSONValue: TypeAlias = JSONMapping | JSONList | JSONScalar
+RequestParamScalar: TypeAlias = str | bytes | int | float
+RequestParamValue: TypeAlias = RequestParamScalar | Iterable[RequestParamScalar] | None
+RequestParams: TypeAlias = Mapping[str, RequestParamValue]
 
 
 def build_headers(token: str, *, user_agent: str = "arthexis-admin") -> Mapping[str, str]:
@@ -240,12 +243,12 @@ def fetch_paginated_items(
     *,
     token: str,
     endpoint: str,
-    params: Mapping[str, object],
+    params: RequestParams,
     timeout: int = REQUEST_TIMEOUT,
 ) -> Iterator[Mapping[str, object]]:
     headers = build_headers(token)
     url = endpoint
-    query_params: Mapping[str, object] | None = params
+    query_params: RequestParams | None = params
 
     while url:
         response = None
@@ -286,7 +289,7 @@ def fetch_repository_issues(
     state: str = "open",
 ) -> Iterator[Mapping[str, object]]:
     endpoint = f"{API_ROOT}/repos/{owner}/{name}/issues"
-    params = {"state": state, "per_page": 100}
+    params: dict[str, RequestParamValue] = {"state": state, "per_page": 100}
     yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
 
 
@@ -298,7 +301,7 @@ def fetch_repository_pull_requests(
     state: str = "open",
 ) -> Iterator[Mapping[str, object]]:
     endpoint = f"{API_ROOT}/repos/{owner}/{name}/pulls"
-    params = {"state": state, "per_page": 100}
+    params: dict[str, RequestParamValue] = {"state": state, "per_page": 100}
     yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
 
 
@@ -315,6 +318,41 @@ def fetch_issue_comments(
 
 
 def fetch_issue_comment_reactions(
+    params: dict[str, RequestParamValue] = {"per_page": 100}
+    yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
+
+
+def _fetch_json_mapping(
+    *,
+    token: str,
+    endpoint: str,
+    timeout: int,
+    decode_error: str,
+) -> Mapping[str, object]:
+    headers = build_headers(token)
+    response = None
+    try:
+        try:
+            response = requests.get(endpoint, headers=headers, timeout=timeout)
+        except requests.RequestException as exc:  # pragma: no cover - network failure
+            raise GitHubRepositoryError(str(exc)) from exc
+
+        if not (200 <= response.status_code < 300):
+            raise GitHubRepositoryError(_extract_error_message(response))
+
+        payload = _safe_json(response)
+        if isinstance(payload, Mapping):
+            return payload
+        raise GitHubRepositoryError(decode_error)
+    finally:
+        if response is not None:
+            close = getattr(response, "close", None)
+            if callable(close):
+                with contextlib.suppress(Exception):
+                    close()
+
+
+def fetch_issue_or_pull_request(
     *,
     token: str,
     owner: str,
@@ -327,6 +365,19 @@ def fetch_issue_comment_reactions(
 
 
 def fetch_pull_request_review_comments(
+    number: int,
+    timeout: int = REQUEST_TIMEOUT,
+) -> Mapping[str, object]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/issues/{number}"
+    return _fetch_json_mapping(
+        token=token,
+        endpoint=endpoint,
+        timeout=timeout,
+        decode_error="Unable to decode issue details from GitHub",
+    )
+
+
+def fetch_commit_status_summary(
     *,
     token: str,
     owner: str,
@@ -339,6 +390,19 @@ def fetch_pull_request_review_comments(
 
 
 def fetch_pull_request_review_comment_reactions(
+    sha: str,
+    timeout: int = REQUEST_TIMEOUT,
+) -> Mapping[str, object]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/commits/{sha}/status"
+    return _fetch_json_mapping(
+        token=token,
+        endpoint=endpoint,
+        timeout=timeout,
+        decode_error="Unable to decode commit status from GitHub",
+    )
+
+
+def fetch_pull_request(
     *,
     token: str,
     owner: str,
@@ -420,7 +484,9 @@ def get_github_issue_token() -> str:
         if cleaned:
             return cleaned
 
-    raise RuntimeError(f"GitHub token is not configured; set one via {DEFAULT_PACKAGE.repository_url}")
+    raise GitHubRepositoryError(
+        f"GitHub token is not configured; set one via {DEFAULT_PACKAGE.repository_url}"
+    )
 
 
 def create_issue(
@@ -777,6 +843,52 @@ def merge_pull_request(
         repository,
         pull_number,
         merge_method,
+    )
+    return response
+
+
+def create_issue_comment(
+    owner: str,
+    repository: str,
+    *,
+    issue_number: int,
+    token: str,
+    body: str,
+    timeout: int = REQUEST_TIMEOUT,
+) -> requests.Response:
+    """Post a comment on a specific issue or pull request and return the API response."""
+
+    cleaned_body = body.strip()
+    if not cleaned_body:
+        raise ValueError("Issue comment body must not be empty")
+
+    headers = build_headers(token, user_agent="arthexis-runtime-reporter")
+    url = f"{API_ROOT}/repos/{owner}/{repository}/issues/{issue_number}/comments"
+    response = None
+    try:
+        response = requests.post(
+            url,
+            json={"body": cleaned_body},
+            headers=headers,
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        raise GitHubRepositoryError(str(exc)) from exc
+
+    if not (200 <= response.status_code < 300):
+        try:
+            message = _extract_error_message(response)
+        finally:
+            with contextlib.suppress(Exception):
+                response.close()
+        raise GitHubRepositoryError(message)
+
+    logger.info(
+        "GitHub issue comment created for %s/%s#%s with status %s",
+        owner,
+        repository,
+        issue_number,
+        response.status_code,
     )
     return response
 

@@ -61,24 +61,14 @@ A release manager should confirm:
 5. OCPP and integration behaviors covered by the release are validated.
 6. Release notes clearly describe known limitations and upgrade considerations.
 
-## Current roadmap to 0.4 stability
-
-Arthexis is currently `0.2.x` (**Beta**).
-
-The planned maturity path is:
-
-1. **`0.2.x` (Beta)**: Continue hardening, reduce regressions, and close critical integration gaps.
-2. **`0.3.x` (Release Candidate)**: Freeze scope to readiness fixes, upgrade safety, and operational confidence.
-3. **`0.4.x` (Stable GA for major zero)**: Maintain conservative updates and production-first reliability.
-4. **Post-`0.4.x` track**: Focus on stability and critical security patches.
-
 ## Release note convention
 
 Each release note should include:
 
 - current maturity stage
-- patch objectives completed in that release
-- remaining promotion blockers (if any)
-- expected next maturity milestone
+- shipped changes in that release
+- known constraints, limitations, and upgrade considerations
 
-This keeps Arthexis aligned with its role as an OCPP-compatible suite that can be extended through cohesive Django apps, models, and migrations instead of disconnected side systems.
+Release notes are a factual record of what shipped and what operators should account for now. They are not a roadmap, forecast, or commitment to future milestones.
+
+This policy is governance and reference guidance for consistent maturity signaling across the Arthexis suite.

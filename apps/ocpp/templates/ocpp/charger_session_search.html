@@ -15,28 +15,43 @@
   {% endfor %}
 </nav>
 {% endif %}
-{% if date_toggle_links %}
-<div class="d-flex flex-column flex-md-row gap-2 justify-content-between align-items-md-center mb-3">
-  <span class="text-muted small text-uppercase fw-semibold">{% trans "Date display" %}</span>
-  <div class="btn-group" role="group" aria-label="{% trans 'Date display' %}">
-    {% for link in date_toggle_links %}
-    <a class="btn btn-outline-secondary{% if link.active %} active{% endif %}" href="{{ link.url }}">{{ link.label }}</a>
-    {% endfor %}
+<div class="card mb-3">
+  <div class="card-body">
+    <p class="text-muted small mb-3">{% trans "Choose the date window and timestamp mode to refine the sessions shown below." %}</p>
+    {% if date_toggle_links %}
+    <div class="d-flex flex-column flex-md-row gap-2 justify-content-between align-items-md-center mb-3">
+      <span class="text-muted small text-uppercase fw-semibold">{% trans "Date display" %}</span>
+      <div class="btn-group" role="group" aria-label="{% trans 'Date display' %}">
+        {% for link in date_toggle_links %}
+        <a class="btn btn-outline-secondary{% if link.active %} active{% endif %}" href="{{ link.url }}">{{ link.label }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    <form method="get" class="mb-0">
+      <label class="form-label" for="date">{% trans "Exact date" %}</label>
+      <div class="d-flex flex-column flex-md-row gap-2">
+        <input type="date" id="date" name="date" class="form-control" value="{{ date|default:'' }}">
+        <input type="hidden" name="dates" value="{{ date_view }}">
+        <button type="submit" class="btn btn-primary">{% trans "Search" %}</button>
+      </div>
+      <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+        <span class="text-muted small">{% trans "Quick ranges:" %}</span>
+        <a class="btn btn-sm btn-outline-secondary{% if quick_range == 'today' %} active{% endif %}" href="?range=today&amp;dates={{ date_view }}">{% trans "Today" %}</a>
+        <a class="btn btn-sm btn-outline-secondary{% if quick_range == 'yesterday' %} active{% endif %}" href="?range=yesterday&amp;dates={{ date_view }}">{% trans "Yesterday" %}</a>
+        <a class="btn btn-sm btn-outline-secondary{% if quick_range == 'last7' %} active{% endif %}" href="?range=last7&amp;dates={{ date_view }}">{% trans "Last 7 days" %}</a>
+      </div>
+    </form>
   </div>
 </div>
-{% endif %}
-<form method="get" class="mb-3">
-  <label class="form-label" for="date">{% trans "Select date" %}</label>
-  <div class="d-flex gap-2">
-    <input type="date" id="date" name="date" class="form-control" value="{{ date|default:'' }}">
-    <input type="hidden" name="dates" value="{{ date_view }}">
-    <button type="submit" class="btn btn-primary">{% trans "Search" %}</button>
-  </div>
-</form>
 {% if transactions is not None %}
   {% if transactions %}
+  <div class="d-flex justify-content-between align-items-center small text-muted border rounded px-3 py-2 mb-2">
+    <span><strong class="text-body">{{ filtered_count }}</strong> {% trans "sessions" %}</span>
+    <span>{% trans "Total energy" %}: <strong class="text-body">{{ filtered_total_kw|floatformat:2 }}</strong> {% trans "kWh" %}</span>
+  </div>
   <div class="table-responsive">
-    <table class="table align-middle">
+    <table class="table table-sm align-middle table-striped">
       <thead>
         <tr>
           <th scope="col">{% trans "ID" %}</th>
@@ -45,7 +60,7 @@
           {% endif %}
           <th scope="col">{% trans "Start" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
           <th scope="col">{% trans "Stop" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
-          <th scope="col">{% trans "Energy (kW)" %}</th>
+          <th scope="col">{% trans "Energy (kWh)" %}</th>
           <th scope="col">{% trans "RFID Label" %}</th>
         </tr>
       </thead>
@@ -57,11 +72,11 @@
           <td>{{ tx.charger.connector_label }}</td>
           {% endif %}
           {% if date_view == "received" %}
-          <td>{{ tx.received_start_time|default:tx.start_time }}</td>
-          <td>{{ tx.received_stop_time|default:tx.stop_time|default:"-" }}</td>
+          <td>{{ tx.received_start_time|default:tx.start_time|date:"Y-m-d H:i" }}</td>
+          <td>{{ tx.received_stop_time|default:tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>
           {% else %}
-          <td>{{ tx.start_time }}</td>
-          <td>{{ tx.stop_time|default:"-" }}</td>
+          <td>{{ tx.start_time|date:"Y-m-d H:i" }}</td>
+          <td>{{ tx.stop_time|date:"Y-m-d H:i"|default:"-" }}</td>
           {% endif %}
           <td>{{ tx.kw|floatformat:2 }}</td>
           <td>

@@ -3,17 +3,23 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
-from io import BytesIO
 from time import perf_counter
 from typing import Any
+from urllib.parse import urlparse
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.html import strip_tags
-
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
+
+try:  # pragma: no cover - exercised through fallback behavior tests
+    from weasyprint import HTML, default_url_fetcher
+except ImportError:  # pragma: no cover - optional dependency
+    HTML = None
+    default_url_fetcher = None
 
 from .models import SQLReport, SQLReportProduct
 from .report_definitions import get_report_definition, report_catalog
@@ -70,7 +76,9 @@ class SQLExecutionResult:
         }
 
 
-def render_report_product(sql_report: SQLReport, result: SQLExecutionResult) -> SQLReportProduct:
+def render_report_product(
+    sql_report: SQLReport, result: SQLExecutionResult
+) -> SQLReportProduct:
     """Render and persist HTML/PDF outputs for a named report execution.
 
     Parameters:
@@ -104,7 +112,9 @@ def render_report_product(sql_report: SQLReport, result: SQLExecutionResult) -> 
     )
 
 
-def run_sql_report(sql_report: SQLReport) -> tuple[SQLExecutionResult, SQLReportProduct | None]:
+def run_sql_report(
+    sql_report: SQLReport,
+) -> tuple[SQLExecutionResult, SQLReportProduct | None]:
     """Run a named report implementation and persist rendered products.
 
     Parameters:
@@ -144,7 +154,9 @@ def run_sql_report(sql_report: SQLReport) -> tuple[SQLExecutionResult, SQLReport
         )
         return result, None
     except Exception as exc:  # pragma: no cover - defensive path
-        logger.exception("Unexpected error executing report", extra={"report_id": sql_report.pk})
+        logger.exception(
+            "Unexpected error executing report", extra={"report_id": sql_report.pk}
+        )
         result = SQLExecutionResult(
             columns=[],
             rows=[],
@@ -163,33 +175,53 @@ def run_sql_report(sql_report: SQLReport) -> tuple[SQLExecutionResult, SQLReport
         updated_at=timezone.now(),
         parameters=parameters,
     )
-    sql_report.refresh_from_db(fields=["last_run_at", "last_run_duration", "parameters"])
+    sql_report.refresh_from_db(
+        fields=["last_run_at", "last_run_duration", "parameters"]
+    )
 
     try:
         product = render_report_product(sql_report, result)
     except Exception as exc:  # pragma: no cover - defensive path
-        logger.exception("Unable to render report product", extra={"report_id": sql_report.pk})
+        logger.exception(
+            "Unable to render report product", extra={"report_id": sql_report.pk}
+        )
         result.error = str(exc)
         return result, None
 
     return result, product
 
 
-def run_due_scheduled_reports(now: timezone.datetime | None = None) -> int:
-    """Run all enabled reports whose schedule indicates they are due.
+def run_due_scheduled_reports(
+    report_ids: list[int] | tuple[int, ...] | None = None,
+    now: timezone.datetime | None = None,
+) -> int:
+    """Run explicitly targeted scheduled reports.
 
     Parameters:
-        now: Optional reference timestamp.
+        report_ids: Explicit report IDs to execute.
+        now: Optional reference timestamp used for legacy fallback.
 
     Returns:
         Number of successfully processed reports.
     """
 
-    current = now or timezone.now()
+    selected_ids = [int(report_id) for report_id in (report_ids or []) if report_id]
+    if not selected_ids:
+        current = now or timezone.now()
+        selected_ids = list(
+            SQLReport.objects.filter(
+                schedule_enabled=True,
+                schedule_interval_minutes__gt=0,
+                next_scheduled_run_at__lte=current,
+                schedule_periodic_task__isnull=True,
+            )
+            .exclude(report_type=SQLReport.ReportType.LEGACY_ARCHIVED)
+            .values_list("pk", flat=True)
+        )
+
     due_reports = SQLReport.objects.filter(
+        pk__in=selected_ids,
         schedule_enabled=True,
-        schedule_interval_minutes__gt=0,
-        next_scheduled_run_at__lte=current,
     ).exclude(report_type=SQLReport.ReportType.LEGACY_ARCHIVED)
 
     processed = 0
@@ -198,15 +230,23 @@ def run_due_scheduled_reports(now: timezone.datetime | None = None) -> int:
         if result.error:
             continue
 
-        report.next_scheduled_run_at = current + timedelta(minutes=report.schedule_interval_minutes)
-        report.save(update_fields=["next_scheduled_run_at", "updated_at"])
+        if (
+            not report.schedule_periodic_task_id
+            and report.schedule_interval_minutes > 0
+        ):
+            SQLReport.objects.filter(pk=report.pk).update(
+                next_scheduled_run_at=(now or timezone.now())
+                + timedelta(minutes=report.schedule_interval_minutes),
+                updated_at=timezone.now(),
+            )
+
         processed += 1
 
     return processed
 
 
 def _render_pdf_bytes(rendered_html: str) -> bytes:
-    """Create a basic PDF document from rendered template text content.
+    """Render report HTML into PDF bytes using the configured HTML renderer.
 
     Parameters:
         rendered_html: Rendered HTML payload.
@@ -215,23 +255,25 @@ def _render_pdf_bytes(rendered_html: str) -> bytes:
         PDF bytes.
     """
 
-    stream = BytesIO()
-    pdf = canvas.Canvas(stream, pagesize=letter)
-    y = 760
+    if not getattr(settings, "REPORTS_HTML_TO_PDF_ENABLED", True):
+        logger.debug("Report PDF rendering disabled by REPORTS_HTML_TO_PDF_ENABLED")
+        return b""
 
-    text_content = strip_tags(rendered_html)
+    if HTML is None:
+        logger.warning("Report PDF rendering unavailable: missing WeasyPrint dependency")
+        return b""
 
-    for line in text_content.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
+    try:
+        return HTML(string=rendered_html, url_fetcher=_safe_report_url_fetcher).write_pdf()
+    except (OSError, RuntimeError, ValueError) as exc:
+        logger.warning("Report PDF rendering failed; returning empty PDF payload", exc_info=exc)
+        return b""
 
-        if y <= 60:
-            pdf.showPage()
-            y = 760
 
-        pdf.drawString(40, y, stripped[:140])
-        y -= 14
+def _safe_report_url_fetcher(url: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    """Restrict WeasyPrint URL fetching to data URIs only."""
 
-    pdf.save()
-    return stream.getvalue()
+    parsed = urlparse(url)
+    if parsed.scheme == "data" and default_url_fetcher is not None:
+        return default_url_fetcher(url, *args, **kwargs)
+    raise ValueError("External resource loading is disabled for report PDF rendering")

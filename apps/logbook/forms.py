@@ -9,6 +9,16 @@ from django.utils.translation import gettext_lazy as _
 
 from .models import LogbookEntry
 
+DISALLOWED_LOGBOOK_LOG_FILENAMES = frozenset({"rfid-scans.ndjson"})
+
+
+def is_logbook_attachable_log(path: Path) -> bool:
+    return (
+        path.is_file()
+        and not path.name.startswith(".")
+        and path.name not in DISALLOWED_LOGBOOK_LOG_FILENAMES
+    )
+
 
 class LogbookEntryForm(forms.ModelForm):
     class MultiFileInput(forms.ClearableFileInput):
@@ -52,7 +62,7 @@ class LogbookEntryForm(forms.ModelForm):
                 for entry in sorted(
                     logs_dir.iterdir(), key=lambda item: item.name.lower()
                 )
-                if entry.is_file() and not entry.name.startswith(".")
+                if is_logbook_attachable_log(entry)
             ][:100]
         self.fields["logs"].choices = choices
 

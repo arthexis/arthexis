@@ -14,7 +14,6 @@ from apps.repos.models.repositories import GitHubRepository
 
 
 @pytest.mark.django_db
-@pytest.mark.critical
 def test_github_webhook_form_payload_array_is_preserved(client):
     repo = GitHubRepository.objects.create(owner="octocat", name="hello-world")
 
@@ -37,7 +36,6 @@ def test_github_webhook_form_payload_array_is_preserved(client):
 
 
 @pytest.mark.django_db
-@pytest.mark.critical
 def test_github_webhook_header_lookup_is_case_insensitive(client):
     repo = GitHubRepository.objects.create(owner="octocat", name="hello-world")
     url = reverse("repos:github-webhook")

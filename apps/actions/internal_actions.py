@@ -61,10 +61,22 @@ INTERNAL_ACTION_SPECS: tuple[InternalActionSpec, ...] = (
         admin_url_name="actions-api-security-groups",
     ),
     InternalActionSpec(
+        name="imager",
+        label="Imager",
+        description="Open the Raspberry Pi image builder wizard.",
+        admin_url_name="admin:imager_raspberrypiimageartifact_create_rpi_image",
+    ),
+    InternalActionSpec(
         name="logs",
         label="Logs",
         description="Browse system and application logs.",
         admin_url_name="admin:log_viewer",
+    ),
+    InternalActionSpec(
+        name="release",
+        label="Release",
+        description="Prepare, review, and publish package releases.",
+        admin_url_name="admin:release_packagerelease_changelist",
     ),
     InternalActionSpec(
         name="reports",

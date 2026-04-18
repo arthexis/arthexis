@@ -13,6 +13,7 @@ from ... import store
 from .common import CALL_EXPECTED_STATUSES, ActionCall, ActionContext
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "ClearDisplayMessage")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ClearDisplayMessage")
 def _handle_clear_display_message(
     context: ActionContext, data: dict
@@ -53,6 +54,7 @@ def _handle_clear_display_message(
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetDisplayMessages")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetDisplayMessages")
 def _handle_get_display_messages(
     context: ActionContext, data: dict
@@ -121,6 +123,7 @@ def _handle_get_display_messages(
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "SetDisplayMessage")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetDisplayMessage")
 def _handle_set_display_message(
     context: ActionContext, data: dict

@@ -8,8 +8,9 @@ from config import urls as project_urls
 
 def _collect_checks(resolver: URLResolver, errors: list, prefix: str = ""):
     for pattern in resolver.url_patterns:
+        route_prefix = getattr(pattern.pattern, "_route", str(pattern.pattern))
         if isinstance(pattern, URLResolver):
-            _collect_checks(pattern, errors, prefix + pattern.pattern._route)
+            _collect_checks(pattern, errors, prefix + route_prefix)
         elif isinstance(pattern, URLPattern):
             view = pattern.callback
             if getattr(view, "landing", False):
@@ -36,5 +37,5 @@ def landing_views_have_no_args(app_configs, **kwargs):
     errors: list = []
     for p in project_urls.urlpatterns:
         if isinstance(p, URLResolver):
-            _collect_checks(p, errors, p.pattern._route)
+            _collect_checks(p, errors, getattr(p.pattern, "_route", str(p.pattern)))
     return errors

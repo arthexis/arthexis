@@ -28,10 +28,11 @@ upgrade.
    files into the environment for downstream commands.
 3. Reuse `.locks/staticfiles.md5` together with `.locks/staticfiles.meta` to
    avoid re-hashing static assets when the recorded mtime snapshot matches the
-   current filesystem. When the metadata is stale (or
-   `--force-collectstatic` is provided), compute a new hash with
-   `scripts/staticfiles_md5.py`, refresh both lock files, and run
-   `manage.py collectstatic --noinput` if the hash differs.
+   current filesystem. Collectstatic behavior is controlled by
+   `ARTHEXIS_COLLECTSTATIC_POLICY=apply|check|skip` (`apply` is the default):
+   `apply` runs `manage.py collectstatic --noinput` when assets are stale,
+   `check` fails startup if assets are stale, and `skip` bypasses the static
+   assets preflight entirely. `--force-collectstatic` always forces `apply`.
 4. Invoke `manage.py startup_orchestrate` and consume its JSON contract to keep
    shell branching deterministic (`launch.celery_embedded`,
    `launch.lcd_embedded`, `launch.lcd_target_mode`, and structured check
@@ -44,6 +45,26 @@ upgrade.
 7. Launch the Django server on `0.0.0.0:<port>`, using `--noreload` unless
    `--reload` was requested.
 
+## Boot upgrade prestart throttle (`scripts/boot-upgrade-prestart.sh`)
+
+Systemd-managed service starts can run the boot upgrade prestart helper before
+`service-start.sh`. The helper keeps startup fast on already-current nodes:
+
+1. Check the existing failure backoff lock
+   `.locks/<service>-boot-upgrade-backoff-until.lck`; when active, skip
+   `upgrade.sh`.
+2. Resolve the current local git revision and compare it with
+   `.locks/<service>-boot-upgrade-last-check.lck` (`<epoch>|<revision>`).
+3. If the last successful check is recent (within
+   `ARTHEXIS_BOOT_UPGRADE_CHECK_TTL_SECONDS`, default `300`) and the revision is
+   unchanged, skip invoking `upgrade.sh`.
+4. Otherwise invoke `upgrade.sh` (stable/latest channel rules unchanged). On
+   success, refresh the recency lock; on failure, preserve existing behavior by
+   writing backoff to `.locks/<service>-boot-upgrade-backoff-until.lck`.
+
+Set `ARTHEXIS_BOOT_UPGRADE_FORCE_CHECK=1` to bypass recency throttle and force
+a fresh check (while still honoring active failure backoff).
+
 ## Startup orchestration (`manage.py startup_orchestrate`)
 1. Evaluate lock/feature state for service mode, Celery units, and LCD feature
    enablement.
@@ -53,6 +74,37 @@ upgrade.
 4. Queue LCD startup messaging when LCD is enabled.
 5. Write orchestration status metadata to
    `.locks/startup_orchestrate_status.lck` and emit a JSON launch contract.
+
+### Migration policy tuning by environment
+
+`run_runserver_preflight` supports `ARTHEXIS_MIGRATION_POLICY=apply|check|skip`.
+
+- `check`: verify migration state and fail fast when migrations are pending.
+- `apply`: apply pending migrations during startup.
+- `skip`: bypass migration preflight entirely (recommended only when your
+  deployment pipeline guarantees migrations have already been applied).
+
+Fresh installs continue to use role-based defaults (`satellite`/`watchtower`
+default to `check`; other roles default to `apply`). Existing installations are
+auto-defaulted to `ARTHEXIS_MIGRATION_POLICY=check` during install updates to
+reduce blocking startup time on routine app nodes. Reserve `apply` for
+nodes/environments that are explicitly responsible for schema rollout.
+
+### Collectstatic policy tuning by environment
+
+`scripts/service-start.sh` supports
+`ARTHEXIS_COLLECTSTATIC_POLICY=apply|check|skip`.
+
+- `apply`: run `collectstatic` when static assets are stale.
+- `check`: verify static assets are current and fail fast when they are stale.
+- `skip`: bypass static assets preflight entirely (recommended only when your
+  deployment pipeline guarantees static assets are already prepared).
+
+Fresh installs default to `apply` (with role-based behavior still applying
+where configured). Existing installations are auto-defaulted to
+`ARTHEXIS_COLLECTSTATIC_POLICY=check` during install updates to reduce blocking
+startup work on routine app nodes. Reserve `apply` for nodes/environments that
+are explicitly responsible for static asset rollout.
 
 ## Operational cleanup ownership
 

@@ -64,7 +64,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
+          key: venv-${{ runner.os }}-${{ matrix.role }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
+          restore-keys: |
+            venv-${{ runner.os }}-${{ matrix.role }}-${{ steps.setup-python.outputs.python-version }}-
       - name: Validate pyproject dependency ordering
         run: |
           python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
@@ -79,8 +81,12 @@ jobs:
       - name: Install suite from repository
         run: |
           ./install.sh ${{ matrix.install_args }} --no-start
+      - name: Refresh environment dependencies
+        run: |
+          ./env-refresh.sh
       - name: Install CI dependencies
         run: |
+          ./scripts/preflight-env.sh
           source .venv/bin/activate
           python -m pip install --only-binary=:all: -r requirements-ci.txt
       - name: Verify editable install import
@@ -89,6 +95,7 @@ jobs:
           python scripts/check_editable_install_import.py
       - name: Validate migrations
         run: |
+          ./scripts/preflight-env.sh
           source .venv/bin/activate
           python scripts/check_migration_conflicts.py
           python manage.py migrations check
@@ -110,10 +117,11 @@ jobs:
           python scripts/check_import_resolution.py
       - name: Validate installed app manifests
         run: |
+          ./scripts/preflight-env.sh --pytest
           source .venv/bin/activate
           manifest_test_file="tests/test_installed_apps_manifests.py"
           if [[ -f "$manifest_test_file" ]]; then
-            pytest "$manifest_test_file" -q
+            python -m pytest "$manifest_test_file" -q
           else
             echo "Manifest test file $manifest_test_file not found; skipping manifest app validation."
           fi
@@ -129,7 +137,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          pytest_help="$(pytest --help)"
+          pytest_help="$(python -m pytest --help)"
           if grep -q -- '--dist' <<<"$pytest_help"; then
             workers="${PYTEST_WORKERS:-auto}"
             echo "PYTEST_XDIST_ARGS=-n ${workers} --dist loadfile" >> "${GITHUB_ENV}"
@@ -139,15 +147,40 @@ jobs:
       - name: Run install smoke tests
         run: |
           set -Eeuo pipefail
+          ./scripts/preflight-env.sh --pytest
           source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
-          pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "not critical and not slow and not integration" | tee pytest.log
+          python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 --junitxml=pytest-junit.xml -m "not critical and not slow and not integration" | tee pytest.log
+      - name: Run install critical smoke tests
+        if: always()
+        run: |
+          set -Eeuo pipefail
+          ./scripts/preflight-env.sh --pytest
+          source .venv/bin/activate
+          critical_smoke_tests=(
+            "apps/netmesh/tests/test_api.py::test_netmesh_token_lifecycle_errors_are_stable"
+            "apps/ocpp/tests/test_charger_status_polling.py::test_dedupe_event_rows_keeps_newest_status_for_out_of_order_retry_collisions"
+            "apps/meta/tests/test_webhooks.py::test_whatsapp_webhook_rejects_invalid_signature"
+            "tests/test_nodes_registration.py::test_register_visitor_proxy_reports_partial_failure_on_visitor_confirmation"
+          )
+          python -m pytest --maxfail=1 --disable-warnings -q --timeout=120 --junitxml=pytest-critical-junit.xml "${critical_smoke_tests[@]}" | tee pytest-critical.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: install-hourly-pytest-log-${{ matrix.role }}
-          path: pytest.log
+          name: install-hourly-pytest-results-${{ matrix.role }}
+          path: |
+            pytest.log
+            pytest-junit.xml
+          if-no-files-found: warn
+      - name: Upload critical pytest log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: install-hourly-critical-smoke-${{ matrix.role }}
+          path: |
+            pytest-critical.log
+            pytest-critical-junit.xml
           if-no-files-found: warn
 
   notify_failure:
@@ -161,7 +194,7 @@ jobs:
       issues: write
     steps:
       - name: Open or update install failure issue
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const title = 'Install health check is failing';
@@ -171,6 +204,7 @@ jobs:
             let runData = null;
             let failedSteps = '';
             let failedRoles = '';
+            let failedJobCount = 0;
 
             try {
               const { data: fetchedRunData } = await github.rest.actions.getWorkflowRun({
@@ -196,13 +230,18 @@ jobs:
                 }
               });
               failedRoles = Array.from(failedRoleSet).sort().join(', ');
+              failedJobCount = failedJobs.length;
               failedSteps = failedJobs
                 .map((job) => {
                   const failedStep = (job.steps || []).find((step) => step.conclusion === 'failure');
+                  const jobUrl = job.html_url ? ` [job logs](${job.html_url})` : '';
+                  const timing = job.started_at && job.completed_at
+                    ? ` (started: ${job.started_at}, completed: ${job.completed_at})`
+                    : '';
                   if (!failedStep) {
-                    return `- ${job.name}`;
+                    return `- ${job.name}${jobUrl}${timing}`;
                   }
-                  return `- ${job.name}: ${failedStep.name}`;
+                  return `- ${job.name}: ${failedStep.name}${jobUrl}${timing}`;
                 })
                 .join('\n');
             } catch (error) {
@@ -219,14 +258,15 @@ jobs:
               `- Branch/ref: ${context.ref}`,
               `- Commit: ${context.sha}`,
               `- Triggered by: ${runData?.event ?? context.eventName}`,
+              `- Run attempt: ${runData?.run_attempt ?? 1}`,
+              `- Actor: ${runData?.actor?.login ?? context.actor}`,
               '',
               '## Failure details',
               '',
               failedRoles ? `- Failed roles: ${failedRoles}` : '- Failed roles: Unable to determine failed roles from workflow metadata.',
+              failedJobCount ? `- Failed jobs: ${failedJobCount}` : '- Failed jobs: Unable to determine failed jobs from workflow metadata.',
               '',
               failedSteps ? failedSteps : '- Unable to identify failed steps from workflow metadata.',
-              '',
-              'Please investigate and close this issue once resolved.'
             ].join('\n');
 
             const openIssues = await github.paginate(github.rest.issues.listForRepo, {
@@ -247,8 +287,10 @@ jobs:
                   '',
                   `- Workflow run: ${runUrl}`,
                   `- Commit: ${context.sha}`,
+                  `- Run attempt: ${runData?.run_attempt ?? 1}`,
                   '',
                   failedRoles ? `### Failed roles\n- ${failedRoles}` : '### Failed roles\n- Unable to determine failed roles from workflow metadata.',
+                  failedJobCount ? `### Failed jobs\n- ${failedJobCount}` : '### Failed jobs\n- Unable to determine failed jobs from workflow metadata.',
                   '',
                   failedSteps ? '### Failed steps\n' + failedSteps : '### Failed steps\n- Unable to identify failed steps from workflow metadata.'
                 ].join('\n')
@@ -275,7 +317,7 @@ jobs:
       issues: write
     steps:
       - name: Comment and close install failure issue when recovered
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const title = 'Install health check is failing';

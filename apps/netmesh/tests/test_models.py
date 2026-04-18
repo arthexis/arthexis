@@ -5,11 +5,9 @@ from django.db import IntegrityError, transaction
 from apps.netmesh.models import (
     MeshMembership,
     NodeKeyMaterial,
-    NodeRelayConfig,
     PeerPolicy,
-    RelayRegion,
-    ServiceAdvertisement,
 )
+from apps.netmesh.services.key_material import ensure_active_transport_key, rotate_transport_key
 from apps.nodes.models import Node, NodeRole
 from apps.ocpp.models import Charger
 
@@ -22,6 +20,57 @@ def test_node_key_material_only_one_active_key():
 
     with pytest.raises(IntegrityError):
         NodeKeyMaterial.objects.create(node=node, public_key="pk-2", revoked=False)
+
+
+@pytest.mark.django_db
+def test_rotate_transport_key_creates_x25519_transport_identity_separate_from_bootstrap_key():
+    node = Node.objects.create(hostname="mesh-key-rotate", public_key="ssh-rsa bootstrap")
+    previous = NodeKeyMaterial.objects.create(
+        node=node,
+        key_type=NodeKeyMaterial.KeyType.RSA_BOOTSTRAP,
+        key_state=NodeKeyMaterial.KeyState.ACTIVE,
+        public_key="ssh-rsa bootstrap",
+        key_version=1,
+        revoked=False,
+    )
+
+    rotated, private_key = rotate_transport_key(node=node)
+    previous.refresh_from_db()
+
+    assert rotated.key_type == NodeKeyMaterial.KeyType.X25519
+    assert rotated.key_state == NodeKeyMaterial.KeyState.ACTIVE
+    assert rotated.public_key.startswith("x25519:")
+    assert rotated.public_key != node.public_key
+    assert rotated.key_version == 2
+    assert previous.key_state == NodeKeyMaterial.KeyState.RETIRED
+    assert previous.revoked is True
+    assert previous.rotated_at is not None
+    assert private_key
+
+
+@pytest.mark.django_db
+def test_ensure_active_transport_key_replaces_active_bootstrap_key():
+    node = Node.objects.create(hostname="mesh-key-ensure", public_key="ssh-rsa bootstrap")
+    previous = NodeKeyMaterial.objects.create(
+        node=node,
+        key_type=NodeKeyMaterial.KeyType.RSA_BOOTSTRAP,
+        key_state=NodeKeyMaterial.KeyState.ACTIVE,
+        public_key="ssh-rsa bootstrap",
+        key_version=1,
+        revoked=False,
+    )
+
+    ensured, private_key = ensure_active_transport_key(node=node)
+    previous.refresh_from_db()
+
+    assert ensured.key_type == NodeKeyMaterial.KeyType.X25519
+    assert ensured.key_state == NodeKeyMaterial.KeyState.ACTIVE
+    assert ensured.public_key.startswith("x25519:")
+    assert ensured.key_version == 2
+    assert previous.key_state == NodeKeyMaterial.KeyState.RETIRED
+    assert previous.revoked is True
+    assert previous.rotated_at is not None
+    assert private_key
 
 
 @pytest.mark.django_db
@@ -187,31 +236,3 @@ def test_peer_policy_requires_non_empty_tenant():
                 destination_node=destination,
             )
 
-
-@pytest.mark.django_db
-def test_service_advertisement_port_range_validation():
-    node = Node.objects.create(hostname="mesh-port")
-    out_of_range_port = ServiceAdvertisement(
-        node=node,
-        service_name="svc",
-        protocol=ServiceAdvertisement.Protocol.TCP,
-        port=65536,
-    )
-
-    with pytest.raises(ValidationError):
-        out_of_range_port.full_clean()
-
-
-@pytest.mark.django_db
-def test_node_relay_config_unique_per_region():
-    node = Node.objects.create(hostname="mesh-relay-node")
-    region = RelayRegion.objects.create(
-        code="usw2",
-        name="US West",
-        relay_endpoint="wss://relay-usw2.example/mesh",
-    )
-    NodeRelayConfig.objects.create(node=node, region=region)
-
-    with pytest.raises(IntegrityError):
-        with transaction.atomic():
-            NodeRelayConfig.objects.create(node=node, region=region)

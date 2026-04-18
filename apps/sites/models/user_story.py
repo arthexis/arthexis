@@ -115,7 +115,6 @@ class UserStory(Lead):
             f"**Rating:** {self.rating}/5",
             f"**Name:** {name}",
             f"**Contact via chat:** {'Yes' if self.contact_via_chat else 'No'}",
-            f"**JavaScript enabled:** {'Yes' if self.javascript_enabled else 'No'}",
         ]
         if self.screenshot:
             lines.append("**Screenshot:** Provided (see admin attachments).")

@@ -19,6 +19,7 @@ from .common import (
 )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetCompositeSchedule")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetCompositeSchedule")
 def _handle_get_composite_schedule(
     context: ActionContext, data: dict
@@ -100,6 +101,7 @@ def _handle_get_composite_schedule(
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "SetChargingProfile")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetChargingProfile")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "SetChargingProfile")
 def _handle_set_charging_profile(
@@ -174,6 +176,7 @@ def _handle_set_charging_profile(
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "ClearChargingProfile")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ClearChargingProfile")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ClearChargingProfile")
 def _handle_clear_charging_profile(
@@ -298,6 +301,7 @@ def _handle_clear_charging_profile(
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetChargingProfiles")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetChargingProfiles")
 def _handle_get_charging_profiles(
     context: ActionContext, data: dict

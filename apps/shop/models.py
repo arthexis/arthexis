@@ -115,6 +115,7 @@ class ShopProduct(Entity):
     currency = models.CharField(max_length=8, default="EUR")
     stock_quantity = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    supports_soul_seed_preload = models.BooleanField(default=False)
     odoo_product = models.ForeignKey(
         "odoo.OdooProduct",
         null=True,

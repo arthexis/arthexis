@@ -8,7 +8,11 @@ import bleach
 import markdown
 
 from apps.docs import assets
-
+from apps.sigils.sigil_resolver import (
+    get_user_safe_sigil_actions,
+    get_user_safe_sigil_roots,
+    resolve_sigils,
+)
 
 MARKDOWN_EXTENSIONS = ["toc", "tables", "mdx_truly_sane_lists", "fenced_code"]
 
@@ -70,6 +74,7 @@ def _sanitize_html(html: str) -> str:
         strip=True,
     )
 
+
 MARKDOWN_FILE_EXTENSIONS = {".md", ".markdown"}
 PLAINTEXT_FILE_EXTENSIONS = {".txt", ".text"}
 CSV_FILE_EXTENSIONS = {".csv"}
@@ -110,7 +115,7 @@ def render_csv_document(text: str) -> tuple[str, str]:
         empty_html = (
             '<div class="table-responsive">'
             '<table class="table table-striped table-bordered table-sm reader-table">'
-            "<tbody><tr><td class=\"text-muted\">No data available.</td></tr></tbody>"
+            '<tbody><tr><td class="text-muted">No data available.</td></tr></tbody>'
             "</table></div>"
         )
         return empty_html, ""
@@ -124,7 +129,7 @@ def render_csv_document(text: str) -> tuple[str, str]:
         return normalized
 
     header_cells = "".join(
-        f"<th scope=\"col\">{escape(value)}</th>" for value in _normalize(rows[0])
+        f'<th scope="col">{escape(value)}</th>' for value in _normalize(rows[0])
     )
     header_html = f"<thead><tr>{header_cells}</tr></thead>"
 
@@ -137,9 +142,7 @@ def render_csv_document(text: str) -> tuple[str, str]:
             for row in body_rows
         )
     else:
-        body_html = (
-            f"<tr><td class=\"text-muted\" colspan=\"{column_count}\">No rows available.</td></tr>"
-        )
+        body_html = f'<tr><td class="text-muted" colspan="{column_count}">No rows available.</td></tr>'
     body_html = f"<tbody>{body_html}</tbody>"
 
     table_html = (
@@ -155,7 +158,7 @@ def render_code_document(text: str) -> tuple[str, str]:
 
     html = (
         '<pre class="reader-code-viewer bg-body-tertiary border rounded p-3">'
-        f"<code class=\"font-monospace\">{escape(text)}</code>"
+        f'<code class="font-monospace">{escape(text)}</code>'
         "</pre>"
     )
     return html, ""
@@ -179,7 +182,12 @@ def _rewrite_mermaid_blocks(html: str) -> str:
 def read_document_text(file_path: Path) -> str:
     """Read ``file_path`` as UTF-8 text, replacing undecodable bytes."""
 
-    return file_path.read_text(encoding="utf-8", errors="replace")
+    raw_text = file_path.read_text(encoding="utf-8", errors="replace")
+    return resolve_sigils(
+        raw_text,
+        allowed_roots=get_user_safe_sigil_roots(),
+        allowed_actions=get_user_safe_sigil_actions(),
+    )
 
 
 def render_document_file(file_path: Path) -> tuple[str, str]:

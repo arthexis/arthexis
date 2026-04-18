@@ -9,6 +9,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from django.utils import timezone
 
+from apps.groups.constants import AP_USER_GROUP_NAME
 from apps.groups.constants import EXTERNAL_AGENT_GROUP_NAME
 from apps.users import temp_passwords
 from apps.users.backends import TempPasswordBackend
@@ -118,6 +119,15 @@ class PasswordCommandTests(TestCase):
         with self.assertRaisesMessage(CommandError, "identifier is required when using --group."):
             call_command("password", group="operators")
 
+    def test_access_point_user_requires_identifier(self):
+        """Access-point mode should reject invocations without an identifier."""
+
+        with self.assertRaisesMessage(
+            CommandError,
+            "identifier is required when using --access-point-user.",
+        ):
+            call_command("password", access_point_user=True)
+
     def test_assigns_group_with_group_option(self):
         """A user should be assignable to existing groups from the password command."""
 
@@ -169,3 +179,172 @@ class PasswordCommandTests(TestCase):
 
         with self.assertRaisesMessage(CommandError, "Unknown groups: missing"):
             call_command("password", user.username, password="valid-pass-123", group="missing")
+
+    def test_configures_access_point_user_mode(self):
+        """Access-point mode should disable passwords and keep the user non-staff."""
+
+        Group.objects.create(name=AP_USER_GROUP_NAME)
+        user = get_user_model().objects.create_user(
+            username="ap-user",
+            email="ap-user@example.com",
+            password="InitialPassword123",
+            is_staff=True,
+            is_superuser=True,
+            force_password_change=True,
+        )
+
+        call_command(
+            "password",
+            user.username,
+            update=True,
+            access_point_user=True,
+            group=AP_USER_GROUP_NAME,
+        )
+
+        user.refresh_from_db()
+        assert not user.is_staff
+        assert not user.is_superuser
+        assert not user.has_usable_password()
+        assert user.allow_local_network_passwordless_login is True
+        assert user.force_password_change is False
+        assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
+
+    def test_configures_access_point_user_mode_without_update_flag(self):
+        """Access-point mode should demote privileges even without --update."""
+
+        Group.objects.create(name=AP_USER_GROUP_NAME)
+        user = get_user_model().objects.create_user(
+            username="ap-no-update",
+            email="ap-no-update@example.com",
+            password="InitialPassword123",
+            is_staff=True,
+            is_superuser=True,
+            force_password_change=True,
+        )
+
+        call_command(
+            "password",
+            user.username,
+            access_point_user=True,
+            group=AP_USER_GROUP_NAME,
+        )
+
+        user.refresh_from_db()
+        assert not user.is_staff
+        assert not user.is_superuser
+        assert not user.has_usable_password()
+        assert user.allow_local_network_passwordless_login is True
+        assert user.force_password_change is False
+        assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
+
+    def test_configures_access_point_user_mode_clears_existing_groups(self):
+        """Access-point mode should drop prior group access before reassignment."""
+
+        Group.objects.create(name=AP_USER_GROUP_NAME)
+        legacy_group = Group.objects.create(name="Legacy Admin")
+        user = get_user_model().objects.create_user(
+            username="ap-groups-clear",
+            email="ap-groups-clear@example.com",
+            password="InitialPassword123",
+            is_staff=True,
+            is_superuser=True,
+        )
+        user.groups.add(legacy_group)
+
+        call_command(
+            "password",
+            user.username,
+            access_point_user=True,
+            group=AP_USER_GROUP_NAME,
+        )
+
+        user.refresh_from_db()
+        assert not user.groups.filter(name=legacy_group.name).exists()
+        assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
+
+    def test_access_point_user_mode_preserves_groups_when_requested_group_is_unknown(self):
+        """Failed AP group reassignment should not apply partial account hardening."""
+
+        legacy_group = Group.objects.create(name="Legacy Admin")
+        user = get_user_model().objects.create_user(
+            username="ap-groups-unknown",
+            email="ap-groups-unknown@example.com",
+            password="InitialPassword123",
+        )
+        user.groups.add(legacy_group)
+
+        with self.assertRaisesMessage(CommandError, "Unknown groups: missing-ap"):
+            call_command(
+                "password",
+                user.username,
+                access_point_user=True,
+                group="missing-ap",
+            )
+
+        user.refresh_from_db()
+        assert user.groups.filter(name=legacy_group.name).exists()
+        assert user.has_usable_password()
+        assert user.allow_local_network_passwordless_login is False
+
+    def test_permanent_password_disables_access_point_mode(self):
+        """Permanent-password updates should exit access-point passwordless mode."""
+
+        user = get_user_model().objects.create_user(
+            username="ap-disable-permanent",
+            email="ap-disable-permanent@example.com",
+            password="InitialPassword123",
+            allow_local_network_passwordless_login=True,
+        )
+
+        call_command(
+            "password",
+            user.username,
+            password="UpdatedPassword123",
+        )
+
+        user.refresh_from_db()
+        assert user.check_password("UpdatedPassword123")
+        assert user.allow_local_network_passwordless_login is False
+
+    def test_configures_access_point_user_mode_clears_temporary_credentials(self):
+        """Access-point mode should clear temporary-password state for hardened login."""
+
+        Group.objects.create(name=AP_USER_GROUP_NAME)
+        user = get_user_model().objects.create_user(
+            username="ap-temp-clear",
+            email="ap-temp-clear@example.com",
+            password="InitialPassword123",
+            temporary_expires_at=timezone.now() + timedelta(hours=1),
+        )
+        temp_passwords.store_temp_password(user.username, "TemporaryPassword123")
+
+        call_command(
+            "password",
+            user.username,
+            access_point_user=True,
+            group=AP_USER_GROUP_NAME,
+        )
+
+        user.refresh_from_db()
+        assert user.temporary_expires_at is None
+        assert temp_passwords.load_temp_password(user.username) is None
+
+    def test_access_point_user_mode_rejects_password_argument(self):
+        """Access-point mode should reject contradictory password arguments."""
+
+        user = get_user_model().objects.create_user(
+            username="ap-invalid",
+            email="ap-invalid@example.com",
+        )
+
+        with self.assertRaisesMessage(
+            CommandError,
+            "--access-point-user cannot be combined with --password.",
+        ):
+            call_command(
+                "password",
+                user.username,
+                update=True,
+                access_point_user=True,
+                password="AnyPassword123",
+            )
