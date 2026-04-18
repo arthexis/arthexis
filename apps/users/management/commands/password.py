@@ -10,7 +10,9 @@ from django.db.models import Q
 from django.db.utils import OperationalError
 from django.utils import timezone
 
-from apps.groups.security import ensure_default_staff_groups
+from apps.gallery.constants import GALLERY_MANAGER_GROUP_NAME
+from apps.groups.constants import AP_USER_GROUP_NAME
+from apps.groups.security import ensure_default_staff_groups, ensure_security_groups_exist
 from apps.users import temp_passwords
 from apps.users.management.commands.utils import coerce_option_list
 
@@ -21,6 +23,10 @@ class Command(BaseCommand):
     help = (
         "Generate or set temporary/permanent passwords, clear passwords, and "
         "toggle forced password change using username, email, or user id."
+    )
+    ACCESS_POINT_DEFAULT_GROUP_NAMES: tuple[str, ...] = (
+        AP_USER_GROUP_NAME,
+        GALLERY_MANAGER_GROUP_NAME,
     )
 
     def add_arguments(self, parser):
@@ -193,6 +199,7 @@ class Command(BaseCommand):
             )
         if access_point_user:
             resolved_groups = self._resolve_groups(groups) if groups else []
+            resolved_groups = self._resolve_access_point_groups(resolved_groups)
             self._configure_access_point_user(user)
             self._harden_access_point_membership(user, resolved_groups)
             self.stdout.write(self.style.SUCCESS(f"Configured {user.username} as a local access point user."))
@@ -353,6 +360,15 @@ class Command(BaseCommand):
         user.groups.clear()
         if groups:
             user.groups.add(*groups)
+
+    def _resolve_access_point_groups(self, explicit_groups: list[Group]) -> list[Group]:
+        ensure_security_groups_exist(self.ACCESS_POINT_DEFAULT_GROUP_NAMES)
+        default_groups = self._resolve_groups(list(self.ACCESS_POINT_DEFAULT_GROUP_NAMES))
+
+        groups_by_name: dict[str, Group] = {
+            group.name: group for group in [*default_groups, *explicit_groups]
+        }
+        return [groups_by_name[name] for name in sorted(groups_by_name)]
 
     def _delete_password(self, user) -> None:
         user.set_unusable_password()

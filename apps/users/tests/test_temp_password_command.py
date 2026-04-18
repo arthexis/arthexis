@@ -9,6 +9,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from django.utils import timezone
 
+from apps.gallery.constants import GALLERY_MANAGER_GROUP_NAME
 from apps.groups.constants import AP_USER_GROUP_NAME
 from apps.groups.constants import EXTERNAL_AGENT_GROUP_NAME
 from apps.users import temp_passwords
@@ -183,7 +184,6 @@ class PasswordCommandTests(TestCase):
     def test_configures_access_point_user_mode(self):
         """Access-point mode should disable passwords and keep the user non-staff."""
 
-        Group.objects.create(name=AP_USER_GROUP_NAME)
         user = get_user_model().objects.create_user(
             username="ap-user",
             email="ap-user@example.com",
@@ -198,7 +198,6 @@ class PasswordCommandTests(TestCase):
             user.username,
             update=True,
             access_point_user=True,
-            group=AP_USER_GROUP_NAME,
         )
 
         user.refresh_from_db()
@@ -208,11 +207,11 @@ class PasswordCommandTests(TestCase):
         assert user.allow_local_network_passwordless_login is True
         assert user.force_password_change is False
         assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
+        assert user.groups.filter(name=GALLERY_MANAGER_GROUP_NAME).exists()
 
     def test_configures_access_point_user_mode_without_update_flag(self):
         """Access-point mode should demote privileges even without --update."""
 
-        Group.objects.create(name=AP_USER_GROUP_NAME)
         user = get_user_model().objects.create_user(
             username="ap-no-update",
             email="ap-no-update@example.com",
@@ -226,7 +225,6 @@ class PasswordCommandTests(TestCase):
             "password",
             user.username,
             access_point_user=True,
-            group=AP_USER_GROUP_NAME,
         )
 
         user.refresh_from_db()
@@ -236,11 +234,11 @@ class PasswordCommandTests(TestCase):
         assert user.allow_local_network_passwordless_login is True
         assert user.force_password_change is False
         assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
+        assert user.groups.filter(name=GALLERY_MANAGER_GROUP_NAME).exists()
 
     def test_configures_access_point_user_mode_clears_existing_groups(self):
         """Access-point mode should drop prior group access before reassignment."""
 
-        Group.objects.create(name=AP_USER_GROUP_NAME)
         legacy_group = Group.objects.create(name="Legacy Admin")
         user = get_user_model().objects.create_user(
             username="ap-groups-clear",
@@ -255,12 +253,12 @@ class PasswordCommandTests(TestCase):
             "password",
             user.username,
             access_point_user=True,
-            group=AP_USER_GROUP_NAME,
         )
 
         user.refresh_from_db()
         assert not user.groups.filter(name=legacy_group.name).exists()
         assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
+        assert user.groups.filter(name=GALLERY_MANAGER_GROUP_NAME).exists()
 
     def test_access_point_user_mode_preserves_groups_when_requested_group_is_unknown(self):
         """Failed AP group reassignment should not apply partial account hardening."""
@@ -309,7 +307,6 @@ class PasswordCommandTests(TestCase):
     def test_configures_access_point_user_mode_clears_temporary_credentials(self):
         """Access-point mode should clear temporary-password state for hardened login."""
 
-        Group.objects.create(name=AP_USER_GROUP_NAME)
         user = get_user_model().objects.create_user(
             username="ap-temp-clear",
             email="ap-temp-clear@example.com",
@@ -322,12 +319,26 @@ class PasswordCommandTests(TestCase):
             "password",
             user.username,
             access_point_user=True,
-            group=AP_USER_GROUP_NAME,
         )
 
         user.refresh_from_db()
         assert user.temporary_expires_at is None
         assert temp_passwords.load_temp_password(user.username) is None
+
+    def test_access_point_user_mode_adds_default_groups_without_preexisting_entries(self):
+        """Access-point mode should always include AP visitor and gallery upload groups."""
+
+        user = get_user_model().objects.create_user(
+            username="ap-default-groups",
+            email="ap-default-groups@example.com",
+            password="InitialPassword123",
+        )
+
+        call_command("password", user.username, access_point_user=True)
+
+        user.refresh_from_db()
+        assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
+        assert user.groups.filter(name=GALLERY_MANAGER_GROUP_NAME).exists()
 
     def test_access_point_user_mode_rejects_password_argument(self):
         """Access-point mode should reject contradictory password arguments."""
