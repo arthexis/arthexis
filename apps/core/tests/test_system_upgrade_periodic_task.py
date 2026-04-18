@@ -12,7 +12,6 @@ from apps.core.system.upgrade import _get_auto_upgrade_periodic_task
 from django.db import DatabaseError
 
 
-@pytest.mark.regression
 def test_get_auto_upgrade_periodic_task_handles_missing_django_celery_beat(
     monkeypatch,
     caplog,
@@ -39,7 +38,6 @@ def test_get_auto_upgrade_periodic_task_handles_missing_django_celery_beat(
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_get_auto_upgrade_periodic_task_repairs_missing_task_row(monkeypatch):
     """Missing task rows should trigger a repair attempt and return the recreated task."""
 
@@ -71,7 +69,6 @@ def test_get_auto_upgrade_periodic_task_repairs_missing_task_row(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.regression
 def test_get_auto_upgrade_periodic_task_reports_database_failure_during_repair(
     monkeypatch,
     caplog,
