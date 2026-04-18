@@ -324,6 +324,7 @@ class NodeFeatureMixin:
             self.sync_feature_tasks()
             return
         managed_slugs = self.AUTO_MANAGED_FEATURES - self.LAZY_AUTO_DETECTION_FEATURE_SLUGS
+        reconciliation_slugs = self.AUTO_MANAGED_FEATURES
         detected_slugs = set()
         base_path = self.get_base_path()
         base_dir = Path(settings.BASE_DIR)
@@ -337,7 +338,7 @@ class NodeFeatureMixin:
                 logger.exception("Automatic detection failed for feature %s", slug)
         current_slugs = set(
             self.features.filter(
-                slug__in=managed_slugs,
+                slug__in=reconciliation_slugs,
                 footprint=self.AUTO_ENABLE_FOOTPRINT,
             ).values_list("slug", flat=True)
         )

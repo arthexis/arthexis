@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest import mock
 from uuid import uuid4
 
 import pytest
@@ -202,6 +203,25 @@ def test_refresh_features_skips_lazy_rfid_auto_detection(monkeypatch, tmp_path):
 
 
 @pytest.mark.django_db
+def test_refresh_features_reconciles_existing_lazy_rfid_assignment(tmp_path):
+    """Feature refresh should clear stale lazy assignments without probing hardware."""
+
+    node = Node.objects.create(
+        hostname="lazy-rfid-stale-node",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+        public_endpoint="lazy-rfid-stale-node",
+        base_path=str(tmp_path),
+    )
+    feature = NodeFeature.objects.create(slug="rfid-scanner", display="RFID Scanner")
+    node.features.add(feature)
+
+    node.refresh_features()
+
+    assert not node.features.filter(pk=feature.pk).exists()
+
+
+@pytest.mark.django_db
 def test_ensure_feature_enabled_lazily_detects_rfid(monkeypatch, tmp_path):
     """On-demand feature checks should detect and assign RFID scanner when needed."""
 
@@ -224,6 +244,60 @@ def test_ensure_feature_enabled_lazily_detects_rfid(monkeypatch, tmp_path):
     assert nodes_utils.ensure_feature_enabled("rfid-scanner", node=node) is True
     assert calls == ["rfid-scanner"]
     assert node.features.filter(pk=feature.pk).exists()
+
+
+@pytest.mark.django_db
+def test_ensure_feature_enabled_does_not_probe_lazy_feature_on_remote_node(
+    monkeypatch, tmp_path
+):
+    """Remote nodes should not probe local hardware for lazy feature detection."""
+
+    node = Node.objects.create(
+        hostname="ensure-rfid-remote-node",
+        mac_address=Node.get_current_mac(),
+        public_endpoint="ensure-rfid-remote-node",
+        base_path=str(tmp_path),
+    )
+    NodeFeature.objects.create(slug="rfid-scanner", display="RFID Scanner")
+    monkeypatch.setattr(Node, "is_local", property(lambda self: False))
+    calls: list[str] = []
+
+    def _detect(*args, **kwargs):
+        calls.append("called")
+        return True
+
+    monkeypatch.setattr(node, "_detect_auto_feature", _detect)
+
+    assert nodes_utils.ensure_feature_enabled("rfid-scanner", node=node) is False
+    assert calls == []
+
+
+@pytest.mark.django_db
+def test_ensure_feature_enabled_handles_lazy_detection_exception(
+    monkeypatch, tmp_path
+):
+    """Lazy detection exceptions should be treated as unavailable features."""
+
+    node = Node.objects.create(
+        hostname="ensure-rfid-exception-node",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+        public_endpoint="ensure-rfid-exception-node",
+        base_path=str(tmp_path),
+    )
+    NodeFeature.objects.create(slug="rfid-scanner", display="RFID Scanner")
+    logger = mock.Mock()
+
+    def _raise(*args, **kwargs):
+        raise RuntimeError("detector unavailable")
+
+    monkeypatch.setattr(node, "_detect_auto_feature", _raise)
+
+    assert (
+        nodes_utils.ensure_feature_enabled("rfid-scanner", node=node, logger=logger)
+        is False
+    )
+    logger.exception.assert_called_once()
 
 
 @pytest.fixture

@@ -50,12 +50,18 @@ def ensure_feature_enabled(
         return True
 
     lazy_slugs = getattr(target, "LAZY_AUTO_DETECTION_FEATURE_SLUGS", set())
-    if slug in lazy_slugs:
-        base_dir = Path(settings.BASE_DIR)
-        base_path = target.get_base_path()
-        if target._detect_auto_feature(slug, base_dir=base_dir, base_path=base_path):
-            NodeFeatureAssignment.objects.update_or_create(node=target, feature=feature)
-            return True
+    if target.is_local and slug in lazy_slugs:
+        try:
+            base_dir = Path(settings.BASE_DIR)
+            base_path = target.get_base_path()
+            if target._detect_auto_feature(slug, base_dir=base_dir, base_path=base_path):
+                NodeFeatureAssignment.objects.update_or_create(
+                    node=target, feature=feature
+                )
+                return True
+        except Exception:
+            if logger:
+                logger.exception("Unable to lazily detect feature %s", slug)
         return False
 
     try:
