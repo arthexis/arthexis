@@ -80,20 +80,55 @@ jobs:
               addSet.add('priority:high');
             }
 
-            // Completeness checks
-            const requiredSections = [
-              { key: 'Steps to reproduce', patterns: ['steps to reproduce', 'reproduction steps', 'repro steps'] },
-              { key: 'Expected behavior', patterns: ['expected behavior', 'expected result'] },
-              { key: 'Actual behavior', patterns: ['actual behavior', 'actual result', 'what happened'] },
-              {
-                key: 'Environment / version',
-                patterns: ['environment', 'version', 'operating system', 'os:', 'os version', 'windows', 'macos', 'linux', 'python', 'browser'],
-              },
-            ];
-
             if (addSet.size === 0) {
               addSet.add('needs-triage');
             }
+            const inferredIssueKind = addSet.has('type:feature')
+              ? 'feature'
+              : addSet.has('type:bug')
+                ? 'bug'
+                : addSet.has('type:question')
+                  ? 'question'
+                  : 'general';
+
+            // Completeness checks should align with the issue intent.
+            const requiredSectionsByKind = {
+              bug: [
+                { key: 'Steps to reproduce', patterns: ['steps to reproduce', 'reproduction steps', 'repro steps'] },
+                { key: 'Expected behavior', patterns: ['expected behavior', 'expected result', 'what did you expect'] },
+                { key: 'Actual behavior', patterns: ['actual behavior', 'actual result', 'what happened'] },
+                {
+                  key: 'Environment / version',
+                  patterns: [
+                    'environment',
+                    'version',
+                    'version or commit',
+                    'operating system',
+                    'os:',
+                    'os version',
+                    'windows',
+                    'macos',
+                    'linux',
+                    'python',
+                    'browser',
+                  ],
+                },
+              ],
+              feature: [
+                { key: 'Summary', patterns: ['summary'] },
+                { key: 'Problem statement', patterns: ['problem statement', 'problem', 'pain point', 'workflow gap'] },
+                { key: 'Proposed solution', patterns: ['proposed solution', 'proposal', 'suggested solution'] },
+              ],
+              question: [
+                { key: 'Question or goal', patterns: ['question', 'help', 'how do i', 'how to', 'goal'] },
+                { key: 'Context', patterns: ['context', 'environment', 'version', 'what i tried', 'tried'] },
+              ],
+              general: [
+                { key: 'Summary', patterns: ['summary', 'what happened', 'problem statement', 'request'] },
+                { key: 'Context', patterns: ['context', 'environment', 'version', 'use case'] },
+              ],
+            };
+            const requiredSections = requiredSectionsByKind[inferredIssueKind];
 
             const missingSections = requiredSections
               .filter((section) => !hasAny(body, section.patterns))
@@ -171,9 +206,13 @@ jobs:
             const qualityMessage = missingSections.length > 0
               ? [
                   '### Missing details to triage',
+                  `Issue type detected: **${inferredIssueKind}**`,
+                  '',
                   ...missingSections.map((section) => `- ${section}`),
                   '',
-                  'Please update the issue with the missing information so maintainers can reproduce and prioritize quickly.',
+                  inferredIssueKind === 'bug'
+                    ? 'Please update the issue with the missing information so maintainers can reproduce and prioritize quickly.'
+                    : 'Please update the issue with the missing information so maintainers can assess impact and prioritize quickly.',
                 ].join('\n')
               : '### Triage readiness\nThanks — this report appears complete enough for triage.';
 
