@@ -38,7 +38,6 @@ def _build_request(factory, payload):
 
 
 @pytest.mark.django_db
-@pytest.mark.critical
 def test_register_node_rejects_invalid_enrollment_token_without_creating_node(
     admin_user,
 ):

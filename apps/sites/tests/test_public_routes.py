@@ -167,7 +167,6 @@ def test_whatsapp_webhook_post_payload_validation(
         assert response.json()["status"] == "ok"
 
 
-@pytest.mark.critical
 def test_require_site_operator_or_staff_enforces_admin_operator_boundary(rf):
     request = rf.get("/ocpp/secure/")
     user_model = get_user_model()

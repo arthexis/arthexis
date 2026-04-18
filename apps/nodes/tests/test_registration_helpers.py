@@ -11,7 +11,6 @@ from django.test import RequestFactory
 from apps.nodes.views.registration import register_node
 
 @pytest.mark.django_db
-@pytest.mark.critical
 def test_register_node_rejects_invalid_signature_without_authenticated_user():
     """Unsigned requests with malformed signature must be rejected."""
 

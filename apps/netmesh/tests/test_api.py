@@ -132,7 +132,6 @@ def test_permitted_peers_includes_group_destination_matches(client):
 
 
 @pytest.mark.django_db
-@pytest.mark.critical
 def test_netmesh_token_lifecycle_errors_are_stable(client):
     role = NodeRole.objects.create(name="Gateway")
     node = Node.objects.create(hostname="lifecycle-node", role=role)

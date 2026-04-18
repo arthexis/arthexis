@@ -42,7 +42,12 @@ def test_test_command_emits_dependency_refresh_remediation(
     monkeypatch.setattr(command, "_base_dir", lambda: tmp_path)
 
     class _ProbeResult:
-        returncode = 1
+        returncode = 0
+        stdout = (
+            '{"python_executable": ".venv/bin/python", "virtualenv_active": true, '
+            '"virtualenv_path": ".venv", "dependencies": {"pytest": false, '
+            '"pytest-django": false, "pytest-timeout": false}}\n'
+        )
 
     monkeypatch.setattr(
         "apps.tests.management.commands.test.subprocess.run",
