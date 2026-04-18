@@ -1,8 +1,21 @@
+from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
+
+
+CV_ALLOWED_EXTENSIONS = ["pdf", "doc", "docx"]
+CV_MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
+
+def validate_cv_file_size(file):
+    if file and file.size and file.size > CV_MAX_UPLOAD_BYTES:
+        raise ValidationError(
+            _("CV file exceeds the maximum size of %(size)s bytes.") % {"size": CV_MAX_UPLOAD_BYTES}
+        )
 
 
 class JobPosting(Entity):
@@ -52,7 +65,14 @@ class CVSubmission(Entity):
     full_name = models.CharField(_("Full name"), max_length=255)
     email = models.EmailField(_("Email"))
     phone = models.CharField(_("Phone"), max_length=64, blank=True)
-    cv_file = models.FileField(_("CV file"), upload_to="jobs/cv/")
+    cv_file = models.FileField(
+        _("CV file"),
+        upload_to="jobs/cv/",
+        validators=[
+            FileExtensionValidator(allowed_extensions=CV_ALLOWED_EXTENSIONS),
+            validate_cv_file_size,
+        ],
+    )
     cover_letter = models.TextField(_("Cover letter"), blank=True)
     notes = models.TextField(_("Notes"), blank=True)
 
