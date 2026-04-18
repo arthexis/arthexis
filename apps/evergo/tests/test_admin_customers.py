@@ -34,3 +34,19 @@ def test_evergo_customer_changelist_renders_with_json_brand_payload(client):
 
     assert response.status_code == 200
     assert b"Customer With Brand" in response.content
+
+
+@pytest.mark.django_db
+def test_evergo_customer_add_view_is_disabled(client):
+    """Customer add view should be unavailable because records come from Evergo sync."""
+    User = get_user_model()
+    admin_user = User.objects.create_superuser(
+        username="evergo-admin-2",
+        email="evergo-admin-2@example.com",
+        password="top-secret",  # noqa: S106
+    )
+
+    client.force_login(admin_user)
+    response = client.get(reverse("admin:evergo_evergocustomer_add"))
+
+    assert response.status_code == 403

@@ -993,6 +993,10 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
             return queryset
         return queryset.filter(user__user=request.user)
 
+    def has_add_permission(self, request):
+        """Disallow manual admin creation; customers are synchronized from Evergo."""
+        return False
+
     def get_urls(self):
         """Register custom admin routes for Evergo customer tools."""
         urls = super().get_urls()
