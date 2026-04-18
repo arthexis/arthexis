@@ -5,6 +5,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PYTHON_BIN="$BASE_DIR/.venv/bin/python"
 REQUIRED_MODULES=("django")
+ENV_REFRESH_CMD=("$BASE_DIR/env-refresh.sh" "--deps-only")
+
+ensure_venv_python() {
+  local needs_refresh=0
+
+  if [[ ! -x "$PYTHON_BIN" ]]; then
+    needs_refresh=1
+  elif ! "$PYTHON_BIN" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >/dev/null 2>&1; then
+    needs_refresh=1
+  fi
+
+  if [[ "$needs_refresh" -eq 0 ]]; then
+    return 0
+  fi
+
+  echo ".venv/bin/python missing or unusable at $PYTHON_BIN; running ${ENV_REFRESH_CMD[*]}" >&2
+  "${ENV_REFRESH_CMD[@]}"
+}
 
 if [[ $# -gt 1 ]]; then
   echo "Too many arguments provided." >&2
@@ -30,8 +48,16 @@ elif [[ $# -gt 0 ]]; then
   exit 1
 fi
 
+ensure_venv_python
+
 if [[ ! -x "$PYTHON_BIN" ]]; then
-  echo ".venv/bin/python missing: expected executable at $PYTHON_BIN" >&2
+  echo ".venv/bin/python missing: expected executable at $PYTHON_BIN after ${ENV_REFRESH_CMD[*]}" >&2
+  echo "Run ./env-refresh.sh --deps-only" >&2
+  exit 1
+fi
+
+if ! "$PYTHON_BIN" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)" >/dev/null 2>&1; then
+  echo ".venv/bin/python is not runnable at $PYTHON_BIN after ${ENV_REFRESH_CMD[*]}" >&2
   echo "Run ./env-refresh.sh --deps-only" >&2
   exit 1
 fi

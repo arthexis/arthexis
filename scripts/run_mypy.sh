@@ -8,10 +8,11 @@ export DEBUG="${DEBUG:-0}"
 export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-PYTHON_BIN=".venv/bin/python"
+PYTHON_BIN="$BASE_DIR/.venv/bin/python"
 if [[ "${OSTYPE:-}" == "msys" || "${OSTYPE:-}" == "cygwin" || "${OSTYPE:-}" == "win32" ]]; then
-  PYTHON_BIN=".venv/Scripts/python.exe"
+  PYTHON_BIN="$BASE_DIR/.venv/Scripts/python.exe"
 fi
 emit_remediation() {
   local code="$1"
@@ -20,8 +21,10 @@ emit_remediation() {
   printf '{"code":"%s","command":"%s","event":"arthexis.qa.remediation","retry":"%s"}\n' "$code" "$command" "$retry" >&2
 }
 
+"$SCRIPT_DIR/preflight-env.sh"
+
 if [ ! -x "$PYTHON_BIN" ]; then
-  emit_remediation "missing_venv_python" "./install.sh --terminal" "./scripts/run_mypy.sh"
+  emit_remediation "missing_venv_python" "./env-refresh.sh --deps-only" "./scripts/run_mypy.sh"
   exit 1
 fi
 
@@ -29,8 +32,6 @@ if ! "$PYTHON_BIN" -c "import importlib.util,sys;sys.exit(0 if importlib.util.fi
   emit_remediation "missing_dependency" "./env-refresh.sh --deps-only" "./scripts/run_mypy.sh"
   exit 1
 fi
-
-"$SCRIPT_DIR/preflight-env.sh"
 
 mypy_output="$(mktemp)"
 cleanup() {
