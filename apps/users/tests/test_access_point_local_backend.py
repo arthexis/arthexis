@@ -22,10 +22,69 @@ class AccessPointLocalUserBackendTests(TestCase):
             REMOTE_ADDR=remote_addr,
         )
 
-    def test_authenticates_passwordless_local_user_from_matching_ipv4_prefix(self):
+    def test_authenticates_local_user_with_valid_password_from_matching_ipv4_prefix(self):
         user = get_user_model().objects.create_user(
             username="ap-user",
             email="ap-user@example.com",
+            password="correct-password",
+            is_staff=False,
+            is_superuser=False,
+            allow_local_network_passwordless_login=True,
+        )
+
+        request = self._request("127.0.0.1")
+
+        authenticated = self.backend.authenticate(
+            request,
+            username="ap-user",
+            password="correct-password",
+        )
+
+        assert authenticated is not None
+        assert authenticated.pk == user.pk
+
+    def test_rejects_local_user_with_invalid_password(self):
+        user = get_user_model().objects.create_user(
+            username="ap-user-invalid-password",
+            email="ap-user-invalid-password@example.com",
+            password="correct-password",
+            is_staff=False,
+            is_superuser=False,
+            allow_local_network_passwordless_login=True,
+        )
+        request = self._request("127.0.0.1")
+
+        authenticated = self.backend.authenticate(
+            request,
+            username=user.username,
+            password="wrong-password",
+        )
+
+        assert authenticated is None
+
+    def test_rejects_user_when_passwordless_flag_is_disabled(self):
+        user = get_user_model().objects.create_user(
+            username="no-ap",
+            email="no-ap@example.com",
+            password="correct-password",
+            is_staff=False,
+            is_superuser=False,
+            allow_local_network_passwordless_login=False,
+        )
+        request = self._request("127.0.0.1")
+
+        authenticated = self.backend.authenticate(
+            request,
+            username=user.username,
+            password="correct-password",
+        )
+
+        assert authenticated is None
+
+    def test_authenticates_legacy_user_with_unusable_password(self):
+        user = get_user_model().objects.create_user(
+            username="legacy-ap",
+            email="legacy-ap@example.com",
             is_staff=False,
             is_superuser=False,
             allow_local_network_passwordless_login=True,
@@ -37,30 +96,12 @@ class AccessPointLocalUserBackendTests(TestCase):
 
         authenticated = self.backend.authenticate(
             request,
-            username="ap-user",
-            password="totally-wrong",
+            username=user.username,
+            password="non-empty-placeholder",
         )
 
         assert authenticated is not None
         assert authenticated.pk == user.pk
-
-    def test_rejects_user_when_passwordless_flag_is_disabled(self):
-        user = get_user_model().objects.create_user(
-            username="no-ap",
-            email="no-ap@example.com",
-            is_staff=False,
-            is_superuser=False,
-            allow_local_network_passwordless_login=False,
-        )
-        request = self._request("127.0.0.1")
-
-        authenticated = self.backend.authenticate(
-            request,
-            username=user.username,
-            password="anything",
-        )
-
-        assert authenticated is None
 
     def test_rejects_non_loopback_ipv6_request(self):
         user = get_user_model().objects.create_user(
@@ -123,6 +164,7 @@ class AccessPointLocalUserBackendTests(TestCase):
         user = get_user_model().objects.create_user(
             username="far-ap",
             email="far-ap@example.com",
+            password="correct-password",
             is_staff=False,
             is_superuser=False,
             allow_local_network_passwordless_login=True,
@@ -133,7 +175,7 @@ class AccessPointLocalUserBackendTests(TestCase):
         authenticated = self.backend.authenticate(
             request,
             username=user.username,
-            password="anything",
+            password="correct-password",
         )
 
         assert authenticated is None

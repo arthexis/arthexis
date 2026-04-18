@@ -568,15 +568,15 @@ class AccessPointLocalUserBackend(LocalhostAdminBackend):
     """Allow selected non-staff users to sign in from local IPv4 /16 peers."""
 
     def authenticate(self, request, username=None, password=None, **kwargs):
-        del password, kwargs
+        del kwargs
         normalized_username = str(username or "").strip()
         remote_ip = self._get_remote_ip(request) if request is not None else None
         remote_ip_text = str(remote_ip) if remote_ip is not None else "unknown"
 
-        if request is None or not normalized_username:
+        if request is None or not normalized_username or not password:
             logger.warning(
                 "AccessPointLocalUserBackend.authenticate rejected before _get_remote_ip/%s: "
-                "request-or-username-missing remote_ip=%s",
+                "request-username-or-password-missing remote_ip=%s",
                 "_resolve_user",
                 remote_ip_text,
             )
@@ -617,6 +617,22 @@ class AccessPointLocalUserBackend(LocalhostAdminBackend):
                 normalized_username,
             )
             return None
+        has_usable_password = user.has_usable_password()
+        if has_usable_password and not user.check_password(password):
+            logger.warning(
+                "AccessPointLocalUserBackend.authenticate rejected by check_password "
+                "remote_ip=%s username=%s",
+                remote_ip_text,
+                normalized_username,
+            )
+            return None
+        if not has_usable_password:
+            logger.info(
+                "AccessPointLocalUserBackend.authenticate allowing legacy access-point "
+                "user with unusable password remote_ip=%s username=%s",
+                remote_ip_text,
+                normalized_username,
+            )
 
         logger.info(
             "AccessPointLocalUserBackend.authenticate granted remote_ip=%s username=%s",
