@@ -75,7 +75,6 @@ def test_sync_feature_tasks_scopes_screenshot_task_to_local_node(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.critical
 def test_sync_feature_tasks_disables_llm_summary_when_suite_gate_is_disabled(monkeypatch):
     """LLM summary periodic task should disable when suite gate is off."""
 

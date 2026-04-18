@@ -11,6 +11,9 @@ from apps.tests.management.commands import test as test_command
 
 def test_run_pytest_prints_readiness_before_execution(monkeypatch, tmp_path, capsys):
     command = test_command.Command()
+    fake_venv_python = test_command.expected_venv_python(tmp_path)
+    fake_venv_python.parent.mkdir(parents=True)
+    fake_venv_python.write_text("", encoding="utf-8")
 
     monkeypatch.setattr(command, "_base_dir", lambda: tmp_path)
     monkeypatch.setattr(test_command, "resolve_project_python", lambda _base_dir: "python")
@@ -50,6 +53,9 @@ def test_run_pytest_prints_readiness_before_execution(monkeypatch, tmp_path, cap
 
 def test_run_pytest_fails_before_pytest_when_dependency_missing(monkeypatch, tmp_path):
     command = test_command.Command()
+    fake_venv_python = test_command.expected_venv_python(tmp_path)
+    fake_venv_python.parent.mkdir(parents=True)
+    fake_venv_python.write_text("", encoding="utf-8")
 
     monkeypatch.setattr(command, "_base_dir", lambda: tmp_path)
     monkeypatch.setattr(test_command, "resolve_project_python", lambda _base_dir: "python")
@@ -76,6 +82,11 @@ def test_run_pytest_fails_before_pytest_when_dependency_missing(monkeypatch, tmp
     with pytest.raises(CommandError) as exc:
         command._run_pytest(["--", "apps/tests/test_test_command.py"])
 
-    assert "Core test dependencies are missing" in str(exc.value)
-    assert "pytest-django" in str(exc.value)
+    payload = json.loads(str(exc.value))
+    assert payload == {
+        "code": "missing_dependency",
+        "command": "./env-refresh.sh --deps-only",
+        "event": "arthexis.qa.remediation",
+        "retry": ".venv/bin/python manage.py test run -- apps/tests/test_test_command.py",
+    }
     assert len(calls) == 1
