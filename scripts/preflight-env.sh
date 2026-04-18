@@ -32,15 +32,7 @@ fi
 
 if [[ ! -x "$PYTHON_BIN" ]]; then
   echo ".venv/bin/python missing: expected executable at $PYTHON_BIN" >&2
-  echo "Bootstrapping dependencies with ./env-refresh.sh --deps-only" >&2
-  if ! "$BASE_DIR/env-refresh.sh" --deps-only; then
-    echo "Failed to bootstrap environment with ./env-refresh.sh --deps-only" >&2
-    exit 1
-  fi
-fi
-
-if [[ ! -x "$PYTHON_BIN" ]]; then
-  echo ".venv/bin/python still missing after bootstrap: expected executable at $PYTHON_BIN" >&2
+  echo "Run ./env-refresh.sh --deps-only" >&2
   exit 1
 fi
 
