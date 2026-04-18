@@ -9,7 +9,11 @@ from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
 from apps.chats.models import ChatAvatar
-from apps.evergo.admin import _run_contract_login_validation
+from apps.evergo.admin import (
+    LOADED_ENTITIES_LINK_ID_LIMIT,
+    _build_loaded_entities_links,
+    _run_contract_login_validation,
+)
 from apps.evergo.forms import EvergoContractorLoginWizardForm
 from apps.evergo.models import EvergoUser
 from apps.groups.models import SecurityGroup
@@ -118,6 +122,8 @@ def test_run_contract_login_validation_uses_order_numbers_when_full_load_disable
         captured_queries.append(raw_queries)
         return {
             "customers_loaded": 1,
+            "loaded_customer_ids": [11],
+            "loaded_order_ids": [22],
             "orders_created": 1,
             "orders_updated": 0,
             "placeholders_created": 0,
@@ -143,3 +149,50 @@ def test_run_contract_login_validation_uses_order_numbers_when_full_load_disable
 
     assert result is not None
     assert captured_queries == ["J00123, J00456"]
+    assert len(messages) == 2
+    assert "id__in=11" in messages[1][1]
+    assert "id__in=22" in messages[1][1]
+    assert result["admin_messages"][0]["status"] == "success"
+    assert result["admin_messages"][1]["status"] == "success"
+
+
+@pytest.mark.django_db
+def test_build_loaded_entities_links_only_includes_present_entities():
+    """Link helper should omit entity links when no IDs were loaded for that entity type."""
+    links = _build_loaded_entities_links(
+        {
+            "loaded_customer_ids": [11],
+            "loaded_order_ids": [],
+        }
+    )
+
+    assert "id__in=11" in links
+    assert "Customers" in links
+    assert "Orders" not in links
+
+
+@pytest.mark.django_db
+def test_build_loaded_entities_links_returns_empty_when_no_entities_loaded():
+    """Link helper should not render generic changelist links when nothing was loaded."""
+    links = _build_loaded_entities_links(
+        {
+            "loaded_customer_ids": [],
+            "loaded_order_ids": [],
+        }
+    )
+
+    assert links == ""
+
+
+@pytest.mark.django_db
+def test_build_loaded_entities_links_limits_query_ids_to_prevent_overlong_urls():
+    """Link helper should cap IDs so large imports do not emit overlong changelist URLs."""
+    links = _build_loaded_entities_links(
+        {
+            "loaded_customer_ids": list(range(1, LOADED_ENTITIES_LINK_ID_LIMIT + 50)),
+            "loaded_order_ids": [],
+        }
+    )
+
+    assert f",{LOADED_ENTITIES_LINK_ID_LIMIT}" in links
+    assert f",{LOADED_ENTITIES_LINK_ID_LIMIT + 1}" not in links

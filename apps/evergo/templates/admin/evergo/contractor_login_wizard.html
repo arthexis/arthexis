@@ -110,6 +110,16 @@
               {% translate "Skipped." %}
             {% endif %}
           </li>
+          {% if setup_results.admin_messages %}
+            <li>
+              <strong>{% translate "Admin Messages" %}:</strong>
+              <ul>
+                {% for entry in setup_results.admin_messages %}
+                  <li><strong>{{ entry.status }}:</strong> {{ entry.message }}</li>
+                {% endfor %}
+              </ul>
+            </li>
+          {% endif %}
         </ul>
         {% if setup_results.loaded.summary and setup_results.loaded.summary.unresolved %}
           <p>
