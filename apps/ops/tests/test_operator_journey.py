@@ -264,6 +264,33 @@ class OperatorJourneyViewTests(TestCase):
             ),
         )
 
+    def test_slug_step_url_that_matches_legacy_complete_shape_stays_canonical(self):
+        numeric_journey = OperatorJourney.objects.create(
+            name="AAA Numeric Journey",
+            slug="123",
+            security_group=self.group,
+            is_active=True,
+            priority=0,
+        )
+        canonical_collision_step = OperatorJourneyStep.objects.create(
+            journey=numeric_journey,
+            title="Canonical complete slug step",
+            slug="complete",
+            instruction="Complete canonical collision step.",
+            iframe_url="/admin/",
+            order=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={"journey_slug": "123", "step_slug": "complete"},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, canonical_collision_step.title)
+
     def test_validate_role_step_shows_setup_check_instead_of_iframe(self):
         response = self.client.get(
             reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
