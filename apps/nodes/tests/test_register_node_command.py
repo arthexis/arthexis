@@ -17,7 +17,6 @@ def _load_node_command():
     return load_command_class(app_name, "node")
 
 
-@pytest.mark.critical
 def test_node_register_requires_https_urls():
     token = _encode_token(
         {

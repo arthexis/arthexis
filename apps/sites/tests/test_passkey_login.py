@@ -50,7 +50,6 @@ def test_passkey_login_options_sets_challenge_in_session(client, monkeypatch):
     assert response.json() == {"publicKey": {"challenge": "abc"}}
     assert client.session["passkey_login_challenge"] == "session-challenge"
 
-@pytest.mark.critical
 def test_passkey_login_verify_authenticates_user(client, passkey, monkeypatch):
     """Verify endpoint should authenticate and update sign count after valid assertion."""
 
@@ -92,7 +91,6 @@ def test_passkey_login_verify_authenticates_user(client, passkey, monkeypatch):
     assert current_user.is_authenticated
     assert current_user.pk == passkey.user_id
 
-@pytest.mark.critical
 def test_passkey_login_verify_rejects_missing_challenge(client):
     """Verify endpoint should reject requests without a stored challenge."""
 
@@ -132,7 +130,6 @@ def test_passkey_login_verify_rejects_unknown_credential(client):
     assert response.status_code == 400
     assert response.json()["detail"]
 
-@pytest.mark.critical
 def test_passkey_login_verify_rejects_invalid_json_structure(client, passkey, monkeypatch):
     """Verify endpoint should reject malformed WebAuthn payload structures."""
 

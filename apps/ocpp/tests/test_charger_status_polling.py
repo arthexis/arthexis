@@ -321,7 +321,6 @@ def test_status_view_shows_non_transaction_events_for_staff(client):
         for item in response.context["non_transaction_events"]
     )
 
-@pytest.mark.critical
 def test_dedupe_event_rows_keeps_newest_status_for_out_of_order_retry_collisions():
     """Regression: out-of-order status retries should keep the newest connector row."""
 
