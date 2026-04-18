@@ -16,7 +16,7 @@ PRODUCT_DEVELOPER_FAVORITE_TARGETS: tuple[tuple[str, str], ...] = (
 )
 SITE_OPERATOR_FAVORITE_TARGETS: tuple[tuple[str, str], ...] = (
     ("cards", "rfidattempt"),
-    ("django_celery_beat", "periodictask"),
+    ("celery", "periodictaskproxy"),
 )
 
 

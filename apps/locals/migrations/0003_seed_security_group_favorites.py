@@ -14,7 +14,7 @@ PRODUCT_DEVELOPER_TARGETS = (
 )
 SITE_OPERATOR_TARGETS = (
     ("cards", "rfidattempt"),
-    ("django_celery_beat", "periodictask"),
+    ("celery", "periodictaskproxy"),
 )
 
 
@@ -125,6 +125,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("app", "0001_initial"),
         ("cards", "0005_alter_offeringsoul_options"),
+        ("celery", "0001_initial"),
         ("contenttypes", "0002_remove_content_type_name"),
         ("django_celery_beat", "0020_googlecalendarprofile"),
         ("groups", "0003_seed_ap_user_group"),
