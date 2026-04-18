@@ -85,7 +85,8 @@ class OperatorJourneyFlowTests(TestCase):
         status = status_for_user(user=self.user)
         self.assertEqual(status.message, "Step 3")
         self.assertEqual(status.task_title, "Step 3")
-        self.assertIn(str(step_3.pk), status.url)
+        self.assertIn(step_3.journey.slug, status.url)
+        self.assertIn(step_3.slug, status.url)
 
     def test_cannot_complete_out_of_order_step(self):
         completed = complete_step_for_user(user=self.user, step=self.step_2)
@@ -212,21 +213,123 @@ class OperatorJourneyViewTests(TestCase):
         self.assertNotContains(response, "admin-home-operator-journey__age")
         self.assertContains(
             response,
-            reverse("ops:operator-journey-step", args=[self.step_1.pk]),
+            reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug}),
         )
 
     def test_step_view_redirects_when_opening_future_step(self):
         response = self.client.get(
-            reverse("ops:operator-journey-step", args=[self.step_2.pk])
+            reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
         )
 
         self.assertRedirects(
-            response, reverse("ops:operator-journey-step", args=[self.step_1.pk])
+            response, reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+        )
+
+    def test_legacy_complete_url_resolves_to_legacy_view_for_get_requests(self):
+        response = self.client.get(
+            reverse(
+                "ops:operator-journey-step-complete-legacy",
+                kwargs={"step_id": self.step_1.pk},
+            )
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            ),
+        )
+
+    def test_legacy_complete_post_redirect_preserves_request_method(self):
+        response = self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete-legacy",
+                kwargs={"step_id": self.step_1.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, 307)
+        self.assertEqual(
+            response["Location"],
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            ),
+        )
+
+    def test_slug_step_url_that_matches_legacy_complete_shape_stays_canonical(self):
+        numeric_journey = OperatorJourney.objects.create(
+            name="AAA Numeric Journey",
+            slug="123",
+            security_group=self.group,
+            is_active=True,
+            priority=0,
+        )
+        canonical_collision_step = OperatorJourneyStep.objects.create(
+            journey=numeric_journey,
+            title="Canonical complete slug step",
+            slug="complete",
+            instruction="Complete canonical collision step.",
+            iframe_url="/admin/",
+            order=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={"journey_slug": "123", "step_slug": "complete"},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, canonical_collision_step.title)
+
+    def test_legacy_complete_post_ignores_slug_collision_fast_path(self):
+        collision_journey = OperatorJourney.objects.create(
+            name="Collision Journey",
+            slug=str(self.step_1.pk),
+            security_group=self.group,
+            is_active=True,
+            priority=0,
+        )
+        OperatorJourneyStep.objects.create(
+            journey=collision_journey,
+            title="Collision Complete Step",
+            slug="complete",
+            instruction="Collision step should not consume legacy post completion.",
+            iframe_url="/admin/",
+            order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete-legacy",
+                kwargs={"step_id": self.step_1.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, 307)
+        self.assertEqual(
+            response["Location"],
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            ),
         )
 
     def test_validate_role_step_shows_setup_check_instead_of_iframe(self):
         response = self.client.get(
-            reverse("ops:operator-journey-step", args=[self.step_1.pk])
+            reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
 
         self.assertContains(
@@ -242,7 +345,7 @@ class OperatorJourneyViewTests(TestCase):
 
     def test_step_view_renders_breadcrumb_with_step_title(self):
         response = self.client.get(
-            reverse("ops:operator-journey-step", args=[self.step_1.pk])
+            reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
 
         self.assertContains(response, '<div class="breadcrumbs">', html=False)
@@ -252,7 +355,7 @@ class OperatorJourneyViewTests(TestCase):
     def test_validate_role_step_limits_role_choices_to_basic_configure_roles(self):
         NodeRole.objects.create(name="Gateway")
         response = self.client.get(
-            reverse("ops:operator-journey-step", args=[self.step_1.pk])
+            reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
 
         self.assertNotContains(response, 'value="gateway"', html=False)
@@ -272,10 +375,10 @@ class OperatorJourneyViewTests(TestCase):
 
     def test_completing_all_steps_shows_completion_message_on_dashboard(self):
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
         complete_response = self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
         )
 
         self.assertContains(complete_response, "Operator journey complete")
@@ -333,14 +436,14 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
         )
 
         response = self.client.get(
-            reverse("ops:operator-journey-step", args=[provision_step.pk])
+            reverse("ops:operator-journey-step", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug})
         )
 
         self.assertContains(response, "Create account and complete step")
@@ -409,15 +512,15 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
         )
         extra_group = SecurityGroup.objects.create(name="Provisioned Ops Group")
 
         response = self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
             {
                 "username": "ops-provisioned",
                 "email": "ops-provisioned@example.com",
@@ -446,14 +549,14 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
         )
 
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
             {
                 "username": "ops-random-password",
                 "email": "ops-random-password@example.com",
@@ -476,10 +579,10 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
         )
         get_user_model().objects.create_user(
             username="existing-ops-user",
@@ -489,7 +592,7 @@ class OperatorJourneyViewTests(TestCase):
         )
 
         response = self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
             {
                 "username": "existing-ops-user",
                 "email": "ops-provisioned@example.com",
@@ -511,10 +614,10 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
         )
         existing_user = get_user_model().objects.create_user(
             username="existing-ops-user",
@@ -531,7 +634,7 @@ class OperatorJourneyViewTests(TestCase):
             existing_user.save(update_fields=["is_deleted"])
 
         response = self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
             {
                 "username": "existing-ops-user",
                 "email": "ops-provisioned@example.com",
@@ -575,14 +678,14 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
         )
 
         response = self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
             {
                 "username": "ops-provisioned-weak-password",
                 "email": "ops-provisioned-weak-password@example.com",
@@ -620,10 +723,10 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
         )
         existing_user = get_user_model().objects.create_user(
             username="existing-ops-user-email-change",
@@ -635,7 +738,7 @@ class OperatorJourneyViewTests(TestCase):
         )
 
         response = self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
             {
                 "username": existing_user.username,
                 "email": "new-upgrade-email@example.com",
@@ -666,7 +769,7 @@ class OperatorJourneyViewTests(TestCase):
         )
 
         response = self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[blocked_step.pk]),
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": blocked_step.journey.slug, "step_slug": blocked_step.slug}),
             {
                 "username": "ops-not-allowed",
                 "email": "ops-provisioned@example.com",
@@ -677,7 +780,7 @@ class OperatorJourneyViewTests(TestCase):
         )
 
         self.assertRedirects(
-            response, reverse("ops:operator-journey-step", args=[self.step_1.pk])
+            response, reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
         self.assertFalse(
             get_user_model().objects.filter(username="ops-not-allowed").exists()
@@ -693,10 +796,10 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
         )
 
         staff_user = get_user_model().objects.create_user(
@@ -708,20 +811,20 @@ class OperatorJourneyViewTests(TestCase):
         staff_user.groups.add(self.group)
         self.client.force_login(staff_user)
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_1.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[self.step_2.pk])
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
         )
 
         view_response = self.client.get(
-            reverse("ops:operator-journey-step", args=[provision_step.pk])
+            reverse("ops:operator-journey-step", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug})
         )
         self.assertEqual(view_response.status_code, 200)
         self.assertContains(view_response, "Operator journey complete")
 
         submit_response = self.client.post(
-            reverse("ops:operator-journey-step-complete", args=[provision_step.pk]),
+            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
             {
                 "username": "ops-should-not-create",
                 "security_groups": [self.group.pk],

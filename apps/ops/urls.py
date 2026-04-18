@@ -9,12 +9,22 @@ app_name = "ops"
 urlpatterns = [
     path("clear-active/", views.clear_active_operation, name="clear-active"),
     path(
+        "operator-journey/steps/<int:step_id>/complete/",
+        views.complete_operator_journey_step_legacy,
+        name="operator-journey-step-complete-legacy",
+    ),
+    path(
         "operator-journey/steps/<int:step_id>/",
+        views.operator_journey_step_legacy,
+        name="operator-journey-step-legacy",
+    ),
+    path(
+        "operator-journey/steps/<slug:journey_slug>/<slug:step_slug>/",
         views.operator_journey_step,
         name="operator-journey-step",
     ),
     path(
-        "operator-journey/steps/<int:step_id>/complete/",
+        "operator-journey/steps/<slug:journey_slug>/<slug:step_slug>/complete/",
         views.complete_operator_journey_step,
         name="operator-journey-step-complete",
     ),
