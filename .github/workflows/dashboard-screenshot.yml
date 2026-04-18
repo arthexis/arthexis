@@ -348,8 +348,16 @@ jobs:
           name: developer-library
           path: artifacts/docs-library-desktop.png
 
-      - name: Build screenshot metadata index
+      - name: Verify screenshot artifacts checklist (pull requests)
         if: ${{ github.event_name == 'pull_request' }}
+        id: verify-pr-screenshot-artifacts
+        continue-on-error: true
+        run: |
+          source .venv/bin/activate
+          python scripts/verify_screenshot_artifacts.py --artifacts-dir artifacts --report artifacts/screenshot-verification.md
+
+      - name: Build screenshot metadata index
+        if: ${{ always() && github.event_name == 'pull_request' }}
         run: |
           source .venv/bin/activate
           python <<'PY'
@@ -357,9 +365,9 @@ jobs:
           from pathlib import Path
 
           artifacts_dir = Path("artifacts")
+          checks_path = artifacts_dir / "screenshot-verification.md"
           images = sorted(path.name for path in artifacts_dir.glob("*.png"))
           readme_path = artifacts_dir / "README.md"
-          checks_path = artifacts_dir / "screenshot-verification.md"
 
           requested_paths: dict[str, str] = {}
           current_path = None
@@ -377,6 +385,11 @@ jobs:
                   requested_paths[filename] = current_path
 
           payload = {
+              "checks_markdown": (
+                  checks_path.read_text(encoding="utf-8").strip()
+                  if checks_path.exists()
+                  else None
+              ),
               "images": [
                   {
                       "filename": name,
@@ -384,11 +397,6 @@ jobs:
                   }
                   for name in images
               ],
-              "checks_markdown": (
-                  checks_path.read_text(encoding="utf-8").strip()
-                  if checks_path.exists()
-                  else None
-              ),
           }
           (artifacts_dir / "screenshot-metadata.json").write_text(
               json.dumps(payload, indent=2, sort_keys=True) + "\n",
@@ -397,23 +405,16 @@ jobs:
           PY
 
       - name: Upload screenshot metadata
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ always() && github.event_name == 'pull_request' }}
         id: upload-pr-screenshot-metadata
         uses: actions/upload-artifact@v7
         with:
           name: screenshot-metadata
           path: |
+            artifacts/*.png
             artifacts/screenshot-metadata.json
             artifacts/README.md
             artifacts/screenshot-verification.md
-
-      - name: Verify screenshot artifacts checklist (pull requests)
-        if: ${{ github.event_name == 'pull_request' }}
-        id: verify-pr-screenshot-artifacts
-        continue-on-error: true
-        run: |
-          source .venv/bin/activate
-          python scripts/verify_screenshot_artifacts.py --artifacts-dir artifacts --report artifacts/screenshot-verification.md
 
       - name: Build PR screenshot comment body
         if: ${{ always() && github.event_name == 'pull_request' }}
