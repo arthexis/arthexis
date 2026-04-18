@@ -63,6 +63,7 @@ from apps.users.passkeys import (
 from config.request_utils import is_https_request
 
 from ..forms import AuthenticatorLoginForm
+from ..session_keys import REGISTRATION_USERNAME_PREFILL_SESSION_KEY
 from ..utils import get_original_referer
 from utils.sites import get_site
 
@@ -422,7 +423,7 @@ class CustomLoginView(LoginView):
 
     template_name = "pages/login.html"
     form_class = AuthenticatorLoginForm
-    registration_username_session_key = "registration_username_prefill"
+    registration_username_session_key = REGISTRATION_USERNAME_PREFILL_SESSION_KEY
 
     def dispatch(self, request, *args, **kwargs):
         allow_check = request.user.is_authenticated and (
@@ -444,6 +445,7 @@ class CustomLoginView(LoginView):
         return form
 
     def get_initial(self):
+        """Return initial values using query-prefill first, then GET-only session prefill."""
         initial = super().get_initial()
         if getattr(self, "_login_check_mode", False):
             initial.setdefault("username", self.request.user.get_username())
@@ -453,7 +455,7 @@ class CustomLoginView(LoginView):
             self.request.GET.get("registration_username", "")
             or self.request.GET.get("username", "")
         ).strip()
-        if not username_prefill:
+        if not username_prefill and self.request.method == "GET":
             username_prefill = str(
                 self.request.session.pop(self.registration_username_session_key, "")
             ).strip()
