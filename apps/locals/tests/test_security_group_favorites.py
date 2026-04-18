@@ -60,3 +60,15 @@ def test_ensure_security_group_favorites_is_idempotent():
 
     target_count = len(PRODUCT_DEVELOPER_FAVORITE_TARGETS)
     assert Favorite.objects.filter(user=user).count() == target_count
+
+
+@pytest.mark.django_db
+def test_user_group_assignment_seeds_favorites():
+    user_model = get_user_model()
+    user = user_model.objects.create_user(username="group-seeded-user", password="pw", is_staff=True)
+    site_operator, _ = SecurityGroup.objects.get_or_create(name="Site Operator")
+
+    user.groups.add(site_operator)
+
+    target_count = len(SITE_OPERATOR_FAVORITE_TARGETS)
+    assert Favorite.objects.filter(user=user).count() == target_count

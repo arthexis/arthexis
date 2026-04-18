@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.auth.signals import user_logged_in
-from django.db.models.signals import post_save
+from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 
 from ..models import ensure_security_group_favorites
@@ -29,4 +30,10 @@ def _on_user_created(sender, instance, created, **kwargs):
     if created:
         load_shared_user_fixtures(force=True, user=instance)
         load_user_fixtures(instance)
-        ensure_security_group_favorites(instance)
+
+
+@receiver(m2m_changed, sender=get_user_model().groups.through)
+def _on_user_groups_changed(sender, instance, action, reverse, pk_set, **kwargs):
+    if reverse or action != "post_add" or not pk_set:
+        return
+    ensure_security_group_favorites(instance)

@@ -9,14 +9,14 @@ from apps.core.entity import Entity
 from apps.groups.constants import PRODUCT_DEVELOPER_GROUP_NAME, SITE_OPERATOR_GROUP_NAME
 
 PRODUCT_DEVELOPER_FAVORITE_TARGETS: tuple[tuple[str, str], ...] = (
-    ("app", "Application"),
-    ("release", "PackageRelease"),
-    ("repos", "RepositoryIssue"),
-    ("tests", "SuiteTest"),
+    ("app", "application"),
+    ("release", "packagerelease"),
+    ("repos", "repositoryissue"),
+    ("tests", "suitetest"),
 )
 SITE_OPERATOR_FAVORITE_TARGETS: tuple[tuple[str, str], ...] = (
-    ("cards", "RFIDAttempt"),
-    ("django_celery_beat", "PeriodicTask"),
+    ("cards", "rfidattempt"),
+    ("django_celery_beat", "periodictask"),
 )
 
 

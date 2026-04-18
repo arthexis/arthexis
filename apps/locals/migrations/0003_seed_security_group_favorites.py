@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import migrations
+from django.db.models import Max
 
 PRODUCT_DEVELOPER_GROUP_NAME = "Product Developer"
 SITE_OPERATOR_GROUP_NAME = "Site Operator"
@@ -54,7 +55,23 @@ def seed_security_group_favorites(apps, schema_editor):
         if content_type_id:
             content_type_by_target[(app_label, model)] = content_type_id
 
-    users = User.objects.filter(id__in=group_name_map.keys())
+    user_ids = list(group_name_map.keys())
+    users = User.objects.filter(id__in=user_ids)
+    all_target_content_type_ids = set(content_type_by_target.values())
+    existing_by_user: dict[int, set[int]] = {}
+    for user_id, content_type_id in Favorite.objects.filter(
+        user_id__in=user_ids,
+        content_type_id__in=all_target_content_type_ids,
+    ).values_list("user_id", "content_type_id"):
+        existing_by_user.setdefault(user_id, set()).add(content_type_id)
+
+    priority_by_user = {
+        row["user_id"]: row["max_priority"]
+        for row in Favorite.objects.filter(user_id__in=user_ids)
+        .values("user_id")
+        .annotate(max_priority=Max("priority"))
+    }
+
     for user in users:
         user_targets = _favorite_targets_for_user(user, group_name_map)
         content_type_ids = [
@@ -65,14 +82,8 @@ def seed_security_group_favorites(apps, schema_editor):
         if not content_type_ids:
             continue
 
-        existing = set(
-            Favorite.objects.filter(user_id=user.pk, content_type_id__in=content_type_ids).values_list(
-                "content_type_id", flat=True
-            )
-        )
-        max_priority = (
-            Favorite.objects.filter(user_id=user.pk).order_by("-priority").values_list("priority", flat=True).first()
-        )
+        existing = existing_by_user.get(user.pk, set())
+        max_priority = priority_by_user.get(user.pk)
         next_priority = (max_priority or -1) + 1
 
         new_favorites = []
