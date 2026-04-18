@@ -45,9 +45,16 @@
             {% endfor %}
           </select>
         </div>
+        <div class="form-row">
+          <label for="id_include_header">{% trans "Header row" %}</label>
+          <label>
+            <input id="id_include_header" type="checkbox" name="include_header" {% if include_header %}checked{% endif %} />
+            {% trans "Include uppercase header row in CSV/TSV exports" %}
+          </label>
+        </div>
       </fieldset>
       <fieldset class="module aligned export-fieldset">
-        <div class="form-row">
+        <div class="form-row export-summary-row">
           <p class="export-summary">
             {% if exporting_selected %}
               {% if export_count == total_export_count %}
@@ -82,11 +89,19 @@
           <input type="hidden" name="export_column_order" id="id_export_column_order" />
           <ul class="export-columns-list">
             {% for column in export_columns %}
-              <li data-export-column-name="{{ column.name }}">
+              <li data-export-column-name="{{ column.name }}" draggable="true">
                 <label class="export-column-option{% if column.is_import_identifier %} import-identifier{% endif %}">
+                  <button
+                    type="button"
+                    class="button export-column-drag-handle"
+                    aria-label="{% trans 'Drag to reorder column' %}"
+                    title="{% trans 'Drag to reorder column' %}"
+                  >
+                    ↕
+                  </button>
                   <input type="checkbox" name="export_columns" value="{{ column.name }}" {% if column.selected %}checked{% endif %} />
                   <span>
-                    {{ column.label }} <span class="quiet">({{ column.name }})</span>
+                    {{ column.label }} <span class="quiet export-column-name">({{ column.name }})</span>
                     {% if column.is_import_identifier %}
                       <span class="import-identifier-badge">{% trans "Import ID" %}</span>
                     {% endif %}
@@ -161,6 +176,70 @@
         if (!list) {
           return;
         }
+        var draggedItem = null;
+        var dragEnabledItem = null;
+
+        list.addEventListener("pointerdown", function (event) {
+          var handle = event.target.closest(".export-column-drag-handle");
+          dragEnabledItem = handle
+            ? handle.closest("li[data-export-column-name]")
+            : null;
+        });
+
+        list.addEventListener("dragstart", function (event) {
+          var target = event.target;
+          if (!target) {
+            event.preventDefault();
+            return;
+          }
+          var item = target.closest("li[data-export-column-name]");
+          if (!item || item !== dragEnabledItem) {
+            event.preventDefault();
+            return;
+          }
+          draggedItem = item;
+          if (!draggedItem) {
+            event.preventDefault();
+            return;
+          }
+          draggedItem.classList.add("is-dragging");
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", draggedItem.dataset.exportColumnName || "");
+        });
+
+        list.addEventListener("dragover", function (event) {
+          if (!draggedItem) {
+            return;
+          }
+          event.preventDefault();
+          var targetItem = event.target.closest("li[data-export-column-name]");
+          if (!targetItem || targetItem === draggedItem) {
+            return;
+          }
+          var bounds = targetItem.getBoundingClientRect();
+          if (event.clientY < bounds.top + bounds.height / 2) {
+            targetItem.before(draggedItem);
+          } else {
+            targetItem.after(draggedItem);
+          }
+        });
+
+        list.addEventListener("drop", function (event) {
+          if (!draggedItem) {
+            return;
+          }
+          event.preventDefault();
+        });
+
+        list.addEventListener("dragend", function () {
+          if (draggedItem) {
+            draggedItem.classList.remove("is-dragging");
+          }
+          draggedItem = null;
+          dragEnabledItem = null;
+          syncColumnOrderInput();
+        });
+
         list.addEventListener("click", function (event) {
           var button = event.target.closest("button");
           if (!button) {

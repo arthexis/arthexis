@@ -181,7 +181,15 @@ class ImportExportAdminMixin:
         return text
 
     def _build_delimited_export_response(
-        self, queryset, export_fields, opts, *, delimiter, content_type, extension
+        self,
+        queryset,
+        export_fields,
+        opts,
+        *,
+        delimiter,
+        content_type,
+        extension,
+        include_header,
     ):
         """Return a delimited file response for the provided queryset and fields."""
         response = HttpResponse(content_type=content_type)
@@ -189,7 +197,8 @@ class ImportExportAdminMixin:
             f"attachment; filename={opts.app_label}_{opts.model_name}.{extension}"
         )
         writer = csv.writer(response, delimiter=delimiter)
-        writer.writerow([field.name for field in export_fields])
+        if include_header:
+            writer.writerow([field.name.upper() for field in export_fields])
         for obj in queryset:
             writer.writerow(
                 [
@@ -244,6 +253,7 @@ class ImportExportAdminMixin:
         queryset, exporting_selected, selected_ids = self._selected_queryset(request, queryset)
         opts = self.model._meta
         export_fields = self._get_export_fields(request)
+        include_header = params.get("include_header") == "on"
         if request.method == "POST" and export_format:
             selected_export_column_names = request.POST.getlist("export_columns")
             if not selected_export_column_names:
@@ -285,6 +295,7 @@ class ImportExportAdminMixin:
                     delimiter=",",
                     content_type="text/csv",
                     extension="csv",
+                    include_header=include_header,
                 )
             if export_format == "tsv":
                 return self._build_delimited_export_response(
@@ -294,6 +305,7 @@ class ImportExportAdminMixin:
                     delimiter="\t",
                     content_type="text/tab-separated-values",
                     extension="tsv",
+                    include_header=include_header,
                 )
             if export_format == "json":
                 payload = serialize("json", queryset, fields=export_field_names)
@@ -318,6 +330,7 @@ class ImportExportAdminMixin:
                 "total_export_count": total_export_count,
                 "exporting_selected": exporting_selected,
                 "selected_ids": selected_ids,
+                "include_header": include_header,
                 "export_columns": [
                     {
                         "name": field.name,

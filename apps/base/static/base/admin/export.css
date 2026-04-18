@@ -11,15 +11,30 @@
 .export-columns-list li {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--spacing, 0.5rem);
   justify-content: space-between;
-  margin-bottom: 0.35rem;
+  margin-bottom: calc(var(--spacing, 0.5rem) * 0.5);
 }
 
 .export-column-option {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: calc(var(--spacing, 0.5rem) * 0.8);
+}
+
+.export-column-drag-handle {
+  cursor: grab;
+  min-height: calc(var(--height, 2rem) * 0.9);
+  min-width: calc(var(--height, 2rem) * 0.9);
+  padding: calc(var(--spacing, 0.5rem) * 0.25) calc(var(--spacing, 0.5rem) * 0.5);
+}
+
+.export-columns-list li.is-dragging .export-column-drag-handle {
+  cursor: grabbing;
+}
+
+.export-column-name {
+  text-transform: uppercase;
 }
 
 .export-column-option input[type="checkbox"] {
@@ -45,26 +60,30 @@
 
 .export-column-move-controls {
   display: inline-flex;
-  gap: 0.3rem;
+  gap: calc(var(--spacing, 0.5rem) * 0.5);
 }
 
 .export-column-move-controls .button {
-  min-height: 1.9rem;
-  min-width: 1.9rem;
-  padding: 0.2rem 0.45rem;
+  min-height: calc(var(--height, 2rem) * 0.9);
+  min-width: calc(var(--height, 2rem) * 0.9);
+  padding: calc(var(--spacing, 0.5rem) * 0.25) calc(var(--spacing, 0.5rem) * 0.5);
 }
 
 
 .export-form .export-fieldset .form-row {
-  padding: 1rem 0.75rem;
+  padding: calc(var(--spacing, 0.5rem) * 0.75) var(--spacing, 0.5rem);
+}
+
+.export-form .export-fieldset .form-row.export-summary-row {
+  padding: calc(var(--spacing, 0.5rem) * 0.35) var(--spacing, 0.5rem);
 }
 
 .export-form .submit-row {
-  padding: 0.9rem 0.75rem;
+  padding: calc(var(--spacing, 0.5rem) * 0.75) var(--spacing, 0.5rem);
 }
 
 .export-form .submit-row .default,
 .export-form .submit-row .button {
-  min-height: 2.2rem;
-  padding: 0.45rem 0.95rem;
+  min-height: calc(var(--height, 2rem) * 1.05);
+  padding: calc(var(--spacing, 0.5rem) * 0.8) calc(var(--spacing, 0.5rem) * 1.5);
 }
