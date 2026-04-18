@@ -198,8 +198,7 @@ class Command(BaseCommand):
                 access_point_user=access_point_user,
             )
         if access_point_user:
-            resolved_groups = self._resolve_groups(groups) if groups else []
-            resolved_groups = self._resolve_access_point_groups(resolved_groups)
+            resolved_groups = self._resolve_access_point_groups(groups)
             self._configure_access_point_user(user)
             self._harden_access_point_membership(user, resolved_groups)
             self.stdout.write(self.style.SUCCESS(f"Configured {user.username} as a local access point user."))
@@ -361,13 +360,12 @@ class Command(BaseCommand):
         if groups:
             user.groups.add(*groups)
 
-    def _resolve_access_point_groups(self, explicit_groups: list[Group]) -> list[Group]:
-        ensure_security_groups_exist(self.ACCESS_POINT_DEFAULT_GROUP_NAMES)
-        default_groups = self._resolve_groups(list(self.ACCESS_POINT_DEFAULT_GROUP_NAMES))
+    def _resolve_access_point_groups(self, explicit_group_names: list[str]) -> list[Group]:
+        default_groups = ensure_security_groups_exist(self.ACCESS_POINT_DEFAULT_GROUP_NAMES)
+        explicit_groups = self._resolve_groups(explicit_group_names) if explicit_group_names else []
 
-        groups_by_name: dict[str, Group] = {
-            group.name: group for group in [*default_groups, *explicit_groups]
-        }
+        groups_by_name: dict[str, Group] = {group.name: group for group in explicit_groups}
+        groups_by_name.update(default_groups)
         return [groups_by_name[name] for name in sorted(groups_by_name)]
 
     def _delete_password(self, user) -> None:

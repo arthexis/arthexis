@@ -340,6 +340,28 @@ class PasswordCommandTests(TestCase):
         assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
         assert user.groups.filter(name=GALLERY_MANAGER_GROUP_NAME).exists()
 
+    def test_access_point_user_mode_merges_explicit_groups_with_defaults(self):
+        """Access-point mode should preserve requested groups while ensuring AP defaults."""
+
+        explicit_group = Group.objects.create(name="Gallery Helpers")
+        user = get_user_model().objects.create_user(
+            username="ap-explicit-group-merge",
+            email="ap-explicit-group-merge@example.com",
+            password="InitialPassword123",
+        )
+
+        call_command(
+            "password",
+            user.username,
+            access_point_user=True,
+            group=explicit_group.name,
+        )
+
+        user.refresh_from_db()
+        assert user.groups.filter(name=AP_USER_GROUP_NAME).exists()
+        assert user.groups.filter(name=GALLERY_MANAGER_GROUP_NAME).exists()
+        assert user.groups.filter(name=explicit_group.name).exists()
+
     def test_access_point_user_mode_rejects_password_argument(self):
         """Access-point mode should reject contradictory password arguments."""
 
