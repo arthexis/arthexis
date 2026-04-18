@@ -105,13 +105,25 @@ def status_for_user(*, user: AbstractBaseUser) -> OperatorJourneyStatus:
         is_complete=False,
         message=next_step.title,
         task_title=next_step.title,
-        url=reverse(
-            "ops:operator-journey-step",
-            kwargs={
-                "journey_slug": next_step.journey.slug,
-                "step_slug": next_step.slug,
-            },
-        ),
+        url=operator_journey_step_url(step=next_step),
+    )
+
+
+def operator_journey_step_url(*, step: OperatorJourneyStep) -> str:
+    """Return canonical step URL keyed by journey and step slugs."""
+
+    return reverse(
+        "ops:operator-journey-step",
+        kwargs={"journey_slug": step.journey.slug, "step_slug": step.slug},
+    )
+
+
+def operator_journey_step_complete_url(*, step: OperatorJourneyStep) -> str:
+    """Return canonical completion URL keyed by journey and step slugs."""
+
+    return reverse(
+        "ops:operator-journey-step-complete",
+        kwargs={"journey_slug": step.journey.slug, "step_slug": step.slug},
     )
 
 

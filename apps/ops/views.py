@@ -9,7 +9,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.http import Http404, HttpRequest, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
@@ -17,7 +17,12 @@ OPERATOR_JOURNEY_STEP_URL_NAME = "ops:operator-journey-step"
 
 from .forms import OperatorJourneyProvisionSuperuserForm
 from .models import OperatorJourneyStep
-from .operator_journey import complete_step_for_user, next_step_for_user
+from .operator_journey import (
+    complete_step_for_user,
+    next_step_for_user,
+    operator_journey_step_complete_url,
+    operator_journey_step_url,
+)
 from .redirects import safe_host_redirect
 from .status_surface import build_status_surface, scoped_log_excerpts
 
@@ -42,24 +47,6 @@ def _build_admin_context(request: HttpRequest) -> dict[str, object]:
     """Return shared context needed by admin base templates."""
 
     return admin.site.each_context(request)
-
-
-def _operator_journey_step_url(*, step: OperatorJourneyStep) -> str:
-    """Return canonical step URL keyed by journey and step slugs."""
-
-    return reverse(
-        OPERATOR_JOURNEY_STEP_URL_NAME,
-        kwargs={"journey_slug": step.journey.slug, "step_slug": step.slug},
-    )
-
-
-def _operator_journey_step_complete_url(*, step: OperatorJourneyStep) -> str:
-    """Return canonical completion URL keyed by journey and step slugs."""
-
-    return reverse(
-        "ops:operator-journey-step-complete",
-        kwargs={"journey_slug": step.journey.slug, "step_slug": step.slug},
-    )
 
 
 def _build_security_group_rows(
@@ -229,7 +216,7 @@ def status_log_excerpts(request: HttpRequest) -> JsonResponse:
 @staff_member_required
 def operator_journey_step(
     request: HttpRequest, journey_slug: str, step_slug: str
-):
+) -> HttpResponse | HttpResponseRedirect:
     """Render the next required journey step with guided manual workflow."""
 
     step = (
@@ -253,7 +240,7 @@ def operator_journey_step(
             request,
             "Please complete your current required operator step before opening later items.",
         )
-        return redirect(_operator_journey_step_url(step=next_step))
+        return redirect(operator_journey_step_url(step=next_step))
 
     context = {"step": step, **_build_admin_context(request)}
     if step.slug == ROLE_VALIDATION_STEP_SLUG:
@@ -271,7 +258,7 @@ def operator_journey_step(
 @staff_member_required
 def complete_operator_journey_step(
     request: HttpRequest, journey_slug: str, step_slug: str
-):
+) -> HttpResponse | HttpResponseRedirect:
     """Complete the current required journey step and route to the next one."""
 
     if request.method != "POST":
@@ -303,7 +290,7 @@ def complete_operator_journey_step(
             request,
             "That step is not available yet. Finish the current required operator step first.",
         )
-        return redirect(_operator_journey_step_url(step=current_step))
+        return redirect(operator_journey_step_url(step=current_step))
 
     if step.slug == PROVISION_SUPERUSER_STEP_SLUG:
         if not request.user.is_superuser:
@@ -334,7 +321,7 @@ def complete_operator_journey_step(
                     "That step is not available yet. Finish the current required operator step first.",
                 )
                 return redirect(
-                    _operator_journey_step_url(step=locked_step)
+                    operator_journey_step_url(step=locked_step)
                 )
             if not complete_step_for_user(user=request.user, step=step):
                 messages.warning(
@@ -342,7 +329,7 @@ def complete_operator_journey_step(
                     "That step is not available yet. Finish the current required operator step first.",
                 )
                 return redirect(
-                    _operator_journey_step_url(step=locked_step)
+                    operator_journey_step_url(step=locked_step)
                 )
             new_user, password, created_user = provision_form.save()
         next_step = next_step_for_user(user=request.user)
@@ -365,12 +352,12 @@ def complete_operator_journey_step(
             request,
             "That step is not available yet. Finish the current required operator step first.",
         )
-        return redirect(_operator_journey_step_url(step=next_step))
+        return redirect(operator_journey_step_url(step=next_step))
 
     next_step = next_step_for_user(user=request.user)
     if next_step is None:
         return render(request, "admin/ops/operator_journey_complete.html")
-    return redirect(_operator_journey_step_url(step=next_step))
+    return redirect(operator_journey_step_url(step=next_step))
 
 
 @staff_member_required
@@ -390,7 +377,7 @@ def operator_journey_step_legacy(
     )
     if step is None:
         raise Http404("Journey step not found")
-    return redirect(_operator_journey_step_url(step=step))
+    return redirect(operator_journey_step_url(step=step))
 
 
 @staff_member_required
@@ -411,5 +398,10 @@ def complete_operator_journey_step_legacy(
     if step is None:
         raise Http404("Journey step not found")
     if request.method != "POST":
-        return redirect(_operator_journey_step_url(step=step))
-    return redirect(_operator_journey_step_complete_url(step=step))
+        return redirect(operator_journey_step_url(step=step))
+    response = redirect(
+        operator_journey_step_complete_url(step=step),
+        preserve_request=True,
+    )
+    response.status_code = 307
+    return response

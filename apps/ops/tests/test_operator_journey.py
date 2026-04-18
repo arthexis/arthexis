@@ -225,6 +225,45 @@ class OperatorJourneyViewTests(TestCase):
             response, reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
         )
 
+    def test_legacy_complete_url_resolves_to_legacy_view_for_get_requests(self):
+        response = self.client.get(
+            reverse(
+                "ops:operator-journey-step-complete-legacy",
+                kwargs={"step_id": self.step_1.pk},
+            )
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            ),
+        )
+
+    def test_legacy_complete_post_redirect_preserves_request_method(self):
+        response = self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete-legacy",
+                kwargs={"step_id": self.step_1.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, 307)
+        self.assertEqual(
+            response["Location"],
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            ),
+        )
+
     def test_validate_role_step_shows_setup_check_instead_of_iframe(self):
         response = self.client.get(
             reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
