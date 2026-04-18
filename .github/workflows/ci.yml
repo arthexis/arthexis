@@ -131,13 +131,13 @@ jobs:
             echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
           fi
 
-      - name: Run critical auto-upgrade checks
+      - name: Run auto-upgrade checks
         run: |
           set -Eeuo pipefail
           ./scripts/preflight-env.sh --pytest
           source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
-          python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee pytest.log
+          python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow and not integration" | tee pytest.log
 
       - name: Upload pytest log
         if: always()

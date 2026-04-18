@@ -100,7 +100,6 @@ ci = [
   "django-stubs-ext==6.0.2",
   "django-stubs==6.0.1",
   "import-linter==2.11",
-  "mypy==1.20.0",
   "ruff==0.15.9",
   "twine==6.1.0",
   "types-requests==2.32.4.20250913",
@@ -387,76 +386,8 @@ config = [ "**/*",]
 where = [ ".",]
 
 
-[tool.mypy]
-python_version = "3.10"
-plugins = ["mypy_django_plugin.main"]
-files = [
-  "scripts/generate_requirements.py",
-  "scripts/sort_pyproject_deps.py",
-  "apps/protocols",
-  "apps/repos/github.py",
-  "apps/repos/models/repositories.py",
-  "apps/repos/services/github.py",
-  "apps/repos/release_management.py",
-  "apps/repos/task_utils.py",
-  "apps/repos/views/webhooks.py",
-  "apps/core/modeling",
-  "apps/core/services/health.py",
-  "apps/core/services/health_checks.py",
-  "apps/core/services/odoo_quote_report.py",
-  "apps/core/system/ui/formatting.py",
-  "apps/core/system/ui/network_probe.py",
-  "apps/core/system/ui/services.py",
-  "apps/core/system/ui/uptime.py",
-  "apps/core/system_ui.py",
-  "apps/ocpp/call_result_handlers/common.py",
-  "apps/ocpp/consumers/base/metering.py",
-  "apps/ocpp/consumers/base/notifications.py",
-  "apps/ocpp/consumers/base/routing.py",
-  "apps/ocpp/consumers/base/transactions.py",
-  "apps/ocpp/consumers/csms/dispatch.py",
-  "apps/ocpp/payload_types.py",
-  "apps/ocpp/services/certificate_status.py",
-]
-exclude = [
-  ".*/migrations/.*",
-  ".*/beat_migrations/.*",
-  "media/.*",
-  "static/.*",
-  "node_modules/.*",
-  "tests/fixtures/.*",
-  "apps/.*/fixtures/.*",
-  "scripts/generated/.*",
-]
-warn_unused_ignores = true
-warn_redundant_casts = true
-check_untyped_defs = false
-allow_untyped_globals = true
-follow_imports = "silent"
-
 [tool.django-stubs]
 django_settings_module = "config.settings"
-
-[[tool.mypy.overrides]]
-module = ["psutil"]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = [
-  "bleach",
-  "cron_descriptor",
-  "dotenv",
-  "import_export.*",
-  "markdown",
-  "mdx_truly_sane_lists",
-  "qrcode",
-  "qrcode.image.svg",
-  "reportlab.*",
-  "requests",
-  "setuptools",
-  "tomllib",
-]
-ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 88

@@ -79,7 +79,6 @@ def test_ensure_auto_upgrade_periodic_task_disables_task_when_feature_is_off(
     assert task.enabled is False
 
 
-@pytest.mark.critical
 def test_sync_auto_upgrade_periodic_task_for_feature_change_enables_task(
     monkeypatch,
 ):

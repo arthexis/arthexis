@@ -19,7 +19,6 @@ def _sqlite_identifier(name: str) -> str:
     return f'"{name.replace(chr(34), chr(34) * 2)}"'
 
 
-@pytest.mark.critical
 def test_reconcile_copies_only_common_tables(tmp_path: Path) -> None:
     source = tmp_path / "source.sqlite3"
     target = tmp_path / "target.sqlite3"
