@@ -291,6 +291,42 @@ class OperatorJourneyViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, canonical_collision_step.title)
 
+    def test_legacy_complete_post_ignores_slug_collision_fast_path(self):
+        collision_journey = OperatorJourney.objects.create(
+            name="Collision Journey",
+            slug=str(self.step_1.pk),
+            security_group=self.group,
+            is_active=True,
+            priority=0,
+        )
+        OperatorJourneyStep.objects.create(
+            journey=collision_journey,
+            title="Collision Complete Step",
+            slug="complete",
+            instruction="Collision step should not consume legacy post completion.",
+            iframe_url="/admin/",
+            order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete-legacy",
+                kwargs={"step_id": self.step_1.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, 307)
+        self.assertEqual(
+            response["Location"],
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            ),
+        )
+
     def test_validate_role_step_shows_setup_check_instead_of_iframe(self):
         response = self.client.get(
             reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})

@@ -386,22 +386,23 @@ def complete_operator_journey_step_legacy(
 ) -> HttpResponseRedirect:
     """Redirect legacy numeric completion URLs to slug-based canonical URLs."""
 
-    canonical_step = (
-        OperatorJourneyStep.objects.filter(
-            journey__slug=str(step_id),
-            slug="complete",
-            is_active=True,
-            journey__is_active=True,
+    if request.method != "POST":
+        canonical_step = (
+            OperatorJourneyStep.objects.filter(
+                journey__slug=str(step_id),
+                slug="complete",
+                is_active=True,
+                journey__is_active=True,
+            )
+            .select_related("journey")
+            .first()
         )
-        .select_related("journey")
-        .first()
-    )
-    if canonical_step is not None:
-        return operator_journey_step(
-            request,
-            journey_slug=canonical_step.journey.slug,
-            step_slug=canonical_step.slug,
-        )
+        if canonical_step is not None:
+            return operator_journey_step(
+                request,
+                journey_slug=canonical_step.journey.slug,
+                step_slug=canonical_step.slug,
+            )
 
     step = (
         OperatorJourneyStep.objects.filter(
