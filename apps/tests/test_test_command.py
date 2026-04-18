@@ -13,14 +13,15 @@ def _create_expected_venv_python(base_dir):
     venv_python = test_command.expected_venv_python(base_dir)
     venv_python.parent.mkdir(parents=True, exist_ok=True)
     venv_python.touch()
+    return venv_python
 
 
 def test_run_pytest_prints_readiness_before_execution(monkeypatch, tmp_path, capsys):
     command = test_command.Command()
 
     monkeypatch.setattr(command, "_base_dir", lambda: tmp_path)
-    monkeypatch.setattr(test_command, "resolve_project_python", lambda _base_dir: "python")
-    _create_expected_venv_python(tmp_path)
+    venv_python = _create_expected_venv_python(tmp_path)
+    monkeypatch.setattr(test_command, "resolve_project_python", lambda _base_dir: str(venv_python))
 
     probe_payload = {
         "python_executable": "/workspace/arthexis/.venv/bin/python",
@@ -37,7 +38,7 @@ def test_run_pytest_prints_readiness_before_execution(monkeypatch, tmp_path, cap
 
     def fake_run(command_args, **kwargs):
         calls.append(command_args)
-        if command_args[:2] == ["python", "-c"]:
+        if command_args[:2] == [str(venv_python), "-c"]:
             return subprocess.CompletedProcess(command_args, 0, stdout=json.dumps(probe_payload))
         return subprocess.CompletedProcess(command_args, 0)
 
@@ -51,16 +52,16 @@ def test_run_pytest_prints_readiness_before_execution(monkeypatch, tmp_path, cap
     assert "python executable: /workspace/arthexis/.venv/bin/python" in captured
     assert "core test dependencies: pytest=yes" in captured
 
-    assert calls[0][:2] == ["python", "-c"]
-    assert calls[1] == ["python", "-m", "pytest", "apps/tests/test_test_command.py"]
+    assert calls[0][:2] == [str(venv_python), "-c"]
+    assert calls[1] == [str(venv_python), "-m", "pytest", "apps/tests/test_test_command.py"]
 
 
 def test_run_pytest_fails_before_pytest_when_dependency_missing(monkeypatch, tmp_path, capsys):
     command = test_command.Command()
 
     monkeypatch.setattr(command, "_base_dir", lambda: tmp_path)
-    monkeypatch.setattr(test_command, "resolve_project_python", lambda _base_dir: "python")
-    _create_expected_venv_python(tmp_path)
+    venv_python = _create_expected_venv_python(tmp_path)
+    monkeypatch.setattr(test_command, "resolve_project_python", lambda _base_dir: str(venv_python))
     probe_payload = {
         "python_executable": "/workspace/arthexis/.venv/bin/python",
         "virtualenv_active": True,
@@ -90,4 +91,7 @@ def test_run_pytest_fails_before_pytest_when_dependency_missing(monkeypatch, tmp
     json_end = message.rfind("}")
     payload = json.loads(message[json_start : json_end + 1])
     assert payload["code"] == "missing_dependency"
+    assert payload["command"] == "./env-refresh.sh --deps-only"
+    assert payload["retry"] == f"{venv_python.relative_to(tmp_path).as_posix()} manage.py test run -- apps/tests/test_test_command.py"
     assert len(calls) == 1
+    assert calls[0][:2] == [str(venv_python), "-c"]
