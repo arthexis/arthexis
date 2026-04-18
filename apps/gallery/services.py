@@ -37,7 +37,7 @@ def _save_gallery_content_sample(*, media_path: str, owner_user=None) -> Content
     return save_content_sample(
         path=Path(media_path),
         kind=ContentSample.IMAGE,
-        method="GALLERY_UPLOAD",
+        method="GAL_UPLOAD",
         user=owner_user,
         link_duplicates=True,
         duplicate_log_context="gallery image upload",
@@ -59,14 +59,14 @@ def create_gallery_image(
 
     bucket = get_gallery_bucket()
     media_file = create_media_file(bucket=bucket, uploaded_file=uploaded_file)
-    content_sample = None
-    if create_content_sample:
-        content_sample = _save_gallery_content_sample(
-            media_path=media_file.file.path,
-            owner_user=owner_user,
-        )
     try:
         with transaction.atomic():
+            content_sample = None
+            if create_content_sample:
+                content_sample = _save_gallery_content_sample(
+                    media_path=media_file.file.path,
+                    owner_user=owner_user,
+                )
             return GalleryImage.objects.create(
                 media_file=media_file,
                 content_sample=content_sample,

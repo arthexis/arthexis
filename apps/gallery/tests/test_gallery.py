@@ -1,4 +1,5 @@
 from io import BytesIO
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -7,6 +8,7 @@ from PIL import Image
 
 from apps.content.models import ContentSample
 from apps.groups.models import SecurityGroup
+from apps.media.models import MediaFile
 
 from ..constants import GALLERY_MANAGER_GROUP_NAME
 from ..models import GalleryCategory, GalleryImage, GalleryImageTrait, GalleryTrait
@@ -55,10 +57,22 @@ class GalleryVisibilityTests(TestCase):
             ContentSample.objects.filter(
                 pk=image.content_sample_id,
                 kind=ContentSample.IMAGE,
-                method="GALLERY_UPLOAD",
+                method="GAL_UPLOAD",
             ).exists()
         )
 
+    def test_content_sample_failure_cleans_up_media_file(self):
+        before_count = MediaFile.objects.count()
+        with mock.patch("apps.gallery.services._save_gallery_content_sample", side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                create_gallery_image(
+                    uploaded_file=self._upload("cleanup.jpg"),
+                    title="Cleanup",
+                    create_content_sample=True,
+                    owner_user=self.user,
+                )
+        self.assertEqual(MediaFile.objects.count(), before_count)
+        self.assertFalse(GalleryImage.objects.filter(title="Cleanup").exists())
 
 class GalleryManagementPermissionTests(TestCase):
     def setUp(self):

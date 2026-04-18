@@ -38,7 +38,7 @@ sample when requested:
 1. Save uploaded binary as `MediaFile` in the gallery media bucket.
 2. If caller requests sample linkage, call `save_content_sample(...)` with:
    - `kind=IMAGE`
-   - `method="GALLERY_UPLOAD"`
+   - `method="GAL_UPLOAD"`
    - `link_duplicates=True`
 3. Persist `GalleryImage` with `content_sample` set to the returned sample.
 
