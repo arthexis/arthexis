@@ -18,7 +18,7 @@ emit_remediation() {
 }
 
 if [ ! -x "$PYTHON_BIN" ]; then
-  emit_remediation "missing_venv_python" "./install.sh --terminal" "./scripts/run_mypy.sh"
+  emit_remediation "missing_venv_python" "./env-refresh.sh --deps-only" "./scripts/run_mypy.sh"
   exit 1
 fi
 
