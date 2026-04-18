@@ -15,7 +15,13 @@ class GalleryImageTraitInline(admin.TabularInline):
 
 @admin.register(GalleryImage)
 class GalleryImageAdmin(admin.ModelAdmin):
-    list_display = ("title", "include_in_public_gallery", "owner_user", "owner_group")
+    list_display = (
+        "title",
+        "include_in_public_gallery",
+        "content_sample",
+        "owner_user",
+        "owner_group",
+    )
     list_filter = ("include_in_public_gallery", "categories")
     search_fields = ("title", "description")
     filter_horizontal = ("categories",)

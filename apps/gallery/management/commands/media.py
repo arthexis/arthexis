@@ -21,6 +21,7 @@ class Command(BaseCommand):
         upload.add_argument("--title", required=True)
         upload.add_argument("--description", default="")
         upload.add_argument("--public", action="store_true", default=False)
+        upload.add_argument("--as-content-sample", action="store_true", default=False)
         upload.add_argument("--owner-user", default="")
         upload.add_argument("--owner-group", default="")
 
@@ -93,6 +94,7 @@ class Command(BaseCommand):
                 title=options["title"],
                 description=options["description"],
                 include_in_public_gallery=options["public"],
+                create_content_sample=options["as_content_sample"],
                 owner_user=owner_user,
                 owner_group=owner_group,
             )

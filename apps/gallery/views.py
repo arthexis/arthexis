@@ -12,7 +12,12 @@ from .services import create_gallery_image
 
 
 def _visible_images_for_user(user):
-    queryset = GalleryImage.objects.select_related("media_file", "owner_user", "owner_group")
+    queryset = GalleryImage.objects.select_related(
+        "content_sample",
+        "media_file",
+        "owner_user",
+        "owner_group",
+    )
     if can_manage_gallery(user):
         return queryset
     visibility_filter = Q(include_in_public_gallery=True)
@@ -29,7 +34,12 @@ def gallery_index(request):
 
 def gallery_detail(request, slug):
     image = get_object_or_404(
-        GalleryImage.objects.select_related("media_file", "owner_user", "owner_group").prefetch_related(
+        GalleryImage.objects.select_related(
+            "content_sample",
+            "media_file",
+            "owner_user",
+            "owner_group",
+        ).prefetch_related(
             "credits", "categories", "trait_values__trait", "trait_values__category"
         ),
         slug=slug,
@@ -122,6 +132,7 @@ def gallery_upload(request):
             title=form.cleaned_data["title"],
             description=form.cleaned_data.get("description", ""),
             include_in_public_gallery=form.cleaned_data.get("include_in_public_gallery", False),
+            create_content_sample=form.cleaned_data.get("create_content_sample", False),
             owner_user=owner_user,
             owner_group=form.cleaned_data.get("owner_group"),
         )

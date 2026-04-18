@@ -10,6 +10,10 @@ class GalleryUploadForm(forms.Form):
     title = forms.CharField(max_length=255)
     description = forms.CharField(required=False, widget=forms.Textarea)
     include_in_public_gallery = forms.BooleanField(required=False)
+    create_content_sample = forms.BooleanField(
+        required=False,
+        label="Also create a Content Sample record",
+    )
     owner_user = forms.CharField(required=False)
     owner_group = forms.ModelChoiceField(queryset=SecurityGroup.objects.order_by("name"), required=False)
 
