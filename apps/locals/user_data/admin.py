@@ -253,7 +253,7 @@ class ImportExportAdminMixin:
         queryset, exporting_selected, selected_ids = self._selected_queryset(request, queryset)
         opts = self.model._meta
         export_fields = self._get_export_fields(request)
-        include_header = request.POST.get("include_header") == "on"
+        include_header = params.get("include_header") == "on"
         if request.method == "POST" and export_format:
             selected_export_column_names = request.POST.getlist("export_columns")
             if not selected_export_column_names:

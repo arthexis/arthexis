@@ -177,14 +177,27 @@
           return;
         }
         var draggedItem = null;
+        var dragEnabledItem = null;
+
+        list.addEventListener("pointerdown", function (event) {
+          var handle = event.target.closest(".export-column-drag-handle");
+          dragEnabledItem = handle
+            ? handle.closest("li[data-export-column-name]")
+            : null;
+        });
 
         list.addEventListener("dragstart", function (event) {
-          var handle = event.target.closest(".export-column-drag-handle");
-          if (!handle) {
+          var target = event.target;
+          if (!target) {
             event.preventDefault();
             return;
           }
-          draggedItem = handle.closest("li[data-export-column-name]");
+          var item = target.closest("li[data-export-column-name]");
+          if (!item || item !== dragEnabledItem) {
+            event.preventDefault();
+            return;
+          }
+          draggedItem = item;
           if (!draggedItem) {
             event.preventDefault();
             return;
@@ -209,7 +222,6 @@
           } else {
             targetItem.after(draggedItem);
           }
-          syncColumnOrderInput();
         });
 
         list.addEventListener("drop", function (event) {
@@ -217,7 +229,6 @@
             return;
           }
           event.preventDefault();
-          syncColumnOrderInput();
         });
 
         list.addEventListener("dragend", function () {
@@ -225,6 +236,7 @@
             draggedItem.classList.remove("is-dragging");
           }
           draggedItem = null;
+          dragEnabledItem = null;
           syncColumnOrderInput();
         });
 
