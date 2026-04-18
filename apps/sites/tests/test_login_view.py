@@ -14,6 +14,31 @@ def test_login_view_prefills_username_from_query_param(client):
     assert 'value="access-user"' in response.content.decode()
 
 
+def test_login_view_prefills_username_from_registration_query_param(client):
+    response = client.get(
+        reverse("pages:login"),
+        {"registration_username": "registered-user"},
+    )
+
+    assert response.status_code == 200
+    assert 'name="username"' in response.content.decode()
+    assert 'value="registered-user"' in response.content.decode()
+
+
+def test_login_view_prefills_username_from_registration_session_once(client):
+    session = client.session
+    session["registration_username_prefill"] = "session-registered-user"
+    session.save()
+
+    response = client.get(reverse("pages:login"))
+
+    assert response.status_code == 200
+    assert 'value="session-registered-user"' in response.content.decode()
+
+    session = client.session
+    assert "registration_username_prefill" not in session
+
+
 def test_login_view_check_mode_prefers_authenticated_username_over_query_prefill(client):
     user = get_user_model().objects.create_user(
         username="existing-user",

@@ -128,6 +128,7 @@ def registration(request: HttpRequest) -> HttpResponse:
             request,
             _("Thanks for registering! Your account is pending approval."),
         )
+        request.session["registration_username_prefill"] = user.get_username()
         return redirect("terms:registration")
 
     context = {

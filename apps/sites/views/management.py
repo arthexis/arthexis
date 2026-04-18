@@ -422,6 +422,7 @@ class CustomLoginView(LoginView):
 
     template_name = "pages/login.html"
     form_class = AuthenticatorLoginForm
+    registration_username_session_key = "registration_username_prefill"
 
     def dispatch(self, request, *args, **kwargs):
         allow_check = request.user.is_authenticated and (
@@ -448,7 +449,14 @@ class CustomLoginView(LoginView):
             initial.setdefault("username", self.request.user.get_username())
             return initial
 
-        username_prefill = str(self.request.GET.get("username", "")).strip()
+        username_prefill = str(
+            self.request.GET.get("registration_username", "")
+            or self.request.GET.get("username", "")
+        ).strip()
+        if not username_prefill:
+            username_prefill = str(
+                self.request.session.pop(self.registration_username_session_key, "")
+            ).strip()
         if username_prefill:
             initial.setdefault("username", username_prefill)
         return initial
