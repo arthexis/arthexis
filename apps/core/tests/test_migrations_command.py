@@ -7,7 +7,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 
-pytestmark = [pytest.mark.integration, pytest.mark.regression]
+pytestmark = [pytest.mark.integration]
 
 
 def _seed_apps_root(base_dir):

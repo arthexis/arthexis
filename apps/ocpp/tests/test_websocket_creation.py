@@ -333,7 +333,6 @@ def test_connect_maps_ocpp16j_subprotocol_to_ocpp16_version():
 
     async_to_sync(run_scenario)()
 
-@pytest.mark.critical
 def test_ocpp_websocket_rate_limit_enforced():
     async def run_scenario():
         serial = "CP-RATE-LIMIT"
@@ -391,7 +390,6 @@ def test_local_ip_bypasses_rate_limit_with_custom_scope_client():
 
     async_to_sync(run_scenario)()
 
-@pytest.mark.critical
 @pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_pending_connection_replaced_on_reconnect():

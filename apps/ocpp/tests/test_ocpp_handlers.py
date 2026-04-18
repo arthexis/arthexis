@@ -381,7 +381,6 @@ async def test_unlock_connector_error_records_failure():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_handle_clear_charging_profile_error_records_failure():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CLR-CP-2")
     profile = ChargingProfile(
@@ -472,7 +471,6 @@ async def test_cleared_charging_limit_persists_event():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_notify_charging_limit_persists_payload():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="CP-301", connector_id=1
@@ -515,7 +513,6 @@ async def test_notify_charging_limit_persists_payload():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_notify_report_persists_inventory_snapshot():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="INV-201", connector_id=1
@@ -1610,7 +1607,6 @@ async def test_transaction_event_updates_request_status(monkeypatch, charger_fac
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_transaction_event_does_not_start_request_when_authorization_fails(charger_factory):
     charger = await charger_factory(
         charger_id="CP-TRX-RFID",
@@ -1716,7 +1712,6 @@ async def test_start_transaction_rejection_creates_transaction_record(charger_fa
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_transaction_event_started_notifies_and_persists(charger_factory):
     charger = await charger_factory(
         charger_id="CP-TE-1",
@@ -1810,7 +1805,6 @@ async def test_transaction_event_updated_notifies_existing_transaction():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_transaction_event_ended_updates_and_notifies():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TE-3")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -2201,7 +2195,6 @@ async def test_report_charging_profiles_rejects_invalid_schedule_values(monkeypa
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_report_charging_profiles_rolls_back_partial_profile_writes(monkeypatch):
     """Schedule validation failures should not leave orphaned charging profiles."""
 
