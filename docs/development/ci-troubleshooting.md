@@ -25,25 +25,6 @@ This catches:
 - local app entries in `PROJECT_LOCAL_APPS` that are not importable
 - `apps.*` entries in `INSTALLED_APPS` that are missing from `PROJECT_LOCAL_APPS` and `PROJECT_APPS`
 
-## Screenshot coverage in CI
-
-The screenshot workflow already captures baseline routes. To request additional CI screenshot coverage without taking manual screenshots:
-
-- Add authenticated paths (admin/session-required pages) to `.github/screenshot-paths.authenticated.txt`.
-- Add public paths to `.github/screenshot-paths.public.txt`.
-- Keep one path per line and start with `/` (for example `/admin/links/reference/`).
-- Blank lines and `#` comments are ignored.
-
-These path files are read by `.github/workflows/dashboard-screenshot.yml`, which appends them to the default capture list and uploads the resulting screenshots as workflow artifacts.
-
-### When local preview tooling is unavailable
-
-If local preview generation fails because browser/screenshot tooling is unavailable in the current runtime, do not block on manual capture. Register the route for CI screenshot capture instead:
-
-- Add the route (starting with `/`, one per line) to `.github/screenshot-paths.authenticated.txt` (requires login) or `.github/screenshot-paths.public.txt` (public route).
-- Push the change and rely on the screenshot workflow artifacts as the preview source of truth.
-- Prefer this CI route-registration flow over ad-hoc local browser setup in constrained environments.
-
 ## Debugger/autoreload duplicate startup logs
 
 In this repository, `manage.py runserver` injects `--noreload` by default, so the usual Django watcher/child autoreload duplication is normally disabled.
