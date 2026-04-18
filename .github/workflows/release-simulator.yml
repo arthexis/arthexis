@@ -120,7 +120,7 @@ jobs:
             });
 
             const latestCiRun = ciRuns
-              .filter((run) => run.name === 'CI')
+              .filter((run) => run.name === 'Upgrade Gate')
               .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
 
             if (latestCiRun && latestCiRun.conclusion === 'failure') {
@@ -278,7 +278,7 @@ jobs:
           fi
 
   report:
-    if: ${{ github.event_name != 'push' }}
+    if: ${{ always() && github.event_name != 'push' }}
     needs:
       - evaluate
       - simulate_release
@@ -302,7 +302,11 @@ jobs:
             const blockers = JSON.parse(process.env.BLOCKERS_JSON || '[]');
             const canSimulate = process.env.CAN_SIMULATE === 'true';
             const simulatedOk = process.env.SIMULATED_OK === 'true';
-            const simulationSummary = process.env.SIM_SUMMARY || '';
+            const simulationSummary = process.env.SIM_SUMMARY || [
+              '### Simulation result',
+              '',
+              '- ❌ Release simulation failed before producing a summary. Check the workflow run logs.'
+            ].join('\n');
 
             const blockerSection = blockers.length
               ? blockers.map((blocker) => `- ${blocker}`).join('\n')
