@@ -14,6 +14,24 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  pull_request:
+    paths:
+      - "**/*.py"
+      - "**/*.json"
+      - "**/*.toml"
+      - "**/*.txt"
+      - ".github/workflows/ci.yml"
+      - "apps/**"
+      - "config/**"
+      - "scripts/**"
+      - "tests/**"
+      - "manage.py"
+      - "configure.sh"
+      - "env-refresh.sh"
+      - "install.sh"
+      - "start.sh"
+      - "stop.sh"
+      - "upgrade.sh"
   push:
     branches:
       - main
@@ -131,13 +149,13 @@ jobs:
             echo "PYTEST_XDIST_ARGS=" >> "${GITHUB_ENV}"
           fi
 
-      - name: Run critical auto-upgrade checks
+      - name: Run auto-upgrade checks
         run: |
           set -Eeuo pipefail
           ./scripts/preflight-env.sh --pytest
           source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
-          python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "critical and not integration" | tee pytest.log
+          python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow and not integration" | tee pytest.log
 
       - name: Upload pytest log
         if: always()
