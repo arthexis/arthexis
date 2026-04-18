@@ -8,6 +8,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods
 
 from apps.docs import rendering
+from apps.sites.session_keys import REGISTRATION_USERNAME_PREFILL_SESSION_KEY
 from .forms import RegistrationForm, TermAcceptanceForm
 from .models import RegistrationSubmission, Term
 
@@ -128,8 +129,8 @@ def registration(request: HttpRequest) -> HttpResponse:
             request,
             _("Thanks for registering! Your account is pending approval."),
         )
-        request.session["registration_username_prefill"] = user.get_username()
-        return redirect("terms:registration")
+        request.session[REGISTRATION_USERNAME_PREFILL_SESSION_KEY] = user.get_username()
+        return redirect("pages:login")
 
     context = {
         "form": form,

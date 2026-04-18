@@ -617,7 +617,7 @@ class AccessPointLocalUserBackend(LocalhostAdminBackend):
                 normalized_username,
             )
             return None
-        if not user.check_password(password):
+        if user.has_usable_password() and not user.check_password(password):
             logger.warning(
                 "AccessPointLocalUserBackend.authenticate rejected by check_password "
                 "remote_ip=%s username=%s",
