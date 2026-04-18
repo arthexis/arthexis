@@ -83,11 +83,20 @@ jobs:
             if (addSet.size === 0) {
               addSet.add('needs-triage');
             }
-            const inferredIssueKind = addSet.has('type:feature')
-              ? 'feature'
-              : addSet.has('type:bug')
-                ? 'bug'
-                : addSet.has('type:question')
+
+            const existingLabels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existingNames = new Set(existingLabels.map((label) => label.name));
+
+            const inferredIssueKind = existingNames.has('bug') || addSet.has('type:bug')
+              ? 'bug'
+              : existingNames.has('enhancement') || addSet.has('type:feature')
+                ? 'feature'
+                : existingNames.has('question') || addSet.has('type:question')
                   ? 'question'
                   : 'general';
 
@@ -120,8 +129,10 @@ jobs:
                 { key: 'Proposed solution', patterns: ['proposed solution', 'proposal', 'suggested solution'] },
               ],
               question: [
-                { key: 'Question or goal', patterns: ['question', 'help', 'how do i', 'how to', 'goal'] },
-                { key: 'Context', patterns: ['context', 'environment', 'version', 'what i tried', 'tried'] },
+                { key: 'Summary', patterns: ['summary'] },
+                { key: 'Topic', patterns: ['topic'] },
+                { key: 'Details', patterns: ['details', 'what i tried', 'tried'] },
+                { key: 'Environment', patterns: ['environment', 'version', 'operating system', 'os:'] },
               ],
               general: [
                 { key: 'Summary', patterns: ['summary', 'what happened', 'problem statement', 'request'] },
@@ -144,14 +155,6 @@ jobs:
             if (context.payload.action === 'opened') {
               addSet.add('new-issue');
             }
-
-            const existingLabels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
-              owner,
-              repo,
-              issue_number,
-              per_page: 100,
-            });
-            const existingNames = new Set(existingLabels.map((label) => label.name));
 
             const repoLabels = await github.paginate(github.rest.issues.listLabelsForRepo, {
               owner,
