@@ -144,7 +144,7 @@ if [ "$DEPS_ONLY" -eq 1 ] && [ "$INSTALL_AND_REFRESH" -eq 1 ]; then
   exit 1
 fi
 
-if [ ! -f "$PYTHON" ]; then
+if [ ! -x "$PYTHON" ]; then
   if bootstrap_python="$(arthexis_python_bin 2>/dev/null)"; then
     if "$bootstrap_python" -m venv "$VENV_DIR" >/dev/null 2>&1; then
       PYTHON="$VENV_DIR/bin/python"
@@ -152,9 +152,9 @@ if [ ! -f "$PYTHON" ]; then
       FORCE_REQUIREMENTS_INSTALL=1
       echo "Virtual environment not found. Bootstrapping new virtual environment." >&2
     else
-      PYTHON="$bootstrap_python"
-      USE_SYSTEM_PYTHON=1
-      echo "Virtual environment not found and automatic creation failed. Using system Python." >&2
+      echo "Virtual environment not found and automatic creation failed." >&2
+      echo "Ensure venv support is installed (for example: sudo apt install python3-venv) and rerun ./install.sh." >&2
+      exit 1
     fi
   else
     echo "Python interpreter not found. Run ./install.sh first. Skipping." >&2
