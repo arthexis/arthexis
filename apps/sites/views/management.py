@@ -462,7 +462,7 @@ class CustomLoginView(LoginView):
         ).strip()
         if not username_prefill and self.request.method == "GET":
             username_prefill = str(
-                self.request.session.pop(self.registration_username_session_key, "")
+                self.request.session.pop(self.registration_username_session_key, "") or ""
             ).strip()
         if username_prefill:
             initial.setdefault("username", username_prefill)
