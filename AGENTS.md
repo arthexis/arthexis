@@ -157,8 +157,6 @@ Agents must run relevant tests after code changes.
   * they are security-relevant, or
   * they protect critical logic.
 
----
-
 ### Test Creation Guidelines
 
 * Each **feature should have a test**.
