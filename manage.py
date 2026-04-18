@@ -12,7 +12,6 @@ import uuid
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from config.admin_urls import admin_mount_path
 from config.loadenv import loadenv
 from config.sqlite_driver import bootstrap_sqlite_driver
 from utils import revision
@@ -98,8 +97,11 @@ def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
                     f"WebSocket available at {scheme}://{host}:{server_port}{path}"
                 )
             http_scheme = "https" if getattr(self, "ssl_options", None) else "http"
+            from django.conf import settings
+
+            admin_mount_path = f"/{settings.ADMIN_URL_PATH}"
             self.stdout.write(
-                f"Admin available at {http_scheme}://{host}:{server_port}{admin_mount_path()}"
+                f"Admin available at {http_scheme}://{host}:{server_port}{admin_mount_path}"
             )
 
             global _RUNSERVER_STARTED_AT
