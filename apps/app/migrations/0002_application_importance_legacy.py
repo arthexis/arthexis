@@ -2,8 +2,12 @@ from django.db import migrations, models
 
 
 def mark_legacy_applications(apps, schema_editor):
+    db_alias = schema_editor.connection.alias
     Application = apps.get_model("app", "Application")
-    Application.objects.filter(name__icontains="legacy").update(importance="legacy")
+    Application.objects.using(db_alias).filter(
+        name__icontains="legacy",
+        importance="baseline",
+    ).update(importance="legacy")
 
 
 class Migration(migrations.Migration):
