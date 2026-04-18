@@ -179,14 +179,6 @@ Agents must run relevant tests after code changes.
 
 Styling will be validated through previews.
 
-## Review Notifications
-
-When a task leaves reviewable local changes or artifacts, agents must run `./scripts/review-notify.sh --actor Codex` before the final response.
-
-Treat `LCD unavailable` fallback behavior as informational, not as a failure. If the notifier reports `Skipped review notification`, do not force it unless the user explicitly asked for a notification without file changes.
-
----
-
 ### Regression Handling
 
 If a test fails **multiple times across runs**, it must be:
