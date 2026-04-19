@@ -20,7 +20,9 @@ def _ready_fallback_classifier(classifier: ImageClassifierModel) -> ImageClassif
             model_type=classifier.model_type,
             status=ImageClassifierModel.Status.READY,
             is_deleted=False,
+            storage_uri__isnull=False,
         )
+        .exclude(storage_uri="")
         .exclude(pk=classifier.pk)
         .first()
     )
