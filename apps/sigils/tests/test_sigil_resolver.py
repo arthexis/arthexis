@@ -215,6 +215,25 @@ def test_pipeline_v2_user_safe_gating_degrades_disallowed_action(settings, node_
 
 
 @pytest.mark.django_db
+def test_pipeline_v2_filter_is_not_user_safe_action(settings, user_root):
+    settings.SIGILS_PIPELINE_V2_ENABLED = True
+    user_model = get_user_model()
+    user_model.objects.create_user(
+        username="safe-filter-user",
+        email="safe-filter@example.com",
+        password="abc12345",
+    )
+
+    resolved = sigil_resolver.resolve_sigils(
+        "[USR:|FILTER:email:safe-filter@example.com]",
+        allowed_roots={"USR"},
+        allowed_actions=sigil_resolver.get_user_safe_sigil_actions(),
+    )
+
+    assert resolved == "[USR:|FILTER:email:safe-filter@example.com]"
+
+
+@pytest.mark.django_db
 def test_pipeline_v2_feature_flag_can_disable_pipeline_parsing(settings, node_root):
     settings.SIGILS_PIPELINE_V2_ENABLED = False
     role = NodeRole.objects.create(name="Disabled")
@@ -491,8 +510,7 @@ def test_get_user_safe_sigil_actions_requires_safe_entity_root():
     )
 
     actions = sigil_resolver.get_user_safe_sigil_actions()
-    assert "FILTER" in actions
-    assert "COUNT" in actions
+    assert actions == {"FIELD", "GET"}
 
 
 @pytest.mark.django_db
