@@ -34,6 +34,8 @@ PIPELINE_FILTER_SENSITIVE_FIELD_TOKENS = (
     "secret",
     "token",
 )
+PIPELINE_INSTANCE_ACTIONS = frozenset({"FIELD", "GET"})
+PIPELINE_WINDOW_ACTIONS = frozenset({"COUNT", "FILTER", "MAX", "MIN", "SUM", "TOTAL"})
 _ATTRIBUTE_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
     max_workers=ATTRIBUTE_RESOLUTION_WORKERS,
     thread_name_prefix="sigil-attr",
@@ -179,7 +181,7 @@ def get_user_safe_sigil_actions() -> set[str]:
     ).exists()
     if not has_safe_entity_root:
         return set()
-    return {"COUNT", "FIELD", "FILTER", "GET", "MAX", "MIN", "SUM", "TOTAL"}
+    return set(PIPELINE_INSTANCE_ACTIONS)
 
 
 def _stringify_value(value) -> str:
@@ -473,11 +475,9 @@ def _parse_pipeline_token_parts(token: str) -> tuple[SigilTokenParts, str | None
             raise TokenParseError("FILTER action is missing field/value")
         key = key_head
         param = key_tail
-    elif action_upper in {"COUNT", "MAX", "MIN", "SUM", "TOTAL"}:
+    elif action_upper in PIPELINE_WINDOW_ACTIONS:
         instance_target = action_payload or ""
         instance_id = f"{instance_target}:{entity_lookup.map_pipeline_action_to_aggregate(action_upper)}"
-    elif action_upper in {"GET", "FIELD"}:
-        key = action_payload or None
     else:
         key = action_payload or None
 
