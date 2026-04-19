@@ -71,29 +71,6 @@ def test_lightsail_command_creates_records(monkeypatch, capsys):
         instance=deploy_instance, action=DeployRun.Action.DEPLOY
     ).exists()
 
-@pytest.mark.parametrize(
-    ("details", "fetch_error", "expected_error"),
-    [
-        pytest.param(
-            {},
-            None,
-            "Lightsail instance details were empty; setup cannot continue.",
-            id="empty-details",
-        ),
-        pytest.param(
-            {"name": "ops-node-1", "publicIpAddress": "", "privateIpAddress": ""},
-            None,
-            "Lightsail instance has no public/private IP yet; try again shortly.",
-            id="missing-ip-addresses",
-        ),
-        pytest.param(
-            None,
-            "unable to fetch",
-            "Unable to fetch Lightsail instance details: unable to fetch",
-            id="fetch-lightsail-error",
-        ),
-    ],
-)
 def test_lightsail_command_rejects_interactive_prompt_in_non_tty_mode(monkeypatch):
     credentials = AWSCredentials.objects.create(
         name="root-account",

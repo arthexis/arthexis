@@ -141,14 +141,6 @@ def test_whatsapp_webhook_post_payload_validation(
     if expected_status == 201:
         assert response.json()["status"] == "ok"
 
-@pytest.mark.parametrize(
-    ("group_name", "is_superuser"),
-    [
-        (PRODUCT_DEVELOPER_GROUP_NAME, False),
-        (RELEASE_MANAGER_GROUP_NAME, False),
-        (None, True),
-    ],
-)
 def test_docs_library_shows_gallery_sidebar_with_latest_four_images(client):
     user = get_user_model().objects.create_user(
         username="docs-gallery-sidebar-user",
