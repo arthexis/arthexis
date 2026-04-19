@@ -63,6 +63,31 @@ def test_train_classifier_and_predict_media_file(db):
     assert records[0].tag == red_tag
 
 
+def test_train_classifier_sanitizes_artifact_version_path(db):
+    """Classifier artifact filenames must not include traversal segments."""
+
+    bucket = ensure_media_bucket(slug="training-images", name="Training Images")
+    media = create_media_file(
+        bucket=bucket,
+        uploaded_file=_uploaded_image("green.jpg", (20, 220, 20)),
+    )
+    tag = ClassificationTag.objects.create(slug="green-pattern", name="Green Pattern")
+    classifier = ImageClassifierModel.objects.create(
+        slug="prototype-classifier-paths",
+        name="Prototype Classifier Paths",
+        version="../outside",
+        training_parameters={"backend": "color_histogram"},
+    )
+    TrainingSample.objects.create(media_file=media, tag=tag, is_verified=True)
+
+    training_run = train_classifier(classifier)
+
+    assert training_run.status == training_run.Status.SUCCEEDED
+    assert classifier.storage_uri is not None
+    assert classifier.storage_uri.endswith("/outside.json")
+    assert "/../" not in classifier.storage_uri
+
+
 def test_capture_stream_to_media_file_creates_camera_media(db):
     """A camera frame can be mirrored into the media pipeline."""
 

@@ -50,13 +50,17 @@ class ColorHistogramBackend:
         return artifact_dir
 
     def _artifact_path(self, classifier: ImageClassifierModel) -> Path:
-        return self._artifact_dir(classifier) / f"{classifier.version}.json"
+        safe_version = Path(str(classifier.version)).name or "artifact"
+        return self._artifact_dir(classifier) / f"{safe_version}.json"
 
     def _compute_histogram(self, image_path: Path) -> list[float]:
         try:
-            image = Image.open(image_path).convert("RGB")
-        except Exception as exc:
+            with Image.open(image_path) as opened_image:
+                image = opened_image.convert("RGB")
+        except (OSError, ValueError) as exc:
             raise ValueError(f"Unable to read image at {image_path}") from exc
+
+        image = image.resize((128, 128), Image.Resampling.NEAREST)
 
         red_bins, green_bins, blue_bins = self.bins
         histogram = [0.0] * (red_bins * green_bins * blue_bins)
@@ -187,7 +191,7 @@ BACKENDS = {
 }
 
 
-def resolve_backend(classifier: ImageClassifierModel):
+def resolve_backend(classifier: ImageClassifierModel) -> ColorHistogramBackend:
     """Return the backend configured for ``classifier``."""
 
     backend_slug = str((classifier.training_parameters or {}).get("backend") or ColorHistogramBackend.slug)
