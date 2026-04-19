@@ -353,56 +353,25 @@ def complete_operator_journey_step(
             user=request.user,
         )
         action = (request.POST.get("journey_action") or "").strip().lower()
-        if not github_access_form.is_valid():
-            context = {
-                **_build_admin_context(request),
-                "step": step,
-                "github_access_form": github_access_form,
-            }
-            return render(
-                request,
-                "admin/ops/operator_journey_step.html",
-                context,
-            )
 
-        github_access_form.save()
-        if action == "save":
-            messages.add_message(
-                request,
-                messages.SUCCESS,
-                "GitHub token saved.",
-            )
-            context = {
-                **_build_admin_context(request),
-                "step": step,
-                "github_access_form": github_access_form,
-            }
-            return render(
-                request,
-                "admin/ops/operator_journey_step.html",
-                context,
-            )
+        if github_access_form.is_valid():
+            if action == "save":
+                github_access_form.save()
+                messages.success(request, "GitHub token saved.")
+            elif action in ("test", "complete"):
+                is_valid_connection, validation_message = github_access_form.validate_connection()
+                if action == "test":
+                    messages.add_message(
+                        request,
+                        messages.SUCCESS if is_valid_connection else messages.ERROR,
+                        validation_message,
+                    )
+                elif not is_valid_connection:
+                    github_access_form.add_error("token", validation_message)
+                else:
+                    github_access_form.save()
 
-        is_valid_connection, validation_message = github_access_form.validate_connection()
-        if action == "test":
-            messages.add_message(
-                request,
-                messages.SUCCESS if is_valid_connection else messages.ERROR,
-                validation_message,
-            )
-            context = {
-                **_build_admin_context(request),
-                "step": step,
-                "github_access_form": github_access_form,
-            }
-            return render(
-                request,
-                "admin/ops/operator_journey_step.html",
-                context,
-            )
-
-        if not is_valid_connection:
-            github_access_form.add_error("token", validation_message)
+        if action != "complete" or not github_access_form.is_valid():
             context = {
                 **_build_admin_context(request),
                 "step": step,

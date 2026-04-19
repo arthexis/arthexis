@@ -211,7 +211,7 @@ class OperatorJourneyGitHubAccessForm(forms.Form):
         label="GitHub username",
     )
     token = forms.CharField(
-        widget=forms.PasswordInput(render_value=True),
+        widget=forms.PasswordInput(),
         help_text="Personal access token used for repository, release, and issue tasks.",
         label="GitHub token",
     )
@@ -230,7 +230,7 @@ class OperatorJourneyGitHubAccessForm(forms.Form):
         if existing is None or self.is_bound:
             return
         self.initial.setdefault("github_username", user.username)
-        self.initial.setdefault("token", existing.token)
+        self.initial.setdefault("token", existing.__dict__.get("token", ""))
         self.initial.setdefault("token_label", existing.label)
 
     def save(self) -> GitHubToken:

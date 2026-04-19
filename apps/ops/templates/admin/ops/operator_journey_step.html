@@ -282,11 +282,11 @@
             <fieldset class="module aligned" style="padding: 0;">
               {% for field in provision_superuser_form %}
                 {% if field.name != "security_groups" %}
-                  <div class="form-row" style="margin-bottom: 0.75rem;">
+                  <div class="form-row" style="margin-bottom: var(--admin-ui-space-3, 0.75rem);">
                     <label for="{{ field.id_for_label }}" style="display: block; font-weight: 600;">{{ field.label }}</label>
                     {{ field }}
                     {% if field.help_text %}
-                      <p class="help" style="margin: 0.25rem 0 0;">{{ field.help_text }}</p>
+                      <p class="help" style="margin: var(--admin-ui-space-1, 0.25rem) 0 0;">{{ field.help_text }}</p>
                     {% endif %}
                     {{ field.errors }}
                   </div>
@@ -321,11 +321,11 @@
         {{ github_access_form.non_field_errors }}
         <fieldset class="module aligned" style="padding: 0;">
           {% for field in github_access_form %}
-            <div class="form-row" style="margin-bottom: 0.75rem;">
+            <div class="form-row" style="margin-bottom: var(--admin-ui-space-3, 0.75rem);">
               <label for="{{ field.id_for_label }}" style="display: block; font-weight: 600;">{{ field.label }}</label>
               {{ field }}
               {% if field.help_text %}
-                <p class="help" style="margin: 0.25rem 0 0;">{{ field.help_text }}</p>
+                <p class="help" style="margin: var(--admin-ui-space-1, 0.25rem) 0 0;">{{ field.help_text }}</p>
               {% endif %}
               {{ field.errors }}
             </div>
