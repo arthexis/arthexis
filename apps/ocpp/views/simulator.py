@@ -1,16 +1,24 @@
 from datetime import timedelta
 import ipaddress
 
-from django.contrib.auth.views import redirect_to_login
-from django.shortcuts import resolve_url
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
+from ..cpsim_service import get_cpsim_request_metadata, is_cpsim_start_queued_status
 from ..utils import resolve_ws_scheme
 from apps.core.notifications import LcdChannel
 from apps.screens.startup_notifications import format_lcd_lines
+from apps.sites.utils import (
+    landing,
+    module_pill_link_validation,
+    require_site_operator_or_staff,
+)
 
 from .common import *  # noqa: F401,F403
+from .common import (
+    _landing_requires_site_operator_or_staff,
+    _landing_visibility_params,
+)
 from apps.simulators.evcs import _start_simulator, _stop_simulator, parse_repeat
 from apps.simulators.simulator_runtime import (
     ARTHEXIS_BACKEND,
@@ -28,12 +36,17 @@ REPEAT_TRUE_STRINGS = {
     "loop",
 }
 
-@landing("Charge Point Simulator")
+@landing("OCPP Simulator")
+@module_pill_link_validation(
+    _landing_requires_site_operator_or_staff,
+    parameter_getter=_landing_visibility_params,
+)
 def cp_simulator(request):
-    """Public landing page to control the OCPP charge point simulator."""
-    user = getattr(request, "user", None)
-    if not getattr(user, "is_authenticated", False):
-        return redirect_to_login(request.get_full_path(), resolve_url("pages:login"))
+    """Landing page to control the OCPP charge point simulator."""
+    auth_response = require_site_operator_or_staff(request)
+    if auth_response is not None:
+        return auth_response
+    user = request.user
     if request.method == "POST" and not getattr(user, "is_staff", False):
         return HttpResponse("Forbidden", status=403)
 
@@ -345,7 +358,7 @@ def cp_simulator(request):
             sim_params["meter_interval"] = _cast_value(
                 request.POST.get("meter_interval"), float, default_params["interval"]
             )
-            _start_simulator(sim_params, cp=simulator_slot)
+            status = _start_simulator(sim_params, cp=simulator_slot)[1]
             subject, body = _lcd_simulator_lines(name, sim_params)
             NetMessage.broadcast(
                 subject=subject,
@@ -354,6 +367,8 @@ def cp_simulator(request):
                 lcd_channel_type=LcdChannel.LOW.value,
             )
             message = _("Simulator start requested")
+            if is_cpsim_start_queued_status(status):
+                message = _("Simulator start queued for cpsim-service")
             if sim_params["demo_mode"]:
                 dashboard_link = reverse("ocpp:ocpp-dashboard")
             if sim_params.get("delay"):
@@ -382,6 +397,53 @@ def cp_simulator(request):
         "backend_choices": backend_choices,
         "backends_available": backends_available,
     }
+    state_params = state.get("params") or {}
+    cp_path = str(state_params.get("cp_path") or form_params.get("cp_path") or "").strip()
+    simulator_log_url = None
+    if getattr(user, "is_staff", False):
+        simulator_for_logs = None
+        if cp_path:
+            simulator_for_logs = (
+                Simulator.objects.filter(cp_path=cp_path, is_deleted=False)
+                .order_by("-default", "pk")
+                .first()
+            )
+        if simulator_for_logs is None:
+            simulator_for_logs = default_simulator
+        try:
+            if simulator_for_logs is not None:
+                simulator_log_url = reverse(
+                    "admin:ocpp_simulator_log", args=[simulator_for_logs.pk]
+                )
+            else:
+                simulator_log_url = reverse("admin:log_viewer")
+        except NoReverseMatch:
+            simulator_log_url = None
+    host = str(state_params.get("host") or "").strip()
+    ws_port = state_params.get("ws_port")
+    target_host = _format_host_with_port(host, ws_port) if host else ""
+    target_ws_url = ""
+    if target_host and cp_path:
+        target_ws_url = f"{ws_scheme}://{target_host}/{cp_path}"
+    is_service_queued = (
+        state.get("running")
+        and state.get("phase") == "Service"
+        and is_cpsim_start_queued_status(state.get("last_status"))
+    )
+    cpsim_request = {"queued": False}
+    if is_service_queued:
+        try:
+            cpsim_request = get_cpsim_request_metadata()
+        except OSError:
+            cpsim_request = {"queued": False}
+    context.update(
+        {
+            "target_ws_url": target_ws_url,
+            "is_service_queued": is_service_queued,
+            "cpsim_request": cpsim_request,
+            "simulator_log_url": simulator_log_url,
+        }
+    )
 
     template = "ocpp/includes/cp_simulator_panel.html" if is_htmx else "ocpp/cp_simulator.html"
     return render(request, template, context)

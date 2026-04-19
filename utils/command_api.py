@@ -82,7 +82,6 @@ SUPPORTED_OPERATIONAL_COMMANDS: tuple[str, ...] = (
     "run_scheduled_sql_reports",
     "runftpserver",
     "runserver",
-    "shortcut_listener",
     "show_rfid_history",
     "simulator",
     "smb",

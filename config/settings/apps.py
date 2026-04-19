@@ -54,6 +54,7 @@ PROJECT_LOCAL_APPS = [
     "apps.forwarder.ocpp",
     "apps.ftp",
     "apps.gdrive",
+    "apps.gallery",
     "apps.groups",
     "apps.imager",
     "apps.leads",
@@ -86,8 +87,10 @@ PROJECT_LOCAL_APPS = [
     "apps.sigils",
     "apps.simulators",
     "apps.sites",
+    "apps.souls",
     "apps.special",
     "apps.summary",
+    "apps.survey",
     "apps.tasks",
     "apps.teams",
     "apps.terms",
@@ -103,6 +106,7 @@ THIRD_PARTY_APPS = [
     "django_mermaid.apps.MermaidConfig",
     "django_object_actions",
     "django_otp",
+    "django_otp.plugins.otp_totp",
     "import_export",
     "parler",
 ]
@@ -120,12 +124,14 @@ PROJECT_APPS = [
     "config.auth_app.AuthConfig",
     "apps.celery.beat_app.CeleryBeatConfig",
 ]
+ARTHEXIS_EXTERNAL_APPS: list[str] = []
 
 INSTALLED_APPS = (
     PROJECT_APPS
     + DJANGO_CORE_APPS
     + THIRD_PARTY_APPS
     + PROJECT_LOCAL_APPS
+    + ARTHEXIS_EXTERNAL_APPS
 )
 
 if HAS_DEBUG_TOOLBAR:

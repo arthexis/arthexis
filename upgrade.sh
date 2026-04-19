@@ -1270,6 +1270,9 @@ wait_for_service_active() {
     case "$status" in
       active)
         echo "Service $service is active."
+        if [ "$service" = "$SERVICE_NAME" ]; then
+          arthexis_service_access_message "$BASE_DIR"
+        fi
         return 0
         ;;
       failed)

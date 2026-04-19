@@ -10,8 +10,8 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, models, transaction
 from django.db.models import F, Value
 from django.db.models.functions import Greatest, Now
-from django.utils.http import escape_leading_slashes
 from django.utils import timezone
+from django.utils.http import escape_leading_slashes
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
@@ -280,3 +280,112 @@ class SecurityAlertEvent(Entity):
                 Value(occurred_at),
             )
         cls.objects.filter(key=key, is_active=True).update(**update_kwargs)
+
+
+class OperatorJourney(Entity):
+    """Linear guided workflow assigned to members of a security group."""
+
+    name = models.CharField(max_length=120)
+    slug = models.SlugField(unique=True)
+    description = models.TextField(blank=True)
+    security_group = models.ForeignKey(
+        "groups.SecurityGroup",
+        on_delete=models.CASCADE,
+        related_name="operator_journeys",
+    )
+    priority = models.PositiveIntegerField(default=100)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("priority", "name")
+        verbose_name = _("Operator Journey")
+        verbose_name_plural = _("Operator Journeys")
+
+    def __str__(self) -> str:
+        """Return journey label for admin and logs."""
+
+        return self.name
+
+
+class OperatorJourneyStep(Entity):
+    """Single required manual step inside a linear operator journey."""
+
+    journey = models.ForeignKey(
+        OperatorJourney,
+        on_delete=models.CASCADE,
+        related_name="steps",
+    )
+    title = models.CharField(max_length=160)
+    slug = models.SlugField()
+    instruction = models.TextField(
+        help_text=_("Operator-facing guidance shown above the embedded frame."),
+    )
+    help_text = models.TextField(
+        blank=True,
+        help_text=_("Optional extra help for manual actions required outside Arthexis."),
+    )
+    iframe_url = models.CharField(
+        max_length=500,
+        validators=[validate_local_absolute_path_url],
+        help_text=_("Local absolute path rendered in the embedded frame."),
+    )
+    order = models.PositiveIntegerField(default=1)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("journey__priority", "journey__name", "order", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("journey", "slug"),
+                name="ops_operatorjourneystep_unique_slug_per_journey",
+            ),
+            models.UniqueConstraint(
+                fields=("journey", "order"),
+                name="ops_operatorjourneystep_unique_order_per_journey",
+            ),
+        ]
+        verbose_name = _("Operator Journey Step")
+        verbose_name_plural = _("Operator Journey Steps")
+
+    def __str__(self) -> str:
+        """Return step label for admin and logs."""
+
+        return f"{self.journey}: {self.title}"
+
+    def clean(self) -> None:
+        """Validate iframe URL stays local to this node."""
+
+        super().clean()
+        validate_local_absolute_path_url(self.iframe_url)
+
+
+class OperatorJourneyStepCompletion(Entity):
+    """Per-user completion marker for operator journey steps."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="operator_journey_step_completions",
+    )
+    step = models.ForeignKey(
+        OperatorJourneyStep,
+        on_delete=models.CASCADE,
+        related_name="completions",
+    )
+    completed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ("-completed_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "step"),
+                name="ops_operatorjourneystepcompletion_unique_user_step",
+            )
+        ]
+        verbose_name = _("Operator Journey Step Completion")
+        verbose_name_plural = _("Operator Journey Step Completions")
+
+    def __str__(self) -> str:
+        """Return concise completion label."""
+
+        return f"{self.user} completed {self.step}"

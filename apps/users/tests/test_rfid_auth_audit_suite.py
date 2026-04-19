@@ -110,7 +110,6 @@ class RFIDAuthAuditSuiteTests(TestCase):
         self.assertTrue(attempt.authenticated)
         self.assertEqual(user.pk, response.json()["id"])
 
-    @pytest.mark.critical
     def test_rfid_login_records_rejected_reason_for_blocked_tag(self) -> None:
         """Regression: blocked RFID tags should emit a rejected auth attempt reason."""
 

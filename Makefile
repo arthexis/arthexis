@@ -1,4 +1,4 @@
-.PHONY: requirements requirements-check check-imports lint lint-imports lint-strict lint-fix mypy typecheck
+.PHONY: requirements requirements-check check-imports lint lint-imports lint-strict lint-fix
 
 requirements:
 	python scripts/generate_requirements.py
@@ -28,8 +28,3 @@ lint-fix:
 	black .
 
 
-mypy:
-	./scripts/run_mypy.sh
-
-
-typecheck: mypy

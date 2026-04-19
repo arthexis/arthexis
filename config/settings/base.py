@@ -61,6 +61,7 @@ HAS_DEBUG_TOOLBAR = DEBUG and importlib.util.find_spec("debug_toolbar") is not N
 NET_MESSAGE_DISABLE_PROPAGATION = env_bool("NET_MESSAGE_DISABLE_PROPAGATION", False)
 NODES_ENABLE_SIBLING_IPC = env_bool("NODES_ENABLE_SIBLING_IPC", False)
 ENABLE_USAGE_ANALYTICS = env_bool("ENABLE_USAGE_ANALYTICS", False)
+REPORTS_HTML_TO_PDF_ENABLED = env_bool("REPORTS_HTML_TO_PDF_ENABLED", True)
 ROUTE_PROVIDERS = [
     "apps.actions.routes",
     "apps.awg.routes",
@@ -72,6 +73,7 @@ ROUTE_PROVIDERS = [
     "apps.embeds.routes",
     "apps.evergo.routes",
     "apps.features.routes",
+    "apps.gallery.routes",
     "apps.links.routes",
     "apps.logbook.routes",
     "apps.meta.routes",
@@ -83,6 +85,8 @@ ROUTE_PROVIDERS = [
     "apps.repos.routes",
     "apps.shop.routes",
     "apps.sites.routes",
+    "apps.souls.routes",
+    "apps.survey.routes",
     "apps.tasks.routes",
     "apps.teams.routes",
     "apps.terms.routes",

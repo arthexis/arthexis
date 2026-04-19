@@ -1,0 +1,53 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Upload Image" %}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <h1 class="h4 mb-3">{% trans "Upload Image" %}</h1>
+  <form method="post" enctype="multipart/form-data" class="card card-body shadow-sm" id="upload-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <div class="mb-3">
+      <label class="form-label" for="{{ form.image.id_for_label }}">{{ form.image.label }}</label>
+      <div id="drop-zone" class="border border-2 rounded p-4 text-center">
+        <p class="mb-2">{% trans "Drag and drop an image here, or choose from your device." %}</p>
+        {{ form.image }}
+      </div>
+      {{ form.image.errors }}
+    </div>
+    <div class="mb-3">{{ form.title.label_tag }} {{ form.title }} {{ form.title.errors }}</div>
+    <div class="mb-3">{{ form.description.label_tag }} {{ form.description }} {{ form.description.errors }}</div>
+    <div class="mb-3">{{ form.owner_user.label_tag }} {{ form.owner_user }} {{ form.owner_user.errors }}</div>
+    <div class="mb-3">{{ form.owner_group.label_tag }} {{ form.owner_group }} {{ form.owner_group.errors }}</div>
+    <div class="form-check mb-3">{{ form.include_in_public_gallery }} {{ form.include_in_public_gallery.label_tag }}</div>
+    <div class="form-check mb-3">{{ form.create_content_sample }} {{ form.create_content_sample.label_tag }}</div>
+    <button class="btn btn-primary" type="submit">{% trans "Upload" %}</button>
+  </form>
+</div>
+<script>
+(() => {
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('{{ form.image.id_for_label }}');
+  if (!dropZone || !fileInput) return;
+  ['dragenter', 'dragover'].forEach((eventName) => {
+    dropZone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      dropZone.classList.add('bg-light');
+    });
+  });
+  ['dragleave', 'drop'].forEach((eventName) => {
+    dropZone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      dropZone.classList.remove('bg-light');
+    });
+  });
+  dropZone.addEventListener('drop', (event) => {
+    const files = event.dataTransfer?.files;
+    if (!files || !files.length) return;
+    fileInput.files = files;
+  });
+})();
+</script>
+{% endblock %}

@@ -43,16 +43,18 @@ def security_group_required(*group_names):
 
     required_groups = frozenset(filter(None, group_names))
 
-    def _has_membership(user):
-        if not getattr(user, "is_authenticated", False):
-            return False
-        if not required_groups:
-            return True
-        if getattr(user, "is_superuser", False):
-            return True
-        return user.groups.filter(name__in=required_groups).exists()
-
     def decorator(view_func):
+        def _has_membership(user):
+            if not getattr(user, "is_authenticated", False):
+                return False
+            if not required_groups:
+                return True
+            if getattr(user, "is_superuser", False):
+                return True
+            if user.groups.filter(name__in=required_groups).exists():
+                return True
+            raise PermissionDenied
+
         decorated = user_passes_test(_has_membership)(view_func)
         decorated.login_required = True
         decorated.required_security_groups = required_groups

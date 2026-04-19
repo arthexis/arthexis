@@ -972,17 +972,19 @@ class Charger(Ownable):
         ref_value = self._full_url()
         if url_targets_local_loopback(ref_value):
             return
-        if not self.reference:
-            self.reference = Reference.objects.create(
-                value=ref_value, alt_text=self.charger_id
-            )
-            super().save(update_fields=["reference"])
-        elif self.reference.value != ref_value:
-            Reference.objects.filter(pk=self.reference_id).update(
-                value=ref_value, alt_text=self.charger_id
-            )
-            self.reference.value = ref_value
-            self.reference.alt_text = self.charger_id
+        from apps.links.services import attach_reference
+
+        attachment = attach_reference(
+            self,
+            alt_text=self.charger_id,
+            value=ref_value,
+            slot="charger",
+            primary=True,
+            method="link",
+        )
+        if self.reference_id != attachment.reference_id:
+            type(self).objects.filter(pk=self.pk).update(reference=attachment.reference)
+            self.reference = attachment.reference
 
     def refresh_manager_node(self, node: Node | None = None) -> Node | None:
         """Ensure ``manager_node`` matches the provided or local node."""

@@ -12,28 +12,6 @@ def _mock_feature_parameters(values: dict[str, str]):
     return _get_feature_parameter
 
 
-@pytest.mark.parametrize("alias", ["arthexis", "legacy"])
-def test_backend_override_forces_arthexis(alias: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Selecting the Arthexis backend should force the legacy runtime path."""
-
-    monkeypatch.setattr(
-        simulator_runtime,
-        "get_feature_parameter",
-        _mock_feature_parameters(
-            {
-                simulator_runtime.ARTHEXIS_BACKEND_PARAMETER_KEY: "enabled",
-                simulator_runtime.MOBILITY_HOUSE_BACKEND_PARAMETER_KEY: "enabled",
-            }
-        ),
-    )
-    monkeypatch.setattr(simulator_runtime, "find_spec", lambda _: object())
-
-    selection = simulator_runtime.resolve_simulator_backend(preferred_backend=alias)
-
-    assert selection.use_mobility_house is False
-    assert selection.backend == "legacy"
-
-
 def test_backend_override_uses_mobilityhouse_when_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -155,46 +133,10 @@ def test_backend_selection_flags_backend_available_when_arthexis_enabled(
     assert selection.feature_enabled is True
 
 
-def test_backend_choices_hide_mobilityhouse_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Dropdown choices should exclude Mobility House when its parameter is disabled."""
-
-    monkeypatch.setattr(
-        simulator_runtime,
-        "get_feature_parameter",
-        _mock_feature_parameters(
-            {
-                simulator_runtime.ARTHEXIS_BACKEND_PARAMETER_KEY: "enabled",
-                simulator_runtime.MOBILITY_HOUSE_BACKEND_PARAMETER_KEY: "disabled",
-            }
-        ),
-    )
-
-    choices = simulator_runtime.get_simulator_backend_choices()
-
-    assert choices == (("arthexis", "arthexis"),)
-
-
-def test_backend_choices_include_mobilityhouse_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Dropdown choices should include Mobility House when its parameter is enabled."""
-
-    monkeypatch.setattr(
-        simulator_runtime,
-        "get_feature_parameter",
-        _mock_feature_parameters(
-            {
-                simulator_runtime.ARTHEXIS_BACKEND_PARAMETER_KEY: "enabled",
-                simulator_runtime.MOBILITY_HOUSE_BACKEND_PARAMETER_KEY: "enabled",
-            }
-        ),
-    )
-
-    choices = simulator_runtime.get_simulator_backend_choices()
-
-    assert choices == (("arthexis", "arthexis"), ("mobilityhouse", "mobilityhouse"))
-
-
-def test_backend_choices_empty_when_all_backends_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Dropdown choices should be empty when all backends are disabled."""
+def test_backend_selection_defaults_enable_mobilityhouse_parameter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Selection should default Mobility House parameter to enabled when unset."""
 
     monkeypatch.setattr(
         simulator_runtime,
@@ -202,11 +144,12 @@ def test_backend_choices_empty_when_all_backends_disabled(monkeypatch: pytest.Mo
         _mock_feature_parameters(
             {
                 simulator_runtime.ARTHEXIS_BACKEND_PARAMETER_KEY: "disabled",
-                simulator_runtime.MOBILITY_HOUSE_BACKEND_PARAMETER_KEY: "disabled",
             }
         ),
     )
+    monkeypatch.setattr(simulator_runtime, "find_spec", lambda _: object())
 
-    choices = simulator_runtime.get_simulator_backend_choices()
+    selection = simulator_runtime.resolve_simulator_backend()
 
-    assert choices == ()
+    assert selection.use_mobility_house is True
+    assert selection.backend == "mobility_house"

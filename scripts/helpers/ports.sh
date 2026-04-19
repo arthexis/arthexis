@@ -51,3 +51,37 @@ arthexis_detect_backend_port() {
 
     printf '%s\n' "$fallback"
 }
+
+# arthexis_service_url BASE_DIR [HOST] [FALLBACK_PORT]
+#
+# Build the suite URL using the configured backend port.
+arthexis_service_url() {
+    local base_dir="$1"
+    local host="${2:-localhost}"
+    local fallback_port="${3:-8888}"
+    local port
+
+    port="$(arthexis_detect_backend_port "$base_dir" "$fallback_port")"
+    printf 'http://%s:%s\n' "$host" "$port"
+}
+
+# arthexis_service_access_message BASE_DIR [HOST] [FALLBACK_PORT]
+#
+# Build a login guidance message for the suite URL shown by install/upgrade flows.
+arthexis_service_access_message() {
+    local base_dir="$1"
+    local url
+
+    url="$(arthexis_service_url "$base_dir" "$2" "$3")"
+    printf 'Access the service at %s. Local-only default login is admin/admin when unchanged.\n' "$url"
+}
+
+# arthexis_service_access_message_for_port HOST PORT
+#
+# Build a login guidance message for a specific runtime host/port pair.
+arthexis_service_access_message_for_port() {
+    local host="${1:-localhost}"
+    local port="${2:-8888}"
+
+    printf 'Access the service at http://%s:%s. Local-only default login is admin/admin when unchanged.\n' "$host" "$port"
+}

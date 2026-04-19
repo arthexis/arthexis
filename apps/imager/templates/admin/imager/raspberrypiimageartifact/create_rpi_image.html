@@ -12,6 +12,27 @@
 
 {% block content %}
 <div id="content-main">
+  {% if artifact %}
+    <div class="module aligned">
+      <h2>{% translate "Latest build artifact" %}</h2>
+      <p><strong>{% translate "Name" %}:</strong> {{ artifact.name }}</p>
+      <p><strong>{% translate "File" %}:</strong> {{ artifact.output_filename }}</p>
+      <p><strong>{% translate "Output path" %}:</strong> {{ artifact.output_path }}</p>
+      {% if artifact.download_uri %}
+        <p><strong>{% translate "Download URL" %}:</strong> <a href="{{ artifact.download_uri }}" target="_blank" rel="noopener">{{ artifact.download_uri }}</a></p>
+      {% else %}
+        <p><strong>{% translate "Download URL" %}:</strong> {% translate "Not configured" %}</p>
+      {% endif %}
+      <div class="submit-row">
+        {% if artifact.download_uri %}
+          <a href="{% url 'admin:imager_raspberrypiimageartifact_test_download_url' artifact.pk %}" class="button default">{% translate "Test URL" %}</a>
+          <a href="{{ artifact.download_uri }}" target="_blank" rel="noopener" class="button">{% translate "Open URL" %}</a>
+        {% else %}
+          <a href="{% url 'admin:imager_raspberrypiimageartifact_test_download_url' artifact.pk %}" class="button">{% translate "Test URL" %}</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
   <form method="post" novalidate>
     {% csrf_token %}
     <fieldset class="module aligned">

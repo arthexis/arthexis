@@ -23,6 +23,19 @@ class DummyFuture:
         return None
 
 
+class StaticFuture:
+    """Return a fixed prefetched cycle without spawning threads."""
+
+    def __init__(self, value) -> None:
+        self.value = value
+
+    def done(self) -> bool:
+        return True
+
+    def result(self):
+        return self.value
+
+
 class DummyExecutor:
     """Capture shutdown requests without spawning threads."""
 
@@ -147,6 +160,8 @@ def test_handle_external_event_interrupt_loads_and_renders(monkeypatch):
             line2=line2,
             scroll_ms=scroll_ms,
             scroll_sec=0.25,
+            steps1=2,
+            steps2=2,
         ),
     )
 
@@ -236,7 +251,7 @@ def test_render_event_frame_raises_stop_iteration_on_shutdown(monkeypatch):
     coordinator.scroll_scheduler = FakeScheduler()
     coordinator.frame_writer = FakeWriter(object())
     coordinator.lcd = object()
-    coordinator.event.display_state = SimpleNamespace(scroll_sec=0.25)
+    coordinator.event.display_state = SimpleNamespace(scroll_sec=0.25, steps1=2, steps2=2)
 
     shutdown_calls: list[object] = []
     monkeypatch.setattr(
@@ -259,3 +274,174 @@ def test_render_event_frame_raises_stop_iteration_on_shutdown(monkeypatch):
 
     assert shutdown_calls == [coordinator.lcd]
     assert coordinator.scroll_scheduler.actions == [("sleep", None)]
+
+
+def test_render_event_frame_refreshes_static_event_periodically(monkeypatch):
+    """Static event frames should be redrawn while the event remains active."""
+
+    coordinator = runner.LCDRunner()
+    coordinator.scroll_scheduler = FakeScheduler()
+    coordinator.frame_writer = FakeWriter(object())
+    coordinator.lcd = object()
+    coordinator.event.display_state = runner._prepare_display_state(
+        "Codex ready",
+        "Please review",
+        0,
+    )._replace(
+        last_segment1="Codex ready     ",
+        last_segment2="Please review   ",
+    )
+    coordinator.event.refresh_deadline = 5.0
+
+    advanced_states: list[object] = []
+    monkeypatch.setattr(runner.time, "monotonic", lambda: 5.0)
+
+    def fake_advance_display(state, frame_writer, **kwargs):
+        advanced_states.append(state)
+        return state, True, False
+
+    monkeypatch.setattr(runner, "_advance_display", fake_advance_display)
+
+    handled = coordinator.render_event_frame()
+
+    assert handled is True
+    assert advanced_states
+    assert advanced_states[0].last_segment1 is None
+    assert advanced_states[0].last_segment2 is None
+    assert coordinator.event.refresh_deadline == 7.0
+    assert coordinator.scroll_scheduler.actions == [("sleep", None), ("advance", 0.5)]
+
+
+def test_high_payloads_repeat_three_times_across_high_and_low_slots(monkeypatch):
+    """HI payloads should display three times before advancing to the next payload."""
+
+    coordinator = runner.LCDRunner()
+    now_dt = datetime(2026, 3, 20, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(
+        runner,
+        "_select_low_payload",
+        lambda *args, **kwargs: runner.locks.LockPayload("LO BASE", "", 0, is_base=True),
+    )
+
+    high_cycle = runner.ChannelCycle(
+        payloads=[
+            runner.locks.LockPayload("HI-1", "", 0),
+            runner.locks.LockPayload("HI-2", "", 0),
+        ],
+        signature=((0, 0.0), (1, 0.0)),
+        index=0,
+    )
+    low_cycle = runner.ChannelCycle(
+        payloads=[runner.locks.LockPayload("", "", 0)],
+        signature=((0, 0.0),),
+        index=0,
+    )
+    channel_info = {"high": high_cycle, "low": low_cycle}
+    channel_text = {"high": True, "low": False}
+
+    seen = [
+        coordinator.payload_for_state(("high", "low"), slot, channel_info, channel_text, now_dt).line1
+        for slot in (0, 1, 0, 1, 0, 1, 0)
+    ]
+
+    assert seen == ["HI-1", "HI-1", "HI-1", "HI-2", "HI-2", "HI-2", "HI-1"]
+
+    high_cycle.signature = ((10, 0.0), (11, 0.0))
+    high_cycle.payloads = [
+        runner.locks.LockPayload("HI-NEW-1", "", 0),
+        runner.locks.LockPayload("HI-NEW-2", "", 0),
+    ]
+    high_cycle.index = 1
+
+    churn_seen = [
+        coordinator.payload_for_state(("high", "low"), slot, channel_info, channel_text, now_dt).line1
+        for slot in (0, 1, 0, 1)
+    ]
+
+    assert churn_seen == ["HI-NEW-1", "HI-NEW-1", "HI-NEW-1", "HI-NEW-2"]
+
+
+def test_low_slot_keeps_default_when_only_one_high_payload_exists(monkeypatch):
+    """Low slot should show its default base payload when only one HI payload exists."""
+
+    coordinator = runner.LCDRunner()
+    now_dt = datetime(2026, 3, 20, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(
+        runner,
+        "_select_low_payload",
+        lambda *args, **kwargs: runner.locks.LockPayload("LO BASE", "", 0, is_base=True),
+    )
+
+    high_cycle = runner.ChannelCycle(
+        payloads=[runner.locks.LockPayload("HI-1", "", 0)],
+        signature=((0, 0.0),),
+        index=0,
+    )
+    low_cycle = runner.ChannelCycle(
+        payloads=[runner.locks.LockPayload("", "", 0)],
+        signature=((0, 0.0),),
+        index=0,
+    )
+    channel_info = {"high": high_cycle, "low": low_cycle}
+    channel_text = {"high": True, "low": False}
+
+    high_payload = coordinator.payload_for_state(
+        ("high", "low"),
+        0,
+        channel_info,
+        channel_text,
+        now_dt,
+    )
+    low_payload = coordinator.payload_for_state(
+        ("high", "low"),
+        1,
+        channel_info,
+        channel_text,
+        now_dt,
+    )
+
+    assert high_payload.line1 == "HI-1"
+    assert low_payload.line1 == "LO BASE"
+
+
+def test_low_slot_does_not_mirror_high_when_rotation_order_excludes_high(monkeypatch):
+    """LO slot should respect configured channel order that excludes HI."""
+
+    coordinator = runner.LCDRunner()
+    now_dt = datetime(2026, 3, 20, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(
+        runner,
+        "_select_low_payload",
+        lambda *args, **kwargs: runner.locks.LockPayload("LO BASE", "", 0, is_base=True),
+    )
+
+    high_cycle = runner.ChannelCycle(
+        payloads=[
+            runner.locks.LockPayload("HI-1", "", 0),
+            runner.locks.LockPayload("HI-2", "", 0),
+        ],
+        signature=((0, 0.0), (1, 0.0)),
+        index=0,
+    )
+    low_cycle = runner.ChannelCycle(
+        payloads=[runner.locks.LockPayload("", "", 0)],
+        signature=((0, 0.0),),
+        index=0,
+    )
+    channel_info = {"high": high_cycle, "low": low_cycle}
+    channel_text = {"high": True, "low": False}
+
+    low_payload = coordinator.payload_for_state(
+        ("low", "stats", "clock"),
+        0,
+        channel_info,
+        channel_text,
+        now_dt,
+    )
+
+    assert low_payload.line1 == "LO BASE"
+    assert high_cycle.index == 0
+    assert coordinator.high_repeat_count == 0

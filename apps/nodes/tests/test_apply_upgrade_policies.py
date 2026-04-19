@@ -6,7 +6,7 @@ import pytest
 
 from apps.nodes.tasks import apply_upgrade_policies
 
-pytestmark = [pytest.mark.django_db, pytest.mark.regression]
+pytestmark = [pytest.mark.django_db]
 
 
 def test_apply_upgrade_policies_skips_when_auto_upgrade_feature_disabled(monkeypatch):

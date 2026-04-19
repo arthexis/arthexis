@@ -17,6 +17,7 @@ Arthexis keeps settings module import lean by validating `PROJECT_LOCAL_APPS` wi
 Run this check locally before opening a PR and in CI guardrail steps:
 
 ```bash
+./scripts/preflight-env.sh
 .venv/bin/python manage.py check --tag core
 ```
 
@@ -24,21 +25,19 @@ This catches:
 - local app entries in `PROJECT_LOCAL_APPS` that are not importable
 - `apps.*` entries in `INSTALLED_APPS` that are missing from `PROJECT_LOCAL_APPS` and `PROJECT_APPS`
 
-## Screenshot coverage in CI
+## Debugger/autoreload duplicate startup logs
 
-The screenshot workflow already captures baseline routes. To request additional CI screenshot coverage without taking manual screenshots:
+In this repository, `manage.py runserver` injects `--noreload` by default, so the usual Django watcher/child autoreload duplication is normally disabled.
 
-- Add authenticated paths (admin/session-required pages) to `.github/screenshot-paths.authenticated.txt`.
-- Add public paths to `.github/screenshot-paths.public.txt`.
-- Keep one path per line and start with `/` (for example `/admin/links/reference/`).
-- Blank lines and `#` comments are ignored.
+If duplicate startup diagnostics still appear, it usually means one of these happened:
 
-These path files are read by `.github/workflows/dashboard-screenshot.yml`, which appends them to the default capture list and uploads the resulting screenshots as workflow artifacts.
+- the Arthexis `manage.py` wrapper was bypassed (for example by invoking Django tooling directly)
+- `runserver` was launched with custom arguments that re-enabled Django autoreload behavior
+- startup checks are repeating during a custom restart cycle
 
-### When local preview tooling is unavailable
+For development debugging sessions where startup logs are noisy:
 
-If local preview generation fails because browser/screenshot tooling is unavailable in the current runtime, do not block on manual capture. Register the route for CI screenshot capture instead:
+- prefer `manage.py runserver` (wrapper-managed `--noreload`) instead of bypassing the wrapper
+- set `DJANGO_SUPPRESS_MIGRATION_CHECK=1` to reduce repeated migration-check output
 
-- Add the route (starting with `/`, one per line) to `.github/screenshot-paths.authenticated.txt` (requires login) or `.github/screenshot-paths.public.txt` (public route).
-- Push the change and rely on the screenshot workflow artifacts as the preview source of truth.
-- Prefer this CI route-registration flow over ad-hoc local browser setup in constrained environments.
+`RUN_MAIN` is a Django autoreloader detail and is not a reliable guard for Arthexis' default runserver flow. If initialization must be single-run, use an explicit project-owned guard (for example a lock file, pid check, or idempotent startup routine).

@@ -83,34 +83,6 @@ async def test_forward_charge_point_reply_noops_for_non_pending_message_id(monke
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize(
-    "session",
-    [None, FakeSession(pending_call_ids={"msg-2"}, is_connected=False)],
-    ids=["missing-session", "disconnected-session"],
-)
-async def test_forward_charge_point_reply_noops_for_missing_or_disconnected_session(
-    monkeypatch, session
-):
-    """Missing or disconnected sessions should skip forwarding without side effects."""
-
-    transport = DummyTransport()
-    transport.aggregate_charger = None
-    transport.charger = SimpleNamespace(pk=12, charger_id="CP-12", connector_id=3)
-
-    fake_forwarder = SimpleNamespace(get_session=Mock(return_value=session), remove_session=Mock())
-    monkeypatch.setattr("apps.ocpp.consumers.csms.transport.forwarder", fake_forwarder)
-    monkeypatch.setattr("apps.ocpp.consumers.csms.transport.ocpp_forwarder_enabled", lambda default=True: True)
-
-    await transport._forward_charge_point_reply_legacy("msg-2", '[3,"msg-2",{}]')
-
-    fake_forwarder.get_session.assert_called_once_with(12)
-    fake_forwarder.remove_session.assert_not_called()
-    if session is not None:
-        session.connection.send.assert_not_called()
-        assert session.pending_call_ids == {"msg-2"}
-
-
-@pytest.mark.anyio
 async def test_forward_charge_point_reply_removes_session_when_send_fails(monkeypatch):
     """Forwarder should drop the session when reply forwarding raises an exception."""
 

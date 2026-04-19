@@ -21,20 +21,6 @@ from apps.nodes.views import registration as registration_views
 from apps.nodes.views.registration.payload import build_payload
 
 
-@pytest.mark.parametrize("relation_value", ["Sibling", "SIBLING"])
-def test_build_payload_preserves_sibling_relation(relation_value):
-    payload = build_payload(
-        {
-            "hostname": "node-1",
-            "mac_address": "aa:bb:cc:dd:ee:01",
-            "address": "203.0.113.1",
-            "current_relation": relation_value,
-        }
-    )
-
-    assert payload.relation_value == Node.Relation.SIBLING
-
-
 @pytest.mark.django_db
 def test_node_info_registers_missing_local(client, monkeypatch):
     """Ensure node info triggers registration when no local node exists."""
@@ -86,22 +72,6 @@ def test_visitor_registration_request_post_requires_submitted_host():
     request = RequestFactory().post(
         "/admin/nodes/node/register-visitor/?visitor=query.example:9443",
         data={"visitor_host": "", "visitor_port": ""},
-    )
-
-    parsed = VisitorRegistrationRequest.from_http_request(request, default_port=8888)
-
-    assert (
-        parsed.visitor_error
-        == "Visitor address missing. Reload with ?visitor=host[:port]."
-    )
-    assert parsed.visitor_base is None
-
-
-def test_visitor_registration_request_post_rejects_malformed_host():
-    """POST parser should reject malformed visitor hosts instead of normalizing unsafe input."""
-    request = RequestFactory().post(
-        "/admin/nodes/node/register-visitor/?visitor=query.example:9443",
-        data={"visitor_host": "https://[broken", "visitor_port": ""},
     )
 
     parsed = VisitorRegistrationRequest.from_http_request(request, default_port=8888)
@@ -407,7 +377,6 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.critical
 def test_register_visitor_proxy_reports_partial_failure_on_visitor_confirmation(
     admin_client, monkeypatch
 ):

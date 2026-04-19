@@ -34,7 +34,7 @@ from django.http.request import split_domain_port
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.template.loader import render_to_string
 from django.urls import NoReverseMatch, reverse
-from django.utils import formats, timezone, translation
+from django.utils import formats, timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.encoding import force_str
 from django.utils.text import slugify
@@ -43,7 +43,6 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.cards.models import RFID as CoreRFID
-from apps.locale.models import Language
 from apps.nodes.models import NetMessage, Node
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
@@ -52,7 +51,7 @@ from apps.simulators.evcs import (
     _stop_simulator,
     get_simulator_state,
 )
-from apps.sites.utils import landing
+from apps.sites.utils import landing, user_in_site_operator_group
 from utils.api import api_login_required
 
 from .. import store
@@ -90,6 +89,38 @@ LOG_TIMESTAMP_PREFIX_LENGTH = 24
 SEVERITY_ERROR = ("error", "#dc3545", "Error")
 SEVERITY_INFO = ("info", "#0d6efd", "Info")
 SEVERITY_WARNING = ("warning", "#ffc107", "Warning")
+
+
+def _status_badge_class(state: str | None, color: str | None) -> str:
+    """Return the semantic badge class used by landing pages."""
+
+    normalized_state = slugify(force_str(state or "")).replace("-", "")
+    if normalized_state in {"available", "preparing", "reserved"}:
+        return "status-available"
+    if normalized_state in {
+        "charging",
+        "finishing",
+        "occupied",
+        "suspendedev",
+        "suspendedevse",
+    }:
+        return "status-charging"
+    if normalized_state in {"faulted"}:
+        return "status-faulted"
+    if normalized_state in {"offline", "disconnected", "outofservice", "unavailable"}:
+        return "status-offline"
+
+    normalized_color = force_str(color or "").strip().casefold()
+    if normalized_color in {"#0d6efd", "blue", "#6f42c1"}:
+        return "status-available"
+    if normalized_color in {"#198754", "green", "#fd7e14", "#20c997", "#0dcaf0"}:
+        return "status-charging"
+    if normalized_color in {"#dc3545", "red", "#ffc107", "yellow"}:
+        return "status-faulted"
+    if normalized_color in {"grey", "gray", "#6c757d"}:
+        return "status-offline"
+
+    return "status-unknown"
 
 
 @dataclass(frozen=True)
@@ -397,6 +428,20 @@ def _landing_visibility_params(*, request, landing) -> dict[str, object]:
     return {"user_id": getattr(user, "pk", "anon") or "anon"}
 
 
+def _landing_requires_site_operator_or_staff(*, request, landing, **kwargs) -> bool:
+    """Return ``True`` when the user is a site operator or a staff member."""
+
+    user = getattr(request, "user", None)
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
+        return True
+    try:
+        return user_in_site_operator_group(user)
+    except (OperationalError, ProgrammingError):
+        return False
+
+
 def _charger_last_seen(charger: Charger | object):
     """Return the last activity timestamp for ``charger`` safely.
 
@@ -533,6 +578,7 @@ def _connector_overview(
                 "connected": store.is_connected(
                     sibling.charger_id, sibling.connector_id
                 ),
+                "status_badge_class": _status_badge_class(state, color),
             }
         )
     return overview
@@ -948,100 +994,47 @@ def _live_sessions(
     return sessions
 
 
-def _supported_language_codes() -> list[str]:
-    codes: list[str] = []
-    try:
-        codes = [
-            str(code).strip()
-            for code in Language.objects.filter(is_deleted=False).values_list(
-                "code", flat=True
-            )
-            if str(code).strip()
-        ]
-    except (OperationalError, ProgrammingError):
-        codes = []
-
-    if codes:
-        return codes
-
-    return [
-        str(code).strip()
-        for code, _ in getattr(settings, "LANGUAGES", [])
-        if str(code).strip()
-    ]
-
-
-def _default_language_code() -> str:
-    try:
-        code = (
-            Language.objects.filter(is_deleted=False, is_default=True)
-            .values_list("code", flat=True)
-            .first()
-            or ""
-        )
-    except (OperationalError, ProgrammingError):
-        code = ""
-
-    normalized = str(code).strip()
-    if normalized:
-        return normalized
-
-    configured = str(getattr(settings, "LANGUAGE_CODE", "") or "").strip()
-    if configured:
-        base = configured.replace("_", "-")
-        parts = base.split("-", 1)
-        return parts[0] if parts else base
-
-    supported = _supported_language_codes()
-    return supported[0] if supported else ""
-
-
 @lru_cache(maxsize=1)
 def _landing_page_translations() -> dict[str, dict[str, str]]:
-    """Return static translations used by the charger public landing page."""
+    """Return static English labels used by the charger public landing page."""
 
-    catalog: dict[str, dict[str, str]] = {}
-    seen_codes: set[str] = set()
-    for code in _supported_language_codes():
-        normalized = str(code).strip()
-        if not normalized or normalized in seen_codes:
-            continue
-        seen_codes.add(normalized)
-        with translation.override(normalized):
-            catalog[normalized] = {
-                "serial_number_label": gettext("Serial Number"),
-                "connector_label": gettext("Connector"),
-                "advanced_view_label": gettext("Advanced View"),
-                "authorization_policy_label": gettext(
-                    "Authorization policy requires validated RFID/account credentials."
-                ),
-                "charging_label": gettext("Charging"),
-                "energy_label": gettext("Energy"),
-                "started_label": gettext("Started"),
-                "rfid_label": gettext("RFID"),
-                "instruction_text": gettext(
-                    "Plug in your vehicle and slide your RFID card over the reader to begin charging."
-                ),
-                "connectors_heading": gettext("Connectors"),
-                "no_active_transaction": gettext("No active transaction"),
-                "connectors_active_singular": ngettext(
-                    "%(count)s connector active",
-                    "%(count)s connectors active",
-                    1,
-                ),
-                "connectors_active_plural": ngettext(
-                    "%(count)s connector active",
-                    "%(count)s connectors active",
-                    2,
-                ),
-                "status_reported_label": gettext("Reported status"),
-                "status_error_label": gettext("Error code"),
-                "status_updated_label": gettext("Last status update"),
-                "status_vendor_label": gettext("Vendor"),
-                "status_info_label": gettext("Info"),
-                "latest_status_label": gettext("Latest report"),
-            }
-    return catalog
+    return {
+        "en": {
+            "serial_number_label": gettext("Serial Number"),
+            "connector_label": gettext("Connector"),
+            "advanced_view_label": gettext("Advanced View"),
+            "live_now_label": gettext("Live now"),
+            "authorization_policy_label": gettext(
+                "Authorization policy requires validated RFID/account credentials."
+            ),
+            "charging_label": gettext("Charging"),
+            "energy_label": gettext("Energy"),
+            "started_label": gettext("Started"),
+            "rfid_label": gettext("RFID"),
+            "instruction_text": gettext(
+                "Plug in your vehicle and slide your RFID card over the reader to begin charging."
+            ),
+            "connectors_heading": gettext("Connectors"),
+            "no_active_transaction": gettext("No active transaction"),
+            "connectors_active_singular": ngettext(
+                "%(count)s connector active",
+                "%(count)s connectors active",
+                1,
+            ),
+            "connectors_active_plural": ngettext(
+                "%(count)s connector active",
+                "%(count)s connectors active",
+                2,
+            ),
+            "status_reported_label": gettext("Reported status"),
+            "status_error_label": gettext("Error code"),
+            "status_updated_label": gettext("Last status update"),
+            "status_vendor_label": gettext("Vendor"),
+            "status_info_label": gettext("Info"),
+            "latest_status_label": gettext("Latest report"),
+            "support_label": gettext("Support"),
+        }
+    }
 
 
 def _has_active_session(tx_obj) -> bool:

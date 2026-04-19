@@ -105,10 +105,21 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
         label="Load all customers after validation",
         help_text="Optionally perform the initial full customer and order load for this contractor.",
     )
+    order_numbers = forms.CharField(
+        required=False,
+        label="Optional order numbers",
+        widget=forms.Textarea(
+            attrs={
+                "rows": 3,
+                "style": "padding: 8px 10px;",
+            }
+        ),
+        help_text="When full load is disabled, enter one or more order numbers separated by spaces or commas.",
+    )
 
     class Meta:
         model = EvergoUser
-        fields = ("user", "group", "avatar", "evergo_email", "evergo_password")
+        fields = ("user", "evergo_email", "evergo_password")
 
     def __init__(self, *args, request_user=None, **kwargs):
         """Prefill first-time contractor setup defaults for a smoother signup flow."""
@@ -118,8 +129,7 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
         if self.instance.pk:
             self.fields["evergo_password"].required = False
         self.fields["user"].required = False
-        self.fields["group"].required = False
-        self.fields["avatar"].required = False
+        self.fields["user"].widget = forms.HiddenInput()
         if (
             not self.is_bound
             and not self.instance.pk
@@ -136,25 +146,24 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
         if self.instance.pk and not cleaned_data.get("evergo_password"):
             cleaned_data["evergo_password"] = self.instance.evergo_password
 
-        owners = [
-            field_name
-            for field_name in ("user", "group", "avatar")
-            if cleaned_data.get(field_name) is not None
-        ]
-        if (
-            not owners
-            and not self.instance.pk
-            and getattr(self.request_user, "is_authenticated", False)
-        ):
+        if getattr(self.request_user, "is_authenticated", False):
             cleaned_data["user"] = self.request_user
-            owners = ["user"]
-        if not owners:
-            raise ValidationError("Choose a user, security group, or avatar owner for this contractor.")
+            self.instance.group = None
+            self.instance.avatar = None
+        if cleaned_data.get("user") is None:
+            raise ValidationError("Could not resolve the current user for this contractor.")
         if cleaned_data.get("load_all_customers") and not cleaned_data.get("validate_credentials"):
             self.add_error(
                 "load_all_customers",
                 "Enable credential validation before running the initial customer load.",
             )
+        if cleaned_data.get("order_numbers") and not cleaned_data.get("validate_credentials"):
+            self.add_error(
+                "order_numbers",
+                "Enable credential validation before loading specific order numbers.",
+            )
+        if cleaned_data.get("load_all_customers"):
+            cleaned_data["order_numbers"] = ""
         return cleaned_data
 
 

@@ -5,6 +5,9 @@ from __future__ import annotations
 from apps.actions.models import StaffTask, StaffTaskPreference
 
 
+UPGRADE_CHECK_PERMISSION = "core.can_trigger_upgrade_checks"
+
+
 DEFAULT_STAFF_TASKS: tuple[dict[str, object], ...] = (
     {
         "slug": "config",
@@ -42,11 +45,25 @@ DEFAULT_STAFF_TASKS: tuple[dict[str, object], ...] = (
         "order": 55,
     },
     {
+        "slug": "imager",
+        "label": "Imager",
+        "description": "Open the Raspberry Pi image builder wizard.",
+        "action_name": "imager",
+        "order": 58,
+    },
+    {
         "slug": "logs",
         "label": "Logs",
         "description": "Browse system and application logs.",
         "action_name": "logs",
         "order": 60,
+    },
+    {
+        "slug": "release",
+        "label": "Release",
+        "description": "Prepare, review, and publish package releases.",
+        "action_name": "release",
+        "order": 65,
     },
     {
         "slug": "rules",
@@ -119,9 +136,7 @@ def visible_staff_tasks_for_user(user) -> list[dict[str, str]]:
 
     visible: list[dict[str, str]] = []
     for task in tasks:
-        if task.staff_only and not user.is_staff:
-            continue
-        if task.superuser_only and not user.is_superuser:
+        if not user_can_access_staff_task(user, task):
             continue
         enabled = pref_map.get(task.pk, task.default_enabled)
         if not enabled:
@@ -131,6 +146,27 @@ def visible_staff_tasks_for_user(user) -> list[dict[str, str]]:
             continue
         visible.append({"slug": task.slug, "label": task.label, "url": url})
     return visible
+
+
+def can_trigger_upgrade_checks(user) -> bool:
+    """Return whether the user may trigger upgrade checks."""
+
+    if not getattr(user, "is_authenticated", False):
+        return False
+
+    return bool(user.is_superuser or user.has_perm(UPGRADE_CHECK_PERMISSION))
+
+
+def user_can_access_staff_task(user, task: StaffTask) -> bool:
+    """Return whether the given user can access the task panel action."""
+
+    if task.staff_only and not user.is_staff:
+        return False
+    if task.action_name == "upgrade":
+        return can_trigger_upgrade_checks(user)
+    if task.superuser_only and not user.is_superuser:
+        return False
+    return True
 
 
 

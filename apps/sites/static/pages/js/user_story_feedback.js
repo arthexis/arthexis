@@ -27,8 +27,8 @@
   const copyErrorMessage = form.dataset.copyError;
   const copyAriaLabel = form.dataset.copyAriaLabel;
   const canCopyStaffDetails = form.dataset.copyStaffDetails === '1';
+  const securityGroups = (form.dataset.securityGroups || '').trim();
   const messageField = form.querySelector('input[name="messages"]');
-  const javascriptEnabledField = form.querySelector('input[name="javascript_enabled"]');
   let previousFocus = null;
   let copyFeedbackTimeout = null;
 
@@ -246,6 +246,49 @@
     return `In ${pageLabel} (\`${window.location.href}\`)`;
   };
 
+  const getAdminDashboardNextTask = () => {
+    const nextTaskNode = document.querySelector(
+      '.admin-home-operator-journey__link, .admin-home-operator-journey__text',
+    );
+    if (!nextTaskNode) {
+      return '';
+    }
+    return nextTaskNode.textContent.replace(/\s+/g, ' ').trim();
+  };
+
+  const getAdminDashboardNetMessage = () => {
+    const netMessageNode = document.querySelector('.admin-home-net-message__content');
+    if (!netMessageNode) {
+      return '';
+    }
+    return netMessageNode.textContent.replace(/\s+/g, ' ').trim();
+  };
+
+  const getRoleSiteNodeSummary = () => {
+    const badgeNodes = document.querySelectorAll('#site-badges .badge');
+    if (!badgeNodes.length) {
+      return '';
+    }
+    const valuesByLabel = {};
+    badgeNodes.forEach(badgeNode => {
+      const labelNode = badgeNode.querySelector('.badge-link');
+      const valueNode = badgeNode.querySelector('.badge-link-value');
+      if (!labelNode || !valueNode) {
+        return;
+      }
+      const normalizedLabel = labelNode.textContent.replace(':', '').trim().toLowerCase();
+      const badgeValue = valueNode.textContent.replace(/\s+/g, ' ').trim();
+      if (normalizedLabel && badgeValue) {
+        valuesByLabel[normalizedLabel] = badgeValue;
+      }
+    });
+    const role = valuesByLabel.role || '';
+    const site = valuesByLabel.site || '';
+    const node = valuesByLabel.node || '';
+    const summaryParts = [role, site, node].filter(Boolean);
+    return summaryParts.join(' / ');
+  };
+
   const getFieldLabel = fieldName => {
     if (fieldName === 'rating') {
       const ratingLabel = document.getElementById('user-story-rating-group-label');
@@ -326,6 +369,21 @@
       return baseValue;
     }
     const details = getFormDetails();
+    const nextOpsTask = getAdminDashboardNextTask();
+    const netMessage = getAdminDashboardNetMessage();
+    const roleSiteNode = getRoleSiteNodeSummary();
+    if (nextOpsTask) {
+      details.push(`Next: ${nextOpsTask}`);
+    }
+    if (netMessage) {
+      details.push(`Net Message: ${netMessage}`);
+    }
+    if (roleSiteNode) {
+      details.push(`Role / Site / Node: ${roleSiteNode}`);
+    }
+    if (securityGroups) {
+      details.push(`Security groups: ${securityGroups}`);
+    }
     const messages = getPageMessages();
     syncMessageField(messages);
     if (!details.length && !messages.length) {
@@ -371,10 +429,6 @@
     event.preventDefault();
     resetAlerts();
     syncMessageField(getPageMessages());
-    if (javascriptEnabledField) {
-      javascriptEnabledField.value = '1';
-    }
-
     if (submitBtn) {
       submitBtn.disabled = true;
     }

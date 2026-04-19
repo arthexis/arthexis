@@ -1,0 +1,133 @@
+{% extends "pages/base.html" %}
+
+{% block title %}{{ survey.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-4 p-md-5">
+          <h1 class="h3 mb-2">{{ survey.title }}</h1>
+          {% if survey.description %}
+            <p class="text-muted mb-4">{{ survey.description }}</p>
+          {% endif %}
+
+          <div class="progress mb-4" role="progressbar" aria-label="Survey progress">
+            <div class="progress-bar" id="survey-progress" style="width: 0%"></div>
+          </div>
+
+          <form method="post" id="survey-form" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+              <div class="alert alert-danger" role="alert">
+                {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+              </div>
+            {% endif %}
+
+            {% for question, field_name, bound_field in form.question_fields %}
+                <section class="question-step{% if field_name == form.first_error_field or forloop.first and not form.first_error_field %} is-active{% endif %}" data-step="{{ forloop.counter0 }}">
+                  <p class="text-muted mb-2">Question {{ forloop.counter }} of {{ form.questions|length }}</p>
+                  <h2 class="h4 mb-3">{{ question.prompt }}</h2>
+
+                  <div class="d-grid gap-2 mb-4">
+                    {% for option in question.options.all %}
+                      {% with current_value=bound_field.value %}
+                      <label class="choice-tile">
+                        <input
+                          type="{% if question.allow_multiple %}checkbox{% else %}radio{% endif %}"
+                          name="{{ field_name }}"
+                          value="{{ option.pk }}"
+                          {% if question.allow_multiple and current_value and option.pk|stringformat:"s" in current_value %}checked{% endif %}
+                          {% if not question.allow_multiple and current_value == option.pk|stringformat:"s" %}checked{% endif %}
+                        >
+                        <span>{{ option.label }}</span>
+                      </label>
+                      {% endwith %}
+                    {% endfor %}
+                  </div>
+
+                  {% if bound_field.errors %}
+                    <div class="alert alert-danger">{{ bound_field.errors|join:", " }}</div>
+                  {% endif %}
+                </section>
+              {% endfor %}
+
+            <div class="d-flex justify-content-between gap-2 mt-3">
+              <button type="button" id="prev-question" class="btn btn-outline-secondary d-none" disabled>Back</button>
+              <button type="button" id="next-question" class="btn btn-primary d-none">Next</button>
+              <button type="submit" id="submit-survey" class="btn btn-success">Submit survey</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .question-step { display: block; }
+  .js .question-step { display: none; }
+  .js .question-step.is-active { display: block; }
+  .choice-tile {
+    border: 1px solid #d1d5db;
+    border-radius: 0.75rem;
+    cursor: pointer;
+    font-size: 1.05rem;
+    padding: 0.9rem 1rem;
+    transition: all 0.15s ease;
+  }
+  .choice-tile:has(input:checked) {
+    background: #eef6ff;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 1px #0d6efd inset;
+  }
+  .choice-tile input { margin-right: 0.6rem; }
+</style>
+
+<script>
+  (() => {
+    const steps = [...document.querySelectorAll('.question-step')];
+    if (!steps.length) {
+      return;
+    }
+
+    document.documentElement.classList.add('js');
+    const prevBtn = document.getElementById('prev-question');
+    const nextBtn = document.getElementById('next-question');
+    const submitBtn = document.getElementById('submit-survey');
+    const progressBar = document.getElementById('survey-progress');
+    let current = Math.max(0, steps.findIndex((step) => step.querySelector('.alert-danger')));
+
+    prevBtn.classList.remove('d-none');
+    nextBtn.classList.remove('d-none');
+    submitBtn.classList.add('d-none');
+
+    const update = () => {
+      steps.forEach((step, idx) => step.classList.toggle('is-active', idx === current));
+      prevBtn.disabled = current === 0;
+      const isLast = current === steps.length - 1;
+      nextBtn.classList.toggle('d-none', isLast);
+      submitBtn.classList.toggle('d-none', !isLast);
+      progressBar.style.width = `${((current + 1) / steps.length) * 100}%`;
+    };
+
+    prevBtn.addEventListener('click', () => {
+      if (current > 0) {
+        current -= 1;
+        update();
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (current < steps.length - 1) {
+        current += 1;
+        update();
+      }
+    });
+
+    update();
+  })();
+</script>
+{% endblock %}

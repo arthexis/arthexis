@@ -5,14 +5,16 @@ from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall, GitHubWeb
 from apps.repos.models.github_tokens import GitHubToken
 from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
 from apps.repos.models.repositories import GitHubRepository, PackageRepository
+from apps.repos.models.response_templates import GitHubResponseTemplate
 
 __all__ = [
-    "GitHubEvent",
     "GitHubApp",
     "GitHubAppInstall",
-    "GitHubWebhook",
-    "GitHubToken",
+    "GitHubEvent",
     "GitHubRepository",
+    "GitHubResponseTemplate",
+    "GitHubToken",
+    "GitHubWebhook",
     "PackageRepository",
     "RepositoryEvent",
     "RepositoryIssue",

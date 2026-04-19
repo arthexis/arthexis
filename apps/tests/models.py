@@ -70,8 +70,8 @@ class SuiteTest(models.Model):
 
     class Meta:
         ordering = ["app_label", "module_path", "class_name", "name", "node_id"]
-        verbose_name = "Suite test"
-        verbose_name_plural = "Suite tests"
+        verbose_name = "Suite Test"
+        verbose_name_plural = "Suite Tests"
 
     def __str__(self) -> str:
         """Return a readable test identity for admin views."""

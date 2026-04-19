@@ -11,7 +11,7 @@ from apps.features.models import Feature
 from apps.nodes.models import Node
 
 from ... import store
-from ...forwarder import forwarder
+from apps.forwarder.ocpp import forwarder
 from ...forwarder_feature import ocpp_forwarder_enabled
 from ...models import Charger, ChargingStation, Transaction
 from ..connection import RateLimitedConnectionMixin
@@ -20,7 +20,7 @@ from config.offline import requires_network
 
 logger = logging.getLogger(__name__)
 
-CHARGER_CREATION_FEATURE_SLUG = "standard-charge-point"
+CHARGER_CREATION_FEATURE_SLUG = "cp-auto-enrollment"
 OCPP_VERSION_FEATURE_SLUGS = {
     "ocpp1.6": "ocpp-16-charge-point",
     "ocpp2.0.1": "ocpp-201-charge-point",

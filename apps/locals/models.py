@@ -6,6 +6,18 @@ from django.db.utils import OperationalError, ProgrammingError
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
+from apps.groups.constants import PRODUCT_DEVELOPER_GROUP_NAME, SITE_OPERATOR_GROUP_NAME
+
+PRODUCT_DEVELOPER_FAVORITE_TARGETS: tuple[tuple[str, str], ...] = (
+    ("app", "application"),
+    ("release", "packagerelease"),
+    ("repos", "repositoryissue"),
+    ("tests", "suitetest"),
+)
+SITE_OPERATOR_FAVORITE_TARGETS: tuple[tuple[str, str], ...] = (
+    ("cards", "rfidattempt"),
+    ("celery", "periodictaskproxy"),
+)
 
 
 class Favorite(Entity):
@@ -43,6 +55,41 @@ class Favorite(Entity):
 
 def ensure_admin_favorites(user) -> None:
     """Ensure the default admin account has standard favorites configured."""
+    ensure_user_favorites(
+        user,
+        model_targets=(
+            ("cards", "RFID"),
+            ("links", "Reference"),
+            ("ocpp", "Charger"),
+        ),
+    )
+
+
+def ensure_security_group_favorites(user) -> None:
+    """Ensure users receive default favorites from their security-group roles."""
+    if not user:
+        return
+    if not (getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)):
+        return
+
+    try:
+        group_names = set(user.groups.values_list("name", flat=True))
+    except (OperationalError, ProgrammingError):
+        return
+
+    model_targets: list[tuple[str, str]] = []
+    if PRODUCT_DEVELOPER_GROUP_NAME in group_names:
+        model_targets.extend(PRODUCT_DEVELOPER_FAVORITE_TARGETS)
+    if SITE_OPERATOR_GROUP_NAME in group_names:
+        model_targets.extend(SITE_OPERATOR_FAVORITE_TARGETS)
+    if not model_targets:
+        return
+
+    ensure_user_favorites(user, model_targets=tuple(dict.fromkeys(model_targets)))
+
+
+def ensure_user_favorites(user, model_targets: tuple[tuple[str, str], ...]) -> None:
+    """Ensure a user has favorites for each target model in ``model_targets``."""
     if not user:
         return
 
@@ -54,11 +101,6 @@ def ensure_admin_favorites(user) -> None:
     except (OperationalError, ProgrammingError):
         return
 
-    model_targets = (
-        ("ocpp", "Charger"),
-        ("cards", "RFID"),
-        ("links", "Reference"),
-    )
     content_types = []
     for app_label, model_name in model_targets:
         try:
@@ -76,16 +118,22 @@ def ensure_admin_favorites(user) -> None:
     try:
         existing = set(
             Favorite.objects.filter(
-                user=user, content_type__in=content_types
+                user=user,
+                content_type__in=content_types,
             ).values_list(
                 "content_type_id",
                 flat=True,
             )
         )
+        max_priority = Favorite.objects.filter(user=user).aggregate(
+            max_priority=models.Max("priority")
+        )["max_priority"]
     except (OperationalError, ProgrammingError):
         return
+
+    next_priority = (max_priority or -1) + 1
     new_favorites = []
-    for priority, content_type in enumerate(content_types):
+    for content_type in content_types:
         if content_type.pk in existing:
             continue
         new_favorites.append(
@@ -94,9 +142,11 @@ def ensure_admin_favorites(user) -> None:
                 content_type=content_type,
                 is_user_data=True,
                 user_data=True,
-                priority=priority,
+                priority=next_priority,
             )
         )
+        next_priority += 1
+
     if new_favorites:
         Favorite.objects.bulk_create(new_favorites)
         from .favorites_cache import clear_user_favorites_cache

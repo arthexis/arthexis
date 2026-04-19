@@ -7,15 +7,17 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import Client, RequestFactory
 
-from apps.netmesh.admin import MeshMembershipAdmin, NodeEndpointAdmin, PeerPolicyAdmin
-from apps.netmesh.models import MeshMembership, NodeEndpoint, PeerPolicy
+from apps.netmesh.admin import (
+    MeshMembershipAdmin,
+    NetmeshAgentStatusAdmin,
+    PeerPolicyAdmin,
+)
+from apps.netmesh.models import MeshMembership, NetmeshAgentStatus, PeerPolicy
 from apps.nodes.models import Node
-
 
 def _attach_messages(request):
     setattr(request, "session", {})
     setattr(request, "_messages", FallbackStorage(request))
-
 
 @pytest.mark.django_db
 def test_mesh_membership_admin_quarantine_segment_disables_selected_memberships():
@@ -39,7 +41,6 @@ def test_mesh_membership_admin_quarantine_segment_disables_selected_memberships(
     membership.refresh_from_db()
     assert response.status_code == 302
     assert membership.is_enabled is False
-
 
 @pytest.mark.django_db
 def test_mesh_membership_admin_revoke_selected_nodes_disables_membership_and_node_enrollment():
@@ -65,7 +66,6 @@ def test_mesh_membership_admin_revoke_selected_nodes_disables_membership_and_nod
     assert response.status_code == 302
     assert membership.is_enabled is False
     assert node.mesh_enrollment_state == Node.MeshEnrollmentState.UNENROLLED
-
 
 @pytest.mark.django_db
 def test_mesh_membership_admin_quarantine_segment_honors_select_across_queryset():
@@ -97,7 +97,6 @@ def test_mesh_membership_admin_quarantine_segment_honors_select_across_queryset(
     assert response.status_code == 302
     assert membership_a.is_enabled is False
     assert membership_b.is_enabled is False
-
 
 @pytest.mark.django_db
 def test_mesh_membership_admin_revoke_selected_nodes_deduplicates_nodes():
@@ -134,63 +133,3 @@ def test_mesh_membership_admin_revoke_selected_nodes_deduplicates_nodes():
         reason="netmesh incident response",
     )
 
-
-@pytest.mark.django_db
-def test_peer_policy_admin_changelist_exposes_policy_matrix_url(admin_client):
-    response = admin_client.get("/admin/netmesh/peerpolicy/")
-
-    assert response.status_code == 200
-    assert "policy_matrix_url" in response.context_data
-
-
-@pytest.mark.django_db
-def test_node_endpoint_admin_health_status_classes():
-    model_admin = NodeEndpointAdmin(NodeEndpoint, admin.site)
-    endpoint = NodeEndpoint(node=Node(hostname="health-node"), endpoint="198.51.100.10:443")
-
-    rendered = model_admin.health_status(endpoint)
-
-    assert "degraded" in str(rendered)
-
-
-@pytest.mark.django_db
-def test_peer_policy_matrix_view_renders(admin_client):
-    node = Node.objects.create(hostname="policy-node")
-    PeerPolicy.objects.create(source_node=node, destination_node=node)
-
-    response = admin_client.get("/admin/netmesh/peerpolicy/matrix/")
-
-    assert response.status_code == 200
-    assert "rows" in response.context_data
-
-
-@pytest.mark.django_db
-def test_peer_policy_matrix_view_denies_staff_without_model_permissions():
-    user = get_user_model().objects.create_user(
-        username="staff-no-peerpolicy-perm",
-        email="staff-no-peerpolicy-perm@example.com",
-        password="password",
-        is_staff=True,
-    )
-    client = Client()
-    client.force_login(user)
-
-    response = client.get("/admin/netmesh/peerpolicy/matrix/")
-
-    assert response.status_code == 403
-
-
-@pytest.mark.django_db
-def test_node_endpoint_health_view_denies_staff_without_model_permissions():
-    user = get_user_model().objects.create_user(
-        username="staff-no-nodeendpoint-perm",
-        email="staff-no-nodeendpoint-perm@example.com",
-        password="password",
-        is_staff=True,
-    )
-    client = Client()
-    client.force_login(user)
-
-    response = client.get("/admin/netmesh/nodeendpoint/health/")
-
-    assert response.status_code == 403

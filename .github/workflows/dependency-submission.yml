@@ -16,14 +16,18 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  dependency-graph: write
-  id-token: write
+  contents: write
+  issues: write
 
 jobs:
   dependency-submission:
     name: Submit dependencies
     runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      DEPENDENCY_DETECTOR_ARGS: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
+      DEPENDENCY_SUBMISSION_FAIL_AFTER: '0'
+      DEPENDENCY_SUBMISSION_TRACKING_LABEL: dependency-submission-failure
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -33,9 +37,9 @@ jobs:
       - name: Submit dependency snapshot (attempt 1)
         id: submit_snapshot_attempt_1
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@9c110eb34dee187cd9eca76a652b9f6a0ed22927
+        uses: advanced-security/component-detection-dependency-submission-action@7c766a0966c66533ae37f76556cf9a33be50e5f8
         with:
-          detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
+          detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
 
       - name: Backoff before retry
         if: steps.submit_snapshot_attempt_1.outcome == 'failure'
@@ -45,9 +49,9 @@ jobs:
         id: submit_snapshot_attempt_2
         if: steps.submit_snapshot_attempt_1.outcome == 'failure'
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@9c110eb34dee187cd9eca76a652b9f6a0ed22927
+        uses: advanced-security/component-detection-dependency-submission-action@7c766a0966c66533ae37f76556cf9a33be50e5f8
         with:
-          detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
+          detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
 
       - name: Backoff before final retry
         if: steps.submit_snapshot_attempt_2.outcome == 'failure'
@@ -57,11 +61,118 @@ jobs:
         id: submit_snapshot_attempt_3
         if: steps.submit_snapshot_attempt_2.outcome == 'failure'
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@9c110eb34dee187cd9eca76a652b9f6a0ed22927
+        uses: advanced-security/component-detection-dependency-submission-action@7c766a0966c66533ae37f76556cf9a33be50e5f8
         with:
-          detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
+          detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
 
-      - name: Report non-blocking submission failure
+      - name: Track persistent submission failures
         if: steps.submit_snapshot_attempt_3.outcome == 'failure'
+        uses: actions/github-script@v9
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const label = process.env.DEPENDENCY_SUBMISSION_TRACKING_LABEL;
+            const failAfter = Number.parseInt(process.env.DEPENDENCY_SUBMISSION_FAIL_AFTER || '0', 10);
+            const runUrl = process.env.RUN_URL;
+            const detectorArgs = process.env.DEPENDENCY_DETECTOR_ARGS;
+            const branchRef = process.env.GITHUB_REF;
+            const workflowName = process.env.GITHUB_WORKFLOW;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const title = 'Dependency submission failures need attention';
+            const searchLabel = `${owner}:${label}`;
+            const issueList = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              labels: label,
+              state: 'open',
+              per_page: 100,
+            });
+            const trackingIssue = issueList.find((issue) => issue.title === title && !issue.pull_request);
+
+            const markerRegex = /<!-- failure-count: (\d+) -->/;
+            let failureCount = 1;
+
+            if (!trackingIssue) {
+              const body = [
+                'Dependency snapshot submission failed after all retries.',
+                '',
+                `- Workflow: \`${workflowName}\``,
+                `- Branch/ref: \`${branchRef}\``,
+                `- Detector args: \`${detectorArgs}\``,
+                `- Run URL: ${runUrl}`,
+                '',
+                'Actionable remediation:',
+                '1. Re-run this workflow to rule out transient Dependency Graph API outages.',
+                '2. Check GitHub status and Actions logs for upstream service interruptions.',
+                '3. Verify token permissions and detector arguments are still valid.',
+                '',
+                '<!-- failure-count: 1 -->',
+              ].join('\n');
+
+              await github.rest.issues.create({
+                owner,
+                repo,
+                title,
+                labels: [label],
+                body,
+              });
+            } else {
+              const issueBody = trackingIssue.body || '';
+              const markerMatch = issueBody.match(markerRegex);
+              const currentCount = markerMatch ? Number.parseInt(markerMatch[1], 10) : 0;
+              failureCount = currentCount + 1;
+
+              const nextBody = markerMatch
+                ? issueBody.replace(markerRegex, `<!-- failure-count: ${failureCount} -->`)
+                : `${issueBody}\n<!-- failure-count: ${failureCount} -->`;
+
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: trackingIssue.number,
+                body: nextBody,
+              });
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: trackingIssue.number,
+                body: [
+                  'Another dependency submission failure was detected after all retries.',
+                  '',
+                  `- Branch/ref: \`${branchRef}\``,
+                  `- Detector args: \`${detectorArgs}\``,
+                  `- Run URL: ${runUrl}`,
+                ].join('\n'),
+              });
+            }
+
+            const summaryLines = [
+              '### Dependency submission retry exhaustion',
+              '',
+              'Dependency snapshot submission failed after all retries. This workflow remains non-blocking for transient outages.',
+              '',
+              `- Branch/ref: \`${branchRef}\``,
+              `- Detector args: \`${detectorArgs}\``,
+              `- Run URL: ${runUrl}`,
+              '',
+              'Actionable remediation:',
+              '1. Re-run this workflow to confirm whether the outage is transient.',
+              '2. Review the action logs and GitHub status for Dependency Graph/API incidents.',
+              '3. Validate detector arguments and repository permissions.',
+            ];
+
+            await core.summary.addRaw(summaryLines.join('\n')).write();
+            core.warning(`Dependency submission failed after retries for ${branchRef}. Run: ${runUrl}`);
+
+            if (failAfter > 0 && failureCount >= failAfter) {
+              core.setFailed(`Dependency submission failed ${failureCount} times (threshold ${failAfter}). See tracking issue label ${searchLabel}.`);
+            }
+
+      - name: Confirm non-blocking outcome
+        if: always()
         run: |
-          echo "::warning title=Dependency submission failed after retries::GitHub dependency snapshot submission appears to be temporarily unavailable; continuing without blocking this workflow."
+          echo "Dependency submission workflow is configured as non-blocking to tolerate transient GitHub Dependency Graph API errors."

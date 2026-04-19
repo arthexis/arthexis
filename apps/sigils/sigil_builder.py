@@ -6,6 +6,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
+from .builtin_policy import BUILTIN_SIGIL_POLICIES
 from .fields import SigilAutoFieldMixin
 from .loader import load_fixture_sigil_roots
 from .models import SigilRoot
@@ -25,26 +26,22 @@ class SigilBuilderResponse(TemplateResponse):
 
 def generate_model_sigils(**kwargs) -> None:
     """Ensure built-in configuration SigilRoot entries exist."""
-    for prefix in ["ENV", "CONF", "SYS", "REQ"]:
+    for prefix, policy in BUILTIN_SIGIL_POLICIES.items():
         # Ensure built-in configuration roots exist without violating the
         # unique ``prefix`` constraint, even if older databases already have
         # entries with a different ``context_type`` or are soft deleted.
         root = SigilRoot.all_objects.filter(prefix__iexact=prefix).first()
         if root:
             root.prefix = prefix
-            root.context_type = (
-                SigilRoot.Context.REQUEST if prefix == "REQ" else SigilRoot.Context.CONFIG
-            )
+            root.context_type = policy["context_type"]
+            root.is_user_safe = policy["is_user_safe"]
             root.is_deleted = False
-            root.save(update_fields=["prefix", "context_type", "is_deleted"])
+            root.save(update_fields=["prefix", "context_type", "is_user_safe", "is_deleted"])
         else:
             SigilRoot.objects.create(
                 prefix=prefix,
-                context_type=(
-                    SigilRoot.Context.REQUEST
-                    if prefix == "REQ"
-                    else SigilRoot.Context.CONFIG
-                ),
+                context_type=policy["context_type"],
+                is_user_safe=policy["is_user_safe"],
             )
 
 

@@ -9,6 +9,7 @@ from apps.ocpp.payload_types import Handler, SupportsHandle
 
 
 class ConsumerDispatchContext(Protocol):
+    _handle_authorize_action: Handler
     _handle_boot_notification_action: Handler
     _handle_cost_updated_action: Handler
     _handle_data_transfer_action: Handler
@@ -41,7 +42,7 @@ def build_action_registry(consumer: ConsumerDispatchContext) -> dict[str, Handle
     c = consumer
     handlers = cast(dict[str, SupportsHandle], build_action_handlers(consumer))
     return {
-        "Authorize": handlers["Authorize"].handle,
+        "Authorize": c._handle_authorize_action,
         "BootNotification": c._handle_boot_notification_action,
         "ClearedChargingLimit": handlers["ClearedChargingLimit"].handle,
         "CostUpdated": c._handle_cost_updated_action,

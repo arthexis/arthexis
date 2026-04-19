@@ -2,6 +2,13 @@
 
 This domain centralizes how Arthexis selects log destinations and routes output from Django, Celery, and supporting scripts.
 
+## Formatter mode selection
+* `ARTHEXIS_LOG_FORMAT` controls the formatter at runtime.
+  * `text` (default): keeps the existing line format (`%(asctime)s [%(levelname)s] %(name)s: %(message)s`) for backward compatibility.
+  * `json`: emits stable JSON keys for Loki/LogQL pipelines.
+* JSON records include core keys (`timestamp`, `level`, `logger`, `message`, `app`, `hostname`, `process`, `thread`) and correlation keys (`request_id`, `node_id`, `charger_id`, `session_id`).
+* Correlation keys are injected using request context hooks in `config.middleware.ActiveAppMiddleware` and `config.request_utils`, so HTTP request-scoped IDs appear automatically when available.
+
 ## Log directory selection
 * `select_log_dir` chooses the first writable candidate from `ARTHEXIS_LOG_DIR`, the repository `logs/` folder, user state directories, or system fallbacks (including `/var/log/arthexis` when running as root). It also exports `ARTHEXIS_LOG_DIR` for child processes so Python and shell tooling share the same location.
 * Django loads `LOG_DIR` via `build_logging_settings`, which calls `select_log_dir` and exposes the resolved path alongside the full `LOGGING` dict used by the app and Celery workers.
@@ -12,11 +19,17 @@ This domain centralizes how Arthexis selects log destinations and routes output 
 * **Celery log**: `celery.log` (or `tests-celery.log`) receives Celery and worker trace output via `CeleryFileHandler`, keeping worker chatter separate from the shared error log. Celery-specific loggers are wired to this handler and the error handler without propagation to other handlers.
 
 ## Dependent systems and auxiliary outputs
-* **Celery runtime**: Celery workers reuse the `standard` formatter from the logging config so worker log lines match Django output while respecting the `celery.log` routing described above.
+* **Celery runtime**: Celery workers reuse the selected formatter mode from the logging config so worker output stays aligned with Django while respecting the `celery.log` routing described above.
 * **OCPP session logging**: The OCPP store selects the same `LOG_DIR`, then writes per-charger and simulator files (e.g., `charger.<id>.log`) and session captures under `logs/sessions/` using that shared path.
 * **Release publishing**: Headless release workflows and the `release clean-logs` management subcommand rely on `settings.LOG_DIR` for publish logs named `pr.<package>.v<version>.log`, and they fall back to `select_log_dir` when the preferred path is not writable.
 * **Node utilities**: Screenshot and audio captures land in `logs/screenshots/` and `logs/audio/`, and node registration helpers create dedicated `register_visitor_node.log` and `register_local_node.log` files alongside the main logs.
 * **Shell automation**: Startup, upgrade, and service scripts source `scripts/helpers/logging.sh` to mirror `select_log_dir`'s candidate search (including honoring `ARTHEXIS_LOG_DIR`) so their `.log` outputs live beside the Django logs.
+
+## LogQL-friendly field conventions
+* Recommended Loki labels: keep low-cardinality labels such as `level`, `logger`, `app`, and `hostname`.
+* Keep higher-cardinality correlation keys (`request_id`, `node_id`, `charger_id`, `session_id`) as JSON fields and query them with `| json` expressions.
+* Example query pattern:
+  * `{logger="apps.forwarder.ocpp"} | json | request_id!="" | line_format "{{.timestamp}} {{.level}} {{.charger_id}} {{.message}}"`
 
 ## Retention policy and unattended disk safety
 * **Lower transactional retention stays in force**: Django/Celery transactional handlers keep using daily rotation with their existing short retention windows (for example `TRANSACTIONAL_LOG_RETENTION_DAYS`).

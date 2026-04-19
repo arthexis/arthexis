@@ -14,6 +14,7 @@ from ...models import CertificateOperation, CertificateRequest, InstalledCertifi
 from .common import CALL_EXPECTED_STATUSES, ActionCall, ActionContext
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "InstallCertificate")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "InstallCertificate")
 def _handle_install_certificate(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     certificate = data.get("certificate")
@@ -71,6 +72,7 @@ def _handle_install_certificate(context: ActionContext, data: dict) -> JsonRespo
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "DeleteCertificate")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "DeleteCertificate")
 def _handle_delete_certificate(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     hash_data = data.get("certificateHashData")
@@ -131,6 +133,7 @@ def _handle_delete_certificate(context: ActionContext, data: dict) -> JsonRespon
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "CertificateSigned")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "CertificateSigned")
 def _handle_certificate_signed(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     certificate_chain = data.get("certificateChain")
@@ -192,6 +195,7 @@ def _handle_certificate_signed(context: ActionContext, data: dict) -> JsonRespon
     )
 
 
+@protocol_call("ocpp21", ProtocolCallModel.CSMS_TO_CP, "GetInstalledCertificateIds")
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetInstalledCertificateIds")
 def _handle_get_installed_certificate_ids(
     context: ActionContext, data: dict

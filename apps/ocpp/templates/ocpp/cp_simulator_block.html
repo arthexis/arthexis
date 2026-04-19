@@ -6,6 +6,7 @@
           hx-swap="outerHTML">
       {% csrf_token %}
       <input type="hidden" name="simulator_slot" value="{{ idx }}">
+      <input type="hidden" name="simulator_backend" value="{{ selected_backend }}">
       <div class="row g-3 align-items-start simulator-layout">
         <div class="col-12 col-xl-6">
           <div class="row g-2">
@@ -114,7 +115,27 @@
               <label>Last Command:</label> <span class="stat">{{ cp.last_command|default:"-" }}</span>
               <label>Started:</label> <span class="stat">{{ cp.start_time|default:"-" }}</span>
               <label>Stopped:</label> <span class="stat">{{ cp.stop_time|default:"-" }}</span>
+              <label>Target:</label> <span class="stat">{{ target_ws_url|default:"-" }}</span>
             </div>
+            {% if is_service_queued %}
+            <div class="alert alert-warning simulator-service-alert mb-0" role="alert">
+              <div class="fw-semibold">Start request queued for cpsim-service.</div>
+              {% if cpsim_request.queued %}
+              <div class="small">
+                Queue age: {{ cpsim_request.age_seconds|floatformat:0 }}s · Lock file: <code>{{ cpsim_request.lock_path }}</code>
+              </div>
+              {% endif %}
+              <div class="small mb-0">
+                No websocket will open until a cpsim worker consumes this queue entry.
+                If this stays in Service phase, start or restart the cpsim worker and
+                {% if simulator_log_url %}
+                <a href="{{ simulator_log_url }}">check simulator logs</a>.
+                {% else %}
+                check simulator logs.
+                {% endif %}
+              </div>
+            </div>
+            {% endif %}
             {% if cp.last_error %}
             <div class="error"><b>Error:</b><pre>{{ cp.last_error }}</pre></div>
             {% endif %}

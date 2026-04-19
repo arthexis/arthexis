@@ -13,7 +13,7 @@
         "docs"
       ],
       "path": "/docs/",
-      "menu": "Docs",
+      "menu": "Developers",
       "priority": 0,
       "is_default": false,
       "security_mode": "inclusive"

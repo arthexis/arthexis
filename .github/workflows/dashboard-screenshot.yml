@@ -227,15 +227,67 @@ jobs:
             exit 1
           fi
 
+      - name: Collect pull request screenshot path requests
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
+        run: |
+          python <<'PY' > /tmp/pr-authenticated-screenshot-paths.txt
+          import os
+          import re
+
+          body = os.environ.get("PR_BODY", "").splitlines()
+          requested: list[str] = []
+          active_section = "auth"
+
+          for raw_line in body:
+              line = re.sub(r"^[-*]\s+", "", raw_line.strip())
+              if not line or line.startswith("#"):
+                  continue
+
+              lower = line.lower()
+              if lower == "public:":
+                  active_section = "public"
+                  continue
+              if lower == "auth:":
+                  active_section = "auth"
+                  continue
+
+              if lower.startswith("public:"):
+                  active_section = "public"
+                  line = line.split(":", maxsplit=1)[1].strip()
+              elif lower.startswith("auth:"):
+                  active_section = "auth"
+                  line = line.split(":", maxsplit=1)[1].strip()
+
+              if not line.startswith("/"):
+                  continue
+
+              if active_section == "public":
+                  continue
+
+              path = line if line.endswith("/") else f"{line}/"
+              requested.append(path)
+
+          ordered: list[str] = []
+          for path in requested:
+              if path not in ordered:
+                  ordered.append(path)
+
+          print("\n".join(ordered))
+          PY
+
       - name: Capture authenticated previews
         run: |
           source .venv/bin/activate
           python <<'PY' > /tmp/authenticated-screenshot-paths.txt
           from pathlib import Path
 
-          defaults = ["/admin/", "/ocpp/cpms/dashboard/"]
+          defaults = ["/admin/", "/ocpp/cpms/dashboard/", "/docs/library/"]
           configured_paths_file = Path(".github/screenshot-paths.authenticated.txt")
+          requested_paths_file = Path("/tmp/pr-authenticated-screenshot-paths.txt")
           configured = []
+          requested = []
 
           if configured_paths_file.exists():
               for raw_line in configured_paths_file.read_text(encoding="utf-8").splitlines():
@@ -244,8 +296,15 @@ jobs:
                       continue
                   configured.append(line if line.startswith("/") else f"/{line}")
 
+          if requested_paths_file.exists():
+              for raw_line in requested_paths_file.read_text(encoding="utf-8").splitlines():
+                  line = raw_line.strip()
+                  if not line or line.startswith("#"):
+                      continue
+                  requested.append(line if line.startswith("/") else f"/{line}")
+
           ordered = []
-          for path in defaults + configured:
+          for path in defaults + configured + requested:
               if path not in ordered:
                   ordered.append(path)
 
@@ -281,28 +340,118 @@ jobs:
           name: ocpp-dashboard
           path: artifacts/ocpp-cpms-dashboard-desktop.png
 
-      - name: Build PR screenshot comment body
+      - name: Upload developer library screenshot for pull requests
         if: ${{ github.event_name == 'pull_request' }}
+        id: upload-developer-library
+        uses: actions/upload-artifact@v7
+        with:
+          name: developer-library
+          path: artifacts/docs-library-desktop.png
+
+      - name: Verify screenshot artifacts checklist (pull requests)
+        if: ${{ github.event_name == 'pull_request' }}
+        id: verify-pr-screenshot-artifacts
+        continue-on-error: true
+        run: |
+          source .venv/bin/activate
+          python scripts/verify_screenshot_artifacts.py --artifacts-dir artifacts --report artifacts/screenshot-verification.md
+
+      - name: Build screenshot metadata index
+        if: ${{ always() && github.event_name == 'pull_request' }}
         run: |
           source .venv/bin/activate
           python <<'PY'
+          import json
+          from pathlib import Path
+
+          artifacts_dir = Path("artifacts")
+          checks_path = artifacts_dir / "screenshot-verification.md"
+          images = sorted(path.name for path in artifacts_dir.glob("*.png"))
+          readme_path = artifacts_dir / "README.md"
+
+          requested_paths: dict[str, str] = {}
+          current_path = None
+          if readme_path.exists():
+              for raw_line in readme_path.read_text(encoding="utf-8").splitlines():
+                  line = raw_line.strip()
+                  if line.startswith("## `") and line.endswith("`"):
+                      current_path = line.removeprefix("## `").removesuffix("`")
+                      continue
+                  if current_path is None or not line.startswith("- **desktop**: ["):
+                      continue
+                  filename = Path(
+                      line.split("[", maxsplit=1)[1].split("]", maxsplit=1)[0].strip()
+                  ).name
+                  requested_paths[filename] = current_path
+
+          payload = {
+              "checks_markdown": (
+                  checks_path.read_text(encoding="utf-8").strip()
+                  if checks_path.exists()
+                  else None
+              ),
+              "images": [
+                  {
+                      "filename": name,
+                      "requested_path": requested_paths.get(name),
+                  }
+                  for name in images
+              ],
+          }
+          (artifacts_dir / "screenshot-metadata.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Upload screenshot metadata
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        id: upload-pr-screenshot-metadata
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshot-metadata
+          path: |
+            artifacts/*.png
+            artifacts/screenshot-metadata.json
+            artifacts/README.md
+            artifacts/screenshot-verification.md
+
+      - name: Build PR screenshot comment body
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        env:
+          ADMIN_DASHBOARD_URL: ${{ steps.upload-admin-dashboard.outputs.artifact-url || '' }}
+          OCPP_DASHBOARD_URL: ${{ steps.upload-ocpp-dashboard.outputs.artifact-url || '' }}
+          DEVELOPER_LIBRARY_URL: ${{ steps.upload-developer-library.outputs.artifact-url || '' }}
+          METADATA_URL: ${{ steps.upload-pr-screenshot-metadata.outputs.artifact-url || '' }}
+        run: |
+          source .venv/bin/activate
+          python <<'PY'
+          import os
           from pathlib import Path
 
           marker = "<!-- dashboard-screenshot-preview -->"
           output = Path("artifacts/pr-screenshot-comment.md")
-          images = sorted(Path("artifacts").glob("*.png"))
-          expected_images = [
-              (
-                  Path("artifacts/admin-desktop.png"),
-                  "Admin Desktop",
-                  "${{ steps.upload-admin-dashboard.outputs.artifact-url }}",
-              ),
-              (
-                  Path("artifacts/ocpp-cpms-dashboard-desktop.png"),
-                  "Ocpp Cpms Dashboard Desktop",
-                  "${{ steps.upload-ocpp-dashboard.outputs.artifact-url }}",
-              ),
-          ]
+          images = {path.name: path for path in Path("artifacts").glob("*.png")}
+          metadata_url = os.environ.get("METADATA_URL", "").strip()
+          artifact_links = {
+              "admin-desktop.png": os.environ.get("ADMIN_DASHBOARD_URL", "").strip(),
+              "ocpp-cpms-dashboard-desktop.png": os.environ.get("OCPP_DASHBOARD_URL", "").strip(),
+              "docs-library-desktop.png": os.environ.get("DEVELOPER_LIBRARY_URL", "").strip(),
+          }
+
+          expected_images: list[tuple[str, str]] = []
+          readme = Path("artifacts/README.md")
+          current_path: str | None = None
+          if readme.exists():
+              for raw_line in readme.read_text(encoding="utf-8").splitlines():
+                  line = raw_line.strip()
+                  if line.startswith("## `") and line.endswith("`"):
+                      current_path = line.removeprefix("## `").removesuffix("`")
+                      continue
+                  if current_path is None or not line.startswith("- **desktop**: ["):
+                      continue
+                  link = line.split("[", maxsplit=1)[1].split("]", maxsplit=1)[0].strip()
+                  expected_images.append((Path(link).name, current_path))
 
           lines = [
               marker,
@@ -310,37 +459,52 @@ jobs:
               "",
               (
                   "Generated by the screenshot CI workflow on this pull request. "
-                  "GitHub comments block inline data URI images, so previews are linked as workflow artifacts."
+                  "GitHub comments block inline data URI images, so each screenshot is linked to its own artifact when available."
               ),
               "",
           ]
 
+          if metadata_url:
+              lines.append(f"- Screenshot metadata + verification report: [Download]({metadata_url})")
+          else:
+              lines.append("- ⚠️ Screenshot metadata artifact URL unavailable.")
+          lines.append("")
+
+          verification_report = Path("artifacts/screenshot-verification.md")
+          if verification_report.exists():
+              lines.append(verification_report.read_text(encoding="utf-8").strip())
+              lines.append("")
+
           if not images:
               lines.append("- ⚠️ No screenshots were produced in this run.")
           else:
-              for expected_path, expected_label, _ in expected_images:
-                  if not expected_path.exists():
+              for expected_name, requested_path in expected_images:
+                  if expected_name not in images:
                       lines.append(
-                          f"- ⚠️ {expected_label}: expected screenshot was not produced."
+                          f"- ⚠️ `{requested_path}`: expected screenshot was not produced."
                       )
               lines.append("| Screenshot | Artifact |")
               lines.append("|---|---|")
 
-          for path, expected_label, artifact_url in expected_images:
-              if not path.exists():
+          for expected_name, requested_path in expected_images:
+              if expected_name not in images:
                   continue
-              link = artifact_url.strip()
-              if link:
-                  lines.append(f"| {expected_label} | [Download artifact]({link}) |")
+              artifact_url = artifact_links.get(expected_name, "")
+              if artifact_url:
+                  lines.append(
+                      f"| `{requested_path}` (`{expected_name}`) | [Download image artifact]({artifact_url}) |"
+                  )
               else:
-                  lines.append(f"| {expected_label} | ⚠️ Artifact URL unavailable. |")
+                  lines.append(
+                      f"| `{requested_path}` (`{expected_name}`) | ⚠️ Dedicated image artifact unavailable; use metadata artifact. |"
+                  )
 
           output.write_text("\n".join(lines), encoding="utf-8")
           PY
 
       - name: Upsert pull request screenshot comment
-        if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
-        uses: actions/github-script@v8
+        if: ${{ always() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
@@ -377,6 +541,10 @@ jobs:
               body,
             });
             core.info('Created screenshot preview comment.');
+
+      - name: Fail pull request build when screenshot verification fails
+        if: ${{ github.event_name == 'pull_request' && steps.verify-pr-screenshot-artifacts.outcome == 'failure' }}
+        run: exit 1
 
       - name: Capture public screenshot
         if: ${{ github.event_name != 'pull_request' }}
@@ -419,6 +587,12 @@ jobs:
             "${capture_paths[@]}" \
             --output-dir artifacts
 
+      - name: Verify screenshot artifacts checklist (non-pull requests)
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          source .venv/bin/activate
+          python scripts/verify_screenshot_artifacts.py --artifacts-dir artifacts --report artifacts/screenshot-verification.md
+
       - name: Upload public screenshot
         if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@v7
@@ -432,6 +606,13 @@ jobs:
         with:
           name: ocpp-dashboard
           path: artifacts/ocpp-cpms-dashboard-desktop.png
+
+      - name: Upload developer library screenshot
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: developer-library
+          path: artifacts/docs-library-desktop.png
 
       - name: Upload EVCS public screenshot
         if: ${{ github.event_name != 'pull_request' }}
@@ -462,7 +643,7 @@ jobs:
       issues: write
     steps:
       - name: Open or update screenshot failure issue
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const title = 'Dashboard screenshot workflow is failing';
@@ -563,7 +744,7 @@ jobs:
       issues: write
     steps:
       - name: Comment and close screenshot failure issue when recovered
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const title = 'Dashboard screenshot workflow is failing';

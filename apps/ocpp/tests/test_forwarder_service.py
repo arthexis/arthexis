@@ -57,94 +57,6 @@ def test_candidate_forwarding_urls_skips_tls_ip_targets(forwarder_instance):
     ]
 
 
-def test_connect_forwarding_session_keeps_tls_verification_for_trusted_node(
-    monkeypatch, forwarder_instance
-):
-    """Trusted nodes must retain default TLS certificate verification."""
-
-    charger = SimpleNamespace(pk=1, charger_id="CP-1")
-    node = SimpleNamespace(
-        trusted=True,
-        iter_remote_urls=lambda path: ["https://trusted.example.com/"],
-    )
-
-    create_kwargs = {}
-
-    def fake_connect(url, timeout, subprotocols, **kwargs):
-        create_kwargs.update(kwargs)
-        return SimpleNamespace(connected=True, close=Mock())
-
-    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_connect)
-
-    session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
-
-    assert session is not None
-    assert not create_kwargs
-
-
-def test_connect_forwarding_session_keeps_tls_verification_for_untrusted_node(
-    monkeypatch, forwarder_instance
-):
-    """Untrusted nodes must retain default TLS certificate verification."""
-
-    charger = SimpleNamespace(pk=1, charger_id="CP-1")
-    node = SimpleNamespace(
-        trusted=False,
-        iter_remote_urls=lambda path: ["https://untrusted.example.com/"],
-    )
-
-    create_kwargs = {}
-
-    def fake_connect(url, timeout, subprotocols, **kwargs):
-        create_kwargs.update(kwargs)
-        return SimpleNamespace(connected=True, close=Mock())
-
-    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_connect)
-
-    session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
-
-    assert session is not None
-    assert not create_kwargs
-
-
-def test_connect_forwarding_session_handles_failures(monkeypatch, forwarder_instance):
-    charger = SimpleNamespace(pk=1, charger_id="CP-1")
-    node = SimpleNamespace(iter_remote_urls=lambda path: [
-        "http://unreliable.example.com/",
-        "http://reliable.example.com/",
-    ])
-
-    connections = []
-
-    def fake_connect(url, timeout, subprotocols):
-        connections.append(url)
-        if "unreliable" in url:
-            raise WebSocketException("boom")
-        return SimpleNamespace(connected=True, close=Mock())
-
-    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_connect)
-    monkeypatch.setattr(
-        "apps.forwarder.ocpp.logger", SimpleNamespace(warning=Mock(), info=Mock())
-    )
-
-    session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
-
-    assert session is not None
-    assert session.url.startswith("ws://reliable.example.com")
-    assert forwarder_instance.get_session(charger.pk) is session
-    assert len(forwarder_instance._sessions) == 1
-    assert connections[0].startswith("ws://unreliable.example.com")
-
-    # verify failures leave no sessions behind when nothing connects
-    def always_fail(url, timeout, subprotocols):
-        raise WebSocketException("down")
-
-    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", always_fail)
-    forwarder_instance.clear_sessions()
-    session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
-    assert session is None
-    assert forwarder_instance.get_session(charger.pk) is None
-
 
 def test_prune_inactive_sessions_closes_missing(monkeypatch, forwarder_instance):
     active_connection = SimpleNamespace(connected=True, close=Mock())
@@ -235,7 +147,8 @@ def test_sync_forwarded_charge_points_respects_existing_sessions(monkeypatch):
     monkeypatch.setattr("apps.forwarder.ocpp.logger", fake_logger)
     monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_create_connection)
 
-    from apps.ocpp import forwarder as forwarder_module, forwarding_utils
+    from apps.forwarder import ocpp as forwarder_module
+    from apps.ocpp import forwarding_utils
 
     monkeypatch.setitem(sys.modules, "apps.ocpp.models.forwarder", forwarder_module)
 

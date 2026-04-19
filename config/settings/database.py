@@ -1,15 +1,31 @@
 """Database backend selection and configuration."""
 
-import contextlib
 import os
 import tempfile
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
-from config.settings_helpers import should_probe_postgres
-
+from .apps import ARTHEXIS_EXTERNAL_APPS
 from .base import BASE_DIR
+from .external_dbs import external_app_database_alias_mapping
+
+
+def build_external_sqlite_databases(external_apps: list[str]) -> dict[str, dict[str, Path | str]]:
+    """Return external-app SQLite database entries rooted in ``work/dbs``."""
+
+    external_dbs_dir = BASE_DIR / "work" / "dbs"
+    external_dbs_dir.mkdir(parents=True, exist_ok=True)
+
+    configs: dict[str, dict[str, Path | str]] = {}
+    for alias in external_app_database_alias_mapping(external_apps).values():
+        configs[alias] = {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": external_dbs_dir / f"{alias}.sqlite3",
+            "OPTIONS": {"timeout": 60},
+        }
+
+    return configs
 
 FORCED_DB_BACKEND = os.environ.get("ARTHEXIS_DB_BACKEND", "").strip().lower()
 if FORCED_DB_BACKEND and FORCED_DB_BACKEND not in {"sqlite", "postgres"}:
@@ -18,51 +34,10 @@ if FORCED_DB_BACKEND and FORCED_DB_BACKEND not in {"sqlite", "postgres"}:
     )
 
 
-def _postgres_available() -> bool:
-    """Return whether the configured PostgreSQL endpoint is reachable quickly.
-
-    Startup probes should fail fast so local tooling (for example the VS Code
-    migration watcher) can fall back to SQLite when PostgreSQL is unavailable.
-    """
-
-    if FORCED_DB_BACKEND == "sqlite":
-        return False
-    if not should_probe_postgres():
-        return False
-    try:
-        import psycopg
-    except ImportError:
-        return False
-
-    try:
-        connect_timeout = int(os.environ.get("ARTHEXIS_POSTGRES_PROBE_TIMEOUT", "1"))
-    except (TypeError, ValueError):
-        connect_timeout = 1
-
-    if connect_timeout <= 0:
-        connect_timeout = 1
-
-    params = {
-        "dbname": os.environ.get("POSTGRES_DB", "postgres"),
-        "user": os.environ.get("POSTGRES_USER", "postgres"),
-        "password": os.environ.get("POSTGRES_PASSWORD", ""),
-        "host": os.environ.get("POSTGRES_HOST", "localhost"),
-        "port": os.environ.get("POSTGRES_PORT", "5432"),
-        "connect_timeout": connect_timeout,
-    }
-    try:
-        with contextlib.closing(psycopg.connect(**params)):
-            return True
-    except (psycopg.Error, OSError):
-        return False
-
-
 if FORCED_DB_BACKEND == "postgres":
     _use_postgres = True
-elif FORCED_DB_BACKEND == "sqlite":
-    _use_postgres = False
 else:
-    _use_postgres = _postgres_available()
+    _use_postgres = False
 
 
 if _use_postgres:
@@ -80,6 +55,7 @@ if _use_postgres:
             },
         }
     }
+    DATABASES.update(build_external_sqlite_databases(list(ARTHEXIS_EXTERNAL_APPS)))
 else:
     _sqlite_override = os.environ.get("ARTHEXIS_SQLITE_PATH")
     if _sqlite_override:
@@ -121,3 +97,6 @@ else:
             "TEST": {"NAME": SQLITE_TEST_DB_PATH},
         }
     }
+    DATABASES.update(build_external_sqlite_databases(list(ARTHEXIS_EXTERNAL_APPS)))
+
+DATABASE_ROUTERS = ["apps.core.dbrouters.ExternalAppDatabaseRouter"]

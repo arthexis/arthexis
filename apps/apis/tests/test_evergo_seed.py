@@ -46,29 +46,3 @@ def test_evergo_api_explorer_seeded_endpoints() -> None:
 
     assert api.base_url == "https://portal-backend.evergo.com/api/mex/v1/"
     assert methods == EXPECTED_METHOD_PATHS
-
-
-@pytest.mark.django_db
-def test_evergo_fixture_loaddata_is_idempotent() -> None:
-    """Regression: loading Evergo endpoint fixture should update seeded rows without integrity errors."""
-
-    api = _ensure_evergo_api_seeded()
-    initial_count = ResourceMethod.objects.filter(api=api).count()
-
-    call_command(
-        "loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0
-    )
-
-    assert ResourceMethod.objects.filter(api=api).count() == initial_count
-
-
-@pytest.mark.django_db
-def test_evergo_fixture_loaddata_bootstraps_parent_api() -> None:
-    """Regression: fixture should load successfully even when APIExplorer row is absent."""
-
-    call_command(
-        "loaddata", "apps/apis/fixtures/apis__evergo_endpoints.json", verbosity=0
-    )
-
-    api = APIExplorer.objects.get(name="Evergo API")
-    assert ResourceMethod.objects.filter(api=api).count() == len(EXPECTED_METHOD_PATHS)

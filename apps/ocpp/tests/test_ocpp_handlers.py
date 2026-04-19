@@ -9,7 +9,11 @@ from channels.db import database_sync_to_async
 from django.test import override_settings
 from django.utils import timezone
 
-from apps.ocpp import store, call_error_handlers, call_result_handlers
+from apps.ocpp import call_error_handlers, store
+from apps.ocpp.call_result_handlers.profiles import handle_clear_charging_profile_result
+from apps.ocpp.call_result_handlers.transactions import (
+    handle_request_start_transaction_result,
+)
 from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.consumers import base as consumers_base
 from apps.flows.models import Transition
@@ -129,7 +133,7 @@ async def test_handle_clear_charging_profile_result_updates_profile():
     payload = {"status": "Accepted", "statusInfo": {"detail": "ok"}}
     metadata = {"charging_profile_id": 9, "charger_id": charger.charger_id}
 
-    result = await call_result_handlers.handle_clear_charging_profile_result(
+    result = await handle_clear_charging_profile_result(
         consumer,
         "msg-clear-1",
         metadata,
@@ -377,7 +381,6 @@ async def test_unlock_connector_error_records_failure():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_handle_clear_charging_profile_error_records_failure():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CLR-CP-2")
     profile = ChargingProfile(
@@ -468,7 +471,6 @@ async def test_cleared_charging_limit_persists_event():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_notify_charging_limit_persists_payload():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="CP-301", connector_id=1
@@ -511,7 +513,6 @@ async def test_notify_charging_limit_persists_payload():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_notify_report_persists_inventory_snapshot():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="INV-201", connector_id=1
@@ -694,9 +695,17 @@ async def test_cost_updated_persists_and_forwards():
     assert cost_update.ocpp_transaction_id == "TX-1"
     assert str(cost_update.total_cost) == "15.750"
     assert cost_update.currency == "USD"
-    assert any(
-        entry.get("cost_update_id") == cost_update.pk for entry in store.billing_updates
-    )
+    assert list(store.billing_updates) == [
+        {
+            "charger_id": charger.charger_id,
+            "connector_id": 1,
+            "transaction_id": "TX-1",
+            "cost_update_id": cost_update.pk,
+            "total_cost": "15.75",
+            "currency": "USD",
+            "reported_at": cost_update.reported_at,
+        }
+    ]
 
 
 @pytest.mark.anyio
@@ -720,6 +729,34 @@ async def test_cost_updated_rejects_invalid_payload():
     assert result == {}
     exists = await database_sync_to_async(CostUpdate.objects.filter)(charger=charger)
     assert not await database_sync_to_async(exists.exists)()
+    entries = list(store.logs["charger"].get(consumer.store_key, []))
+    assert any("CostUpdated ignored: invalid totalCost" in entry for entry in entries)
+    assert not store.billing_updates
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
+@pytest.mark.integration
+async def test_cost_updated_requires_transaction_id():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="COST-3"
+    )
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, 1)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.connector_value = 1
+
+    result = await consumer._handle_cost_updated_action(
+        {"totalCost": "9.50", "currency": "USD"}, "msg-missing-tx", "", ""
+    )
+
+    assert result == {}
+    exists = await database_sync_to_async(CostUpdate.objects.filter)(charger=charger)
+    assert not await database_sync_to_async(exists.exists)()
+    entries = list(store.logs["charger"].get(consumer.store_key, []))
+    assert any("CostUpdated ignored: missing transactionId" in entry for entry in entries)
     assert not store.billing_updates
 
 
@@ -894,11 +931,17 @@ async def test_get_certificate_status_marks_revoked_when_ocsp_revoked(monkeypatc
                 "errors": [],
             }
 
-    monkeypatch.setattr(
-        consumers_base.certificate_status.requests,
-        "post",
-        lambda *_args, **_kwargs: FakeResponse(),
-    )
+    class FakeSession:
+        def mount(self, *_args, **_kwargs):
+            return None
+
+        def request(self, *_args, **_kwargs):
+            return FakeResponse()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(consumers_base.certificate_status.requests, "Session", FakeSession)
 
     result = await consumer._handle_get_certificate_status_action(
         {"certificateHashData": hash_data}, "msg-ocsp-rev", "", ""
@@ -943,7 +986,17 @@ async def test_get_certificate_status_ocsp_timeout_uses_responder_unavailable(mo
     def _raise_timeout(*_args, **_kwargs):
         raise consumers_base.certificate_status.requests.Timeout("timed out")
 
-    monkeypatch.setattr(consumers_base.certificate_status.requests, "post", _raise_timeout)
+    class FakeSession:
+        def mount(self, *_args, **_kwargs):
+            return None
+
+        def request(self, *_args, **_kwargs):
+            return _raise_timeout()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(consumers_base.certificate_status.requests, "Session", FakeSession)
 
     result = await consumer._handle_get_certificate_status_action(
         {"certificateHashData": hash_data}, "msg-ocsp-timeout", "", ""
@@ -989,7 +1042,17 @@ async def test_get_certificate_status_ocsp_timeout_fail_open_accepts(monkeypatch
     def _raise_timeout(*_args, **_kwargs):
         raise consumers_base.certificate_status.requests.Timeout("timed out")
 
-    monkeypatch.setattr(consumers_base.certificate_status.requests, "post", _raise_timeout)
+    class FakeSession:
+        def mount(self, *_args, **_kwargs):
+            return None
+
+        def request(self, *_args, **_kwargs):
+            return _raise_timeout()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(consumers_base.certificate_status.requests, "Session", FakeSession)
 
     result = await consumer._handle_get_certificate_status_action(
         {"certificateHashData": hash_data}, "msg-ocsp-open", "", ""
@@ -1037,11 +1100,17 @@ async def test_get_certificate_status_invalid_crl_payload_is_responder_unavailab
         def json():
             return {"revokedSerialNumbers": "not-a-list"}
 
-    monkeypatch.setattr(
-        consumers_base.certificate_status.requests,
-        "get",
-        lambda *_args, **_kwargs: FakeCRLResponse(),
-    )
+    class FakeSession:
+        def mount(self, *_args, **_kwargs):
+            return None
+
+        def request(self, *_args, **_kwargs):
+            return FakeCRLResponse()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(consumers_base.certificate_status.requests, "Session", FakeSession)
 
     result = await consumer._handle_get_certificate_status_action(
         {"certificateHashData": hash_data}, "msg-crl-invalid", "", ""
@@ -1462,7 +1531,7 @@ async def test_request_start_transaction_result_tracks_status():
         },
     )
 
-    await call_result_handlers.handle_request_start_transaction_result(
+    await handle_request_start_transaction_result(
         consumer,
         "msg-req-1",
         {"action": "RequestStartTransaction"},
@@ -1538,7 +1607,6 @@ async def test_transaction_event_updates_request_status(monkeypatch, charger_fac
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_transaction_event_does_not_start_request_when_authorization_fails(charger_factory):
     charger = await charger_factory(
         charger_id="CP-TRX-RFID",
@@ -1644,7 +1712,6 @@ async def test_start_transaction_rejection_creates_transaction_record(charger_fa
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_transaction_event_started_notifies_and_persists(charger_factory):
     charger = await charger_factory(
         charger_id="CP-TE-1",
@@ -1738,7 +1805,6 @@ async def test_transaction_event_updated_notifies_existing_transaction():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_transaction_event_ended_updates_and_notifies():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TE-3")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -2129,7 +2195,6 @@ async def test_report_charging_profiles_rejects_invalid_schedule_values(monkeypa
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.critical
 async def test_report_charging_profiles_rolls_back_partial_profile_writes(monkeypatch):
     """Schedule validation failures should not leave orphaned charging profiles."""
 
@@ -2598,7 +2663,7 @@ async def test_report_charging_profiles_resolves_evse_row_from_aggregate_charger
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize(
     "status,confirmed",
-    [("Accepted", True), ("Cancelled", False), ("Expired", False)],
+    [("Accepted", True), ("Rejected", False), ("Cancelled", False), ("Expired", False)],
 )
 @pytest.mark.slow
 async def test_reservation_status_update_persists_and_notifies(status, confirmed):
@@ -2643,6 +2708,71 @@ async def test_reservation_status_update_persists_and_notifies(status, confirmed
         "connector_id": charger.connector_id,
         "reservation_id": reservation.pk,
         "status": status,
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.slow
+async def test_reservation_status_update_tracks_accepted_to_rejected_transition():
+    location = await database_sync_to_async(Location.objects.create)(name="Depot")
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CP-RES-TRANSITION", connector_id=1, location=location
+    )
+    reservation = await database_sync_to_async(CPReservation.objects.create)(
+        location=location,
+        connector=charger,
+        start_time=timezone.now(),
+        duration_minutes=30,
+    )
+
+    consumer = CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+    consumer.connector_value = charger.connector_id
+
+    accepted_payload = {
+        "reservationId": reservation.pk,
+        "reservationUpdateStatus": "Accepted",
+    }
+    rejected_payload = {
+        "reservationId": reservation.pk,
+        "reservationUpdateStatus": "Rejected",
+    }
+
+    accepted_result = await consumer._handle_reservation_status_update_action(
+        accepted_payload, "resv-transition-1", "", ""
+    )
+    accepted_state = await database_sync_to_async(CPReservation.objects.get)(pk=reservation.pk)
+
+    rejected_result = await consumer._handle_reservation_status_update_action(
+        rejected_payload, "resv-transition-2", "", ""
+    )
+    rejected_state = await database_sync_to_async(CPReservation.objects.get)(pk=reservation.pk)
+
+    assert accepted_result == {}
+    assert accepted_state.evcs_status == "Accepted"
+    assert accepted_state.evcs_confirmed is True
+    assert accepted_state.evcs_confirmed_at is not None
+
+    assert rejected_result == {}
+    assert rejected_state.evcs_status == "Rejected"
+    assert rejected_state.evcs_confirmed is False
+    assert rejected_state.evcs_confirmed_at is None
+
+    assert len(store.connector_release_notifications) == 2
+    assert store.connector_release_notifications[0] == {
+        "charger_id": charger.charger_id,
+        "connector_id": charger.connector_id,
+        "reservation_id": reservation.pk,
+        "status": "Accepted",
+    }
+    assert store.connector_release_notifications[1] == {
+        "charger_id": charger.charger_id,
+        "connector_id": charger.connector_id,
+        "reservation_id": reservation.pk,
+        "status": "Rejected",
     }
 
 

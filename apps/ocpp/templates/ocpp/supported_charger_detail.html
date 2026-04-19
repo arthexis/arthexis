@@ -3,118 +3,225 @@
 
 {% block title %}{{ station_model.vendor }} {{ station_model.model_family }} {{ station_model.model }}{% endblock %}
 
+{% block extra_head %}
+<style>
+  .spec-chip-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .spec-chip {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0.12rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    background-color: #fff;
+    padding: 0.45rem 0.7rem;
+    min-width: 7rem;
+  }
+  .spec-chip small {
+    font-size: 0.64rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--bs-secondary-color);
+    line-height: 1.2;
+  }
+  .spec-chip strong {
+    font-size: 0.92rem;
+    line-height: 1.25;
+    color: var(--bs-body-color);
+  }
+  .hero-media {
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    box-shadow: 0 0.85rem 1.5rem rgba(15, 23, 42, 0.1);
+    background: #fff;
+  }
+  .hero-media img {
+    width: 100%;
+    max-height: 360px;
+    object-fit: cover;
+    display: block;
+  }
+  .thumb-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    gap: 0.65rem;
+  }
+  .thumb-item {
+    border-radius: 0.65rem;
+    overflow: hidden;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    background: #fff;
+    box-shadow: 0 0.45rem 0.9rem rgba(15, 23, 42, 0.06);
+  }
+  .thumb-item img {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    display: block;
+  }
+  .file-type-badge {
+    min-width: 3rem;
+    text-align: center;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container px-3 px-sm-4">
-  <div class="row justify-content-center mt-2 mt-sm-4">
-    <div class="col-12 col-lg-10">
-      <div class="card shadow-sm border-0 overflow-hidden mb-3">
-        <div class="card-header">
-          <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start gap-3">
-            <div>
-              <h1 class="h4 mb-1">{{ station_model.vendor }} {{ station_model.model_family }} {{ station_model.model }}</h1>
-              <p class="text-muted mb-0">
-                {% if station_model.preferred_ocpp_version %}
-                  {% trans "Preferred OCPP" %}: {{ station_model.preferred_ocpp_version }}
-                {% else %}
-                  {% trans "Preferred OCPP" %}: {% trans "Not specified" %}
-                {% endif %}
-              </p>
-            </div>
-            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
-              {% trans "Integration Rating" %}: {{ station_model.integration_rating }}/5
-            </span>
+  <section class="mb-3 mt-2 mt-sm-4">
+    <div class="card shadow-sm border-0 overflow-hidden mb-3 mb-sm-4">
+      <div class="card-header">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <h1 class="h4 mb-1">{{ station_model.vendor }} {{ station_model.model_family }} {{ station_model.model }}</h1>
+            <p class="text-muted mb-0">
+              {% trans "Supported model profile, reference files, and integration guidance." %}
+            </p>
           </div>
+          <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
+            {% trans "Integration Rating" %}: {{ station_model.integration_rating }}/5
+          </span>
         </div>
-        <div class="card-body">
-          <dl class="landing-meta-list mb-3">
-            <div>
-              <dt>{% trans "Connector" %}</dt>
-              <dd>{{ station_model.connector_type|default:"-" }}</dd>
-            </div>
-            <div>
-              <dt>{% trans "Max Power" %}</dt>
-              <dd>
-                {% if station_model.max_power_kw %}{{ station_model.max_power_kw }} kW{% else %}-{% endif %}
-              </dd>
-            </div>
-            <div>
-              <dt>{% trans "Max Voltage" %}</dt>
-              <dd>
-                {% if station_model.max_voltage_v %}{{ station_model.max_voltage_v }} V{% else %}-{% endif %}
-              </dd>
-            </div>
-          </dl>
-          {% if station_model.notes %}
-          <p class="text-muted mb-0">{{ station_model.notes }}</p>
-          {% endif %}
-        </div>
-      </div>
-
-      <div class="card shadow-sm border-0 overflow-hidden mb-3">
-        <div class="card-header">
-          <h2 class="h6 mb-0">{% trans "Special Instructions" %}</h2>
-        </div>
-        <div class="card-body">
-          {% if instructions_html %}
-            <div class="prose">{{ instructions_html|safe }}</div>
-          {% else %}
-            <p class="text-muted mb-0">{% trans "No special instructions have been provided." %}</p>
-          {% endif %}
+        <div class="spec-chip-grid">
+          <span class="spec-chip">
+            <small>{% trans "Preferred OCPP" %}</small>
+            <strong>
+              {% if station_model.preferred_ocpp_version %}
+                {{ station_model.preferred_ocpp_version }}
+              {% else %}
+                {% trans "Not specified" %}
+              {% endif %}
+            </strong>
+          </span>
+          <span class="spec-chip">
+            <small>{% trans "Connector" %}</small>
+            <strong>{{ station_model.connector_type|default:"-" }}</strong>
+          </span>
+          <span class="spec-chip">
+            <small>{% trans "Max Power" %}</small>
+            <strong>{% if station_model.max_power_kw %}{{ station_model.max_power_kw }} kW{% else %}-{% endif %}</strong>
+          </span>
+          <span class="spec-chip">
+            <small>{% trans "Max Voltage" %}</small>
+            <strong>{% if station_model.max_voltage_v %}{{ station_model.max_voltage_v }} V{% else %}-{% endif %}</strong>
+          </span>
         </div>
       </div>
 
-      <div class="card shadow-sm border-0 overflow-hidden mb-3">
-        <div class="card-header">
-          <h2 class="h6 mb-0">{% trans "Images" %}</h2>
-        </div>
-        <div class="card-body">
-          {% if images %}
-          <div class="row g-3">
+      <div class="card-body pt-0">
+        {% if images %}
+          {% with primary_image=images|first %}
+          <div class="hero-media mb-3">
+            <a href="{{ primary_image.file.url }}" target="_blank" rel="noopener">
+              <img src="{{ primary_image.file.url }}" alt="{{ station_model.vendor }} {{ station_model.model_family }} {{ station_model.model }}">
+            </a>
+          </div>
+          {% endwith %}
+
+          {% if images|length > 1 %}
+          <div class="thumb-grid mb-2">
             {% for image in images %}
-            <div class="col-6 col-md-4">
-              <a class="d-block" href="{{ image.file.url }}" target="_blank" rel="noopener">
-                <img src="{{ image.file.url }}" class="img-fluid rounded border" alt="{{ image.original_name }}">
+              {% if not forloop.first %}
+              <a class="thumb-item" href="{{ image.file.url }}" target="_blank" rel="noopener" title="{{ image.original_name }}">
+                <img src="{{ image.file.url }}" alt="{{ image.original_name }}">
               </a>
-            </div>
+              {% endif %}
             {% endfor %}
           </div>
-          {% else %}
-          <p class="text-muted mb-0">{% trans "No images have been uploaded yet." %}</p>
           {% endif %}
-        </div>
-      </div>
+        {% else %}
+        <p class="text-muted mb-3">{% trans "No images have been uploaded yet." %}</p>
+        {% endif %}
 
-      <div class="card shadow-sm border-0 overflow-hidden">
-        <div class="card-header">
-          <h2 class="h6 mb-0">{% trans "Manuals and Files" %}</h2>
+        {% if station_model.notes %}
+        <div class="landing-card-section">
+          <h2 class="landing-card-section-title">{% trans "Notes" %}</h2>
+          <p class="text-muted mb-0">{{ station_model.notes }}</p>
         </div>
-        <div class="card-body">
-          {% if documents %}
-          <ul class="list-group list-group-flush">
-            {% for doc in documents %}
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-              <div>
-                <div class="fw-semibold">{{ doc.original_name|default:doc.file.name }}</div>
-                <small class="text-muted">{{ doc.content_type|default:"" }}</small>
-              </div>
-              <a class="btn btn-outline-primary btn-sm" href="{{ doc.file.url }}" target="_blank" rel="noopener">
-                {% trans "Download" %}
-              </a>
-            </li>
-            {% endfor %}
-          </ul>
-          {% else %}
-          <p class="text-muted mb-0">{% trans "No manuals or files have been uploaded yet." %}</p>
-          {% endif %}
-        </div>
-      </div>
-
-      <div class="mt-3">
-        <a class="btn btn-link px-0" href="{% url 'ocpp:supported-chargers' %}">
-          {% trans "Back to supported chargers" %}
-        </a>
+        {% endif %}
       </div>
     </div>
-  </div>
+
+    <div class="card shadow-sm border-0 overflow-hidden mb-3 mb-sm-4">
+      <div class="card-header">
+        <h2 class="h6 mb-0">{% trans "Special Instructions" %}</h2>
+      </div>
+      <div class="card-body pt-2">
+        {% if instructions_html %}
+          <div class="prose">{{ instructions_html|safe }}</div>
+        {% else %}
+          <p class="text-muted mb-0">{% trans "No special instructions have been provided." %}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 overflow-hidden mb-3 mb-sm-4">
+      <div class="card-header">
+        <h2 class="h6 mb-0">{% trans "Manuals and Files" %}</h2>
+      </div>
+      <div class="card-body pt-2">
+        {% if documents %}
+        <ul class="list-group list-group-flush">
+          {% for doc in documents %}
+          {% with file_name=doc.original_name|default:doc.file.name file_type=doc.content_type|default:""|lower %}
+          <li class="list-group-item px-0 d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+            <div>
+              <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
+                <span class="badge text-bg-light border file-type-badge">
+                  {% if "pdf" in file_type %}
+                    PDF
+                  {% elif "spreadsheet" in file_type or "excel" in file_type or "csv" in file_type %}
+                    XLS
+                  {% elif "word" in file_type or "document" in file_type %}
+                    DOC
+                  {% elif "zip" in file_type or "compressed" in file_type %}
+                    ZIP
+                  {% elif "json" in file_type %}
+                    JSON
+                  {% elif "text" in file_type %}
+                    TXT
+                  {% else %}
+                    FILE
+                  {% endif %}
+                </span>
+                <span class="fw-semibold">{{ file_name }}</span>
+              </div>
+              <div class="small text-muted d-flex flex-wrap gap-3">
+                {% if doc.content_type %}
+                <span>{{ doc.content_type }}</span>
+                {% endif %}
+                {% if doc.size %}
+                <span>{{ doc.size|filesizeformat }}</span>
+                {% endif %}
+                {% if doc.uploaded_at %}
+                <span>{% trans "Uploaded" %}: {{ doc.uploaded_at|date:"M j, Y" }}</span>
+                {% endif %}
+              </div>
+            </div>
+            <a class="btn btn-outline-primary btn-sm" href="{{ doc.file.url }}" target="_blank" rel="noopener">
+              {% trans "Download" %}
+            </a>
+          </li>
+          {% endwith %}
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-muted mb-0">{% trans "No manuals or files have been uploaded yet." %}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div>
+      <a class="btn btn-link px-0" href="{% url 'ocpp:supported-chargers' %}">
+        {% trans "Back to supported chargers" %}
+      </a>
+    </div>
+  </section>
 </div>
 {% endblock %}

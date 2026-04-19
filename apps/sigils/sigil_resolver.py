@@ -3,13 +3,14 @@ import concurrent.futures
 import json
 import logging
 import os
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 
 from django.conf import settings
 from django.core import serializers
 from django.core.exceptions import FieldDoesNotExist, FieldError
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 
 from . import entity_lookup
@@ -22,6 +23,19 @@ logger = logging.getLogger(__name__)
 
 ATTRIBUTE_RESOLUTION_TIMEOUT = float(os.environ.get("SIGIL_ATTRIBUTE_TIMEOUT", 2.0))
 ATTRIBUTE_RESOLUTION_WORKERS = int(os.environ.get("SIGIL_ATTRIBUTE_WORKERS", 4)) or 1
+PIPELINE_FILTER_DEFAULT_LIMIT = 50
+PIPELINE_FILTER_MAX_LIMIT = 200
+PIPELINE_FILTER_SENSITIVE_FIELD_TOKENS = (
+    "api_key",
+    "hash",
+    "key",
+    "password",
+    "private",
+    "secret",
+    "token",
+)
+PIPELINE_INSTANCE_ACTIONS = frozenset({"FIELD", "GET"})
+PIPELINE_WINDOW_ACTIONS = frozenset({"COUNT", "FILTER", "MAX", "MIN", "SUM", "TOTAL"})
 _ATTRIBUTE_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
     max_workers=ATTRIBUTE_RESOLUTION_WORKERS,
     thread_name_prefix="sigil-attr",
@@ -38,7 +52,9 @@ class SigilTokenParts(tuple):
     __slots__ = ()
 
     def __new__(cls, root_name, filter_field, instance_id, key, param, strict_key):
-        return super().__new__(cls, (root_name, filter_field, instance_id, key, param, strict_key))
+        return super().__new__(
+            cls, (root_name, filter_field, instance_id, key, param, strict_key)
+        )
 
     root_name = property(lambda self: self[0])
     filter_field = property(lambda self: self[1])
@@ -61,6 +77,7 @@ class ResolutionContext:
     original_token: str
     param: str | None
     param_args: tuple[str, ...]
+    pipeline_action: str | None
     raw_key: str | None
     token_parts: SigilTokenParts
 
@@ -106,7 +123,15 @@ def _identifier_variants(name: str | None) -> list[str]:
     normalized = _normalize_name(name)
     dashed = normalized.replace("_", "-")
     variants: list[str] = []
-    for candidate in (name, normalized, dashed, normalized.lower(), normalized.upper(), dashed.lower(), dashed.upper()):
+    for candidate in (
+        name,
+        normalized,
+        dashed,
+        normalized.lower(),
+        normalized.upper(),
+        dashed.lower(),
+        dashed.upper(),
+    ):
         if candidate and candidate not in variants:
             variants.append(candidate)
     return variants
@@ -129,6 +154,34 @@ def _get_sigil_root(prefix: str) -> SigilRoot | None:
 
 def _candidate_names(name: str) -> list[str]:
     return _identifier_variants(name)
+
+
+def _normalize_allowed_roots(allowed_roots: Collection[str] | None) -> set[str] | None:
+    """Normalize an optional root allow-list for case-insensitive checks."""
+    if allowed_roots is None:
+        return None
+    return {_normalize_name(root).upper() for root in allowed_roots if root}
+
+
+def get_user_safe_sigil_roots() -> set[str]:
+    """Return sigil roots marked safe for user-facing resolution."""
+    return {
+        _normalize_name(prefix).upper()
+        for prefix in SigilRoot.objects.filter(is_user_safe=True).values_list(
+            "prefix", flat=True
+        )
+    }
+
+
+def get_user_safe_sigil_actions() -> set[str]:
+    """Return user-safe pipeline actions for user-facing resolution."""
+    has_safe_entity_root = SigilRoot.objects.filter(
+        is_user_safe=True,
+        context_type=SigilRoot.Context.ENTITY,
+    ).exists()
+    if not has_safe_entity_root:
+        return set()
+    return set(PIPELINE_INSTANCE_ACTIONS)
 
 
 def _stringify_value(value) -> str:
@@ -316,12 +369,16 @@ def _parse_key_segment(token: str, index: int) -> tuple[str | None, bool, int]:
     key, index = _parse_quoted_segment(
         token,
         index,
-        lambda value, offset, depth, in_quotes: depth == 0 and not in_quotes and value[offset] == "=",
+        lambda value, offset, depth, in_quotes: depth == 0
+        and not in_quotes
+        and value[offset] == "=",
     )
     return key, strict_key, index
 
 
-def _parse_key_and_param(token: str, index: int) -> tuple[str | None, str | None, bool, int]:
+def _parse_key_and_param(
+    token: str, index: int
+) -> tuple[str | None, str | None, bool, int]:
     """Parse optional ``.key``/``->key`` and ``=param`` segments from a sigil token.
 
     Args:
@@ -361,6 +418,73 @@ def _parse_token_parts(token: str) -> SigilTokenParts:
     instance_id, index = _parse_instance_id(token, index)
     key, param, strict_key, index = _parse_key_and_param(token, index)
     return SigilTokenParts(root_name, filter_field, instance_id, key, param, strict_key)
+
+
+def _is_pipeline_v2_enabled() -> bool:
+    return bool(getattr(settings, "SIGILS_PIPELINE_V2_ENABLED", False))
+
+
+def _normalize_pipeline_segment(segment: str) -> str:
+    head, separator, tail = segment.partition(":")
+    if not separator:
+        return segment
+    return f"{head.upper()}:{tail}"
+
+
+def _is_valid_pipeline_head(name: str) -> bool:
+    return bool(name) and all(char.isalnum() or char in {"_", "-"} for char in name)
+
+
+def _parse_pipeline_token_parts(token: str) -> tuple[SigilTokenParts, str | None]:
+    if "|" not in token:
+        raise TokenParseError("Sigil token is not a pipeline token")
+    root_segment, action_segment = token.split("|", 1)
+    normalized_root_segment = _normalize_pipeline_segment(root_segment)
+    normalized_action_segment = _normalize_pipeline_segment(action_segment)
+    root_name, separator, root_payload = normalized_root_segment.partition(":")
+    if not separator:
+        root_name = normalized_root_segment
+        root_payload = ""
+    action_name, action_separator, action_payload = normalized_action_segment.partition(
+        ":"
+    )
+    if not action_separator:
+        action_name = normalized_action_segment
+        action_payload = ""
+    if not _is_valid_pipeline_head(root_name) or not _is_valid_pipeline_head(
+        action_name
+    ):
+        raise TokenParseError("Sigil pipeline token is malformed")
+
+    filter_field = None
+    instance_id = None
+    key = None
+    param = None
+    strict_key = False
+    payload_head, payload_separator, payload_tail = root_payload.partition(":")
+    if payload_separator:
+        filter_field = payload_head.replace("-", "_")
+        instance_id = payload_tail
+    elif root_payload:
+        instance_id = root_payload
+
+    action_upper = action_name.upper()
+    if action_upper == "FILTER":
+        key_head, key_separator, key_tail = action_payload.partition(":")
+        if not key_separator:
+            raise TokenParseError("FILTER action is missing field/value")
+        key = key_head
+        param = key_tail
+    elif action_upper in PIPELINE_WINDOW_ACTIONS:
+        instance_target = action_payload or ""
+        instance_id = f"{instance_target}:{entity_lookup.map_pipeline_action_to_aggregate(action_upper)}"
+    else:
+        key = action_payload or None
+
+    return (
+        SigilTokenParts(root_name, filter_field, instance_id, key, param, strict_key),
+        action_upper,
+    )
 
 
 def _resolve_request_value(request, key: str, param: str) -> str:
@@ -412,7 +536,9 @@ def _resolve_request_value(request, key: str, param: str) -> str:
     return ""
 
 
-def _resolve_instance_value(instance, model, key_name: str, key_lower: str, raw_key: str, param_args: list[str]):
+def _resolve_instance_value(
+    instance, model, key_name: str, key_lower: str, raw_key: str, param_args: list[str]
+):
     """Resolve an instance value via custom resolver, model field, or callable attribute.
 
     Args:
@@ -451,7 +577,13 @@ def _resolve_instance_value(instance, model, key_name: str, key_lower: str, raw_
     return None
 
 
-def _resolve_env_value(normalized_key: str | None, key_upper: str | None, key_lower: str | None, raw_key: str | None, original_token: str) -> str:
+def _resolve_env_value(
+    normalized_key: str | None,
+    key_upper: str | None,
+    key_lower: str | None,
+    raw_key: str | None,
+    original_token: str,
+) -> str:
     """Resolve an ``ENV`` sigil from process environment variables.
 
     Args:
@@ -488,7 +620,9 @@ def _resolve_env_value(normalized_key: str | None, key_upper: str | None, key_lo
     return _failed_resolution(original_token)
 
 
-def _resolve_conf_value(normalized_key: str | None, key_upper: str | None, key_lower: str | None) -> str:
+def _resolve_conf_value(
+    normalized_key: str | None, key_upper: str | None, key_lower: str | None
+) -> str:
     """Resolve a ``CONF`` sigil from Django settings.
 
     Args:
@@ -509,7 +643,12 @@ def _resolve_conf_value(normalized_key: str | None, key_upper: str | None, key_l
     return ""
 
 
-def _resolve_sys_value(normalized_key: str | None, key_upper: str | None, raw_key: str | None, original_token: str) -> str:
+def _resolve_sys_value(
+    normalized_key: str | None,
+    key_upper: str | None,
+    raw_key: str | None,
+    original_token: str,
+) -> str:
     """Resolve a ``SYS`` sigil from cached or computed system metadata.
 
     Args:
@@ -522,7 +661,9 @@ def _resolve_sys_value(normalized_key: str | None, key_upper: str | None, raw_ke
         The resolved system value or the degraded placeholder.
     """
     values = get_system_sigil_values()
-    candidates = [candidate for candidate in [key_upper, (raw_key or "").upper()] if candidate]
+    candidates = [
+        candidate for candidate in [key_upper, (raw_key or "").upper()] if candidate
+    ]
     for candidate in candidates:
         if candidate in values:
             return values[candidate]
@@ -536,7 +677,14 @@ def _resolve_sys_value(normalized_key: str | None, key_upper: str | None, raw_ke
     return _failed_resolution(original_token)
 
 
-def _resolve_config_value(root, normalized_key: str | None, key_upper: str | None, key_lower: str | None, raw_key: str | None, original_token: str) -> str:
+def _resolve_config_value(
+    root,
+    normalized_key: str | None,
+    key_upper: str | None,
+    key_lower: str | None,
+    raw_key: str | None,
+    original_token: str,
+) -> str:
     """Resolve configuration-backed sigils, including ENV, CONF, and SYS namespaces.
 
     Args:
@@ -554,7 +702,9 @@ def _resolve_config_value(root, normalized_key: str | None, key_upper: str | Non
         return ""
     prefix = root.prefix.upper()
     if prefix == "ENV":
-        return _resolve_env_value(normalized_key, key_upper, key_lower, raw_key, original_token)
+        return _resolve_env_value(
+            normalized_key, key_upper, key_lower, raw_key, original_token
+        )
     if prefix == "CONF":
         return _resolve_conf_value(normalized_key, key_upper, key_lower)
     if prefix == "SYS":
@@ -562,7 +712,12 @@ def _resolve_config_value(root, normalized_key: str | None, key_upper: str | Non
     return _failed_resolution(original_token)
 
 
-def _resolve_request_root(normalized_key: str | None, raw_key: str | None, param: str | None, param_args: list[str]) -> str:
+def _resolve_request_root(
+    normalized_key: str | None,
+    raw_key: str | None,
+    param: str | None,
+    param_args: list[str],
+) -> str:
     """Resolve request-context sigils from the current request.
 
     Args:
@@ -617,7 +772,15 @@ def _resolve_dynamic_root(
     return serializers.serialize("json", [instance])
 
 
-def _resolve_entity_instance(model, instance, normalized_key: str | None, key_lower: str | None, raw_key: str | None, param_args: list[str], original_token: str) -> str:
+def _resolve_entity_instance(
+    model,
+    instance,
+    normalized_key: str | None,
+    key_lower: str | None,
+    raw_key: str | None,
+    param_args: list[str],
+    original_token: str,
+) -> str:
     """Resolve a sigil against a specific entity instance or serialize that instance.
 
     Args:
@@ -672,6 +835,51 @@ def _resolve_entity_root(
     if model is None:
         return _failed_resolution(context.original_token)
 
+    if context.pipeline_action == "FILTER":
+        filter_field = (context.normalized_key or "").lower()
+        if not filter_field or context.param is None:
+            return _failed_resolution(context.original_token)
+        try:
+            field_obj = model._meta.get_field(filter_field)
+        except FieldDoesNotExist:
+            return _failed_resolution(context.original_token)
+        if isinstance(field_obj, (models.CharField, models.TextField)):
+            lookup = {f"{filter_field}__iexact": context.param}
+        else:
+            lookup = {filter_field: context.param}
+        try:
+            qs = model.objects.filter(**lookup)
+        except (FieldError, TypeError, ValueError):
+            return _failed_resolution(context.original_token)
+        filter_limit = getattr(
+            settings,
+            "SIGILS_PIPELINE_FILTER_LIMIT",
+            PIPELINE_FILTER_DEFAULT_LIMIT,
+        )
+        try:
+            filter_limit = int(filter_limit)
+        except (TypeError, ValueError):
+            filter_limit = PIPELINE_FILTER_DEFAULT_LIMIT
+        filter_limit = max(1, min(filter_limit, PIPELINE_FILTER_MAX_LIMIT))
+
+        safe_fields = []
+        for model_field in model._meta.fields:
+            if model_field.is_relation:
+                continue
+            lower_name = model_field.name.lower()
+            if any(
+                token in lower_name for token in PIPELINE_FILTER_SENSITIVE_FIELD_TOKENS
+            ):
+                continue
+            safe_fields.append(model_field.name)
+        if model._meta.pk.name not in safe_fields:
+            safe_fields.insert(0, model._meta.pk.name)
+        if filter_field not in safe_fields and not field_obj.is_relation:
+            safe_fields.append(filter_field)
+
+        payload = list(qs.values(*safe_fields)[:filter_limit])
+        return json.dumps(payload, cls=DjangoJSONEncoder)
+
     aggregate_target, aggregate_func = entity_lookup.parse_aggregate_request(
         context.token_parts.filter_field,
         context.instance_id,
@@ -719,7 +927,9 @@ def _resolve_entity_root(
         else None
     )
     if manager_method_name:
-        found, manager_val = _call_attribute(model.objects, manager_method_name, list(context.param_args))
+        found, manager_val = _call_attribute(
+            model.objects, manager_method_name, list(context.param_args)
+        )
         if found:
             if isinstance(manager_val, models.QuerySet):
                 return serializers.serialize("json", manager_val)
@@ -737,17 +947,33 @@ def _resolve_entity_root(
 def _build_resolution_context(
     token: str,
     current: models.Model | None,
+    allowed_roots: set[str] | None = None,
 ) -> ResolutionContext:
     """Build normalized token resolution context from a raw token."""
-    token_parts = _parse_token_parts(token)
+    pipeline_action = None
+    if _is_pipeline_v2_enabled() and "|" in token:
+        try:
+            token_parts, pipeline_action = _parse_pipeline_token_parts(token)
+        except TokenParseError:
+            token_parts = _parse_token_parts(token)
+    else:
+        token_parts = _parse_token_parts(token)
     normalized_root = _normalize_name(token_parts.root_name)
     lookup_root = normalized_root.upper()
     normalized_key = _normalize_name(token_parts.key) if token_parts.key else None
     key_upper = normalized_key.upper() if normalized_key else None
     key_lower = normalized_key.lower() if normalized_key else None
-    param = resolve_sigils(token_parts.param, current) if token_parts.param else token_parts.param
+    param = (
+        resolve_sigils(token_parts.param, current, allowed_roots=allowed_roots)
+        if token_parts.param
+        else token_parts.param
+    )
     param_args = tuple(param.split(",")) if param else ()
-    instance_id = resolve_sigils(token_parts.instance_id, current) if token_parts.instance_id else token_parts.instance_id
+    instance_id = (
+        resolve_sigils(token_parts.instance_id, current, allowed_roots=allowed_roots)
+        if token_parts.instance_id
+        else token_parts.instance_id
+    )
     return ResolutionContext(
         current=current,
         instance_id=instance_id,
@@ -758,6 +984,7 @@ def _build_resolution_context(
         original_token=token,
         param=param,
         param_args=param_args,
+        pipeline_action=pipeline_action,
         raw_key=token_parts.key,
         token_parts=token_parts,
     )
@@ -794,12 +1021,26 @@ CONTEXT_RESOLVERS = {
 }
 
 
-def _resolve_token(token: str, current: models.Model | None = None) -> str:
-    """Resolve a single sigil token to its string value with graceful degradation."""
+def _resolve_token_with_policy(
+    token: str,
+    current: models.Model | None = None,
+    allowed_roots: set[str] | None = None,
+    allowed_actions: set[str] | None = None,
+) -> str:
+    """Resolve one sigil token while enforcing an optional root allow-list."""
     try:
-        context = _build_resolution_context(token, current)
+        context = _build_resolution_context(token, current, allowed_roots=allowed_roots)
     except TokenParseError:
         return _failed_resolution(token)
+
+    if allowed_roots is not None and context.lookup_root not in allowed_roots:
+        return _failed_resolution(context.original_token)
+    if (
+        allowed_actions is not None
+        and context.pipeline_action
+        and context.pipeline_action not in allowed_actions
+    ):
+        return _failed_resolution(context.original_token)
 
     if context.lookup_root == "OBJECT" and context.current is not None:
         return _resolve_dynamic_root(
@@ -840,7 +1081,13 @@ def _resolve_token(token: str, current: models.Model | None = None) -> str:
         return _failed_resolution(context.original_token)
 
 
-def resolve_sigils(text: str, current: models.Model | None = None) -> str:
+def resolve_sigils(
+    text: str,
+    current: models.Model | None = None,
+    *,
+    allowed_roots: Collection[str] | None = None,
+    allowed_actions: Collection[str] | None = None,
+) -> str:
     """Resolve every sigil token found in the given text.
 
     Args:
@@ -850,20 +1097,39 @@ def resolve_sigils(text: str, current: models.Model | None = None) -> str:
     Returns:
         The input text with each recognized sigil token replaced by its resolved value.
     """
+    normalized_allowed_roots = _normalize_allowed_roots(allowed_roots)
+    normalized_allowed_actions = (
+        {action.upper() for action in allowed_actions if action}
+        if allowed_actions is not None
+        else None
+    )
     parts: list[str] = []
     cursor = 0
     for span in scan_sigil_tokens(text):
         if span.start > cursor:
-            parts.append(text[cursor:span.start])
+            parts.append(text[cursor : span.start])
         token = text[span.start + 1 : span.end - 1]
-        parts.append(_resolve_token(token, current))
+        parts.append(
+            _resolve_token_with_policy(
+                token,
+                current,
+                allowed_roots=normalized_allowed_roots,
+                allowed_actions=normalized_allowed_actions,
+            )
+        )
         cursor = span.end
     if cursor < len(text):
         parts.append(text[cursor:])
     return "".join(parts)
 
 
-def resolve_sigil(sigil: str, current: models.Model | None = None) -> str:
+def resolve_sigil(
+    sigil: str,
+    current: models.Model | None = None,
+    *,
+    allowed_roots: Collection[str] | None = None,
+    allowed_actions: Collection[str] | None = None,
+) -> str:
     """Resolve a single sigil-bearing string.
 
     Args:
@@ -873,4 +1139,9 @@ def resolve_sigil(sigil: str, current: models.Model | None = None) -> str:
     Returns:
         The resolved sigil text.
     """
-    return resolve_sigils(sigil, current)
+    return resolve_sigils(
+        sigil,
+        current,
+        allowed_roots=allowed_roots,
+        allowed_actions=allowed_actions,
+    )

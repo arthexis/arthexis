@@ -66,15 +66,65 @@
         font-weight: 600;
         color: var(--bs-body-color);
       }
-      .landing-card-section + .landing-card-section {
-        margin-top: 1.5rem;
+      .landing-section + .landing-section {
+        margin-top: 1.25rem;
       }
-      .landing-card-section-title {
+      .landing-section-heading {
         font-size: 0.75rem;
         letter-spacing: 0.04em;
         text-transform: uppercase;
         color: var(--bs-secondary-color);
-        margin-bottom: 0.35rem;
+        margin: 0 0 0.5rem;
+      }
+      .landing-stack-sm > * + * {
+        margin-top: 0.25rem;
+      }
+      .landing-stack-md > * + * {
+        margin-top: 0.5rem;
+      }
+      .landing-status-badge {
+        min-width: 6.5rem;
+      }
+      .landing-status-badge.status-available {
+        background-color: #0d6efd;
+        color: #fff;
+      }
+      .landing-status-badge.status-charging {
+        background-color: #198754;
+        color: #fff;
+      }
+      .landing-status-badge.status-faulted {
+        background-color: #dc3545;
+        color: #fff;
+      }
+      .landing-status-badge.status-offline {
+        background-color: #6c757d;
+        color: #fff;
+      }
+      .landing-status-badge.status-unknown {
+        background-color: #0d6efd;
+        color: #fff;
+      }
+      .landing-action-group .btn + .btn {
+        margin-top: 0.5rem;
+      }
+      .landing-action-secondary {
+        font-size: 0.875rem;
+        color: var(--bs-secondary-color);
+      }
+      .landing-live-now {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.875rem;
+        color: var(--bs-secondary-color);
+      }
+      .landing-live-now-icon {
+        width: 0.6rem;
+        height: 0.6rem;
+        border-radius: 999px;
+        background: #198754;
+        box-shadow: 0 0 0 0.3rem rgba(25, 135, 84, 0.15);
       }
       .landing-stat-grid {
         display: grid;
@@ -99,9 +149,23 @@
         padding: 1.25rem;
         background-color: #fff;
         box-shadow: 0 0.5rem 1rem rgba(15, 23, 42, 0.05);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+      }
+      .landing-connector-card:hover {
+        border-color: rgba(13, 110, 253, 0.35);
+        box-shadow: 0 0.75rem 1.4rem rgba(15, 23, 42, 0.12);
+        transform: translateY(-1px);
+      }
+      .landing-connector-card:has(.stretched-link:focus-visible) {
+        border-color: rgba(13, 110, 253, 0.65);
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.2);
+      }
+      .landing-connector-card.is-selected {
+        border-color: rgba(13, 110, 253, 0.8);
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
       }
       .landing-connector-card .badge {
-        min-width: 4.5rem;
+        min-width: 5.75rem;
         text-align: center;
       }
       [data-language-container] {

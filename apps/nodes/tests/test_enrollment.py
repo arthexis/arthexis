@@ -23,7 +23,6 @@ from apps.nodes.views.registration.handlers import submit_enrollment_public_key
 
 
 @pytest.mark.django_db
-@pytest.mark.critical
 def test_submit_enrollment_public_key_accepts_valid_token():
     site = Site.objects.create(domain="mesh.example.com", name="Mesh")
     node = Node.objects.create(
@@ -98,7 +97,7 @@ def test_admin_actions_emit_enrollment_transitions():
 
 
 @pytest.mark.django_db
-def test_rotate_mesh_key_revokes_existing_key_and_reissues_token():
+def test_rotate_mesh_key_revokes_existing_bootstrap_key_and_reissues_token():
     user = get_user_model().objects.create_superuser(
         username="mesh-rotate-admin",
         email="mesh-rotate-admin@example.com",
@@ -111,7 +110,14 @@ def test_rotate_mesh_key_revokes_existing_key_and_reissues_token():
         port=8888,
         public_endpoint="node-rotate",
     )
-    active_key = NodeKeyMaterial.objects.create(node=node, public_key="ssh-rsa test", revoked=False)
+    active_key = NodeKeyMaterial.objects.create(
+        node=node,
+        key_type=NodeKeyMaterial.KeyType.RSA_BOOTSTRAP,
+        key_state=NodeKeyMaterial.KeyState.ACTIVE,
+        public_key="ssh-rsa test",
+        key_version=1,
+        revoked=False,
+    )
     admin = _DummyAdmin()
     request = RequestFactory().post("/admin/")
     request.user = user
@@ -171,7 +177,6 @@ def test_submit_enrollment_public_key_rejects_missing_site_for_scoped_token():
 
 
 @pytest.mark.django_db
-@pytest.mark.critical
 def test_submit_enrollment_public_key_rejects_duplicate_submission_regression():
     """Regression: repeated token submissions should be idempotent after first success."""
 

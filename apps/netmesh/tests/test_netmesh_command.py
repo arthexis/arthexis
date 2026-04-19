@@ -9,7 +9,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.utils import timezone
 
-from apps.netmesh.models import NodeEndpoint, NodeKeyMaterial, PeerPolicy
+from apps.netmesh.models import NodeKeyMaterial, PeerPolicy
 from apps.nodes.models import Node, NodeEnrollmentEvent
 
 
@@ -24,22 +24,6 @@ def test_netmesh_enroll_token_emits_json_payload():
     assert payload["node_id"] == node.id
     assert payload["token"].startswith("nmt1_")
     assert payload["scope"] == "mesh:read"
-
-
-@pytest.mark.django_db
-def test_netmesh_cleanup_endpoints_deletes_stale_rows():
-    node = Node.objects.create(hostname="mesh-cleanup")
-    stale = NodeEndpoint.objects.create(node=node, endpoint="wss://stale.example")
-    stale.last_seen = timezone.now() - timedelta(hours=72)
-    stale.save(update_fields=["last_seen"])
-    NodeEndpoint.objects.create(node=node, endpoint="wss://fresh.example", last_seen=timezone.now())
-    stream = StringIO()
-
-    call_command("netmesh", "cleanup-endpoints", "--stale-hours", "24", stdout=stream)
-
-    payload = json.loads(stream.getvalue())
-    assert stale.id in payload["stale_endpoint_ids"]
-    assert not NodeEndpoint.objects.filter(id=stale.id).exists()
 
 
 @pytest.mark.django_db

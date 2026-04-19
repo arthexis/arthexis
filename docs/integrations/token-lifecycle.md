@@ -1,6 +1,6 @@
 # Canonical API enrollment token lifecycle
 
-Arthexis API consumers that use enrollment bearer tokens (Netmesh HTTP endpoints and node-network OCPP control actions) follow one canonical lifecycle.
+Arthexis API consumers that use enrollment bearer tokens (Netmesh peer policy endpoints and node-network OCPP control actions) follow one canonical lifecycle.
 
 ## 1) Issuance path
 
@@ -22,8 +22,8 @@ Arthexis API consumers that use enrollment bearer tokens (Netmesh HTTP endpoints
   - expiry,
   - status and revocation timestamps.
 - Required scope per endpoint family:
-  - `mesh:read` for Netmesh discovery/read APIs (`/api/netmesh/...`),
-- `ocpp:control` for OCPP-adjacent control actions (`/nodes/network/chargers/action/`) when bearer auth is used.
+  - `mesh:read` for Netmesh peer policy APIs (`/api/netmesh/...`),
+  - `ocpp:control` for OCPP-adjacent control actions (`/nodes/network/chargers/action/`) when bearer auth is used.
 
 ## 3) Refresh/rotation strategy
 

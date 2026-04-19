@@ -36,7 +36,7 @@
             <span class="visually-hidden">{% trans "Toggle navigation" %}</span>
           </button>
           <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav module-pill-nav me-auto mb-2 mb-lg-0">
+            <ul class="navbar-nav navbar-nav-wrap me-auto mb-2 mb-lg-0">
               {% if nav_modules %}
                 {% for module in nav_modules %}
                   {% with landings=module.enabled_landings %}
@@ -44,7 +44,7 @@
                       {% if module.enabled_landings_all_invalid %}
                         <li class="nav-item dropdown">
                           <a class="nav-link" href="#" role="button">
-                            <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
+                            {{ module.menu_label|upper }}
                             {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
                           </a>
                           <ul class="dropdown-menu">
@@ -80,7 +80,7 @@
                       {% else %}
                         <li class="nav-item">
                           <a class="nav-link" href="{{ landings.0.path }}">
-                            <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
+                            {{ module.menu_label|upper }}
                             {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
                             {% include "pages/_agent_notes.html" with notes=landings.0.agent_notes role="landing" %}
                           </a>
@@ -89,7 +89,7 @@
                     {% else %}
                       <li class="nav-item dropdown">
                         <a class="nav-link" href="#" role="button">
-                          <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
+                          {{ module.menu_label|upper }}
                           {% include "pages/_agent_notes.html" with notes=module.agent_notes role="module" %}
                         </a>
                         <ul class="dropdown-menu">
@@ -129,7 +129,8 @@
               {% if header_references %}
                 <li class="nav-item dropdown">
                   <a class="nav-link" href="#" role="button">
-                    <span class="badge rounded-pill text-bg-secondary">CONSOLES</span>
+                    {% trans "Consoles" as consoles_label %}
+                    {{ consoles_label|upper }}
                   </a>
                   <ul class="dropdown-menu">
                     {% for reference in header_references %}
@@ -160,15 +161,6 @@
                 </svg>
                 <span class="visually-hidden">{% trans "Light Mode" %}</span>
               </button>
-              <form action="{% url 'set_language' %}" method="post" class="d-inline me-2">
-                {% csrf_token %}
-                <input name="next" type="hidden" value="{{ request.get_full_path }}">
-                <select name="language" class="form-select form-select-sm d-inline w-auto language-select">
-                  {% for lang_code, lang_name in LANGUAGES %}
-                    <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>{{ lang_code|slice:":2"|upper }}</option>
-                  {% endfor %}
-                </select>
-              </form>
               <a class="btn btn-sm btn-outline-light position-relative user-info-trigger" href="{% if request.user.is_staff %}{% url 'admin:index' %}{% elif request.user.is_authenticated %}#{% else %}{{ login_url }}{% endif %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-person"></use>
@@ -188,12 +180,14 @@
                 </div>
                 {% endif %}
               </a>
+              {% if quick_web_share_enabled %}
               <button id="share-button" class="btn btn-sm btn-outline-light ms-2" type="button">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-share"></use>
                 </svg>
                 <span class="visually-hidden">{% trans "Share" %}</span>
               </button>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -212,6 +206,7 @@
     </div>
     {% include "pages/includes/public_chat_widget.html" %}
     {% include "pages/includes/public_feedback_widget.html" %}
+    {% if quick_web_share_enabled %}
     <div class="modal fade" id="shareModal" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -266,6 +261,7 @@
         </div>
       </div>
     </div>
+    {% endif %}
     {% url 'pages:footer-fragment' as footer_fragment_url %}
     {% if not hide_default_footer and footer_fragment_url %}
       <div
@@ -310,7 +306,6 @@
     {% include "core/version_check.html" %}
     {% endif %}
 
-    {% include_if_exists "shortcuts/includes/client_shortcuts_setup.html" %}
 
     {% block extra_scripts %}{% endblock %}
   </body>

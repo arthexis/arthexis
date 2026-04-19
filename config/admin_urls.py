@@ -43,8 +43,3 @@ def admin_route(route_suffix: str = "") -> str:
     prefix = normalize_admin_url_path(settings.ADMIN_URL_PATH)
     return f"{prefix}{suffix}"
 
-
-def admin_mount_path() -> str:
-    """Return the configured admin URL mount with a leading slash."""
-
-    return f"/{normalize_admin_url_path(settings.ADMIN_URL_PATH)}"

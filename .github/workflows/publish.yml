@@ -5,6 +5,10 @@ on:
     tags:
       - "v*"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -48,21 +52,27 @@ jobs:
       - name: Install suite from repository
         run: |
           ./install.sh --no-start
+      - name: Refresh environment dependencies
+        run: |
+          ./env-refresh.sh
       - name: Validate migrations
         run: |
+          ./scripts/preflight-env.sh
           source .venv/bin/activate
           python scripts/check_migration_conflicts.py
           python manage.py migrations check
           python manage.py migrate --noinput --database default
       - name: Install CI dependencies
         run: |
+          ./scripts/preflight-env.sh
           source .venv/bin/activate
           python -m pip install --only-binary=:all: -r requirements-ci.txt
       - name: Run tests
         run: |
           set -o pipefail
+          ./scripts/preflight-env.sh --pytest
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
+          python -m pytest --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v7
@@ -80,18 +90,147 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Validate release tag matches package version
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import tomllib
+
+          root = Path(".")
+          ref_name = os.environ["GITHUB_REF_NAME"].strip()
+          tag_version = ref_name[1:] if ref_name.startswith("v") else ref_name
+
+          version_path = root / "VERSION"
+          expected_version = version_path.read_text(encoding="utf-8").strip()
+
+          pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+          dynamic_version_files = (
+              pyproject.get("tool", {})
+              .get("setuptools", {})
+              .get("dynamic", {})
+              .get("version", {})
+              .get("file", [])
+          )
+          if isinstance(dynamic_version_files, str):
+              dynamic_version_files = [dynamic_version_files]
+
+          if dynamic_version_files:
+              dynamic_path = root / dynamic_version_files[0]
+              dynamic_version = dynamic_path.read_text(encoding="utf-8").strip()
+              if dynamic_version != expected_version:
+                  raise SystemExit(
+                      "Release publish blocked: VERSION and setuptools dynamic version file differ. "
+                      f"VERSION={expected_version!r}; {dynamic_path}={dynamic_version!r}."
+                  )
+
+          if tag_version != expected_version:
+              raise SystemExit(
+                  "Release publish blocked: tag and package version differ. "
+                  f"Tag {ref_name!r} resolves to {tag_version!r}, but VERSION is {expected_version!r}. "
+                  "Update VERSION (and dynamic version source) or retag before publishing."
+              )
+
+          print(f"Version gate passed: tag {ref_name!r} matches package version {expected_version!r}.")
+          PY
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
+      - name: Preflight PyPI version availability
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.error import HTTPError, URLError
+          from urllib.request import urlopen
+
+          package_name = "arthexis"
+          package_version = Path("VERSION").read_text(encoding="utf-8").strip()
+          pypi_url = f"https://pypi.org/pypi/{package_name}/json"
+
+          try:
+              with urlopen(pypi_url, timeout=15) as response:
+                  payload = json.load(response)
+          except HTTPError as exc:
+              if exc.code == 404:
+                  payload = {"releases": {}}
+              else:
+                  raise SystemExit(
+                      "Release publish blocked: unable to verify existing PyPI versions "
+                      f"(HTTP {exc.code} from {pypi_url}). "
+                      "Check Arthexis release UI/headless logs, then rerun intentionally."
+                  ) from exc
+          except URLError as exc:
+              raise SystemExit(
+                  "Release publish blocked: network failure while checking PyPI for an existing release "
+                  f"({exc.reason}). Check Arthexis release UI/headless logs, then rerun intentionally."
+              ) from exc
+
+          releases = payload.get("releases", {})
+          if package_version in releases:
+              raise SystemExit(
+                  f"Release publish blocked: {package_name} {package_version} is already available on PyPI. "
+                  "Use a new VERSION/tag before publishing again, and confirm the rerun intent in "
+                  "Arthexis release UI/headless logs for traceability."
+              )
+
+          print(
+              f"Preflight passed: {package_name} {package_version} is not yet published on PyPI; "
+              "continuing with build and publish workflow."
+          )
+          PY
+
       - name: Install build backend
         run: |
           python -m pip install --upgrade pip
-          python -m pip install build
+          python -m pip install build twine
 
       - name: Build sdist and wheel
-        run: python -m build
+        run: |
+          mkdir -p validation-logs
+          set -o pipefail
+          python -m build 2>&1 | tee validation-logs/build.log
+
+      - name: Validate package metadata
+        run: |
+          mkdir -p validation-logs
+          set -o pipefail
+          python -m twine check dist/* 2>&1 | tee validation-logs/twine-check.log
+
+      - name: Smoke install from built artifacts
+        run: |
+          mkdir -p validation-logs
+          python -m venv .smoke-venv
+          source .smoke-venv/bin/activate
+          set -o pipefail
+          python -m pip install --upgrade pip 2>&1 | tee validation-logs/smoke-pip-upgrade.log
+          python -m pip install --no-index --find-links dist --no-deps arthexis 2>&1 | tee validation-logs/smoke-install.log
+          python - <<'PY' 2>&1 | tee validation-logs/smoke-import.log
+          import importlib.metadata
+          import arthexis
+
+          package_version = importlib.metadata.version("arthexis")
+          module_version = getattr(arthexis, "__version__", None)
+          print(f"Installed package version: {package_version}")
+          print(f"arthexis.__version__: {module_version}")
+          if module_version is None:
+              raise SystemExit("arthexis.__version__ is missing")
+          if module_version != package_version:
+              raise SystemExit(
+                  f"Version mismatch between module ({module_version}) and metadata ({package_version})"
+              )
+          PY
+
+      - name: Upload validation logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: arthexis-validation-logs
+          path: validation-logs/
+          if-no-files-found: warn
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v7

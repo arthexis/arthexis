@@ -54,6 +54,24 @@
       <a href="{{ rfid_write_url }}" class="historylink">{% trans "Write RFID login data" %}</a>
     </li>
   {% endif %}
+  {% if impersonate_url %}
+    <li>
+      <form action="{{ impersonate_url }}" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="historylink">{% trans "Impersonate user" %}</button>
+      </form>
+    </li>
+  {% endif %}
+  {% if stop_impersonation_url %}
+    <li>
+      <form action="{{ stop_impersonation_url }}" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="historylink">{% trans "Stop impersonation" %}</button>
+      </form>
+    </li>
+  {% endif %}
 {% endblock %}
 
 {% block extrajs %}

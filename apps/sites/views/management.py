@@ -15,6 +15,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import LoginView
+from django.contrib.staticfiles.storage import staticfiles_storage
 from django.contrib.sites.models import Site
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
@@ -40,7 +41,7 @@ from django.utils.http import (
 from django.utils.text import slugify
 from django.utils.translation import gettext as _
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from webauthn.helpers.exceptions import (
     InvalidAuthenticationResponse,
@@ -62,6 +63,7 @@ from apps.users.passkeys import (
 from config.request_utils import is_https_request
 
 from ..forms import AuthenticatorLoginForm
+from ..session_keys import REGISTRATION_USERNAME_PREFILL_SESSION_KEY
 from ..utils import get_original_referer
 from utils.sites import get_site
 
@@ -421,6 +423,7 @@ class CustomLoginView(LoginView):
 
     template_name = "pages/login.html"
     form_class = AuthenticatorLoginForm
+    registration_username_session_key = REGISTRATION_USERNAME_PREFILL_SESSION_KEY
 
     def dispatch(self, request, *args, **kwargs):
         allow_check = request.user.is_authenticated and (
@@ -442,9 +445,27 @@ class CustomLoginView(LoginView):
         return form
 
     def get_initial(self):
+        """Prefill username, consuming registration session prefill on GET only.
+
+        Query params take priority (`registration_username`, then `username`), and
+        the one-time session prefill is consumed only for non-check GET requests.
+        """
+
         initial = super().get_initial()
         if getattr(self, "_login_check_mode", False):
             initial.setdefault("username", self.request.user.get_username())
+            return initial
+
+        username_prefill = str(
+            self.request.GET.get("registration_username", "")
+            or self.request.GET.get("username", "")
+        ).strip()
+        if not username_prefill and self.request.method == "GET":
+            username_prefill = str(
+                self.request.session.pop(self.registration_username_session_key, "") or ""
+            ).strip()
+        if username_prefill:
+            initial.setdefault("username", username_prefill)
         return initial
 
     def get_context_data(self, **kwargs):
@@ -888,6 +909,14 @@ def _render_admin_template(
             context=signal_context,
         )
     return response
+
+
+@never_cache
+@require_GET
+def admin_service_worker(request):
+    service_worker_url = staticfiles_storage.url("pages/js/admin-sw.js")
+    script = f'importScripts("{service_worker_url}" + self.location.search);'
+    return HttpResponse(script, content_type="application/javascript")
 
 
 @staff_member_required

@@ -121,18 +121,21 @@ class Term(models.Model):
         return self.title
 
     def save(self, *args, **kwargs):
-        is_new = self.pk is None
         super().save(*args, **kwargs)
-        if is_new and not self.reference_id and self.slug:
-            self.reference = Reference.objects.create(
+        if self.slug:
+            from apps.links.services import attach_reference
+
+            attachment = attach_reference(
+                self,
                 alt_text=self.title,
                 value=self.get_absolute_url(),
+                slot="term",
+                primary=True,
+                method="link",
             )
-            type(self).objects.filter(pk=self.pk).update(reference=self.reference)
-        elif self.reference_id and self.slug:
-            desired_value = self.get_absolute_url()
-            if self.reference.value != desired_value:
-                Reference.objects.filter(pk=self.reference_id).update(value=desired_value)
+            if self.reference_id != attachment.reference_id:
+                type(self).objects.filter(pk=self.pk).update(reference=attachment.reference)
+                self.reference = attachment.reference
 
     def clean(self):
         super().clean()

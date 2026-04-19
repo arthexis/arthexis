@@ -19,7 +19,10 @@
       {% endfor %}
     </ul>
   {% else %}
-    <p class="help">{% trans "No active security alerts." %}</p>
+    <p class="help">
+      {% trans "No active security alerts." %}
+      <a href="{{ dashboard_rules_report_url }}">{% trans "View passed and unmet rules" %}</a>
+    </p>
   {% endif %}
 </div>
 <style>

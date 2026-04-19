@@ -77,7 +77,7 @@
       <h1>{{ title }}</h1>
       <p>
         {% blocktranslate %}
-          Use this wizard to create or update an Evergo contractor, validate portal access, and optionally perform the first full customer import.
+          Use this wizard to create or update your Evergo contractor, validate portal access, and optionally load all customers or specific order numbers.
         {% endblocktranslate %}
       </p>
     </div>
@@ -103,13 +103,23 @@
             {% endif %}
           </li>
           <li>
-            <strong>{% translate "Initial customer load" %}:</strong>
+            <strong>{% translate "Customer load" %}:</strong>
             {% if setup_results.loaded %}
               {{ setup_results.loaded.message }}
             {% else %}
               {% translate "Skipped." %}
             {% endif %}
           </li>
+          {% if setup_results.admin_messages %}
+            <li>
+              <strong>{% translate "Admin Messages" %}:</strong>
+              <ul>
+                {% for entry in setup_results.admin_messages %}
+                  <li><strong>{{ entry.status }}:</strong> {{ entry.message }}</li>
+                {% endfor %}
+              </ul>
+            </li>
+          {% endif %}
         </ul>
         {% if setup_results.loaded.summary and setup_results.loaded.summary.unresolved %}
           <p>
@@ -122,13 +132,16 @@
 
     <form method="post" novalidate>
       {% csrf_token %}
+      {% for hidden in form.hidden_fields %}
+        {{ hidden }}
+      {% endfor %}
       <fieldset class="module aligned">
         {% if form.non_field_errors %}
           <div class="form-row errors">
             {{ form.non_field_errors }}
           </div>
         {% endif %}
-        {% for field in form %}
+        {% for field in form.visible_fields %}
           <div class="form-row{% if field.errors %} errors{% endif %}">
             {{ field.errors }}
             {{ field.label_tag }}

@@ -6,7 +6,6 @@ from datetime import timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
 from django.test import RequestFactory
 from django.utils import timezone
@@ -56,6 +55,7 @@ def test_build_security_alerts_isolates_collector_failures(monkeypatch) -> None:
     assert alerts == []
     persisted_event = SecurityAlertEvent.objects.get(key="security-alert-source-error-events")
     assert persisted_event.occurrence_count == 1
+
 
 def test_record_occurrence_keeps_last_occurred_at_monotonic() -> None:
     """Older occurrences should not move last_occurred_at backwards."""
@@ -125,6 +125,7 @@ def test_build_security_alerts_clears_collector_failure_on_success(monkeypatch) 
     persisted_event = SecurityAlertEvent.objects.get(key="security-alert-source-error-events")
     assert persisted_event.is_active is False
 
+
 def test_error_event_security_alerts_surface_last_seen_and_count() -> None:
     """Recorded event alerts should expose summary with timestamp and occurrence count."""
 
@@ -149,3 +150,34 @@ def test_error_event_security_alerts_surface_last_seen_and_count() -> None:
     assert len(alerts) == 1
     assert alerts[0].message == "Email worker failed."
     assert "Count: 2" in alerts[0].summary
+
+
+def test_security_alerts_widget_exposes_dashboard_rules_report_url() -> None:
+    widget_context = ops_widgets.security_alerts_widget()
+
+    assert widget_context["dashboard_rules_report_url"] == "/admin/system/dashboard-rules-report/"
+
+
+def test_security_alerts_empty_state_links_to_dashboard_rules_report() -> None:
+    html = render_to_string(
+        "widgets/security_alerts.html",
+        {"alerts": [], "dashboard_rules_report_url": "/admin/system/dashboard-rules-report/"},
+    )
+
+    assert "No active security alerts." in html
+    assert 'href="/admin/system/dashboard-rules-report/"' in html
+    assert "View passed and unmet rules" in html
+
+
+def test_security_alerts_widget_priority_is_topmost() -> None:
+    sync_registered_widgets()
+    request = RequestFactory().get("/admin/")
+    request.user = get_user_model().objects.create_user(
+        username="widget-priority-admin",
+        password="password",
+        is_staff=True,
+    )
+
+    rendered_widgets = render_zone_widgets(request=request, zone_slug=WidgetZone.ZONE_SIDEBAR)
+
+    assert rendered_widgets[0].widget.slug == "security-alerts"

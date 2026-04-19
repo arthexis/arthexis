@@ -4,8 +4,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-import requests
 from django.conf import settings
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from apps.ocpp.models import InstalledCertificate
 from apps.ocpp.payload_types import CertificateHashData, OCSPResultPayload
@@ -209,39 +211,52 @@ def _request_with_retry(
         max_retries = 0
 
     method_name = method.strip().lower()
-    last_error = "No response."
-    attempts = max_retries + 1
+    if method_name not in {"get", "post"}:
+        return {}, f"Unsupported method '{method_name}'."
 
-    for _ in range(attempts):
-        try:
-            if method_name == "post":
-                response = requests.post(url, json=payload, timeout=timeout_seconds)
-            elif method_name == "get":
-                response = requests.get(url, params=payload, timeout=timeout_seconds)
-            else:
-                return {}, f"Unsupported method '{method_name}'."
-        except requests.Timeout:
-            last_error = "Request timed out."
-            continue
-        except requests.RequestException as exc:
-            last_error = str(exc) or "Responder request failed."
-            continue
+    retry_policy = Retry(
+        total=max_retries,
+        connect=max_retries,
+        read=max_retries,
+        status=max_retries,
+        allowed_methods={"GET", "POST"},
+        backoff_factor=0.1,
+        status_forcelist=tuple(range(400, 600)),
+        raise_on_status=False,
+        respect_retry_after_header=True,
+    )
+    session = requests.Session()
+    adapter = HTTPAdapter(max_retries=retry_policy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
 
-        try:
-            data = response.json()
-        except ValueError:
-            return {}, "Responder returned invalid JSON."
+    request_kwargs: dict[str, Any] = {"timeout": timeout_seconds}
+    if method_name == "post":
+        request_kwargs["json"] = payload
+    else:
+        request_kwargs["params"] = payload
 
-        if response.status_code >= 400:
-            error_detail = data.get("error") if isinstance(data, dict) else ""
-            last_error = str(error_detail).strip() or f"HTTP {response.status_code}"
-            continue
+    try:
+        response = session.request(method_name, url, **request_kwargs)
+    except requests.Timeout:
+        return {}, "Request timed out."
+    except requests.RequestException as exc:
+        return {}, str(exc) or "Responder request failed."
+    finally:
+        session.close()
 
-        if isinstance(data, dict):
-            return data, ""
-        return {}, "Responder returned invalid payload."
+    try:
+        data = response.json()
+    except ValueError:
+        return {}, "Responder returned invalid JSON."
 
-    return {}, last_error
+    if response.status_code >= 400:
+        error_detail = data.get("error") if isinstance(data, dict) else ""
+        return {}, str(error_detail).strip() or f"HTTP {response.status_code}"
+
+    if isinstance(data, dict):
+        return data, ""
+    return {}, "Responder returned invalid payload."
 
 
 def _structured_ocsp_result(

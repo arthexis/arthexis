@@ -6,9 +6,9 @@ from datetime import datetime, time, timedelta
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Prefetch, Q
-from django.db.models.functions import Coalesce
-from django.utils.html import format_html
+from django.db.models import CharField, Prefetch, Q, Value
+from django.db.models.functions import Coalesce, NullIf
+from django.utils.html import format_html, format_html_join
 from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
@@ -22,6 +22,8 @@ from apps.core.admin.mixins import _build_credentials_actions
 from .exceptions import EvergoAPIError
 from .forms import EvergoContractorLoginWizardForm, EvergoLoadCustomersForm, EvergoUserAdminForm
 from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
+
+LOADED_ENTITIES_LINK_ID_LIMIT = 100
 
 
 def _parse_selected_ids_query_param(request) -> list[int]:
@@ -41,7 +43,53 @@ def _parse_selected_ids_query_param(request) -> list[int]:
 
 def _initialize_contract_login_results(saved_contractor):
     """Return the default result payload shown after wizard validation attempts."""
-    return {"contractor": saved_contractor, "validated": None, "loaded": None}
+    return {"admin_messages": [], "contractor": saved_contractor, "validated": None, "loaded": None}
+
+
+def _message_level_label(level: int) -> str:
+    """Return a stable status label for Django admin message levels."""
+    if level >= messages.ERROR:
+        return "error"
+    if level >= messages.WARNING:
+        return "warning"
+    if level >= messages.SUCCESS:
+        return "success"
+    if level >= messages.INFO:
+        return "info"
+    return "debug"
+
+
+def _message_user_with_feedback(admin_instance, request, setup_results, message, *, level: int):
+    """Emit a Django admin message and mirror it into setup feedback data when available."""
+    admin_instance.message_user(request, message, level=level)
+    if setup_results is None:
+        return
+    setup_results["admin_messages"].append(
+        {
+            "message": message,
+            "status": _message_level_label(level),
+        }
+    )
+
+
+def _build_loaded_entities_links(summary: dict[str, list[int]]) -> str:
+    """Build customer/order changelist links for the imported entities."""
+    customer_ids = [str(value) for value in summary.get("loaded_customer_ids", [])[:LOADED_ENTITIES_LINK_ID_LIMIT]]
+    order_ids = [str(value) for value in summary.get("loaded_order_ids", [])[:LOADED_ENTITIES_LINK_ID_LIMIT]]
+    links: list[tuple[str, str]] = []
+    if customer_ids:
+        customers_url = reverse("admin:evergo_evergocustomer_changelist")
+        links.append((f"{customers_url}?id__in={','.join(customer_ids)}", _("Customers")))
+    if order_ids:
+        orders_url = reverse("admin:evergo_evergoorder_changelist")
+        links.append((f"{orders_url}?id__in={','.join(order_ids)}", _("Orders")))
+    if not links:
+        return ""
+    return format_html(
+        "{} {}",
+        _("View loaded items:"),
+        format_html_join(" | ", '<a href="{}">{}</a>', links),
+    )
 
 
 def _run_contract_login_validation(admin_instance, request, form, contractor, *, show_setup_results: bool):
@@ -54,45 +102,73 @@ def _run_contract_login_validation(admin_instance, request, form, contractor, *,
     success_message = _(
         "Evergo login succeeded for %(contractor)s (status %(status)s)."
     ) % {"contractor": str(contractor), "status": login_result.response_code}
-    admin_instance.message_user(request, success_message, level=messages.SUCCESS)
+    _message_user_with_feedback(
+        admin_instance,
+        request,
+        setup_results,
+        success_message,
+        level=messages.SUCCESS,
+    )
     if setup_results is not None:
         setup_results["validated"] = {"ok": True, "message": success_message}
 
-    if not form.cleaned_data.get("load_all_customers"):
+    order_numbers = (form.cleaned_data.get("order_numbers") or "").strip()
+    if not form.cleaned_data.get("load_all_customers") and not order_numbers:
         return setup_results
 
     try:
-        summary = contractor.load_customers_from_queries(raw_queries="")
+        summary = contractor.load_customers_from_queries(
+            raw_queries="" if form.cleaned_data.get("load_all_customers") else order_numbers
+        )
     except EvergoAPIError as exc:
-        admin_instance.message_user(
+        error_message = _("Customer load failed for %(contractor)s: %(error)s") % {
+            "contractor": str(contractor),
+            "error": exc,
+        }
+        _message_user_with_feedback(
+            admin_instance,
             request,
-            _("Initial customer load failed for %(contractor)s: %(error)s")
-            % {"contractor": str(contractor), "error": exc},
+            setup_results,
+            error_message,
             level=messages.ERROR,
         )
         if setup_results is not None:
-            setup_results["loaded"] = {"ok": False, "message": str(exc)}
+            setup_results["loaded"] = {"ok": False, "message": error_message}
         return setup_results
 
+    load_label = _("Full load completed") if form.cleaned_data.get("load_all_customers") else _("Order load completed")
     load_message = _(
-        "Initial load completed. Customers: %(customers)s | "
+        "%(label)s. Customers: %(customers)s | "
         "Orders created: %(created)s | Orders updated: %(updated)s | "
         "Placeholders: %(placeholders)s"
     ) % {
+        "label": load_label,
         "customers": summary["customers_loaded"],
         "created": summary["orders_created"],
         "updated": summary["orders_updated"],
         "placeholders": summary["placeholders_created"],
     }
-    admin_instance.message_user(request, load_message, level=messages.SUCCESS)
+    loaded_entities_links = _build_loaded_entities_links(summary)
+    load_message_with_links = format_html("{} {}", load_message, loaded_entities_links) if loaded_entities_links else load_message
+    _message_user_with_feedback(
+        admin_instance,
+        request,
+        setup_results,
+        load_message_with_links,
+        level=messages.SUCCESS,
+    )
     if setup_results is not None:
-        setup_results["loaded"] = {"ok": True, "message": load_message, "summary": summary}
+        setup_results["loaded"] = {"ok": True, "message": load_message_with_links, "summary": summary}
     return setup_results
 
 
 def _save_contractor_and_maybe_validate(admin_instance, request, form, profile):
     """Persist wizard changes and rollback validation failures for both create and update flows."""
-    show_setup_results = form.cleaned_data.get("validate_credentials") or form.cleaned_data.get("load_all_customers")
+    show_setup_results = (
+        form.cleaned_data.get("validate_credentials")
+        or form.cleaned_data.get("load_all_customers")
+        or bool((form.cleaned_data.get("order_numbers") or "").strip())
+    )
 
     try:
         with transaction.atomic():
@@ -111,16 +187,20 @@ def _save_contractor_and_maybe_validate(admin_instance, request, form, profile):
         else:
             contractor.pk = None
             contractor._state.adding = True
-        admin_instance.message_user(
+        setup_results = _initialize_contract_login_results(contractor) if show_setup_results else None
+        if setup_results is not None:
+            setup_results["validated"] = {"ok": False, "message": str(exc)}
+        error_message = _("Evergo validation failed for %(contractor)s: %(error)s") % {
+            "contractor": str(contractor),
+            "error": exc,
+        }
+        _message_user_with_feedback(
+            admin_instance,
             request,
-            _("Evergo validation failed for %(contractor)s: %(error)s")
-            % {"contractor": str(contractor), "error": exc},
+            setup_results,
+            error_message,
             level=messages.ERROR,
         )
-        setup_results = None
-        if show_setup_results:
-            setup_results = _initialize_contract_login_results(contractor)
-            setup_results["validated"] = {"ok": False, "message": str(exc)}
         return contractor, setup_results
 
     return contractor, setup_results
@@ -971,7 +1051,11 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     def get_queryset(self, request):
         """Limit customer rows to the signed-in owner unless user is superuser."""
         queryset = super().get_queryset(request).annotate(
-            brand_sort_value=Coalesce("latest_order__site_name", "raw_payload__orden_instalacion__marca_cargador")
+            brand_sort_value=Coalesce(
+                NullIf("latest_order__site_name", Value("")),
+                "raw_payload__orden_instalacion__marca_cargador__text",
+                output_field=CharField(),
+            )
         )
         selected_ids = _parse_selected_ids_query_param(request)
         if selected_ids:
@@ -979,6 +1063,10 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
         if request.user.is_superuser:
             return queryset
         return queryset.filter(user__user=request.user)
+
+    def has_add_permission(self, request):
+        """Disallow manual admin creation; customers are synchronized from Evergo."""
+        return False
 
     def get_urls(self):
         """Register custom admin routes for Evergo customer tools."""
