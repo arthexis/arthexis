@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import errno
+import subprocess
 from pathlib import Path
 
 import manage
@@ -103,3 +104,51 @@ def test_main_does_not_check_service_mode_outside_runserver(
     )
 
     manage.main(["check"])
+
+
+def test_run_env_refresh_runs_latest_database_refresh(
+    monkeypatch, tmp_path: Path
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return None
+
+    monkeypatch.setattr(manage.subprocess, "run", fake_run)
+
+    manage._run_env_refresh(tmp_path)
+
+    assert captured["command"] == [
+        manage.sys.executable,
+        str(tmp_path / "env-refresh.py"),
+        "--latest",
+        "database",
+    ]
+    kwargs = captured["kwargs"]
+    assert kwargs["check"] is True
+    assert kwargs["cwd"] == tmp_path
+    assert kwargs["env"]["DJANGO_SETTINGS_MODULE"] == "config.settings"
+
+
+def test_run_env_refresh_exits_with_context_when_refresh_fails(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    command = [manage.sys.executable, str(tmp_path / "env-refresh.py"), "--latest"]
+
+    def fake_run(*_args, **_kwargs):
+        raise subprocess.CalledProcessError(1, command)
+
+    monkeypatch.setattr(manage.subprocess, "run", fake_run)
+
+    try:
+        manage._run_env_refresh(tmp_path)
+    except SystemExit as exc:
+        assert exc.code == 1
+    else:  # pragma: no cover - defensive
+        raise AssertionError("Expected SystemExit")
+
+    captured = capsys.readouterr()
+    assert "Environment refresh failed before runserver startup." in captured.err
+    assert "Re-run manually for full details:" in captured.err
