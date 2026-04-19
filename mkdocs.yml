@@ -8,6 +8,7 @@ nav:
       - Install & Lifecycle Scripts Manual: development/install-lifecycle-scripts-manual.md
       - Good Command: operations/good-command.md
       - Operational Commands: operations/operational-commands.md
+      - Loki + Promtail Integration: operations/logging-loki-promtail.md
       - Reinstall + Data Import Runbook: operations/reinstall-data-import-runbook.md
   - Integrations:
       - Integration Onboarding Tracks: integrations/onboarding-tracks.md
