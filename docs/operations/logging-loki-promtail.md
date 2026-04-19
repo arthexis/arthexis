@@ -22,6 +22,14 @@ Reference configs are provided in:
 
 Promtail should read from the same `ARTHEXIS_LOG_DIR` used by Arthexis processes.
 
+When starting Promtail with the provided config, export the expected environment and enable env expansion:
+
+```bash
+export ARTHEXIS_LOG_DIR=/var/log/arthexis
+export ARTHEXIS_LOKI_URL=http://localhost:3100
+promtail -config.file="$ARTHEXIS_PROMTAIL_CONFIG" -config.expand-env=true
+```
+
 ## 3) Configure Arthexis integration URLs
 
 Set these for admin hand-off links and integration status in Log Viewer:

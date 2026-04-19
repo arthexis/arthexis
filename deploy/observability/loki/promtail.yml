@@ -6,7 +6,7 @@ positions:
   filename: /var/lib/promtail/positions.yaml
 
 clients:
-  - url: ${ARTHEXIS_LOKI_PUSH_URL:-http://localhost:3100/loki/api/v1/push}
+  - url: ${ARTHEXIS_LOKI_URL:-http://localhost:3100}/loki/api/v1/push
 
 scrape_configs:
   - job_name: arthexis-logs
@@ -18,9 +18,6 @@ scrape_configs:
           app: arthexis
           __path__: ${ARTHEXIS_LOG_DIR:-/var/log/arthexis}/*.log
     pipeline_stages:
-      - multiline:
-          firstline: '^\\d{4}-\\d{2}-\\d{2}'
-          max_wait_time: 3s
       - json:
           expressions:
             timestamp: timestamp

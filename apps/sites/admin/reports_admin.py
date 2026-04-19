@@ -1,17 +1,17 @@
 import logging
-import os
 import re
 from collections import deque
 from datetime import datetime, time, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.contrib import admin
 from django.db.models import Count
 from django.db.models.functions import TruncDate
 from django.http import FileResponse, JsonResponse
-from django.template.response import TemplateResponse
 from django.shortcuts import redirect
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -47,31 +47,44 @@ def _recommended_log_stack() -> dict[str, str]:
     }
 
 
+def _is_http_url(value: str) -> bool:
+    """Return whether ``value`` is an HTTP(S) URL."""
+
+    return urlsplit(value).scheme in {"http", "https"}
 
 
 def _observability_integration_status() -> dict[str, str | bool]:
     """Return deployment-facing status for external log aggregation wiring."""
 
-    grafana_url = os.environ.get("ARTHEXIS_GRAFANA_URL", "").strip()
-    loki_url = os.environ.get("ARTHEXIS_LOKI_URL", "").strip()
-    promtail_config = os.environ.get("ARTHEXIS_PROMTAIL_CONFIG", "").strip()
+    raw_grafana_url = getattr(settings, "ARTHEXIS_GRAFANA_URL", "")
+    raw_loki_url = getattr(settings, "ARTHEXIS_LOKI_URL", "")
+    promtail_config = getattr(settings, "ARTHEXIS_PROMTAIL_CONFIG", "")
+
+    grafana_url = raw_grafana_url if _is_http_url(raw_grafana_url) else ""
+    loki_url = raw_loki_url if _is_http_url(raw_loki_url) else ""
+    promtail_config = promtail_config.strip()
 
     configured = bool(grafana_url and loki_url and promtail_config)
     if configured:
-        status_label = _("Connected")
+        status_label = _("External aggregation fully configured")
         status_help = _(
             "Grafana, Loki, and Promtail settings are configured for this process."
         )
-    else:
-        status_label = _("Not configured")
+    elif grafana_url or loki_url or promtail_config:
+        status_label = _("External aggregation partially configured")
         status_help = _(
-            "Set ARTHEXIS_GRAFANA_URL, ARTHEXIS_LOKI_URL, and ARTHEXIS_PROMTAIL_CONFIG to activate external aggregation links."
+            "Set ARTHEXIS_GRAFANA_URL, ARTHEXIS_LOKI_URL, and ARTHEXIS_PROMTAIL_CONFIG to fully activate external aggregation features."
+        )
+    else:
+        status_label = _("External aggregation not configured")
+        status_help = _(
+            "Set ARTHEXIS_GRAFANA_URL, ARTHEXIS_LOKI_URL, and ARTHEXIS_PROMTAIL_CONFIG to fully activate external aggregation features."
         )
 
     return {
         "configured": configured,
-        "status_label": str(status_label),
-        "status_help": str(status_help),
+        "status_label": status_label,
+        "status_help": status_help,
         "grafana_url": grafana_url,
         "loki_url": loki_url,
         "promtail_config": promtail_config,

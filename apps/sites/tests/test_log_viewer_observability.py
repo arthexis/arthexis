@@ -1,10 +1,10 @@
 from apps.sites.admin.reports_admin import _observability_integration_status
 
 
-def test_observability_status_reports_not_configured(monkeypatch):
-    monkeypatch.delenv("ARTHEXIS_GRAFANA_URL", raising=False)
-    monkeypatch.delenv("ARTHEXIS_LOKI_URL", raising=False)
-    monkeypatch.delenv("ARTHEXIS_PROMTAIL_CONFIG", raising=False)
+def test_observability_status_reports_not_configured(settings):
+    settings.ARTHEXIS_GRAFANA_URL = ""
+    settings.ARTHEXIS_LOKI_URL = ""
+    settings.ARTHEXIS_PROMTAIL_CONFIG = ""
 
     status = _observability_integration_status()
 
@@ -12,12 +12,24 @@ def test_observability_status_reports_not_configured(monkeypatch):
     assert status["grafana_url"] == ""
 
 
-def test_observability_status_reports_configured(monkeypatch):
-    monkeypatch.setenv("ARTHEXIS_GRAFANA_URL", "https://grafana.example.test")
-    monkeypatch.setenv("ARTHEXIS_LOKI_URL", "https://loki.example.test")
-    monkeypatch.setenv("ARTHEXIS_PROMTAIL_CONFIG", "/etc/promtail/promtail.yml")
+def test_observability_status_reports_configured(settings):
+    settings.ARTHEXIS_GRAFANA_URL = "https://grafana.example.test"
+    settings.ARTHEXIS_LOKI_URL = "https://loki.example.test"
+    settings.ARTHEXIS_PROMTAIL_CONFIG = "/etc/promtail/promtail.yml"
 
     status = _observability_integration_status()
 
     assert status["configured"] is True
     assert status["grafana_url"] == "https://grafana.example.test"
+
+
+def test_observability_status_hides_unsafe_urls(settings):
+    settings.ARTHEXIS_GRAFANA_URL = "javascript:alert(1)"
+    settings.ARTHEXIS_LOKI_URL = "ftp://loki.example.test"
+    settings.ARTHEXIS_PROMTAIL_CONFIG = "/etc/promtail/promtail.yml"
+
+    status = _observability_integration_status()
+
+    assert status["configured"] is False
+    assert status["grafana_url"] == ""
+    assert status["loki_url"] == ""

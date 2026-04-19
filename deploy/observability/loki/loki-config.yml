@@ -34,5 +34,6 @@ limits_config:
 
 compactor:
   working_directory: /var/lib/loki/compactor
+  delete_request_store: filesystem
   compaction_interval: 10m
   retention_enabled: true
