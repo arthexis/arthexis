@@ -11,6 +11,8 @@ from typing import Iterable
 from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError, OperationalError, connections
 
+from utils.post_migrate import is_final_post_migrate_app
+
 from .models import SigilRoot
 
 
@@ -42,6 +44,10 @@ def load_fixture_sigil_roots(sender=None, **kwargs) -> None:
     """Hydrate bundled SigilRoot fixtures while tolerating missing models."""
 
     del sender
+
+    app_config = kwargs.get("app_config")
+    if app_config is not None and not is_final_post_migrate_app(app_config):
+        return
 
     global _missing_content_types_logged
 

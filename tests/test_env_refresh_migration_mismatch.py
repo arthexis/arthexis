@@ -116,3 +116,40 @@ def test_branch_tag_conflict_without_reconcile_fails_fast(
     assert "branch tag conflict" in output
     assert "Auto-reconcile fallback engaged" not in output
     assert migrate_calls == 1
+
+
+def test_resolve_content_type_natural_key_returns_none_when_missing(
+    env_refresh_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class MissingManager:
+        def get_by_natural_key(self, app_label: str, model_name: str):
+            raise env_refresh_module.ContentType.DoesNotExist
+
+    monkeypatch.setattr(env_refresh_module.ContentType, "objects", MissingManager())
+
+    assert (
+        env_refresh_module._resolve_content_type_natural_key(["gallery", "galleryimage"])
+        is None
+    )
+
+
+def test_resolve_content_type_natural_key_returns_content_type_when_present(
+    env_refresh_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sentinel = object()
+
+    class PresentManager:
+        def get_by_natural_key(self, app_label: str, model_name: str):
+            assert (app_label, model_name) == ("gallery", "galleryimage")
+            return sentinel
+
+    monkeypatch.setattr(env_refresh_module.ContentType, "objects", PresentManager())
+
+    assert (
+        env_refresh_module._resolve_content_type_natural_key(
+            {"app_label": "gallery", "model": "galleryimage"}
+        )
+        is sentinel
+    )

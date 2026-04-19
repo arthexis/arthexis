@@ -200,6 +200,26 @@ def _upsert_site_configuration(fields: dict[str, Any]) -> bool:
     return True
 
 
+def _resolve_content_type_natural_key(content_type: Any) -> ContentType | None:
+    """Return a content type for fixture data, or ``None`` when it is unavailable."""
+
+    if isinstance(content_type, (list, tuple)) and len(content_type) >= 2:
+        app_label, model_name = content_type[0], content_type[1]
+    elif isinstance(content_type, dict):
+        app_label = content_type.get("app_label")
+        model_name = content_type.get("model") or content_type.get("model_name")
+    else:
+        return None
+
+    if not app_label or not model_name:
+        return None
+
+    try:
+        return ContentType.objects.get_by_natural_key(app_label, model_name)
+    except ContentType.DoesNotExist:
+        return None
+
+
 def _schema_needs_migration() -> bool:
     """Return ``True`` when unapplied migrations exist."""
 
@@ -1066,27 +1086,18 @@ def run_database_tasks(
                         if prefix:
                             defaults = dict(fields)
                             content_type = defaults.get("content_type")
-                            if isinstance(content_type, (list, tuple)) and len(
+                            resolved_content_type = _resolve_content_type_natural_key(
                                 content_type
-                            ) >= 2:
-                                defaults["content_type"] = (
-                                    ContentType.objects.get_by_natural_key(
-                                        content_type[0],
-                                        content_type[1],
-                                    )
+                            )
+                            if content_type and resolved_content_type is None:
+                                print(
+                                    "Skipping SigilRoot "
+                                    f"'{prefix}' (content type not available yet)",
+                                    flush=True,
                                 )
-                            elif isinstance(content_type, dict):
-                                app_label = content_type.get("app_label")
-                                model_name = content_type.get("model")
-                                if not model_name:
-                                    model_name = content_type.get("model_name")
-                                if app_label and model_name:
-                                    defaults["content_type"] = (
-                                        ContentType.objects.get_by_natural_key(
-                                            app_label,
-                                            model_name,
-                                        )
-                                    )
+                                modified = True
+                                continue
+                            defaults["content_type"] = resolved_content_type
                             SigilRoot = model
                             SigilRoot.objects.update_or_create(
                                 prefix=prefix,

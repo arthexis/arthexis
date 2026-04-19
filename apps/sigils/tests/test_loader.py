@@ -5,6 +5,64 @@ from apps.sigils import loader
 from apps.sigils.models import SigilRoot
 
 
+def test_load_fixture_sigil_roots_skips_non_final_post_migrate_signal(
+    monkeypatch,
+) -> None:
+    saved_prefixes: list[str] = []
+
+    monkeypatch.setattr(loader, "is_final_post_migrate_app", lambda app_config: False)
+    monkeypatch.setattr(
+        loader,
+        "_iter_fixture_entries",
+        lambda _path: [
+            {
+                "prefix": "late",
+                "context_type": SigilRoot.Context.CONFIG,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        loader,
+        "_save_sigil_root",
+        lambda **kwargs: saved_prefixes.append(kwargs["prefix"]),
+    )
+
+    loader.load_fixture_sigil_roots(
+        sender=object(),
+        app_config=object(),
+        using="default",
+    )
+
+    assert saved_prefixes == []
+
+
+def test_load_fixture_sigil_roots_manual_call_bypasses_post_migrate_guard(
+    monkeypatch,
+) -> None:
+    saved_prefixes: list[str] = []
+
+    monkeypatch.setattr(loader, "is_final_post_migrate_app", lambda app_config: False)
+    monkeypatch.setattr(
+        loader,
+        "_iter_fixture_entries",
+        lambda _path: [
+            {
+                "prefix": "manual",
+                "context_type": SigilRoot.Context.CONFIG,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        loader,
+        "_save_sigil_root",
+        lambda **kwargs: saved_prefixes.append(kwargs["prefix"]),
+    )
+
+    loader.load_fixture_sigil_roots(using="default")
+
+    assert saved_prefixes == ["manual"]
+
+
 
 @pytest.mark.django_db
 def test_load_fixture_sigil_roots_retries_on_locked(monkeypatch, caplog):
