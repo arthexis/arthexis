@@ -14,6 +14,18 @@ def _verified_training_samples():
     return TrainingSample.objects.select_related("media_file", "tag").filter(is_verified=True)
 
 
+def _ready_fallback_classifier(classifier: ImageClassifierModel) -> ImageClassifierModel | None:
+    return (
+        ImageClassifierModel.objects.filter(
+            model_type=classifier.model_type,
+            status=ImageClassifierModel.Status.READY,
+            is_deleted=False,
+        )
+        .exclude(pk=classifier.pk)
+        .first()
+    )
+
+
 def train_classifier(
     classifier: ImageClassifierModel,
     *,
@@ -27,6 +39,16 @@ def train_classifier(
 
     backend = resolve_backend(classifier)
     was_selected = classifier.is_selected
+    fallback_classifier = None
+    if was_selected:
+        fallback_classifier = _ready_fallback_classifier(classifier)
+        if fallback_classifier is None:
+            raise ValueError(
+                "Cannot retrain the selected classifier without another ready classifier available."
+            )
+        fallback_classifier.is_selected = True
+        fallback_classifier.save()
+
     classifier.status = ImageClassifierModel.Status.TRAINING
     if was_selected:
         classifier.is_selected = False

@@ -110,14 +110,49 @@ def test_train_classifier_reselects_model_after_training(db):
         is_selected=True,
         training_parameters={"backend": "color_histogram"},
     )
+    fallback_classifier = ImageClassifierModel.objects.create(
+        slug="fallback-prototype-classifier",
+        name="Fallback Prototype Classifier",
+        version="v1",
+        status=ImageClassifierModel.Status.READY,
+        training_parameters={"backend": "color_histogram"},
+    )
     TrainingSample.objects.create(media_file=media, tag=tag, is_verified=True)
 
     training_run = train_classifier(classifier)
     classifier.refresh_from_db()
+    fallback_classifier.refresh_from_db()
 
     assert training_run.status == training_run.Status.SUCCEEDED
     assert classifier.status == ImageClassifierModel.Status.READY
     assert classifier.is_selected is True
+    assert fallback_classifier.is_selected is False
+
+
+def test_train_classifier_requires_ready_fallback_for_selected_model(db):
+    """Selected model retraining should fail without another ready classifier."""
+
+    bucket = ensure_media_bucket(slug="training-images", name="Training Images")
+    media = create_media_file(
+        bucket=bucket,
+        uploaded_file=_uploaded_image("green.jpg", (20, 220, 20)),
+    )
+    tag = ClassificationTag.objects.create(slug="green-pattern", name="Green Pattern")
+    classifier = ImageClassifierModel.objects.create(
+        slug="selected-without-fallback",
+        name="Selected Without Fallback",
+        version="v1",
+        status=ImageClassifierModel.Status.READY,
+        is_selected=True,
+        training_parameters={"backend": "color_histogram"},
+    )
+    TrainingSample.objects.create(media_file=media, tag=tag, is_verified=True)
+
+    try:
+        train_classifier(classifier)
+        raise AssertionError("Expected selected classifier retraining without fallback to fail.")
+    except ValueError as exc:
+        assert "another ready classifier" in str(exc)
 
 
 def test_capture_stream_to_media_file_creates_camera_media(db):
