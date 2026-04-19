@@ -29,9 +29,17 @@ class Command(BaseCommand):
             raise CommandError("No active MJPEG streams matched the request.")
 
         classified_streams = 0
+        failed_streams = 0
         prediction_records = 0
         for stream in streams:
-            _media_file, records = classify_stream(stream, classifier=classifier)
+            try:
+                _media_file, records = classify_stream(stream, classifier=classifier)
+            except Exception as exc:
+                failed_streams += 1
+                self.stderr.write(
+                    self.style.WARNING(f"{stream.slug}: classification failed ({exc}).")
+                )
+                continue
             if not records:
                 continue
             classified_streams += 1
@@ -45,7 +53,8 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 f"Completed camera classification for {classified_streams} stream(s); "
-                f"created {prediction_records} record(s)."
+                f"created {prediction_records} record(s); "
+                f"failed {failed_streams} stream(s)."
             )
         )
 
@@ -68,4 +77,3 @@ class Command(BaseCommand):
         if stream is None:
             stream = queryset.filter(slug=value).first()
         return [stream] if stream else []
-

@@ -26,8 +26,13 @@ def train_classifier(
         raise ValueError("No verified training samples are available.")
 
     backend = resolve_backend(classifier)
+    was_selected = classifier.is_selected
     classifier.status = ImageClassifierModel.Status.TRAINING
-    classifier.save(update_fields=["status"])
+    if was_selected:
+        classifier.is_selected = False
+        classifier.save(update_fields=["is_selected", "status"])
+    else:
+        classifier.save(update_fields=["status"])
 
     training_run = TrainingRun.objects.create(
         classifier=classifier,
@@ -56,16 +61,18 @@ def train_classifier(
         "backend": artifact.backend,
     }
     classifier.status = ImageClassifierModel.Status.READY
+    classifier.is_selected = was_selected
     classifier.trained_at = trained_at
-    classifier.save(
-        update_fields=[
-            "storage_uri",
-            "metrics",
-            "training_parameters",
-            "status",
-            "trained_at",
-        ]
-    )
+    update_fields = [
+        "storage_uri",
+        "metrics",
+        "training_parameters",
+        "status",
+        "trained_at",
+    ]
+    if was_selected:
+        update_fields.append("is_selected")
+    classifier.save(update_fields=update_fields)
 
     training_run.status = TrainingRun.Status.SUCCEEDED
     training_run.finished_at = trained_at

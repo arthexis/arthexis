@@ -93,6 +93,33 @@ def test_train_classifier_sanitizes_artifact_version_path(db):
     assert "/../" not in classifier.storage_uri
 
 
+def test_train_classifier_reselects_model_after_training(db):
+    """Training a selected classifier should complete and restore its selection."""
+
+    bucket = ensure_media_bucket(slug="training-images", name="Training Images")
+    media = create_media_file(
+        bucket=bucket,
+        uploaded_file=_uploaded_image("green.jpg", (20, 220, 20)),
+    )
+    tag = ClassificationTag.objects.create(slug="green-pattern", name="Green Pattern")
+    classifier = ImageClassifierModel.objects.create(
+        slug="selected-prototype-classifier",
+        name="Selected Prototype Classifier",
+        version="v2",
+        status=ImageClassifierModel.Status.READY,
+        is_selected=True,
+        training_parameters={"backend": "color_histogram"},
+    )
+    TrainingSample.objects.create(media_file=media, tag=tag, is_verified=True)
+
+    training_run = train_classifier(classifier)
+    classifier.refresh_from_db()
+
+    assert training_run.status == training_run.Status.SUCCEEDED
+    assert classifier.status == ImageClassifierModel.Status.READY
+    assert classifier.is_selected is True
+
+
 def test_capture_stream_to_media_file_creates_camera_media(db):
     """A camera frame can be mirrored into the media pipeline."""
 
