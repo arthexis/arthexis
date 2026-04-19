@@ -49,7 +49,7 @@ def create_media_file_from_frame_bytes(
         bucket_name="Camera Classification Frames",
         original_name=original_name,
         content_type=content_type,
-        queue_for_classification=True,
+        queue_for_classification=False,
     )
 
 

@@ -9,7 +9,12 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
 from apps.classification.camera import capture_stream_to_media_file
-from apps.classification.models import ClassificationTag, ImageClassifierModel, TrainingSample
+from apps.classification.models import (
+    ClassificationTag,
+    ContentClassification,
+    ImageClassifierModel,
+    TrainingSample,
+)
 from apps.classification.pipeline import predict_media_file, train_classifier
 from apps.media.utils import create_media_file, ensure_media_bucket
 
@@ -102,3 +107,31 @@ def test_capture_stream_to_media_file_creates_camera_media(db):
     assert media_file is not None
     assert media_file.bucket.slug == "camera-classification"
     assert source == "direct-capture"
+
+
+def test_capture_stream_to_media_file_does_not_create_pending_classification(db):
+    """Camera captures should not auto-queue pending rows for selected models."""
+
+    ImageClassifierModel.objects.create(
+        slug="selected-general",
+        name="Selected General",
+        version="v1",
+        status=ImageClassifierModel.Status.READY,
+        is_selected=True,
+    )
+    frame_bytes = _uploaded_image("frame.jpg", (30, 200, 30)).read()
+    stream = SimpleNamespace(
+        slug="front-door",
+        capture_frame_bytes=lambda: frame_bytes,
+    )
+
+    media_file, _source = capture_stream_to_media_file(stream)
+
+    assert media_file is not None
+    assert (
+        ContentClassification.objects.filter(
+            media_file=media_file,
+            status=ContentClassification.Status.PENDING,
+        ).count()
+        == 0
+    )
