@@ -4,3 +4,4 @@
 # /admin/links/reference/
 
 /ocpp/c/SIM-CP-1/
+/gallery/
