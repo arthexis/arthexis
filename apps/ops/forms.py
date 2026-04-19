@@ -11,6 +11,8 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 
 from apps.groups.models import SecurityGroup
+from apps.repos.models import GitHubToken
+from apps.repos.services import github as github_service
 
 
 class OperatorJourneyProvisionSuperuserForm(forms.Form):
@@ -197,3 +199,70 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
     @classmethod
     def _resolve_upgrade_update_fields(cls, user) -> list[str]:
         return [field for field in cls.UPGRADE_UPDATE_FIELDS if hasattr(user, field)]
+
+
+class OperatorJourneyGitHubAccessForm(forms.Form):
+    """Configure and validate the current user's GitHub token."""
+
+    github_username = forms.CharField(
+        max_length=255,
+        required=False,
+        help_text="Optional GitHub username to confirm against the token.",
+        label="GitHub username",
+    )
+    token = forms.CharField(
+        widget=forms.PasswordInput(render_value=True),
+        help_text="Personal access token used for repository, release, and issue tasks.",
+        label="GitHub token",
+    )
+    token_label = forms.CharField(
+        max_length=255,
+        required=False,
+        help_text="Optional label shown in token admin records.",
+        label="Token label",
+    )
+
+    def __init__(self, *args, user, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+
+        existing = GitHubToken.objects.filter(user=user).order_by("-pk").first()
+        if existing is None or self.is_bound:
+            return
+        self.initial.setdefault("github_username", user.username)
+        self.initial.setdefault("token", existing.token)
+        self.initial.setdefault("token_label", existing.label)
+
+    def save(self) -> GitHubToken:
+        """Persist the token for the active user."""
+
+        cleaned_data = self.cleaned_data
+        label = (cleaned_data.get("token_label") or "").strip()
+        username = (cleaned_data.get("github_username") or "").strip()
+        defaults = {
+            "label": label or username or "GitHub access token",
+            "token": (cleaned_data.get("token") or "").strip(),
+        }
+        token, _created = GitHubToken.objects.update_or_create(
+            user=self.user,
+            defaults=defaults,
+        )
+        return token
+
+    def validate_connection(self) -> tuple[bool, str]:
+        """Return whether the token authenticates and matches the requested username."""
+
+        cleaned_data = self.cleaned_data
+        success, message, login = github_service.validate_token(
+            cleaned_data.get("token") or ""
+        )
+        if not success:
+            return False, message
+
+        expected_username = (cleaned_data.get("github_username") or "").strip()
+        if expected_username and login and login.lower() != expected_username.lower():
+            return (
+                False,
+                f"Token authenticated as {login}, which does not match {expected_username}.",
+            )
+        return True, message

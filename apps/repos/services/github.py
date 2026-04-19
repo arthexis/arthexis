@@ -68,6 +68,38 @@ def build_headers(token: str, *, user_agent: str = "arthexis-admin") -> Mapping[
     }
 
 
+def validate_token(
+    token: str,
+    *,
+    api_root: str = API_ROOT,
+    timeout: int = REQUEST_TIMEOUT,
+) -> tuple[bool, str, str]:
+    """Validate a GitHub token against the current user endpoint."""
+
+    cleaned_token = str(token or "").strip()
+    if not cleaned_token:
+        return False, "Enter a GitHub token before testing.", ""
+
+    try:
+        response = requests.get(
+            f"{api_root}/user",
+            headers=build_headers(cleaned_token),
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        return False, str(exc), ""
+
+    if not 200 <= response.status_code < 300:
+        return False, _extract_error_message(response), ""
+
+    payload = _safe_json(response)
+    payload_data = payload if isinstance(payload, Mapping) else {}
+    login = str(payload_data.get("login") or "").strip()
+    if login:
+        return True, f"Connected to GitHub as {login}.", login
+    return True, "Connected to GitHub.", ""
+
+
 def _get_latest_release_token() -> str | None:
     """Return the GitHub token from the latest package release, if available."""
 

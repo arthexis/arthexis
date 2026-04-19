@@ -15,7 +15,7 @@ from django.urls import reverse
 
 OPERATOR_JOURNEY_STEP_URL_NAME = "ops:operator-journey-step"
 
-from .forms import OperatorJourneyProvisionSuperuserForm
+from .forms import OperatorJourneyGitHubAccessForm, OperatorJourneyProvisionSuperuserForm
 from .models import OperatorJourneyStep
 from .operator_journey import (
     complete_step_for_user,
@@ -28,6 +28,7 @@ from .status_surface import build_status_surface, scoped_log_excerpts
 
 ROLE_VALIDATION_STEP_SLUG = "validate-local-node-role"
 PROVISION_SUPERUSER_STEP_SLUG = "provision-ops-superuser"
+SETUP_GITHUB_TOKEN_STEP_SLUG = "setup-github-token"
 KNOWN_NODE_ROLES = ("Terminal", "Satellite", "Control", "Watchtower")
 ROLE_ALIASES = {"constellation": "Watchtower"}
 
@@ -251,6 +252,8 @@ def operator_journey_step(
         provision_form = OperatorJourneyProvisionSuperuserForm()
         context["provision_superuser_form"] = provision_form
         context["security_group_rows"] = _build_security_group_rows(provision_form)
+    if step.slug == SETUP_GITHUB_TOKEN_STEP_SLUG:
+        context["github_access_form"] = OperatorJourneyGitHubAccessForm(user=request.user)
 
     return render(request, "admin/ops/operator_journey_step.html", context)
 
@@ -343,6 +346,73 @@ def complete_operator_journey_step(
                 "next_step": next_step,
             },
         )
+
+    if step.slug == SETUP_GITHUB_TOKEN_STEP_SLUG:
+        github_access_form = OperatorJourneyGitHubAccessForm(
+            request.POST,
+            user=request.user,
+        )
+        action = (request.POST.get("journey_action") or "").strip().lower()
+        if not github_access_form.is_valid():
+            context = {
+                **_build_admin_context(request),
+                "step": step,
+                "github_access_form": github_access_form,
+            }
+            return render(
+                request,
+                "admin/ops/operator_journey_step.html",
+                context,
+            )
+
+        github_access_form.save()
+        if action == "save":
+            messages.add_message(
+                request,
+                messages.SUCCESS,
+                "GitHub token saved.",
+            )
+            context = {
+                **_build_admin_context(request),
+                "step": step,
+                "github_access_form": github_access_form,
+            }
+            return render(
+                request,
+                "admin/ops/operator_journey_step.html",
+                context,
+            )
+
+        is_valid_connection, validation_message = github_access_form.validate_connection()
+        if action == "test":
+            messages.add_message(
+                request,
+                messages.SUCCESS if is_valid_connection else messages.ERROR,
+                validation_message,
+            )
+            context = {
+                **_build_admin_context(request),
+                "step": step,
+                "github_access_form": github_access_form,
+            }
+            return render(
+                request,
+                "admin/ops/operator_journey_step.html",
+                context,
+            )
+
+        if not is_valid_connection:
+            github_access_form.add_error("token", validation_message)
+            context = {
+                **_build_admin_context(request),
+                "step": step,
+                "github_access_form": github_access_form,
+            }
+            return render(
+                request,
+                "admin/ops/operator_journey_step.html",
+                context,
+            )
 
     if not complete_step_for_user(user=request.user, step=step):
         next_step = next_step_for_user(user=request.user)

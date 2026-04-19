@@ -23,6 +23,7 @@ from apps.ops.views import (
     _build_node_role_validation_summary,
     _build_security_group_rows,
 )
+from apps.repos.models import GitHubToken
 
 
 class OperatorJourneyFlowTests(TestCase):
@@ -263,6 +264,125 @@ class OperatorJourneyViewTests(TestCase):
                 },
             ),
         )
+
+    def test_setup_github_token_step_renders_inline_configuration_form(self):
+        complete_step_for_user(user=self.user, step=self.step_1)
+        complete_step_for_user(user=self.user, step=self.step_2)
+        github_journey = OperatorJourney.objects.create(
+            name="Product Developer GitHub Access",
+            slug="product-developer-github-access",
+            security_group=self.group,
+            is_active=True,
+            priority=1,
+        )
+        github_step = OperatorJourneyStep.objects.create(
+            journey=github_journey,
+            title="Connect your GitHub access",
+            slug="setup-github-token",
+            instruction="Configure GitHub access directly in this step.",
+            iframe_url="/admin/repos/githubrepository/setup-token/",
+            order=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            )
+        )
+
+        self.assertContains(response, "GitHub token")
+        self.assertContains(response, "Test GitHub access")
+        self.assertNotContains(response, "Guided action")
+        self.assertNotContains(response, "Open task page")
+
+    @patch("apps.ops.forms.github_service.validate_token")
+    def test_setup_github_token_test_action_saves_and_validates(self, mock_validate_token):
+        mock_validate_token.return_value = (True, "Connected to GitHub as arthexis.", "arthexis")
+        complete_step_for_user(user=self.user, step=self.step_1)
+        complete_step_for_user(user=self.user, step=self.step_2)
+        github_journey = OperatorJourney.objects.create(
+            name="Product Developer GitHub Access",
+            slug="product-developer-github-access",
+            security_group=self.group,
+            is_active=True,
+            priority=1,
+        )
+        github_step = OperatorJourneyStep.objects.create(
+            journey=github_journey,
+            title="Connect your GitHub access",
+            slug="setup-github-token",
+            instruction="Configure GitHub access directly in this step.",
+            iframe_url="/admin/repos/githubrepository/setup-token/",
+            order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            ),
+            {
+                "journey_action": "test",
+                "github_username": "arthexis",
+                "token": "ghp_demo_token",
+                "token_label": "Dev token",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        saved_token = GitHubToken.objects.get(user=self.user)
+        self.assertEqual(saved_token.label, "Dev token")
+        self.assertEqual(saved_token.token, "ghp_demo_token")
+        mock_validate_token.assert_called_once_with("ghp_demo_token")
+        self.assertFalse(github_step.completions.filter(user=self.user).exists())
+
+    @patch("apps.ops.forms.github_service.validate_token")
+    def test_setup_github_token_complete_requires_successful_validation(self, mock_validate_token):
+        mock_validate_token.return_value = (False, "Bad credentials", "")
+        complete_step_for_user(user=self.user, step=self.step_1)
+        complete_step_for_user(user=self.user, step=self.step_2)
+        github_journey = OperatorJourney.objects.create(
+            name="Product Developer GitHub Access",
+            slug="product-developer-github-access",
+            security_group=self.group,
+            is_active=True,
+            priority=1,
+        )
+        github_step = OperatorJourneyStep.objects.create(
+            journey=github_journey,
+            title="Connect your GitHub access",
+            slug="setup-github-token",
+            instruction="Configure GitHub access directly in this step.",
+            iframe_url="/admin/repos/githubrepository/setup-token/",
+            order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            ),
+            {
+                "journey_action": "complete",
+                "github_username": "arthexis",
+                "token": "ghp_demo_token",
+                "token_label": "Dev token",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bad credentials")
+        self.assertFalse(github_step.completions.filter(user=self.user).exists())
 
     def test_slug_step_url_that_matches_legacy_complete_shape_stays_canonical(self):
         numeric_journey = OperatorJourney.objects.create(

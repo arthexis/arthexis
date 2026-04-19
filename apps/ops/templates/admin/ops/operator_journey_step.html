@@ -297,6 +297,46 @@
         </div>
         <button type="submit" class="button default operator-journey-primary-button">{% translate "Create account and complete step" %}</button>
       </form>
+    {% elif github_access_form %}
+      <p>{{ step.instruction }}</p>
+      {% if step.help_text %}
+        <p><strong>{% translate "Manual help:" %}</strong> {{ step.help_text }}</p>
+      {% endif %}
+      <style>
+        .operator-journey-github-panel {
+          border: 1px solid var(--hairline-color);
+          border-radius: var(--admin-ui-radius-md, 0.5rem);
+          margin-top: 1rem;
+          padding: 1rem;
+        }
+        .operator-journey-github-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--admin-ui-space-2, 0.5rem);
+          margin-top: 1rem;
+        }
+      </style>
+      <form method="post" action="{% url 'ops:operator-journey-step-complete' journey_slug=step.journey.slug step_slug=step.slug %}" class="operator-journey-github-panel">
+        {% csrf_token %}
+        {{ github_access_form.non_field_errors }}
+        <fieldset class="module aligned" style="padding: 0;">
+          {% for field in github_access_form %}
+            <div class="form-row" style="margin-bottom: 0.75rem;">
+              <label for="{{ field.id_for_label }}" style="display: block; font-weight: 600;">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}
+                <p class="help" style="margin: 0.25rem 0 0;">{{ field.help_text }}</p>
+              {% endif %}
+              {{ field.errors }}
+            </div>
+          {% endfor %}
+        </fieldset>
+        <div class="operator-journey-github-actions">
+          <button type="submit" name="journey_action" value="save" class="button">{% translate "Save GitHub access" %}</button>
+          <button type="submit" name="journey_action" value="test" class="button">{% translate "Test GitHub access" %}</button>
+          <button type="submit" name="journey_action" value="complete" class="button default">{% translate "Validate GitHub access and complete step" %}</button>
+        </div>
+      </form>
     {% else %}
       <p>{{ step.instruction }}</p>
       {% if step.help_text %}
@@ -322,7 +362,7 @@
         </p>
       </div>
     {% endif %}
-    {% if not provision_superuser_form %}
+    {% if not provision_superuser_form and not github_access_form %}
       <form method="post" action="{% url 'ops:operator-journey-step-complete' journey_slug=step.journey.slug step_slug=step.slug %}" style="margin-top: 1rem;">
         {% csrf_token %}
         <button type="submit" class="button default">{% translate "Mark this step complete" %}</button>
