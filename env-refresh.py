@@ -48,6 +48,7 @@ django.setup()
 from apps.nodes.models import Node
 from django.contrib.sites.models import Site
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.management import create_contenttypes
 from django.contrib.contenttypes.models import ContentType
 
 from apps.release.models import PackageRelease
@@ -457,6 +458,18 @@ def _assign_many_to_many(instance: "Model", field_name: str, value: Any) -> bool
                 return False
     manager.set(resolved)
     return True
+
+
+def _ensure_content_types(using: str = "default") -> None:
+    """Rebuild missing content-type rows before loading fixtures."""
+
+    for app_config in apps.get_app_configs():
+        create_contenttypes(
+            app_config,
+            interactive=False,
+            using=using,
+            verbosity=0,
+        )
 
 
 def _fixture_sort_key(name: str) -> tuple[int, str]:
@@ -908,6 +921,11 @@ def run_database_tasks(
         else:
             raise CommandError("--migrate supports only SQLite and PostgreSQL backends.")
         _emit_reconciliation_report(report)
+
+    # A previous run can fail after schema migration but before post_migrate
+    # fully recreates content types. Ensure fixture natural-key lookups have a
+    # complete baseline even when migrate is skipped.
+    _ensure_content_types(using=connection.alias)
 
     # SigilRoot entries are protected from deletion; fixtures will update them.
 

@@ -36,7 +36,11 @@ def env_refresh_module(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Modul
             },
         ),
     )
-    monkeypatch.setattr(module, "connection", SimpleNamespace(in_atomic_block=False))
+    monkeypatch.setattr(
+        module,
+        "connection",
+        SimpleNamespace(alias="default", in_atomic_block=False),
+    )
     monkeypatch.setattr(module, "call_command", lambda *args, **kwargs: None)
     monkeypatch.setattr(module, "_local_app_labels", lambda: ["core"])
     monkeypatch.setattr(module, "_migration_hash", lambda apps: "hash")
@@ -116,3 +120,39 @@ def test_branch_tag_conflict_without_reconcile_fails_fast(
     assert "branch tag conflict" in output
     assert "Auto-reconcile fallback engaged" not in output
     assert migrate_calls == 1
+
+
+def test_content_types_are_ensured_when_migrate_is_skipped(
+    env_refresh_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_migrate_calls = 0
+    ensure_calls: list[str] = []
+    fake_user_model = SimpleNamespace(objects=SimpleNamespace(all=lambda: []))
+
+    def fake_run_migrate(*, using_sqlite: bool, default_db: dict[str, str], interactive: bool) -> None:
+        nonlocal run_migrate_calls
+        run_migrate_calls += 1
+
+    monkeypatch.setattr(env_refresh_module, "_run_migrate", fake_run_migrate)
+    monkeypatch.setattr(env_refresh_module, "_schema_needs_migration", lambda: False)
+    monkeypatch.setattr(env_refresh_module, "_pending_migration_graph", lambda: True)
+    monkeypatch.setattr(
+        env_refresh_module,
+        "_ensure_content_types",
+        lambda using="default": ensure_calls.append(using),
+    )
+    monkeypatch.setattr(env_refresh_module, "generate_model_sigils", lambda: None)
+    monkeypatch.setattr(env_refresh_module, "get_user_model", lambda: fake_user_model)
+    monkeypatch.setattr(env_refresh_module, "load_shared_user_fixtures", lambda force=True: None)
+    monkeypatch.setattr(env_refresh_module, "load_local_seed_zips", lambda: 0)
+    monkeypatch.setattr(
+        env_refresh_module.Node,
+        "register_current",
+        lambda notify_peers=False: (SimpleNamespace(public_endpoint="test.local"), False),
+    )
+
+    env_refresh_module.run_database_tasks()
+
+    assert run_migrate_calls == 0
+    assert ensure_calls == ["default"]
