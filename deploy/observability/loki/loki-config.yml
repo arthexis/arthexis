@@ -1,0 +1,39 @@
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+common:
+  path_prefix: /var/lib/loki
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: loki_index_
+        period: 24h
+
+storage_config:
+  filesystem:
+    directory: /var/lib/loki/chunks
+
+ingester:
+  wal:
+    enabled: true
+    dir: /var/lib/loki/wal
+
+limits_config:
+  retention_period: 730d
+
+compactor:
+  working_directory: /var/lib/loki/compactor
+  delete_request_store: filesystem
+  compaction_interval: 10m
+  retention_enabled: true

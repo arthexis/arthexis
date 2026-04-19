@@ -186,6 +186,18 @@
           <a class="button button-secondary" href="{{ recommended_stack.url }}" target="_blank" rel="noopener noreferrer">{% translate "Evaluate integration" %}</a>
         </p>
       </div>
+      <div class="log-viewer-recommendation">
+        <p>
+          <strong>{% translate "Aggregator integration status" %}:</strong>
+          {{ observability_status.status_label }}
+        </p>
+        <p>{{ observability_status.status_help }}</p>
+        {% if observability_status.grafana_url %}
+          <p>
+            <a class="button button-secondary" href="{{ observability_status.grafana_url }}" target="_blank" rel="noopener noreferrer">{% translate "Open Grafana" %}</a>
+          </p>
+        {% endif %}
+      </div>
 
       {% if log_dashboard.level_rows %}
         <table class="log-viewer-table">

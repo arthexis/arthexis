@@ -1,0 +1,38 @@
+{
+  "title": "Arthexis Logs Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Error + Critical logs",
+      "targets": [
+        {
+          "expr": "sum by (level) (count_over_time({app=\"arthexis\", level=~\"ERROR|CRITICAL\"}[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Warning logs",
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"arthexis\", level=\"WARNING\"}[5m]))",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Live logs",
+      "targets": [
+        {
+          "expr": "{app=\"arthexis\"} | json",
+          "refId": "C"
+        }
+      ]
+    }
+  ]
+}
