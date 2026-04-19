@@ -15,7 +15,7 @@ from apps.classification.models import (
     ImageClassifierModel,
     TrainingSample,
 )
-from apps.classification.pipeline import predict_media_file, train_classifier
+from apps.classification.pipeline import classify_stream, predict_media_file, train_classifier
 from apps.media.utils import create_media_file, ensure_media_bucket
 
 
@@ -135,3 +135,22 @@ def test_capture_stream_to_media_file_does_not_create_pending_classification(db)
         ).count()
         == 0
     )
+
+
+def test_classify_stream_skips_capture_without_usable_classifier(db, monkeypatch):
+    """Stream classification should not capture frames when no model can predict."""
+
+    stream = SimpleNamespace(slug="front-door")
+    captured = {"called": False}
+
+    def _unexpected_capture(_stream):
+        captured["called"] = True
+        return None, None
+
+    monkeypatch.setattr("apps.classification.pipeline.capture_stream_to_media_file", _unexpected_capture)
+
+    media_file, records = classify_stream(stream)
+
+    assert media_file is None
+    assert records == []
+    assert captured["called"] is False

@@ -108,12 +108,16 @@ def classify_stream(
 ):
     """Capture a stream frame, persist it, and classify it."""
 
+    classifier = classifier or ImageClassifierModel.selected_general_model()
+    if classifier is None or not classifier.storage_uri:
+        return None, []
+
     media_file, source = capture_stream_to_media_file(stream)
     if media_file is None:
         return None, []
 
-    classifier, predictions = build_predictions_for_media_file(media_file, classifier=classifier)
-    if classifier is None or not predictions:
+    _, predictions = build_predictions_for_media_file(media_file, classifier=classifier)
+    if not predictions:
         return media_file, []
 
     for prediction in predictions:
@@ -126,4 +130,3 @@ def classify_stream(
         )
         prediction["metadata"] = metadata
     return media_file, apply_model_predictions(media_file, predictions, classifier=classifier)
-
