@@ -356,6 +356,14 @@ jobs:
           name: image-gallery
           path: artifacts/gallery-desktop.png
 
+      - name: Upload OCPP charger detail screenshot for pull requests
+        if: ${{ github.event_name == 'pull_request' }}
+        id: upload-ocpp-charger-detail
+        uses: actions/upload-artifact@v7
+        with:
+          name: ocpp-charger-detail
+          path: artifacts/ocpp-c-SIM-CP-1-desktop.png
+
       - name: Verify screenshot artifacts checklist (pull requests)
         if: ${{ github.event_name == 'pull_request' }}
         id: verify-pr-screenshot-artifacts
@@ -429,6 +437,7 @@ jobs:
         env:
           ADMIN_DASHBOARD_URL: ${{ steps.upload-admin-dashboard.outputs.artifact-url || '' }}
           OCPP_DASHBOARD_URL: ${{ steps.upload-ocpp-dashboard.outputs.artifact-url || '' }}
+          OCPP_CHARGER_DETAIL_URL: ${{ steps.upload-ocpp-charger-detail.outputs.artifact-url || '' }}
           DEVELOPER_LIBRARY_URL: ${{ steps.upload-developer-library.outputs.artifact-url || '' }}
           GALLERY_URL: ${{ steps.upload-gallery.outputs.artifact-url || '' }}
           METADATA_URL: ${{ steps.upload-pr-screenshot-metadata.outputs.artifact-url || '' }}
@@ -445,6 +454,7 @@ jobs:
           artifact_links = {
               "admin-desktop.png": os.environ.get("ADMIN_DASHBOARD_URL", "").strip(),
               "ocpp-cpms-dashboard-desktop.png": os.environ.get("OCPP_DASHBOARD_URL", "").strip(),
+              "ocpp-c-SIM-CP-1-desktop.png": os.environ.get("OCPP_CHARGER_DETAIL_URL", "").strip(),
               "docs-library-desktop.png": os.environ.get("DEVELOPER_LIBRARY_URL", "").strip(),
               "gallery-desktop.png": os.environ.get("GALLERY_URL", "").strip(),
           }
