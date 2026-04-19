@@ -29,6 +29,9 @@ scrape_configs:
             node_id: node_id
             charger_id: charger_id
             session_id: session_id
+      - timestamp:
+          source: timestamp
+          format: RFC3339
       - labels:
           app:
           hostname:

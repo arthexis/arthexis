@@ -27,6 +27,7 @@ When starting Promtail with the provided config, export the expected environment
 ```bash
 export ARTHEXIS_LOG_DIR=/var/log/arthexis
 export ARTHEXIS_LOKI_URL=http://localhost:3100
+export ARTHEXIS_PROMTAIL_CONFIG=/etc/promtail/promtail.yml
 promtail -config.file="$ARTHEXIS_PROMTAIL_CONFIG" -config.expand-env=true
 ```
 
