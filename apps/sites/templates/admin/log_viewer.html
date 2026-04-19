@@ -222,7 +222,7 @@
           <tbody>
             {% for row in log_dashboard.file_rows %}
               <tr>
-                <th scope="row">{{ row.name }}</th>
+                <th scope="row"><a href="?log={{ row.name|urlencode }}">{{ row.name }}</a></th>
                 <td>{{ row.line_count }}</td>
                 <td>{{ row.recent_warning }}</td>
                 <td>{{ row.recent_error }}</td>
