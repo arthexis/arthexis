@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 from collections import deque
 from datetime import datetime, time, timedelta
@@ -43,6 +44,37 @@ def _recommended_log_stack() -> dict[str, str]:
         "name": "Grafana Loki + Promtail",
         "summary": "Low-overhead log aggregation with dashboarding and alerting via Grafana.",
         "url": "https://grafana.com/oss/loki/",
+    }
+
+
+
+
+def _observability_integration_status() -> dict[str, str | bool]:
+    """Return deployment-facing status for external log aggregation wiring."""
+
+    grafana_url = os.environ.get("ARTHEXIS_GRAFANA_URL", "").strip()
+    loki_url = os.environ.get("ARTHEXIS_LOKI_URL", "").strip()
+    promtail_config = os.environ.get("ARTHEXIS_PROMTAIL_CONFIG", "").strip()
+
+    configured = bool(grafana_url and loki_url and promtail_config)
+    if configured:
+        status_label = _("Connected")
+        status_help = _(
+            "Grafana, Loki, and Promtail settings are configured for this process."
+        )
+    else:
+        status_label = _("Not configured")
+        status_help = _(
+            "Set ARTHEXIS_GRAFANA_URL, ARTHEXIS_LOKI_URL, and ARTHEXIS_PROMTAIL_CONFIG to activate external aggregation links."
+        )
+
+    return {
+        "configured": configured,
+        "status_label": str(status_label),
+        "status_help": str(status_help),
+        "grafana_url": grafana_url,
+        "loki_url": loki_url,
+        "promtail_config": promtail_config,
     }
 
 
@@ -366,6 +398,7 @@ def log_viewer(request):
             "hide_limit_slider": True,
             "log_dashboard": dashboard,
             "recommended_stack": _recommended_log_stack(),
+            "observability_status": _observability_integration_status(),
         }
     )
     return TemplateResponse(request, "admin/log_viewer.html", context)
