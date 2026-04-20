@@ -15,6 +15,7 @@ from django.views.decorators.csrf import csrf_exempt
 from apps.repos.models.events import GitHubEvent
 from apps.repos.models.github_apps import GitHubApp
 from apps.repos.models.repositories import GitHubRepository
+from apps.repos.spam_filter import assess_github_issue_event
 
 
 class GitHubWebhookOwnerPayload(TypedDict, total=False):
@@ -205,5 +206,6 @@ def github_webhook(
         payload=payload,
         raw_body=raw_body,
     )
+    assess_github_issue_event(event)
 
     return JsonResponse({"status": "ok", "event_id": event.pk})
