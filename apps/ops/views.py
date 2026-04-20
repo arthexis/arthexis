@@ -15,7 +15,7 @@ from django.urls import reverse
 
 OPERATOR_JOURNEY_STEP_URL_NAME = "ops:operator-journey-step"
 
-from .forms import OperatorJourneyProvisionSuperuserForm
+from .forms import OperatorJourneyGitHubAccessForm, OperatorJourneyProvisionSuperuserForm
 from .models import OperatorJourneyStep
 from .operator_journey import (
     complete_step_for_user,
@@ -28,6 +28,7 @@ from .status_surface import build_status_surface, scoped_log_excerpts
 
 ROLE_VALIDATION_STEP_SLUG = "validate-local-node-role"
 PROVISION_SUPERUSER_STEP_SLUG = "provision-ops-superuser"
+SETUP_GITHUB_TOKEN_STEP_SLUG = "setup-github-token"
 KNOWN_NODE_ROLES = ("Terminal", "Satellite", "Control", "Watchtower")
 ROLE_ALIASES = {"constellation": "Watchtower"}
 
@@ -47,6 +48,25 @@ def _build_admin_context(request: HttpRequest) -> dict[str, object]:
     """Return shared context needed by admin base templates."""
 
     return admin.site.each_context(request)
+
+
+def _can_manage_github_token(request: HttpRequest, token=None) -> bool:
+    """Return whether the current user can create/update GitHubToken records."""
+
+    try:
+        from apps.repos.models import GitHubToken
+    except (ImportError, LookupError):
+        return False
+
+    token_admin = admin.site._registry.get(GitHubToken)
+    if token_admin is not None:
+        if token is None:
+            return bool(token_admin.has_add_permission(request))
+        return bool(token_admin.has_change_permission(request, obj=token))
+
+    if token is None:
+        return request.user.has_perm("repos.add_githubtoken")
+    return request.user.has_perm("repos.change_githubtoken")
 
 
 def _build_security_group_rows(
@@ -251,6 +271,8 @@ def operator_journey_step(
         provision_form = OperatorJourneyProvisionSuperuserForm()
         context["provision_superuser_form"] = provision_form
         context["security_group_rows"] = _build_security_group_rows(provision_form)
+    if step.slug == SETUP_GITHUB_TOKEN_STEP_SLUG:
+        context["github_access_form"] = OperatorJourneyGitHubAccessForm(user=request.user)
 
     return render(request, "admin/ops/operator_journey_step.html", context)
 
@@ -343,6 +365,59 @@ def complete_operator_journey_step(
                 "next_step": next_step,
             },
         )
+
+    if step.slug == SETUP_GITHUB_TOKEN_STEP_SLUG:
+        github_access_form = OperatorJourneyGitHubAccessForm(
+            request.POST,
+            user=request.user,
+        )
+        action = (request.POST.get("journey_action") or "").strip().lower()
+        token_record = github_access_form._existing_token_record
+        can_write_token = _can_manage_github_token(request, token=token_record)
+
+        if github_access_form.is_valid():
+            if action == "save":
+                if not can_write_token:
+                    messages.warning(
+                        request,
+                        "You do not have permission to save a GitHub token.",
+                    )
+                else:
+                    github_access_form.save()
+                    messages.success(request, "GitHub token saved.")
+            elif action in ("test", "complete"):
+                if not can_write_token:
+                    permission_message = "You do not have permission to save a GitHub token."
+                    if action == "test":
+                        messages.warning(request, permission_message)
+                    else:
+                        github_access_form.add_error("token", permission_message)
+                else:
+                    is_valid_connection, validation_message = (
+                        github_access_form.validate_connection()
+                    )
+                    if action == "test":
+                        messages.add_message(
+                            request,
+                            messages.SUCCESS if is_valid_connection else messages.ERROR,
+                            validation_message,
+                        )
+                    elif not is_valid_connection:
+                        github_access_form.add_error("token", validation_message)
+                    else:
+                        github_access_form.save()
+
+        if action != "complete" or not github_access_form.is_valid():
+            context = {
+                **_build_admin_context(request),
+                "step": step,
+                "github_access_form": github_access_form,
+            }
+            return render(
+                request,
+                "admin/ops/operator_journey_step.html",
+                context,
+            )
 
     if not complete_step_for_user(user=request.user, step=step):
         next_step = next_step_for_user(user=request.user)
