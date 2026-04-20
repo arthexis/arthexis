@@ -76,7 +76,7 @@ requests==2.33.1
 ruff==0.15.11
 selenium==4.41.0
 setuptools==82.0.1
-smbus2==0.6.0; sys_platform == "linux" and (platform_machine == "armv7l" or platform_machine == "aarch64")
+smbus2==0.6.1; sys_platform == "linux" and (platform_machine == "armv7l" or platform_machine == "aarch64")
 sqlparse==0.5.5
 tablib==3.9.0
 tinycss2==1.5.1
