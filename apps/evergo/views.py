@@ -242,8 +242,9 @@ def customer_public_detail(request, public_id) -> HttpResponse:
                                 display_order=next_order,
                             )
                         except ValidationError as exc:
-                            for message in exc.message_dict.get("file", []):
-                                upload_form.add_error("image", message)
+                            # Map model 'file' errors to form 'image' field; others to non-field errors.
+                            for field, errors in getattr(exc, "error_dict", {None: exc}).items():
+                                upload_form.add_error("image" if field == "file" else None, errors)
                         else:
                             messages.success(request, "Image added.")
                             return redirect(customer.get_absolute_url())
