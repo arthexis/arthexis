@@ -231,7 +231,6 @@ class OperatorJourneyGitHubAccessForm(forms.Form):
         self._existing_token_record = GitHubToken.objects.filter(user=user).order_by("-pk").first()
         if self._existing_token_record is None or self.is_bound:
             return
-        self.initial.setdefault("github_username", user.username)
         self.initial.setdefault("token", self._existing_token_record.__dict__.get("token", ""))
         self.initial.setdefault("token_label", self._existing_token_record.label)
 

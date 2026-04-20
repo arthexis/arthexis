@@ -437,6 +437,7 @@ class OperatorJourneyViewTests(TestCase):
 
         form = OperatorJourneyGitHubAccessForm(user=self.user)
 
+        self.assertEqual(form.initial.get("github_username"), None)
         self.assertEqual(
             form.initial.get("token"),
             token.__dict__.get("token"),
