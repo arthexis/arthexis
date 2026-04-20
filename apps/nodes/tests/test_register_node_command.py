@@ -47,6 +47,41 @@ def test_node_register_rejects_private_host_in_token():
         command.handle(action="register", token=token)
 
 
+def test_node_token_generates_register_consumable_payload():
+    command = _load_node_command()
+
+    token = command._encode_token(
+        {
+            "register": "https://example.com/nodes/register/",
+            "info": "https://example.com/nodes/info/",
+            "username": "cli-user",
+            "password": "cli-pass",
+        }
+    )
+
+    decoded = command._decode_token(token)
+
+    assert decoded == {
+        "register": "https://example.com/nodes/register/",
+        "info": "https://example.com/nodes/info/",
+        "username": "cli-user",
+        "password": "cli-pass",
+    }
+
+
+def test_node_token_rejects_private_hosts():
+    command = _load_node_command()
+
+    with pytest.raises(CommandError, match="Host info URL host must not resolve"):
+        command.handle(
+            action="token",
+            host="https://127.0.0.1",
+            username="cli-user",
+            password="cli-pass",
+            json=False,
+        )
+
+
 @pytest.mark.django_db
 def test_discovered_different_host_instance_keeps_peer_relation(monkeypatch):
     command = _load_node_command()
