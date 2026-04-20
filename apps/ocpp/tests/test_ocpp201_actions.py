@@ -229,6 +229,7 @@ async def test_authorize_keeps_id_token_info_shape_for_ocpp2x():
 
     assert result == {"idTokenInfo": {"status": "Accepted"}}
 
+@pytest.mark.anyio
 async def test_boot_notification_normalizes_ocpp2x_payload(caplog):
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.ocpp_version = "ocpp2.0.1"
