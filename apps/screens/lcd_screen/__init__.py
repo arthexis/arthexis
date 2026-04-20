@@ -1,5 +1,10 @@
 """LCD screen service package."""
 
+from __future__ import annotations
+
+from importlib import import_module
+from typing import Any
+
 from .logging import (
     BASE_DIR,
     HISTORY_DIR,
@@ -112,19 +117,6 @@ from .rendering import (
     _use_fate_vector,
     _warn_on_non_ascii_payload,
 )
-from .runner import (
-    EVENT_LINE_SCROLL_SECONDS,
-    ROTATION_SECONDS,
-    _event_interrupt_requested,
-    _handle_shutdown_request,
-    _request_event_interrupt,
-    _request_shutdown,
-    _reset_event_interrupt_flag,
-    _reset_shutdown_flag,
-    _shutdown_requested,
-    main,
-)
-
 __all__ = [
     "BASE_DIR",
     "HISTORY_DIR",
@@ -153,3 +145,24 @@ __all__ = [
     "main",
     "read_lcd_lock_file",
 ]
+
+_RUNNER_EXPORTS = {
+    "EVENT_LINE_SCROLL_SECONDS",
+    "ROTATION_SECONDS",
+    "_event_interrupt_requested",
+    "_handle_shutdown_request",
+    "_request_event_interrupt",
+    "_request_shutdown",
+    "_reset_event_interrupt_flag",
+    "_reset_shutdown_flag",
+    "_shutdown_requested",
+    "main",
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _RUNNER_EXPORTS:
+        value = getattr(import_module(".runner", __name__), name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
