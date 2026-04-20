@@ -1017,7 +1017,6 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         from apps.cards.reader import validate_rfid_value
 
         ensure_feature_enabled("rfid-scanner", logger=logger)
-        rfid_feature_enabled = _feature_enabled("rfid-scanner")
         if request.method == "POST":
             try:
                 payload = json.loads(request.body.decode("utf-8") or "{}")

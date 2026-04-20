@@ -36,7 +36,7 @@ class Command(BaseCommand):
             help="Arguments forwarded directly to pytest (use '-- ...').",
         )
 
-        server_parser = subparsers.add_parser(
+        subparsers.add_parser(
             "server",
             help="Start the VS Code test server watcher.",
         )
@@ -91,7 +91,6 @@ class Command(BaseCommand):
             if not available
         ]
         if missing_dependencies:
-            dependency_list = ", ".join(missing_dependencies)
             raise CommandError(
                 emit_remediation(
                     code="missing_dependency",

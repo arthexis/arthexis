@@ -843,20 +843,11 @@ def _build_auto_upgrade_report(
     skip_revisions = _load_auto_upgrade_skip_revisions(base_dir)
     schedule_info = _load_auto_upgrade_schedule()
 
-    used_log_last_run = False
     entries = log_info.get("entries") or []
     last_log_entry = next(iter(entries), None)
-    last_log_timestamp_raw = None
-    if last_log_entry:
-        last_log_timestamp_raw = last_log_entry.get("timestamp_raw")
     if not schedule_info.get("last_run_at") and last_log_entry:
         if last_log_entry.get("timestamp"):
             schedule_info["last_run_at"] = last_log_entry["timestamp"]
-            used_log_last_run = True
-
-    schedule_disabled = schedule_info.get("enabled") is False
-    if schedule_info.get("next_run") == str(_("Disabled")):
-        schedule_disabled = True
 
     revision_details = _prepare_revision_info(revision_info)
 
