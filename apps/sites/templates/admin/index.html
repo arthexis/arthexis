@@ -62,6 +62,11 @@
           {% translate "Chargers" %}
         </a>
       {% endif %}
+      {% if operator_journey.has_journey %}
+        <a class="button" href="{% url 'ops:operator-journey-dashboard' %}">
+          {% translate "Journey" %}
+        </a>
+      {% endif %}
       {% admin_staff_tasks as staff_tasks %}
       {% for task in staff_tasks %}
         <a class="button" href="{{ task.url }}">{{ task.label }}</a>

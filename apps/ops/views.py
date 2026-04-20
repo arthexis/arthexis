@@ -16,7 +16,7 @@ from django.urls import reverse
 OPERATOR_JOURNEY_STEP_URL_NAME = "ops:operator-journey-step"
 
 from .forms import OperatorJourneyGitHubAccessForm, OperatorJourneyProvisionSuperuserForm
-from .models import OperatorJourneyStep
+from .models import OperatorJourneyStep, OperatorJourneyStepCompletion
 from .operator_journey import (
     complete_step_for_user,
     next_step_for_user,
@@ -275,6 +275,56 @@ def operator_journey_step(
         context["github_access_form"] = OperatorJourneyGitHubAccessForm(user=request.user)
 
     return render(request, "admin/ops/operator_journey_step.html", context)
+
+
+@staff_member_required
+def operator_journey_dashboard(request: HttpRequest) -> HttpResponse:
+    """Render completed and current steps while hiding future journey steps."""
+
+    steps = list(
+        OperatorJourneyStep.objects.filter(
+            is_active=True,
+            journey__is_active=True,
+            journey__security_group__in=request.user.groups.all(),
+        )
+        .select_related("journey")
+        .order_by("journey__priority", "journey__name", "order", "id")
+    )
+    completion_by_step_id = {
+        completion.step_id: completion
+        for completion in OperatorJourneyStepCompletion.objects.filter(
+            user=request.user,
+            step__in=steps,
+        ).select_related("step")
+    }
+    next_step = next_step_for_user(user=request.user)
+
+    visible_steps = [
+        step
+        for step in steps
+        if step.id in completion_by_step_id
+        or (next_step is not None and step.id == next_step.id)
+    ]
+    step_rows = []
+    for step in visible_steps:
+        completion = completion_by_step_id.get(step.id)
+        is_current = next_step is not None and step.id == next_step.id
+        step_rows.append(
+            {
+                "step": step,
+                "is_completed": completion is not None,
+                "is_current": is_current,
+                "completed_at": getattr(completion, "completed_at", None),
+                "url": operator_journey_step_url(step=step),
+            }
+        )
+
+    context = {
+        **_build_admin_context(request),
+        "next_step": next_step,
+        "step_rows": step_rows,
+    }
+    return render(request, "admin/ops/operator_journey_dashboard.html", context)
 
 
 @staff_member_required

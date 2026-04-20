@@ -1,0 +1,68 @@
+{% extends "admin/base_site.html" %}
+{% load i18n tz %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+    &rsaquo;
+    <span>{% translate "Journey" %}</span>
+  </div>
+{% endblock %}
+
+{% block content %}
+  <div class="module aligned">
+    <h1>{% translate "Journey" %}</h1>
+    <p>{% translate "Review your completed operator tasks and the active task currently requested." %}</p>
+    {% if step_rows %}
+      <table>
+        <thead>
+          <tr>
+            <th>{% translate "Task" %}</th>
+            <th>{% translate "Journey" %}</th>
+            <th>{% translate "Status" %}</th>
+            <th>{% translate "Completed" %}</th>
+            <th>{% translate "Action" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in step_rows %}
+            <tr>
+              <td>{{ row.step.title }}</td>
+              <td>{{ row.step.journey.name }}</td>
+              <td>
+                {% if row.is_current %}
+                  {% translate "Current required task" %}
+                {% elif row.is_completed %}
+                  {% translate "Completed" %}
+                {% endif %}
+              </td>
+              <td>
+                {% if row.completed_at %}
+                  {{ row.completed_at|localtime|date:"Y-m-d H:i" }}
+                {% else %}
+                  &mdash;
+                {% endif %}
+              </td>
+              <td>
+                <a class="button" href="{{ row.url }}">
+                  {% if row.is_current %}
+                    {% translate "Open task" %}
+                  {% else %}
+                    {% translate "Review" %}
+                  {% endif %}
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% elif next_step %}
+      <p>
+        {% translate "Your current required task is ready." %}
+        <a class="button default" href="{% url 'ops:operator-journey-step' journey_slug=next_step.journey.slug step_slug=next_step.slug %}">{% translate "Open task" %}</a>
+      </p>
+    {% else %}
+      <p>{% translate "All Operator tasks completed to date. Keep coming back for more." %}</p>
+    {% endif %}
+  </div>
+{% endblock %}
