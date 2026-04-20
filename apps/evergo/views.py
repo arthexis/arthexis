@@ -296,11 +296,12 @@ def _to_tsv(rows: list[dict[str, str]]) -> str:
 @login_required
 def order_tracking_public(request, order_id: int) -> HttpResponse:
     """Render and submit the order tracking phase-one helper form for authorized owners only."""
-    order = get_object_or_404(
-        EvergoOrder.objects.select_related("user"),
-        remote_id=order_id,
-        user__user=request.user,
-    )
+    order_lookup = {
+        "remote_id": order_id,
+    }
+    if not request.user.is_staff:
+        order_lookup["user__user"] = request.user
+    order = get_object_or_404(EvergoOrder.objects.select_related("user"), **order_lookup)
     profile = order.user
     brands = profile.fetch_charger_brand_options()
     remote_image_urls: dict[str, str] = {}

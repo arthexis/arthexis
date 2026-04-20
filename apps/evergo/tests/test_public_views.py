@@ -31,6 +31,40 @@ def test_order_tracking_public_requires_login(client):
     assert response.status_code == 302
     assert "login" in response["Location"]
 
+
+@pytest.mark.django_db
+def test_order_tracking_public_allows_staff_cross_profile_access(client, monkeypatch):
+    """Regression: staff users can access tracking helper pages across profiles."""
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        username="evergo-owner-order-staff",
+        email="owner-order-staff@example.com",
+    )
+    profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-order-staff@example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile, remote_id=30939, order_number="GM030939")
+    staff_user = user_model.objects.create_user(
+        username="evergo-order-staff-viewer",
+        email="order-staff-viewer@example.com",
+        password="secret",  # noqa: S106
+        is_staff=True,
+    )
+    client.force_login(staff_user)
+    monkeypatch.setattr("apps.evergo.views._load_remote_phase_one_initial_data", lambda **_: ({}, {}, {}))
+    monkeypatch.setattr(
+        "apps.evergo.models.user.EvergoUser.fetch_charger_brand_options",
+        lambda self: [],
+    )
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]))
+
+    assert response.status_code == 200
+
 @pytest.mark.django_db
 def test_my_evergo_dashboard_renders_and_generates_table_from_local_orders(client):
     """Regression: dashboard token page should render readonly username and order table rows."""
