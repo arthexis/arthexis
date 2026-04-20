@@ -369,6 +369,12 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
       $SUDO systemctl status "$CAMERA_SERVICE" --no-pager || true
     fi
 
+    SUMMARY_RUNTIME_SERVICE="summary-runtime-$SERVICE_NAME"
+    if [ -f "$LOCK_DIR/$ARTHEXIS_SUMMARY_RUNTIME_SERVICE_LOCK" ] || systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${SUMMARY_RUNTIME_SERVICE}.service"; then
+      $SUDO systemctl stop "$SUMMARY_RUNTIME_SERVICE" || true
+      $SUDO systemctl status "$SUMMARY_RUNTIME_SERVICE" --no-pager || true
+    fi
+
     exit 0
   fi
 fi

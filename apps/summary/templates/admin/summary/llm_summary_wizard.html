@@ -14,8 +14,9 @@
   <div class="content">
     <p>
       {% blocktrans %}
-        Use this wizard to configure where the LCD summary model lives and to
-        create the model directory if needed.
+        Use this wizard to pick a built-in summary model, bind it to a local
+        llama.cpp-compatible runtime, and let Arthexis manage the matching
+        local runtime service before the LCD summary task is scheduled.
       {% endblocktrans %}
     </p>
 
@@ -77,7 +78,7 @@
       </fieldset>
 
       <div class="submit-row">
-        <input type="submit" value="{% trans 'Save and install' %}" class="default">
+        <input type="submit" value="{% trans 'Save and probe' %}" class="default">
         <a href="{{ change_url }}" class="button">{% trans "Back to config" %}</a>
         <a href="{{ changelist_url }}" class="button">{% trans "Back to list" %}</a>
       </div>

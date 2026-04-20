@@ -12,60 +12,84 @@ from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from apps.features.models import Feature
-from apps.features.parameters import set_feature_parameter_values
-from apps.nodes.models import NodeFeature
-
+from .catalog import SUMMARY_MODEL_CHOICES
 from .constants import LLM_SUMMARY_SUITE_FEATURE_SLUG
 from .models import LLMSummaryConfig
-from .services import DEFAULT_MODEL_DIR, ensure_local_model, get_summary_config, resolve_model_path
+from .services import (
+    build_summary_runtime_launch_plan,
+    get_selected_summary_model,
+    get_summary_config,
+    probe_summary_runtime,
+    resolve_model_path,
+    resolve_runtime_base_url,
+    resolve_runtime_binary_path,
+    summary_runtime_service_lock_enabled,
+    sync_summary_suite_feature,
+    summary_runtime_is_ready,
+)
 
 
 class LLMSummaryWizardForm(forms.Form):
     """Collect safe local summary settings for operators."""
 
-    MODEL_DEFAULT = "default"
-    MODEL_CUSTOM = "custom"
-
-    MODEL_CHOICES = (
-        (MODEL_DEFAULT, _("Use the default model directory")),
-        (MODEL_CUSTOM, _("Specify a custom model directory")),
-    )
-
-    model_choice = forms.ChoiceField(
-        label=_("Model location"),
-        choices=MODEL_CHOICES,
-        initial=MODEL_DEFAULT,
-        widget=forms.RadioSelect,
+    selected_model = forms.ChoiceField(
+        label=_("Summary model"),
+        choices=(("", _("Select a model")), *SUMMARY_MODEL_CHOICES),
+        required=False,
+        help_text=_("Pick one built-in model profile to bind to the LCD summary runtime."),
     )
     model_path = forms.CharField(
         label=_("Model path"),
         required=False,
-        help_text=_("Directory that contains local LLM model files."),
+        help_text=_("Optional local artifact path or cache directory for the selected model."),
     )
     backend = forms.ChoiceField(
         label=_("Summary backend"),
         choices=LLMSummaryConfig.Backend.choices,
-        initial=LLMSummaryConfig.Backend.DETERMINISTIC,
-        help_text=_("Built-in in-process summarizer used for LCD-friendly log summaries."),
+        initial=LLMSummaryConfig.Backend.LLAMA_CPP_SERVER,
+        help_text=_("Use a local llama.cpp server so the summary task runs against a real loaded model."),
     )
-    install_model = forms.BooleanField(
-        label=_("Create the model directory now"),
+    runtime_base_url = forms.CharField(
+        label=_("Runtime base URL"),
+        required=False,
+        initial="http://127.0.0.1:8080/v1",
+        help_text=_("OpenAI-compatible base URL exposed by the local llama.cpp server."),
+    )
+    runtime_binary_path = forms.CharField(
+        label=_("Runtime binary"),
+        required=False,
+        initial="llama-server",
+        help_text=_("Executable path or command name for the local llama.cpp server."),
+    )
+    probe_runtime = forms.BooleanField(
+        label=_("Probe the runtime now"),
         required=False,
         initial=True,
-        help_text=_("Creates the folder and placeholder if missing."),
+        help_text=_("Checks /models and records the resolved runtime model before scheduling the task."),
     )
 
     def clean(self):
-        """Validate custom model path input when operators override the default."""
+        """Validate model-backed runtime settings."""
 
         cleaned = super().clean()
-        if cleaned.get("model_choice") == self.MODEL_CUSTOM:
-            model_path = (cleaned.get("model_path") or "").strip()
-            if not model_path:
-                self.add_error("model_path", _("Enter a model path."))
-            else:
-                cleaned["model_path"] = model_path
+        selected_model = (cleaned.get("selected_model") or "").strip()
+        model_path = (cleaned.get("model_path") or "").strip()
+        runtime_base_url = (cleaned.get("runtime_base_url") or "").strip()
+        runtime_binary_path = (cleaned.get("runtime_binary_path") or "").strip()
+        backend = cleaned.get("backend")
+
+        cleaned["selected_model"] = selected_model
+        cleaned["model_path"] = model_path
+        cleaned["runtime_base_url"] = runtime_base_url
+        cleaned["runtime_binary_path"] = runtime_binary_path
+
+        if backend == LLMSummaryConfig.Backend.LLAMA_CPP_SERVER:
+            if not selected_model:
+                self.add_error("selected_model", _("Select a model before enabling the llama.cpp runtime."))
+            if not runtime_base_url:
+                self.add_error("runtime_base_url", _("Enter the local runtime base URL."))
+            if not runtime_binary_path:
+                self.add_error("runtime_binary_path", _("Enter the llama.cpp server binary name or path."))
         return cleaned
 
 
@@ -84,35 +108,6 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
         "updated_at",
     )
     change_list_template = "admin/summary/llmsummaryconfig/change_list.html"
-
-    def _sync_summary_suite_feature(self, config: LLMSummaryConfig) -> Feature:
-        """Persist suite feature parameters and ensure node-feature linkage is present."""
-
-        lcd_node_feature = NodeFeature.objects.filter(slug="lcd-screen").first()
-        suite_feature, _created = Feature.objects.get_or_create(
-            slug=LLM_SUMMARY_SUITE_FEATURE_SLUG,
-            defaults={
-                "display": "LLM Summary Suite",
-                "source": Feature.Source.CUSTOM,
-                "is_enabled": True,
-                "node_feature": lcd_node_feature,
-            },
-        )
-        updated_fields: set[str] = set()
-        if suite_feature.node_feature_id != (lcd_node_feature.pk if lcd_node_feature else None):
-            suite_feature.node_feature = lcd_node_feature
-            updated_fields.add("node_feature")
-
-        set_feature_parameter_values(
-            suite_feature,
-            {
-                "backend": config.backend,
-                "model_path": config.model_path,
-            },
-        )
-        updated_fields.update({"metadata", "updated_at"})
-        suite_feature.save(update_fields=sorted(updated_fields))
-        return suite_feature
 
     def get_urls(self):
         """Add the summary configuration wizard endpoint."""
@@ -137,52 +132,48 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
 
         config = get_summary_config()
         resolved_path = resolve_model_path(config)
-        initial_choice = (
-            LLMSummaryWizardForm.MODEL_DEFAULT
-            if not config.model_path or Path(config.model_path) == DEFAULT_MODEL_DIR
-            else LLMSummaryWizardForm.MODEL_CUSTOM
-        )
         form = LLMSummaryWizardForm(
             request.POST or None,
             initial={
-                "model_choice": initial_choice,
+                "selected_model": config.selected_model,
                 "model_path": config.model_path or str(resolved_path),
                 "backend": config.backend,
+                "runtime_base_url": resolve_runtime_base_url(config),
+                "runtime_binary_path": resolve_runtime_binary_path(config),
             },
         )
 
         if request.method == "POST" and form.is_valid():
-            model_choice = form.cleaned_data["model_choice"]
             config.backend = form.cleaned_data["backend"]
-            if model_choice == LLMSummaryWizardForm.MODEL_DEFAULT:
-                config.model_path = ""
-            else:
-                config.model_path = form.cleaned_data.get("model_path", "").strip()
-            if form.cleaned_data.get("install_model"):
-                model_dir = ensure_local_model(
-                    config,
-                    preferred_path=(
-                        config.model_path
-                        if model_choice == LLMSummaryWizardForm.MODEL_CUSTOM
-                        else None
-                    ),
-                )
-                if model_choice == LLMSummaryWizardForm.MODEL_DEFAULT:
-                    config.model_path = ""
-                installed_message = _("Model directory is ready at %(path)s.") % {
-                    "path": str(model_dir),
-                }
-                messages.success(request, installed_message)
+            config.selected_model = form.cleaned_data["selected_model"]
+            config.model_path = form.cleaned_data.get("model_path", "").strip()
+            config.runtime_base_url = form.cleaned_data.get("runtime_base_url", "").strip()
+            config.runtime_binary_path = form.cleaned_data.get("runtime_binary_path", "").strip()
+            config.runtime_model_id = ""
+            config.runtime_is_ready = False
+            config.last_runtime_error = ""
             config.save(
                 update_fields=[
                     "backend",
+                    "selected_model",
                     "model_path",
-                    "installed_at",
+                    "runtime_base_url",
+                    "runtime_binary_path",
+                    "runtime_model_id",
+                    "runtime_is_ready",
+                    "last_runtime_error",
                     "updated_at",
                 ]
             )
 
-            self._sync_summary_suite_feature(config)
+            if form.cleaned_data.get("probe_runtime"):
+                runtime_state = probe_summary_runtime(config)
+                if runtime_state.ready:
+                    messages.success(request, runtime_state.detail)
+                else:
+                    messages.warning(request, runtime_state.detail)
+
+            sync_summary_suite_feature(config)
             messages.success(request, _("LLM summary settings updated."))
             return redirect(
                 reverse("admin:summary_llmsummaryconfig_change", args=[config.pk])
@@ -220,6 +211,8 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
         from apps.summary.node_features import get_llm_summary_prereq_state
 
         checks: list[dict[str, str]] = []
+        from apps.features.models import Feature
+
         suite_feature = Feature.objects.filter(slug=LLM_SUMMARY_SUITE_FEATURE_SLUG).first()
         suite_enabled = bool(suite_feature and suite_feature.is_enabled)
         checks.append({
@@ -246,11 +239,22 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
             "status": _("Ready") if node.has_feature("llm-summary") else _("Missing"),
             "detail": _("Assign the LLM Summary node feature to this node."),
         })
+        checks.append({
+            "label": _("LCD node feature"),
+            "status": _("Ready") if node.has_feature("lcd-screen") else _("Missing"),
+            "detail": _("The LCD Screen node feature must stay assigned for LCD summary rotation."),
+        })
 
         prereqs = get_llm_summary_prereq_state(
             base_dir=Path(settings.BASE_DIR),
             base_path=node.get_base_path(),
         )
+        try:
+            runtime_command = build_summary_runtime_launch_plan(config).audit_command
+        except ValueError:
+            runtime_command = config.model_command_audit or _(
+                "Choose a model and a local runtime endpoint to generate the managed command."
+            )
         checks.append({
             "label": _("LCD lock"),
             "status": _("Ready") if prereqs["lcd_enabled"] else _("Missing"),
@@ -269,14 +273,43 @@ class LLMSummaryConfigAdmin(admin.ModelAdmin):
         checks.append({
             "label": _("Summary backend"),
             "status": config.get_backend_display(),
-            "detail": _("Summaries run in process and never execute operator-provided commands."),
+            "detail": _("The preferred backend is a local llama.cpp server that exposes an OpenAI-compatible API."),
+        })
+        checks.append({
+            "label": _("Runtime binary"),
+            "status": resolve_runtime_binary_path(config),
+            "detail": _("Arthexis uses this binary name/path when it launches the managed llama.cpp service."),
+        })
+        selected_model = get_selected_summary_model(config)
+        checks.append({
+            "label": _("Selected model"),
+            "status": selected_model.display if selected_model else _("Missing"),
+            "detail": (
+                selected_model.notes
+                if selected_model is not None
+                else _("Choose one built-in model before the summary task can be scheduled.")
+            ),
         })
         checks.append({
             "label": _("Model directory"),
             "status": _("Ready") if resolved_path.exists() else _("Missing"),
             "detail": _(
-                "Use Save and install to create the model placeholder directory for local artifacts."
+                "Optional local artifact or cache path recorded for operator reference."
             ),
+        })
+        checks.append({
+            "label": _("Runtime probe"),
+            "status": _("Ready") if summary_runtime_is_ready(config) else _("Missing"),
+            "detail": (
+                config.runtime_model_id
+                or config.last_runtime_error
+                or _("Probe the runtime after selecting a model and base URL.")
+            ),
+        })
+        checks.append({
+            "label": _("Runtime service lock"),
+            "status": _("Ready") if summary_runtime_service_lock_enabled(base_dir=Path(settings.BASE_DIR)) else _("Missing"),
+            "detail": runtime_command,
         })
         checks.append({
             "label": _("Reviewed"),

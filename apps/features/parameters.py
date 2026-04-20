@@ -9,6 +9,8 @@ from django.core.cache import cache
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils.translation import gettext_lazy as _
 
+from apps.summary.catalog import SUMMARY_MODEL_CHOICES
+
 
 @dataclass(frozen=True, slots=True)
 class FeatureParameterDefinition:
@@ -75,17 +77,45 @@ FEATURE_PARAMETER_DEFINITIONS: dict[str, tuple[FeatureParameterDefinition, ...]]
     ),
     "llm-summary-suite": (
         FeatureParameterDefinition(
+            key="selected_model",
+            label=_("Summary model"),
+            help_text=_("Choose the built-in model profile to bind to the LCD summary runtime."),
+            choices=(("", _("Not configured")), *SUMMARY_MODEL_CHOICES),
+            default="",
+        ),
+        FeatureParameterDefinition(
             key="model_path",
             label=_("Model path"),
-            help_text=_("Directory that contains local LLM summary model files."),
+            help_text=_("Optional local artifact path or cache directory for the selected summary model."),
             default="",
         ),
         FeatureParameterDefinition(
             key="backend",
             label=_("Summary backend"),
-            help_text=_("Select the fixed in-process backend used for LCD summaries."),
-            choices=(("deterministic", _("Deterministic built-in summarizer")),),
-            default="deterministic",
+            help_text=_("Select the runtime backend used for LCD summaries."),
+            choices=(
+                ("llama_cpp_server", _("llama.cpp OpenAI-compatible server")),
+                ("deterministic", _("Deterministic built-in summarizer")),
+            ),
+            default="llama_cpp_server",
+        ),
+        FeatureParameterDefinition(
+            key="runtime_base_url",
+            label=_("Runtime base URL"),
+            help_text=_("Base URL for the local OpenAI-compatible llama.cpp server."),
+            default="http://127.0.0.1:8080/v1",
+        ),
+        FeatureParameterDefinition(
+            key="runtime_binary_path",
+            label=_("Runtime binary"),
+            help_text=_("Executable path or command name for the local llama.cpp server binary."),
+            default="llama-server",
+        ),
+        FeatureParameterDefinition(
+            key="runtime_model_id",
+            label=_("Runtime model ID"),
+            help_text=_("Resolved model ID reported by the local runtime after probing /models."),
+            default="",
         ),
     ),
     "celery-workers": (

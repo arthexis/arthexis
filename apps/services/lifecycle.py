@@ -254,4 +254,17 @@ def reconcile_node_features_and_services(base_dir: Path | None = None) -> Lifecy
         if node is not None:
             node.refresh_features()
 
+    try:
+        from apps.summary.services import get_summary_config, sync_summary_runtime_service_lock
+    except ImportError:
+        logger.debug("Unable to import summary runtime lock reconciliation", exc_info=True)
+    else:
+        try:
+            sync_summary_runtime_service_lock(
+                get_summary_config(),
+                base_dir=resolved_base,
+            )
+        except (OperationalError, ProgrammingError):
+            logger.debug("Summary runtime config unavailable during lifecycle reconciliation", exc_info=True)
+
     return write_lifecycle_config(resolved_base)

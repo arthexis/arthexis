@@ -5,6 +5,7 @@ ARTHEXIS_SERVICE_MODE_SYSTEMD="systemd"
 ARTHEXIS_LCD_LOCK="lcd_screen.lck"
 ARTHEXIS_RFID_SERVICE_LOCK="rfid-service.lck"
 ARTHEXIS_CAMERA_SERVICE_LOCK="camera-service.lck"
+ARTHEXIS_SUMMARY_RUNTIME_SERVICE_LOCK="summary-runtime-service.lck"
 
 # shellcheck source=scripts/helpers/systemd_locks.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/systemd_locks.sh"
@@ -53,6 +54,7 @@ arthexis_detect_service_mode() {
         "lcd-${service_name}.service"
         "rfid-${service_name}.service"
         "camera-${service_name}.service"
+        "summary-runtime-${service_name}.service"
       )
 
       local unit_name
@@ -240,6 +242,7 @@ arthexis_service_unit_names() {
   local include_lcd="${3:-false}"
   local include_rfid="${4:-false}"
   local include_camera="${5:-false}"
+  local include_summary_runtime="${6:-false}"
 
   if [ -z "$service_name" ]; then
     return 0
@@ -258,6 +261,9 @@ arthexis_service_unit_names() {
   if [ "$include_camera" = true ]; then
     units+=("camera-${service_name}.service")
   fi
+  if [ "$include_summary_runtime" = true ]; then
+    units+=("summary-runtime-${service_name}.service")
+  fi
 
   printf "%s\n" "${units[@]}"
 }
@@ -268,6 +274,7 @@ arthexis_stop_service_unit_stack() {
   local include_lcd="${3:-false}"
   local include_rfid="${4:-false}"
   local include_camera="${5:-false}"
+  local include_summary_runtime="${6:-false}"
 
   if [ -z "$service_name" ]; then
     return 0
@@ -276,7 +283,7 @@ arthexis_stop_service_unit_stack() {
   local unit
   while IFS= read -r unit; do
     arthexis_stop_systemd_unit_if_present "$unit"
-  done < <(arthexis_service_unit_names "$service_name" "$include_celery" "$include_lcd" "$include_rfid" "$include_camera")
+  done < <(arthexis_service_unit_names "$service_name" "$include_celery" "$include_lcd" "$include_rfid" "$include_camera" "$include_summary_runtime")
 }
 
 arthexis_remove_service_unit_stack() {
@@ -286,6 +293,7 @@ arthexis_remove_service_unit_stack() {
   local include_lcd="${4:-false}"
   local include_rfid="${5:-false}"
   local include_camera="${6:-false}"
+  local include_summary_runtime="${7:-false}"
 
   if [ -z "$service_name" ]; then
     return 0
@@ -294,7 +302,7 @@ arthexis_remove_service_unit_stack() {
   local unit
   while IFS= read -r unit; do
     arthexis_remove_systemd_unit_if_present "$lock_dir" "$unit"
-  done < <(arthexis_service_unit_names "$service_name" "$include_celery" "$include_lcd" "$include_rfid" "$include_camera")
+  done < <(arthexis_service_unit_names "$service_name" "$include_celery" "$include_lcd" "$include_rfid" "$include_camera" "$include_summary_runtime")
 }
 
 _arthexis_lcd_feature_lock_file() {

@@ -105,6 +105,7 @@ ENABLE_CELERY=false
 ENABLE_LCD=false
 ENABLE_RFID=false
 ENABLE_CAMERA=false
+ENABLE_SUMMARY_RUNTIME=false
 
 if [ "$SERVICE_MODE" != "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && systemd_unit_known "${OLD_SERVICE}.service"; then
   SERVICE_MODE="$ARTHEXIS_SERVICE_MODE_SYSTEMD"
@@ -136,23 +137,29 @@ fi
 if [ "$ENABLE_CAMERA" = false ] && systemd_unit_known "camera-${OLD_SERVICE}.service"; then
   ENABLE_CAMERA=true
 fi
+if [ -f "$LOCK_DIR/$ARTHEXIS_SUMMARY_RUNTIME_SERVICE_LOCK" ]; then
+  ENABLE_SUMMARY_RUNTIME=true
+fi
+if [ "$ENABLE_SUMMARY_RUNTIME" = false ] && systemd_unit_known "summary-runtime-${OLD_SERVICE}.service"; then
+  ENABLE_SUMMARY_RUNTIME=true
+fi
 
 if [ "$DRY_RUN" = true ]; then
   echo "Dry run only."
   echo "Base dir: $LOCK_BASE_DIR"
   echo "Rename: $OLD_SERVICE -> $NEW_SERVICE"
   echo "Mode: $SERVICE_MODE"
-  echo "Companions: celery=$ENABLE_CELERY lcd=$ENABLE_LCD rfid=$ENABLE_RFID camera=$ENABLE_CAMERA"
+  echo "Companions: celery=$ENABLE_CELERY lcd=$ENABLE_LCD rfid=$ENABLE_RFID camera=$ENABLE_CAMERA summary_runtime=$ENABLE_SUMMARY_RUNTIME"
   exit 0
 fi
 
 mkdir -p "$LOCK_DIR"
 
 echo "Stopping old unit stack for '$OLD_SERVICE'..."
-arthexis_stop_service_unit_stack "$OLD_SERVICE" "$ENABLE_CELERY" "$ENABLE_LCD" "$ENABLE_RFID" "$ENABLE_CAMERA"
+arthexis_stop_service_unit_stack "$OLD_SERVICE" "$ENABLE_CELERY" "$ENABLE_LCD" "$ENABLE_RFID" "$ENABLE_CAMERA" "$ENABLE_SUMMARY_RUNTIME"
 
 echo "Removing old unit stack for '$OLD_SERVICE'..."
-arthexis_remove_service_unit_stack "$LOCK_DIR" "$OLD_SERVICE" "$ENABLE_CELERY" "$ENABLE_LCD" "$ENABLE_RFID" "$ENABLE_CAMERA"
+arthexis_remove_service_unit_stack "$LOCK_DIR" "$OLD_SERVICE" "$ENABLE_CELERY" "$ENABLE_LCD" "$ENABLE_RFID" "$ENABLE_CAMERA" "$ENABLE_SUMMARY_RUNTIME"
 arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${OLD_SERVICE}-upgrade-guard.service"
 arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${OLD_SERVICE}-upgrade-guard.timer"
 
@@ -170,6 +177,9 @@ if [ "$SERVICE_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
   if [ "$ENABLE_CAMERA" = true ]; then
     arthexis_install_camera_service_unit "$LOCK_BASE_DIR" "$LOCK_DIR" "$NEW_SERVICE"
   fi
+  if [ "$ENABLE_SUMMARY_RUNTIME" = true ]; then
+    arthexis_install_summary_runtime_service_unit "$LOCK_BASE_DIR" "$LOCK_DIR" "$NEW_SERVICE"
+  fi
 
   if [ "$START_AFTER_RENAME" = true ]; then
     echo "Starting new service units for '$NEW_SERVICE'..."
@@ -186,6 +196,9 @@ if [ "$SERVICE_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
     fi
     if [ "$ENABLE_CAMERA" = true ]; then
       arthexis_start_systemd_unit_if_present "camera-${NEW_SERVICE}.service"
+    fi
+    if [ "$ENABLE_SUMMARY_RUNTIME" = true ]; then
+      arthexis_start_systemd_unit_if_present "summary-runtime-${NEW_SERVICE}.service"
     fi
   fi
 else

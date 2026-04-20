@@ -10,16 +10,32 @@ class LLMSummaryConfig(models.Model):
     class Backend(models.TextChoices):
         """Supported in-process summarizer backends."""
 
+        LLAMA_CPP_SERVER = "llama_cpp_server", "llama.cpp OpenAI-compatible server"
         DETERMINISTIC = "deterministic", "Deterministic built-in summarizer"
 
     slug = models.SlugField(unique=True, default="lcd-log-summary")
     display = models.CharField(max_length=120, default="LCD Log Summary")
+    selected_model = models.CharField(max_length=120, blank=True)
     model_path = models.CharField(max_length=255, blank=True)
     backend = models.CharField(
         max_length=32,
         choices=Backend.choices,
-        default=Backend.DETERMINISTIC,
+        default=Backend.LLAMA_CPP_SERVER,
     )
+    runtime_base_url = models.CharField(
+        max_length=255,
+        blank=True,
+        default="http://127.0.0.1:8080/v1",
+    )
+    runtime_binary_path = models.CharField(
+        max_length=255,
+        blank=True,
+        default="llama-server",
+    )
+    runtime_model_id = models.CharField(max_length=255, blank=True)
+    runtime_is_ready = models.BooleanField(default=False)
+    last_runtime_check_at = models.DateTimeField(null=True, blank=True)
+    last_runtime_error = models.TextField(blank=True)
     model_command_audit = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     installed_at = models.DateTimeField(null=True, blank=True)

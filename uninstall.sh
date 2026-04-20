@@ -89,7 +89,7 @@ fi
 if [ -z "$SERVICE" ] && [ ${#RECORDED_SYSTEMD_UNITS[@]} -gt 0 ]; then
     for unit in "${RECORDED_SYSTEMD_UNITS[@]}"; do
         case "$unit" in
-            *-upgrade-guard.service|*-upgrade-guard.timer|celery-*.service|celery-beat-*.service|lcd-*.service|rfid-*.service)
+            *-upgrade-guard.service|*-upgrade-guard.timer|celery-*.service|celery-beat-*.service|lcd-*.service|rfid-*.service|summary-runtime-*.service)
                 continue
                 ;;
         esac
@@ -139,6 +139,11 @@ if [ -n "$SERVICE" ]; then
             arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${RFID_SERVICE}.service"
             rm -f "$LOCK_DIR/$ARTHEXIS_RFID_SERVICE_LOCK"
         fi
+    fi
+    SUMMARY_RUNTIME_SERVICE="summary-runtime-$SERVICE"
+    if [ -f "$LOCK_DIR/$ARTHEXIS_SUMMARY_RUNTIME_SERVICE_LOCK" ] || printf '%s\n' "${RECORDED_SYSTEMD_UNITS[@]}" | grep -Fxq "${SUMMARY_RUNTIME_SERVICE}.service"; then
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${SUMMARY_RUNTIME_SERVICE}.service"
+        rm -f "$LOCK_DIR/$ARTHEXIS_SUMMARY_RUNTIME_SERVICE_LOCK"
     fi
 
     if [ -f "$LOCK_DIR/celery.lck" ]; then

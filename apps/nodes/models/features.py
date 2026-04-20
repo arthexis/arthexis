@@ -376,6 +376,7 @@ class NodeFeatureMixin:
     def sync_feature_tasks(self):
         """Synchronize periodic tasks based on active features."""
         from apps.features.utils import is_suite_feature_enabled
+        from apps.summary.services import get_summary_config, summary_runtime_is_ready
 
         screenshot_enabled = self.is_local and is_suite_feature_enabled(
             "screenshot-capture", default=True
@@ -391,10 +392,13 @@ class NodeFeatureMixin:
                 screenshot_enabled = False
         llm_summary_suite_enabled = is_suite_feature_enabled("llm-summary-suite", default=True)
         celery_enabled = self.is_local and self.has_feature("celery-queue")
+        summary_runtime_ready = summary_runtime_is_ready(get_summary_config())
         llm_summary_enabled = (
             llm_summary_suite_enabled
             and celery_enabled
+            and self.has_feature("lcd-screen")
             and self.has_feature("llm-summary")
+            and summary_runtime_ready
         )
         self._sync_screenshot_task(screenshot_enabled)
         self._sync_landing_lead_task(celery_enabled)

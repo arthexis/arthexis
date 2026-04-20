@@ -167,7 +167,15 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
     from .models import Node
     from apps.features.utils import is_suite_feature_enabled
     from apps.summary.node_features import get_llm_summary_prereq_state
-    from apps.summary.services import get_summary_config, resolve_model_path
+    from apps.summary.services import (
+        build_summary_runtime_launch_plan,
+        get_selected_summary_model,
+        get_summary_config,
+        resolve_runtime_base_url,
+        resolve_runtime_binary_path,
+        summary_runtime_service_lock_enabled,
+        summary_runtime_is_ready,
+    )
 
     target: Optional["Node"] = node or Node.get_local()
     if target is None:
@@ -183,26 +191,42 @@ def _check_llm_summary(feature: "NodeFeature", node: Optional["Node"]):
         base_dir=base_dir, base_path=base_path
     )
     config = get_summary_config()
-    model_path = resolve_model_path(config)
-    model_path_exists = model_path.exists()
+    selected_model = get_selected_summary_model(config)
     suite_enabled = is_suite_feature_enabled("llm-summary-suite", default=True)
+    try:
+        runtime_launch = build_summary_runtime_launch_plan(config).audit_command
+    except ValueError:
+        runtime_launch = config.model_command_audit or "missing"
 
     details = [
         f"Suite gate: {'ok' if suite_enabled else 'disabled'}",
+        f"LCD feature: {'ok' if target.has_feature('lcd-screen') else 'missing'}",
         f"LCD lock: {'ok' if prereqs['lcd_enabled'] else 'missing'}",
         f"Celery lock: {'ok' if prereqs['celery_enabled'] else 'missing'}",
         f"Config active: {'yes' if config.is_active else 'no'}",
-        f"Model path: {model_path} ({'found' if model_path_exists else 'missing'})",
-        f"Backend: {config.get_backend_display()} (in-process)",
+        f"Selected model: {selected_model.display if selected_model else 'missing'}",
+        f"Backend: {config.get_backend_display()}",
+        f"Runtime base URL: {resolve_runtime_base_url(config)}",
+        f"Runtime binary: {resolve_runtime_binary_path(config)}",
+        f"Runtime service lock: {'present' if summary_runtime_service_lock_enabled(base_dir=base_dir) else 'missing'}",
+        f"Runtime ready: {'yes' if summary_runtime_is_ready(config) else 'no'}",
+        f"Runtime launch: {runtime_launch}",
+        (
+            f"Runtime model ID: {config.runtime_model_id}"
+            if config.runtime_model_id
+            else f"Runtime error: {config.last_runtime_error or 'missing'}"
+        ),
     ]
 
     success = (
         suite_enabled
+        and target.has_feature("lcd-screen")
         and prereqs["lcd_enabled"]
         and prereqs["celery_enabled"]
         and config.is_active
+        and summary_runtime_is_ready(config)
     )
-    if success and model_path_exists:
+    if success:
         level = messages.SUCCESS
     else:
         level = messages.WARNING

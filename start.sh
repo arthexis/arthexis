@@ -199,6 +199,19 @@ fi
 if [ -n "$CAMERA_SERVICE_UNIT" ] && _arthexis_systemd_unit_present "${CAMERA_SERVICE_UNIT}.service"; then
   CAMERA_UNIT_PRESENT=true
 fi
+SUMMARY_RUNTIME_SERVICE_LOCK="$LOCK_DIR/$ARTHEXIS_SUMMARY_RUNTIME_SERVICE_LOCK"
+SUMMARY_RUNTIME_SERVICE_CONFIGURED=false
+if [ -f "$SUMMARY_RUNTIME_SERVICE_LOCK" ]; then
+  SUMMARY_RUNTIME_SERVICE_CONFIGURED=true
+fi
+SUMMARY_RUNTIME_SERVICE_UNIT=""
+SUMMARY_RUNTIME_UNIT_PRESENT=false
+if [ -n "$SERVICE_NAME" ]; then
+  SUMMARY_RUNTIME_SERVICE_UNIT="summary-runtime-$SERVICE_NAME"
+fi
+if [ -n "$SUMMARY_RUNTIME_SERVICE_UNIT" ] && _arthexis_systemd_unit_present "${SUMMARY_RUNTIME_SERVICE_UNIT}.service"; then
+  SUMMARY_RUNTIME_UNIT_PRESENT=true
+fi
 
 if [ "$RFID_SERVICE_CONFIGURED" = true ]; then
   RFID_INITIAL_STATUS="unknown"
@@ -224,6 +237,18 @@ if [ "$CAMERA_SERVICE_CONFIGURED" = true ]; then
   echo "Camera service initial status: $CAMERA_INITIAL_STATUS"
   arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "camera-status" "initial_status=$CAMERA_INITIAL_STATUS"
 fi
+if [ "$SUMMARY_RUNTIME_SERVICE_CONFIGURED" = true ]; then
+  SUMMARY_RUNTIME_INITIAL_STATUS="unknown"
+  if [ ${#SYSTEMCTL_CMD[@]} -eq 0 ]; then
+    SUMMARY_RUNTIME_INITIAL_STATUS="systemctl-unavailable"
+  elif [ "$SUMMARY_RUNTIME_UNIT_PRESENT" = true ]; then
+    SUMMARY_RUNTIME_INITIAL_STATUS=$("${SYSTEMCTL_CMD[@]}" is-active "$SUMMARY_RUNTIME_SERVICE_UNIT" 2>/dev/null || echo "unknown")
+  else
+    SUMMARY_RUNTIME_INITIAL_STATUS="not-registered"
+  fi
+  echo "Summary runtime initial status: $SUMMARY_RUNTIME_INITIAL_STATUS"
+  arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "summary-runtime-status" "initial_status=$SUMMARY_RUNTIME_INITIAL_STATUS"
+fi
 
 reconcile_companion_units() {
   if [ "$RFID_SERVICE_CONFIGURED" = true ] && [ "$RFID_UNIT_PRESENT" = true ]; then
@@ -244,6 +269,16 @@ reconcile_companion_units() {
       "${SYSTEMCTL_CMD[@]}" restart "$CAMERA_SERVICE_UNIT"
     elif [ "$CAMERA_INITIAL_STATUS" != "active" ]; then
       "${SYSTEMCTL_CMD[@]}" start "$CAMERA_SERVICE_UNIT"
+    fi
+  fi
+  if [ "$SUMMARY_RUNTIME_SERVICE_CONFIGURED" = true ] && [ "$SUMMARY_RUNTIME_UNIT_PRESENT" = true ]; then
+    if ! SUMMARY_RUNTIME_INITIAL_STATUS=$("${SYSTEMCTL_CMD[@]}" is-active "$SUMMARY_RUNTIME_SERVICE_UNIT" 2>/dev/null); then
+      SUMMARY_RUNTIME_INITIAL_STATUS="${SUMMARY_RUNTIME_INITIAL_STATUS:-unknown}"
+    fi
+    if [ "$SUMMARY_RUNTIME_INITIAL_STATUS" = "failed" ]; then
+      "${SYSTEMCTL_CMD[@]}" restart "$SUMMARY_RUNTIME_SERVICE_UNIT"
+    elif [ "$SUMMARY_RUNTIME_INITIAL_STATUS" != "active" ]; then
+      "${SYSTEMCTL_CMD[@]}" start "$SUMMARY_RUNTIME_SERVICE_UNIT"
     fi
   fi
 }
@@ -272,6 +307,11 @@ if [ "$DEBUG_MODE" = false ] && [ -z "$SHOW_LEVEL" ] && [ "$RELOAD_REQUESTED" = 
     fi
     if [ "$CAMERA_SERVICE_CONFIGURED" = true ] && [ "$CAMERA_UNIT_PRESENT" = true ]; then
       if ! wait_for_systemd_service "$CAMERA_SERVICE_UNIT"; then
+        exit 1
+      fi
+    fi
+    if [ "$SUMMARY_RUNTIME_SERVICE_CONFIGURED" = true ] && [ "$SUMMARY_RUNTIME_UNIT_PRESENT" = true ]; then
+      if ! wait_for_systemd_service "$SUMMARY_RUNTIME_SERVICE_UNIT"; then
         exit 1
       fi
     fi

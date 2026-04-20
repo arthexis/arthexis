@@ -180,6 +180,56 @@ SERVICEEOF
   arthexis_record_systemd_unit "$lock_dir" "${camera_service}.service"
 }
 
+arthexis_install_summary_runtime_service_unit() {
+  local base_dir="$1"
+  local lock_dir="$2"
+  local service_name="$3"
+
+  if [ -z "$base_dir" ] || [ -z "$lock_dir" ] || [ -z "$service_name" ]; then
+    return 0
+  fi
+
+  local systemd_dir="${SYSTEMD_DIR:-/etc/systemd/system}"
+  local runtime_service
+  runtime_service="summary-runtime-${service_name}"
+  local runtime_service_file
+  runtime_service_file="${systemd_dir}/${runtime_service}.service"
+  local runtime_service_user
+  runtime_service_user="$(arthexis_detect_service_user "$base_dir")"
+  local runtime_lock_file
+  runtime_lock_file="${base_dir}/.locks/${ARTHEXIS_SUMMARY_RUNTIME_SERVICE_LOCK}"
+
+  sudo tee "$runtime_service_file" > /dev/null <<SERVICEEOF
+[Unit]
+Description=LLM summary runtime service for Arthexis
+After=${service_name}.service network-online.target
+Wants=${service_name}.service
+PartOf=${service_name}.service
+Wants=network-online.target
+ConditionPathExists=${runtime_lock_file}
+
+[Service]
+Type=simple
+WorkingDirectory=$base_dir
+EnvironmentFile=-$base_dir/redis.env
+EnvironmentFile=-$base_dir/debug.env
+ExecStart=$base_dir/.venv/bin/python manage.py summary --serve-runtime
+Restart=always
+TimeoutStartSec=500
+StandardOutput=journal
+StandardError=journal
+User=$runtime_service_user
+
+[Install]
+WantedBy=multi-user.target
+WantedBy=${service_name}.service
+SERVICEEOF
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable "$runtime_service"
+  arthexis_record_systemd_unit "$lock_dir" "${runtime_service}.service"
+}
+
 arthexis_remove_systemd_unit_record() {
   local lock_dir="$1"
   local unit_name="$2"

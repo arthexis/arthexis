@@ -580,7 +580,7 @@ UPGRADE_IN_PROGRESS_LOCK="$LOCK_DIR/upgrade_in_progress.lck"
 if [ -z "$SERVICE_NAME" ]; then
   while IFS= read -r unit_name; do
     case "$unit_name" in
-      *-upgrade-guard.service|*-upgrade-guard.timer|celery-*.service|celery-beat-*.service|lcd-*.service)
+      *-upgrade-guard.service|*-upgrade-guard.timer|celery-*.service|celery-beat-*.service|lcd-*.service|summary-runtime-*.service)
         continue
         ;;
     esac
@@ -596,6 +596,7 @@ if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ]; then
   if [ -n "$SERVICE_NAME" ]; then
     arthexis_remove_celery_unit_stack "$LOCK_DIR" "$SERVICE_NAME"
     arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "lcd-${SERVICE_NAME}.service"
+    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "summary-runtime-${SERVICE_NAME}.service"
   fi
   if [ -f "$SYSTEMD_UNITS_LOCK" ]; then
     while IFS= read -r recorded_unit; do
@@ -603,7 +604,7 @@ if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ]; then
         celery-*.service|celery-beat-*.service)
           arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "$recorded_unit"
           ;;
-        lcd-*.service|camera-*.service)
+        lcd-*.service|camera-*.service|summary-runtime-*.service)
           arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "$recorded_unit"
           ;;
       esac
@@ -661,6 +662,14 @@ camera_service_configured() {
 
 camera_systemd_unit_present() {
   _prefixed_systemd_unit_present "camera" "$1"
+}
+
+summary_runtime_service_configured() {
+  [ -f "$LOCK_DIR/$ARTHEXIS_SUMMARY_RUNTIME_SERVICE_LOCK" ]
+}
+
+summary_runtime_systemd_unit_present() {
+  _prefixed_systemd_unit_present "summary-runtime" "$1"
 }
 
 
@@ -1401,6 +1410,10 @@ restart_services() {
     if camera_service_configured && camera_systemd_unit_present "$service_name"; then
       include_camera=1
     fi
+    local include_summary_runtime=0
+    if summary_runtime_service_configured && summary_runtime_systemd_unit_present "$service_name"; then
+      include_summary_runtime=1
+    fi
     local restart_via_systemd=0
     local systemctl_available=0
     local -a systemctl_cmd=()
@@ -1448,6 +1461,16 @@ restart_services() {
           "${systemctl_cmd[@]}" start "$camera_service" || true
         fi
       fi
+      if [ "$include_summary_runtime" -eq 1 ]; then
+        local summary_runtime_service="summary-runtime-$service_name"
+        if "${systemctl_cmd[@]}" is-active --quiet "$summary_runtime_service"; then
+          echo "Signaling $summary_runtime_service for restart via systemd..."
+          "${systemctl_cmd[@]}" kill --signal=TERM "$summary_runtime_service" || true
+        else
+          echo "Starting $summary_runtime_service via systemd..."
+          "${systemctl_cmd[@]}" start "$summary_runtime_service" || true
+        fi
+      fi
     fi
     if [ "$restart_via_systemd" -eq 1 ]; then
       if ! wait_for_service_active "$service_name" 1; then
@@ -1479,6 +1502,10 @@ restart_services() {
         local camera_service="camera-$service_name"
         _ensure_service_active "$camera_service" "Camera" "$systemctl_available" "${systemctl_cmd[@]}" || return 1
       fi
+      if [ "$include_summary_runtime" -eq 1 ]; then
+        local summary_runtime_service="summary-runtime-$service_name"
+        _ensure_service_active "$summary_runtime_service" "Summary runtime" "$systemctl_available" "${systemctl_cmd[@]}" || return 1
+      fi
       return 0
     fi
     if ! ./start.sh; then
@@ -1500,6 +1527,10 @@ restart_services() {
     if [ "$include_camera" -eq 1 ]; then
       local camera_service="camera-$service_name"
       _check_service_active "$camera_service" "Camera" || return 1
+    fi
+    if [ "$include_summary_runtime" -eq 1 ]; then
+      local summary_runtime_service="summary-runtime-$service_name"
+      _check_service_active "$summary_runtime_service" "Summary runtime" || return 1
     fi
     return 0
   fi
@@ -2090,6 +2121,11 @@ if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_M
     arthexis_install_camera_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
   else
     arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "camera-${SERVICE_NAME}.service"
+  fi
+
+  arthexis_install_summary_runtime_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
+  if ! summary_runtime_service_configured; then
+    arthexis_remove_systemd_unit_record "$LOCK_DIR" "summary-runtime-${SERVICE_NAME}.service"
   fi
 fi
 

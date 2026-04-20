@@ -51,6 +51,7 @@ ENABLE_RFID_SERVICE=false
 DISABLE_RFID_SERVICE=false
 ENABLE_CAMERA_SERVICE=false
 DISABLE_CAMERA_SERVICE=false
+ENABLE_SUMMARY_RUNTIME_SERVICE=false
 ENABLE_BOOT_UPGRADE=false
 DISABLE_BOOT_UPGRADE=false
 CLEAN=false
@@ -91,7 +92,7 @@ usage() {
 stop_existing_units_for_repair() {
     local service_name="$1"
 
-    arthexis_stop_service_unit_stack "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_RFID_SERVICE" "$ENABLE_CAMERA_SERVICE"
+    arthexis_stop_service_unit_stack "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_RFID_SERVICE" "$ENABLE_CAMERA_SERVICE" "$ENABLE_SUMMARY_RUNTIME_SERVICE"
 }
 
 clean_previous_installation_state() {
@@ -121,7 +122,7 @@ clean_previous_installation_state() {
     fi
 
     if [ -n "$service_name" ]; then
-        arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" true true true true
+        arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" true true true true true
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}-upgrade-guard.service"
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}-upgrade-guard.timer"
     fi
@@ -185,7 +186,7 @@ reset_service_units_for_repair() {
         return 0
     fi
 
-    arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_RFID_SERVICE" "$ENABLE_CAMERA_SERVICE"
+    arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_RFID_SERVICE" "$ENABLE_CAMERA_SERVICE" "$ENABLE_SUMMARY_RUNTIME_SERVICE"
 
     if [ -f "$SYSTEMD_UNITS_LOCK" ]; then
         while IFS= read -r recorded_unit; do
@@ -425,6 +426,9 @@ if [ "$REPAIR" = true ]; then
         while IFS= read -r recorded_unit; do
             [ -z "$recorded_unit" ] && continue
             case "$recorded_unit" in
+                celery-*.service|celery-beat-*.service|lcd-*.service|rfid-*.service|camera-*.service|summary-runtime-*.service|*-upgrade-guard.service|*-upgrade-guard.timer)
+                    continue
+                    ;;
                 *.service)
                     SERVICE="${recorded_unit%.service}"
                     echo "Repair mode: discovered service '$SERVICE' from recorded unit."
@@ -451,6 +455,9 @@ if [ "$REPAIR" = true ]; then
         ENABLE_CAMERA_SERVICE=true
         DISABLE_CAMERA_SERVICE=false
         REQUIRES_REDIS=true
+    fi
+    if [ "$ENABLE_SUMMARY_RUNTIME_SERVICE" = false ] && [ -f "$LOCK_DIR_PATH/$ARTHEXIS_SUMMARY_RUNTIME_SERVICE_LOCK" ]; then
+        ENABLE_SUMMARY_RUNTIME_SERVICE=true
     fi
     if [ "$ENABLE_BOOT_UPGRADE" = false ] && [ -f "$LOCK_DIR_PATH/boot-upgrade.lck" ]; then
         ENABLE_BOOT_UPGRADE=true
@@ -781,6 +788,7 @@ arthexis_timing_record "env_refresh" 0 "included-in-requirements_install"
 
 # Ensure auto-managed node features are refreshed via NodeFeatureAssignment lifecycle.
 python manage.py features --refresh-node
+python manage.py reconcile_node_features_services
 
 deactivate
 
@@ -799,6 +807,13 @@ if [ -n "$SERVICE" ]; then
     LCD_SERVICE="lcd-$SERVICE"
     RFID_SERVICE="rfid-$SERVICE"
     CAMERA_SERVICE="camera-$SERVICE"
+    SUMMARY_RUNTIME_SERVICE="summary-runtime-$SERVICE"
+    SUMMARY_RUNTIME_SERVICE_LOCK="$LOCK_DIR/$ARTHEXIS_SUMMARY_RUNTIME_SERVICE_LOCK"
+    if [ -f "$SUMMARY_RUNTIME_SERVICE_LOCK" ]; then
+        ENABLE_SUMMARY_RUNTIME_SERVICE=true
+    else
+        ENABLE_SUMMARY_RUNTIME_SERVICE=false
+    fi
     if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
         if [ "$DISABLE_LCD_SCREEN" = true ]; then
             if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
@@ -851,6 +866,11 @@ if [ -n "$SERVICE" ]; then
             arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${CAMERA_SERVICE}.service"
         fi
 
+        arthexis_install_summary_runtime_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE"
+        if [ "$ENABLE_SUMMARY_RUNTIME_SERVICE" = false ]; then
+            arthexis_remove_systemd_unit_record "$LOCK_DIR" "${SUMMARY_RUNTIME_SERVICE}.service"
+        fi
+
         if [ "$ENABLE_BOOT_UPGRADE" = true ]; then
             arthexis_install_boot_upgrade_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE"
         else
@@ -861,6 +881,7 @@ if [ -n "$SERVICE" ]; then
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${LCD_SERVICE}.service"
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${RFID_SERVICE}.service"
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${CAMERA_SERVICE}.service"
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${SUMMARY_RUNTIME_SERVICE}.service"
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${SERVICE}-boot-upgrade.service"
         rm -f "$LOCK_DIR/${SERVICE}-boot-upgrade-backoff-until.lck"
     fi

@@ -2,7 +2,7 @@
   {
     "model": "features.feature",
     "fields": {
-      "admin_requirements": "Summary admin surfaces can configure backend and model path parameters.",
+      "admin_requirements": "Summary admin surfaces can select a built-in model, configure the llama.cpp runtime binding, and inspect the managed runtime service/probe state.",
       "admin_views": [
         "admin:features_feature_changelist",
         "admin:summary_lcdlogsummary_changelist"
@@ -27,13 +27,13 @@
       "protocol_coverage": {},
       "public_requirements": "No direct public interface; summarization updates internal displays.",
       "public_views": [],
-      "service_requirements": "Requires summary command/task pipeline and optional model files.",
+      "service_requirements": "Requires the summary command/task pipeline, LCD and Celery node features, and an Arthexis-managed local model runtime backed by a selected llama.cpp model.",
       "service_views": [
         "apps.summary.services.generate_lcd_log_summaries"
       ],
       "slug": "llm-summary-suite",
       "source": "mainstream",
-      "summary": "Controls automated LCD summary generation and related local model settings.",
+      "summary": "Controls automated LCD summary generation, model selection, and the managed local llama.cpp runtime service settings.",
       "updated_at": "2024-03-01T00:00:00Z"
     }
   }

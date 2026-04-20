@@ -31,7 +31,7 @@ def _is_llm_summary_active(*, base_dir: Path, base_path: Path) -> bool:
     """Return whether llm-summary runtime requirements are met."""
 
     try:
-        from apps.summary.services import get_summary_config
+        from apps.summary.services import get_summary_config, summary_runtime_is_ready
     except ImportError:
         return False
 
@@ -44,7 +44,7 @@ def _is_llm_summary_active(*, base_dir: Path, base_path: Path) -> bool:
     except (OperationalError, ProgrammingError):
         return False
 
-    return bool(config.is_active)
+    return summary_runtime_is_ready(config)
 
 
 def check_node_feature(
