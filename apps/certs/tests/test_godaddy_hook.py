@@ -11,9 +11,23 @@ MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
 SPEC.loader.exec_module(MODULE)
 
-def test_zone_and_name_validates_zone_override_suffix():
-    with pytest.raises(RuntimeError, match="GODADDY_ZONE"):
-        MODULE._zone_and_name("_acme-challenge.example.com", "other.com")
+@pytest.mark.parametrize(
+    ("domain", "zone_override", "match"),
+    [
+        ("_acme-challenge.example.com", "other.com", "GODADDY_ZONE"),
+        ("_acme-challenge.example.com", "", None),
+    ],
+)
+def test_zone_and_name_validation_and_derivation(domain, zone_override, match, capsys):
+    if match:
+        with pytest.raises(RuntimeError, match=match):
+            MODULE._zone_and_name(domain, zone_override)
+        return
+    zone, host = MODULE._zone_and_name(domain, zone_override)
+    captured = capsys.readouterr()
+    assert zone == "example.com"
+    assert host == "_acme-challenge"
+    assert "derived zone 'example.com'" in captured.out
 
 def test_emit_log_writes_to_configured_log_file(tmp_path, capsys, monkeypatch):
     log_path = tmp_path / "hook.log"
@@ -24,14 +38,6 @@ def test_emit_log_writes_to_configured_log_file(tmp_path, capsys, monkeypatch):
     captured = capsys.readouterr()
     assert "diagnostic-message" in captured.out
     assert "diagnostic-message" in log_path.read_text(encoding="utf-8")
-
-def test_zone_and_name_derives_zone_without_override(capsys):
-    zone, host = MODULE._zone_and_name("_acme-challenge.example.com")
-
-    captured = capsys.readouterr()
-    assert zone == "example.com"
-    assert host == "_acme-challenge"
-    assert "derived zone 'example.com'" in captured.out
 
 def test_fetch_existing_txt_values_returns_empty_for_404(monkeypatch):
     class Response:
@@ -165,4 +171,3 @@ def test_wait_for_public_recursive_txt_propagation_ignores_failed_resolvers(monk
         expected_value="expected-value",
         timeout_seconds=1,
     )
-

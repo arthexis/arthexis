@@ -188,34 +188,32 @@ def test_status_notification_normalization_maps_ocpp21_fields():
     assert normalized["info"] == "door-open"
 
 
-def test_meter_values_normalization_maps_ocpp21_evse_to_connector_id():
+@pytest.mark.parametrize(
+    ("normalizer", "payload", "expected_connector_id"),
+    [
+        (
+            "_normalized_meter_values_payload",
+            {"evse": {"id": "4"}, "meterValue": []},
+            "4",
+        ),
+        (
+            "_normalized_meter_values_payload",
+            {"evse": {"connectorId": 0, "id": 9}, "evseId": 3, "meterValue": []},
+            0,
+        ),
+        (
+            "_normalized_status_notification_payload",
+            {"evse": {"connectorId": 0, "id": 9}, "evseId": 3},
+            0,
+        ),
+    ],
+)
+def test_payload_normalization_connector_id_handling(
+    normalizer, payload, expected_connector_id
+):
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
-
-    normalized = consumer._normalized_meter_values_payload(
-        {"evse": {"id": "4"}, "meterValue": []}
-    )
-
-    assert normalized["connectorId"] == "4"
-
-
-def test_meter_values_normalization_preserves_zero_connector_id():
-    consumer = CSMSConsumer(scope={}, receive=None, send=None)
-
-    normalized = consumer._normalized_meter_values_payload(
-        {"evse": {"connectorId": 0, "id": 9}, "evseId": 3, "meterValue": []}
-    )
-
-    assert normalized["connectorId"] == 0
-
-
-def test_status_notification_normalization_preserves_zero_connector_id():
-    consumer = CSMSConsumer(scope={}, receive=None, send=None)
-
-    normalized = consumer._normalized_status_notification_payload(
-        {"evse": {"connectorId": 0, "id": 9}, "evseId": 3}
-    )
-
-    assert normalized["connectorId"] == 0
+    normalized = getattr(consumer, normalizer)(payload)
+    assert normalized["connectorId"] == expected_connector_id
 
 
 @pytest.mark.anyio

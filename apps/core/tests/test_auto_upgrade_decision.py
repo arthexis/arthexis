@@ -64,10 +64,7 @@ def test_build_upgrade_decision_applies_stable_and_unstable(monkeypatch):
     assert len(unstable_decision.args) == 2
     assert Path(unstable_decision.args[0]).name == expected_script
     assert unstable_decision.args[1] == "--latest"
-
-
-def test_ci_status_for_revision_compatibility_shim_returns_empty_string(tmp_path):
-    assert tasks._ci_status_for_revision(tmp_path, "abc123") == ""
+    assert tasks._ci_status_for_revision(Path("/tmp/base"), "abc123") == ""
 
 
 def test_build_upgrade_decision_skips_when_pypi_gate_blocks(monkeypatch):

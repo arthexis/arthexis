@@ -25,9 +25,14 @@ def test_build_external_sqlite_databases_uses_work_dbs_dir():
 
 
 def test_external_alias_falls_back_when_path_has_no_suffix_token():
-    alias = external_app_database_alias("...", fallback_index=4)
-
-    assert alias == "external_app_4"
+    assert external_app_database_alias("...", fallback_index=4) == "external_app_4"
+    assert (
+        external_app_database_alias(
+            "arthexis_plugin_sample.apps.ArthexisPluginSampleConfig",
+            fallback_index=1,
+        )
+        == "external_arthexis_plugin_sample"
+    )
 
 
 def test_external_router_routes_external_model(settings):

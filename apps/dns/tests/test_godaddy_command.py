@@ -80,19 +80,17 @@ def test_godaddy_add_requires_known_user():
 
 
 @pytest.mark.django_db
-def test_godaddy_remove_requires_credential_id():
-    """Remove should fail when no credential id is provided."""
-
-    with pytest.raises(CommandError, match="remove requires credential_id"):
-        call_command("godaddy", "remove")
-
-
-@pytest.mark.django_db
-def test_godaddy_remove_errors_when_credential_not_found():
-    """Remove should fail when the credential id does not exist."""
-
-    with pytest.raises(CommandError, match="GoDaddy credential #9999"):
-        call_command("godaddy", "remove", "9999")
+@pytest.mark.parametrize(
+    ("args", "match"),
+    [
+        ((), "remove requires credential_id"),
+        (("9999",), "GoDaddy credential #9999"),
+    ],
+)
+def test_godaddy_remove_validates_credential_inputs(args, match):
+    """Remove should reject missing and unknown credential identifiers."""
+    with pytest.raises(CommandError, match=match):
+        call_command("godaddy", "remove", *args)
 
 
 @pytest.mark.django_db

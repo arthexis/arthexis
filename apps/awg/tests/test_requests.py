@@ -1,3 +1,4 @@
+import pytest
 from apps.awg.views.requests import _AwgParameters, _base_vdrop
 
 
@@ -17,9 +18,11 @@ def _params(*, phases: int) -> _AwgParameters:
     )
 
 
-def test_base_vdrop_uses_two_wire_multiplier_for_two_phase():
-    assert _base_vdrop(_params(phases=2)) == _base_vdrop(_params(phases=1))
-
-
-def test_base_vdrop_uses_three_phase_multiplier_for_three_phase():
-    assert _base_vdrop(_params(phases=3)) < _base_vdrop(_params(phases=1))
+@pytest.mark.parametrize(
+    ("phases", "comparator"),
+    [(2, lambda value, baseline: value == baseline), (3, lambda value, baseline: value < baseline)],
+)
+def test_base_vdrop_uses_expected_phase_multiplier(phases, comparator):
+    base = _base_vdrop(_params(phases=1))
+    value = _base_vdrop(_params(phases=phases))
+    assert comparator(value, base)

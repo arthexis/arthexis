@@ -69,19 +69,14 @@ def test_initialize_reader_strategy_wraps_provided_reader():
     )
 
 
-def test_read_rfid_returns_initialization_failure(monkeypatch):
+def test_read_rfid_handles_initialization_and_polling_failure(monkeypatch):
     monkeypatch.setattr(
         reader,
         "_initialize_reader_strategy",
         lambda mfrc=None, *, cleanup=True: (None, {"error": "reader unavailable"}),
     )
+    assert reader.read_rfid() == {"error": "reader unavailable"}
 
-    result = reader.read_rfid()
-
-    assert result == {"error": "reader unavailable"}
-
-
-def test_read_rfid_returns_empty_payload_when_polling_times_out(monkeypatch):
     fake_reader = _FakeReader(request_status=_FakeReader.MI_ERR)
     strategy = reader.ReaderStrategy(
         mfrc=fake_reader,
@@ -98,7 +93,6 @@ def test_read_rfid_returns_empty_payload_when_polling_times_out(monkeypatch):
     monkeypatch.setattr(reader.time, "time", lambda: next(times))
 
     result = reader.read_rfid(timeout=0.5, poll_interval=None)
-
     assert result == {"rfid": None, "label_id": None}
 
 

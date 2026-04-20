@@ -23,18 +23,6 @@ def test_setup_hardware_gpio_missing_disables_reader(caplog, monkeypatch):
     assert "GPIO library not available" in matches[0]
 
 
-def test_start_skips_when_hardware_is_disabled(monkeypatch):
-    monkeypatch.setattr(background_reader, "_hardware_disabled_reason", "missing gpio")
-    monkeypatch.setattr(background_reader, "_thread", None)
-
-    def _unexpected_thread(*_args, **_kwargs):
-        raise AssertionError("background thread should not start when hardware disabled")
-
-    monkeypatch.setattr(background_reader.threading, "Thread", _unexpected_thread)
-
-    background_reader.start()
-
-
 def test_start_disables_hardware_when_gpio_unavailable(monkeypatch):
     monkeypatch.setattr(background_reader, "_hardware_disabled_reason", None)
     monkeypatch.setattr(background_reader, "_thread", None)
@@ -49,3 +37,16 @@ def test_start_disables_hardware_when_gpio_unavailable(monkeypatch):
     background_reader.start()
 
     assert background_reader._hardware_disabled_reason == "GPIO library not available"
+
+
+def test_start_skips_when_hardware_is_disabled(monkeypatch):
+    monkeypatch.setattr(background_reader, "_hardware_disabled_reason", "missing gpio")
+    monkeypatch.setattr(background_reader, "_thread", None)
+    monkeypatch.setattr(background_reader, "is_configured", lambda: True)
+    monkeypatch.setattr(background_reader, "_ensure_gpio_loaded", lambda: True)
+
+    def _unexpected_thread(*_args, **_kwargs):
+        raise AssertionError("background thread should not start when hardware disabled")
+
+    monkeypatch.setattr(background_reader.threading, "Thread", _unexpected_thread)
+    background_reader.start()

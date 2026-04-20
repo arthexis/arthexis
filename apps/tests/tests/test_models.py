@@ -4,10 +4,9 @@ from apps.tests.models import SuiteTest
 
 
 @pytest.mark.django_db
-def test_suite_test_name_uses_title_case():
-    assert SuiteTest._meta.verbose_name == "Suite Test"
-
-
-@pytest.mark.django_db
-def test_suite_test_plural_name_uses_title_case():
-    assert SuiteTest._meta.verbose_name_plural == "Suite Tests"
+@pytest.mark.parametrize(
+    ("attribute", "expected"),
+    [("verbose_name", "Suite Test"), ("verbose_name_plural", "Suite Tests")],
+)
+def test_suite_test_names_use_title_case(attribute, expected):
+    assert getattr(SuiteTest._meta, attribute) == expected

@@ -135,14 +135,24 @@ def test_evergo_command_load_customers_with_inline_queries():
 
 @pytest.mark.django_db
 @pytest.mark.integration
-def test_evergo_command_load_customers_requires_query_source():
-    """Command should reject load-customer runs that do not provide any queries."""
+@pytest.mark.parametrize(
+    ("extra_args", "match"),
+    [
+        ([], "requires --queries or --queries-file"),
+        (["--queries", "J00123", "--queries-file", "__conflict__"], "Use only one of --queries or --queries-file"),
+    ],
+)
+def test_evergo_command_load_customers_query_source_validation(tmp_path, extra_args, match):
+    """Command should validate query source selection for customer-loading runs."""
     User = get_user_model()
     suite_user = User.objects.create_user(username="suite-missing", email="suite-missing@example.com")
     EvergoUser.objects.create(user=suite_user, evergo_email="ops@example.com", evergo_password="secret")
+    queries_file = tmp_path / "queries.txt"
+    queries_file.write_text("J00123", encoding="utf-8")
+    args = [str(queries_file) if arg == "__conflict__" else arg for arg in extra_args]
+    with pytest.raises(CommandError, match=match):
+        call_command("evergo", suite_user.username, "--load-customers", *args)
 
-    with pytest.raises(CommandError, match="requires --queries or --queries-file"):
-        call_command("evergo", suite_user.username, "--load-customers")
 
 @pytest.mark.django_db
 def test_evergo_command_load_customers_requires_existing_evergo_email():
@@ -157,26 +167,6 @@ def test_evergo_command_load_customers_requires_existing_evergo_email():
             "--load-customers",
             "--queries",
             "J00123",
-        )
-
-@pytest.mark.django_db
-@pytest.mark.integration
-def test_evergo_command_load_customers_rejects_conflicting_query_sources(tmp_path):
-    """Command should reject passing both inline and file query sources at once."""
-    User = get_user_model()
-    suite_user = User.objects.create_user(username="suite-conflict", email="suite-conflict@example.com")
-    queries_file = tmp_path / "queries.txt"
-    queries_file.write_text("J00123", encoding="utf-8")
-
-    with pytest.raises(CommandError, match="Use only one of --queries or --queries-file"):
-        call_command(
-            "evergo",
-            suite_user.username,
-            "--load-customers",
-            "--queries",
-            "J00123",
-            "--queries-file",
-            str(queries_file),
         )
 
 @pytest.mark.django_db

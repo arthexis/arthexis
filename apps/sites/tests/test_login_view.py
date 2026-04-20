@@ -46,8 +46,9 @@ def test_login_view_does_not_consume_registration_session_prefill_on_post(client
     session[REGISTRATION_USERNAME_PREFILL_SESSION_KEY] = "session-registered-user"
     session.save()
 
-    client.post(reverse("pages:login"), {"username": "", "password": ""})
+    response = client.post(reverse("pages:login"), {"username": "", "password": ""})
 
+    assert response.status_code == 200
     session = client.session
     assert session.get(REGISTRATION_USERNAME_PREFILL_SESSION_KEY) == "session-registered-user"
 

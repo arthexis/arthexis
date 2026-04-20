@@ -21,14 +21,14 @@ from apps.ocpp.cpsim_service import (
 pytestmark = pytest.mark.django_db
 
 
-def test_cpsim_service_enabled_reads_suite_feature_flag():
+@pytest.mark.parametrize("is_enabled", [True, False])
+def test_cpsim_service_enabled_reads_suite_feature_flag(is_enabled):
     """Regression: service enabled state should come from suite feature flag."""
-
     Feature.objects.update_or_create(
         slug=CPSIM_FEATURE_SLUG,
-        defaults={"display": "OCPP Simulator", "is_enabled": True},
+        defaults={"display": "OCPP Simulator", "is_enabled": is_enabled},
     )
-    assert cpsim_service_enabled() is True
+    assert cpsim_service_enabled() is is_enabled
 
 
 def test_simulator_admin_toggle_updates_suite_feature(admin_client, monkeypatch):

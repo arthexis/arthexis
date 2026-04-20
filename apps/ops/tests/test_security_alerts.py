@@ -152,16 +152,13 @@ def test_error_event_security_alerts_surface_last_seen_and_count() -> None:
     assert "Count: 2" in alerts[0].summary
 
 
-def test_security_alerts_widget_exposes_dashboard_rules_report_url() -> None:
+def test_security_alerts_empty_state_links_to_dashboard_rules_report() -> None:
     widget_context = ops_widgets.security_alerts_widget()
-
     assert widget_context["dashboard_rules_report_url"] == "/admin/system/dashboard-rules-report/"
 
-
-def test_security_alerts_empty_state_links_to_dashboard_rules_report() -> None:
     html = render_to_string(
         "widgets/security_alerts.html",
-        {"alerts": [], "dashboard_rules_report_url": "/admin/system/dashboard-rules-report/"},
+        {"alerts": [], "dashboard_rules_report_url": widget_context["dashboard_rules_report_url"]},
     )
 
     assert "No active security alerts." in html

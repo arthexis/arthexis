@@ -18,7 +18,7 @@ from apps.evergo.models import (
 
 
 @pytest.mark.django_db
-def test_evergo_user_rejects_empty_email_at_database_level():
+def test_evergo_user_email_database_constraint_enforces_non_empty_value():
     """Database constraint should reject direct saves with an empty Evergo email."""
     User = get_user_model()
     suite_user = User.objects.create_user(

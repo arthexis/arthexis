@@ -396,11 +396,28 @@ def test_verify_certificate_handles_permission_error():
         for message in result.messages
     )
 
-def test_ensure_certbot_available_missing_sudo_reports_sudo_guidance(monkeypatch):
-    """Missing sudo binary should return sudo-specific guidance."""
+@pytest.mark.parametrize(
+    ("raised_error", "expected_message", "unexpected_message"),
+    [
+        (
+            FileNotFoundError(2, "No such file or directory", "sudo"),
+            "configured sudo executable is not available",
+            "apt install -y certbot",
+        ),
+        (
+            RuntimeError("sudo: a password is required"),
+            "sudo: a password is required",
+            None,
+        ),
+    ],
+)
+def test_ensure_certbot_available_wraps_runtime_preflight_errors(
+    monkeypatch, raised_error, expected_message, unexpected_message
+):
+    """Preflight runtime errors should be normalized as CertbotError with actionable context."""
 
     def fake_run(command: list[str], *, env=None):  # noqa: ARG001
-        raise FileNotFoundError(2, "No such file or directory", "sudo")
+        raise raised_error
 
     monkeypatch.setattr(services, "_run_command", fake_run)
 
@@ -408,20 +425,9 @@ def test_ensure_certbot_available_missing_sudo_reports_sudo_guidance(monkeypatch
         services.ensure_certbot_available()
 
     message = str(exc_info.value)
-    assert "No such file or directory" in message
-    assert "configured sudo executable is not available" in message
-    assert "apt install -y certbot" not in message
-
-def test_ensure_certbot_available_runtime_errors_are_wrapped(monkeypatch):
-    """Non-missing-certbot runtime errors should still raise CertbotError."""
-
-    def fake_run(command: list[str], *, env=None):  # noqa: ARG001
-        raise RuntimeError("sudo: a password is required")
-
-    monkeypatch.setattr(services, "_run_command", fake_run)
-
-    with pytest.raises(services.CertbotError, match="sudo: a password is required"):
-        services.ensure_certbot_available()
+    assert expected_message in message
+    if unexpected_message:
+        assert unexpected_message not in message
 
 def test_ensure_certbot_available_missing_certbot_includes_supported_os_guidance(monkeypatch):
     """Missing certbot preflight checks should provide actionable install guidance."""

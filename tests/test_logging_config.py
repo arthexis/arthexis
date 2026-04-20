@@ -22,12 +22,10 @@ def _build_request(**kwargs):
     )
 
 
-def test_resolve_log_formatter_defaults_to_text(monkeypatch):
+def test_resolve_log_formatter_modes(monkeypatch):
     monkeypatch.delenv("ARTHEXIS_LOG_FORMAT", raising=False)
     assert resolve_log_formatter() == "standard"
 
-
-def test_resolve_log_formatter_json_mode(monkeypatch):
     monkeypatch.setenv("ARTHEXIS_LOG_FORMAT", "json")
     assert resolve_log_formatter() == "json"
 

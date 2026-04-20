@@ -13,7 +13,7 @@ from apps.ocpp.models import Charger
 
 
 @pytest.mark.django_db
-def test_node_key_material_only_one_active_key():
+def test_node_key_material_enforces_single_active_key():
     node = Node.objects.create(hostname="mesh-a")
 
     NodeKeyMaterial.objects.create(node=node, public_key="pk-1", revoked=False)
@@ -108,27 +108,41 @@ def test_peer_policy_rejects_mixed_node_and_group_selectors():
 
 
 @pytest.mark.django_db
-def test_peer_policy_selector_constraints_block_direct_create():
+@pytest.mark.parametrize(
+    ("policy_kwargs", "expect_validation_error"),
+    [
+        ({"source_node": "new-node"}, True),
+        (
+            {
+                "source_station": "station",
+                "source_tags": ["edge"],
+                "destination_node": "new-destination",
+                "destination_tags": ["ingress"],
+                "allowed_services": ["telemetry"],
+            },
+            False,
+        ),
+    ],
+)
+def test_peer_policy_selector_validation(policy_kwargs, expect_validation_error):
     source_node = Node.objects.create(hostname="mesh-source-db")
-    policy = PeerPolicy(source_node=source_node)
-
-    with pytest.raises(ValidationError):
-        policy.full_clean()
-
-
-@pytest.mark.django_db
-def test_peer_policy_accepts_station_and_tag_selectors():
-    source = Node.objects.create(hostname="mesh-source-station", mesh_capability_flags=["edge"])
-    destination = Node.objects.create(hostname="mesh-destination-station", mesh_capability_flags=["ingress"])
-    station = Charger.objects.create(charger_id="NETMESH-STATION-1", manager_node=source)
-    policy = PeerPolicy(
-        source_station=station,
-        source_tags=["edge"],
-        destination_node=destination,
-        destination_tags=["ingress"],
-        allowed_services=["telemetry"],
-    )
-
+    destination_node = Node.objects.create(hostname="mesh-destination-db")
+    station = Charger.objects.create(charger_id="NETMESH-STATION-1", manager_node=source_node)
+    resolved_kwargs = {}
+    for key, value in policy_kwargs.items():
+        if value == "new-node":
+            resolved_kwargs[key] = source_node
+        elif value == "new-destination":
+            resolved_kwargs[key] = destination_node
+        elif value == "station":
+            resolved_kwargs[key] = station
+        else:
+            resolved_kwargs[key] = value
+    policy = PeerPolicy(**resolved_kwargs)
+    if expect_validation_error:
+        with pytest.raises(ValidationError):
+            policy.full_clean()
+        return
     policy.full_clean()
 
 
@@ -192,27 +206,22 @@ def test_peer_policy_rejects_ambiguous_allow_and_deny_with_reordered_tag_selecto
 
 
 @pytest.mark.django_db
-def test_mesh_membership_disallows_duplicate_default_scope():
-    node = Node.objects.create(hostname="mesh-default-scope")
-
-    MeshMembership.objects.create(node=node, tenant=MeshMembership.DEFAULT_TENANT, site=None)
-
-    with pytest.raises(IntegrityError):
-        with transaction.atomic():
-            MeshMembership.objects.create(node=node, tenant=MeshMembership.DEFAULT_TENANT, site=None)
-
-
-@pytest.mark.django_db
-def test_mesh_membership_requires_non_empty_tenant():
+@pytest.mark.parametrize("tenant", [MeshMembership.DEFAULT_TENANT, ""])
+def test_mesh_membership_tenant_constraints(tenant):
     node = Node.objects.create(hostname="mesh-empty-membership-tenant")
-    membership = MeshMembership(node=node, tenant="")
+    if tenant == MeshMembership.DEFAULT_TENANT:
+        MeshMembership.objects.create(node=node, tenant=tenant, site=None)
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                MeshMembership.objects.create(node=node, tenant=tenant, site=None)
+        return
 
+    membership = MeshMembership(node=node, tenant=tenant)
     with pytest.raises(ValidationError):
         membership.full_clean()
-
     with pytest.raises(IntegrityError):
         with transaction.atomic():
-            MeshMembership.objects.create(node=node, tenant="")
+            MeshMembership.objects.create(node=node, tenant=tenant)
 
 
 @pytest.mark.django_db
@@ -235,4 +244,3 @@ def test_peer_policy_requires_non_empty_tenant():
                 source_node=source,
                 destination_node=destination,
             )
-

@@ -24,8 +24,12 @@ class DummyResponse:
         self.closed = True
 
 
-def test_issue_lock_dir_uses_project_root():
+def test_repository_service_paths_and_token_fallback(monkeypatch):
     assert github.ISSUE_LOCK_DIR == Path(settings.BASE_DIR) / ".locks" / "github-issues"
+
+    monkeypatch.setenv("GITHUB_TOKEN", "")
+    monkeypatch.setattr(github, "_get_latest_release_token", lambda: "release-token")
+    assert github.resolve_repository_token(package=None) == "release-token"
 
 
 def test_fetch_repository_issues_handles_pagination(monkeypatch):
@@ -59,15 +63,6 @@ def test_fetch_repository_pull_requests_raises_on_error(monkeypatch):
 
     with pytest.raises(github.GitHubRepositoryError):
         list(github.fetch_repository_pull_requests(token="tok", owner="octo", name="demo"))
-
-
-def test_resolve_repository_token_uses_latest_release_when_available(monkeypatch):
-    monkeypatch.setenv("GITHUB_TOKEN", "")
-    monkeypatch.setattr(github, "_get_latest_release_token", lambda: "release-token")
-
-    token = github.resolve_repository_token(package=None)
-
-    assert token == "release-token"
 
 
 def test_create_pull_request_comment_posts_to_issue_comments_for_open_pr(monkeypatch):

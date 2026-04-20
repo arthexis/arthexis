@@ -13,26 +13,23 @@ from apps.nodes.models import Node
 pytestmark = pytest.mark.django_db
 
 
-def test_last_seen_prefers_status_timestamp():
-    timestamp = timezone.now()
-    charger = Charger.objects.create(
-        charger_id="CH-1",
-        last_status_timestamp=timestamp,
-        last_heartbeat=timestamp - dt.timedelta(minutes=5),
+@pytest.mark.parametrize(
+    ("last_status_offset", "last_heartbeat_offset", "expected_field"),
+    [(0, 5, "last_status_timestamp"), (None, 0, "last_heartbeat")],
+)
+def test_last_seen_uses_expected_source(last_status_offset, last_heartbeat_offset, expected_field):
+    heartbeat = timezone.now() - dt.timedelta(minutes=last_heartbeat_offset)
+    status_timestamp = (
+        None
+        if last_status_offset is None
+        else timezone.now() - dt.timedelta(minutes=last_status_offset)
     )
-
-    assert charger.last_seen == timestamp
-
-
-def test_last_seen_falls_back_to_heartbeat():
-    heartbeat = timezone.now()
     charger = Charger.objects.create(
-        charger_id="CH-2",
-        last_status_timestamp=None,
+        charger_id=f"CH-{expected_field}",
+        last_status_timestamp=status_timestamp,
         last_heartbeat=heartbeat,
     )
-
-    assert charger.last_seen == heartbeat
+    assert charger.last_seen == getattr(charger, expected_field)
 
 
 def test_create_charger_ignores_stale_local_node_cache():

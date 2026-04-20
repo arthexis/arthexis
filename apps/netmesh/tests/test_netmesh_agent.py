@@ -16,7 +16,7 @@ from apps.nodes.models import Node
 
 @pytest.mark.django_db
 def test_netmesh_agent_command_requires_enrollment_token():
-    with pytest.raises(CommandError):
+    with pytest.raises(CommandError, match="--enrollment-token"):
         call_command("netmesh_agent", "--max-loops", "1")
 
 

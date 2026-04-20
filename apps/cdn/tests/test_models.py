@@ -19,37 +19,28 @@ def test_jsdelivr_configuration_is_valid_without_distribution_id():
 
 
 @pytest.mark.django_db
-def test_database_constraint_enforces_provider_distribution_invariant():
-    """DB check constraint rejects provider/distribution mismatch writes."""
-
+@pytest.mark.parametrize(
+    "create_kwargs",
+    [
+        {
+            "name": "Broken CDN",
+            "provider": CDNConfiguration.Provider.CLOUDFLARE,
+            "base_url": "https://cdn.example.com/static/",
+            "aws_distribution_id": "E123ABC",
+        },
+        {
+            "name": "Broken AWS CDN",
+            "provider": CDNConfiguration.Provider.AWS_CLOUDFRONT,
+            "base_url": "https://d111111abcdef8.cloudfront.net/static/",
+        },
+        {
+            "name": "Broken HTTP CDN",
+            "provider": CDNConfiguration.Provider.CLOUDFLARE,
+            "base_url": "http://cdn.example.com/static/",
+        },
+    ],
+)
+def test_database_constraints_reject_invalid_cdn_configuration(create_kwargs):
+    """DB check constraints reject invalid provider/distribution/url combinations."""
     with pytest.raises(IntegrityError):
-        CDNConfiguration.objects.create(
-            name="Broken CDN",
-            provider=CDNConfiguration.Provider.CLOUDFLARE,
-            base_url="https://cdn.example.com/static/",
-            aws_distribution_id="E123ABC",
-        )
-
-
-@pytest.mark.django_db
-def test_database_constraint_requires_distribution_id_for_aws():
-    """DB check constraint rejects AWS records missing distribution IDs."""
-
-    with pytest.raises(IntegrityError):
-        CDNConfiguration.objects.create(
-            name="Broken AWS CDN",
-            provider=CDNConfiguration.Provider.AWS_CLOUDFRONT,
-            base_url="https://d111111abcdef8.cloudfront.net/static/",
-        )
-
-
-@pytest.mark.django_db
-def test_database_constraint_requires_https_base_url():
-    """DB check constraint rejects non-HTTPS base URLs."""
-
-    with pytest.raises(IntegrityError):
-        CDNConfiguration.objects.create(
-            name="Broken HTTP CDN",
-            provider=CDNConfiguration.Provider.CLOUDFLARE,
-            base_url="http://cdn.example.com/static/",
-        )
+        CDNConfiguration.objects.create(**create_kwargs)

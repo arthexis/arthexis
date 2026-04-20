@@ -157,31 +157,35 @@ def test_run_contract_login_validation_uses_order_numbers_when_full_load_disable
 
 
 @pytest.mark.django_db
-def test_build_loaded_entities_links_only_includes_present_entities():
-    """Link helper should omit entity links when no IDs were loaded for that entity type."""
-    links = _build_loaded_entities_links(
-        {
-            "loaded_customer_ids": [11],
-            "loaded_order_ids": [],
-        }
-    )
-
-    assert "id__in=11" in links
-    assert "Customers" in links
-    assert "Orders" not in links
-
-
-@pytest.mark.django_db
-def test_build_loaded_entities_links_returns_empty_when_no_entities_loaded():
-    """Link helper should not render generic changelist links when nothing was loaded."""
-    links = _build_loaded_entities_links(
-        {
-            "loaded_customer_ids": [],
-            "loaded_order_ids": [],
-        }
-    )
-
-    assert links == ""
+@pytest.mark.parametrize(
+    ("payload", "expects_empty", "expected_parts", "unexpected_parts"),
+    [
+        (
+            {"loaded_customer_ids": [11], "loaded_order_ids": []},
+            False,
+            ["id__in=11", "Customers"],
+            ["Orders"],
+        ),
+        (
+            {"loaded_customer_ids": [], "loaded_order_ids": []},
+            True,
+            [],
+            [],
+        ),
+    ],
+)
+def test_build_loaded_entities_links_handles_presence_and_empty_states(
+    payload, expects_empty, expected_parts, unexpected_parts
+):
+    """Link helper should include only loaded entities and emit empty output when nothing was loaded."""
+    links = _build_loaded_entities_links(payload)
+    if expects_empty:
+        assert links == ""
+        return
+    for part in expected_parts:
+        assert part in links
+    for part in unexpected_parts:
+        assert part not in links
 
 
 @pytest.mark.django_db
