@@ -136,10 +136,46 @@
       return Math.max(0, table.rows.length - 1);
     };
 
+    const summarizeColumns = (table) => {
+      const headers = Array.from(table.querySelectorAll("thead th"))
+        .map((cell) => cell.textContent.trim())
+        .filter(Boolean);
+
+      if (!headers.length) {
+        return "";
+      }
+
+      const visibleHeaders = headers.slice(0, 3).join(", ");
+      if (headers.length <= 3) {
+        return visibleHeaders;
+      }
+
+      return `${visibleHeaders}, …`;
+    };
+
+    const summarizeFirstRow = (table) => {
+      const firstBodyRow = table.tBodies[0]?.rows[0] || table.rows[1];
+      if (!firstBodyRow) {
+        return "";
+      }
+
+      const values = Array.from(firstBodyRow.cells)
+        .map((cell) => cell.textContent.trim())
+        .filter(Boolean)
+        .slice(0, 2);
+      return values.join(" • ");
+    };
+
     const buildTableToggleLabel = (table, rowCount) => {
       const captionText = table.caption ? table.caption.textContent.trim() : "";
       const tableName = captionText || tableLabel;
       const rowLabel = rowCount === 1 ? rowLabelSingular : rowLabelPlural;
+      const detailSummary = summarizeColumns(table) || summarizeFirstRow(table);
+
+      if (detailSummary) {
+        return `${tableName}: ${detailSummary} (${rowCount} ${rowLabel})`;
+      }
+
       return `${tableName} (${rowCount} ${rowLabel})`;
     };
 
@@ -170,7 +206,16 @@
         headingButton.setAttribute("aria-expanded", "false");
         headingButton.setAttribute("aria-controls", tableId);
         headingButton.setAttribute("title", collapseLabel);
-        headingButton.innerHTML = `<span class="reader-table-toggle-text">${headingText}</span><span class="reader-table-toggle-icon" aria-hidden="true">▸</span>`;
+        const textNode = document.createElement("span");
+        textNode.className = "reader-table-toggle-text";
+        textNode.textContent = headingText;
+
+        const iconNode = document.createElement("span");
+        iconNode.className = "reader-table-toggle-icon";
+        iconNode.setAttribute("aria-hidden", "true");
+        iconNode.textContent = "▸";
+
+        headingButton.append(textNode, iconNode);
 
         headingButton.addEventListener("click", () => {
           const expanded = headingButton.getAttribute("aria-expanded") === "true";
