@@ -216,7 +216,7 @@ start_embedded_lcd_if_needed() {
     return 0
   fi
 
-  python -m apps.screens.lcd_screen.runner &
+  python -m apps.screens.lcd_screen &
   LCD_PROCESS_PID=$!
   LCD_STARTED=true
   record_pid_file "$LCD_PROCESS_PID" "$LCD_PID_FILE"
