@@ -21,6 +21,8 @@ from utils.qa_remediation import emit_remediation, expected_venv_python, find_re
 class Command(BaseCommand):
     """Run local test workflows from a single command entrypoint."""
 
+    __test__ = False
+
     help = "Run suite tests via the canonical manage.py entrypoint or launch the VS Code test server."
 
     def add_arguments(self, parser) -> None:
