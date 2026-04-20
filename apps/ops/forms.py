@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 from apps.groups.models import SecurityGroup
 from apps.repos.models import GitHubToken
 from apps.repos.services import github as github_service
+from apps.sigils.sigil_resolver import resolve_sigils
 
 
 class OperatorJourneyProvisionSuperuserForm(forms.Form):
@@ -253,8 +254,9 @@ class OperatorJourneyGitHubAccessForm(forms.Form):
         """Return whether the token authenticates and matches the requested username."""
 
         cleaned_data = self.cleaned_data
+        submitted_token = (cleaned_data.get("token") or "").strip()
         success, message, login = github_service.validate_token(
-            cleaned_data.get("token") or ""
+            resolve_sigils(submitted_token)
         )
         if not success:
             return False, message

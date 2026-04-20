@@ -442,6 +442,32 @@ class OperatorJourneyViewTests(TestCase):
             token.__dict__.get("token"),
         )
 
+    @patch("apps.ops.forms.github_service.validate_token")
+    @patch("apps.ops.forms.resolve_sigils")
+    def test_setup_github_token_validation_resolves_sigil_tokens(
+        self,
+        mock_resolve_sigils,
+        mock_validate_token,
+    ):
+        mock_resolve_sigils.return_value = "resolved-token"
+        mock_validate_token.return_value = (True, "Connected to GitHub as arthexis.", "arthexis")
+        form = OperatorJourneyGitHubAccessForm(
+            data={
+                "github_username": "arthexis",
+                "token": "[ENV.GITHUB_TOKEN]",
+                "token_label": "",
+            },
+            user=self.user,
+        )
+
+        self.assertTrue(form.is_valid())
+        is_valid, message = form.validate_connection()
+
+        self.assertTrue(is_valid)
+        self.assertEqual(message, "Connected to GitHub as arthexis.")
+        mock_resolve_sigils.assert_called_once_with("[ENV.GITHUB_TOKEN]")
+        mock_validate_token.assert_called_once_with("resolved-token")
+
     def test_slug_step_url_that_matches_legacy_complete_shape_stays_canonical(self):
         numeric_journey = OperatorJourney.objects.create(
             name="AAA Numeric Journey",
