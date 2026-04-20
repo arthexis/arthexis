@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
+import json
 import re
 import shlex
 import shutil
@@ -18,6 +19,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 
 from apps.imager.models import RaspberryPiImageArtifact
 
@@ -79,6 +81,31 @@ class BuildResult:
     download_uri: str
 
 
+@dataclass
+class BlockDeviceInfo:
+    """Block device information used for operator-safe write decisions."""
+
+    path: str
+    size_bytes: int
+    transport: str
+    removable: bool
+    mountpoints: list[str]
+    partitions: list[str]
+    protected: bool
+
+
+@dataclass
+class WriteResult:
+    """Metadata returned from writing an image artifact to a block device."""
+
+    device_path: str
+    image_path: Path
+    size_bytes: int
+    source_sha256: str
+    written_sha256: str
+    verified: bool
+
+
 def _sha256_for_file(path: Path) -> str:
     """Compute the SHA-256 checksum for a file."""
 
@@ -86,6 +113,23 @@ def _sha256_for_file(path: Path) -> str:
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _sha256_for_prefix(path: Path, *, size_bytes: int) -> str:
+    """Compute SHA-256 for the first ``size_bytes`` bytes of a file/device."""
+
+    digest = hashlib.sha256()
+    remaining = size_bytes
+    with path.open("rb") as handle:
+        while remaining > 0:
+            chunk = handle.read(min(1024 * 1024, remaining))
+            if not chunk:
+                break
+            digest.update(chunk)
+            remaining -= len(chunk)
+    if remaining != 0:
+        raise ImagerBuildError(f"Could not read expected {size_bytes} bytes from {path}.")
     return digest.hexdigest()
 
 
@@ -313,6 +357,188 @@ def _build_download_uri(download_base_uri: str, output_filename: str) -> str:
 
     normalized_path = f"{parsed_base.path.rstrip('/')}/{output_filename}"
     return parsed_base._replace(path=normalized_path).geturl()
+
+
+def _resolve_root_disk_path() -> str | None:
+    """Resolve the current host root disk block path, if discoverable."""
+
+    findmnt_result = subprocess.run(
+        ["findmnt", "-n", "-o", "SOURCE", "/"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    root_source = findmnt_result.stdout.strip()
+    if findmnt_result.returncode != 0 or not root_source:
+        return None
+
+    pkname_result = subprocess.run(
+        ["lsblk", "-n", "-o", "PKNAME", root_source],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    pkname = pkname_result.stdout.strip()
+    if pkname_result.returncode == 0 and pkname:
+        return f"/dev/{pkname}"
+
+    type_result = subprocess.run(
+        ["lsblk", "-n", "-o", "TYPE", root_source],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if type_result.returncode == 0 and type_result.stdout.strip() == "disk":
+        return root_source
+    return None
+
+
+def list_block_devices() -> list[BlockDeviceInfo]:
+    """Enumerate host block devices and safety-relevant metadata."""
+
+    result = subprocess.run(
+        ["lsblk", "-J", "-b", "-o", "PATH,SIZE,RM,TRAN,TYPE,MOUNTPOINTS"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ImagerBuildError(result.stderr.strip() or "Unable to enumerate block devices.")
+    try:
+        payload = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise ImagerBuildError("Unable to parse lsblk output for device discovery.") from exc
+
+    root_disk = _resolve_root_disk_path()
+    devices: list[BlockDeviceInfo] = []
+    for entry in payload.get("blockdevices", []):
+        if entry.get("type") != "disk":
+            continue
+        children = entry.get("children", [])
+        mountpoints = [mount for mount in (entry.get("mountpoints") or []) if mount]
+        mountpoints.extend(
+            mount
+            for child in children
+            for mount in (child.get("mountpoints") or [])
+            if mount
+        )
+        partitions = [child.get("path", "") for child in children if child.get("path")]
+        devices.append(
+            BlockDeviceInfo(
+                path=str(entry.get("path", "")),
+                size_bytes=int(entry.get("size") or 0),
+                transport=str(entry.get("tran") or ""),
+                removable=bool(entry.get("rm")),
+                mountpoints=sorted(set(mountpoints)),
+                partitions=partitions,
+                protected=str(entry.get("path", "")) == root_disk,
+            )
+        )
+    return sorted(devices, key=lambda item: item.path)
+
+
+def _resolve_image_path_for_write(*, artifact_name: str, image_path: str) -> tuple[Path, RaspberryPiImageArtifact | None]:
+    """Resolve CLI write source from artifact registry or explicit image path."""
+
+    if artifact_name:
+        artifact = RaspberryPiImageArtifact.objects.filter(name=artifact_name).first()
+        if artifact is None:
+            raise ImagerBuildError(f"Artifact '{artifact_name}' does not exist.")
+        resolved_path = Path(artifact.output_path).expanduser().resolve()
+        if not resolved_path.exists():
+            raise ImagerBuildError(f"Artifact image file does not exist: {resolved_path}")
+        return resolved_path, artifact
+    resolved_path = Path(image_path).expanduser().resolve()
+    if not resolved_path.exists():
+        raise ImagerBuildError(f"Image file does not exist: {resolved_path}")
+    return resolved_path, None
+
+
+def _confirm_destructive_write(*, device_path: str, image_path: Path, size_bytes: int, confirmed: bool) -> None:
+    """Require explicit operator confirmation before device overwrite."""
+
+    if confirmed:
+        return
+    raise ImagerBuildError(
+        "Refusing write without explicit confirmation. Re-run with --yes.\n"
+        f"Planned overwrite target: {device_path}\n"
+        f"Source image: {image_path}\n"
+        f"Bytes to write: {size_bytes}"
+    )
+
+
+def write_image_to_device(
+    *,
+    device_path: str,
+    artifact_name: str = "",
+    image_path: str = "",
+    confirmed: bool = False,
+) -> WriteResult:
+    """Write an artifact/local image to a block device with safety checks and verification."""
+
+    if bool(artifact_name) == bool(image_path):
+        raise ImagerBuildError("Provide exactly one of artifact_name or image_path.")
+
+    source_path, artifact = _resolve_image_path_for_write(
+        artifact_name=artifact_name,
+        image_path=image_path,
+    )
+    source_size = source_path.stat().st_size
+    devices = {device.path: device for device in list_block_devices()}
+    if device_path not in devices:
+        raise ImagerBuildError(f"Target device '{device_path}' was not found in discovered block devices.")
+    target_device = devices[device_path]
+
+    if target_device.protected:
+        raise ImagerBuildError(f"Refusing to overwrite protected system/root disk: {device_path}")
+    if target_device.mountpoints:
+        mounts = ", ".join(target_device.mountpoints)
+        raise ImagerBuildError(
+            f"Refusing to overwrite mounted device '{device_path}'. Unmount all partitions first: {mounts}"
+        )
+    if target_device.size_bytes < source_size:
+        raise ImagerBuildError(
+            f"Target device '{device_path}' is too small ({target_device.size_bytes} bytes) for image size {source_size} bytes."
+        )
+
+    _confirm_destructive_write(
+        device_path=device_path,
+        image_path=source_path,
+        size_bytes=source_size,
+        confirmed=confirmed,
+    )
+
+    source_hash = _sha256_for_file(source_path)
+    with source_path.open("rb") as source_handle, Path(device_path).open("wb") as device_handle:
+        shutil.copyfileobj(source_handle, device_handle, length=1024 * 1024 * 4)
+        device_handle.flush()
+    write_hash = _sha256_for_prefix(Path(device_path), size_bytes=source_size)
+    verified = source_hash == write_hash
+    if not verified:
+        raise ImagerBuildError(f"Verification failed for '{device_path}': checksum mismatch after write.")
+
+    if artifact is not None:
+        artifact.metadata = {
+            **artifact.metadata,
+            "last_write": {
+                "device_path": device_path,
+                "source_path": str(source_path),
+                "size_bytes": source_size,
+                "sha256": source_hash,
+                "verified": True,
+                "verified_at": timezone.now().isoformat(),
+            },
+        }
+        artifact.save(update_fields=["metadata", "updated_at"])
+
+    return WriteResult(
+        device_path=device_path,
+        image_path=source_path,
+        size_bytes=source_size,
+        source_sha256=source_hash,
+        written_sha256=write_hash,
+        verified=verified,
+    )
 
 
 def build_rpi4b_image(

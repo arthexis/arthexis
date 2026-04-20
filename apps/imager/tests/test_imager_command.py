@@ -13,12 +13,14 @@ from django.test import override_settings
 
 from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.services import (
+    BlockDeviceInfo,
     TARGET_RPI4B,
     ImagerBuildError,
     _build_download_uri,
     _download_remote_base_image,
     _validate_remote_base_image_url,
     build_rpi4b_image,
+    write_image_to_device,
 )
 
 
@@ -213,3 +215,142 @@ def test_download_remote_base_image_validates_redirect_target(tmp_path: Path) ->
         call("https://internal.example.com/image.img"),
     ]
 
+
+@patch("apps.imager.management.commands.imager.list_block_devices")
+def test_imager_devices_command_lists_discovery_metadata(list_devices_mock) -> None:
+    """Regression: devices action should print block safety metadata."""
+
+    list_devices_mock.return_value = [
+        BlockDeviceInfo(
+            path="/dev/sda",
+            size_bytes=64000000000,
+            transport="usb",
+            removable=True,
+            mountpoints=[],
+            partitions=["/dev/sda1"],
+            protected=False,
+        )
+    ]
+
+    out = StringIO()
+    call_command("imager", "devices", stdout=out)
+    output = out.getvalue()
+
+    assert "/dev/sda" in output
+    assert "removable=yes" in output
+    assert "protected=no" in output
+
+
+@pytest.mark.django_db
+@patch("apps.imager.services.list_block_devices")
+def test_write_image_to_device_refuses_protected_disk(list_devices_mock, tmp_path: Path) -> None:
+    """Regression: write should fail when target disk is marked protected."""
+
+    source = tmp_path / "source.img"
+    source.write_bytes(b"safe")
+    list_devices_mock.return_value = [
+        BlockDeviceInfo(
+            path="/dev/sda",
+            size_bytes=1024 * 1024,
+            transport="nvme",
+            removable=False,
+            mountpoints=[],
+            partitions=[],
+            protected=True,
+        )
+    ]
+
+    with pytest.raises(ImagerBuildError, match="protected system/root disk"):
+        write_image_to_device(device_path="/dev/sda", image_path=str(source), confirmed=True)
+
+
+@pytest.mark.django_db
+@patch("apps.imager.services.list_block_devices")
+def test_write_image_to_device_refuses_mounted_target(list_devices_mock, tmp_path: Path) -> None:
+    """Regression: mounted targets should be rejected before write."""
+
+    source = tmp_path / "source.img"
+    source.write_bytes(b"safe")
+    list_devices_mock.return_value = [
+        BlockDeviceInfo(
+            path="/dev/sdb",
+            size_bytes=1024 * 1024,
+            transport="usb",
+            removable=True,
+            mountpoints=["/media/card"],
+            partitions=["/dev/sdb1"],
+            protected=False,
+        )
+    ]
+
+    with pytest.raises(ImagerBuildError, match="Unmount all partitions first"):
+        write_image_to_device(device_path="/dev/sdb", image_path=str(source), confirmed=True)
+
+
+@pytest.mark.django_db
+@patch("apps.imager.services.list_block_devices")
+def test_write_image_to_device_refuses_undersized_target(list_devices_mock, tmp_path: Path) -> None:
+    """Regression: write should fail when target capacity is smaller than image."""
+
+    source = tmp_path / "source.img"
+    source.write_bytes(b"12345")
+    list_devices_mock.return_value = [
+        BlockDeviceInfo(
+            path="/dev/sdb",
+            size_bytes=4,
+            transport="usb",
+            removable=True,
+            mountpoints=[],
+            partitions=[],
+            protected=False,
+        )
+    ]
+
+    with pytest.raises(ImagerBuildError, match="is too small"):
+        write_image_to_device(device_path="/dev/sdb", image_path=str(source), confirmed=True)
+
+
+@pytest.mark.django_db
+@patch("apps.imager.services.list_block_devices")
+def test_write_image_to_device_writes_and_verifies_and_updates_artifact_metadata(
+    list_devices_mock, tmp_path: Path
+) -> None:
+    """Regression: write should copy bytes, verify checksum, and persist artifact write metadata."""
+
+    source = tmp_path / "artifact.img"
+    source.write_bytes(b"artifact-bytes")
+    target = tmp_path / "device.bin"
+    target.write_bytes(b"\0" * 32)
+    list_devices_mock.return_value = [
+        BlockDeviceInfo(
+            path=str(target),
+            size_bytes=32,
+            transport="usb",
+            removable=True,
+            mountpoints=[],
+            partitions=[],
+            protected=False,
+        )
+    ]
+    artifact = RaspberryPiImageArtifact.objects.create(
+        name="stable",
+        target=TARGET_RPI4B,
+        base_image_uri=str(source),
+        output_filename=source.name,
+        output_path=str(source),
+        sha256="",
+        size_bytes=source.stat().st_size,
+        download_uri="",
+        metadata={},
+    )
+
+    result = write_image_to_device(
+        device_path=str(target),
+        artifact_name="stable",
+        confirmed=True,
+    )
+
+    artifact.refresh_from_db()
+    assert target.read_bytes()[: source.stat().st_size] == source.read_bytes()
+    assert result.verified is True
+    assert artifact.metadata["last_write"]["device_path"] == str(target)
