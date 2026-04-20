@@ -275,7 +275,7 @@ class RepositoryIssueSpamAssessmentAdmin(admin.ModelAdmin):
     )
     list_filter = ("is_spam", "action", "processed_at", "repository")
     search_fields = (
-        "issue_number",
+        "=issue_number",
         "issue_title",
         "issue_author",
         "delivery_id",
