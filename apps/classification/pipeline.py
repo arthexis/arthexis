@@ -1,0 +1,185 @@
+"""Experimental training and camera classification pipeline helpers."""
+
+from __future__ import annotations
+
+from django.utils import timezone
+
+from .backends import resolve_backend
+from .camera import capture_stream_to_media_file
+from .models import ImageClassifierModel, TrainingRun, TrainingSample
+from .services import apply_model_predictions
+
+
+def _verified_training_samples():
+    return TrainingSample.objects.select_related("media_file", "tag").filter(is_verified=True)
+
+
+def _classifier_can_predict(classifier: ImageClassifierModel | None) -> bool:
+    return bool(
+        classifier
+        and classifier.status == ImageClassifierModel.Status.READY
+        and classifier.storage_uri
+    )
+
+
+def _classifier_has_readable_artifact(classifier: ImageClassifierModel | None) -> bool:
+    if not _classifier_can_predict(classifier):
+        return False
+    try:
+        backend = resolve_backend(classifier)
+        backend._load_payload(classifier)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _ready_fallback_classifier(classifier: ImageClassifierModel) -> ImageClassifierModel | None:
+    candidates = (
+        ImageClassifierModel.objects.filter(
+            model_type=classifier.model_type,
+            status=ImageClassifierModel.Status.READY,
+            is_deleted=False,
+            storage_uri__isnull=False,
+        )
+        .exclude(storage_uri="")
+        .exclude(pk=classifier.pk)
+    )
+    for fallback_classifier in candidates:
+        if _classifier_has_readable_artifact(fallback_classifier):
+            return fallback_classifier
+    return None
+
+
+def train_classifier(
+    classifier: ImageClassifierModel,
+    *,
+    initiated_by=None,
+) -> TrainingRun:
+    """Train ``classifier`` from the verified examples currently in the suite."""
+
+    samples = list(_verified_training_samples())
+    if not samples:
+        raise ValueError("No verified training samples are available.")
+
+    backend = resolve_backend(classifier)
+    was_selected = classifier.is_selected
+    fallback_classifier = None
+    if was_selected:
+        fallback_classifier = _ready_fallback_classifier(classifier)
+        if fallback_classifier is None:
+            raise ValueError(
+                "Cannot retrain the selected classifier without another ready classifier available."
+            )
+        fallback_classifier.is_selected = True
+        fallback_classifier.save()
+
+    classifier.status = ImageClassifierModel.Status.TRAINING
+    if was_selected:
+        classifier.is_selected = False
+        classifier.save(update_fields=["is_selected", "status"])
+    else:
+        classifier.save(update_fields=["status"])
+
+    training_run = TrainingRun.objects.create(
+        classifier=classifier,
+        status=TrainingRun.Status.RUNNING,
+        initiated_by=initiated_by,
+        started_at=timezone.now(),
+        sample_count=len(samples),
+    )
+
+    try:
+        artifact = backend.train(classifier=classifier, samples=samples)
+    except Exception as exc:
+        classifier.status = ImageClassifierModel.Status.FAILED
+        classifier.save(update_fields=["status"])
+        training_run.status = TrainingRun.Status.FAILED
+        training_run.finished_at = timezone.now()
+        training_run.notes = str(exc)
+        training_run.save(update_fields=["status", "finished_at", "notes"])
+        raise
+
+    trained_at = timezone.now()
+    classifier.storage_uri = artifact.storage_uri
+    classifier.metrics = artifact.metrics
+    classifier.training_parameters = {
+        **(classifier.training_parameters or {}),
+        "backend": artifact.backend,
+    }
+    classifier.status = ImageClassifierModel.Status.READY
+    classifier.is_selected = was_selected
+    classifier.trained_at = trained_at
+    update_fields = [
+        "storage_uri",
+        "metrics",
+        "training_parameters",
+        "status",
+        "trained_at",
+    ]
+    if was_selected:
+        update_fields.append("is_selected")
+    classifier.save(update_fields=update_fields)
+
+    training_run.status = TrainingRun.Status.SUCCEEDED
+    training_run.finished_at = trained_at
+    training_run.metrics = artifact.metrics
+    training_run.save(update_fields=["status", "finished_at", "metrics"])
+    return training_run
+
+
+def build_predictions_for_media_file(
+    media_file,
+    *,
+    classifier: ImageClassifierModel | None = None,
+) -> tuple[ImageClassifierModel | None, list[dict[str, object]]]:
+    """Return raw predictions for ``media_file`` without persisting them."""
+
+    classifier = classifier or ImageClassifierModel.selected_general_model()
+    if not _classifier_can_predict(classifier):
+        return classifier, []
+    backend = resolve_backend(classifier)
+    return classifier, backend.predict(classifier=classifier, media_file=media_file)
+
+
+def predict_media_file(
+    media_file,
+    *,
+    classifier: ImageClassifierModel | None = None,
+):
+    """Score ``media_file`` and persist the resulting classifications."""
+
+    classifier, predictions = build_predictions_for_media_file(media_file, classifier=classifier)
+    if classifier is None or not predictions:
+        return []
+    return apply_model_predictions(media_file, predictions, classifier=classifier)
+
+
+def classify_stream(
+    stream,
+    *,
+    classifier: ImageClassifierModel | None = None,
+):
+    """Capture a stream frame, persist it, and classify it."""
+
+    classifier = classifier or ImageClassifierModel.selected_general_model()
+    if not _classifier_has_readable_artifact(classifier):
+        return None, []
+
+    media_file, source = capture_stream_to_media_file(stream)
+    if media_file is None:
+        return None, []
+
+    _, predictions = build_predictions_for_media_file(media_file, classifier=classifier)
+    if not predictions:
+        return media_file, []
+
+    for prediction in predictions:
+        metadata = dict(prediction.get("metadata") or {})
+        metadata.update(
+            {
+                "camera_stream": stream.slug,
+                "frame_source": source,
+            }
+        )
+        prediction["metadata"] = metadata
+    return media_file, apply_model_predictions(media_file, predictions, classifier=classifier)
