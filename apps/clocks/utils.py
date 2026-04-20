@@ -23,6 +23,11 @@ class DetectedClockDevice:
 Scanner = Callable[[int], str]
 
 
+def _is_missing_i2c_bus_error(message: str) -> bool:
+    normalized = message.lower()
+    return "could not open file `/dev/i2c-" in normalized
+
+
 def _run_i2cdetect(bus: int) -> str:
     tool_path = shutil.which(I2C_SCANNER)
     if not tool_path:
@@ -71,6 +76,13 @@ def discover_clock_devices(
     for bus in buses:
         try:
             output = scan_bus(bus)
+        except RuntimeError as exc:  # pragma: no cover - hardware dependent
+            log_message = "I2C scan skipped for bus %s: %s"
+            if _is_missing_i2c_bus_error(str(exc)):
+                logger.info(log_message, bus, exc)
+            else:
+                logger.warning(log_message, bus, exc)
+            continue
         except Exception as exc:  # pragma: no cover - defensive; hardware dependent
             logger.warning("I2C scan failed for bus %s: %s", bus, exc)
             continue
