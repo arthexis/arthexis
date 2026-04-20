@@ -1,7 +1,11 @@
 """Views supporting in-progress operation banners."""
 
+import secrets
 from pathlib import Path
+from urllib.parse import urlencode
 
+import requests
+from apps.repos.services import github as github_service
 from django.conf import settings
 from django.contrib import admin
 from django.contrib import messages
@@ -31,6 +35,10 @@ PROVISION_SUPERUSER_STEP_SLUG = "provision-ops-superuser"
 SETUP_GITHUB_TOKEN_STEP_SLUG = "setup-github-token"
 KNOWN_NODE_ROLES = ("Terminal", "Satellite", "Control", "Watchtower")
 ROLE_ALIASES = {"constellation": "Watchtower"}
+GITHUB_OAUTH_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
+GITHUB_OAUTH_TOKEN_URL = "https://github.com/login/oauth/access_token"
+GITHUB_OAUTH_SESSION_STATE_KEY = "ops_github_oauth_state"
+GITHUB_OAUTH_TIMEOUT_SECONDS = 10
 
 
 def _normalize_role_name(value: str) -> str:
@@ -48,6 +56,29 @@ def _build_admin_context(request: HttpRequest) -> dict[str, object]:
     """Return shared context needed by admin base templates."""
 
     return admin.site.each_context(request)
+
+
+def _github_oauth_is_configured() -> bool:
+    return bool(
+        str(getattr(settings, "GITHUB_OAUTH_CLIENT_ID", "")).strip()
+        and str(getattr(settings, "GITHUB_OAUTH_CLIENT_SECRET", "")).strip()
+    )
+
+
+def _github_oauth_scopes() -> str:
+    configured_scopes = str(getattr(settings, "GITHUB_OAUTH_SCOPES", "")).strip()
+    return configured_scopes or "repo read:user"
+
+
+def _github_oauth_callback_url(
+    request: HttpRequest, *, journey_slug: str, step_slug: str
+) -> str:
+    return request.build_absolute_uri(
+        reverse(
+            "ops:operator-journey-github-callback",
+            kwargs={"journey_slug": journey_slug, "step_slug": step_slug},
+        )
+    )
 
 
 def _can_manage_github_token(request: HttpRequest, token=None) -> bool:
@@ -272,7 +303,19 @@ def operator_journey_step(
         context["provision_superuser_form"] = provision_form
         context["security_group_rows"] = _build_security_group_rows(provision_form)
     if step.slug == SETUP_GITHUB_TOKEN_STEP_SLUG:
-        context["github_access_form"] = OperatorJourneyGitHubAccessForm(user=request.user)
+        github_access_form = OperatorJourneyGitHubAccessForm(user=request.user)
+        github_oauth_enabled = _github_oauth_is_configured()
+        context["github_access_form"] = github_access_form
+        context["github_oauth_enabled"] = github_oauth_enabled
+        context["github_login_url"] = reverse(
+            "ops:operator-journey-github-login",
+            kwargs={"journey_slug": step.journey.slug, "step_slug": step.slug},
+        )
+        context["github_connected_username"] = (
+            github_access_form._existing_token_record.label
+            if github_access_form._existing_token_record
+            else ""
+        )
 
     return render(request, "admin/ops/operator_journey_step.html", context)
 
@@ -375,43 +418,38 @@ def complete_operator_journey_step(
         token_record = github_access_form._existing_token_record
         can_write_token = _can_manage_github_token(request, token=token_record)
 
-        if github_access_form.is_valid():
-            if action == "save":
-                if not can_write_token:
-                    messages.warning(
-                        request,
-                        "You do not have permission to save a GitHub token.",
+        if action == "complete":
+            if not can_write_token:
+                github_access_form.add_error(
+                    None,
+                    "You do not have permission to save a GitHub token.",
+                )
+            else:
+                is_valid_connection, validation_message, github_login = (
+                    github_access_form.validate_connection()
+                )
+                if not is_valid_connection:
+                    github_access_form.add_error(None, validation_message)
+                elif github_access_form._existing_token_record is not None:
+                    github_access_form.save(
+                        token=github_access_form._existing_token_record.__dict__.get("token", ""),
+                        username=github_login,
                     )
-                else:
-                    github_access_form.save()
-                    messages.success(request, "GitHub token saved.")
-            elif action in ("test", "complete"):
-                if not can_write_token:
-                    permission_message = "You do not have permission to save a GitHub token."
-                    if action == "test":
-                        messages.warning(request, permission_message)
-                    else:
-                        github_access_form.add_error("token", permission_message)
-                else:
-                    is_valid_connection, validation_message = (
-                        github_access_form.validate_connection()
-                    )
-                    if action == "test":
-                        messages.add_message(
-                            request,
-                            messages.SUCCESS if is_valid_connection else messages.ERROR,
-                            validation_message,
-                        )
-                    elif not is_valid_connection:
-                        github_access_form.add_error("token", validation_message)
-                    else:
-                        github_access_form.save()
-
-        if action != "complete" or not github_access_form.is_valid():
+        if action != "complete" or github_access_form.errors:
             context = {
                 **_build_admin_context(request),
                 "step": step,
                 "github_access_form": github_access_form,
+                "github_connected_username": (
+                    github_access_form._existing_token_record.label
+                    if github_access_form._existing_token_record
+                    else ""
+                ),
+                "github_login_url": reverse(
+                    "ops:operator-journey-github-login",
+                    kwargs={"journey_slug": step.journey.slug, "step_slug": step.slug},
+                ),
+                "github_oauth_enabled": _github_oauth_is_configured(),
             }
             return render(
                 request,
@@ -498,3 +536,122 @@ def complete_operator_journey_step_legacy(
     )
     response.status_code = 307
     return response
+
+
+@staff_member_required
+def operator_journey_github_login(
+    request: HttpRequest, journey_slug: str, step_slug: str
+) -> HttpResponseRedirect:
+    """Start GitHub OAuth login for the operator journey GitHub setup step."""
+
+    if not _github_oauth_is_configured():
+        messages.error(request, "GitHub OAuth is not configured.")
+        return redirect(
+            reverse(
+                OPERATOR_JOURNEY_STEP_URL_NAME,
+                kwargs={"journey_slug": journey_slug, "step_slug": step_slug},
+            )
+        )
+
+    state = secrets.token_urlsafe(32)
+    request.session[GITHUB_OAUTH_SESSION_STATE_KEY] = {
+        "journey_slug": journey_slug,
+        "state": state,
+        "step_slug": step_slug,
+    }
+    params = {
+        "client_id": str(getattr(settings, "GITHUB_OAUTH_CLIENT_ID", "")).strip(),
+        "redirect_uri": _github_oauth_callback_url(
+            request, journey_slug=journey_slug, step_slug=step_slug
+        ),
+        "scope": _github_oauth_scopes(),
+        "state": state,
+    }
+    return redirect(f"{GITHUB_OAUTH_AUTHORIZE_URL}?{urlencode(params)}")
+
+
+@staff_member_required
+def operator_journey_github_callback(
+    request: HttpRequest, journey_slug: str, step_slug: str
+) -> HttpResponseRedirect:
+    """Complete GitHub OAuth login and store the token for this operator user."""
+
+    step_url = reverse(
+        OPERATOR_JOURNEY_STEP_URL_NAME,
+        kwargs={"journey_slug": journey_slug, "step_slug": step_slug},
+    )
+    state_payload = request.session.pop(GITHUB_OAUTH_SESSION_STATE_KEY, None)
+    request_state = (request.GET.get("state") or "").strip()
+    if (
+        not isinstance(state_payload, dict)
+        or state_payload.get("journey_slug") != journey_slug
+        or state_payload.get("step_slug") != step_slug
+        or not request_state
+        or request_state != state_payload.get("state")
+    ):
+        messages.error(request, "GitHub authorization could not be validated. Please try again.")
+        return redirect(step_url)
+
+    oauth_error = (request.GET.get("error") or "").strip()
+    if oauth_error:
+        messages.error(request, f"GitHub returned an error: {oauth_error}")
+        return redirect(step_url)
+
+    code = (request.GET.get("code") or "").strip()
+    if not code:
+        messages.error(request, "GitHub did not return an authorization code.")
+        return redirect(step_url)
+
+    form = OperatorJourneyGitHubAccessForm(user=request.user)
+    if not _can_manage_github_token(request, token=form._existing_token_record):
+        messages.error(request, "You do not have permission to save a GitHub token.")
+        return redirect(step_url)
+
+    try:
+        response = requests.post(
+            GITHUB_OAUTH_TOKEN_URL,
+            data={
+                "client_id": str(getattr(settings, "GITHUB_OAUTH_CLIENT_ID", "")).strip(),
+                "client_secret": str(getattr(settings, "GITHUB_OAUTH_CLIENT_SECRET", "")).strip(),
+                "code": code,
+                "redirect_uri": _github_oauth_callback_url(
+                    request, journey_slug=journey_slug, step_slug=step_slug
+                ),
+            },
+            headers={"Accept": "application/json"},
+            timeout=GITHUB_OAUTH_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as exc:
+        messages.error(request, f"GitHub authentication failed: {exc}")
+        return redirect(step_url)
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    access_token = (
+        str(payload.get("access_token", "")).strip() if isinstance(payload, dict) else ""
+    )
+    if not access_token:
+        oauth_error_message = (
+            str(payload.get("error_description") or payload.get("error") or "unknown_error")
+            if isinstance(payload, dict)
+            else "unknown_error"
+        )
+        messages.error(request, f"GitHub authentication failed: {oauth_error_message}")
+        return redirect(step_url)
+
+    validation_success, validation_message, validated_login = github_service.validate_token(
+        access_token
+    )
+    if not validation_success:
+        messages.error(request, validation_message)
+        return redirect(step_url)
+    form.save(
+        token=access_token,
+        username=validated_login,
+    )
+    messages.success(
+        request,
+        validation_message or "Connected to GitHub.",
+    )
+    return redirect(step_url)

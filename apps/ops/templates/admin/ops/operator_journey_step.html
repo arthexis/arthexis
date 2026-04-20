@@ -319,21 +319,23 @@
       <form method="post" action="{% url 'ops:operator-journey-step-complete' journey_slug=step.journey.slug step_slug=step.slug %}" class="operator-journey-github-panel">
         {% csrf_token %}
         {{ github_access_form.non_field_errors }}
-        <fieldset class="module aligned" style="padding: 0;">
-          {% for field in github_access_form %}
-            <div class="form-row" style="margin-bottom: var(--admin-ui-space-3, 0.75rem);">
-              <label for="{{ field.id_for_label }}" style="display: block; font-weight: 600;">{{ field.label }}</label>
-              {{ field }}
-              {% if field.help_text %}
-                <p class="help" style="margin: var(--admin-ui-space-1, 0.25rem) 0 0;">{{ field.help_text }}</p>
-              {% endif %}
-              {{ field.errors }}
-            </div>
-          {% endfor %}
-        </fieldset>
+        <p style="margin: 0;">
+          <strong>{% translate "GitHub username:" %}</strong>
+          {% if github_connected_username %}
+            {{ github_connected_username }}
+          {% else %}
+            {% translate "Not connected" %}
+          {% endif %}
+        </p>
+        {% if not github_oauth_enabled %}
+          <p class="help" style="margin-top: var(--admin-ui-space-2, 0.5rem);">
+            {% translate "Set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET to enable GitHub login." %}
+          </p>
+        {% endif %}
         <div class="operator-journey-github-actions">
-          <button type="submit" name="journey_action" value="save" class="button">{% translate "Save GitHub access" %}</button>
-          <button type="submit" name="journey_action" value="test" class="button">{% translate "Test GitHub access" %}</button>
+          {% if github_oauth_enabled %}
+            <a href="{{ github_login_url }}" class="button">{% translate "Login with GitHub" %}</a>
+          {% endif %}
           <button type="submit" name="journey_action" value="complete" class="button default">{% translate "Validate GitHub access and complete step" %}</button>
         </div>
       </form>
