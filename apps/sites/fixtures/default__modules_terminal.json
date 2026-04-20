@@ -4,41 +4,6 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "roles": [
-        [
-          "Terminal"
-        ]
-      ],
-      "application": [
-        "docs"
-      ],
-      "path": "/docs/",
-      "menu": "Developers",
-      "priority": 0,
-      "is_default": false,
-      "security_mode": "inclusive"
-    }
-  },
-  {
-    "model": "pages.landing",
-    "fields": {
-      "is_seed_data": true,
-      "is_deleted": false,
-      "module": [
-        "/docs/"
-      ],
-      "path": "/docs/library/",
-      "label": "Developer Documents",
-      "enabled": true,
-      "track_leads": false,
-      "description": ""
-    }
-  },
-  {
-    "model": "modules.module",
-    "fields": {
-      "is_seed_data": true,
-      "is_deleted": false,
       "roles": [],
       "application": [
         "awg"
@@ -171,6 +136,41 @@
       ],
       "path": "/shop/",
       "label": "RFID Card Shop",
+      "enabled": true,
+      "track_leads": false,
+      "description": ""
+    }
+  },
+  {
+    "model": "modules.module",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "roles": [
+        [
+          "Terminal"
+        ]
+      ],
+      "application": [
+        "docs"
+      ],
+      "path": "/docs/",
+      "menu": "Developers",
+      "priority": 0,
+      "is_default": false,
+      "security_mode": "inclusive"
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": [
+        "/docs/"
+      ],
+      "path": "/docs/library/",
+      "label": "Developer Documents",
       "enabled": true,
       "track_leads": false,
       "description": ""

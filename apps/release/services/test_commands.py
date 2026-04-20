@@ -9,6 +9,8 @@ from typing import Sequence
 class TestCommandPolicy:
     """Policy definition for an approved release test command wrapper."""
 
+    __test__ = False
+
     value: str
     label: str
     prefix: tuple[str, ...]
