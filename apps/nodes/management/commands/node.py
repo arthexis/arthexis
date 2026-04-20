@@ -381,7 +381,7 @@ class Command(BaseCommand):
             return None
 
         self.stdout.write(token)
-        return token
+        return None
 
     def _resolve_token_password(self, **options):
         inline_password = options.get("password", "")
@@ -409,7 +409,7 @@ class Command(BaseCommand):
                 raise CommandError(f"Environment variable {password_env} is empty.")
             return env_password
 
-        stdin_password = sys.stdin.readline().rstrip("\r\n")
+        stdin_password = self.stdin.readline().rstrip("\r\n")
         if not stdin_password:
             raise CommandError("No password was provided on stdin.")
         return stdin_password

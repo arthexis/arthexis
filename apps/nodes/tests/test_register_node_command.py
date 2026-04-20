@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 
 import pytest
@@ -85,8 +86,9 @@ def test_node_token_rejects_private_hosts():
 def test_node_token_accepts_password_from_env(monkeypatch):
     command = _load_node_command()
     monkeypatch.setenv("NODE_PASSWORD", "env-pass")
+    command.stdout = io.StringIO()
 
-    token = command.handle(
+    result = command.handle(
         action="token",
         host="https://example.com",
         username="cli-user",
@@ -96,15 +98,18 @@ def test_node_token_accepts_password_from_env(monkeypatch):
         json=False,
     )
 
+    token = command.stdout.getvalue().strip()
     decoded = command._decode_token(token)
     assert decoded["password"] == "env-pass"
+    assert result is None
 
 
 def test_node_token_accepts_password_from_stdin(monkeypatch):
     command = _load_node_command()
-    monkeypatch.setattr("sys.stdin.readline", lambda: "stdin-pass\n")
+    command.stdin = io.StringIO("stdin-pass\n")
+    command.stdout = io.StringIO()
 
-    token = command.handle(
+    result = command.handle(
         action="token",
         host="https://example.com",
         username="cli-user",
@@ -114,8 +119,10 @@ def test_node_token_accepts_password_from_stdin(monkeypatch):
         json=False,
     )
 
+    token = command.stdout.getvalue().strip()
     decoded = command._decode_token(token)
     assert decoded["password"] == "stdin-pass"
+    assert result is None
 
 
 def test_node_token_requires_single_password_source():
