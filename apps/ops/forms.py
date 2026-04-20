@@ -212,6 +212,7 @@ class OperatorJourneyGitHubAccessForm(forms.Form):
         label="GitHub username",
     )
     token = forms.CharField(
+        required=False,
         widget=forms.PasswordInput(),
         help_text="Personal access token used for repository, release, and issue tasks.",
         label="GitHub token",
@@ -227,12 +228,24 @@ class OperatorJourneyGitHubAccessForm(forms.Form):
         self.user = user
         super().__init__(*args, **kwargs)
 
-        existing = GitHubToken.objects.filter(user=user).order_by("-pk").first()
-        if existing is None or self.is_bound:
+        self._existing_token_record = GitHubToken.objects.filter(user=user).order_by("-pk").first()
+        if self._existing_token_record is None or self.is_bound:
             return
         self.initial.setdefault("github_username", user.username)
-        self.initial.setdefault("token", existing.__dict__.get("token", ""))
-        self.initial.setdefault("token_label", existing.label)
+        self.initial.setdefault("token", self._existing_token_record.__dict__.get("token", ""))
+        self.initial.setdefault("token_label", self._existing_token_record.label)
+
+    def clean_token(self) -> str:
+        submitted_token = (self.cleaned_data.get("token") or "").strip()
+        if submitted_token:
+            return submitted_token
+
+        existing_token = ""
+        if self._existing_token_record is not None:
+            existing_token = (self._existing_token_record.__dict__.get("token") or "").strip()
+        if existing_token:
+            return existing_token
+        raise forms.ValidationError("Enter a GitHub token.")
 
     def save(self) -> GitHubToken:
         """Persist the token for the active user."""

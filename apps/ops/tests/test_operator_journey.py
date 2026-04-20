@@ -442,6 +442,24 @@ class OperatorJourneyViewTests(TestCase):
             token.__dict__.get("token"),
         )
 
+    def test_setup_github_token_form_reuses_stored_token_when_submission_is_blank(self):
+        token = GitHubToken.objects.create(
+            user=self.user,
+            label="Sigil token",
+            token="[ENV.GITHUB_TOKEN]",
+        )
+        form = OperatorJourneyGitHubAccessForm(
+            data={
+                "github_username": "arthexis",
+                "token": "",
+                "token_label": "Existing token",
+            },
+            user=self.user,
+        )
+
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["token"], token.__dict__.get("token"))
+
     @patch("apps.ops.forms.github_service.validate_token")
     @patch("apps.ops.forms.resolve_sigils")
     def test_setup_github_token_validation_resolves_sigil_tokens(
