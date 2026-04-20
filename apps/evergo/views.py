@@ -300,8 +300,6 @@ def customer_pdf_download(request, public_id) -> HttpResponse:
     payload = _render_pdf_bytes(html)
     if not payload:
         raise Http404("PDF renderer is unavailable.")
-    for artifact in image_artifacts:
-        _delete_artifact_and_blob(artifact)
     safe_so = customer.latest_so or str(customer.public_id)
     response = HttpResponse(payload, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="evergo-{safe_so}.pdf"'

@@ -201,7 +201,7 @@ def test_customer_public_detail_enforces_image_and_storage_limits(client, settin
 
 
 @pytest.mark.django_db
-def test_customer_pdf_download_generates_pdf_and_clears_temp_images(client, monkeypatch):
+def test_customer_pdf_download_generates_pdf_without_deleting_uploaded_images(client, monkeypatch):
     customer = _create_customer(username="owner-pdf")
     artifact = EvergoArtifact.objects.create(
         customer=customer,
@@ -218,8 +218,8 @@ def test_customer_pdf_download_generates_pdf_and_clears_temp_images(client, monk
 
     assert response.status_code == 200
     assert response["Content-Type"] == "application/pdf"
-    assert not EvergoArtifact.objects.filter(customer=customer).exists()
-    assert not artifact.file.storage.exists(storage_name)
+    assert EvergoArtifact.objects.filter(customer=customer).exists()
+    assert artifact.file.storage.exists(storage_name)
 
 
 @pytest.mark.django_db
