@@ -9,16 +9,35 @@ def test_rfid_service_module_main_invokes_runner(monkeypatch):
 
     monkeypatch.setattr("sys.argv", ["python", "--host", "0.0.0.0", "--port", "29999"])
     captured: dict[str, object] = {}
+    call_order: list[str] = []
 
     def fake_run_service(*, host: str | None = None, port: int | None = None) -> None:
+        call_order.append("run_service")
         captured["host"] = host
         captured["port"] = port
 
+    monkeypatch.setattr(rfid_service, "loadenv", lambda: call_order.append("loadenv"))
+    monkeypatch.setattr(
+        rfid_service,
+        "bootstrap_sqlite_driver",
+        lambda: call_order.append("bootstrap_sqlite_driver"),
+    )
+    monkeypatch.setattr(
+        rfid_service.django,
+        "setup",
+        lambda: call_order.append("django.setup"),
+    )
     monkeypatch.setattr(rfid_service, "run_service", fake_run_service)
 
     rfid_service.main()
 
     assert captured == {"host": "0.0.0.0", "port": 29999}
+    assert call_order == [
+        "loadenv",
+        "bootstrap_sqlite_driver",
+        "django.setup",
+        "run_service",
+    ]
 
 
 def test_scan_sources_falls_back_to_attempts_for_lockfile_ingest_error(monkeypatch):

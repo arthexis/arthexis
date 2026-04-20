@@ -30,6 +30,7 @@ from django.conf import settings
 from apps.core.notifications import notify_event_async
 from apps.screens.startup_notifications import lcd_feature_enabled
 from config.loadenv import loadenv
+from config.sqlite_driver import bootstrap_sqlite_driver
 
 logger = logging.getLogger(__name__)
 
@@ -489,6 +490,7 @@ def main() -> None:
     """Run the RFID UDP service as a module entrypoint."""
 
     loadenv()
+    bootstrap_sqlite_driver()
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     django.setup()
     endpoint = service_endpoint()
