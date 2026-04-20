@@ -6,16 +6,36 @@ from .models import GalleryCategory, GalleryCredit, GalleryImage, GalleryImageTr
 
 
 class GalleryUploadForm(forms.Form):
-    image = forms.ImageField(required=True)
-    title = forms.CharField(max_length=255)
-    description = forms.CharField(required=False, widget=forms.Textarea)
-    include_in_public_gallery = forms.BooleanField(required=False)
+    image = forms.ImageField(
+        required=True,
+        widget=forms.ClearableFileInput(attrs={"class": "form-control", "accept": "image/*"}),
+    )
+    title = forms.CharField(max_length=255, widget=forms.TextInput(attrs={"class": "form-control"}))
+    description = forms.CharField(
+        required=False,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+                "data-autogrow": "true",
+            }
+        ),
+    )
+    include_in_public_gallery = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
     create_content_sample = forms.BooleanField(
         required=False,
         label="Also create a Content Sample record",
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
-    owner_user = forms.CharField(required=False)
-    owner_group = forms.ModelChoiceField(queryset=SecurityGroup.objects.order_by("name"), required=False)
+    owner_user = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
+    owner_group = forms.ModelChoiceField(
+        queryset=SecurityGroup.objects.order_by("name"),
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
 
     def clean(self):
         cleaned = super().clean()
