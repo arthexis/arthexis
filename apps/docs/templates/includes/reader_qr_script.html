@@ -154,7 +154,7 @@
     };
 
     const summarizeFirstRow = (table) => {
-      const firstBodyRow = table.tBodies[0]?.rows[0];
+      const firstBodyRow = table.tBodies[0]?.rows[0] || table.rows[1];
       if (!firstBodyRow) {
         return "";
       }
@@ -170,9 +170,7 @@
       const captionText = table.caption ? table.caption.textContent.trim() : "";
       const tableName = captionText || tableLabel;
       const rowLabel = rowCount === 1 ? rowLabelSingular : rowLabelPlural;
-      const columnSummary = summarizeColumns(table);
-      const rowSummary = summarizeFirstRow(table);
-      const detailSummary = columnSummary || rowSummary;
+      const detailSummary = summarizeColumns(table) || summarizeFirstRow(table);
 
       if (detailSummary) {
         return `${tableName}: ${detailSummary} (${rowCount} ${rowLabel})`;
@@ -208,7 +206,16 @@
         headingButton.setAttribute("aria-expanded", "false");
         headingButton.setAttribute("aria-controls", tableId);
         headingButton.setAttribute("title", collapseLabel);
-        headingButton.innerHTML = `<span class="reader-table-toggle-text">${headingText}</span><span class="reader-table-toggle-icon" aria-hidden="true">▸</span>`;
+        const textNode = document.createElement("span");
+        textNode.className = "reader-table-toggle-text";
+        textNode.textContent = headingText;
+
+        const iconNode = document.createElement("span");
+        iconNode.className = "reader-table-toggle-icon";
+        iconNode.setAttribute("aria-hidden", "true");
+        iconNode.textContent = "▸";
+
+        headingButton.append(textNode, iconNode);
 
         headingButton.addEventListener("click", () => {
           const expanded = headingButton.getAttribute("aria-expanded") === "true";
