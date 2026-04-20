@@ -50,6 +50,25 @@ def _build_admin_context(request: HttpRequest) -> dict[str, object]:
     return admin.site.each_context(request)
 
 
+def _can_manage_github_token(request: HttpRequest, token=None) -> bool:
+    """Return whether the current user can create/update GitHubToken records."""
+
+    try:
+        from apps.repos.models import GitHubToken
+    except (ImportError, LookupError):
+        return False
+
+    token_admin = admin.site._registry.get(GitHubToken)
+    if token_admin is not None:
+        if token is None:
+            return bool(token_admin.has_add_permission(request))
+        return bool(token_admin.has_change_permission(request, obj=token))
+
+    if token is None:
+        return request.user.has_perm("repos.add_githubtoken")
+    return request.user.has_perm("repos.change_githubtoken")
+
+
 def _build_security_group_rows(
     provision_superuser_form: OperatorJourneyProvisionSuperuserForm,
 ) -> list[dict[str, object]]:
@@ -353,13 +372,23 @@ def complete_operator_journey_step(
             user=request.user,
         )
         action = (request.POST.get("journey_action") or "").strip().lower()
+        token_record = github_access_form._existing_token_record
+        can_write_token = _can_manage_github_token(request, token=token_record)
 
         if github_access_form.is_valid():
             if action == "save":
-                github_access_form.save()
-                messages.success(request, "GitHub token saved.")
+                if not can_write_token:
+                    messages.warning(
+                        request,
+                        "You do not have permission to save a GitHub token.",
+                    )
+                else:
+                    github_access_form.save()
+                    messages.success(request, "GitHub token saved.")
             elif action in ("test", "complete"):
-                is_valid_connection, validation_message = github_access_form.validate_connection()
+                is_valid_connection, validation_message = (
+                    github_access_form.validate_connection()
+                )
                 if action == "test":
                     messages.add_message(
                         request,
@@ -368,6 +397,11 @@ def complete_operator_journey_step(
                     )
                 elif not is_valid_connection:
                     github_access_form.add_error("token", validation_message)
+                elif not can_write_token:
+                    github_access_form.add_error(
+                        "token",
+                        "You do not have permission to save a GitHub token.",
+                    )
                 else:
                     github_access_form.save()
 

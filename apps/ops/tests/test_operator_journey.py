@@ -460,6 +460,104 @@ class OperatorJourneyViewTests(TestCase):
         self.assertTrue(form.is_valid())
         self.assertEqual(form.cleaned_data["token"], token.__dict__.get("token"))
 
+    def test_setup_github_token_save_requires_githubtoken_permissions(self):
+        limited_user = get_user_model().objects.create_user(
+            username="ops-journey-limited",
+            password="x",
+            is_staff=True,
+        )
+        limited_user.groups.add(self.group)
+        self.client.force_login(limited_user)
+        complete_step_for_user(user=limited_user, step=self.step_1)
+        complete_step_for_user(user=limited_user, step=self.step_2)
+        github_journey = OperatorJourney.objects.create(
+            name="Product Developer GitHub Access",
+            slug="product-developer-github-access",
+            security_group=self.group,
+            is_active=True,
+            priority=1,
+        )
+        github_step = OperatorJourneyStep.objects.create(
+            journey=github_journey,
+            title="Connect your GitHub access",
+            slug="setup-github-token",
+            instruction="Configure GitHub access directly in this step.",
+            iframe_url="/admin/repos/githubrepository/setup-token/",
+            order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            ),
+            {
+                "journey_action": "save",
+                "github_username": "arthexis",
+                "token": "ghp_demo_token",
+                "token_label": "Dev token",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You do not have permission to save a GitHub token.")
+        self.assertFalse(GitHubToken.objects.filter(user=limited_user).exists())
+
+    @patch("apps.ops.forms.github_service.validate_token")
+    def test_setup_github_token_complete_requires_githubtoken_permissions(
+        self,
+        mock_validate_token,
+    ):
+        mock_validate_token.return_value = (True, "Connected to GitHub as arthexis.", "arthexis")
+        limited_user = get_user_model().objects.create_user(
+            username="ops-journey-complete-limited",
+            password="x",
+            is_staff=True,
+        )
+        limited_user.groups.add(self.group)
+        self.client.force_login(limited_user)
+        complete_step_for_user(user=limited_user, step=self.step_1)
+        complete_step_for_user(user=limited_user, step=self.step_2)
+        github_journey = OperatorJourney.objects.create(
+            name="Product Developer GitHub Access",
+            slug="product-developer-github-access",
+            security_group=self.group,
+            is_active=True,
+            priority=1,
+        )
+        github_step = OperatorJourneyStep.objects.create(
+            journey=github_journey,
+            title="Connect your GitHub access",
+            slug="setup-github-token",
+            instruction="Configure GitHub access directly in this step.",
+            iframe_url="/admin/repos/githubrepository/setup-token/",
+            order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            ),
+            {
+                "journey_action": "complete",
+                "github_username": "arthexis",
+                "token": "ghp_demo_token",
+                "token_label": "Dev token",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You do not have permission to save a GitHub token.")
+        self.assertFalse(GitHubToken.objects.filter(user=limited_user).exists())
+        self.assertFalse(github_step.completions.filter(user=limited_user).exists())
+
     @patch("apps.ops.forms.github_service.validate_token")
     @patch("apps.ops.forms.resolve_sigils")
     def test_setup_github_token_validation_resolves_sigil_tokens(
