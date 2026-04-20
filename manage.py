@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -127,7 +128,21 @@ def _run_env_refresh(base_dir: Path) -> None:
     command = [sys.executable, str(base_dir / "env-refresh.py"), "--latest", "database"]
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-    subprocess.run(command, cwd=base_dir, check=True, env=env)
+    try:
+        subprocess.run(command, cwd=base_dir, check=True, env=env)
+    except subprocess.CalledProcessError as exc:
+        command_str = shlex.join(command)
+        print(
+            "Environment refresh failed before runserver startup.",
+            file=sys.stderr,
+        )
+        print(f"Failed command: {command_str}", file=sys.stderr)
+        print(
+            "Re-run manually for full details: "
+            f"{command_str} --reconcile",
+            file=sys.stderr,
+        )
+        raise SystemExit(exc.returncode) from exc
 
 
 def _service_mode_allows_embedded_celery(base_dir: Path) -> bool:
