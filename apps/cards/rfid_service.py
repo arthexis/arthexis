@@ -24,13 +24,11 @@ from datetime import datetime, timezone as datetime_timezone
 from pathlib import Path
 from typing import Any
 
+import django
 from django.conf import settings
 
 from apps.core.notifications import notify_event_async
 from apps.screens.startup_notifications import lcd_feature_enabled
-
-from .background_reader import get_next_tag, is_configured, start as start_reader, stop as stop_reader
-from .reader import toggle_deep_read
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +44,37 @@ DEFAULT_SCAN_DEDUPE_SECONDS = float(
 )
 SCAN_STATE_FILE = "rfid-scan.json"
 SCAN_LOG_FILE = "rfid-scans.ndjson"
+SERVICE_SCAN_LOCKFILE_ERROR = "scan requests are handled via lock-file ingest"
+
+
+def get_next_tag(timeout: float = 0.2) -> dict[str, Any] | None:
+    from .background_reader import get_next_tag as background_get_next_tag
+
+    return background_get_next_tag(timeout=timeout)
+
+
+def is_configured() -> bool:
+    from .background_reader import is_configured as background_is_configured
+
+    return background_is_configured()
+
+
+def start_reader() -> None:
+    from .background_reader import start as background_start_reader
+
+    background_start_reader()
+
+
+def stop_reader() -> None:
+    from .background_reader import stop as background_stop_reader
+
+    background_stop_reader()
+
+
+def toggle_deep_read() -> bool:
+    from .reader import toggle_deep_read as reader_toggle_deep_read
+
+    return reader_toggle_deep_read()
 
 
 @dataclass(frozen=True)
@@ -262,7 +291,7 @@ class RFIDServiceHandler(socketserver.BaseRequestHandler):
 
         if action == "scan":
             response = {
-                "error": "scan requests are handled via lock-file ingest",
+                "error": SERVICE_SCAN_LOCKFILE_ERROR,
                 "service_mode": "service",
             }
             socket_out.sendto(json.dumps(response).encode("utf-8"), self.client_address)
@@ -433,6 +462,8 @@ def run_service(host: str | None = None, port: int | None = None) -> None:
 def main() -> None:
     """Run the RFID UDP service as a module entrypoint."""
 
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    django.setup()
     endpoint = service_endpoint()
     parser = argparse.ArgumentParser(description="Run the Arthexis RFID scanner UDP service.")
     parser.add_argument("--host", default=endpoint.host, help="Host interface to bind.")

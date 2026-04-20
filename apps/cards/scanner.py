@@ -10,8 +10,13 @@ from django.utils import timezone
 from apps.cards.models import RFID, RFIDAttempt
 
 from .irq_wiring_check import check_irq_pin
+from .rfid_service import (
+    SERVICE_SCAN_LOCKFILE_ERROR,
+    deep_read_via_service,
+    request_service,
+    rfid_scan_log_path,
+)
 from .utils import convert_endianness_value, normalize_endianness
-from .rfid_service import deep_read_via_service, request_service, rfid_scan_log_path
 
 
 RECENT_SCAN_WINDOW_SECONDS = float(
@@ -24,7 +29,6 @@ SCANNER_SOURCES = {
     RFIDAttempt.Source.ON_DEMAND,
 }
 SCAN_INGEST_OFFSET_FILE = "rfid-scan.offset"
-SERVICE_SCAN_LOCKFILE_ERROR = "scan requests are handled via lock-file ingest"
 SERVICE_SCAN_DB_ERROR = "scan requests are handled via the database"
 
 
