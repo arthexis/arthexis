@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import base64
+import mimetypes
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from urllib.error import URLError
 from urllib.parse import quote_plus
+from urllib.request import urlopen
 
 from django.conf import settings
 from django.contrib import messages
@@ -134,12 +138,15 @@ def _build_customer_maps_context(customer: EvergoCustomer) -> dict[str, str]:
             "google_maps_snapshot_url": "",
         }
     encoded_address = quote_plus(address)
+    static_map_api_key = getattr(settings, "GOOGLE_MAPS_API_KEY", "").strip()
+    static_map_key_fragment = f"&key={quote_plus(static_map_api_key)}" if static_map_api_key else ""
     return {
         "google_maps_url": f"https://www.google.com/maps/search/?api=1&query={encoded_address}",
         "google_maps_embed_url": f"https://maps.google.com/maps?q={encoded_address}&z=15&output=embed",
         "google_maps_snapshot_url": (
             "https://maps.googleapis.com/maps/api/staticmap"
             f"?center={encoded_address}&zoom=15&size=1200x600&markers=color:red%7C{encoded_address}"
+            f"{static_map_key_fragment}"
         ),
     }
 
@@ -156,10 +163,40 @@ def _resequence_customer_image_artifacts(customer: EvergoCustomer) -> None:
         EvergoArtifact.objects.bulk_update(updates, ["display_order"])
 
 
+def _to_data_uri(content: bytes, *, content_type: str) -> str:
+    """Return a base64 data URI for PDF rendering."""
+    return f"data:{content_type};base64,{base64.b64encode(content).decode('ascii')}"
+
+
+def _artifact_image_data_uri(artifact: EvergoArtifact) -> str:
+    """Return a data URI for an artifact image file."""
+    guessed_type, _ = mimetypes.guess_type(artifact.file.name)
+    content_type = guessed_type or "application/octet-stream"
+    artifact.file.open("rb")
+    try:
+        content = artifact.file.read()
+    finally:
+        artifact.file.close()
+    return _to_data_uri(content, content_type=content_type)
+
+
+def _remote_image_data_uri(url: str) -> str:
+    """Fetch remote image bytes and return a data URI, or an empty string on failure."""
+    if not url:
+        return ""
+    try:
+        with urlopen(url, timeout=5) as response:
+            content = response.read()
+            content_type = response.headers.get_content_type() or "application/octet-stream"
+    except (OSError, URLError, ValueError):
+        return ""
+    return _to_data_uri(content, content_type=content_type)
+
+
 def customer_public_detail(request, public_id) -> HttpResponse:
     """Render a shareable Evergo customer profile and handle temporary image uploads."""
     customer = get_object_or_404(
-        EvergoCustomer.objects.select_related("latest_order", "user__user").prefetch_related("artifacts"),
+        EvergoCustomer.objects.select_related("latest_order", "user__user"),
         public_id=public_id,
     )
     _resequence_customer_image_artifacts(customer)
@@ -236,6 +273,7 @@ def customer_pdf_download(request, public_id) -> HttpResponse:
     _resequence_customer_image_artifacts(customer)
     image_artifacts = list(customer.artifacts.filter(artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE))
     maps_context = _build_customer_maps_context(customer)
+    map_snapshot_data_uri = _remote_image_data_uri(maps_context.get("google_maps_snapshot_url", ""))
     html = render_to_string(
         "evergo/customer_public_pdf.html",
         {
@@ -243,17 +281,20 @@ def customer_pdf_download(request, public_id) -> HttpResponse:
             "image_artifacts": [
                 {
                     "name": artifact.filename,
-                    "url": request.build_absolute_uri(artifact.file.url),
+                    "url": _artifact_image_data_uri(artifact),
                 }
                 for artifact in image_artifacts
             ],
+            "google_maps_snapshot_data_uri": map_snapshot_data_uri,
             **maps_context,
         },
     )
     payload = _render_pdf_bytes(html)
     if not payload:
         raise Http404("PDF renderer is unavailable.")
-    customer.artifacts.filter(artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE).delete()
+    for artifact in image_artifacts:
+        artifact.file.delete(save=False)
+        artifact.delete()
     safe_so = customer.latest_so or str(customer.public_id)
     response = HttpResponse(payload, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="evergo-{safe_so}.pdf"'

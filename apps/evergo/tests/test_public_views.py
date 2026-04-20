@@ -188,13 +188,15 @@ def test_customer_public_detail_enforces_image_and_storage_limits(client, settin
 @pytest.mark.django_db
 def test_customer_pdf_download_generates_pdf_and_clears_temp_images(client, monkeypatch):
     customer = _create_customer(username="owner-pdf")
-    EvergoArtifact.objects.create(
+    artifact = EvergoArtifact.objects.create(
         customer=customer,
         file=SimpleUploadedFile("one.jpg", b"12345", content_type="image/jpeg"),
         artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
         display_order=1,
     )
+    storage_name = artifact.file.name
 
+    monkeypatch.setattr("apps.evergo.views._remote_image_data_uri", lambda _: "")
     monkeypatch.setattr("apps.evergo.views._render_pdf_bytes", lambda html: b"%PDF-1.4 fake")
 
     response = client.get(reverse("evergo:customer-pdf-download", kwargs={"public_id": customer.public_id}))
@@ -202,3 +204,30 @@ def test_customer_pdf_download_generates_pdf_and_clears_temp_images(client, monk
     assert response.status_code == 200
     assert response["Content-Type"] == "application/pdf"
     assert not EvergoArtifact.objects.filter(customer=customer).exists()
+    assert not artifact.file.storage.exists(storage_name)
+
+
+@pytest.mark.django_db
+def test_customer_pdf_download_passes_data_uris_to_template(client, monkeypatch):
+    customer = _create_customer(username="owner-pdf-data-uri")
+    EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("one.jpg", b"12345", content_type="image/jpeg"),
+        artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
+        display_order=1,
+    )
+    captured_context = {}
+
+    def _capture_template(_template_name, context):
+        captured_context.update(context)
+        return "<html></html>"
+
+    monkeypatch.setattr("apps.evergo.views._remote_image_data_uri", lambda _: "data:image/png;base64,YWJj")
+    monkeypatch.setattr("apps.evergo.views.render_to_string", _capture_template)
+    monkeypatch.setattr("apps.evergo.views._render_pdf_bytes", lambda html: b"%PDF-1.4 fake")
+
+    response = client.get(reverse("evergo:customer-pdf-download", kwargs={"public_id": customer.public_id}))
+
+    assert response.status_code == 200
+    assert captured_context["google_maps_snapshot_data_uri"].startswith("data:image/png;base64,")
+    assert captured_context["image_artifacts"][0]["url"].startswith("data:image/")

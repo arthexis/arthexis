@@ -61,8 +61,8 @@
         <div class="summary-row">Address: {{ customer.address|default:"-" }}</div>
     </div>
 
-    {% if google_maps_snapshot_url %}
-        <img class="map-snapshot" src="{{ google_maps_snapshot_url }}" alt="Map snapshot">
+    {% if google_maps_snapshot_data_uri %}
+        <img class="map-snapshot" src="{{ google_maps_snapshot_data_uri }}" alt="Map snapshot">
     {% endif %}
 
     {% for artifact in image_artifacts %}
