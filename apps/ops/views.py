@@ -281,6 +281,7 @@ def operator_journey_step(
 def operator_journey_dashboard(request: HttpRequest) -> HttpResponse:
     """Render completed and current steps while hiding future journey steps."""
 
+    next_step = next_step_for_user(user=request.user)
     steps = list(
         OperatorJourneyStep.objects.filter(
             is_active=True,
@@ -295,9 +296,8 @@ def operator_journey_dashboard(request: HttpRequest) -> HttpResponse:
         for completion in OperatorJourneyStepCompletion.objects.filter(
             user=request.user,
             step__in=steps,
-        ).select_related("step")
+        )
     }
-    next_step = next_step_for_user(user=request.user)
 
     visible_steps = [
         step
@@ -315,7 +315,7 @@ def operator_journey_dashboard(request: HttpRequest) -> HttpResponse:
                 "is_completed": completion is not None,
                 "is_current": is_current,
                 "completed_at": getattr(completion, "completed_at", None),
-                "url": operator_journey_step_url(step=step),
+                "url": operator_journey_step_url(step=step) if is_current else None,
             }
         )
 
