@@ -49,6 +49,27 @@ def test_node_register_rejects_private_host_in_token():
         command.handle(action="register", token=token)
 
 
+def test_node_register_accepts_multiline_token_input():
+    command = _load_node_command()
+    token = command._encode_token(
+        {
+            "register": "https://example.com/nodes/register/",
+            "info": "https://example.com/nodes/info/",
+            "username": "cli-user",
+            "password": "cli-pass",
+        }
+    )
+
+    payload = command._decode_token_from_input(f"Version: test\n{token}\n")
+
+    assert payload == {
+        "register": "https://example.com/nodes/register/",
+        "info": "https://example.com/nodes/info/",
+        "username": "cli-user",
+        "password": "cli-pass",
+    }
+
+
 def test_node_token_generates_register_consumable_payload():
     command = _load_node_command()
 

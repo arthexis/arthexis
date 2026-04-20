@@ -131,7 +131,11 @@ class Command(BaseCommand):
         token_parser.add_argument(
             "--password",
             default="",
-            help="Password used for host /nodes/info/ and /nodes/register/ calls.",
+            help=(
+                "Password used for host /nodes/info/ and /nodes/register/ calls. "
+                "Prefer --password-env or --password-stdin to avoid leaking secrets "
+                "via argv, process listings, or shell history."
+            ),
         )
         token_parser.add_argument(
             "--password-env",
@@ -313,7 +317,7 @@ class Command(BaseCommand):
         if options.get("no_reciprocal"):
             raise CommandError("--no-reciprocal can only be used together with --path.")
 
-        payload = self._decode_token(token)
+        payload = self._decode_token_from_input(token)
         self._ensure_public_https_url(payload["info"], label="Host info")
         self._ensure_public_https_url(payload["register"], label="Host registration")
         session = requests.Session()
@@ -802,6 +806,22 @@ class Command(BaseCommand):
 
         return last_path.as_posix() if last_path else ""
 
+    def _decode_token_from_input(self, token_input: str) -> dict:
+        token = token_input.strip()
+        candidates = [token]
+        lines = [line.strip() for line in token_input.splitlines() if line.strip()]
+        for line in reversed(lines):
+            if line not in candidates:
+                candidates.append(line)
+
+        for candidate in candidates:
+            try:
+                return self._decode_token(candidate)
+            except CommandError:
+                continue
+
+        raise CommandError("Invalid registration token")
+
     def _decode_token(self, token: str) -> dict:
         try:
             payload = json.loads(base64.urlsafe_b64decode(token).decode("utf-8"))
@@ -816,7 +836,8 @@ class Command(BaseCommand):
             )
         return payload
 
-    def _encode_token(self, payload: dict) -> str:
+    @staticmethod
+    def _encode_token(payload: dict) -> str:
         return base64.urlsafe_b64encode(
             json.dumps(payload, separators=(",", ":")).encode("utf-8")
         ).decode("utf-8")
