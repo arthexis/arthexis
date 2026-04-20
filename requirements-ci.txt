@@ -8,7 +8,7 @@ asgiref==3.11.0
 autobahn==24.4.2
 black==26.3.1
 bleach==6.3.0
-boto3==1.42.78
+boto3==1.42.91
 botocore==1.42.91
 celery==5.5.3
 cffi==2.0.0
@@ -38,7 +38,7 @@ django-timezone-field==7.2.1
 Django==5.2.12
 dnspython==2.7.0
 docutils==0.22.4
-filelock==3.25.2
+filelock==3.29.0
 gpiozero==2.0.1; sys_platform == "linux" and (platform_machine == "armv7l" or platform_machine == "aarch64")
 graphviz==0.21
 httpx==0.28.1
@@ -89,7 +89,7 @@ txaio==25.9.2
 types-requests==2.33.0.20260408
 typing_extensions==4.15.0
 urllib3~=2.6.3
-weasyprint==68.0
+weasyprint==68.1
 webauthn==2.7.1
 websocket-client==1.8.0
 websockets>=15,<17
