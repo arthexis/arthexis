@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
@@ -15,6 +16,7 @@ from apps.repos.models.spam import RepositoryIssueSpamAssessment
 from apps.repos.services import github as github_service
 
 URL_PATTERN = re.compile(r"https?://", re.IGNORECASE)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -139,21 +141,48 @@ def _moderate_issue(*, repository: GitHubRepository, issue_number: int, policy: 
     if not policy.auto_moderate_enabled:
         return
 
-    token = github_service.get_github_issue_token()
+    try:
+        token = github_service.get_github_issue_token()
+    except github_service.GitHubRepositoryError:
+        logger.exception(
+            "GitHub spam moderation token resolution failed for %s/%s#%s",
+            repository.owner,
+            repository.name,
+            issue_number,
+        )
+        return
+
     if policy.auto_label:
-        github_service.add_issue_labels(
+        try:
+            github_service.add_issue_labels(
+                owner=repository.owner,
+                repository=repository.name,
+                issue_number=issue_number,
+                token=token,
+                labels=policy.auto_label,
+            )
+        except github_service.GitHubRepositoryError:
+            logger.exception(
+                "GitHub spam moderation labeling failed for %s/%s#%s",
+                repository.owner,
+                repository.name,
+                issue_number,
+            )
+
+    try:
+        github_service.close_issue(
             owner=repository.owner,
             repository=repository.name,
             issue_number=issue_number,
             token=token,
-            labels=policy.auto_label,
         )
-    github_service.close_issue(
-        owner=repository.owner,
-        repository=repository.name,
-        issue_number=issue_number,
-        token=token,
-    )
+    except github_service.GitHubRepositoryError:
+        logger.exception(
+            "GitHub spam moderation close failed for %s/%s#%s",
+            repository.owner,
+            repository.name,
+            issue_number,
+        )
 
 
 def assess_github_issue_event(event: GitHubEvent) -> RepositoryIssueSpamAssessment | None:

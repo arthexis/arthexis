@@ -8,6 +8,7 @@ from django.urls import reverse
 
 from apps.repos.models.repositories import GitHubRepository
 from apps.repos.models.spam import RepositoryIssueSpamAssessment
+from apps.repos.services import github as github_service
 from apps.repos.spam_filter import evaluate_issue_payload, get_spam_policy
 
 
@@ -109,3 +110,51 @@ def test_github_webhook_auto_moderates_when_enabled(client, monkeypatch, setting
 
     assert response.status_code == 200
     assert calls == [("labels", 77), ("close", 77)]
+
+
+@pytest.mark.django_db
+def test_github_webhook_auto_moderation_closes_issue_when_labeling_fails(
+    client, monkeypatch, settings
+):
+    settings.GITHUB_ISSUE_SPAM_FILTER_ENABLED = True
+    settings.GITHUB_ISSUE_SPAM_AUTO_MODERATE = True
+    settings.GITHUB_ISSUE_SPAM_MAX_LINKS = 0
+    settings.GITHUB_ISSUE_SPAM_THRESHOLD = "0.20"
+    settings.GITHUB_ISSUE_SPAM_AUTO_LABELS = ["spam-suspected"]
+
+    repo = GitHubRepository.objects.create(owner="octocat", name="hello-world")
+    url = reverse("repos:github-webhook")
+
+    calls: list[tuple[str, int]] = []
+
+    def fake_labels(*, owner, repository, issue_number, token, labels, timeout=10):
+        del owner, repository, issue_number, token, labels, timeout
+        raise github_service.GitHubRepositoryError("labels failed")
+
+    def fake_close(*, owner, repository, issue_number, token, timeout=10):
+        del owner, repository, token, timeout
+        calls.append(("close", issue_number))
+
+    monkeypatch.setattr("apps.repos.spam_filter.github_service.get_github_issue_token", lambda: "token")
+    monkeypatch.setattr("apps.repos.spam_filter.github_service.add_issue_labels", fake_labels)
+    monkeypatch.setattr("apps.repos.spam_filter.github_service.close_issue", fake_close)
+
+    payload = {
+        "action": "opened",
+        "repository": {"owner": {"login": repo.owner}, "name": repo.name},
+        "issue": {
+            "number": 88,
+            "title": "promo",
+            "body": "https://spam.example",
+            "user": {"login": "spambot"},
+        },
+    }
+    response = client.post(
+        url,
+        data=json.dumps(payload),
+        content_type="application/json",
+        **{"HTTP_X_GITHUB_EVENT": "issues", "HTTP_X_GITHUB_DELIVERY": "delivery-88"},
+    )
+
+    assert response.status_code == 200
+    assert calls == [("close", 88)]
