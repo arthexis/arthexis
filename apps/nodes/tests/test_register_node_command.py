@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import sys
 
 import pytest
 from django.core.management import get_commands, load_command_class
@@ -106,7 +107,7 @@ def test_node_token_accepts_password_from_env(monkeypatch):
 
 def test_node_token_accepts_password_from_stdin(monkeypatch):
     command = _load_node_command()
-    command.stdin = io.StringIO("stdin-pass\n")
+    monkeypatch.setattr(sys, "stdin", io.StringIO("stdin-pass\n"))
     command.stdout = io.StringIO()
 
     result = command.handle(
