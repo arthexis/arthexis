@@ -152,7 +152,10 @@ def _read_ingest_offset_state(offset_path: Path) -> tuple[int | None, int]:
         except Exception:
             return None, 0
     if not isinstance(payload, dict):
-        return None, 0
+        try:
+            return None, int(payload)
+        except (TypeError, ValueError):
+            return None, 0
     inode = payload.get("inode")
     offset = payload.get("offset")
     try:
@@ -181,18 +184,17 @@ def ingest_service_scans() -> int:
         return 0
     offset_path = _scan_ingest_offset_path()
     offset_path.parent.mkdir(parents=True, exist_ok=True)
-    stat = log_path.stat()
-    current_inode = getattr(stat, "st_ino", None)
-    file_size = stat.st_size
     last_inode, last_offset = _read_ingest_offset_state(offset_path)
 
     processed = 0
-    if last_inode is not None and current_inode is not None and last_inode != current_inode:
-        last_offset = 0
-    if last_offset < 0 or last_offset > file_size:
-        last_offset = 0
-
     with log_path.open("r", encoding="utf-8") as scan_log:
+        stat = os.fstat(scan_log.fileno())
+        current_inode = getattr(stat, "st_ino", None)
+        file_size = stat.st_size
+        if last_inode is not None and current_inode is not None and last_inode != current_inode:
+            last_offset = 0
+        if last_offset < 0 or last_offset > file_size:
+            last_offset = 0
         scan_log.seek(last_offset)
         while True:
             line = scan_log.readline()

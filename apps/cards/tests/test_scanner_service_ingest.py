@@ -57,3 +57,31 @@ def test_ingest_service_scans_recovers_when_log_rotates(monkeypatch, settings, t
     assert second_processed == 1
     assert RFIDAttempt.objects.filter(rfid="FEDC4321").count() == 1
     assert RFIDAttempt.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_ingest_service_scans_honors_legacy_integer_offset(
+    monkeypatch, settings, tmp_path
+):
+    settings.BASE_DIR = str(tmp_path)
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(settings, "LOG_DIR", str(log_dir), raising=False)
+
+    log_file = log_dir / "rfid-scans.ndjson"
+    first_payload = {"rfid": "ABCD1234", "service_mode": "service"}
+    second_payload = {"rfid": "FEDC4321", "service_mode": "service"}
+    first_line = json.dumps(first_payload) + "\n"
+    second_line = json.dumps(second_payload) + "\n"
+    log_file.write_text(first_line + second_line, encoding="utf-8")
+
+    offset_path = tmp_path / ".locks" / "rfid-scan.offset"
+    offset_path.parent.mkdir(parents=True, exist_ok=True)
+    offset_path.write_text(str(len(first_line)), encoding="utf-8")
+
+    processed = ingest_service_scans()
+
+    assert processed == 1
+    assert RFIDAttempt.objects.count() == 1
+    assert RFIDAttempt.objects.filter(rfid="ABCD1234").count() == 0
+    assert RFIDAttempt.objects.filter(rfid="FEDC4321").count() == 1
