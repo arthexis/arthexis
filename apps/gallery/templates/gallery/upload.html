@@ -23,7 +23,7 @@
           <img
             id="image-preview"
             alt="{% trans 'Selected image preview' %}"
-            class="img-fluid rounded d-none"
+            class="img-fluid rounded d-none gallery-upload-preview"
           />
           <p id="image-preview-placeholder" class="text-body-secondary mb-0">{% trans "Selected image preview will appear here." %}</p>
         </div>
@@ -53,13 +53,17 @@
           <div class="col-12">
             <div class="form-check">
               {{ form.include_in_public_gallery }}
-              {{ form.include_in_public_gallery.label_tag }}
+              <label class="form-check-label" for="{{ form.include_in_public_gallery.id_for_label }}">
+                {{ form.include_in_public_gallery.label }}
+              </label>
             </div>
           </div>
           <div class="col-12">
             <div class="form-check">
               {{ form.create_content_sample }}
-              {{ form.create_content_sample.label_tag }}
+              <label class="form-check-label" for="{{ form.create_content_sample.id_for_label }}">
+                {{ form.create_content_sample.label }}
+              </label>
             </div>
           </div>
           <div class="col-12">
@@ -72,32 +76,41 @@
 </div>
 <script>
 (() => {
-  const dropZone = document.getElementById('drop-zone');
-  const fileInput = document.getElementById('{{ form.image.id_for_label }}');
-  const preview = document.getElementById('image-preview');
-  const previewPlaceholder = document.getElementById('image-preview-placeholder');
-  const autoGrowTextareas = document.querySelectorAll('textarea[data-autogrow="true"]');
-  if (!dropZone || !fileInput || !preview || !previewPlaceholder) return;
-
   const syncTextareaHeight = (textarea) => {
     textarea.style.height = 'auto';
     textarea.style.height = `${textarea.scrollHeight}px`;
   };
 
-  autoGrowTextareas.forEach((textarea) => {
+  document.querySelectorAll('textarea[data-autogrow="true"]').forEach((textarea) => {
     syncTextareaHeight(textarea);
     textarea.addEventListener('input', () => syncTextareaHeight(textarea));
   });
 
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('{{ form.image.id_for_label }}');
+  const preview = document.getElementById('image-preview');
+  const previewPlaceholder = document.getElementById('image-preview-placeholder');
+  if (!dropZone || !fileInput || !preview || !previewPlaceholder) return;
+
+  let previewObjectUrl = null;
+
   const updatePreview = (file) => {
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = ({ target }) => {
-      preview.src = target?.result || '';
-      preview.classList.remove('d-none');
-      previewPlaceholder.classList.add('d-none');
-    };
-    reader.readAsDataURL(file);
+    if (previewObjectUrl) {
+      URL.revokeObjectURL(previewObjectUrl);
+      previewObjectUrl = null;
+    }
+
+    if (!file || !file.type.startsWith('image/')) {
+      preview.src = '';
+      preview.classList.add('d-none');
+      previewPlaceholder.classList.remove('d-none');
+      return;
+    }
+
+    previewObjectUrl = URL.createObjectURL(file);
+    preview.src = previewObjectUrl;
+    preview.classList.remove('d-none');
+    previewPlaceholder.classList.add('d-none');
   };
 
   fileInput.addEventListener('change', () => updatePreview(fileInput.files?.[0]));
@@ -119,6 +132,17 @@
     fileInput.files = files;
     updatePreview(files[0]);
   });
+
+  window.addEventListener('beforeunload', () => {
+    if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+  });
 })();
 </script>
+<style>
+  .gallery-upload-preview {
+    max-height: 50vh;
+    object-fit: contain;
+    width: 100%;
+  }
+</style>
 {% endblock %}
