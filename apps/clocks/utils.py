@@ -25,7 +25,10 @@ Scanner = Callable[[int], str]
 
 def _is_missing_i2c_bus_error(message: str) -> bool:
     normalized = message.lower()
-    return "could not open file `/dev/i2c-" in normalized
+    return (
+        "could not open file `/dev/i2c-" in normalized
+        and "no such file or directory" in normalized
+    )
 
 
 def _run_i2cdetect(bus: int) -> str:

@@ -162,5 +162,7 @@ _RUNNER_EXPORTS = {
 
 def __getattr__(name: str) -> Any:
     if name in _RUNNER_EXPORTS:
-        return getattr(import_module(".runner", __name__), name)
+        value = getattr(import_module(".runner", __name__), name)
+        globals()[name] = value
+        return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

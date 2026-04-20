@@ -14,3 +14,4 @@ def test_lcd_screen_package_does_not_eager_import_runner():
 
     assert "apps.screens.lcd_screen.runner" not in sys.modules
     assert callable(package.main)
+    assert package.__dict__["main"] is package.main
