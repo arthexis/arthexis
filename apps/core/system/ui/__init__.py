@@ -34,11 +34,9 @@ from .uptime import (
     _load_shutdown_periods,
     _system_boot_time,
     _suite_offline_period,
-    _suite_uptime,
     _suite_uptime_details,
     build_uptime_segments,
     load_shutdown_periods,
-    suite_offline_period,
 )
 
 STARTUP_REPORT_DEFAULT_LIMIT = 50

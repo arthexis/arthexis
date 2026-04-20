@@ -81,7 +81,7 @@ class LogbookEntryForm(forms.ModelForm):
             return None
         try:
             json.loads(document.read().decode("utf-8"))
-        except Exception as exc:
+        except Exception:
             raise forms.ValidationError(_("Debug document must contain valid JSON (%(error)s)"))
         finally:
             if document and hasattr(document, "seek"):

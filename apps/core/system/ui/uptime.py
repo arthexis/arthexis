@@ -121,12 +121,6 @@ def _suite_uptime_details() -> SuiteUptimeDetailsPayload:
     }
 
 
-def _suite_uptime() -> str:
-    """Return a human-readable uptime for the running suite when possible."""
-
-    return _suite_uptime_details().get("uptime", "")
-
-
 def _suite_offline_period(now: datetime) -> tuple[datetime, datetime] | None:
     """Return a downtime window when the lock predates the current boot."""
 
@@ -138,12 +132,6 @@ def _suite_offline_period(now: datetime) -> tuple[datetime, datetime] | None:
         return boot_time, now
 
     return None
-
-
-def suite_offline_period(now: datetime) -> tuple[datetime, datetime] | None:
-    """Return a downtime window when the lock predates the current boot."""
-
-    return _suite_offline_period(now)
 
 
 def _parse_last_history_line(line: str) -> dict[str, datetime | str | None] | None:

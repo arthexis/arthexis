@@ -17,7 +17,6 @@ from apps.locals.user_data import (
     delete_user_fixture,
     dump_user_fixture,
     resolve_fixture_user,
-    user_allows_user_data,
 )
 from apps.core.admin.mixins import OwnedObjectLinksMixin
 from apps.core.impersonation import (
@@ -539,7 +538,6 @@ class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
         if not getattr(obj, "pk", None):
             return
         target_user = resolve_fixture_user(obj, obj)
-        allow_user_data = user_allows_user_data(target_user)
         if request.POST.get("_user_datum") == "on":
             type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=False)
             obj.is_user_data = False
