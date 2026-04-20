@@ -192,3 +192,42 @@ class GalleryManagementPermissionTests(TestCase):
             qualitative_value="warm",
         )
         self.assertEqual(assignment.float_value, 0.8)
+
+
+class GalleryImageSharingTests(TestCase):
+    def setUp(self):
+        self.owner = get_user_model().objects.create_user(username="owner-share", password="pw")
+        self.recipient = get_user_model().objects.create_user(username="recipient-share", password="pw")
+        self.other = get_user_model().objects.create_user(username="other-share", password="pw")
+        self.image = create_gallery_image(
+            uploaded_file=self._upload("shared.jpg"),
+            title="Shared",
+            owner_user=self.owner,
+        )
+
+    def _upload(self, name="share.jpg"):
+        buffer = BytesIO()
+        Image.new("RGB", (10, 10), "purple").save(buffer, format="JPEG")
+        return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/jpeg")
+
+    def test_owner_can_share_without_relinquishing_ownership(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            f"/gallery/images/{self.image.slug}/",
+            {"action": "share-image", "username": self.recipient.username},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.image.refresh_from_db()
+        self.assertEqual(self.image.owner_user_id, self.owner.pk)
+        self.assertTrue(self.image.shared_with_users.filter(pk=self.recipient.pk).exists())
+        self.assertTrue(self.image.can_view(self.recipient))
+
+    def test_shared_user_cannot_reshare_image(self):
+        self.image.shared_with_users.add(self.recipient)
+        self.client.force_login(self.recipient)
+        response = self.client.post(
+            f"/gallery/images/{self.image.slug}/",
+            {"action": "share-image", "username": self.other.username},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(self.image.shared_with_users.filter(pk=self.other.pk).exists())

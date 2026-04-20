@@ -5,7 +5,15 @@ from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
-from .forms import GalleryCategoryForm, GalleryCreditForm, GalleryImageForm, GalleryTraitAssignmentForm, GalleryTraitForm, GalleryUploadForm
+from .forms import (
+    GalleryCategoryForm,
+    GalleryCreditForm,
+    GalleryImageForm,
+    GalleryShareForm,
+    GalleryTraitAssignmentForm,
+    GalleryTraitForm,
+    GalleryUploadForm,
+)
 from .models import GalleryImage
 from .permissions import can_manage_gallery
 from .services import create_gallery_image
@@ -24,6 +32,7 @@ def _visible_images_for_user(user):
     if getattr(user, "is_authenticated", False):
         visibility_filter |= Q(owner_user=user)
         visibility_filter |= Q(owner_group__in=user.groups.all())
+        visibility_filter |= Q(shared_with_users=user)
     return queryset.filter(visibility_filter).distinct()
 
 
@@ -40,7 +49,11 @@ def gallery_detail(request, slug):
             "owner_user",
             "owner_group",
         ).prefetch_related(
-            "credits", "categories", "trait_values__trait", "trait_values__category"
+            "categories",
+            "credits",
+            "shared_with_users",
+            "trait_values__category",
+            "trait_values__trait",
         ),
         slug=slug,
     )
@@ -48,19 +61,33 @@ def gallery_detail(request, slug):
         raise Http404
 
     can_view_metadata = image.can_view_metadata(request.user)
+    can_share = image.can_share(request.user)
     image_form = GalleryImageForm(instance=image) if can_manage_gallery(request.user) else None
+    share_form = GalleryShareForm()
     trait_form = GalleryTraitAssignmentForm()
     credit_form = GalleryCreditForm()
 
-    if request.method == "POST" and can_manage_gallery(request.user):
+    if request.method == "POST":
         action = request.POST.get("action", "")
-        if action == "update-image":
+        if action == "share-image" and can_share:
+            share_form = GalleryShareForm(request.POST)
+            if share_form.is_valid():
+                share_user = share_form.cleaned_data["username"]
+                if image.owner_user_id == share_user.pk:
+                    share_form.add_error("username", "Image owner already has access.")
+                elif image.shared_with_users.filter(pk=share_user.pk).exists():
+                    share_form.add_error("username", "User already has access.")
+                else:
+                    image.shared_with_users.add(share_user)
+                    messages.success(request, f"Shared with {share_user.username}.")
+                    return redirect("gallery:detail", slug=image.slug)
+        elif action == "update-image" and can_manage_gallery(request.user):
             image_form = GalleryImageForm(request.POST, instance=image)
             if image_form.is_valid():
                 image_form.save()
                 messages.success(request, "Image updated.")
                 return redirect("gallery:detail", slug=image.slug)
-        elif action == "add-trait":
+        elif action == "add-trait" and can_manage_gallery(request.user):
             trait_form = GalleryTraitAssignmentForm(request.POST)
             if trait_form.is_valid():
                 _, created = image.trait_values.update_or_create(
@@ -71,7 +98,7 @@ def gallery_detail(request, slug):
                 )
                 messages.success(request, "Trait added." if created else "Trait updated.")
                 return redirect("gallery:detail", slug=image.slug)
-        elif action == "add-credit":
+        elif action == "add-credit" and can_manage_gallery(request.user):
             credit_form = GalleryCreditForm(request.POST)
             if credit_form.is_valid():
                 credit_obj = credit_form.save(commit=False)
@@ -79,11 +106,15 @@ def gallery_detail(request, slug):
                 credit_obj.save()
                 messages.success(request, "Credit added.")
                 return redirect("gallery:detail", slug=image.slug)
+        elif action == "share-image":
+            return JsonResponse({"detail": "forbidden"}, status=403)
 
     context = {
         "image": image,
         "can_view_metadata": can_view_metadata,
         "can_manage": can_manage_gallery(request.user),
+        "can_share": can_share,
+        "share_form": share_form,
         "image_form": image_form,
         "trait_form": trait_form,
         "credit_form": credit_form,

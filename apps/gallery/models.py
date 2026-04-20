@@ -69,6 +69,11 @@ class GalleryImage(Entity):
         blank=True,
         related_name="owned_gallery_images",
     )
+    shared_with_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="shared_gallery_images",
+    )
     categories = models.ManyToManyField(GalleryCategory, blank=True, related_name="images")
     traits = models.ManyToManyField(GalleryTrait, through="GalleryImageTrait", related_name="images")
 
@@ -99,6 +104,8 @@ class GalleryImage(Entity):
             return True
         if self.owner_group_id and user.groups.filter(pk=self.owner_group_id).exists():
             return True
+        if self.shared_with_users.filter(pk=user.pk).exists():
+            return True
         return False
 
     def can_view_metadata(self, user) -> bool:
@@ -111,6 +118,17 @@ class GalleryImage(Entity):
         if self.owner_group_id and user.groups.filter(pk=self.owner_group_id).exists():
             return True
         return user.groups.filter(name=GALLERY_MANAGER_GROUP_NAME).exists()
+
+    def can_share(self, user) -> bool:
+        if not getattr(user, "is_authenticated", False):
+            return False
+        if can_manage_gallery(user):
+            return True
+        if self.owner_user_id and self.owner_user_id == user.pk:
+            return True
+        if self.owner_group_id and user.groups.filter(pk=self.owner_group_id).exists():
+            return True
+        return False
 
 
 class GalleryCredit(Entity):
