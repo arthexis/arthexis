@@ -1,7 +1,15 @@
-"""RFID scanner service and UDP client helpers."""
+"""RFID scanner service and UDP client helpers.
+
+Design note:
+The long-running RFID worker intentionally communicates through lock/log files
+(``.locks/rfid-scan.json`` and ``logs/rfid-scans.ndjson``). Django processes
+ingest those artifacts separately, so this service can run via ``python -m``
+without a Django management command invocation.
+"""
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import os
@@ -254,7 +262,7 @@ class RFIDServiceHandler(socketserver.BaseRequestHandler):
 
         if action == "scan":
             response = {
-                "error": "scan requests are handled via the database",
+                "error": "scan requests are handled via lock-file ingest",
                 "service_mode": "service",
             }
             socket_out.sendto(json.dumps(response).encode("utf-8"), self.client_address)
@@ -420,3 +428,18 @@ def run_service(host: str | None = None, port: int | None = None) -> None:
     signal.signal(signal.SIGINT, _handle_signal)
 
     runner.serve()
+
+
+def main() -> None:
+    """Run the RFID UDP service as a module entrypoint."""
+
+    endpoint = service_endpoint()
+    parser = argparse.ArgumentParser(description="Run the Arthexis RFID scanner UDP service.")
+    parser.add_argument("--host", default=endpoint.host, help="Host interface to bind.")
+    parser.add_argument("--port", type=int, default=endpoint.port, help="UDP port to bind.")
+    options = parser.parse_args()
+    run_service(host=options.host, port=options.port)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,11 +1,12 @@
 # RFID scanner service
 
 ## What it is
-The RFID scanner service runs a lightweight background reader for local hardware. It stores successful scans as persistent RFID attempts so the web UI can poll the database without opening direct service connections.
+The RFID scanner service runs a lightweight background reader for local hardware. It is intentionally started without a Django management command runtime and communicates scan state through lock/log files.
 
 ## What it does
 - Reads RFID tags from attached hardware in a background worker.
-- Writes non-repeated scans to the RFID Attempts table for web and API clients.
+- Writes non-repeated scans to `.locks/rfid-scan.json` and `logs/rfid-scans.ndjson`.
+- Lets Django ingest those artifacts into RFID Attempts for web/API consumers.
 - Exposes health checks (ping) and deep-read toggles for diagnostics.
 
 ## Enable
@@ -31,6 +32,8 @@ The RFID scanner service runs a lightweight background reader for local hardware
 3. You can also run the configurator with `--no-rfid-service` to remove the lock and unit.
 
 ## Notes
+- Systemd should launch the service with module execution (`python -m apps.cards.rfid_service`), not `manage.py`.
+- The service itself should not write directly to the Django database.
 - The Suite Services Report lists the RFID service row even if it is not installed so operators know the expected unit name.
 
 ## Troubleshooting

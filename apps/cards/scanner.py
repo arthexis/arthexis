@@ -24,6 +24,7 @@ SCANNER_SOURCES = {
     RFIDAttempt.Source.ON_DEMAND,
 }
 SCAN_INGEST_OFFSET_FILE = "rfid-scan.offset"
+SERVICE_SCAN_LOCKFILE_ERROR = "scan requests are handled via lock-file ingest"
 SERVICE_SCAN_DB_ERROR = "scan requests are handled via the database"
 
 
@@ -189,7 +190,11 @@ def scan_sources(
     if not result:
         return {"rfid": None, "label_id": None, "service_mode": "service"}
     if result.get("error"):
-        if SERVICE_SCAN_DB_ERROR in str(result.get("error", "")).lower():
+        error_text = str(result.get("error", "")).lower()
+        if (
+            SERVICE_SCAN_LOCKFILE_ERROR in error_text
+            or SERVICE_SCAN_DB_ERROR in error_text
+        ):
             return _scan_from_attempts(timeout=timeout_value, endianness=endianness)
         result["service_mode"] = "service"
         return result
