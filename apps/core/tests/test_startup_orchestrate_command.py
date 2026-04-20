@@ -143,3 +143,19 @@ def test_run_preflight_passes_current_python_to_helper(tmp_path, monkeypatch):
     assert ok is True
     assert status["status"] == "ok"
     assert captured["env"]["ARTHEXIS_PYTHON_BIN"] == sys.executable
+
+
+def test_build_phase_timing_uses_monotonic_duration():
+    payload = Command._build_phase_timing(
+        name="startup_message",
+        detail="ok",
+        phase_started_epoch=200.0,
+        phase_finished_epoch=199.0,
+        phase_started_monotonic=300.5,
+        phase_finished_monotonic=300.9,
+        orchestrate_started_monotonic=300.0,
+        status="ok",
+    )
+
+    assert payload["duration_ms"] == 400
+    assert payload["started_offset_ms"] == 500

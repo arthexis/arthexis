@@ -129,12 +129,15 @@ class Command(BaseCommand):
                 orchestrate_started_monotonic=started_monotonic,
             )
         else:
+            phase_started_monotonic = time.monotonic()
+            phase_finished_monotonic = time.monotonic()
             startup_message_timing = self._build_phase_timing(
                 name="startup_message",
                 detail=startup_message_status,
                 phase_started_epoch=time.time(),
                 phase_finished_epoch=time.time(),
-                phase_started_monotonic=time.monotonic(),
+                phase_started_monotonic=phase_started_monotonic,
+                phase_finished_monotonic=phase_finished_monotonic,
                 orchestrate_started_monotonic=started_monotonic,
                 status="skipped",
             )
@@ -244,6 +247,7 @@ class Command(BaseCommand):
         phase_started_epoch = time.time()
         detail = self._queue_startup_message(port)
         phase_finished_epoch = time.time()
+        phase_finished_monotonic = time.monotonic()
         status = "error" if str(detail).startswith("error:") else "ok"
         return detail, self._build_phase_timing(
             name="startup_message",
@@ -251,6 +255,7 @@ class Command(BaseCommand):
             phase_started_epoch=phase_started_epoch,
             phase_finished_epoch=phase_finished_epoch,
             phase_started_monotonic=phase_started_monotonic,
+            phase_finished_monotonic=phase_finished_monotonic,
             orchestrate_started_monotonic=orchestrate_started_monotonic,
             status=status,
         )
@@ -266,6 +271,7 @@ class Command(BaseCommand):
         phase_started_epoch = time.time()
         ok, status = callback()
         phase_finished_epoch = time.time()
+        phase_finished_monotonic = time.monotonic()
         status_payload = dict(status)
         status_payload.update(
             self._build_phase_timing(
@@ -274,6 +280,7 @@ class Command(BaseCommand):
                 phase_started_epoch=phase_started_epoch,
                 phase_finished_epoch=phase_finished_epoch,
                 phase_started_monotonic=phase_started_monotonic,
+                phase_finished_monotonic=phase_finished_monotonic,
                 orchestrate_started_monotonic=orchestrate_started_monotonic,
                 status=str(status.get("status") or ("ok" if ok else "error")),
             )
@@ -288,10 +295,11 @@ class Command(BaseCommand):
         phase_started_epoch: float,
         phase_finished_epoch: float,
         phase_started_monotonic: float,
+        phase_finished_monotonic: float,
         orchestrate_started_monotonic: float,
         status: str,
     ) -> dict[str, object]:
-        duration_ms = max(int(round((phase_finished_epoch - phase_started_epoch) * 1000)), 0)
+        duration_ms = max(int(round((phase_finished_monotonic - phase_started_monotonic) * 1000)), 0)
         started_offset_ms = max(
             int(round((phase_started_monotonic - orchestrate_started_monotonic) * 1000)),
             0,
