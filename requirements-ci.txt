@@ -33,7 +33,7 @@ django-object-actions==5.0.0
 django-otp==1.7.0
 django-parler==2.3
 django-stubs-ext==6.0.3
-django-stubs==6.0.1
+django-stubs==6.0.3
 django-timezone-field==7.2.1
 Django==5.2.12
 dnspython==2.7.0
