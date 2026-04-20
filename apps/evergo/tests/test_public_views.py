@@ -94,3 +94,71 @@ def test_to_tsv_sanitizes_formula_and_line_break_characters():
     assert "' @phone" in tsv
     assert "'-brand" in tsv
     assert "Monterrey NL" in tsv
+
+
+@pytest.mark.django_db
+def test_customer_public_detail_allows_staff_cross_profile_access(client):
+    """Regression: staff users can inspect customer pages without owner scoping."""
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(username="evergo-owner-staff", email="owner-staff@example.com")
+    owner_profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-staff@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(
+        user=owner_profile,
+        name="Cross Profile Customer",
+        latest_so="SO-777",
+    )
+
+    staff_user = user_model.objects.create_user(
+        username="evergo-staff-viewer",
+        email="staff-viewer@example.com",
+        password="secret",  # noqa: S106
+        is_staff=True,
+    )
+    client.force_login(staff_user)
+
+    response = client.get(reverse("evergo:customer-public-detail", kwargs={"pk": customer.pk}))
+
+    assert response.status_code == 200
+    assert "Cross Profile Customer" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_customer_artifact_download_allows_staff_cross_profile_access(client):
+    """Regression: staff users can download customer PDF artifacts across profiles."""
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(username="evergo-owner-artifacts", email="owner-artifacts@example.com")
+    owner_profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email="owner-artifacts@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    customer = EvergoCustomer.objects.create(
+        user=owner_profile,
+        name="Artifact Customer",
+    )
+    artifact = EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("summary.pdf", b"%PDF-1.4 fake", content_type="application/pdf"),
+    )
+
+    staff_user = user_model.objects.create_user(
+        username="evergo-staff-artifact",
+        email="staff-artifact@example.com",
+        password="secret",  # noqa: S106
+        is_staff=True,
+    )
+    client.force_login(staff_user)
+
+    response = client.get(
+        reverse(
+            "evergo:customer-artifact-download",
+            kwargs={"pk": customer.pk, "artifact_id": artifact.pk},
+        )
+    )
+
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/pdf"
