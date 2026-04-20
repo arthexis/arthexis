@@ -115,6 +115,12 @@ INTERNAL_ACTION_SPECS: tuple[InternalActionSpec, ...] = (
         admin_url_name="admin:system",
     ),
     InternalActionSpec(
+        name="uploader",
+        label="Uploader",
+        description="Open the admin uploader view for content samples.",
+        admin_url_name="admin:content_contentsample_changelist",
+    ),
+    InternalActionSpec(
         name="upgrade",
         label="Upgrade",
         description="View upgrade status and run upgrade checks.",

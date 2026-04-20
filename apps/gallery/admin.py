@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.urls import reverse
 
 from .models import GalleryCategory, GalleryCredit, GalleryImage, GalleryImageTrait, GalleryTrait
 
@@ -26,6 +27,18 @@ class GalleryImageAdmin(admin.ModelAdmin):
     search_fields = ("title", "description")
     filter_horizontal = ("categories",)
     inlines = (GalleryCreditInline, GalleryImageTraitInline)
+    change_form_template = "admin/gallery/galleryimage/change_form.html"
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        context = {"uploader_url": reverse("admin:content_contentsample_changelist")}
+        if extra_context:
+            context.update(extra_context)
+        return super().changeform_view(
+            request,
+            object_id=object_id,
+            form_url=form_url,
+            extra_context=context,
+        )
 
 
 @admin.register(GalleryCategory)
