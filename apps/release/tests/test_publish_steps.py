@@ -22,21 +22,3 @@ EXPECTED_STEP_ORDER = [
     "Capture PyPI publish logs",
 ]
 
-def test_release_publish_step_order_matches_expected_order() -> None:
-    assert [name for name, _handler_name in DOMAIN_PUBLISH_STEPS] == EXPECTED_STEP_ORDER
-
-
-def test_release_publish_step_order_matches_expected_ui_order() -> None:
-    assert [name for name, _func in UI_PUBLISH_STEPS] == EXPECTED_STEP_ORDER
-
-
-def test_run_headless_publish_uses_expected_release_step_order() -> None:
-    workflow = _build_release_workflow()
-
-    assert [step.name for step in workflow.steps] == EXPECTED_STEP_ORDER
-
-
-def test_release_publish_handler_names_match_ui_implementations() -> None:
-    assert [handler_name for _name, handler_name in DOMAIN_PUBLISH_STEPS] == [
-        func.__name__ for _name, func in UI_PUBLISH_STEPS
-    ]

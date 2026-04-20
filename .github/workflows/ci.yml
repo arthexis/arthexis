@@ -235,7 +235,7 @@ jobs:
           PY
 
       - name: Comment on pull request with failure details
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@v8
         with:
           script: |
@@ -252,31 +252,39 @@ jobs:
             const issue_number = context.issue.number;
             const { owner, repo } = context.repo;
 
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner,
-              repo,
-              issue_number,
-              per_page: 100,
-            });
-
-            const existing = comments.find((comment) =>
-              comment.user?.type === 'Bot' && comment.body?.includes(marker),
-            );
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner,
-                repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
+            try {
+              const comments = await github.paginate(github.rest.issues.listComments, {
                 owner,
                 repo,
                 issue_number,
-                body,
+                per_page: 100,
               });
+
+              const existing = comments.find((comment) =>
+                comment.user?.type === 'Bot' && comment.body?.includes(marker),
+              );
+
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: existing.id,
+                  body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number,
+                  body,
+                });
+              }
+            } catch (error) {
+              if (error?.status === 403) {
+                core.warning(`Skipping PR failure comment due to token permissions: ${error.message}`);
+                return;
+              }
+              throw error;
             }
 
       - name: Upload pytest log

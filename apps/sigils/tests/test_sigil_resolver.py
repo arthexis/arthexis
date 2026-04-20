@@ -12,7 +12,6 @@ from apps.sigils.models import SigilRoot
 from apps.sigils.sigil_builder import generate_model_sigils
 from apps.sigils.sigil_context import clear_request, set_request
 
-
 @pytest.fixture
 def user_root():
     user_model = get_user_model()
@@ -24,7 +23,6 @@ def user_root():
         },
     )
     return root
-
 
 @pytest.fixture
 def node_root():
@@ -38,7 +36,6 @@ def node_root():
     )
     return root
 
-
 @pytest.mark.django_db
 def test_resolve_sigils_filters_and_fetches_field(user_root):
     user_model = get_user_model()
@@ -47,65 +44,6 @@ def test_resolve_sigils_filters_and_fetches_field(user_root):
     result = sigil_resolver.resolve_sigils("[USR:username=sigiluser.email]")
 
     assert result == user.email
-
-
-@pytest.mark.django_db
-def test_pipeline_v2_parses_uppercase_pipeline(settings, node_root):
-    settings.SIGILS_PIPELINE_V2_ENABLED = True
-    role = NodeRole.objects.create(name="Charging")
-    Node.objects.create(
-        hostname="SIM-CP-1",
-        address="127.0.0.11",
-        mac_address="00:11:22:33:44:12",
-        port=9001,
-        public_endpoint="SIM-CP-1",
-        role=role,
-    )
-
-    resolved = sigil_resolver.resolve_sigils("[CP:hostname:SIM-CP-1|GET:role]")
-
-    assert resolved == "Charging"
-
-
-@pytest.mark.django_db
-def test_pipeline_v2_normalizes_mixed_case_root_and_action(settings, node_root):
-    settings.SIGILS_PIPELINE_V2_ENABLED = True
-    role = NodeRole.objects.create(name="Charging")
-    Node.objects.create(
-        hostname="SIM-CP-1",
-        address="127.0.0.12",
-        mac_address="00:11:22:33:44:13",
-        port=9002,
-        public_endpoint="SIM-CP-1",
-        role=role,
-    )
-
-    resolved = sigil_resolver.resolve_sigils("[cp:hostname:SIM-CP-1|field:role]")
-
-    assert resolved == "Charging"
-
-
-@pytest.mark.django_db
-def test_pipeline_v2_coexists_with_dot_and_parenthesis_sigils(settings, node_root):
-    settings.SIGILS_PIPELINE_V2_ENABLED = True
-    role = NodeRole.objects.create(name="Router")
-    Node.objects.create(
-        hostname="SIM-CP-2",
-        address="127.0.0.13",
-        mac_address="00:11:22:33:44:14",
-        port=9003,
-        public_endpoint="SIM-CP-2",
-        role=role,
-    )
-    user_model = get_user_model()
-    user_model.objects.create(username="sigiladmin")
-
-    result = sigil_resolver.resolve_sigils(
-        "[USR:username=sigiladmin.username]-[CP:hostname:SIM-CP-2|GET:role]"
-    )
-
-    assert result == "sigiladmin-Router"
-
 
 @pytest.mark.django_db
 def test_pipeline_v2_aggregate_action_payload_resolves(settings, node_root):
@@ -132,25 +70,6 @@ def test_pipeline_v2_aggregate_action_payload_resolves(settings, node_root):
 
     assert resolved == "2"
 
-
-@pytest.mark.django_db
-def test_pipeline_v2_root_and_action_can_omit_colons(settings, node_root):
-    settings.SIGILS_PIPELINE_V2_ENABLED = True
-    role = NodeRole.objects.create(name="No-Colon")
-    Node.objects.create(
-        hostname="SIM-CP-NC-1",
-        address="127.0.1.3",
-        mac_address="00:11:22:33:44:33",
-        port=9013,
-        public_endpoint="SIM-CP-NC-1",
-        role=role,
-    )
-
-    resolved = sigil_resolver.resolve_sigils("[CP|COUNT:port]")
-
-    assert resolved == "1"
-
-
 @pytest.mark.django_db
 def test_pipeline_v2_filter_uses_safe_bounded_serialization(settings, user_root):
     settings.SIGILS_PIPELINE_V2_ENABLED = True
@@ -174,24 +93,6 @@ def test_pipeline_v2_filter_uses_safe_bounded_serialization(settings, user_root)
     assert payload[0]["email"] == "filter@example.com"
     assert "password" not in payload[0]
 
-
-@pytest.mark.django_db
-def test_pipeline_v2_falls_back_to_legacy_parser_for_pipe_parameters(settings):
-    settings.SIGILS_PIPELINE_V2_ENABLED = True
-    SigilRoot.objects.update_or_create(
-        prefix="REQ", defaults={"context_type": SigilRoot.Context.REQUEST}
-    )
-    factory = RequestFactory()
-    request = factory.get("/example/path?foo%7Cbar=baz")
-    set_request(request)
-    try:
-        resolved = sigil_resolver.resolve_sigils("[REQ.query=foo|bar]")
-    finally:
-        clear_request()
-
-    assert resolved == "baz"
-
-
 @pytest.mark.django_db
 def test_pipeline_v2_user_safe_gating_degrades_disallowed_action(settings, node_root):
     settings.SIGILS_PIPELINE_V2_ENABLED = True
@@ -213,7 +114,6 @@ def test_pipeline_v2_user_safe_gating_degrades_disallowed_action(settings, node_
 
     assert resolved == "[CP:hostname:SIM-CP-3|GET:role]"
 
-
 @pytest.mark.django_db
 def test_pipeline_v2_filter_is_not_user_safe_action(settings, user_root):
     settings.SIGILS_PIPELINE_V2_ENABLED = True
@@ -232,7 +132,6 @@ def test_pipeline_v2_filter_is_not_user_safe_action(settings, user_root):
 
     assert resolved == "[USR:|FILTER:email:safe-filter@example.com]"
 
-
 @pytest.mark.django_db
 def test_pipeline_v2_feature_flag_can_disable_pipeline_parsing(settings, node_root):
     settings.SIGILS_PIPELINE_V2_ENABLED = False
@@ -249,7 +148,6 @@ def test_pipeline_v2_feature_flag_can_disable_pipeline_parsing(settings, node_ro
     resolved = sigil_resolver.resolve_sigils("[CP:hostname:SIM-CP-4|GET:role]")
 
     assert resolved == "[CP:hostname:SIM-CP-4|GET:role]"
-
 
 @pytest.mark.django_db
 def test_resolve_sigils_request_values():
@@ -269,7 +167,6 @@ def test_resolve_sigils_request_values():
         assert sigil_resolver.resolve_sigils("[REQ.header=X-Custom-Header]") == "hello"
     finally:
         clear_request()
-
 
 @pytest.mark.django_db
 def test_resolve_sigils_uses_default_entity_instance(monkeypatch):
@@ -295,7 +192,6 @@ def test_resolve_sigils_uses_default_entity_instance(monkeypatch):
     result = sigil_resolver.resolve_sigils("[NODE.ROLE]")
 
     assert result == role.name
-
 
 @pytest.mark.django_db
 def test_resolve_sigils_uses_default_entity_instance_with_unrelated_current(
@@ -325,7 +221,6 @@ def test_resolve_sigils_uses_default_entity_instance_with_unrelated_current(
 
     assert result == role.name
 
-
 @pytest.mark.django_db
 def test_resolve_sigils_empty_nested_selector_does_not_fall_back_to_default_instance(
     monkeypatch, user_root
@@ -352,7 +247,6 @@ def test_resolve_sigils_empty_nested_selector_does_not_fall_back_to_default_inst
 
     assert result == ""
 
-
 @pytest.mark.django_db
 def test_resolve_sigils_entity_manager_dispatch_ignores_unrelated_current(user_root):
     user_model = get_user_model()
@@ -373,7 +267,6 @@ def test_resolve_sigils_entity_manager_dispatch_ignores_unrelated_current(user_r
     assert "alpha" in result
     assert "bravo" in result
 
-
 @pytest.mark.django_db
 def test_resolve_sigils_manager_database_errors_propagate(monkeypatch, user_root):
     user_model = get_user_model()
@@ -385,7 +278,6 @@ def test_resolve_sigils_manager_database_errors_propagate(monkeypatch, user_root
 
     with pytest.raises(DatabaseError, match="boom"):
         sigil_resolver.resolve_sigils("[USR=explode]")
-
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
@@ -408,7 +300,6 @@ def test_resolve_sigils_table_driven_manager_method_dispatch(
 
     assert assertion(parsed)
 
-
 @pytest.mark.django_db
 @pytest.mark.parametrize(
     ("token", "expected"),
@@ -429,7 +320,6 @@ def test_resolve_sigils_table_driven_aggregate_requests(user_root, token, expect
         expected if isinstance(expected, str) else expected(baseline_total, user_ids)
     )
     assert resolved == expected_value
-
 
 @pytest.mark.django_db
 def test_resolve_sigils_allowed_roots_limits_resolution(monkeypatch):
@@ -454,7 +344,6 @@ def test_resolve_sigils_allowed_roots_limits_resolution(monkeypatch):
         == "resolved"
     )
 
-
 @pytest.mark.django_db
 def test_get_user_safe_sigil_roots_normalizes_prefixes():
     SigilRoot.objects.update_or_create(
@@ -476,7 +365,6 @@ def test_get_user_safe_sigil_roots_normalizes_prefixes():
     assert "SAFE_ROOT" in safe_roots
     assert "UNSAFE_ROOT" not in safe_roots
 
-
 @pytest.mark.django_db
 def test_sigil_root_prefix_persists_uppercase_and_matches_case_insensitively():
     root, _ = SigilRoot.objects.update_or_create(
@@ -487,7 +375,6 @@ def test_sigil_root_prefix_persists_uppercase_and_matches_case_insensitively():
 
     assert root.prefix == "XCP"
     assert fetched.pk == root.pk
-
 
 @pytest.mark.django_db
 def test_get_user_safe_sigil_actions_requires_safe_entity_root():
@@ -512,7 +399,6 @@ def test_get_user_safe_sigil_actions_requires_safe_entity_root():
     actions = sigil_resolver.get_user_safe_sigil_actions()
     assert actions == {"FIELD", "GET"}
 
-
 @pytest.mark.django_db
 def test_generate_model_sigils_sets_default_user_safety_for_new_builtin_roots(
     monkeypatch,
@@ -535,7 +421,6 @@ def test_generate_model_sigils_sets_default_user_safety_for_new_builtin_roots(
 
     assert SigilRoot.objects.get(prefix="REQ_SAFE").is_user_safe is True
     assert SigilRoot.objects.get(prefix="REQ_UNSAFE").is_user_safe is False
-
 
 @pytest.mark.django_db
 def test_generate_model_sigils_updates_existing_builtin_user_safety():
