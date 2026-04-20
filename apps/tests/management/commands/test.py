@@ -115,7 +115,8 @@ class Command(BaseCommand):
                 (
                     "import importlib.util,json,os,sys;"
                     "deps={'pytest':'pytest','pytest-django':'pytest_django',"
-                    "'pytest-timeout':'pytest_timeout'};"
+                    "'pytest-timeout':'pytest_timeout',"
+                    "'pytest-asyncio':'pytest_asyncio'};"
                     "print(json.dumps({"
                     "'python_executable':sys.executable,"
                     "'virtualenv_active':bool(os.environ.get('VIRTUAL_ENV')) "

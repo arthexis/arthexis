@@ -459,9 +459,14 @@ should_install_hardware_requirements() {
 collect_requirement_files() {
   local -n out_array="$1"
   local hardware_file="$SCRIPT_DIR/requirements-hw.txt"
+  local ci_requirements_file="$SCRIPT_DIR/requirements-ci.txt"
 
   if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
     out_array+=("$SCRIPT_DIR/requirements.txt")
+  fi
+
+  if [ "$DEPS_ONLY" -eq 1 ] && [ -f "$ci_requirements_file" ]; then
+    out_array+=("$ci_requirements_file")
   fi
 
   if [ -f "$hardware_file" ] && should_install_hardware_requirements; then

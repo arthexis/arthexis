@@ -46,7 +46,8 @@ def test_test_command_emits_dependency_refresh_remediation(
         stdout = (
             '{"python_executable": ".venv/bin/python", "virtualenv_active": true, '
             '"virtualenv_path": ".venv", "dependencies": {"pytest": false, '
-            '"pytest-django": false, "pytest-timeout": false}}\n'
+            '"pytest-django": false, "pytest-timeout": false, '
+            '"pytest-asyncio": false}}\n'
         )
 
     monkeypatch.setattr(
