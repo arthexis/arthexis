@@ -24,6 +24,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options) -> None:
         classifier = self._resolve_classifier(options.get("classifier"))
+        if classifier is None:
+            raise CommandError("No selected ready image classifier is available.")
         streams = self._resolve_streams(options.get("stream"))
         if not streams:
             raise CommandError("No active MJPEG streams matched the request.")

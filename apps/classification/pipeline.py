@@ -14,8 +14,27 @@ def _verified_training_samples():
     return TrainingSample.objects.select_related("media_file", "tag").filter(is_verified=True)
 
 
+def _classifier_can_predict(classifier: ImageClassifierModel | None) -> bool:
+    return bool(
+        classifier
+        and classifier.status == ImageClassifierModel.Status.READY
+        and classifier.storage_uri
+    )
+
+
+def _classifier_has_readable_artifact(classifier: ImageClassifierModel | None) -> bool:
+    if not _classifier_can_predict(classifier):
+        return False
+    try:
+        backend = resolve_backend(classifier)
+        backend._load_payload(classifier)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 def _ready_fallback_classifier(classifier: ImageClassifierModel) -> ImageClassifierModel | None:
-    return (
+    candidates = (
         ImageClassifierModel.objects.filter(
             model_type=classifier.model_type,
             status=ImageClassifierModel.Status.READY,
@@ -24,8 +43,11 @@ def _ready_fallback_classifier(classifier: ImageClassifierModel) -> ImageClassif
         )
         .exclude(storage_uri="")
         .exclude(pk=classifier.pk)
-        .first()
     )
+    for fallback_classifier in candidates:
+        if _classifier_has_readable_artifact(fallback_classifier):
+            return fallback_classifier
+    return None
 
 
 def train_classifier(
@@ -113,7 +135,7 @@ def build_predictions_for_media_file(
     """Return raw predictions for ``media_file`` without persisting them."""
 
     classifier = classifier or ImageClassifierModel.selected_general_model()
-    if classifier is None or not classifier.storage_uri:
+    if not _classifier_can_predict(classifier):
         return classifier, []
     backend = resolve_backend(classifier)
     return classifier, backend.predict(classifier=classifier, media_file=media_file)
@@ -140,7 +162,7 @@ def classify_stream(
     """Capture a stream frame, persist it, and classify it."""
 
     classifier = classifier or ImageClassifierModel.selected_general_model()
-    if classifier is None or not classifier.storage_uri:
+    if not _classifier_has_readable_artifact(classifier):
         return None, []
 
     media_file, source = capture_stream_to_media_file(stream)

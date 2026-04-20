@@ -7,11 +7,12 @@ from django.core.management import call_command
 
 
 def test_classify_camera_streams_continues_after_stream_failure(monkeypatch):
+    classifier = object()
     first_stream = SimpleNamespace(slug="first-stream")
     second_stream = SimpleNamespace(slug="second-stream")
 
     def _resolve_classifier(_self, _value):
-        return None
+        return classifier
 
     def _resolve_streams(_self, _value):
         return [first_stream, second_stream]

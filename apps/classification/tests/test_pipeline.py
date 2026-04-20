@@ -93,7 +93,7 @@ def test_train_classifier_sanitizes_artifact_version_path(db):
     assert "/../" not in classifier.storage_uri
 
 
-def test_train_classifier_reselects_model_after_training(db):
+def test_train_classifier_reselects_model_after_training(db, tmp_path):
     """Training a selected classifier should complete and restore its selection."""
 
     bucket = ensure_media_bucket(slug="training-images", name="Training Images")
@@ -115,8 +115,12 @@ def test_train_classifier_reselects_model_after_training(db):
         name="Fallback Prototype Classifier",
         version="v1",
         status=ImageClassifierModel.Status.READY,
-        storage_uri="artifacts/classification/v1/model.json",
+        storage_uri=(tmp_path / "fallback-artifact.json").as_posix(),
         training_parameters={"backend": "color_histogram"},
+    )
+    (tmp_path / "fallback-artifact.json").write_text(
+        '{"backend": "color_histogram", "bins": [8, 8, 8], "tags": {}}',
+        encoding="utf-8",
     )
     TrainingSample.objects.create(media_file=media, tag=tag, is_verified=True)
 
@@ -191,6 +195,41 @@ def test_train_classifier_requires_artifact_backed_fallback_for_selected_model(d
         assert "another ready classifier" in str(exc)
 
 
+def test_train_classifier_requires_readable_fallback_artifact_for_selected_model(db):
+    """Selected model retraining should fail when fallback artifact is unreadable."""
+
+    bucket = ensure_media_bucket(slug="training-images", name="Training Images")
+    media = create_media_file(
+        bucket=bucket,
+        uploaded_file=_uploaded_image("green.jpg", (20, 220, 20)),
+    )
+    tag = ClassificationTag.objects.create(slug="green-pattern", name="Green Pattern")
+    classifier = ImageClassifierModel.objects.create(
+        slug="selected-with-unreadable-fallback",
+        name="Selected With Unreadable Fallback",
+        version="v1",
+        status=ImageClassifierModel.Status.READY,
+        is_selected=True,
+        storage_uri="artifacts/classification/v1/model.json",
+        training_parameters={"backend": "color_histogram"},
+    )
+    ImageClassifierModel.objects.create(
+        slug="fallback-unreadable-artifact",
+        name="Fallback Unreadable Artifact",
+        version="v0",
+        status=ImageClassifierModel.Status.READY,
+        storage_uri="artifacts/classification/missing/model.json",
+        training_parameters={"backend": "color_histogram"},
+    )
+    TrainingSample.objects.create(media_file=media, tag=tag, is_verified=True)
+
+    try:
+        train_classifier(classifier)
+        raise AssertionError("Expected retraining to fail when fallback artifact is unreadable.")
+    except ValueError as exc:
+        assert "another ready classifier" in str(exc)
+
+
 def test_capture_stream_to_media_file_creates_camera_media(db):
     """A camera frame can be mirrored into the media pipeline."""
 
@@ -248,6 +287,34 @@ def test_classify_stream_skips_capture_without_usable_classifier(db, monkeypatch
     monkeypatch.setattr("apps.classification.pipeline.capture_stream_to_media_file", _unexpected_capture)
 
     media_file, records = classify_stream(stream)
+
+    assert media_file is None
+    assert records == []
+    assert captured["called"] is False
+
+
+def test_classify_stream_skips_capture_when_artifact_is_unreadable(db, monkeypatch):
+    """Stream classification should not capture frames for unreadable artifacts."""
+
+    classifier = ImageClassifierModel.objects.create(
+        slug="unreadable-selected",
+        name="Unreadable Selected",
+        version="v1",
+        status=ImageClassifierModel.Status.READY,
+        is_selected=True,
+        storage_uri="artifacts/classification/missing/model.json",
+        training_parameters={"backend": "color_histogram"},
+    )
+    stream = SimpleNamespace(slug="front-door")
+    captured = {"called": False}
+
+    def _unexpected_capture(_stream):
+        captured["called"] = True
+        return None, None
+
+    monkeypatch.setattr("apps.classification.pipeline.capture_stream_to_media_file", _unexpected_capture)
+
+    media_file, records = classify_stream(stream, classifier=classifier)
 
     assert media_file is None
     assert records == []
