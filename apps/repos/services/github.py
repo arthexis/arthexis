@@ -687,6 +687,93 @@ def create_issue_comment(
     return response
 
 
+def add_issue_labels(
+    *,
+    owner: str,
+    repository: str,
+    issue_number: int,
+    token: str,
+    labels: Iterable[str],
+    timeout: int = REQUEST_TIMEOUT,
+) -> requests.Response:
+    """Add labels to an issue and return the API response."""
+
+    cleaned_labels = [str(label).strip() for label in labels if str(label).strip()]
+    if not cleaned_labels:
+        raise ValueError("Issue labels must not be empty")
+
+    headers = build_headers(token, user_agent="arthexis-runtime-reporter")
+    url = f"{API_ROOT}/repos/{owner}/{repository}/issues/{issue_number}/labels"
+    response = None
+    try:
+        response = requests.post(
+            url,
+            json={"labels": cleaned_labels},
+            headers=headers,
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        raise GitHubRepositoryError(str(exc)) from exc
+
+    if not (200 <= response.status_code < 300):
+        try:
+            message = _extract_error_message(response)
+        finally:
+            with contextlib.suppress(Exception):
+                response.close()
+        raise GitHubRepositoryError(message)
+
+    logger.info(
+        "GitHub issue labels updated for %s/%s#%s with status %s",
+        owner,
+        repository,
+        issue_number,
+        response.status_code,
+    )
+    return response
+
+
+def close_issue(
+    *,
+    owner: str,
+    repository: str,
+    issue_number: int,
+    token: str,
+    timeout: int = REQUEST_TIMEOUT,
+) -> requests.Response:
+    """Close an issue and return the API response."""
+
+    headers = build_headers(token, user_agent="arthexis-runtime-reporter")
+    url = f"{API_ROOT}/repos/{owner}/{repository}/issues/{issue_number}"
+    response = None
+    try:
+        response = requests.patch(
+            url,
+            json={"state": "closed"},
+            headers=headers,
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        raise GitHubRepositoryError(str(exc)) from exc
+
+    if not (200 <= response.status_code < 300):
+        try:
+            message = _extract_error_message(response)
+        finally:
+            with contextlib.suppress(Exception):
+                response.close()
+        raise GitHubRepositoryError(message)
+
+    logger.info(
+        "GitHub issue %s/%s#%s closed with status %s",
+        owner,
+        repository,
+        issue_number,
+        response.status_code,
+    )
+    return response
+
+
 @dataclass(slots=True)
 class GitHubIssue:
     """Represents a GitHub issue creation request."""

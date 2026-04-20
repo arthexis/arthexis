@@ -117,3 +117,56 @@ def test_create_pull_request_comment_rejects_closed_pr(monkeypatch):
             token="tok",
             body="Please merge",
         )
+
+
+def test_add_issue_labels_posts_label_payload(monkeypatch):
+    calls: dict[str, Any] = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls["request"] = {
+            "url": url,
+            "json": json,
+            "headers": headers,
+            "timeout": timeout,
+        }
+        return DummyResponse({"labels": ["spam-suspected"]}, status_code=200)
+
+    monkeypatch.setattr(github.requests, "post", fake_post)
+
+    response = github.add_issue_labels(
+        owner="octo",
+        repository="demo",
+        issue_number=33,
+        token="tok",
+        labels=("spam-suspected", "triage"),
+    )
+
+    assert response.status_code == 200
+    assert calls["request"]["url"].endswith("/repos/octo/demo/issues/33/labels")
+    assert calls["request"]["json"] == {"labels": ["spam-suspected", "triage"]}
+
+
+def test_close_issue_patches_closed_state(monkeypatch):
+    calls: dict[str, Any] = {}
+
+    def fake_patch(url, json=None, headers=None, timeout=None):
+        calls["request"] = {
+            "url": url,
+            "json": json,
+            "headers": headers,
+            "timeout": timeout,
+        }
+        return DummyResponse({"state": "closed"}, status_code=200)
+
+    monkeypatch.setattr(github.requests, "patch", fake_patch)
+
+    response = github.close_issue(
+        owner="octo",
+        repository="demo",
+        issue_number=44,
+        token="tok",
+    )
+
+    assert response.status_code == 200
+    assert calls["request"]["url"].endswith("/repos/octo/demo/issues/44")
+    assert calls["request"]["json"] == {"state": "closed"}

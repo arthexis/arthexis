@@ -9,14 +9,15 @@ from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
 from apps.core.admin import OwnableAdminMixin
-from apps.repos.forms import GitHubAppAdminForm
 from apps.repos.admin_feedback_config import FeedbackIssueConfigurationAdminMixin
+from apps.repos.forms import GitHubAppAdminForm
 from apps.repos.models.events import GitHubEvent
 from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
 from apps.repos.models.github_tokens import GitHubToken
 from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
 from apps.repos.models.repositories import GitHubRepository, PackageRepository
 from apps.repos.models.response_templates import GitHubResponseTemplate
+from apps.repos.models.spam import RepositoryIssueSpamAssessment
 
 
 class FetchFromGitHubMixin(DjangoObjectActions):
@@ -259,6 +260,42 @@ class GitHubResponseTemplateAdmin(OwnableAdminMixin, admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         obj.user = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(RepositoryIssueSpamAssessment)
+class RepositoryIssueSpamAssessmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "issue_number",
+        "repository",
+        "issue_author",
+        "action",
+        "is_spam",
+        "score",
+        "processed_at",
+    )
+    list_filter = ("is_spam", "action", "processed_at", "repository")
+    search_fields = (
+        "=issue_number",
+        "issue_title",
+        "issue_author",
+        "delivery_id",
+        "repository__owner",
+        "repository__name",
+    )
+    readonly_fields = (
+        "processed_at",
+        "delivery_id",
+        "issue_number",
+        "issue_title",
+        "issue_body",
+        "issue_author",
+        "action",
+        "is_spam",
+        "score",
+        "reasons",
+        "event",
+    )
+    raw_id_fields = ("event", "repository")
 
 
 @admin.register(GitHubApp)
