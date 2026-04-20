@@ -3,7 +3,7 @@
 
 {% block object-tools-items %}
   <li>
-    <a href="{{ uploader_url }}">{% trans "Uploader" %}</a>
+    <a href="{% url 'admin:content_contentsample_changelist' %}">{% trans "Uploader" %}</a>
   </li>
   {{ block.super }}
 {% endblock %}
