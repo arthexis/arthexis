@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 from apps.groups.models import SecurityGroup
 from apps.repos.models import GitHubToken
 from apps.repos.services import github as github_service
+from apps.sigils.sigil_resolver import resolve_sigils
 
 
 class OperatorJourneyProvisionSuperuserForm(forms.Form):
@@ -207,7 +208,9 @@ class OperatorJourneyGitHubAccessForm(forms.Form):
     def __init__(self, *args, user, **kwargs):
         self.user = user
         super().__init__(*args, **kwargs)
-        self._existing_token_record = GitHubToken.objects.filter(user=user).order_by("-pk").first()
+        self._existing_token_record = (
+            GitHubToken.objects.filter(user=user).order_by("-pk").first()
+        )
 
     def save(self, *, token: str, username: str) -> GitHubToken:
         """Persist the token for the active user."""
@@ -228,5 +231,5 @@ class OperatorJourneyGitHubAccessForm(forms.Form):
 
         if self._existing_token_record is None:
             return False, "Sign in with GitHub before validating access.", ""
-        stored_token = (self._existing_token_record.__dict__.get("token") or "").strip()
-        return github_service.validate_token(stored_token)
+        stored_token = self._existing_token_record.token
+        return github_service.validate_token(resolve_sigils(stored_token))

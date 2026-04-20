@@ -427,8 +427,10 @@ class OperatorJourneyViewTests(TestCase):
         self.assertFalse(GitHubToken.objects.filter(user=limited_user).exists())
 
     @patch("apps.ops.forms.github_service.validate_token")
+    @patch("apps.ops.forms.resolve_sigils")
     def test_setup_github_token_validation_uses_stored_token(
         self,
+        mock_resolve_sigils,
         mock_validate_token,
     ):
         GitHubToken.objects.create(
@@ -436,6 +438,7 @@ class OperatorJourneyViewTests(TestCase):
             label="Sigil token",
             token="[ENV.GITHUB_TOKEN]",
         )
+        mock_resolve_sigils.return_value = "resolved-token"
         mock_validate_token.return_value = (True, "Connected to GitHub as arthexis.", "arthexis")
         form = OperatorJourneyGitHubAccessForm(user=self.user)
         is_valid, message, login = form.validate_connection()
@@ -443,7 +446,8 @@ class OperatorJourneyViewTests(TestCase):
         self.assertTrue(is_valid)
         self.assertEqual(message, "Connected to GitHub as arthexis.")
         self.assertEqual(login, "arthexis")
-        mock_validate_token.assert_called_once_with("[ENV.GITHUB_TOKEN]")
+        mock_resolve_sigils.assert_called_once_with("[ENV.GITHUB_TOKEN]")
+        mock_validate_token.assert_called_once_with("resolved-token")
 
     @override_settings(
         GITHUB_OAUTH_CLIENT_ID="client-id",

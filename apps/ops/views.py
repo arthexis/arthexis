@@ -432,7 +432,7 @@ def complete_operator_journey_step(
                     github_access_form.add_error(None, validation_message)
                 elif github_access_form._existing_token_record is not None:
                     github_access_form.save(
-                        token=github_access_form._existing_token_record.__dict__.get("token", ""),
+                        token=github_access_form._existing_token_record.token,
                         username=github_login,
                     )
         if action != "complete" or github_access_form.errors:
