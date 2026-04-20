@@ -44,23 +44,18 @@
                 {% endif %}
               </td>
               <td>
-                <a class="button" href="{{ row.url }}">
-                  {% if row.is_current %}
+                {% if row.is_current %}
+                  <a class="button" href="{{ row.url }}">
                     {% translate "Open task" %}
-                  {% else %}
-                    {% translate "Review" %}
-                  {% endif %}
-                </a>
+                  </a>
+                {% else %}
+                  &mdash;
+                {% endif %}
               </td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
-    {% elif next_step %}
-      <p>
-        {% translate "Your current required task is ready." %}
-        <a class="button default" href="{% url 'ops:operator-journey-step' journey_slug=next_step.journey.slug step_slug=next_step.slug %}">{% translate "Open task" %}</a>
-      </p>
     {% else %}
       <p>{% translate "All Operator tasks completed to date. Keep coming back for more." %}</p>
     {% endif %}

@@ -239,6 +239,16 @@ class OperatorJourneyViewTests(TestCase):
         self.assertContains(response, self.step_2.title)
         self.assertContains(response, "Current required task")
         self.assertContains(response, "Completed")
+        self.assertNotContains(
+            response,
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            ),
+        )
         self.assertNotContains(response, step_3.title)
 
     def test_step_view_redirects_when_opening_future_step(self):
