@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
@@ -198,6 +199,32 @@ def test_customer_public_detail_enforces_image_and_storage_limits(client, settin
 
     assert response.status_code == 200
     assert "You can only add up to 1 images." in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_customer_public_detail_upload_shows_form_error_for_model_validation(client, monkeypatch):
+    customer = _create_customer(username="owner-unsupported-suffix")
+    detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
+    monkeypatch.setattr(
+        "apps.evergo.views.EvergoArtifact.objects.create",
+        lambda **_kwargs: (_ for _ in ()).throw(ValidationError({"file": ["Only image files and PDFs are allowed."]})),
+    )
+
+    response = client.post(
+        detail_url,
+        data={
+            "action": "upload-image",
+            "image": SimpleUploadedFile(
+                "photo.gif",
+                b"\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b",
+                content_type="image/gif",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Only image files and PDFs are allowed." in response.content.decode()
+    assert not EvergoArtifact.objects.filter(customer=customer).exists()
 
 
 @pytest.mark.django_db
