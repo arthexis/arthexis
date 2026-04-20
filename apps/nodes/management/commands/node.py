@@ -7,6 +7,7 @@ import ipaddress
 import itertools
 import json
 import logging
+import os
 import re
 import shutil
 import socket
@@ -114,7 +115,7 @@ class Command(BaseCommand):
             help="Generate a CLI registration token consumable by node register.",
             description=(
                 "Example: python manage.py node token --host https://host:8888 "
-                "--username register --password secret"
+                "--username register --password-env NODE_PASSWORD"
             ),
         )
         token_parser.add_argument(
@@ -129,8 +130,18 @@ class Command(BaseCommand):
         )
         token_parser.add_argument(
             "--password",
-            required=True,
+            default="",
             help="Password used for host /nodes/info/ and /nodes/register/ calls.",
+        )
+        token_parser.add_argument(
+            "--password-env",
+            default="",
+            help="Environment variable name that stores the host password.",
+        )
+        token_parser.add_argument(
+            "--password-stdin",
+            action="store_true",
+            help="Read the host password from standard input.",
         )
         token_parser.add_argument(
             "--json",
@@ -346,12 +357,13 @@ class Command(BaseCommand):
         register_url = f"{host_base}/nodes/register/"
         self._ensure_public_https_url(info_url, label="Host info")
         self._ensure_public_https_url(register_url, label="Host registration")
+        password = self._resolve_token_password(**options)
 
         payload = {
             "register": register_url,
             "info": info_url,
             "username": options["username"],
-            "password": options["password"],
+            "password": password,
         }
         token = self._encode_token(payload)
         if options.get("json"):
@@ -366,9 +378,41 @@ class Command(BaseCommand):
                     sort_keys=True,
                 )
             )
-            return
+            return None
 
         self.stdout.write(token)
+        return None
+
+    def _resolve_token_password(self, **options):
+        inline_password = options.get("password", "")
+        password_env = options.get("password_env", "")
+        password_stdin = bool(options.get("password_stdin"))
+
+        option_sources = [
+            bool(inline_password),
+            bool(password_env),
+            password_stdin,
+        ]
+        if sum(option_sources) != 1:
+            raise CommandError(
+                "Provide exactly one of --password, --password-env, or --password-stdin."
+            )
+
+        if inline_password:
+            return inline_password
+
+        if password_env:
+            env_password = os.environ.get(password_env)
+            if env_password is None:
+                raise CommandError(f"Environment variable {password_env} is not set.")
+            if not env_password:
+                raise CommandError(f"Environment variable {password_env} is empty.")
+            return env_password
+
+        stdin_password = self.stdin.readline().rstrip("\r\n")
+        if not stdin_password:
+            raise CommandError("No password was provided on stdin.")
+        return stdin_password
 
     def _handle_info_json(self, **options):
         self.stdout.write(json.dumps(self._load_local_info(), sort_keys=True))

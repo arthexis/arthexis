@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 
 import pytest
@@ -78,6 +79,66 @@ def test_node_token_rejects_private_hosts():
             host="https://127.0.0.1",
             username="cli-user",
             password="cli-pass",
+            json=False,
+        )
+
+
+def test_node_token_accepts_password_from_env(monkeypatch):
+    command = _load_node_command()
+    monkeypatch.setenv("NODE_PASSWORD", "env-pass")
+    command.stdout = io.StringIO()
+
+    result = command.handle(
+        action="token",
+        host="https://example.com",
+        username="cli-user",
+        password="",
+        password_env="NODE_PASSWORD",
+        password_stdin=False,
+        json=False,
+    )
+
+    token = command.stdout.getvalue().strip()
+    decoded = command._decode_token(token)
+    assert decoded["password"] == "env-pass"
+    assert result is None
+
+
+def test_node_token_accepts_password_from_stdin(monkeypatch):
+    command = _load_node_command()
+    command.stdin = io.StringIO("stdin-pass\n")
+    command.stdout = io.StringIO()
+
+    result = command.handle(
+        action="token",
+        host="https://example.com",
+        username="cli-user",
+        password="",
+        password_env="",
+        password_stdin=True,
+        json=False,
+    )
+
+    token = command.stdout.getvalue().strip()
+    decoded = command._decode_token(token)
+    assert decoded["password"] == "stdin-pass"
+    assert result is None
+
+
+def test_node_token_requires_single_password_source():
+    command = _load_node_command()
+
+    with pytest.raises(
+        CommandError,
+        match="Provide exactly one of --password, --password-env, or --password-stdin.",
+    ):
+        command.handle(
+            action="token",
+            host="https://example.com",
+            username="cli-user",
+            password="inline-pass",
+            password_env="NODE_PASSWORD",
+            password_stdin=False,
             json=False,
         )
 
