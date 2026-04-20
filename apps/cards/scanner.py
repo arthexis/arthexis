@@ -135,6 +135,44 @@ def _scan_ingest_offset_path() -> Path:
     return Path(settings.BASE_DIR) / ".locks" / SCAN_INGEST_OFFSET_FILE
 
 
+def _read_ingest_offset_state(offset_path: Path) -> tuple[int | None, int]:
+    """Return the last ingested inode and byte offset for the scan log."""
+
+    try:
+        raw_value = offset_path.read_text(encoding="utf-8").strip()
+    except Exception:
+        return None, 0
+    if not raw_value:
+        return None, 0
+    try:
+        payload = json.loads(raw_value)
+    except (TypeError, ValueError):
+        try:
+            return None, int(raw_value)
+        except Exception:
+            return None, 0
+    if not isinstance(payload, dict):
+        return None, 0
+    inode = payload.get("inode")
+    offset = payload.get("offset")
+    try:
+        normalized_inode = int(inode) if inode is not None else None
+    except Exception:
+        normalized_inode = None
+    try:
+        normalized_offset = int(offset)
+    except Exception:
+        normalized_offset = 0
+    return normalized_inode, normalized_offset
+
+
+def _write_ingest_offset_state(offset_path: Path, inode: int | None, offset: int) -> None:
+    """Persist the inode and byte offset for the next scan-log ingest run."""
+
+    payload = {"inode": inode, "offset": max(0, int(offset))}
+    offset_path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def ingest_service_scans() -> int:
     """Ingest scanner service NDJSON entries into RFIDAttempt history."""
 
@@ -143,12 +181,17 @@ def ingest_service_scans() -> int:
         return 0
     offset_path = _scan_ingest_offset_path()
     offset_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        last_offset = int(offset_path.read_text(encoding="utf-8").strip())
-    except Exception:
-        last_offset = 0
+    stat = log_path.stat()
+    current_inode = getattr(stat, "st_ino", None)
+    file_size = stat.st_size
+    last_inode, last_offset = _read_ingest_offset_state(offset_path)
 
     processed = 0
+    if last_inode is not None and current_inode is not None and last_inode != current_inode:
+        last_offset = 0
+    if last_offset < 0 or last_offset > file_size:
+        last_offset = 0
+
     with log_path.open("r", encoding="utf-8") as scan_log:
         scan_log.seek(last_offset)
         while True:
@@ -170,7 +213,7 @@ def ingest_service_scans() -> int:
             )
             if attempt is not None:
                 processed += 1
-        offset_path.write_text(str(scan_log.tell()), encoding="utf-8")
+        _write_ingest_offset_state(offset_path, current_inode, scan_log.tell())
     return processed
 
 

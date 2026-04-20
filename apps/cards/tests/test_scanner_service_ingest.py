@@ -30,3 +30,30 @@ def test_ingest_service_scans_reads_ndjson_log(monkeypatch, settings, tmp_path):
 
     assert processed_again == 0
     assert RFIDAttempt.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_ingest_service_scans_recovers_when_log_rotates(monkeypatch, settings, tmp_path):
+    settings.BASE_DIR = str(tmp_path)
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(settings, "LOG_DIR", str(log_dir), raising=False)
+
+    log_file = log_dir / "rfid-scans.ndjson"
+    first_payload = {"rfid": "ABCD1234", "service_mode": "service"}
+    second_payload = {"rfid": "FEDC4321", "service_mode": "service"}
+
+    log_file.write_text(json.dumps(first_payload) + "\n", encoding="utf-8")
+    first_processed = ingest_service_scans()
+
+    assert first_processed == 1
+    assert RFIDAttempt.objects.filter(rfid="ABCD1234").count() == 1
+
+    rotated_log_file = log_dir / "rfid-scans.rotated.ndjson"
+    rotated_log_file.write_text(json.dumps(second_payload) + "\n", encoding="utf-8")
+    rotated_log_file.replace(log_file)
+    second_processed = ingest_service_scans()
+
+    assert second_processed == 1
+    assert RFIDAttempt.objects.filter(rfid="FEDC4321").count() == 1
+    assert RFIDAttempt.objects.count() == 2
