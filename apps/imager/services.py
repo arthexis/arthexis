@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import json
+import os
 import re
 import shlex
 import shutil
@@ -362,46 +363,52 @@ def _build_download_uri(download_base_uri: str, output_filename: str) -> str:
 def _resolve_root_disk_path() -> str | None:
     """Resolve the current host root disk block path, if discoverable."""
 
-    findmnt_result = subprocess.run(
-        ["findmnt", "-n", "-o", "SOURCE", "/"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    root_source = findmnt_result.stdout.strip()
-    if findmnt_result.returncode != 0 or not root_source:
+    try:
+        findmnt_result = subprocess.run(
+            ["findmnt", "-n", "-o", "SOURCE", "/"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        root_source = findmnt_result.stdout.strip()
+        if findmnt_result.returncode != 0 or not root_source:
+            return None
+
+        pkname_result = subprocess.run(
+            ["lsblk", "-n", "-o", "PKNAME", root_source],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        pkname = pkname_result.stdout.strip()
+        if pkname_result.returncode == 0 and pkname:
+            return f"/dev/{pkname}"
+
+        type_result = subprocess.run(
+            ["lsblk", "-n", "-o", "TYPE", root_source],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if type_result.returncode == 0 and type_result.stdout.strip() == "disk":
+            return root_source
+    except FileNotFoundError:
         return None
-
-    pkname_result = subprocess.run(
-        ["lsblk", "-n", "-o", "PKNAME", root_source],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    pkname = pkname_result.stdout.strip()
-    if pkname_result.returncode == 0 and pkname:
-        return f"/dev/{pkname}"
-
-    type_result = subprocess.run(
-        ["lsblk", "-n", "-o", "TYPE", root_source],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if type_result.returncode == 0 and type_result.stdout.strip() == "disk":
-        return root_source
     return None
 
 
 def list_block_devices() -> list[BlockDeviceInfo]:
     """Enumerate host block devices and safety-relevant metadata."""
 
-    result = subprocess.run(
-        ["lsblk", "-J", "-b", "-o", "PATH,SIZE,RM,TRAN,TYPE,MOUNTPOINTS"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["lsblk", "-J", "-b", "--tree", "-o", "PATH,SIZE,RM,TRAN,TYPE,MOUNTPOINTS"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise ImagerBuildError("The 'lsblk' command is required but was not found.") from exc
     if result.returncode != 0:
         raise ImagerBuildError(result.stderr.strip() or "Unable to enumerate block devices.")
     try:
@@ -512,6 +519,7 @@ def write_image_to_device(
     with source_path.open("rb") as source_handle, Path(device_path).open("wb") as device_handle:
         shutil.copyfileobj(source_handle, device_handle, length=1024 * 1024 * 4)
         device_handle.flush()
+        os.fsync(device_handle.fileno())
     write_hash = _sha256_for_prefix(Path(device_path), size_bytes=source_size)
     verified = source_hash == write_hash
     if not verified:

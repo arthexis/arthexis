@@ -18,10 +18,53 @@ from apps.imager.services import (
     ImagerBuildError,
     _build_download_uri,
     _download_remote_base_image,
+    _resolve_root_disk_path,
     _validate_remote_base_image_url,
     build_rpi4b_image,
+    list_block_devices,
     write_image_to_device,
 )
+
+
+def test_list_block_devices_requests_tree_output_for_partition_mountpoints() -> None:
+    """Regression: lsblk JSON discovery should request tree mode for children[]."""
+
+    lsblk_result = SimpleNamespace(
+        returncode=0,
+        stdout='{"blockdevices":[{"path":"/dev/sdb","size":"64","rm":true,"tran":"usb","type":"disk","mountpoints":[null],"children":[{"path":"/dev/sdb1","mountpoints":["/media/card"]}]}]}',
+        stderr="",
+    )
+    root_findmnt = SimpleNamespace(returncode=1, stdout="", stderr="")
+
+    with patch("apps.imager.services.subprocess.run", side_effect=[lsblk_result, root_findmnt]) as run_mock:
+        devices = list_block_devices()
+
+    assert devices[0].mountpoints == ["/media/card"]
+    assert run_mock.call_args_list[0].args[0] == [
+        "lsblk",
+        "-J",
+        "-b",
+        "--tree",
+        "-o",
+        "PATH,SIZE,RM,TRAN,TYPE,MOUNTPOINTS",
+    ]
+
+
+def test_list_block_devices_raises_operator_error_when_lsblk_missing() -> None:
+    """Regression: operators should get a clear error if lsblk is unavailable."""
+
+    with (
+        patch("apps.imager.services.subprocess.run", side_effect=FileNotFoundError),
+        pytest.raises(ImagerBuildError, match="lsblk"),
+    ):
+        list_block_devices()
+
+
+def test_resolve_root_disk_path_returns_none_when_required_tools_missing() -> None:
+    """Regression: root-disk discovery should gracefully handle missing host tools."""
+
+    with patch("apps.imager.services.subprocess.run", side_effect=FileNotFoundError):
+        assert _resolve_root_disk_path() is None
 
 
 @pytest.mark.django_db
@@ -354,3 +397,36 @@ def test_write_image_to_device_writes_and_verifies_and_updates_artifact_metadata
     assert target.read_bytes()[: source.stat().st_size] == source.read_bytes()
     assert result.verified is True
     assert artifact.metadata["last_write"]["device_path"] == str(target)
+
+
+@pytest.mark.django_db
+@patch("apps.imager.services.list_block_devices")
+@patch("apps.imager.services.os.fsync")
+def test_write_image_to_device_fsyncs_target_before_verification(
+    fsync_mock, list_devices_mock, tmp_path: Path
+) -> None:
+    """Regression: write path should fsync target media before checksum verification."""
+
+    source = tmp_path / "artifact.img"
+    source.write_bytes(b"artifact-bytes")
+    target = tmp_path / "device.bin"
+    target.write_bytes(b"\0" * 32)
+    list_devices_mock.return_value = [
+        BlockDeviceInfo(
+            path=str(target),
+            size_bytes=32,
+            transport="usb",
+            removable=True,
+            mountpoints=[],
+            partitions=[],
+            protected=False,
+        )
+    ]
+
+    write_image_to_device(
+        device_path=str(target),
+        image_path=str(source),
+        confirmed=True,
+    )
+
+    fsync_mock.assert_called_once()
