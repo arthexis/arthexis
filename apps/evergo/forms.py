@@ -167,6 +167,12 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
         return cleaned_data
 
 
+class EvergoCustomerImageUploadForm(forms.Form):
+    """Upload a single customer image artifact."""
+
+    image = forms.ImageField(label="Add image")
+
+
 class EvergoUserAdminForm(OwnableAdminForm):
     """Allow user/group/avatar ownership while defaulting new records to the acting user."""
 

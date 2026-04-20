@@ -1,4 +1,4 @@
-"""Focused Evergo public-view security regression tests."""
+"""Focused Evergo public-view regression tests."""
 
 from __future__ import annotations
 
@@ -8,6 +8,23 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoUser
+
+
+def _create_customer(*, username: str = "evergo-owner") -> EvergoCustomer:
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(username=username, email=f"{username}@example.com")
+    owner_profile = EvergoUser.objects.create(
+        user=owner,
+        evergo_email=f"{username}@evergo.example.com",
+        evergo_password="secret",  # noqa: S106
+    )
+    return EvergoCustomer.objects.create(
+        user=owner_profile,
+        name="Public Customer",
+        address="Monterrey, NL",
+        latest_so="SO-777",
+    )
+
 
 @pytest.mark.django_db
 def test_order_tracking_public_requires_login(client):
@@ -30,6 +47,7 @@ def test_order_tracking_public_requires_login(client):
 
     assert response.status_code == 302
     assert "login" in response["Location"]
+
 
 @pytest.mark.django_db
 def test_my_evergo_dashboard_renders_and_generates_table_from_local_orders(client):
@@ -68,6 +86,7 @@ def test_my_evergo_dashboard_renders_and_generates_table_from_local_orders(clien
     assert "https://portal-mex.evergo.com/ordenes/28690" in content
     assert "Copy / Paste table" in content
 
+
 def test_to_tsv_sanitizes_formula_and_line_break_characters():
     """Security: TSV export must neutralize formulas and sanitize control characters."""
 
@@ -97,68 +116,89 @@ def test_to_tsv_sanitizes_formula_and_line_break_characters():
 
 
 @pytest.mark.django_db
-def test_customer_public_detail_allows_staff_cross_profile_access(client):
-    """Regression: staff users can inspect customer pages without owner scoping."""
-    user_model = get_user_model()
-    owner = user_model.objects.create_user(username="evergo-owner-staff", email="owner-staff@example.com")
-    owner_profile = EvergoUser.objects.create(
-        user=owner,
-        evergo_email="owner-staff@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
-    )
-    customer = EvergoCustomer.objects.create(
-        user=owner_profile,
-        name="Cross Profile Customer",
-        latest_so="SO-777",
-    )
+def test_customer_public_detail_allows_anonymous_access(client):
+    customer = _create_customer()
 
-    staff_user = user_model.objects.create_user(
-        username="evergo-staff-viewer",
-        email="staff-viewer@example.com",
-        password="secret",  # noqa: S106
-        is_staff=True,
-    )
-    client.force_login(staff_user)
-
-    response = client.get(reverse("evergo:customer-public-detail", kwargs={"pk": customer.pk}))
+    response = client.get(reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id}))
 
     assert response.status_code == 200
-    assert "Cross Profile Customer" in response.content.decode()
+    assert "Download PDF" in response.content.decode()
 
 
 @pytest.mark.django_db
-def test_customer_artifact_download_allows_staff_cross_profile_access(client):
-    """Regression: staff users can download customer PDF artifacts across profiles."""
-    user_model = get_user_model()
-    owner = user_model.objects.create_user(username="evergo-owner-artifacts", email="owner-artifacts@example.com")
-    owner_profile = EvergoUser.objects.create(
-        user=owner,
-        evergo_email="owner-artifacts@evergo.example.com",
-        evergo_password="secret",  # noqa: S106
+def test_customer_public_detail_uploads_and_deletes_image(client):
+    customer = _create_customer(username="owner-with-image")
+    detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
+
+    upload_response = client.post(
+        detail_url,
+        data={
+            "action": "upload-image",
+            "image": SimpleUploadedFile(
+                "evidence.jpg",
+                b"\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b",
+                content_type="image/gif",
+            ),
+        },
     )
-    customer = EvergoCustomer.objects.create(
-        user=owner_profile,
-        name="Artifact Customer",
+
+    assert upload_response.status_code == 302
+    artifact = EvergoArtifact.objects.get(customer=customer)
+
+    delete_response = client.post(
+        detail_url,
+        data={"action": "delete-image", "artifact_id": artifact.pk, "confirm_delete": "yes"},
     )
-    artifact = EvergoArtifact.objects.create(
+
+    assert delete_response.status_code == 302
+    assert not EvergoArtifact.objects.filter(customer=customer).exists()
+
+
+@pytest.mark.django_db
+def test_customer_public_detail_enforces_image_and_storage_limits(client, settings):
+    settings.EVERGO_PUBLIC_IMAGE_LIMIT = 1
+    settings.EVERGO_PUBLIC_IMAGE_TOTAL_STORAGE_LIMIT = 50
+    customer = _create_customer(username="owner-limits")
+    detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
+
+    gif_payload = (
+        b"\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff"
+        b"\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02"
+        b"\x02\x44\x01\x00\x3b"
+    )
+    EvergoArtifact.objects.create(
         customer=customer,
-        file=SimpleUploadedFile("summary.pdf", b"%PDF-1.4 fake", content_type="application/pdf"),
+        file=SimpleUploadedFile("existing.gif", gif_payload, content_type="image/gif"),
+        artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
+        display_order=1,
     )
 
-    staff_user = user_model.objects.create_user(
-        username="evergo-staff-artifact",
-        email="staff-artifact@example.com",
-        password="secret",  # noqa: S106
-        is_staff=True,
-    )
-    client.force_login(staff_user)
-
-    response = client.get(
-        reverse(
-            "evergo:customer-artifact-download",
-            kwargs={"pk": customer.pk, "artifact_id": artifact.pk},
-        )
+    response = client.post(
+        detail_url,
+        data={
+            "action": "upload-image",
+            "image": SimpleUploadedFile("new.gif", gif_payload, content_type="image/gif"),
+        },
     )
 
     assert response.status_code == 200
+    assert "You can only add up to 1 images." in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_customer_pdf_download_generates_pdf_and_clears_temp_images(client, monkeypatch):
+    customer = _create_customer(username="owner-pdf")
+    EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("one.jpg", b"12345", content_type="image/jpeg"),
+        artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
+        display_order=1,
+    )
+
+    monkeypatch.setattr("apps.evergo.views._render_pdf_bytes", lambda html: b"%PDF-1.4 fake")
+
+    response = client.get(reverse("evergo:customer-pdf-download", kwargs={"public_id": customer.public_id}))
+
+    assert response.status_code == 200
     assert response["Content-Type"] == "application/pdf"
+    assert not EvergoArtifact.objects.filter(customer=customer).exists()

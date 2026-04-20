@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ customer.name }} · Evergo Customer PDF</title>
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 12mm;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.35;
+            margin: 0;
+        }
+
+        .summary {
+            margin-bottom: 8mm;
+        }
+
+        .summary-row {
+            margin-bottom: 2mm;
+            word-break: break-word;
+        }
+
+        .map-snapshot {
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 5mm;
+        }
+
+        .image-card {
+            page-break-inside: avoid;
+            break-inside: avoid;
+            margin-top: 6mm;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 4mm;
+        }
+
+        .image {
+            width: 100%;
+            max-height: 110mm;
+            object-fit: contain;
+        }
+
+        .caption {
+            margin-top: 2mm;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Evergo Customer</h1>
+    <div class="summary">
+        <div class="summary-row">SO: {{ customer.latest_so|default:"-" }}</div>
+        <div class="summary-row">Name: {{ customer.name|default:"-" }}</div>
+        <div class="summary-row">Phone: {{ customer.phone_number|default:"-" }}</div>
+        <div class="summary-row">Address: {{ customer.address|default:"-" }}</div>
+    </div>
+
+    {% if google_maps_snapshot_url %}
+        <img class="map-snapshot" src="{{ google_maps_snapshot_url }}" alt="Map snapshot">
+    {% endif %}
+
+    {% for artifact in image_artifacts %}
+        <div class="image-card">
+            <img class="image" src="{{ artifact.url }}" alt="{{ artifact.name }}">
+            <div class="caption">{{ forloop.counter }}. {{ artifact.name }}</div>
+        </div>
+    {% endfor %}
+</body>
+</html>
