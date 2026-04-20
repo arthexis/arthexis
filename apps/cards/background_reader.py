@@ -11,6 +11,7 @@ from typing import Optional
 
 from django.conf import settings
 
+from apps.core.optional_hardware import is_expected_optional_hardware_absence
 from .constants import DEFAULT_IRQ_PIN, DEFAULT_RST_PIN, GPIO_PIN_MODE_BCM
 from .reader import resolve_spi_bus_device, resolve_spi_device_path
 
@@ -137,7 +138,12 @@ def _record_setup_failure(reason: str) -> None:
 
     global _last_setup_failure
     _last_setup_failure = time.monotonic()
-    logger.warning(
+    log = logger.warning
+    if _hardware_disabled_reason and is_expected_optional_hardware_absence(
+        _hardware_disabled_reason
+    ):
+        log = logger.info
+    log(
         "RFID hardware setup failed (%s); skipping retries for %.1fs",
         reason,
         _SETUP_BACKOFF_SECONDS,
@@ -152,7 +158,12 @@ def _disable_hardware(reason: str) -> None:
     if _hardware_disabled_reason:
         return
     _hardware_disabled_reason = reason
-    logger.warning(
+    log = (
+        logger.info
+        if is_expected_optional_hardware_absence(reason)
+        else logger.warning
+    )
+    log(
         "RFID hardware disabled for this process after setup failure: %s",
         reason,
     )

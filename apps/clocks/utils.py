@@ -7,6 +7,8 @@ import shutil
 import subprocess
 from typing import Callable, Iterable
 
+from apps.core.optional_hardware import is_expected_i2c_absence
+
 logger = logging.getLogger(__name__)
 
 I2C_SCANNER = "i2cdetect"
@@ -21,14 +23,6 @@ class DetectedClockDevice:
 
 
 Scanner = Callable[[int], str]
-
-
-def _is_missing_i2c_bus_error(message: str) -> bool:
-    normalized = message.lower()
-    return (
-        "could not open file `/dev/i2c-" in normalized
-        and "no such file or directory" in normalized
-    )
 
 
 def _run_i2cdetect(bus: int) -> str:
@@ -81,7 +75,7 @@ def discover_clock_devices(
             output = scan_bus(bus)
         except RuntimeError as exc:  # pragma: no cover - hardware dependent
             log_message = "I2C scan skipped for bus %s: %s"
-            if _is_missing_i2c_bus_error(str(exc)):
+            if is_expected_i2c_absence(exc):
                 logger.info(log_message, bus, exc)
             else:
                 logger.warning(log_message, bus, exc)

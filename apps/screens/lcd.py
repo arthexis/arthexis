@@ -47,7 +47,7 @@ class _BusWrapper:
             return smbus.SMBus(self.channel)
         except OSError as exc:
             raise LCDUnavailableError(
-                f"I2C bus device for channel {self.channel} is unavailable"
+                f"I2C bus device for channel {self.channel} is unavailable ({exc})"
             ) from exc
 
     def write_byte(
