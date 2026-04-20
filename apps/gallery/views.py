@@ -75,7 +75,7 @@ def gallery_detail(request, slug):
                 share_user = share_form.cleaned_data["username"]
                 if image.owner_user_id == share_user.pk:
                     share_form.add_error("username", "Image owner already has access.")
-                elif image.shared_with_users.filter(pk=share_user.pk).exists():
+                elif share_user in image.shared_with_users.all():
                     share_form.add_error("username", "User already has access.")
                 else:
                     image.shared_with_users.add(share_user)

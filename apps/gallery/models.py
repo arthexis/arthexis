@@ -104,7 +104,11 @@ class GalleryImage(Entity):
             return True
         if self.owner_group_id and user.groups.filter(pk=self.owner_group_id).exists():
             return True
-        if self.shared_with_users.filter(pk=user.pk).exists():
+        prefetched_shared_users = getattr(self, "_prefetched_objects_cache", {}).get("shared_with_users")
+        if prefetched_shared_users is not None:
+            if any(shared_user.pk == user.pk for shared_user in prefetched_shared_users):
+                return True
+        elif self.shared_with_users.filter(pk=user.pk).exists():
             return True
         return False
 
