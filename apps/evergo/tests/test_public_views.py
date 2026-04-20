@@ -144,6 +144,7 @@ def test_customer_public_detail_uploads_and_deletes_image(client):
 
     assert upload_response.status_code == 302
     artifact = EvergoArtifact.objects.get(customer=customer)
+    storage_name = artifact.file.name
 
     delete_response = client.post(
         detail_url,
@@ -152,6 +153,20 @@ def test_customer_public_detail_uploads_and_deletes_image(client):
 
     assert delete_response.status_code == 302
     assert not EvergoArtifact.objects.filter(customer=customer).exists()
+    assert not artifact.file.storage.exists(storage_name)
+
+
+@pytest.mark.django_db
+def test_customer_public_detail_delete_image_with_invalid_artifact_id_returns_404(client):
+    customer = _create_customer(username="owner-invalid-artifact-id")
+    detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
+
+    response = client.post(
+        detail_url,
+        data={"action": "delete-image", "artifact_id": "abc", "confirm_delete": "yes"},
+    )
+
+    assert response.status_code == 404
 
 
 @pytest.mark.django_db

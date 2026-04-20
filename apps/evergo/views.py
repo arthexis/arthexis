@@ -193,6 +193,12 @@ def _remote_image_data_uri(url: str) -> str:
     return _to_data_uri(content, content_type=content_type)
 
 
+def _delete_artifact_and_blob(artifact: EvergoArtifact) -> None:
+    """Delete an artifact and its underlying storage blob."""
+    artifact.file.delete(save=False)
+    artifact.delete()
+
+
 def customer_public_detail(request, public_id) -> HttpResponse:
     """Render a shareable Evergo customer profile and handle temporary image uploads."""
     customer = get_object_or_404(
@@ -239,6 +245,8 @@ def customer_public_detail(request, public_id) -> HttpResponse:
             artifact_id = request.POST.get("artifact_id")
             if request.POST.get("confirm_delete") != "yes":
                 messages.error(request, "Deletion cancelled because confirmation was missing.")
+            elif not str(artifact_id or "").isdigit():
+                raise Http404("Image not found.")
             else:
                 artifact = get_object_or_404(
                     EvergoArtifact,
@@ -246,7 +254,7 @@ def customer_public_detail(request, public_id) -> HttpResponse:
                     customer=customer,
                     artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
                 )
-                artifact.delete()
+                _delete_artifact_and_blob(artifact)
                 _resequence_customer_image_artifacts(customer)
                 messages.success(request, "Image deleted.")
                 return redirect(customer.get_absolute_url())
@@ -293,8 +301,7 @@ def customer_pdf_download(request, public_id) -> HttpResponse:
     if not payload:
         raise Http404("PDF renderer is unavailable.")
     for artifact in image_artifacts:
-        artifact.file.delete(save=False)
-        artifact.delete()
+        _delete_artifact_and_blob(artifact)
     safe_so = customer.latest_so or str(customer.public_id)
     response = HttpResponse(payload, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="evergo-{safe_so}.pdf"'
