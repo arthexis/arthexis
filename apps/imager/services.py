@@ -374,27 +374,46 @@ def _resolve_root_disk_path() -> str | None:
         if findmnt_result.returncode != 0 or not root_source:
             return None
 
-        pkname_result = subprocess.run(
-            ["lsblk", "-n", "-o", "PKNAME", root_source],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        pkname = pkname_result.stdout.strip()
-        if pkname_result.returncode == 0 and pkname:
-            return f"/dev/{pkname}"
+        current_path = root_source
+        visited_paths: set[str] = set()
+        while current_path and current_path not in visited_paths:
+            visited_paths.add(current_path)
+            info_result = subprocess.run(
+                ["lsblk", "-n", "-o", "TYPE,PKNAME", current_path],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if info_result.returncode != 0:
+                return None
+            info = info_result.stdout.strip().splitlines()
+            if not info:
+                return None
+            parts = info[0].split(maxsplit=1)
+            device_type = parts[0]
+            parent_kernel_name = parts[1] if len(parts) > 1 else ""
 
-        type_result = subprocess.run(
-            ["lsblk", "-n", "-o", "TYPE", root_source],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if type_result.returncode == 0 and type_result.stdout.strip() == "disk":
-            return root_source
+            if device_type == "disk":
+                return current_path
+            if not parent_kernel_name:
+                return None
+
+            current_path = f"/dev/{parent_kernel_name}"
     except FileNotFoundError:
         return None
     return None
+
+
+def _walk_block_descendants(entry: dict[str, object]) -> list[dict[str, object]]:
+    """Return all descendants from an lsblk tree row."""
+
+    descendants: list[dict[str, object]] = []
+    for child in (entry.get("children") or []):
+        if not isinstance(child, dict):
+            continue
+        descendants.append(child)
+        descendants.extend(_walk_block_descendants(child))
+    return descendants
 
 
 def list_block_devices() -> list[BlockDeviceInfo]:
@@ -421,15 +440,15 @@ def list_block_devices() -> list[BlockDeviceInfo]:
     for entry in payload.get("blockdevices", []):
         if entry.get("type") != "disk":
             continue
-        children = entry.get("children", [])
+        descendants = _walk_block_descendants(entry)
         mountpoints = [mount for mount in (entry.get("mountpoints") or []) if mount]
         mountpoints.extend(
             mount
-            for child in children
+            for child in descendants
             for mount in (child.get("mountpoints") or [])
             if mount
         )
-        partitions = [child.get("path", "") for child in children if child.get("path")]
+        partitions = [child.get("path", "") for child in descendants if child.get("path")]
         devices.append(
             BlockDeviceInfo(
                 path=str(entry.get("path", "")),

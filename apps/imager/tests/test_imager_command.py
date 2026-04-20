@@ -50,6 +50,23 @@ def test_list_block_devices_requests_tree_output_for_partition_mountpoints() -> 
     ]
 
 
+def test_list_block_devices_collects_mountpoints_from_nested_descendants() -> None:
+    """Regression: nested children mountpoints must prevent in-use target writes."""
+
+    lsblk_result = SimpleNamespace(
+        returncode=0,
+        stdout='{"blockdevices":[{"path":"/dev/sdb","size":"64","rm":true,"tran":"usb","type":"disk","mountpoints":[null],"children":[{"path":"/dev/sdb1","mountpoints":[null],"children":[{"path":"/dev/mapper/crypt","mountpoints":["/media/card"]}]}]}]}',
+        stderr="",
+    )
+    root_findmnt = SimpleNamespace(returncode=1, stdout="", stderr="")
+
+    with patch("apps.imager.services.subprocess.run", side_effect=[lsblk_result, root_findmnt]):
+        devices = list_block_devices()
+
+    assert devices[0].mountpoints == ["/media/card"]
+    assert devices[0].partitions == ["/dev/sdb1", "/dev/mapper/crypt"]
+
+
 def test_list_block_devices_raises_operator_error_when_lsblk_missing() -> None:
     """Regression: operators should get a clear error if lsblk is unavailable."""
 
@@ -65,6 +82,23 @@ def test_resolve_root_disk_path_returns_none_when_required_tools_missing() -> No
 
     with patch("apps.imager.services.subprocess.run", side_effect=FileNotFoundError):
         assert _resolve_root_disk_path() is None
+
+
+def test_resolve_root_disk_path_walks_to_disk_parent() -> None:
+    """Regression: root-disk detection should resolve parent chains to disk devices."""
+
+    findmnt_result = SimpleNamespace(returncode=0, stdout="/dev/mapper/vg-root\n", stderr="")
+    mapper_info = SimpleNamespace(returncode=0, stdout="lvm dm-0\n", stderr="")
+    dm_info = SimpleNamespace(returncode=0, stdout="part nvme0n1\n", stderr="")
+    disk_info = SimpleNamespace(returncode=0, stdout="disk\n", stderr="")
+
+    with patch(
+        "apps.imager.services.subprocess.run",
+        side_effect=[findmnt_result, mapper_info, dm_info, disk_info],
+    ):
+        root_disk = _resolve_root_disk_path()
+
+    assert root_disk == "/dev/nvme0n1"
 
 
 @pytest.mark.django_db
