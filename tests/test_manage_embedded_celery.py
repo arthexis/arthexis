@@ -135,7 +135,13 @@ def test_run_env_refresh_runs_latest_database_refresh(
 def test_run_env_refresh_exits_with_context_when_refresh_fails(
     monkeypatch, tmp_path: Path, capsys
 ) -> None:
-    command = [manage.sys.executable, str(tmp_path / "env-refresh.py"), "--latest"]
+    command = [
+        manage.sys.executable,
+        str(tmp_path / "env-refresh.py"),
+        "--latest",
+        "database",
+    ]
+    command_str = manage.shlex.join(command)
 
     def fake_run(*_args, **_kwargs):
         raise subprocess.CalledProcessError(1, command)
@@ -151,4 +157,6 @@ def test_run_env_refresh_exits_with_context_when_refresh_fails(
 
     captured = capsys.readouterr()
     assert "Environment refresh failed before runserver startup." in captured.err
+    assert f"Failed command: {command_str}" in captured.err
     assert "Re-run manually for full details:" in captured.err
+    assert f"{command_str} --reconcile" in captured.err

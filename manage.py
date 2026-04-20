@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -130,7 +131,7 @@ def _run_env_refresh(base_dir: Path) -> None:
     try:
         subprocess.run(command, cwd=base_dir, check=True, env=env)
     except subprocess.CalledProcessError as exc:
-        command_str = " ".join(command)
+        command_str = shlex.join(command)
         print(
             "Environment refresh failed before runserver startup.",
             file=sys.stderr,
