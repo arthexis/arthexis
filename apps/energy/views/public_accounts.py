@@ -204,11 +204,11 @@ def public_connector_page_create_account(request, slug):
         charger.charger_id,
         charger.connector_slug,
     )
-    if not _energy_accounts_enabled():
-        messages.error(request, _("Energy account onboarding is not enabled."))
-        return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
     if request.user.is_authenticated:
         messages.error(request, _("Please sign out before creating a new account."))
+        return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
+    if not _energy_accounts_enabled():
+        messages.error(request, _("Energy account onboarding is not enabled."))
         return redirect(PUBLIC_CONNECTOR_PAGE_URL_NAME, slug=slug)
     form = PublicConnectorAccountCreateForm(request.POST)
     if not form.is_valid():

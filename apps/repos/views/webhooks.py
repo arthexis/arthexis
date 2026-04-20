@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 from urllib.parse import parse_qs
 from typing import TypeAlias, TypedDict
 
@@ -15,6 +16,9 @@ from django.views.decorators.csrf import csrf_exempt
 from apps.repos.models.events import GitHubEvent
 from apps.repos.models.github_apps import GitHubApp
 from apps.repos.models.repositories import GitHubRepository
+from apps.repos.spam_filter import assess_github_issue_event
+
+logger = logging.getLogger(__name__)
 
 
 class GitHubWebhookOwnerPayload(TypedDict, total=False):
@@ -205,5 +209,9 @@ def github_webhook(
         payload=payload,
         raw_body=raw_body,
     )
+    try:
+        assess_github_issue_event(event)
+    except Exception:  # pragma: no cover - defensive guard to keep webhook ingestion resilient
+        logger.exception("GitHub issue spam assessment failed for event_id=%s", event.pk)
 
     return JsonResponse({"status": "ok", "event_id": event.pk})

@@ -101,10 +101,14 @@ def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
 @login_required
 def customer_public_detail(request, pk: int) -> HttpResponse:
     """Render a public Evergo customer profile and artifacts."""
+    customer_lookup = {
+        "pk": pk,
+    }
+    if not request.user.is_staff:
+        customer_lookup["user__user"] = request.user
     customer = get_object_or_404(
         EvergoCustomer.objects.select_related("latest_order", "user__user").prefetch_related("artifacts"),
-        pk=pk,
-        user__user=request.user,
+        **customer_lookup,
     )
     artifacts = list(customer.artifacts.all())
     address = customer.address.strip()
@@ -127,11 +131,15 @@ def customer_public_detail(request, pk: int) -> HttpResponse:
 @login_required
 def customer_artifact_download(request, pk: int, artifact_id: int) -> HttpResponse:
     """Download a PDF artifact attached to a customer profile."""
+    artifact_lookup = {
+        "pk": artifact_id,
+        "customer_id": pk,
+    }
+    if not request.user.is_staff:
+        artifact_lookup["customer__user__user"] = request.user
     artifact = get_object_or_404(
         EvergoArtifact.objects.select_related("customer__user__user"),
-        pk=artifact_id,
-        customer_id=pk,
-        customer__user__user=request.user,
+        **artifact_lookup,
     )
     if not artifact.is_pdf:
         raise Http404("Only PDF artifacts can be downloaded from this endpoint.")
@@ -288,11 +296,12 @@ def _to_tsv(rows: list[dict[str, str]]) -> str:
 @login_required
 def order_tracking_public(request, order_id: int) -> HttpResponse:
     """Render and submit the order tracking phase-one helper form for authorized owners only."""
-    order = get_object_or_404(
-        EvergoOrder.objects.select_related("user"),
-        remote_id=order_id,
-        user__user=request.user,
-    )
+    order_lookup = {
+        "remote_id": order_id,
+    }
+    if not request.user.is_staff:
+        order_lookup["user__user"] = request.user
+    order = get_object_or_404(EvergoOrder.objects.select_related("user"), **order_lookup)
     profile = order.user
     brands = profile.fetch_charger_brand_options()
     remote_image_urls: dict[str, str] = {}

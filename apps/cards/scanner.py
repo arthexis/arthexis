@@ -10,8 +10,13 @@ from django.utils import timezone
 from apps.cards.models import RFID, RFIDAttempt
 
 from .irq_wiring_check import check_irq_pin
+from .rfid_service import (
+    SERVICE_SCAN_LOCKFILE_ERROR,
+    deep_read_via_service,
+    request_service,
+    rfid_scan_log_path,
+)
 from .utils import convert_endianness_value, normalize_endianness
-from .rfid_service import deep_read_via_service, request_service, rfid_scan_log_path
 
 
 RECENT_SCAN_WINDOW_SECONDS = float(
@@ -234,7 +239,11 @@ def scan_sources(
     if not result:
         return {"rfid": None, "label_id": None, "service_mode": "service"}
     if result.get("error"):
-        if SERVICE_SCAN_DB_ERROR in str(result.get("error", "")).lower():
+        error_text = str(result.get("error", "")).lower()
+        if (
+            SERVICE_SCAN_LOCKFILE_ERROR in error_text
+            or SERVICE_SCAN_DB_ERROR in error_text
+        ):
             return _scan_from_attempts(timeout=timeout_value, endianness=endianness)
         result["service_mode"] = "service"
         return result

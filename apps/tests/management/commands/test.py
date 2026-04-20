@@ -17,6 +17,8 @@ from apps.tests.models import SuiteTest
 from utils.python_env import resolve_project_python
 from utils.qa_remediation import emit_remediation, expected_venv_python, find_repo_root
 
+__test__ = False
+
 
 class Command(BaseCommand):
     """Run local test workflows from a single command entrypoint."""
