@@ -82,6 +82,60 @@ def test_node_token_rejects_private_hosts():
         )
 
 
+def test_node_token_accepts_password_from_env(monkeypatch):
+    command = _load_node_command()
+    monkeypatch.setenv("NODE_PASSWORD", "env-pass")
+
+    token = command.handle(
+        action="token",
+        host="https://example.com",
+        username="cli-user",
+        password="",
+        password_env="NODE_PASSWORD",
+        password_stdin=False,
+        json=False,
+    )
+
+    decoded = command._decode_token(token)
+    assert decoded["password"] == "env-pass"
+
+
+def test_node_token_accepts_password_from_stdin(monkeypatch):
+    command = _load_node_command()
+    monkeypatch.setattr("sys.stdin.readline", lambda: "stdin-pass\n")
+
+    token = command.handle(
+        action="token",
+        host="https://example.com",
+        username="cli-user",
+        password="",
+        password_env="",
+        password_stdin=True,
+        json=False,
+    )
+
+    decoded = command._decode_token(token)
+    assert decoded["password"] == "stdin-pass"
+
+
+def test_node_token_requires_single_password_source():
+    command = _load_node_command()
+
+    with pytest.raises(
+        CommandError,
+        match="Provide exactly one of --password, --password-env, or --password-stdin.",
+    ):
+        command.handle(
+            action="token",
+            host="https://example.com",
+            username="cli-user",
+            password="inline-pass",
+            password_env="NODE_PASSWORD",
+            password_stdin=False,
+            json=False,
+        )
+
+
 @pytest.mark.django_db
 def test_discovered_different_host_instance_keeps_peer_relation(monkeypatch):
     command = _load_node_command()
