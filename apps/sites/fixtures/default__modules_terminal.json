@@ -104,6 +104,21 @@
       "module": [
         "/ocpp/"
       ],
+      "path": "/ocpp/charge-point-models/",
+      "label": "Supported CP Models",
+      "enabled": true,
+      "track_leads": false,
+      "description": ""
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": [
+        "/ocpp/"
+      ],
       "path": "/ocpp/charging-map/",
       "label": "Charging Station Map",
       "enabled": true,

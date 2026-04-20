@@ -732,6 +732,7 @@ def _station_model_documents(bucket, image_ids):
     return [media_file for media_file in files if media_file.pk not in image_ids]
 
 
+@landing("Supported CP Models")
 def supported_chargers(request):
     station_models = StationModel.objects.all().order_by(
         "vendor", "model_family", "model"
