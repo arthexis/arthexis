@@ -29,22 +29,47 @@ from django.conf import settings
 
 from apps.core.notifications import notify_event_async
 from apps.screens.startup_notifications import lcd_feature_enabled
+from config.loadenv import loadenv
 
 logger = logging.getLogger(__name__)
 
 SENSITIVE_RFID_KEYS = {"keys", "dump"}
 
-DEFAULT_SERVICE_HOST = os.environ.get("RFID_SERVICE_HOST", "127.0.0.1")
-DEFAULT_SERVICE_PORT = int(os.environ.get("RFID_SERVICE_PORT", "29801"))
-DEFAULT_SCAN_TIMEOUT = float(os.environ.get("RFID_SERVICE_SCAN_TIMEOUT", "0.3"))
-DEFAULT_QUEUE_MAX = int(os.environ.get("RFID_SERVICE_QUEUE_MAX", "50"))
-DEFAULT_EVENT_DURATION = int(os.environ.get("RFID_EVENT_DURATION", "180"))
-DEFAULT_SCAN_DEDUPE_SECONDS = float(
-    os.environ.get("RFID_SCAN_DEDUPE_SECONDS", "1.0")
-)
 SCAN_STATE_FILE = "rfid-scan.json"
 SCAN_LOG_FILE = "rfid-scans.ndjson"
 SERVICE_SCAN_LOCKFILE_ERROR = "scan requests are handled via lock-file ingest"
+
+
+def default_service_host() -> str:
+    return os.environ.get("RFID_SERVICE_HOST", "127.0.0.1")
+
+
+def default_service_port() -> int:
+    return int(os.environ.get("RFID_SERVICE_PORT", "29801"))
+
+
+def default_scan_timeout() -> float:
+    return float(os.environ.get("RFID_SERVICE_SCAN_TIMEOUT", "0.3"))
+
+
+def default_queue_max() -> int:
+    return int(os.environ.get("RFID_SERVICE_QUEUE_MAX", "50"))
+
+
+def default_event_duration() -> int:
+    return int(os.environ.get("RFID_EVENT_DURATION", "180"))
+
+
+def default_scan_dedupe_seconds() -> float:
+    return float(os.environ.get("RFID_SCAN_DEDUPE_SECONDS", "1.0"))
+
+
+DEFAULT_SERVICE_HOST = default_service_host()
+DEFAULT_SERVICE_PORT = default_service_port()
+DEFAULT_SCAN_TIMEOUT = default_scan_timeout()
+DEFAULT_QUEUE_MAX = default_queue_max()
+DEFAULT_EVENT_DURATION = default_event_duration()
+DEFAULT_SCAN_DEDUPE_SECONDS = default_scan_dedupe_seconds()
 
 
 def get_next_tag(timeout: float = 0.2) -> dict[str, Any] | None:
@@ -92,8 +117,9 @@ class ServiceStatus:
 
 
 class ScanQueue:
-    def __init__(self, maxlen: int = DEFAULT_QUEUE_MAX) -> None:
-        self._queue: deque[dict[str, Any]] = deque(maxlen=maxlen)
+    def __init__(self, maxlen: int | None = None) -> None:
+        queue_maxlen = maxlen if maxlen is not None else default_queue_max()
+        self._queue: deque[dict[str, Any]] = deque(maxlen=queue_maxlen)
         self._condition = threading.Condition()
         self._last_scan: dict[str, Any] | None = None
         self._last_scan_at: datetime | None = None
@@ -182,7 +208,7 @@ class RFIDServiceState:
         rfid_value = str(result.get("rfid", "")).strip()
         color = str(result.get("color", "")).strip()
         body = " ".join(part for part in (rfid_value, color) if part)
-        notify_event_async(subject, body, duration=DEFAULT_EVENT_DURATION, event_id=0)
+        notify_event_async(subject, body, duration=default_event_duration(), event_id=0)
 
     def _emit_scan_artifacts(self, result: dict[str, Any]) -> None:
         rfid_value = str(result.get("rfid", "") or "").strip().upper()
@@ -192,7 +218,7 @@ class RFIDServiceState:
         if (
             self._last_emitted_rfid == rfid_value
             and self._last_emitted_at is not None
-            and now - self._last_emitted_at < DEFAULT_SCAN_DEDUPE_SECONDS
+            and now - self._last_emitted_at < default_scan_dedupe_seconds()
         ):
             return
         payload = dict(result)
@@ -277,9 +303,9 @@ class RFIDServiceHandler(socketserver.BaseRequestHandler):
                 "service_mode": "service",
             }
             if enabled:
-                tag = state.queue.get(timeout=DEFAULT_SCAN_TIMEOUT)
+                tag = state.queue.get(timeout=default_scan_timeout())
                 if tag is None:
-                    tag = get_next_tag(timeout=DEFAULT_SCAN_TIMEOUT) or None
+                    tag = get_next_tag(timeout=default_scan_timeout()) or None
                 if tag:
                     response["scan"] = tag
                 logger.debug(
@@ -299,9 +325,9 @@ class RFIDServiceHandler(socketserver.BaseRequestHandler):
 
         timeout = payload.get("timeout")
         try:
-            timeout_value = float(timeout) if timeout is not None else DEFAULT_SCAN_TIMEOUT
+            timeout_value = float(timeout) if timeout is not None else default_scan_timeout()
         except (TypeError, ValueError):
-            timeout_value = DEFAULT_SCAN_TIMEOUT
+            timeout_value = default_scan_timeout()
 
         tag = state.queue.get(timeout=timeout_value)
         if tag is None:
@@ -406,7 +432,7 @@ def rfid_service_enabled(lock_dir: Path | None = None) -> bool:
 
 
 def service_endpoint() -> ServiceEndpoint:
-    return ServiceEndpoint(host=DEFAULT_SERVICE_HOST, port=DEFAULT_SERVICE_PORT)
+    return ServiceEndpoint(host=default_service_host(), port=default_service_port())
 
 
 def request_service(
@@ -435,7 +461,7 @@ def request_service(
 
 
 def deep_read_via_service() -> dict[str, Any] | None:
-    return request_service("deep_read", timeout=DEFAULT_SCAN_TIMEOUT)
+    return request_service("deep_read", timeout=default_scan_timeout())
 
 
 def service_available(timeout: float = 0.2) -> bool:
@@ -462,6 +488,7 @@ def run_service(host: str | None = None, port: int | None = None) -> None:
 def main() -> None:
     """Run the RFID UDP service as a module entrypoint."""
 
+    loadenv()
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     django.setup()
     endpoint = service_endpoint()
