@@ -386,24 +386,26 @@ def complete_operator_journey_step(
                     github_access_form.save()
                     messages.success(request, "GitHub token saved.")
             elif action in ("test", "complete"):
-                is_valid_connection, validation_message = (
-                    github_access_form.validate_connection()
-                )
-                if action == "test":
-                    messages.add_message(
-                        request,
-                        messages.SUCCESS if is_valid_connection else messages.ERROR,
-                        validation_message,
-                    )
-                elif not is_valid_connection:
-                    github_access_form.add_error("token", validation_message)
-                elif not can_write_token:
-                    github_access_form.add_error(
-                        "token",
-                        "You do not have permission to save a GitHub token.",
-                    )
+                if not can_write_token:
+                    permission_message = "You do not have permission to save a GitHub token."
+                    if action == "test":
+                        messages.warning(request, permission_message)
+                    else:
+                        github_access_form.add_error("token", permission_message)
                 else:
-                    github_access_form.save()
+                    is_valid_connection, validation_message = (
+                        github_access_form.validate_connection()
+                    )
+                    if action == "test":
+                        messages.add_message(
+                            request,
+                            messages.SUCCESS if is_valid_connection else messages.ERROR,
+                            validation_message,
+                        )
+                    elif not is_valid_connection:
+                        github_access_form.add_error("token", validation_message)
+                    else:
+                        github_access_form.save()
 
         if action != "complete" or not github_access_form.is_valid():
             context = {
