@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 from django.urls import reverse
 
@@ -61,3 +64,17 @@ def test_supported_charger_detail_renders_without_storage_blob_for_document(clie
     assert "manual.pdf" in content
     assert "KB" in content
     assert 'alt="ABB Terra 54"' in content
+
+
+def test_supported_chargers_fixture_path_matches_named_route():
+    fixture_path = Path("apps/sites/fixtures/default__modules_terminal.json")
+    fixture_data = json.loads(fixture_path.read_text())
+
+    supported_landing = next(
+        item
+        for item in fixture_data
+        if item.get("model") == "pages.landing"
+        and item.get("fields", {}).get("label") == "Supported CP Models"
+    )
+
+    assert supported_landing["fields"]["path"] == reverse("ocpp:supported-chargers")

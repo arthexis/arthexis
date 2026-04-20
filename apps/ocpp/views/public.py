@@ -733,6 +733,10 @@ def _station_model_documents(bucket, image_ids):
 
 
 @landing("Supported CP Models")
+@module_pill_link_validation(
+    _landing_requires_chargers,
+    parameter_getter=_landing_visibility_params,
+)
 def supported_chargers(request):
     station_models = StationModel.objects.all().order_by(
         "vendor", "model_family", "model"
