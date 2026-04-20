@@ -74,7 +74,7 @@ redis==7.4.0
 reportlab==4.4.10
 requests==2.33.1
 ruff==0.15.11
-selenium==4.41.0
+selenium==4.43.0
 setuptools==82.0.1
 smbus2==0.6.1; sys_platform == "linux" and (platform_machine == "armv7l" or platform_machine == "aarch64")
 sqlparse==0.5.5
