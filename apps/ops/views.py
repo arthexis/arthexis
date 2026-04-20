@@ -5,7 +5,6 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import requests
-from apps.repos.services import github as github_service
 from django.conf import settings
 from django.contrib import admin
 from django.contrib import messages
@@ -13,13 +12,22 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import (
+    Http404,
+    HttpRequest,
+    HttpResponse,
+    HttpResponseRedirect,
+    JsonResponse,
+)
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
-OPERATOR_JOURNEY_STEP_URL_NAME = "ops:operator-journey-step"
+from apps.repos.services import github as github_service
 
-from .forms import OperatorJourneyGitHubAccessForm, OperatorJourneyProvisionSuperuserForm
+from .forms import (
+    OperatorJourneyGitHubAccessForm,
+    OperatorJourneyProvisionSuperuserForm,
+)
 from .models import OperatorJourneyStep
 from .operator_journey import (
     complete_step_for_user,
@@ -29,6 +37,8 @@ from .operator_journey import (
 )
 from .redirects import safe_host_redirect
 from .status_surface import build_status_surface, scoped_log_excerpts
+
+OPERATOR_JOURNEY_STEP_URL_NAME = "ops:operator-journey-step"
 
 ROLE_VALIDATION_STEP_SLUG = "validate-local-node-role"
 PROVISION_SUPERUSER_STEP_SLUG = "provision-ops-superuser"
@@ -117,17 +127,18 @@ def _build_security_group_rows(
     else:
         initial = provision_superuser_form.fields["security_groups"].initial or []
         if hasattr(initial, "values_list"):
-            selected_group_ids = {str(pk) for pk in initial.values_list("pk", flat=True)}
+            selected_group_ids = {
+                str(pk) for pk in initial.values_list("pk", flat=True)
+            }
         else:
             selected_group_ids = {
                 str(value.pk if hasattr(value, "pk") else value) for value in initial
             }
 
     rows: list[dict[str, object]] = []
-    for group in (
-        provision_superuser_form.fields["security_groups"]
-        .queryset.prefetch_related("permissions__content_type")
-    ):
+    for group in provision_superuser_form.fields[
+        "security_groups"
+    ].queryset.prefetch_related("permissions__content_type"):
         app_labels = {
             permission.content_type.app_label
             for permission in group.permissions.all()
@@ -239,6 +250,36 @@ def _build_node_role_validation_summary() -> dict[str, object]:
         "role_mismatch": role_mismatch,
         "commands": commands,
     }
+
+
+def _resolve_oauth_step_or_redirect(
+    request: HttpRequest, *, journey_slug: str, step_slug: str
+) -> tuple[OperatorJourneyStep | None, HttpResponseRedirect | None]:
+    """Return the current setup-github-token step or a redirect response."""
+
+    step = (
+        OperatorJourneyStep.objects.filter(
+            journey__slug=journey_slug,
+            slug=step_slug,
+            is_active=True,
+            journey__is_active=True,
+        )
+        .select_related("journey")
+        .first()
+    )
+    if step is None or step.slug != SETUP_GITHUB_TOKEN_STEP_SLUG:
+        raise Http404("Journey step not found")
+
+    current_step = next_step_for_user(user=request.user)
+    if current_step is None:
+        return None, redirect(reverse("admin:index"))
+    if current_step.pk != step.pk:
+        messages.warning(
+            request,
+            "That step is not available yet. Finish the current required operator step first.",
+        )
+        return None, redirect(operator_journey_step_url(step=current_step))
+    return step, None
 
 
 @staff_member_required
@@ -385,17 +426,13 @@ def complete_operator_journey_step(
                     request,
                     "That step is not available yet. Finish the current required operator step first.",
                 )
-                return redirect(
-                    operator_journey_step_url(step=locked_step)
-                )
+                return redirect(operator_journey_step_url(step=locked_step))
             if not complete_step_for_user(user=request.user, step=step):
                 messages.warning(
                     request,
                     "That step is not available yet. Finish the current required operator step first.",
                 )
-                return redirect(
-                    operator_journey_step_url(step=locked_step)
-                )
+                return redirect(operator_journey_step_url(step=locked_step))
             new_user, password, created_user = provision_form.save()
         next_step = next_step_for_user(user=request.user)
         return render(
@@ -432,7 +469,7 @@ def complete_operator_journey_step(
                     github_access_form.add_error(None, validation_message)
                 elif github_access_form._existing_token_record is not None:
                     github_access_form.save(
-                        token=github_access_form._existing_token_record.token,
+                        token=github_access_form.stored_token_raw_value(),
                         username=github_login,
                     )
         if action != "complete" or github_access_form.errors:
@@ -544,6 +581,12 @@ def operator_journey_github_login(
 ) -> HttpResponseRedirect:
     """Start GitHub OAuth login for the operator journey GitHub setup step."""
 
+    step, blocked_response = _resolve_oauth_step_or_redirect(
+        request, journey_slug=journey_slug, step_slug=step_slug
+    )
+    if blocked_response is not None:
+        return blocked_response
+
     if not _github_oauth_is_configured():
         messages.error(request, "GitHub OAuth is not configured.")
         return redirect(
@@ -555,9 +598,9 @@ def operator_journey_github_login(
 
     state = secrets.token_urlsafe(32)
     request.session[GITHUB_OAUTH_SESSION_STATE_KEY] = {
-        "journey_slug": journey_slug,
+        "journey_slug": step.journey.slug,
         "state": state,
-        "step_slug": step_slug,
+        "step_slug": step.slug,
     }
     params = {
         "client_id": str(getattr(settings, "GITHUB_OAUTH_CLIENT_ID", "")).strip(),
@@ -576,9 +619,15 @@ def operator_journey_github_callback(
 ) -> HttpResponseRedirect:
     """Complete GitHub OAuth login and store the token for this operator user."""
 
+    step, blocked_response = _resolve_oauth_step_or_redirect(
+        request, journey_slug=journey_slug, step_slug=step_slug
+    )
+    if blocked_response is not None:
+        return blocked_response
+
     step_url = reverse(
         OPERATOR_JOURNEY_STEP_URL_NAME,
-        kwargs={"journey_slug": journey_slug, "step_slug": step_slug},
+        kwargs={"journey_slug": step.journey.slug, "step_slug": step.slug},
     )
     state_payload = request.session.pop(GITHUB_OAUTH_SESSION_STATE_KEY, None)
     request_state = (request.GET.get("state") or "").strip()
@@ -589,7 +638,9 @@ def operator_journey_github_callback(
         or not request_state
         or request_state != state_payload.get("state")
     ):
-        messages.error(request, "GitHub authorization could not be validated. Please try again.")
+        messages.error(
+            request, "GitHub authorization could not be validated. Please try again."
+        )
         return redirect(step_url)
 
     oauth_error = (request.GET.get("error") or "").strip()
@@ -611,8 +662,12 @@ def operator_journey_github_callback(
         response = requests.post(
             GITHUB_OAUTH_TOKEN_URL,
             data={
-                "client_id": str(getattr(settings, "GITHUB_OAUTH_CLIENT_ID", "")).strip(),
-                "client_secret": str(getattr(settings, "GITHUB_OAUTH_CLIENT_SECRET", "")).strip(),
+                "client_id": str(
+                    getattr(settings, "GITHUB_OAUTH_CLIENT_ID", "")
+                ).strip(),
+                "client_secret": str(
+                    getattr(settings, "GITHUB_OAUTH_CLIENT_SECRET", "")
+                ).strip(),
                 "code": code,
                 "redirect_uri": _github_oauth_callback_url(
                     request, journey_slug=journey_slug, step_slug=step_slug
@@ -629,19 +684,25 @@ def operator_journey_github_callback(
     except ValueError:
         payload = {}
     access_token = (
-        str(payload.get("access_token", "")).strip() if isinstance(payload, dict) else ""
+        str(payload.get("access_token", "")).strip()
+        if isinstance(payload, dict)
+        else ""
     )
     if not access_token:
         oauth_error_message = (
-            str(payload.get("error_description") or payload.get("error") or "unknown_error")
+            str(
+                payload.get("error_description")
+                or payload.get("error")
+                or "unknown_error"
+            )
             if isinstance(payload, dict)
             else "unknown_error"
         )
         messages.error(request, f"GitHub authentication failed: {oauth_error_message}")
         return redirect(step_url)
 
-    validation_success, validation_message, validated_login = github_service.validate_token(
-        access_token
+    validation_success, validation_message, validated_login = (
+        github_service.validate_token(access_token)
     )
     if not validation_success:
         messages.error(request, validation_message)

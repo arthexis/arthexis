@@ -233,3 +233,10 @@ class OperatorJourneyGitHubAccessForm(forms.Form):
             return False, "Sign in with GitHub before validating access.", ""
         stored_token = self._existing_token_record.token
         return github_service.validate_token(resolve_sigils(stored_token))
+
+    def stored_token_raw_value(self) -> str:
+        """Return the raw persisted token value without descriptor resolution."""
+
+        if self._existing_token_record is None:
+            return ""
+        return str(self._existing_token_record.__dict__.get("token", "")).strip()
