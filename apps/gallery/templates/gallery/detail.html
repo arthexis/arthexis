@@ -43,6 +43,26 @@
   </ul>
   {% endif %}
 
+  {% if can_share %}
+    <hr>
+    <h2 class="h5">{% trans "Share Image" %}</h2>
+    <form method="post" class="card card-body mb-3">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="share-image">
+      {{ share_form.as_p }}
+      <button class="btn btn-outline-primary" type="submit">{% trans "Share with user" %}</button>
+    </form>
+
+    <h3 class="h6">{% trans "Shared with" %}</h3>
+    <ul>
+      {% for shared_user in image.shared_with_users.all %}
+        <li>{{ shared_user.username }}</li>
+      {% empty %}
+        <li class="text-muted">{% trans "No users yet." %}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
   {% if can_manage %}
     <hr>
     <h2 class="h5">{% trans "Edit Image" %}</h2>

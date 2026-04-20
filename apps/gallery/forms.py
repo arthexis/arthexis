@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth import get_user_model
 
 from apps.groups.models import SecurityGroup
 
@@ -90,3 +91,14 @@ class GalleryImageForm(forms.ModelForm):
             "owner_group",
             "categories",
         )
+
+
+class GalleryShareForm(forms.Form):
+    username = forms.CharField(max_length=150, widget=forms.TextInput(attrs={"class": "form-control"}))
+
+    def clean_username(self):
+        username = self.cleaned_data["username"].strip()
+        user = get_user_model().objects.filter(username=username).first()
+        if user is None:
+            raise forms.ValidationError("User not found.")
+        return user
