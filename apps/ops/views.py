@@ -452,26 +452,22 @@ def complete_operator_journey_step(
             user=request.user,
         )
         action = (request.POST.get("journey_action") or "").strip().lower()
-        token_record = github_access_form._existing_token_record
-        can_write_token = _can_manage_github_token(request, token=token_record)
-
         if action == "complete":
-            if not can_write_token:
-                github_access_form.add_error(
-                    None,
-                    "You do not have permission to save a GitHub token.",
+            is_valid_connection, validation_message, github_login = (
+                github_access_form.validate_connection()
+            )
+            if not is_valid_connection:
+                github_access_form.add_error(None, validation_message)
+            elif (
+                github_access_form._existing_token_record is not None
+                and _can_manage_github_token(
+                    request, token=github_access_form._existing_token_record
                 )
-            else:
-                is_valid_connection, validation_message, github_login = (
-                    github_access_form.validate_connection()
+            ):
+                github_access_form.save(
+                    token=github_access_form.stored_token_raw_value(),
+                    username=github_login,
                 )
-                if not is_valid_connection:
-                    github_access_form.add_error(None, validation_message)
-                elif github_access_form._existing_token_record is not None:
-                    github_access_form.save(
-                        token=github_access_form.stored_token_raw_value(),
-                        username=github_login,
-                    )
         if action != "complete" or github_access_form.errors:
             context = {
                 **_build_admin_context(request),

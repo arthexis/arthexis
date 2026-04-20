@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.test import TestCase, override_settings
 from django.template import Context, Template
 from django.urls import reverse
@@ -412,7 +413,7 @@ class OperatorJourneyViewTests(TestCase):
         self.assertContains(response, "Bad credentials")
         self.assertFalse(github_step.completions.filter(user=self.user).exists())
 
-    def test_setup_github_token_complete_requires_githubtoken_permissions(self):
+    def test_setup_github_token_complete_requires_connected_token(self):
         limited_user = get_user_model().objects.create_user(
             username="ops-journey-limited",
             password="x",
@@ -452,10 +453,68 @@ class OperatorJourneyViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response, "You do not have permission to save a GitHub token."
-        )
+        self.assertContains(response, "Sign in with GitHub before validating access.")
         self.assertFalse(GitHubToken.objects.filter(user=limited_user).exists())
+        self.assertFalse(github_step.completions.filter(user=limited_user).exists())
+
+    @patch("apps.ops.forms.github_service.validate_token")
+    def test_setup_github_token_complete_allows_add_only_permissions(
+        self, mock_validate_token
+    ):
+        add_only_user = get_user_model().objects.create_user(
+            username="ops-journey-add-only",
+            password="x",
+            is_staff=True,
+        )
+        add_only_user.groups.add(self.group)
+        add_only_user.user_permissions.add(
+            Permission.objects.get(codename="add_githubtoken")
+        )
+        self.client.force_login(add_only_user)
+        complete_step_for_user(user=add_only_user, step=self.step_1)
+        complete_step_for_user(user=add_only_user, step=self.step_2)
+        github_journey = OperatorJourney.objects.create(
+            name="Product Developer GitHub Access",
+            slug="product-developer-github-access",
+            security_group=self.group,
+            is_active=True,
+            priority=1,
+        )
+        github_step = OperatorJourneyStep.objects.create(
+            journey=github_journey,
+            title="Connect your GitHub access",
+            slug="setup-github-token",
+            instruction="Configure GitHub access directly in this step.",
+            iframe_url="/admin/repos/githubrepository/setup-token/",
+            order=1,
+        )
+        GitHubToken.objects.create(
+            user=add_only_user,
+            label="existing-label",
+            token="[ENV.GITHUB_TOKEN]",
+        )
+        mock_validate_token.return_value = (
+            True,
+            "Connected to GitHub as arthexis.",
+            "arthexis",
+        )
+
+        response = self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            ),
+            {"journey_action": "complete"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        saved_token = GitHubToken.objects.get(user=add_only_user)
+        self.assertEqual(saved_token.label, "existing-label")
+        self.assertEqual(saved_token.__dict__["token"], "[ENV.GITHUB_TOKEN]")
+        self.assertTrue(github_step.completions.filter(user=add_only_user).exists())
 
     @patch("apps.ops.forms.github_service.validate_token")
     @patch("apps.ops.forms.resolve_sigils")
