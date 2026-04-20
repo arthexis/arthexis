@@ -101,6 +101,13 @@ DEFAULT_STAFF_TASKS: tuple[dict[str, object], ...] = (
         "order": 100,
     },
     {
+        "slug": "uploader",
+        "label": "Uploader",
+        "description": "Open the admin uploader view for content samples.",
+        "action_name": "uploader",
+        "order": 103,
+    },
+    {
         "slug": "system",
         "label": "System",
         "description": "Inspect system details and service controls.",
