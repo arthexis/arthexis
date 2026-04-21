@@ -4,41 +4,6 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "roles": [
-        [
-          "Terminal"
-        ]
-      ],
-      "application": [
-        "docs"
-      ],
-      "path": "/docs/",
-      "menu": "Developers",
-      "priority": 0,
-      "is_default": false,
-      "security_mode": "inclusive"
-    }
-  },
-  {
-    "model": "pages.landing",
-    "fields": {
-      "is_seed_data": true,
-      "is_deleted": false,
-      "module": [
-        "/docs/"
-      ],
-      "path": "/docs/library/",
-      "label": "Developer Documents",
-      "enabled": true,
-      "track_leads": false,
-      "description": ""
-    }
-  },
-  {
-    "model": "modules.module",
-    "fields": {
-      "is_seed_data": true,
-      "is_deleted": false,
       "roles": [],
       "application": [
         "awg"
@@ -91,6 +56,21 @@
       ],
       "path": "/ocpp/cpms/dashboard/",
       "label": "Charging Station Dashboards",
+      "enabled": true,
+      "track_leads": false,
+      "description": ""
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": [
+        "/ocpp/"
+      ],
+      "path": "/ocpp/charge-point-models/",
+      "label": "Supported CP Models",
       "enabled": true,
       "track_leads": false,
       "description": ""
@@ -171,6 +151,41 @@
       ],
       "path": "/shop/",
       "label": "RFID Card Shop",
+      "enabled": true,
+      "track_leads": false,
+      "description": ""
+    }
+  },
+  {
+    "model": "modules.module",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "roles": [
+        [
+          "Terminal"
+        ]
+      ],
+      "application": [
+        "docs"
+      ],
+      "path": "/docs/",
+      "menu": "Developers",
+      "priority": 0,
+      "is_default": false,
+      "security_mode": "inclusive"
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": [
+        "/docs/"
+      ],
+      "path": "/docs/library/",
+      "label": "Developer Documents",
       "enabled": true,
       "track_leads": false,
       "description": ""

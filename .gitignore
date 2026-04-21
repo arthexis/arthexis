@@ -181,6 +181,7 @@ arthexis.env
 .env.*
 .envrc
 .venv
+.codex/
 env/
 venv/
 ENV/

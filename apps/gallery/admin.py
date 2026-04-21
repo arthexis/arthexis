@@ -26,6 +26,7 @@ class GalleryImageAdmin(admin.ModelAdmin):
     search_fields = ("title", "description")
     filter_horizontal = ("categories",)
     inlines = (GalleryCreditInline, GalleryImageTraitInline)
+    change_form_template = "admin/gallery/galleryimage/change_form.html"
 
 
 @admin.register(GalleryCategory)

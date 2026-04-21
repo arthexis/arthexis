@@ -9,19 +9,52 @@ from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
 from apps.core.admin import OwnableAdminMixin
-from apps.repos.forms import GitHubAppAdminForm
 from apps.repos.admin_feedback_config import FeedbackIssueConfigurationAdminMixin
+from apps.repos.forms import GitHubAppAdminForm
 from apps.repos.models.events import GitHubEvent
 from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
 from apps.repos.models.github_tokens import GitHubToken
 from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
 from apps.repos.models.repositories import GitHubRepository, PackageRepository
 from apps.repos.models.response_templates import GitHubResponseTemplate
+from apps.repos.models.spam import RepositoryIssueSpamAssessment
 
 
 class FetchFromGitHubMixin(DjangoObjectActions):
     changelist_actions: list[str] = []
     dashboard_actions: list[str] = []
+
+    def _run_fetch_from_github_action(
+        self,
+        request,
+        *,
+        sync_function,
+        error_message_template,
+        success_message_template,
+        empty_state_message_template,
+    ):
+        try:
+            created, updated = sync_function()
+        except Exception as exc:
+            self.message_user(
+                request,
+                error_message_template % {"error": exc},
+                level=messages.ERROR,
+            )
+            return self._redirect_to_changelist()
+
+        if created or updated:
+            message = success_message_template % {
+                "created": created,
+                "updated": updated,
+            }
+            level = messages.SUCCESS
+        else:
+            message = empty_state_message_template
+            level = messages.INFO
+
+        self.message_user(request, message, level=level)
+        return self._redirect_to_changelist()
 
     def _redirect_to_changelist(self):
         opts = self.model._meta
@@ -58,28 +91,15 @@ class RepositoryIssueAdmin(
     raw_id_fields = ("repository",)
 
     def fetch_open_issues(self, request, queryset=None):
-        try:
-            created, updated = RepositoryIssue.fetch_open_issues()
-        except Exception as exc:  # pragma: no cover - defensive
-            self.message_user(
-                request,
-                _("Failed to fetch issues from GitHub: %s") % (exc,),
-                level=messages.ERROR,
-            )
-            return self._redirect_to_changelist()
-
-        if created or updated:
-            message = _("Fetched %(created)s new and %(updated)s updated issues.") % {
-                "created": created,
-                "updated": updated,
-            }
-            level = messages.SUCCESS
-        else:
-            message = _("No open issues found to sync.")
-            level = messages.INFO
-
-        self.message_user(request, message, level=level)
-        return self._redirect_to_changelist()
+        return self._run_fetch_from_github_action(
+            request,
+            sync_function=RepositoryIssue.fetch_open_issues,
+            error_message_template=_("Failed to fetch issues from GitHub: %(error)s"),
+            success_message_template=_(
+                "Fetched %(created)s new and %(updated)s updated issues."
+            ),
+            empty_state_message_template=_("No open issues found to sync."),
+        )
 
     fetch_open_issues.label = _("Fetch Open")
     fetch_open_issues.short_description = _("Fetch Open")
@@ -108,30 +128,17 @@ class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
     raw_id_fields = ("repository",)
 
     def fetch_open_pull_requests(self, request, queryset=None):
-        try:
-            created, updated = RepositoryPullRequest.fetch_open_pull_requests()
-        except Exception as exc:  # pragma: no cover - defensive
-            self.message_user(
-                request,
-                _("Failed to fetch pull requests from GitHub: %s") % (exc,),
-                level=messages.ERROR,
-            )
-            return self._redirect_to_changelist()
-
-        if created or updated:
-            message = _(
+        return self._run_fetch_from_github_action(
+            request,
+            sync_function=RepositoryPullRequest.fetch_open_pull_requests,
+            error_message_template=_(
+                "Failed to fetch pull requests from GitHub: %(error)s"
+            ),
+            success_message_template=_(
                 "Fetched %(created)s new and %(updated)s updated pull requests."
-            ) % {
-                "created": created,
-                "updated": updated,
-            }
-            level = messages.SUCCESS
-        else:
-            message = _("No open pull requests found to sync.")
-            level = messages.INFO
-
-        self.message_user(request, message, level=level)
-        return self._redirect_to_changelist()
+            ),
+            empty_state_message_template=_("No open pull requests found to sync."),
+        )
 
     fetch_open_pull_requests.label = _("Fetch Open")
     fetch_open_pull_requests.short_description = _("Fetch Open")
@@ -259,6 +266,42 @@ class GitHubResponseTemplateAdmin(OwnableAdminMixin, admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         obj.user = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(RepositoryIssueSpamAssessment)
+class RepositoryIssueSpamAssessmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "issue_number",
+        "repository",
+        "issue_author",
+        "action",
+        "is_spam",
+        "score",
+        "processed_at",
+    )
+    list_filter = ("is_spam", "action", "processed_at", "repository")
+    search_fields = (
+        "=issue_number",
+        "issue_title",
+        "issue_author",
+        "delivery_id",
+        "repository__owner",
+        "repository__name",
+    )
+    readonly_fields = (
+        "processed_at",
+        "delivery_id",
+        "issue_number",
+        "issue_title",
+        "issue_body",
+        "issue_author",
+        "action",
+        "is_spam",
+        "score",
+        "reasons",
+        "event",
+    )
+    raw_id_fields = ("event", "repository")
 
 
 @admin.register(GitHubApp)

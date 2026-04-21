@@ -68,6 +68,7 @@ def test_staff_task_resolves_named_internal_action_for_visible_tasks():
         and task["url"] == "/admin/imager/raspberrypiimageartifact/create-rpi-image/"
         for task in tasks
     )
+    assert any(task["slug"] == "uploader" and task["url"] == "/admin/content/contentsample/" for task in tasks)
     assert any(task["slug"] == "release" and task["url"] == "/admin/release/packagerelease/" for task in tasks)
     assert StaffTask.objects.filter(slug="actions").exists() is False
 

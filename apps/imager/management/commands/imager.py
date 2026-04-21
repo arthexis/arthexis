@@ -5,13 +5,18 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.imager.models import RaspberryPiImageArtifact
-from apps.imager.services import ImagerBuildError, build_rpi4b_image
+from apps.imager.services import (
+    ImagerBuildError,
+    build_rpi4b_image,
+    list_block_devices,
+    write_image_to_device,
+)
 
 
 class Command(BaseCommand):
     """Build and list Raspberry Pi image artifacts for Arthexis."""
 
-    help = "Build Raspberry Pi 4B image artifacts with Arthexis preloaded bootstrap scripts."
+    help = "Build and safely write Raspberry Pi 4B image artifacts."
 
     def add_arguments(self, parser) -> None:
         """Register command actions and options."""
@@ -46,7 +51,25 @@ class Command(BaseCommand):
             help="Copy the base image without injecting bootstrap scripts.",
         )
 
+        subparsers.add_parser("devices", help="List candidate block devices for image writing.")
         subparsers.add_parser("list", help="List generated Raspberry Pi image artifacts.")
+
+        write_parser = subparsers.add_parser(
+            "write",
+            help="Write an existing image artifact (or local image path) to a block device.",
+        )
+        write_parser.add_argument("--artifact", default="", help="Registered artifact name to write.")
+        write_parser.add_argument(
+            "--image-path",
+            default="",
+            help="Direct local path to an image file to write (alternative to --artifact).",
+        )
+        write_parser.add_argument("--device", required=True, help="Target block device path, for example /dev/sdb.")
+        write_parser.add_argument(
+            "--yes",
+            action="store_true",
+            help="Confirm destructive write operation.",
+        )
 
     def handle(self, *args, **options) -> None:
         """Dispatch command to selected action."""
@@ -57,6 +80,12 @@ class Command(BaseCommand):
             return
         if action == "list":
             self._handle_list()
+            return
+        if action == "devices":
+            self._handle_devices()
+            return
+        if action == "write":
+            self._handle_write(options)
             return
         raise CommandError(f"Unsupported action '{action}'.")
 
@@ -93,3 +122,47 @@ class Command(BaseCommand):
                 f"{artifact.name} [{artifact.target}] file={artifact.output_filename} "
                 f"sha256={artifact.sha256} uri={artifact.download_uri or '(not configured)'}"
             )
+
+    def _handle_devices(self) -> None:
+        """Print block devices and safety metadata for writing."""
+
+        try:
+            devices = list_block_devices()
+        except ImagerBuildError as exc:
+            raise CommandError(str(exc)) from exc
+
+        if not devices:
+            self.stdout.write("No block devices were discovered.")
+            return
+        for device in devices:
+            mountpoints = ",".join(device.mountpoints) if device.mountpoints else "(none)"
+            partitions = ",".join(device.partitions) if device.partitions else "(none)"
+            self.stdout.write(
+                f"{device.path} size={device.size_bytes} transport={device.transport or '(unknown)'} "
+                f"removable={'yes' if device.removable else 'no'} protected={'yes' if device.protected else 'no'} "
+                f"partitions={partitions} mounts={mountpoints}"
+            )
+
+    def _handle_write(self, options: dict[str, object]) -> None:
+        """Write image artifact to block device with safety checks and verification."""
+
+        artifact_name = str(options["artifact"])
+        image_path = str(options["image_path"])
+        if bool(artifact_name) == bool(image_path):
+            raise CommandError("Provide exactly one of --artifact or --image-path.")
+
+        try:
+            result = write_image_to_device(
+                device_path=str(options["device"]),
+                artifact_name=artifact_name,
+                image_path=image_path,
+                confirmed=bool(options["yes"]),
+            )
+        except ImagerBuildError as exc:
+            raise CommandError(str(exc)) from exc
+
+        self.stdout.write(self.style.SUCCESS(f"Wrote {result.image_path} -> {result.device_path}"))
+        self.stdout.write(f"size_bytes={result.size_bytes}")
+        self.stdout.write(f"source_sha256={result.source_sha256}")
+        self.stdout.write(f"written_sha256={result.written_sha256}")
+        self.stdout.write(f"verified={'yes' if result.verified else 'no'}")

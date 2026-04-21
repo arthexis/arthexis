@@ -4,7 +4,7 @@
 The LCD screen service drives a 16x2 I²C display on Control nodes, showing uptime, status messages, and queued notifications.
 
 ## What it does
-- Runs the `apps.screens.lcd_screen` updater loop.
+- Runs the `apps.screens.lcd_screen` updater loop via `python -m apps.screens.lcd_screen.runner`.
 - Reads LCD lock files for messages and cycles the display.
 
 ## Enable
@@ -29,5 +29,6 @@ The LCD screen service drives a 16x2 I²C display on Control nodes, showing upti
    ```
 
 ## Notes
+- The LCD updater is intentionally lock-file driven and does not require direct Django database access.
 - Control presets enable the LCD lock automatically.
 - The Suite Services Report lists the LCD row even when the lock is missing so operators can enable it later.

@@ -14,7 +14,7 @@ from apps.evergo.admin import (
     _build_loaded_entities_links,
     _run_contract_login_validation,
 )
-from apps.evergo.forms import EvergoContractorLoginWizardForm
+from apps.evergo.forms import EvergoContractorLoginWizardForm, EvergoUserAdminForm
 from apps.evergo.models import EvergoUser
 from apps.groups.models import SecurityGroup
 
@@ -94,6 +94,33 @@ def test_contractor_login_wizard_form_requires_validation_for_order_numbers():
 
     assert not form.is_valid()
     assert "order_numbers" in form.errors
+
+
+@pytest.mark.django_db
+def test_evergo_user_admin_form_defaults_owner_to_request_user_on_create():
+    """Create form should assign the acting admin when no owner fields are provided."""
+    User = get_user_model()
+    acting_user = User.objects.create_user(username="acting-owner", email="acting-owner@example.com")
+    form = EvergoUserAdminForm(
+        data={
+            "evergo_email": "contractor@example.com",
+            "evergo_password": "top-secret",  # noqa: S106
+        },
+        instance=EvergoUser(),
+        request_user=acting_user,
+    )
+
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["user"] == acting_user
+
+
+def test_evergo_user_admin_form_reads_owner_required_from_model_metadata(monkeypatch):
+    """Owner-required logic should resolve from model metadata before validation executes."""
+    form = EvergoUserAdminForm(instance=EvergoUser(), request_user=None)
+    assert form._resolved_owner_required() is False
+
+    monkeypatch.setattr(EvergoUser, "owner_required", True)
+    assert form._resolved_owner_required() is True
 
 
 @pytest.mark.django_db

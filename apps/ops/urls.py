@@ -9,6 +9,11 @@ app_name = "ops"
 urlpatterns = [
     path("clear-active/", views.clear_active_operation, name="clear-active"),
     path(
+        "operator-journey/",
+        views.operator_journey_dashboard,
+        name="operator-journey-dashboard",
+    ),
+    path(
         "operator-journey/steps/<int:step_id>/complete/",
         views.complete_operator_journey_step_legacy,
         name="operator-journey-step-complete-legacy",

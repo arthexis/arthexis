@@ -6,6 +6,7 @@ from apps.repos.models.github_tokens import GitHubToken
 from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
 from apps.repos.models.repositories import GitHubRepository, PackageRepository
 from apps.repos.models.response_templates import GitHubResponseTemplate
+from apps.repos.models.spam import RepositoryIssueSpamAssessment
 
 __all__ = [
     "GitHubApp",
@@ -18,5 +19,6 @@ __all__ = [
     "PackageRepository",
     "RepositoryEvent",
     "RepositoryIssue",
+    "RepositoryIssueSpamAssessment",
     "RepositoryPullRequest",
 ]

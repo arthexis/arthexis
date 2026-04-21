@@ -5,16 +5,20 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from urllib.parse import parse_qs
+import logging
 from typing import TypeAlias, TypedDict
+from urllib.parse import parse_qs
 
 from django.db.models import Q
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.repos.models.events import GitHubEvent
-from apps.repos.models.github_apps import GitHubApp
+from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
 from apps.repos.models.repositories import GitHubRepository
+from apps.repos.spam_filter import assess_github_issue_event
+
+logger = logging.getLogger(__name__)
 
 
 class GitHubWebhookOwnerPayload(TypedDict, total=False):
@@ -165,6 +169,44 @@ def _verify_signature(request: HttpRequest, secret: str) -> bool:
     return False
 
 
+def _verify_signature_for_any_app(request: HttpRequest) -> bool:
+    signature_256 = request.headers.get("X-Hub-Signature-256", "")
+    signature = request.headers.get("X-Hub-Signature", "")
+    if not signature_256 and not signature:
+        return False
+
+    apps = GitHubApp.objects.exclude(webhook_secret="")
+    return any(_verify_signature(request, app.webhook_secret) for app in apps)
+
+
+def _installation_id_from_payload(payload: ParsedWebhookPayload) -> int | None:
+    installation = payload.get("installation")
+    if not isinstance(installation, dict):
+        return None
+    installation_id = installation.get("id")
+    if isinstance(installation_id, int):
+        return installation_id
+    if isinstance(installation_id, str) and installation_id.isdigit():
+        return int(installation_id)
+    return None
+
+
+def _verify_signature_for_payload(
+    request: HttpRequest,
+    payload: ParsedWebhookPayload,
+) -> bool:
+    installation_id = _installation_id_from_payload(payload)
+    if installation_id is not None:
+        install = (
+            GitHubAppInstall.objects.select_related("app")
+            .filter(installation_id=installation_id)
+            .first()
+        )
+        if install:
+            return _verify_signature(request, install.app.webhook_secret)
+    return _verify_signature_for_any_app(request)
+
+
 @csrf_exempt
 def github_webhook(
     request: HttpRequest,
@@ -172,14 +214,18 @@ def github_webhook(
     name: str = "",
     app_slug: str = "",
 ) -> JsonResponse:
+    payload, raw_body = _extract_payload(request)
+
+    is_verified = False
     if app_slug:
         app = GitHubApp.objects.filter(
             Q(webhook_slug=app_slug) | Q(app_slug=app_slug)
         ).first()
         if not app or not _verify_signature(request, app.webhook_secret):
             return JsonResponse({"status": "unauthorized"}, status=401)
-
-    payload, raw_body = _extract_payload(request)
+        is_verified = True
+    else:
+        is_verified = _verify_signature_for_payload(request, payload)
     owner, name = _resolve_event_route(owner, name, _payload_for_routing(payload))
 
     repository = None
@@ -205,5 +251,10 @@ def github_webhook(
         payload=payload,
         raw_body=raw_body,
     )
+    if is_verified:
+        try:
+            assess_github_issue_event(event)
+        except Exception:  # pragma: no cover - defensive guard to keep webhook ingestion resilient
+            logger.exception("GitHub issue spam assessment failed for event_id=%s", event.pk)
 
     return JsonResponse({"status": "ok", "event_id": event.pk})
