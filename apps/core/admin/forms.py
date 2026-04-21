@@ -124,39 +124,70 @@ class UserDiagnosticsProfileInlineForm(forms.ModelForm):
         fields = ("is_enabled", "collect_diagnostics", "allow_manual_feedback")
 
 
-class OdooEmployeeAdminForm(forms.ModelForm):
+class MaskedPasswordFormMixin:
+    """Mixin that hides stored passwords while allowing updates."""
+
+    password_field_name = "password"
+    password_field_render_value: bool | None = None
+    password_sigil_fields: tuple[str, ...] = ()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        field = self.fields.get(self.password_field_name)
+        if field is None:
+            return
+        render_value = self.password_field_render_value
+        if not isinstance(field.widget, forms.PasswordInput):
+            field.widget = forms.PasswordInput(render_value=bool(render_value))
+        elif render_value is not None:
+            field.widget.render_value = render_value
+        field.widget.attrs.setdefault("autocomplete", "new-password")
+        field.help_text = field.help_text or "Leave blank to keep the current password."
+        if self.instance.pk:
+            field.required = False
+            field.initial = ""
+            self.initial[self.password_field_name] = ""
+        else:
+            field.required = True
+
+    def _clean_password_field(self, cleaned_data):
+        field = self.fields.get(self.password_field_name)
+        if field is None:
+            return cleaned_data
+        pwd = cleaned_data.get(self.password_field_name)
+        if not pwd and self.instance.pk:
+            cleaned_data[self.password_field_name] = keep_existing(
+                self.password_field_name
+            )
+        return cleaned_data
+
+    def clean_password(self):
+        cleaned_data = self._clean_password_field(self.cleaned_data)
+        return cleaned_data.get(self.password_field_name)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        return self._clean_password_field(cleaned_data)
+
+    def _post_clean(self):
+        super()._post_clean()
+        if self.password_sigil_fields:
+            _restore_sigil_values(self, self.password_sigil_fields)
+
+
+class OdooEmployeeAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
     """Admin form for :class:`core.models.OdooEmployee` with hidden password."""
 
     password = forms.CharField(
-        widget=forms.PasswordInput(render_value=True),
         required=False,
         help_text="Leave blank to keep the current password.",
     )
+    password_field_render_value = True
+    password_sigil_fields = ("host", "database", "username", "password")
 
     class Meta:
         model = OdooEmployee
         fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance.pk:
-            self.fields["password"].initial = ""
-            self.initial["password"] = ""
-        else:
-            self.fields["password"].required = True
-
-    def clean_password(self):
-        pwd = self.cleaned_data.get("password")
-        if not pwd and self.instance.pk:
-            return keep_existing("password")
-        return pwd
-
-    def _post_clean(self):
-        super()._post_clean()
-        _restore_sigil_values(
-            self,
-            ["host", "database", "username", "password"],
-        )
 
 
 class PaymentProcessorAdminForm(forms.ModelForm):
@@ -308,41 +339,6 @@ class StripeProcessorAdminForm(PaymentProcessorAdminForm):
                 _("Provide Stripe secret and publishable keys to configure Stripe.")
             )
         return cleaned
-
-
-class MaskedPasswordFormMixin:
-    """Mixin that hides stored passwords while allowing updates."""
-
-    password_sigil_fields: tuple[str, ...] = ()
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        field = self.fields.get("password")
-        if field is None:
-            return
-        if not isinstance(field.widget, forms.PasswordInput):
-            field.widget = forms.PasswordInput()
-        field.widget.attrs.setdefault("autocomplete", "new-password")
-        field.help_text = field.help_text or "Leave blank to keep the current password."
-        if self.instance.pk:
-            field.initial = ""
-            self.initial["password"] = ""
-        else:
-            field.required = True
-
-    def clean_password(self):
-        field = self.fields.get("password")
-        if field is None:
-            return self.cleaned_data.get("password")
-        pwd = self.cleaned_data.get("password")
-        if not pwd and self.instance.pk:
-            return keep_existing("password")
-        return pwd
-
-    def _post_clean(self):
-        super()._post_clean()
-        if self.password_sigil_fields:
-            _restore_sigil_values(self, self.password_sigil_fields)
 
 
 class EmailInboxAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
