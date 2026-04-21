@@ -14,7 +14,7 @@ from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.repos.models.events import GitHubEvent
-from apps.repos.models.github_apps import GitHubApp
+from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
 from apps.repos.models.repositories import GitHubRepository
 from apps.repos.spam_filter import assess_github_issue_event
 
@@ -175,10 +175,36 @@ def _verify_signature_for_any_app(request: HttpRequest) -> bool:
     if not signature_256 and not signature:
         return False
 
-    webhook_secrets = GitHubApp.objects.exclude(webhook_secret="").values_list(
-        "webhook_secret", flat=True
-    )
-    return any(_verify_signature(request, secret) for secret in webhook_secrets)
+    apps = GitHubApp.objects.exclude(webhook_secret="")
+    return any(_verify_signature(request, app.webhook_secret) for app in apps)
+
+
+def _installation_id_from_payload(payload: ParsedWebhookPayload) -> int | None:
+    installation = payload.get("installation")
+    if not isinstance(installation, dict):
+        return None
+    installation_id = installation.get("id")
+    if isinstance(installation_id, int):
+        return installation_id
+    if isinstance(installation_id, str) and installation_id.isdigit():
+        return int(installation_id)
+    return None
+
+
+def _verify_signature_for_payload(
+    request: HttpRequest,
+    payload: ParsedWebhookPayload,
+) -> bool:
+    installation_id = _installation_id_from_payload(payload)
+    if installation_id is not None:
+        install = (
+            GitHubAppInstall.objects.select_related("app")
+            .filter(installation_id=installation_id)
+            .first()
+        )
+        if install and _verify_signature(request, install.app.webhook_secret):
+            return True
+    return _verify_signature_for_any_app(request)
 
 
 @csrf_exempt
@@ -188,6 +214,8 @@ def github_webhook(
     name: str = "",
     app_slug: str = "",
 ) -> JsonResponse:
+    payload, raw_body = _extract_payload(request)
+
     is_verified = False
     if app_slug:
         app = GitHubApp.objects.filter(
@@ -197,9 +225,7 @@ def github_webhook(
             return JsonResponse({"status": "unauthorized"}, status=401)
         is_verified = True
     else:
-        is_verified = _verify_signature_for_any_app(request)
-
-    payload, raw_body = _extract_payload(request)
+        is_verified = _verify_signature_for_payload(request, payload)
     owner, name = _resolve_event_route(owner, name, _payload_for_routing(payload))
 
     repository = None
