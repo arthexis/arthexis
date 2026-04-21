@@ -1,5 +1,6 @@
 """Management command for Raspberry Pi image artifact workflows."""
 
+import json
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
@@ -50,6 +51,21 @@ class Command(BaseCommand):
             action="store_true",
             help="Copy the base image without injecting bootstrap scripts.",
         )
+        build_parser.add_argument(
+            "--build-engine",
+            default="arthexis-bootstrap",
+            help="Build engine backend used to produce the artifact.",
+        )
+        build_parser.add_argument(
+            "--profile",
+            default="bootstrap",
+            help="Build profile for engine-specific validation and rollout metadata.",
+        )
+        build_parser.add_argument(
+            "--profile-metadata",
+            default="{}",
+            help="JSON object carrying profile metadata, required artifacts, and rollout fields.",
+        )
 
         subparsers.add_parser("devices", help="List candidate block devices for image writing.")
         subparsers.add_parser("list", help="List generated Raspberry Pi image artifacts.")
@@ -93,6 +109,13 @@ class Command(BaseCommand):
         """Build a Raspberry Pi 4B image artifact and print summary metadata."""
 
         try:
+            profile_metadata = json.loads(str(options["profile_metadata"]))
+        except json.JSONDecodeError as exc:
+            raise CommandError("--profile-metadata must be valid JSON.") from exc
+        if not isinstance(profile_metadata, dict):
+            raise CommandError("--profile-metadata must decode to a JSON object.")
+
+        try:
             result = build_rpi4b_image(
                 name=str(options["name"]),
                 base_image_uri=str(options["base_image_uri"]),
@@ -100,6 +123,9 @@ class Command(BaseCommand):
                 download_base_uri=str(options["download_base_uri"]),
                 git_url=str(options["git_url"]),
                 customize=not bool(options["skip_customize"]),
+                build_engine=str(options["build_engine"]),
+                profile=str(options["profile"]),
+                profile_metadata=profile_metadata,
             )
         except ImagerBuildError as exc:
             raise CommandError(str(exc)) from exc

@@ -14,6 +14,8 @@ class RaspberryPiImageArtifact(models.Model):
     sha256 = models.CharField(max_length=64)
     size_bytes = models.BigIntegerField()
     download_uri = models.URLField(blank=True, default="")
+    build_engine = models.CharField(max_length=80, default="arthexis-bootstrap")
+    build_profile = models.CharField(max_length=80, default="bootstrap")
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
