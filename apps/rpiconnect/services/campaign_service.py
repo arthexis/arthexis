@@ -455,14 +455,29 @@ class CampaignService:
         stages = self._load_rollout_stages(campaign)
         if not stages:
             return
-        deployment_device_ids = set(campaign.deployments.values_list("device_id", flat=True))
+
+        deployment_queryset = campaign.deployments
         active_statuses = {
             ConnectUpdateDeployment.Status.PENDING,
             ConnectUpdateDeployment.Status.IN_PROGRESS,
         }
-        if campaign.deployments.filter(status__in=active_statuses).exists():
+        if deployment_queryset.filter(status__in=active_statuses).exists():
             return
 
+        failure_statuses = {
+            ConnectUpdateDeployment.Status.FAILED,
+            ConnectUpdateDeployment.Status.ROLLED_BACK,
+        }
+        if deployment_queryset.filter(status__in=failure_statuses).exists():
+            self._transition_campaign(
+                campaign,
+                to_status=ConnectUpdateCampaign.Status.FAILED,
+                event_type="campaign.failed",
+                created_by=None,
+            )
+            return
+
+        deployment_device_ids = set(deployment_queryset.values_list("device_id", flat=True))
         for stage in stages:
             stage_device_ids = set(stage.device_ids)
             if stage_device_ids.issubset(deployment_device_ids):
@@ -483,7 +498,14 @@ class CampaignService:
                     for device_pk in next_ids
                 ]
             )
-            break
+            return
+
+        self._transition_campaign(
+            campaign,
+            to_status=ConnectUpdateCampaign.Status.COMPLETED,
+            event_type="campaign.completed",
+            created_by=None,
+        )
 
     def _load_rollout_stages(self, campaign: ConnectUpdateCampaign) -> list[RolloutStage]:
         """Load rollout stages from the creation event payload."""

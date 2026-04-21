@@ -87,3 +87,54 @@ class CampaignStateTransitionTests(CampaignServiceTestCaseMixin, TestCase):
 
         self.assertEqual(campaign.deployments.count(), 2)
         self.assertTrue(campaign.deployments.filter(device=self.device_b).exists())
+
+    def test_running_campaign_stops_stage_progression_after_failed_canary(self) -> None:
+        campaign = self.service.create_campaign(
+            release=self.release,
+            target_set={"device_ids": [self.device_a.device_id, self.device_b.device_id]},
+            strategy=ConnectUpdateCampaign.Strategy.CANARY,
+            canary_size=1,
+            created_by=self.user,
+        )
+        self.service.start_campaign(campaign, created_by=self.user)
+
+        first_deployment = campaign.deployments.get(device=self.device_a)
+        first_deployment.status = ConnectUpdateDeployment.Status.IN_PROGRESS
+        first_deployment.save(update_fields=["status", "updated_at"])
+        first_deployment.status = ConnectUpdateDeployment.Status.FAILED
+        with self.captureOnCommitCallbacks(execute=True):
+            first_deployment.save(update_fields=["status", "updated_at"])
+
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, ConnectUpdateCampaign.Status.FAILED)
+        self.assertEqual(campaign.deployments.count(), 1)
+        self.assertFalse(campaign.deployments.filter(device=self.device_b).exists())
+
+    def test_running_campaign_marks_complete_after_final_stage_finishes(self) -> None:
+        campaign = self.service.create_campaign(
+            release=self.release,
+            target_set={"device_ids": [self.device_a.device_id, self.device_b.device_id]},
+            strategy=ConnectUpdateCampaign.Strategy.CANARY,
+            canary_size=1,
+            created_by=self.user,
+        )
+        self.service.start_campaign(campaign, created_by=self.user)
+
+        first_deployment = campaign.deployments.get(device=self.device_a)
+        first_deployment.status = ConnectUpdateDeployment.Status.IN_PROGRESS
+        first_deployment.save(update_fields=["status", "updated_at"])
+        first_deployment.status = ConnectUpdateDeployment.Status.SUCCEEDED
+        with self.captureOnCommitCallbacks(execute=True):
+            first_deployment.save(update_fields=["status", "updated_at"])
+
+        second_deployment = campaign.deployments.get(device=self.device_b)
+        second_deployment.status = ConnectUpdateDeployment.Status.IN_PROGRESS
+        second_deployment.save(update_fields=["status", "updated_at"])
+        second_deployment.status = ConnectUpdateDeployment.Status.SUCCEEDED
+        with self.captureOnCommitCallbacks(execute=True):
+            second_deployment.save(update_fields=["status", "updated_at"])
+
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, ConnectUpdateCampaign.Status.COMPLETED)
+        self.assertTrue(campaign.completed_at)
+        self.assertTrue(campaign.events.filter(event_type="campaign.completed").exists())
