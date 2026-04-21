@@ -23,11 +23,6 @@ from apps.links.templatetags.ref_tags import build_footer_context
 from apps.modules.models import Module
 from apps.nodes.models import Node
 from apps.nodes.utils import FeatureChecker
-from apps.ocpp.consumers.constants import (
-    OCPP_VERSION_16,
-    OCPP_VERSION_201,
-    OCPP_VERSION_21,
-)
 from apps.ocpp.utils.websocket import resolve_ws_scheme
 from utils.decorators import security_group_required, staff_required
 from utils.sites import get_site
@@ -221,7 +216,6 @@ def index(request):
 
 
 def sitemap(request):
-    site = get_site(request)
     node = Node.get_local()
     role = node.role if node else None
     role_id = getattr(role, "id", "none")

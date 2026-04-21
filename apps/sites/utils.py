@@ -11,7 +11,6 @@ from django.db import DatabaseError
 from django.db.utils import OperationalError, ProgrammingError
 from django.http.request import split_domain_port
 from django.shortcuts import resolve_url
-from django.urls import path as django_path
 from django.utils.translation import get_language
 
 from apps.celery.utils import celery_feature_enabled

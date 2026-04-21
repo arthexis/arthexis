@@ -13,7 +13,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 try:
     import psutil
-except ImportError as exc:  # pragma: no cover - handled via CommandError in handle
+except ImportError:  # pragma: no cover - handled via CommandError in handle
     psutil = None  # type: ignore[assignment]
 
 

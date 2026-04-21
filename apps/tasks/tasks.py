@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -9,7 +8,6 @@ from typing import Any
 import requests
 from celery import shared_task
 from django.apps import apps as django_apps
-from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
