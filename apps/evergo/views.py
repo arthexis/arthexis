@@ -215,6 +215,121 @@ def _render_pdf_bytes(rendered_html: str) -> bytes:
     return _reports_render_pdf_bytes(rendered_html, enabled_setting_name="EVERGO_PUBLIC_HTML_TO_PDF_ENABLED")
 
 
+def _collect_customer_public_image_state(
+    customer: EvergoCustomer,
+    *,
+    image_limit: int,
+    storage_limit_bytes: int,
+) -> tuple[list[EvergoArtifact], int, bool]:
+    """Return current image artifacts, used storage bytes, and limit-state flags."""
+    artifacts = list(customer.artifacts.all())
+    image_artifacts = [artifact for artifact in artifacts if artifact.is_image]
+    current_storage_bytes = sum(artifact.file.size for artifact in image_artifacts)
+    max_images_reached = len(image_artifacts) >= image_limit
+    remaining_storage_bytes = max(0, storage_limit_bytes - current_storage_bytes)
+    return image_artifacts, remaining_storage_bytes, max_images_reached
+
+
+def _handle_public_image_upload(
+    request,
+    *,
+    customer: EvergoCustomer,
+    image_limit: int,
+    storage_limit_bytes: int,
+) -> tuple[EvergoCustomerImageUploadForm, HttpResponse | None]:
+    """Handle upload-image POST processing and return the form and optional redirect."""
+    upload_form = EvergoCustomerImageUploadForm(request.POST, request.FILES)
+    if not upload_form.is_valid():
+        return upload_form, None
+
+    uploaded_image = upload_form.cleaned_data["image"]
+    with transaction.atomic():
+        customer = EvergoCustomer.objects.select_for_update().get(pk=customer.pk)
+        locked_image_artifacts = list(
+            customer.artifacts.select_for_update().filter(
+                artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE
+            )
+        )
+        if len(locked_image_artifacts) >= image_limit:
+            upload_form.add_error(
+                "image",
+                ngettext(
+                    "You can only add up to %(count)d image.",
+                    "You can only add up to %(count)d images.",
+                    image_limit,
+                )
+                % {"count": image_limit},
+            )
+            return upload_form, None
+
+        current_storage_bytes = sum(artifact.file.size for artifact in locked_image_artifacts)
+        projected_total = current_storage_bytes + uploaded_image.size
+        if projected_total > storage_limit_bytes:
+            upload_form.add_error(
+                "image",
+                (
+                    "Image storage limit reached. "
+                    f"Allowed total: {storage_limit_bytes // (1024 * 1024)} MB."
+                ),
+            )
+            return upload_form, None
+
+        next_order = max(
+            (artifact.display_order for artifact in locked_image_artifacts),
+            default=0,
+        ) + 1
+        try:
+            artifact = EvergoArtifact.objects.create(
+                customer=customer,
+                file=uploaded_image,
+                artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
+                display_order=next_order,
+            )
+        except ValidationError as exc:
+            field_errors = (
+                list(exc.message_dict.get("file", []))
+                if hasattr(exc, "message_dict")
+                else []
+            )
+            for error in field_errors or list(exc.messages):
+                upload_form.add_error("image", error)
+            return upload_form, None
+
+        if not artifact.is_image:
+            _delete_artifact_and_blob(artifact)
+            upload_form.add_error(
+                "image",
+                "Only image files are allowed for this upload.",
+            )
+            return upload_form, None
+
+    messages.success(request, "Image added.")
+    return upload_form, redirect(customer.get_absolute_url())
+
+
+def _handle_public_image_delete(request, *, customer: EvergoCustomer) -> HttpResponse | None:
+    """Handle delete-image POST processing and return redirect when deletion succeeds."""
+    if request.POST.get("confirm_delete") != "yes":
+        messages.error(request, "Deletion cancelled because confirmation was missing.")
+        return None
+
+    artifact_id = request.POST.get("artifact_id")
+    try:
+        artifact_pk = int(str(artifact_id))
+    except (TypeError, ValueError):
+        raise Http404("Image not found.") from None
+    artifact = get_object_or_404(
+        EvergoArtifact,
+        pk=artifact_pk,
+        customer=customer,
+        artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
+    )
+    _delete_artifact_and_blob(artifact)
+    _resequence_customer_image_artifacts(customer)
+    messages.success(request, "Image deleted.")
+    return redirect(customer.get_absolute_url())
+
+
 def customer_public_detail(request, public_id) -> HttpResponse:
     """Render a shareable Evergo customer profile and handle temporary image uploads."""
     customer = get_object_or_404(
@@ -222,108 +337,41 @@ def customer_public_detail(request, public_id) -> HttpResponse:
         public_id=public_id,
     )
     _resequence_customer_image_artifacts(customer)
-    artifacts = list(customer.artifacts.all())
-    image_artifacts = [artifact for artifact in artifacts if artifact.is_image]
     image_limit = _get_evergo_public_image_limit()
     storage_limit_bytes = _get_evergo_public_image_total_storage_limit()
-    current_storage_bytes = sum(artifact.file.size for artifact in image_artifacts)
-
     upload_form = EvergoCustomerImageUploadForm()
+
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "upload-image":
-            upload_form = EvergoCustomerImageUploadForm(request.POST, request.FILES)
-            if upload_form.is_valid():
-                uploaded_image = upload_form.cleaned_data["image"]
-                with transaction.atomic():
-                    customer = EvergoCustomer.objects.select_for_update().get(pk=customer.pk)
-                    locked_image_artifacts = list(
-                        customer.artifacts.select_for_update().filter(
-                            artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE
-                        )
-                    )
-                    if len(locked_image_artifacts) >= image_limit:
-                        upload_form.add_error(
-                            "image",
-                            ngettext(
-                                "You can only add up to %(count)d image.",
-                                "You can only add up to %(count)d images.",
-                                image_limit,
-                            )
-                            % {"count": image_limit},
-                        )
-                    else:
-                        current_storage_bytes = sum(artifact.file.size for artifact in locked_image_artifacts)
-                        projected_total = current_storage_bytes + uploaded_image.size
-                        if projected_total > storage_limit_bytes:
-                            upload_form.add_error(
-                                "image",
-                                (
-                                    "Image storage limit reached. "
-                                    f"Allowed total: {storage_limit_bytes // (1024 * 1024)} MB."
-                                ),
-                            )
-                        else:
-                            next_order = max(
-                                (artifact.display_order for artifact in locked_image_artifacts),
-                                default=0,
-                            ) + 1
-                            try:
-                                artifact = EvergoArtifact.objects.create(
-                                    customer=customer,
-                                    file=uploaded_image,
-                                    artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
-                                    display_order=next_order,
-                                )
-                            except ValidationError as exc:
-                                field_errors = (
-                                    list(exc.message_dict.get("file", []))
-                                    if hasattr(exc, "message_dict")
-                                    else []
-                                )
-                                for error in field_errors or list(exc.messages):
-                                    upload_form.add_error("image", error)
-                            else:
-                                if not artifact.is_image:
-                                    _delete_artifact_and_blob(artifact)
-                                    upload_form.add_error(
-                                        "image",
-                                        "Only image files are allowed for this upload.",
-                                    )
-                                else:
-                                    messages.success(request, "Image added.")
-                                    return redirect(customer.get_absolute_url())
-                    image_artifacts = locked_image_artifacts
-                    current_storage_bytes = sum(artifact.file.size for artifact in image_artifacts)
+            upload_form, response = _handle_public_image_upload(
+                request,
+                customer=customer,
+                image_limit=image_limit,
+                storage_limit_bytes=storage_limit_bytes,
+            )
+            if response:
+                return response
         elif action == "delete-image":
-            artifact_id = request.POST.get("artifact_id")
-            if request.POST.get("confirm_delete") != "yes":
-                messages.error(request, "Deletion cancelled because confirmation was missing.")
-            else:
-                try:
-                    artifact_pk = int(str(artifact_id))
-                except (TypeError, ValueError):
-                    raise Http404("Image not found.") from None
-                artifact = get_object_or_404(
-                    EvergoArtifact,
-                    pk=artifact_pk,
-                    customer=customer,
-                    artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
-                )
-                _delete_artifact_and_blob(artifact)
-                _resequence_customer_image_artifacts(customer)
-                messages.success(request, "Image deleted.")
-                return redirect(customer.get_absolute_url())
+            response = _handle_public_image_delete(request, customer=customer)
+            if response:
+                return response
+
+    image_artifacts, remaining_storage_bytes, max_images_reached = _collect_customer_public_image_state(
+        customer,
+        image_limit=image_limit,
+        storage_limit_bytes=storage_limit_bytes,
+    )
 
     maps_context = _build_customer_maps_context(customer)
 
     context = {
         "customer": customer,
         "image_artifacts": image_artifacts,
-        "max_images_reached": len(image_artifacts) >= image_limit,
+        "max_images_reached": max_images_reached,
         "upload_form": upload_form,
         "image_limit": image_limit,
-        "remaining_storage_mb": max(0, (storage_limit_bytes - current_storage_bytes) // (1024 * 1024)),
+        "remaining_storage_mb": remaining_storage_bytes // (1024 * 1024),
         **maps_context,
     }
     return render(request, "evergo/customer_public_detail.html", context)
