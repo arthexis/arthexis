@@ -33,11 +33,19 @@
             margin-bottom: 0.7rem;
         }
 
-        .map-preview {
+        .map-preview,
+        .map-snapshot {
             width: 100%;
-            height: 320px;
             border: 0;
             border-radius: 8px;
+        }
+
+        .map-preview {
+            height: 320px;
+        }
+
+        .map-snapshot {
+            margin-top: 0.6rem;
         }
 
         .images {
@@ -70,15 +78,32 @@
             word-break: break-word;
         }
 
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            margin: 1.1rem 0;
+        }
+
         .btn {
             display: inline-block;
-            margin-top: 1.25rem;
-            margin-bottom: 1.25rem;
             padding: 0.6rem 1rem;
             background: #0b5ed7;
             color: #fff;
             text-decoration: none;
             border-radius: 6px;
+            border: 0;
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .btn-danger {
+            background: #c82333;
+        }
+
+        .messages {
+            margin: 0.8rem 0;
+            padding-left: 1.2rem;
         }
 
         @media print {
@@ -91,11 +116,6 @@
                 max-width: none;
                 margin: 0;
                 padding: 0;
-            }
-
-            .first-page {
-                break-inside: avoid;
-                page-break-inside: avoid;
             }
 
             .map-preview {
@@ -117,17 +137,22 @@
             .artifact-image {
                 max-height: 112mm;
             }
-
-            .btn {
-                margin-top: 8mm;
-            }
         }
     </style>
 </head>
 <body>
     <main>
-        <section class="first-page">
-            <h1>Evergo Customer</h1>
+        <h1>Evergo Customer</h1>
+
+        {% if messages %}
+            <ul class="messages">
+                {% for message in messages %}
+                    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        <section>
             <div class="summary">
                 <div class="summary-value">{{ customer.latest_so|default:"-" }}</div>
                 <div class="summary-value">{{ customer.name|default:"-" }}</div>
@@ -135,37 +160,52 @@
                 <div class="summary-value">{{ customer.address|default:"-" }}</div>
             </div>
 
+            <div class="actions">
+                <a class="btn" href="{% url 'evergo:customer-pdf-download' customer.public_id %}">Download PDF</a>
+            </div>
+
             {% if google_maps_url %}
                 <a class="map-link" href="{{ google_maps_url }}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>
             {% endif %}
 
             {% if google_maps_embed_url %}
-                <iframe
-                    class="map-preview"
-                    title="Customer map"
-                    src="{{ google_maps_embed_url }}"
-                    allowfullscreen
-                ></iframe>
+                <iframe class="map-preview" title="Customer map" src="{{ google_maps_embed_url }}" allowfullscreen></iframe>
+            {% endif %}
+
+            {% if google_maps_snapshot_url %}
+                <img class="map-snapshot" src="{{ google_maps_snapshot_url }}" alt="Map snapshot for {{ customer.address }}">
             {% endif %}
         </section>
 
         <section class="images">
+            <h2>Order images</h2>
+            <p>You can upload up to {{ image_limit }} images. Remaining shared storage: {{ remaining_storage_mb }} MB.</p>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="upload-image">
+                {{ upload_form.image }}
+                {% if upload_form.image.errors %}
+                    <div>{{ upload_form.image.errors }}</div>
+                {% endif %}
+                <button class="btn" type="submit" {% if max_images_reached %}disabled{% endif %}>Add image</button>
+            </form>
+
             {% for artifact in image_artifacts %}
                 <figure class="artifact-card">
                     <img class="artifact-image" src="{{ artifact.file.url }}" alt="{{ artifact.filename }}">
-                    <figcaption class="artifact-caption">{{ artifact.filename }}</figcaption>
+                    <figcaption class="artifact-caption">{{ forloop.counter }}. {{ artifact.filename }}</figcaption>
+                    <form method="post" onsubmit="return window.confirm('Delete this image?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete-image">
+                        <input type="hidden" name="artifact_id" value="{{ artifact.pk }}">
+                        <input type="hidden" name="confirm_delete" value="yes">
+                        <button class="btn btn-danger" type="submit">Delete image</button>
+                    </form>
                 </figure>
             {% empty %}
                 <p>No image artifacts attached.</p>
             {% endfor %}
         </section>
-
-        {% if pdf_artifact %}
-            <a
-                class="btn"
-                href="{% url 'evergo:customer-artifact-download' customer.pk pdf_artifact.pk %}"
-            >Download PDF</a>
-        {% endif %}
     </main>
 </body>
 </html>

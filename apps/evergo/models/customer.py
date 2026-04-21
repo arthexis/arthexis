@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from django.db import models
 from django.urls import reverse
 
@@ -9,6 +11,7 @@ from django.urls import reverse
 class EvergoCustomer(models.Model):
     """Local cache of customer info sourced from Evergo sales-order payloads."""
 
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
     user = models.ForeignKey("evergo.EvergoUser", on_delete=models.CASCADE, related_name="customers")
     remote_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
     name = models.CharField(max_length=255)
@@ -42,4 +45,4 @@ class EvergoCustomer(models.Model):
 
     def get_absolute_url(self) -> str:
         """Return the public-facing URL for this customer profile."""
-        return reverse("evergo:customer-public-detail", kwargs={"pk": self.pk})
+        return reverse("evergo:customer-public-detail", kwargs={"public_id": self.public_id})

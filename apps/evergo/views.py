@@ -2,25 +2,34 @@
 
 from __future__ import annotations
 
+import base64
+import mimetypes
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from urllib.parse import quote_plus
+from urllib.parse import urlparse
+from urllib.request import urlopen
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.sites.models import Site
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.utils import timezone
-from django.utils.translation import gettext as _
+from django.utils.text import get_valid_filename
+from django.utils.translation import gettext as _, ngettext
 
 from apps.features.utils import is_pages_chat_runtime_enabled, is_suite_feature_enabled
+from apps.reports.services import _render_pdf_bytes as _reports_render_pdf_bytes
 from apps.sites.context_processors import _build_chat_context
 
 from .exceptions import EvergoAPIError, EvergoPhaseSubmissionError
-from .forms import EvergoDashboardLookupForm, EvergoOrderTrackingForm
+from .forms import EvergoCustomerImageUploadForm, EvergoDashboardLookupForm, EvergoOrderTrackingForm
 from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoUser
 from .services import ensure_image_payload
 
@@ -37,6 +46,8 @@ DISPLAY_TEXT_FIXUPS = {
 }
 
 DATETIME_LOCAL_FORMAT = "%Y-%m-%dT%H:%M"
+EVERGO_PUBLIC_IMAGE_LIMIT = 10
+EVERGO_PUBLIC_IMAGE_TOTAL_STORAGE_LIMIT = 20 * 1024 * 1024
 
 TRACKING_PREFILL_SOURCE_KEYS = (
     "reporte_visita",
@@ -98,55 +109,318 @@ def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
     return DISPLAY_TEXT_FIXUPS.get(normalized, normalized)
 
 
-@login_required
-def customer_public_detail(request, pk: int) -> HttpResponse:
-    """Render a public Evergo customer profile and artifacts."""
-    customer_lookup = {
-        "pk": pk,
-    }
-    if not request.user.is_staff:
-        customer_lookup["user__user"] = request.user
-    customer = get_object_or_404(
-        EvergoCustomer.objects.select_related("latest_order", "user__user").prefetch_related("artifacts"),
-        **customer_lookup,
-    )
-    artifacts = list(customer.artifacts.all())
+def _get_evergo_public_image_limit() -> int:
+    """Return the configured public image limit with safe parsing."""
+    try:
+        return int(getattr(settings, "EVERGO_PUBLIC_IMAGE_LIMIT", EVERGO_PUBLIC_IMAGE_LIMIT))
+    except (TypeError, ValueError):
+        return EVERGO_PUBLIC_IMAGE_LIMIT
+
+
+def _get_evergo_public_image_total_storage_limit() -> int:
+    """Return the total image storage cap in bytes with safe parsing."""
+    try:
+        return int(
+            getattr(
+                settings,
+                "EVERGO_PUBLIC_IMAGE_TOTAL_STORAGE_LIMIT",
+                EVERGO_PUBLIC_IMAGE_TOTAL_STORAGE_LIMIT,
+            )
+        )
+    except (TypeError, ValueError):
+        return EVERGO_PUBLIC_IMAGE_TOTAL_STORAGE_LIMIT
+
+
+def _build_customer_maps_context(customer: EvergoCustomer) -> dict[str, str]:
+    """Return public map URLs for the customer location."""
     address = customer.address.strip()
-    google_maps_url = f"https://www.google.com/maps/search/?api=1&query={quote_plus(address)}" if address else ""
-    google_maps_embed_url = (
-        f"https://maps.google.com/maps?q={quote_plus(address)}&z=15&output=embed" if address else ""
+    if not address:
+        return {
+            "google_maps_url": "",
+            "google_maps_embed_url": "",
+            "google_maps_snapshot_url": "",
+        }
+    encoded_address = quote_plus(address)
+    return {
+        "google_maps_url": f"https://www.google.com/maps/search/?api=1&query={encoded_address}",
+        "google_maps_embed_url": f"https://maps.google.com/maps?q={encoded_address}&z=15&output=embed",
+        "google_maps_snapshot_url": (
+            "https://maps.googleapis.com/maps/api/staticmap"
+            f"?center={encoded_address}&zoom=15&size=1200x600&markers=color:red%7C{encoded_address}"
+        ),
+    }
+
+
+def _build_customer_private_maps_snapshot_url(customer: EvergoCustomer) -> str:
+    """Return a server-side map snapshot URL that can include an API key."""
+    snapshot_url = _build_customer_maps_context(customer)["google_maps_snapshot_url"]
+    static_map_api_key = getattr(settings, "GOOGLE_MAPS_API_KEY", "").strip()
+    if not snapshot_url or not static_map_api_key:
+        return snapshot_url
+    return f"{snapshot_url}&key={quote_plus(static_map_api_key)}"
+
+
+def _resequence_customer_image_artifacts(customer: EvergoCustomer) -> None:
+    """Ensure image artifacts have contiguous display_order values."""
+    image_artifacts = list(customer.artifacts.filter(artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE))
+    updates: list[EvergoArtifact] = []
+    for index, artifact in enumerate(image_artifacts, start=1):
+        if artifact.display_order != index:
+            artifact.display_order = index
+            updates.append(artifact)
+    if updates:
+        EvergoArtifact.objects.bulk_update(updates, ["display_order"])
+
+
+def _to_data_uri(content: bytes, *, content_type: str) -> str:
+    """Return a base64 data URI for PDF rendering."""
+    return f"data:{content_type};base64,{base64.b64encode(content).decode('ascii')}"
+
+
+def _artifact_image_data_uri(artifact: EvergoArtifact) -> str:
+    """Return a data URI for an artifact image file."""
+    guessed_type, _ = mimetypes.guess_type(artifact.file.name)
+    content_type = guessed_type or "application/octet-stream"
+    try:
+        artifact.file.open("rb")
+        try:
+            content = artifact.file.read()
+        finally:
+            artifact.file.close()
+    except (OSError, ValueError):
+        return ""
+    return _to_data_uri(content, content_type=content_type)
+
+
+def _remote_image_data_uri(url: str) -> str:
+    """Fetch remote image bytes and return a data URI, or an empty string on failure."""
+    if not url:
+        return ""
+    if urlparse(url).scheme not in {"http", "https"}:
+        return ""
+    try:
+        with urlopen(url, timeout=5) as response:
+            content = response.read()
+            content_type = response.headers.get_content_type() or "application/octet-stream"
+    except (OSError, ValueError):
+        return ""
+    return _to_data_uri(content, content_type=content_type)
+
+
+def _delete_artifact_and_blob(artifact: EvergoArtifact) -> None:
+    """Delete an artifact and its underlying storage blob."""
+    artifact.file.delete(save=False)
+    artifact.delete()
+
+
+def _render_pdf_bytes(rendered_html: str) -> bytes:
+    """Render Evergo PDFs without sharing report-toggle configuration."""
+    return _reports_render_pdf_bytes(rendered_html, enabled_setting_name="EVERGO_PUBLIC_HTML_TO_PDF_ENABLED")
+
+
+def _collect_customer_public_image_state(
+    customer: EvergoCustomer,
+    *,
+    image_limit: int,
+    storage_limit_bytes: int,
+) -> tuple[list[EvergoArtifact], int, bool]:
+    """Return current image artifacts, used storage bytes, and limit-state flags."""
+    artifacts = list(customer.artifacts.all())
+    image_artifacts = [artifact for artifact in artifacts if artifact.is_image]
+    current_storage_bytes = 0
+    for artifact in image_artifacts:
+        try:
+            current_storage_bytes += artifact.file.size
+        except (OSError, ValueError):
+            continue
+    max_images_reached = len(image_artifacts) >= image_limit
+    remaining_storage_bytes = max(0, storage_limit_bytes - current_storage_bytes)
+    return image_artifacts, remaining_storage_bytes, max_images_reached
+
+
+def _handle_public_image_upload(
+    request,
+    *,
+    customer: EvergoCustomer,
+    image_limit: int,
+    storage_limit_bytes: int,
+) -> tuple[EvergoCustomerImageUploadForm, HttpResponse | None]:
+    """Handle upload-image POST processing and return the form and optional redirect."""
+    upload_form = EvergoCustomerImageUploadForm(request.POST, request.FILES)
+    if not upload_form.is_valid():
+        return upload_form, None
+
+    uploaded_image = upload_form.cleaned_data["image"]
+    with transaction.atomic():
+        customer = EvergoCustomer.objects.select_for_update().get(pk=customer.pk)
+        locked_image_artifacts = list(
+            customer.artifacts.select_for_update().filter(
+                artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE
+            )
+        )
+        if len(locked_image_artifacts) >= image_limit:
+            upload_form.add_error(
+                "image",
+                ngettext(
+                    "You can only add up to %(count)d image.",
+                    "You can only add up to %(count)d images.",
+                    image_limit,
+                )
+                % {"count": image_limit},
+            )
+            return upload_form, None
+
+        current_storage_bytes = sum(artifact.file.size for artifact in locked_image_artifacts)
+        projected_total = current_storage_bytes + uploaded_image.size
+        if projected_total > storage_limit_bytes:
+            upload_form.add_error(
+                "image",
+                (
+                    "Image storage limit reached. "
+                    f"Allowed total: {storage_limit_bytes // (1024 * 1024)} MB."
+                ),
+            )
+            return upload_form, None
+
+        next_order = max(
+            (artifact.display_order for artifact in locked_image_artifacts),
+            default=0,
+        ) + 1
+        try:
+            artifact = EvergoArtifact.objects.create(
+                customer=customer,
+                file=uploaded_image,
+                artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
+                display_order=next_order,
+            )
+        except ValidationError as exc:
+            field_errors = (
+                list(exc.message_dict.get("file", []))
+                if hasattr(exc, "message_dict")
+                else []
+            )
+            for error in field_errors or list(exc.messages):
+                upload_form.add_error("image", error)
+            return upload_form, None
+
+        if not artifact.is_image:
+            _delete_artifact_and_blob(artifact)
+            upload_form.add_error(
+                "image",
+                "Only image files are allowed for this upload.",
+            )
+            return upload_form, None
+
+    messages.success(request, "Image added.")
+    return upload_form, redirect(customer.get_absolute_url())
+
+
+def _handle_public_image_delete(request, *, customer: EvergoCustomer) -> HttpResponse | None:
+    """Handle delete-image POST processing and return redirect when deletion succeeds."""
+    if request.POST.get("confirm_delete") != "yes":
+        messages.error(request, "Deletion cancelled because confirmation was missing.")
+        return None
+
+    artifact_id = request.POST.get("artifact_id")
+    try:
+        artifact_pk = int(str(artifact_id))
+    except (TypeError, ValueError):
+        raise Http404("Image not found.") from None
+    artifact = get_object_or_404(
+        EvergoArtifact,
+        pk=artifact_pk,
+        customer=customer,
+        artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
     )
-    pdf_artifact = next((artifact for artifact in artifacts if artifact.is_pdf), None)
+    _delete_artifact_and_blob(artifact)
+    _resequence_customer_image_artifacts(customer)
+    messages.success(request, "Image deleted.")
+    return redirect(customer.get_absolute_url())
+
+
+def customer_public_detail(request, public_id) -> HttpResponse:
+    """Render a shareable Evergo customer profile and handle temporary image uploads."""
+    customer = get_object_or_404(
+        EvergoCustomer.objects.select_related("latest_order", "user__user"),
+        public_id=public_id,
+    )
+    _resequence_customer_image_artifacts(customer)
+    image_limit = _get_evergo_public_image_limit()
+    storage_limit_bytes = _get_evergo_public_image_total_storage_limit()
+    upload_form = EvergoCustomerImageUploadForm()
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "upload-image":
+            upload_form, response = _handle_public_image_upload(
+                request,
+                customer=customer,
+                image_limit=image_limit,
+                storage_limit_bytes=storage_limit_bytes,
+            )
+            if response:
+                return response
+        elif action == "delete-image":
+            response = _handle_public_image_delete(request, customer=customer)
+            if response:
+                return response
+
+    image_artifacts, remaining_storage_bytes, max_images_reached = _collect_customer_public_image_state(
+        customer,
+        image_limit=image_limit,
+        storage_limit_bytes=storage_limit_bytes,
+    )
+
+    maps_context = _build_customer_maps_context(customer)
 
     context = {
         "customer": customer,
-        "google_maps_url": google_maps_url,
-        "google_maps_embed_url": google_maps_embed_url,
-        "image_artifacts": [artifact for artifact in artifacts if artifact.is_image],
-        "pdf_artifact": pdf_artifact,
+        "image_artifacts": image_artifacts,
+        "max_images_reached": max_images_reached,
+        "upload_form": upload_form,
+        "image_limit": image_limit,
+        "remaining_storage_mb": remaining_storage_bytes // (1024 * 1024),
+        **maps_context,
     }
     return render(request, "evergo/customer_public_detail.html", context)
 
 
-@login_required
-def customer_artifact_download(request, pk: int, artifact_id: int) -> HttpResponse:
-    """Download a PDF artifact attached to a customer profile."""
-    artifact_lookup = {
-        "pk": artifact_id,
-        "customer_id": pk,
-    }
-    if not request.user.is_staff:
-        artifact_lookup["customer__user__user"] = request.user
-    artifact = get_object_or_404(
-        EvergoArtifact.objects.select_related("customer__user__user"),
-        **artifact_lookup,
+def customer_pdf_download(request, public_id) -> HttpResponse:
+    """Generate and download a PDF from the public customer page content."""
+    customer = get_object_or_404(
+        EvergoCustomer.objects.select_related("latest_order"),
+        public_id=public_id,
     )
-    if not artifact.is_pdf:
-        raise Http404("Only PDF artifacts can be downloaded from this endpoint.")
-
-    payload = artifact.file.read()
+    _resequence_customer_image_artifacts(customer)
+    image_artifacts = list(customer.artifacts.filter(artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE))
+    maps_context = _build_customer_maps_context(customer)
+    map_snapshot_data_uri = _remote_image_data_uri(_build_customer_private_maps_snapshot_url(customer))
+    pdf_image_artifacts = []
+    for artifact in image_artifacts:
+        data_uri = _artifact_image_data_uri(artifact)
+        if not data_uri:
+            continue
+        pdf_image_artifacts.append(
+            {
+                "name": artifact.filename,
+                "url": data_uri,
+            }
+        )
+    html = render_to_string(
+        "evergo/customer_public_pdf.html",
+        {
+            "customer": customer,
+            "image_artifacts": pdf_image_artifacts,
+            "google_maps_snapshot_data_uri": map_snapshot_data_uri,
+            **maps_context,
+        },
+    )
+    payload = _render_pdf_bytes(html)
+    if not payload:
+        raise Http404("PDF renderer is unavailable.")
+    safe_so = get_valid_filename(customer.latest_so or str(customer.public_id)) or str(customer.public_id)
     response = HttpResponse(payload, content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="{artifact.filename}"'
+    response["Content-Disposition"] = f'attachment; filename="evergo-{safe_so}.pdf"'
     return response
 
 
