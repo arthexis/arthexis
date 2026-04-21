@@ -10,13 +10,13 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name="documentationtranslation",
-            name="documentation",
-        ),
         migrations.AlterUniqueTogether(
             name="documentationtranslation",
             unique_together=None,
+        ),
+        migrations.RemoveField(
+            model_name="documentationtranslation",
+            name="documentation",
         ),
         migrations.RemoveField(
             model_name="documentationtranslation",

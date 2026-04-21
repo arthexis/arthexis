@@ -9,13 +9,6 @@ def default_report_language() -> str:
 
 
 def normalize_report_language(language: str | None) -> str:
-    if not language:
-        return _DEFAULT_REPORT_LANGUAGE
-    candidate = str(language).strip().lower().replace("_", "-")
-    if candidate == _DEFAULT_REPORT_LANGUAGE or candidate.startswith(
-        f"{_DEFAULT_REPORT_LANGUAGE}-"
-    ):
-        return _DEFAULT_REPORT_LANGUAGE
     return _DEFAULT_REPORT_LANGUAGE
 
 
