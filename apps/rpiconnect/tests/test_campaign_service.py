@@ -100,6 +100,15 @@ class CampaignServiceTests(CampaignServiceTestCaseMixin, TestCase):
                 created_by=self.user,
             )
 
+    def test_rejects_non_list_target_selectors(self) -> None:
+        with self.assertRaisesMessage(CampaignServiceError, "target_set.device_ids must be a list."):
+            self.service.create_campaign(
+                release=self.release,
+                target_set={"device_ids": self.device_a.device_id},
+                strategy=ConnectUpdateCampaign.Strategy.ALL_AT_ONCE,
+                created_by=self.user,
+            )
+
     def test_rejects_incompatible_device_target(self) -> None:
         strict_release = ConnectImageRelease.objects.create(
             name="strict-release",
