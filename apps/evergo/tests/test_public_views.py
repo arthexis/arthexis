@@ -8,7 +8,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
-from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoUser
+from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoCustomerShareLink, EvergoUser
 
 
 def _create_customer(*, username: str = "evergo-owner") -> EvergoCustomer:
@@ -116,20 +116,36 @@ def test_to_tsv_sanitizes_formula_and_line_break_characters():
     assert "Monterrey NL" in tsv
 
 
+def _login_customer_owner(client, customer: EvergoCustomer):
+    client.force_login(customer.user.user)
+
+
 @pytest.mark.django_db
-def test_customer_public_detail_allows_anonymous_access(client):
+def test_customer_public_detail_requires_login(client):
     customer = _create_customer()
 
     response = client.get(reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id}))
 
-    assert response.status_code == 200
-    assert "Download PDF" in response.content.decode()
+    assert response.status_code == 302
+    assert "login" in response["Location"]
+
+
+@pytest.mark.django_db
+def test_customer_public_detail_rejects_logged_in_user_without_access(client):
+    customer = _create_customer(username="owner-private-access")
+    outsider = get_user_model().objects.create_user(username="outsider", email="outsider@example.com")
+    client.force_login(outsider)
+
+    response = client.get(reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id}))
+
+    assert response.status_code == 404
 
 
 @pytest.mark.django_db
 def test_customer_public_detail_does_not_expose_google_maps_api_key(client, settings):
     settings.GOOGLE_MAPS_API_KEY = "super-secret-key"
     customer = _create_customer(username="owner-map-key")
+    _login_customer_owner(client, customer)
 
     response = client.get(reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id}))
 
@@ -143,6 +159,7 @@ def test_customer_public_detail_does_not_expose_google_maps_api_key(client, sett
 @pytest.mark.django_db
 def test_customer_public_detail_uploads_and_deletes_image(client):
     customer = _create_customer(username="owner-with-image")
+    _login_customer_owner(client, customer)
     detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
 
     upload_response = client.post(
@@ -174,6 +191,7 @@ def test_customer_public_detail_uploads_and_deletes_image(client):
 @pytest.mark.django_db
 def test_customer_public_detail_delete_image_with_invalid_artifact_id_returns_404(client):
     customer = _create_customer(username="owner-invalid-artifact-id")
+    _login_customer_owner(client, customer)
     detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
 
     response = client.post(
@@ -187,6 +205,7 @@ def test_customer_public_detail_delete_image_with_invalid_artifact_id_returns_40
 @pytest.mark.django_db
 def test_customer_public_detail_delete_image_with_unicode_numeric_artifact_id_returns_404(client):
     customer = _create_customer(username="owner-invalid-unicode-artifact-id")
+    _login_customer_owner(client, customer)
     detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
 
     response = client.post(
@@ -202,6 +221,7 @@ def test_customer_public_detail_enforces_image_and_storage_limits(client, settin
     settings.EVERGO_PUBLIC_IMAGE_LIMIT = 1
     settings.EVERGO_PUBLIC_IMAGE_TOTAL_STORAGE_LIMIT = 50
     customer = _create_customer(username="owner-limits")
+    _login_customer_owner(client, customer)
     detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
 
     gif_payload = (
@@ -231,6 +251,7 @@ def test_customer_public_detail_enforces_image_and_storage_limits(client, settin
 @pytest.mark.django_db
 def test_customer_public_detail_ignores_unreadable_blob_size(client, monkeypatch):
     customer = _create_customer(username="owner-unreadable-size")
+    _login_customer_owner(client, customer)
     artifact = EvergoArtifact.objects.create(
         customer=customer,
         file=SimpleUploadedFile("one.jpg", b"12345", content_type="image/jpeg"),
@@ -254,6 +275,7 @@ def test_customer_public_detail_ignores_unreadable_blob_size(client, monkeypatch
 @pytest.mark.django_db
 def test_customer_public_detail_handles_artifact_model_validation_error(client, monkeypatch):
     customer = _create_customer(username="owner-validation-error")
+    _login_customer_owner(client, customer)
     detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
 
     def _raise_validation_error(**_kwargs):
@@ -281,6 +303,7 @@ def test_customer_public_detail_handles_artifact_model_validation_error(client, 
 @pytest.mark.django_db
 def test_customer_public_detail_rejects_upload_that_resolves_to_non_image_artifact_type(client):
     customer = _create_customer(username="owner-non-image-artifact")
+    _login_customer_owner(client, customer)
     detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
 
     response = client.post(
@@ -303,6 +326,7 @@ def test_customer_public_detail_rejects_upload_that_resolves_to_non_image_artifa
 @pytest.mark.django_db
 def test_customer_pdf_download_generates_pdf_without_deleting_uploaded_images(client, monkeypatch):
     customer = _create_customer(username="owner-pdf")
+    _login_customer_owner(client, customer)
     artifact = EvergoArtifact.objects.create(
         customer=customer,
         file=SimpleUploadedFile("one.jpg", b"12345", content_type="image/jpeg"),
@@ -325,6 +349,7 @@ def test_customer_pdf_download_generates_pdf_without_deleting_uploaded_images(cl
 @pytest.mark.django_db
 def test_customer_pdf_download_passes_data_uris_to_template(client, monkeypatch):
     customer = _create_customer(username="owner-pdf-data-uri")
+    _login_customer_owner(client, customer)
     EvergoArtifact.objects.create(
         customer=customer,
         file=SimpleUploadedFile("one.jpg", b"12345", content_type="image/jpeg"),
@@ -351,6 +376,7 @@ def test_customer_pdf_download_passes_data_uris_to_template(client, monkeypatch)
 @pytest.mark.django_db
 def test_customer_pdf_download_sanitizes_content_disposition_filename(client, monkeypatch):
     customer = _create_customer(username="owner-pdf-filename")
+    _login_customer_owner(client, customer)
     customer.latest_so = "SO\r\nbad"
     customer.save(update_fields=["latest_so"])
     monkeypatch.setattr("apps.evergo.views._remote_image_data_uri", lambda _: "")
@@ -367,6 +393,7 @@ def test_customer_pdf_download_not_blocked_by_reports_pdf_toggle(client, monkeyp
     settings.REPORTS_HTML_TO_PDF_ENABLED = False
     settings.EVERGO_PUBLIC_HTML_TO_PDF_ENABLED = True
     customer = _create_customer(username="owner-pdf-toggle")
+    _login_customer_owner(client, customer)
     captured = {}
 
     def _fake_reports_render_pdf_bytes(html, *, enabled_setting_name="REPORTS_HTML_TO_PDF_ENABLED"):
@@ -400,3 +427,41 @@ def test_artifact_image_data_uri_returns_empty_string_for_unreadable_blob(monkey
     from apps.evergo.views import _artifact_image_data_uri
 
     assert _artifact_image_data_uri(artifact) == ""
+
+
+@pytest.mark.django_db
+def test_customer_shared_detail_allows_access_without_login(client):
+    customer = _create_customer(username="owner-shared")
+    share_link = EvergoCustomerShareLink.objects.create(customer=customer, created_by=customer.user.user)
+
+    response = client.get(reverse("evergo:customer-shared-detail", kwargs={"share_id": share_link.share_id}))
+
+    assert response.status_code == 200
+    assert "Download PDF" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_customer_shared_detail_rejects_revoked_link(client):
+    customer = _create_customer(username="owner-shared-revoked")
+    share_link = EvergoCustomerShareLink.objects.create(customer=customer, created_by=customer.user.user)
+    share_link.revoke(actor=customer.user.user)
+
+    response = client.get(reverse("evergo:customer-shared-detail", kwargs={"share_id": share_link.share_id}))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_customer_shared_detail_uses_creator_permissions(client):
+    customer = _create_customer(username="owner-shared-perms")
+    creator = customer.user.user
+    share_link = EvergoCustomerShareLink.objects.create(customer=customer, created_by=creator)
+    customer.user.user = get_user_model().objects.create_user(
+        username="other-owner",
+        email="other-owner@example.com",
+    )
+    customer.user.save(update_fields=["user"])
+
+    response = client.get(reverse("evergo:customer-shared-detail", kwargs={"share_id": share_link.share_id}))
+
+    assert response.status_code == 404

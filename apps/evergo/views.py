@@ -20,6 +20,7 @@ from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import get_valid_filename
 from django.utils.translation import gettext as _, ngettext
@@ -30,7 +31,7 @@ from apps.sites.context_processors import _build_chat_context
 
 from .exceptions import EvergoAPIError, EvergoPhaseSubmissionError
 from .forms import EvergoCustomerImageUploadForm, EvergoDashboardLookupForm, EvergoOrderTrackingForm
-from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoUser
+from .models import EvergoArtifact, EvergoCustomer, EvergoCustomerShareLink, EvergoOrder, EvergoUser
 from .services import ensure_image_payload
 
 
@@ -338,12 +339,39 @@ def _handle_public_image_delete(request, *, customer: EvergoCustomer) -> HttpRes
     return redirect(customer.get_absolute_url())
 
 
-def customer_public_detail(request, public_id) -> HttpResponse:
-    """Render a shareable Evergo customer profile and handle temporary image uploads."""
+def _can_user_access_customer(*, user, customer: EvergoCustomer) -> bool:
+    """Return whether a user can access the customer through authenticated routes."""
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if user.is_superuser or user.is_staff:
+        return True
+    return customer.user.user_id == user.pk
+
+
+def _get_customer_for_authenticated_request(*, request, public_id) -> EvergoCustomer:
+    """Resolve a customer by public UUID while enforcing owner/staff scoping."""
     customer = get_object_or_404(
         EvergoCustomer.objects.select_related("latest_order", "user__user"),
         public_id=public_id,
     )
+    if not _can_user_access_customer(user=request.user, customer=customer):
+        raise Http404("Customer not found.")
+    return customer
+
+
+def _get_customer_for_share_request(*, share_id) -> EvergoCustomer:
+    """Resolve a customer through an active share link bound to creator permissions."""
+    share_link = get_object_or_404(
+        EvergoCustomerShareLink.objects.select_related("customer__latest_order", "customer__user__user", "created_by"),
+        share_id=share_id,
+    )
+    if not share_link.is_active or not _can_user_access_customer(user=share_link.created_by, customer=share_link.customer):
+        raise Http404("Shared customer page not found.")
+    return share_link.customer
+
+
+def _render_customer_detail(request, *, customer: EvergoCustomer, pdf_download_url: str) -> HttpResponse:
+    """Render customer detail page and process image upload/delete actions."""
     _resequence_customer_image_artifacts(customer)
     image_limit = _get_evergo_public_image_limit()
     storage_limit_bytes = _get_evergo_public_image_total_storage_limit()
@@ -379,18 +407,15 @@ def customer_public_detail(request, public_id) -> HttpResponse:
         "max_images_reached": max_images_reached,
         "upload_form": upload_form,
         "image_limit": image_limit,
+        "pdf_download_url": pdf_download_url,
         "remaining_storage_mb": remaining_storage_bytes // (1024 * 1024),
         **maps_context,
     }
     return render(request, "evergo/customer_public_detail.html", context)
 
 
-def customer_pdf_download(request, public_id) -> HttpResponse:
-    """Generate and download a PDF from the public customer page content."""
-    customer = get_object_or_404(
-        EvergoCustomer.objects.select_related("latest_order"),
-        public_id=public_id,
-    )
+def _render_customer_pdf_download(*, customer: EvergoCustomer) -> HttpResponse:
+    """Generate a customer PDF response."""
     _resequence_customer_image_artifacts(customer)
     image_artifacts = list(customer.artifacts.filter(artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE))
     maps_context = _build_customer_maps_context(customer)
@@ -422,6 +447,43 @@ def customer_pdf_download(request, public_id) -> HttpResponse:
     response = HttpResponse(payload, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="evergo-{safe_so}.pdf"'
     return response
+
+
+@login_required
+def customer_public_detail(request, public_id) -> HttpResponse:
+    """Render customer profile through authenticated UUID route."""
+    customer = _get_customer_for_authenticated_request(request=request, public_id=public_id)
+    return _render_customer_detail(
+        request,
+        customer=customer,
+        pdf_download_url=reverse("evergo:customer-pdf-download", kwargs={"public_id": customer.public_id}),
+    )
+
+
+@login_required
+def customer_pdf_download(request, public_id) -> HttpResponse:
+    """Generate and download a PDF for authenticated UUID route."""
+    customer = _get_customer_for_authenticated_request(
+        request=request,
+        public_id=public_id,
+    )
+    return _render_customer_pdf_download(customer=customer)
+
+
+def customer_shared_detail(request, share_id) -> HttpResponse:
+    """Render customer profile through a revocable share token."""
+    customer = _get_customer_for_share_request(share_id=share_id)
+    return _render_customer_detail(
+        request,
+        customer=customer,
+        pdf_download_url=reverse("evergo:customer-shared-pdf-download", kwargs={"share_id": share_id}),
+    )
+
+
+def customer_shared_pdf_download(request, share_id) -> HttpResponse:
+    """Generate and download a PDF for a share-token route."""
+    customer = _get_customer_for_share_request(share_id=share_id)
+    return _render_customer_pdf_download(customer=customer)
 
 
 def my_evergo_dashboard(request, token) -> HttpResponse:

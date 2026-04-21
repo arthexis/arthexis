@@ -2,6 +2,7 @@
 
 from .artifact import EvergoArtifact
 from .customer import EvergoCustomer
+from .customer_share_link import EvergoCustomerShareLink
 from .order import EvergoOrder, EvergoOrderFieldValue
 from .parsing import (
     first_dict,
@@ -17,6 +18,7 @@ from .user import EvergoLoginResult, EvergoUser
 __all__ = [
     "EvergoArtifact",
     "EvergoCustomer",
+    "EvergoCustomerShareLink",
     "EvergoLoginResult",
     "EvergoOrder",
     "EvergoOrderFieldValue",
