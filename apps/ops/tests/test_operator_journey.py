@@ -461,6 +461,19 @@ class OperatorJourneyViewTests(TestCase):
         self.assertTrue(form.is_valid())
         self.assertEqual(form.cleaned_data["token"], token.__dict__.get("token"))
 
+    def test_setup_github_token_form_rejects_tokens_longer_than_model_limit(self):
+        form = OperatorJourneyGitHubAccessForm(
+            data={
+                "github_username": "arthexis",
+                "token": "t" * 256,
+                "token_label": "Too long token",
+            },
+            user=self.user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("token", form.errors)
+
     def test_setup_github_token_save_requires_githubtoken_permissions(self):
         limited_user = get_user_model().objects.create_user(
             username="ops-journey-limited",

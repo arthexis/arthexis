@@ -212,6 +212,7 @@ class OperatorJourneyGitHubAccessForm(forms.Form):
         label="GitHub username",
     )
     token = forms.CharField(
+        max_length=255,
         required=False,
         widget=forms.PasswordInput(),
         help_text="Personal access token used for repository, release, and issue tasks.",
