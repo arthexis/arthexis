@@ -60,7 +60,11 @@ def test_get_sibling_ipc_status_reports_rejected_permissions(tmp_path):
     socket_path.parent.mkdir(parents=True)
 
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    server.bind(str(socket_path))
+    try:
+        server.bind(str(socket_path))
+    except PermissionError as exc:
+        server.close()
+        pytest.skip(f"UNIX socket bind is not permitted in this environment: {exc}")
     try:
         socket_path.chmod(0o666)
         node = Node(

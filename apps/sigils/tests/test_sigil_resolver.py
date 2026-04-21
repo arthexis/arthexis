@@ -302,23 +302,31 @@ def test_resolve_sigils_table_driven_manager_method_dispatch(
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ("token", "expected"),
+    ("token", "baseline_token", "expected"),
     [
-        ("[USR=:count]", "2"),
-        ("[USR=id:total]", lambda baseline, users: str(baseline + sum(users))),
+        (
+            "[USR=:count]",
+            "[USR=:count]",
+            lambda baseline, users: str(baseline + len(users)),
+        ),
+        (
+            "[USR=id:total]",
+            "[USR=id:total]",
+            lambda baseline, users: str(baseline + sum(users)),
+        ),
     ],
 )
-def test_resolve_sigils_table_driven_aggregate_requests(user_root, token, expected):
+def test_resolve_sigils_table_driven_aggregate_requests(
+    user_root, token, baseline_token, expected
+):
     user_model = get_user_model()
-    baseline_total = int(sigil_resolver.resolve_sigils("[USR=id:total]") or "0")
+    baseline_value = int(sigil_resolver.resolve_sigils(baseline_token) or "0")
     first_user = user_model.objects.create(username="agg-alpha")
     second_user = user_model.objects.create(username="agg-bravo")
     user_ids = (first_user.id, second_user.id)
 
     resolved = sigil_resolver.resolve_sigils(token)
-    expected_value = (
-        expected if isinstance(expected, str) else expected(baseline_total, user_ids)
-    )
+    expected_value = expected(baseline_value, user_ids)
     assert resolved == expected_value
 
 @pytest.mark.django_db
