@@ -18,6 +18,8 @@ class MediaUploadAdminFormMixin:
     def setup_bucket_aware_querysets(self) -> None:
         for binding in self.media_upload_bindings.values():
             media_field_name = binding["media_field"]
+            if media_field_name not in self.fields:
+                continue
             bucket = self.get_media_bucket(binding["bucket_provider"])
             self.fields[media_field_name].queryset = MediaFile.objects.filter(bucket=bucket)
 
@@ -53,6 +55,8 @@ class MediaUploadAdminFormMixin:
             upload = self.cleaned_data.get(upload_field_name)
             if not upload:
                 continue
+            if hasattr(upload, "seek"):
+                upload.seek(0)
             bucket = self.get_media_bucket(binding["bucket_provider"])
             media_file = create_media_file(bucket=bucket, uploaded_file=upload)
             setattr(instance, binding["media_field"], media_file)

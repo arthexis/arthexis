@@ -2,7 +2,7 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from apps.credentials.forms import SSHAccountAdminForm
-from apps.credentials.models import get_ssh_key_bucket
+from apps.credentials.models import SSHAccount, get_ssh_key_bucket
 from apps.media.models import MediaFile
 from apps.nodes.models import Node
 
@@ -45,3 +45,18 @@ def test_ssh_account_form_upload_creates_media_file():
     assert instance.private_key_media is not None
     assert instance.private_key_media.original_name == "id_upload"
 
+
+@pytest.mark.django_db
+def test_ssh_account_form_setup_bucket_querysets_allows_excluded_media_fields():
+    class SSHAccountWithoutMediaFieldsForm(SSHAccountAdminForm):
+        class Meta(SSHAccountAdminForm.Meta):
+            model = SSHAccount
+            exclude = ("private_key_media", "public_key_media")
+
+    node = Node.objects.create(hostname="ssh-form-excluded-fields")
+    form = SSHAccountWithoutMediaFieldsForm(
+        data={"node": node.pk, "username": "root", "password": "secret"}
+    )
+
+    assert "private_key_media" not in form.fields
+    assert "public_key_media" not in form.fields

@@ -5,6 +5,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 
 from apps.cards.forms import CardFaceAdminForm
 from apps.cards.models import CardFace, get_cardface_bucket
+from apps.media import forms_mixins
 from apps.media.models import MediaFile
 
 
@@ -58,3 +59,24 @@ def test_cardface_form_upload_creates_media_file():
     instance = form.save(commit=False)
     assert instance.background_media is not None
     assert instance.background_media.original_name == "fresh.png"
+
+
+@pytest.mark.django_db
+def test_cardface_form_upload_rewinds_stream_before_media_persist(monkeypatch):
+    observed_positions = []
+    original_create = forms_mixins.create_media_file
+
+    def observing_create_media_file(*, bucket, uploaded_file):
+        observed_positions.append(uploaded_file.tell())
+        return original_create(bucket=bucket, uploaded_file=uploaded_file)
+
+    monkeypatch.setattr(forms_mixins, "create_media_file", observing_create_media_file)
+
+    form = CardFaceAdminForm(
+        data=_cardface_data(name="Uploaded media rewind"),
+        files={"background_upload": _image_file(name="rewind.png")},
+    )
+
+    assert form.is_valid()
+    form.save(commit=False)
+    assert observed_positions == [0]
