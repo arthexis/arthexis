@@ -7,6 +7,7 @@ import pytest
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.forms import ModelForm
 
 from apps.chats.models import ChatAvatar
 from apps.core.admin.mixins import OwnableAdminForm, OwnableAdminMixin
@@ -111,3 +112,47 @@ def test_ownable_admin_form_supports_exactly_one_owner_configuration():
     )
     assert not multiple_owner_form.is_valid()
     assert "Select exactly one owner." in multiple_owner_form.errors["user"][0]
+
+
+@pytest.mark.django_db
+def test_ownable_admin_form_uses_non_field_error_when_owner_fields_absent():
+    class NoOwnerFieldsForm(OwnableAdminForm):
+        owner_field_names = ("missing_owner",)
+
+        class Meta:
+            model = EvergoUser
+            fields = ("evergo_email", "evergo_password")
+
+    form = NoOwnerFieldsForm(
+        data={
+            "evergo_email": "contractor@example.com",
+            "evergo_password": "top-secret",  # noqa: S106
+        },
+        instance=EvergoUser(),
+    )
+
+    assert not form.is_valid()
+    assert "__all__" in form.errors
+    assert form.errors["__all__"][0]
+    assert "user" not in form.errors
+    assert "group" not in form.errors
+
+
+@pytest.mark.django_db
+def test_ownable_admin_form_handles_parent_clean_returning_none(monkeypatch):
+    class DefensiveForm(OwnableAdminForm):
+        class Meta:
+            model = EvergoUser
+            fields = "__all__"
+
+    monkeypatch.setattr(ModelForm, "clean", lambda _self: None)
+
+    form = DefensiveForm(
+        data={
+            "evergo_email": "contractor@example.com",
+            "evergo_password": "top-secret",  # noqa: S106
+        },
+        instance=EvergoUser(),
+    )
+
+    assert form.clean() is None

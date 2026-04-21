@@ -5,6 +5,7 @@ import re
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import OwnableAdminForm
 
@@ -170,8 +171,8 @@ class EvergoUserAdminForm(OwnableAdminForm):
     """Allow user/group/avatar ownership while defaulting new records to the acting user."""
 
     owner_field_names = ("user", "group", "avatar")
-    owner_conflict_message = "Choose exactly one owner: user, security group, or avatar."
-    owner_required_message = "Choose a user, security group, or avatar owner for this contractor."
+    owner_conflict_message = _("Choose exactly one owner: user, security group, or avatar.")
+    owner_required_message = _("Choose a user, security group, or avatar owner for this contractor.")
 
     class Meta:
         model = EvergoUser

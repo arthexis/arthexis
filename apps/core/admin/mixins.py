@@ -57,13 +57,18 @@ class OwnableAdminForm(forms.ModelForm):
         return getattr(self._meta.model, "owner_required", self.owner_required)
 
     def _owner_validation_message(self, message, owner_field_names):
+        if not owner_field_names:
+            return message
         return {field_name: message for field_name in owner_field_names}
 
     def normalize_owner_data(self, cleaned):
         return cleaned
 
     def clean(self):
-        cleaned = self.normalize_owner_data(super().clean())
+        cleaned = super().clean()
+        if cleaned is None:
+            return None
+        cleaned = self.normalize_owner_data(cleaned)
         owner_field_names = self._configured_owner_field_names()
         owners = [cleaned.get(field_name) for field_name in owner_field_names]
         owner_count = sum(owner is not None for owner in owners)
