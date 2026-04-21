@@ -117,6 +117,8 @@ class ConnectUpdateCampaign(models.Model):
 
         DRAFT = "draft", "Draft"
         RUNNING = "running", "Running"
+        PAUSED = "paused", "Paused"
+        STOPPED = "stopped", "Stopped"
         COMPLETED = "completed", "Completed"
         FAILED = "failed", "Failed"
         CANCELLED = "cancelled", "Cancelled"
@@ -235,3 +237,40 @@ class ConnectUpdateDeployment(models.Model):
 
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class ConnectCampaignEvent(models.Model):
+    """Durable event log for campaign and deployment state transitions."""
+
+    campaign = models.ForeignKey(
+        ConnectUpdateCampaign,
+        on_delete=models.CASCADE,
+        related_name="events",
+    )
+    deployment = models.ForeignKey(
+        ConnectUpdateDeployment,
+        on_delete=models.CASCADE,
+        related_name="events",
+        null=True,
+        blank=True,
+    )
+    event_type = models.CharField(max_length=80)
+    from_status = models.CharField(max_length=20, blank=True)
+    to_status = models.CharField(max_length=20, blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="connect_campaign_events",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("created_at",)
+
+    def __str__(self) -> str:
+        """Return a readable event label."""
+
+        return f"Campaign {self.campaign_id}: {self.event_type}"
