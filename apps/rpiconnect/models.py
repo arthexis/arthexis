@@ -77,7 +77,7 @@ class ConnectDevice(models.Model):
 class ConnectImageRelease(models.Model):
     """Tracks release artifacts that can be deployed to devices."""
 
-    name = models.CharField(max_length=120, unique=True)
+    name = models.CharField(max_length=120)
     version = models.CharField(max_length=40)
     build_metadata = models.JSONField(default=dict, blank=True)
     artifact_url = models.URLField(max_length=500)
@@ -201,7 +201,7 @@ class ConnectUpdateDeployment(models.Model):
     def __str__(self) -> str:
         """Return a readable deployment label."""
 
-        return f"Campaign {self.campaign_id} / {self.device_id}"
+        return f"Campaign {self.campaign_id} / {self.device.device_id}"
 
     def clean(self) -> None:
         """Enforce monotonic deployment status transitions."""

@@ -1,5 +1,6 @@
 """Admin registrations for Raspberry Pi Connect integration models."""
 
+from django import forms
 from django.contrib import admin
 
 from .models import (
@@ -11,11 +12,22 @@ from .models import (
 )
 
 
+class ConnectAccountAdminForm(forms.ModelForm):
+    class Meta:
+        model = ConnectAccount
+        fields = "__all__"
+        widgets = {
+            "token_reference": forms.PasswordInput(render_value=True),
+            "refresh_token_reference": forms.PasswordInput(render_value=True),
+        }
+
+
 @admin.register(ConnectAccount)
 class ConnectAccountAdmin(admin.ModelAdmin):
-    list_display = ("name", "account_type", "organization_name", "owner_email", "token_reference")
+    form = ConnectAccountAdminForm
+    list_display = ("name", "account_type", "organization_name", "owner_email")
     list_filter = ("account_type", "created_at")
-    search_fields = ("name", "organization_name", "owner_name", "owner_email", "token_reference")
+    search_fields = ("name", "organization_name", "owner_name", "owner_email")
 
 
 @admin.register(ConnectDevice)

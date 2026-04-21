@@ -66,3 +66,22 @@ class ConnectUpdateDeploymentModelTests(TestCase):
 
         with self.assertRaises(ValidationError):
             deployment.save()
+
+
+class ConnectImageReleaseModelTests(TestCase):
+    def test_allows_multiple_versions_for_same_release_name(self) -> None:
+        ConnectImageRelease.objects.create(
+            name="edge-release",
+            version="2026.04.1",
+            artifact_url="https://example.com/artifacts/edge-release-1.img.xz",
+            checksum="abc123",
+        )
+
+        second_release = ConnectImageRelease.objects.create(
+            name="edge-release",
+            version="2026.04.2",
+            artifact_url="https://example.com/artifacts/edge-release-2.img.xz",
+            checksum="def456",
+        )
+
+        self.assertEqual(second_release.version, "2026.04.2")
