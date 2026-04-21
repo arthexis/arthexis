@@ -468,6 +468,19 @@ def test_customer_shared_detail_uses_creator_permissions(client):
 
 
 @pytest.mark.django_db
+def test_customer_shared_detail_rejects_inactive_creator(client):
+    customer = _create_customer(username="owner-shared-inactive-creator")
+    creator = customer.user.user
+    share_link = EvergoCustomerShareLink.objects.create(customer=customer, created_by=creator)
+    creator.is_active = False
+    creator.save(update_fields=["is_active"])
+
+    response = client.get(reverse("evergo:customer-shared-detail", kwargs={"share_id": share_link.share_id}))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
 def test_customer_shared_detail_upload_redirects_back_to_share_route(client):
     customer = _create_customer(username="owner-shared-upload-redirect")
     share_link = EvergoCustomerShareLink.objects.create(customer=customer, created_by=customer.user.user)

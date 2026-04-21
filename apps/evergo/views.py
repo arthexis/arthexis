@@ -344,6 +344,8 @@ def _can_user_access_customer(*, user, customer: EvergoCustomer) -> bool:
     """Return whether a user can access the customer through authenticated routes."""
     if not getattr(user, "is_authenticated", False):
         return False
+    if not getattr(user, "is_active", False):
+        return False
     if user.is_superuser or user.is_staff:
         return True
     return customer.user.user_id == user.pk
