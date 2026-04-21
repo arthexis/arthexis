@@ -80,6 +80,9 @@ class BuildResult:
     sha256: str
     size_bytes: int
     download_uri: str
+    build_engine: str
+    build_profile: str
+    profile_manifest: dict[str, object]
 
 
 @dataclass
@@ -105,6 +108,96 @@ class WriteResult:
     source_sha256: str
     written_sha256: str
     verified: bool
+
+
+@dataclass(frozen=True)
+class BuildEngineProfile:
+    """Build engine profile contract for image validation and metadata generation."""
+
+    name: str
+    required_base_os: str
+    required_architecture: str
+    required_artifacts: tuple[str, ...]
+    required_manifest_fields: tuple[str, ...]
+
+    def validate_base_requirements(self, metadata: dict[str, object]) -> None:
+        """Validate source metadata against profile base OS and architecture requirements."""
+
+        base_os = str(metadata.get("base_os", ""))
+        architecture = str(metadata.get("architecture", ""))
+        if base_os != self.required_base_os:
+            raise ImagerBuildError(
+                f"Profile '{self.name}' requires base_os={self.required_base_os}, got '{base_os or '(missing)'}'."
+            )
+        if architecture != self.required_architecture:
+            raise ImagerBuildError(
+                f"Profile '{self.name}' requires architecture={self.required_architecture}, got '{architecture or '(missing)'}'."
+            )
+
+    def validate_manifest(self, manifest: dict[str, object]) -> None:
+        """Validate required profile-specific rollout and compatibility fields."""
+
+        missing_fields = [field for field in self.required_manifest_fields if not manifest.get(field)]
+        if missing_fields:
+            fields = ", ".join(missing_fields)
+            raise ImagerBuildError(
+                f"Profile '{self.name}' requires manifest fields: {fields}."
+            )
+
+
+@dataclass(frozen=True)
+class BuildEngine:
+    """Build engine configuration that maps profile names to profile requirements."""
+
+    name: str
+    profiles: dict[str, BuildEngineProfile]
+
+    def profile(self, profile_name: str) -> BuildEngineProfile:
+        """Return a supported profile or raise a clear operator error."""
+
+        if profile_name not in self.profiles:
+            available_profiles = ", ".join(sorted(self.profiles))
+            raise ImagerBuildError(
+                f"Unsupported profile '{profile_name}' for engine '{self.name}'. Available profiles: {available_profiles}."
+            )
+        return self.profiles[profile_name]
+
+
+CONNECT_OTA_PROFILE = BuildEngineProfile(
+    name="connect-ota",
+    required_base_os="raspberry-pi-os-trixie",
+    required_architecture="arm64",
+    required_artifacts=(
+        "connect-ota-agent",
+        "connect-ota-channel-config",
+        "connect-ota-device-identity",
+    ),
+    required_manifest_fields=(
+        "release_version",
+        "compatibility_model",
+        "compatibility_board",
+        "ota_channel",
+        "ota_artifact_type",
+    ),
+)
+
+ARTHEXIS_BOOTSTRAP_PROFILE = BuildEngineProfile(
+    name="bootstrap",
+    required_base_os="",
+    required_architecture="",
+    required_artifacts=(),
+    required_manifest_fields=(),
+)
+
+BUILD_ENGINES: dict[str, BuildEngine] = {
+    "arthexis-bootstrap": BuildEngine(
+        name="arthexis-bootstrap",
+        profiles={
+            "bootstrap": ARTHEXIS_BOOTSTRAP_PROFILE,
+            "connect-ota": CONNECT_OTA_PROFILE,
+        },
+    ),
+}
 
 
 def _sha256_for_file(path: Path) -> str:
@@ -343,6 +436,59 @@ def _customize_image(image_path: Path, *, git_url: str) -> None:
             _guestfish_write(image_path, firstrun, "/boot/firmware/firstrun.sh", chmod_mode="0755")
 
 
+def _coerce_profile_metadata(profile_metadata: dict[str, object] | None) -> dict[str, object]:
+    """Normalize profile metadata into predictable keys for profile validation."""
+
+    return dict(profile_metadata or {})
+
+
+def _build_profile_manifest(
+    *,
+    build_profile: BuildEngineProfile,
+    profile_metadata: dict[str, object],
+) -> dict[str, object]:
+    """Build rollout manifest metadata for a profile and validate mandatory fields."""
+
+    if build_profile.name != "connect-ota":
+        return {}
+
+    base_requirements = {
+        "base_os": "raspberry-pi-os-trixie",
+        "architecture": "arm64",
+    }
+    base_requirements.update(
+        {
+            key: value
+            for key, value in profile_metadata.items()
+            if key in {"base_os", "architecture"}
+        }
+    )
+    build_profile.validate_base_requirements(base_requirements)
+
+    required_artifacts = profile_metadata.get("required_artifacts", build_profile.required_artifacts)
+    if not isinstance(required_artifacts, list | tuple):
+        raise ImagerBuildError("Profile 'connect-ota' requires required_artifacts as a list.")
+    required_artifacts_set = {str(entry) for entry in required_artifacts if str(entry)}
+    missing_artifacts = [name for name in build_profile.required_artifacts if name not in required_artifacts_set]
+    if missing_artifacts:
+        raise ImagerBuildError(
+            "Profile 'connect-ota' is missing required update-enablement artifacts: "
+            + ", ".join(missing_artifacts)
+            + "."
+        )
+
+    manifest = {
+        "release_version": profile_metadata.get("release_version"),
+        "compatibility_model": profile_metadata.get("compatibility_model"),
+        "compatibility_board": profile_metadata.get("compatibility_board", TARGET_RPI4B),
+        "ota_channel": profile_metadata.get("ota_channel"),
+        "ota_artifact_type": profile_metadata.get("ota_artifact_type", "raw-disk-image"),
+        "required_artifacts": sorted(required_artifacts_set),
+    }
+    build_profile.validate_manifest(manifest)
+    return manifest
+
+
 def _build_download_uri(download_base_uri: str, output_filename: str) -> str:
     """Build an optional hosted download URI for an artifact."""
 
@@ -576,6 +722,9 @@ def build_rpi4b_image(
     download_base_uri: str,
     git_url: str,
     customize: bool = True,
+    build_engine: str = "arthexis-bootstrap",
+    profile: str = "bootstrap",
+    profile_metadata: dict[str, object] | None = None,
 ) -> BuildResult:
     """Build and register a Raspberry Pi 4B Arthexis image artifact."""
 
@@ -583,6 +732,19 @@ def build_rpi4b_image(
         raise ImagerBuildError(
             "Artifact name must start with an alphanumeric character and use only letters, numbers, dot, underscore, or hyphen."
         )
+
+    engine = BUILD_ENGINES.get(build_engine)
+    if engine is None:
+        available_engines = ", ".join(sorted(BUILD_ENGINES))
+        raise ImagerBuildError(
+            f"Unsupported build engine '{build_engine}'. Available engines: {available_engines}."
+        )
+    selected_profile = engine.profile(profile)
+    normalized_profile_metadata = _coerce_profile_metadata(profile_metadata)
+    profile_manifest = _build_profile_manifest(
+        build_profile=selected_profile,
+        profile_metadata=normalized_profile_metadata,
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     output_filename = f"{name}-{TARGET_RPI4B}.img"
@@ -612,11 +774,16 @@ def build_rpi4b_image(
                 "size_bytes": size_bytes,
                 "download_uri": download_uri,
                 "metadata": {
+                    "build_engine": build_engine,
+                    "build_profile": profile,
+                    "profile_manifest": profile_manifest,
                     "bootstrap_service": "arthexis-bootstrap.service",
                     "bootstrap_script": "/usr/local/bin/arthexis-bootstrap.sh",
                     "first_boot_script": "firstrun.sh",
                     "git_url": git_url,
                 },
+                "build_engine": build_engine,
+                "build_profile": profile,
             },
         )
 
@@ -628,4 +795,7 @@ def build_rpi4b_image(
         sha256=sha256,
         size_bytes=size_bytes,
         download_uri=download_uri,
+        build_engine=build_engine,
+        build_profile=profile,
+        profile_manifest=profile_manifest,
     )

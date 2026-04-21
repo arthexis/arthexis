@@ -234,10 +234,10 @@ class RaspberryPiImageArtifactAdmin(DjangoObjectActions, admin.ModelAdmin):
 
     change_list_template = "django_object_actions/change_list.html"
     changelist_actions = ("create_rpi_image",)
-    list_display = ("name", "target", "output_filename", "download_uri", "created_at")
+    list_display = ("name", "target", "build_engine", "build_profile", "output_filename", "download_uri", "created_at")
     list_filter = ("target", "created_at")
     search_fields = ("name", "target", "output_filename", "download_uri", "base_image_uri")
-    readonly_fields = ("sha256", "size_bytes", "created_at", "updated_at")
+    readonly_fields = ("build_engine", "build_profile", "sha256", "size_bytes", "created_at", "updated_at")
 
     def get_urls(self):
         custom_urls = [
