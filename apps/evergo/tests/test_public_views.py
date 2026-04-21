@@ -229,6 +229,29 @@ def test_customer_public_detail_enforces_image_and_storage_limits(client, settin
 
 
 @pytest.mark.django_db
+def test_customer_public_detail_ignores_unreadable_blob_size(client, monkeypatch):
+    customer = _create_customer(username="owner-unreadable-size")
+    artifact = EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("one.jpg", b"12345", content_type="image/jpeg"),
+        artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
+        display_order=1,
+    )
+    original_size = artifact.file.storage.size
+
+    def _failing_size(name):
+        if name == artifact.file.name:
+            raise OSError("blob unavailable")
+        return original_size(name)
+
+    monkeypatch.setattr(artifact.file.storage, "size", _failing_size)
+
+    response = client.get(reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id}))
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
 def test_customer_public_detail_handles_artifact_model_validation_error(client, monkeypatch):
     customer = _create_customer(username="owner-validation-error")
     detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
@@ -357,3 +380,23 @@ def test_customer_pdf_download_not_blocked_by_reports_pdf_toggle(client, monkeyp
 
     assert response.status_code == 200
     assert captured["enabled_setting_name"] == "EVERGO_PUBLIC_HTML_TO_PDF_ENABLED"
+
+
+@pytest.mark.django_db
+def test_artifact_image_data_uri_returns_empty_string_for_unreadable_blob(monkeypatch):
+    customer = _create_customer(username="owner-pdf-unreadable")
+    artifact = EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("one.jpg", b"12345", content_type="image/jpeg"),
+        artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
+        display_order=1,
+    )
+
+    def _raise_open(*_args, **_kwargs):
+        raise OSError("blob unavailable")
+
+    monkeypatch.setattr(artifact.file, "open", _raise_open)
+
+    from apps.evergo.views import _artifact_image_data_uri
+
+    assert _artifact_image_data_uri(artifact) == ""

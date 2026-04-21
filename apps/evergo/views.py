@@ -181,11 +181,14 @@ def _artifact_image_data_uri(artifact: EvergoArtifact) -> str:
     """Return a data URI for an artifact image file."""
     guessed_type, _ = mimetypes.guess_type(artifact.file.name)
     content_type = guessed_type or "application/octet-stream"
-    artifact.file.open("rb")
     try:
-        content = artifact.file.read()
-    finally:
-        artifact.file.close()
+        artifact.file.open("rb")
+        try:
+            content = artifact.file.read()
+        finally:
+            artifact.file.close()
+    except (OSError, ValueError):
+        return ""
     return _to_data_uri(content, content_type=content_type)
 
 
@@ -224,7 +227,12 @@ def _collect_customer_public_image_state(
     """Return current image artifacts, used storage bytes, and limit-state flags."""
     artifacts = list(customer.artifacts.all())
     image_artifacts = [artifact for artifact in artifacts if artifact.is_image]
-    current_storage_bytes = sum(artifact.file.size for artifact in image_artifacts)
+    current_storage_bytes = 0
+    for artifact in image_artifacts:
+        try:
+            current_storage_bytes += artifact.file.size
+        except (OSError, ValueError):
+            continue
     max_images_reached = len(image_artifacts) >= image_limit
     remaining_storage_bytes = max(0, storage_limit_bytes - current_storage_bytes)
     return image_artifacts, remaining_storage_bytes, max_images_reached
@@ -387,17 +395,22 @@ def customer_pdf_download(request, public_id) -> HttpResponse:
     image_artifacts = list(customer.artifacts.filter(artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE))
     maps_context = _build_customer_maps_context(customer)
     map_snapshot_data_uri = _remote_image_data_uri(_build_customer_private_maps_snapshot_url(customer))
+    pdf_image_artifacts = []
+    for artifact in image_artifacts:
+        data_uri = _artifact_image_data_uri(artifact)
+        if not data_uri:
+            continue
+        pdf_image_artifacts.append(
+            {
+                "name": artifact.filename,
+                "url": data_uri,
+            }
+        )
     html = render_to_string(
         "evergo/customer_public_pdf.html",
         {
             "customer": customer,
-            "image_artifacts": [
-                {
-                    "name": artifact.filename,
-                    "url": _artifact_image_data_uri(artifact),
-                }
-                for artifact in image_artifacts
-            ],
+            "image_artifacts": pdf_image_artifacts,
             "google_maps_snapshot_data_uri": map_snapshot_data_uri,
             **maps_context,
         },
