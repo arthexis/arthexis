@@ -18,6 +18,7 @@ OPERATOR_JOURNEY_STEP_URL_NAME = "ops:operator-journey-step"
 from .forms import OperatorJourneyGitHubAccessForm, OperatorJourneyProvisionSuperuserForm
 from .models import OperatorJourneyStep, OperatorJourneyStepCompletion
 from .operator_journey import (
+    _active_security_groups_for_user,
     complete_step_for_user,
     next_step_for_user,
     operator_journey_step_complete_url,
@@ -282,11 +283,12 @@ def operator_journey_dashboard(request: HttpRequest) -> HttpResponse:
     """Render completed and current steps while hiding future journey steps."""
 
     next_step = next_step_for_user(user=request.user)
+    active_groups = _active_security_groups_for_user(request.user)
     steps = list(
         OperatorJourneyStep.objects.filter(
             is_active=True,
             journey__is_active=True,
-            journey__security_group__in=request.user.groups.all(),
+            journey__security_group__in=active_groups,
         )
         .select_related("journey")
         .order_by("journey__priority", "journey__name", "order", "id")

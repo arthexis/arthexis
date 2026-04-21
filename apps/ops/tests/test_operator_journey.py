@@ -214,8 +214,15 @@ class OperatorJourneyViewTests(TestCase):
 
         self.assertContains(response, "Next:")
         self.assertContains(response, "Validate role")
-        self.assertContains(response, "Journey")
-        self.assertContains(response, reverse("ops:operator-journey-dashboard"))
+        self.assertInHTML(
+            (
+                f'<a class="button" '
+                f'href="{reverse("ops:operator-journey-dashboard")}">'
+                "Operator Journey"
+                "</a>"
+            ),
+            response.content.decode(),
+        )
         self.assertNotContains(response, "admin-home-operator-journey__age")
         self.assertContains(
             response,
@@ -239,6 +246,16 @@ class OperatorJourneyViewTests(TestCase):
         self.assertContains(response, self.step_2.title)
         self.assertContains(response, "Current required task")
         self.assertContains(response, "Completed")
+        self.assertContains(
+            response,
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            ),
+        )
         self.assertNotContains(
             response,
             reverse(
