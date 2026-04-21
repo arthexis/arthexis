@@ -126,6 +126,20 @@ def test_customer_public_detail_allows_anonymous_access(client):
 
 
 @pytest.mark.django_db
+def test_customer_public_detail_does_not_expose_google_maps_api_key(client, settings):
+    settings.GOOGLE_MAPS_API_KEY = "super-secret-key"
+    customer = _create_customer(username="owner-map-key")
+
+    response = client.get(reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id}))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "maps.googleapis.com/maps/api/staticmap" in content
+    assert "super-secret-key" not in content
+    assert "&key=" not in content
+
+
+@pytest.mark.django_db
 def test_customer_public_detail_uploads_and_deletes_image(client):
     customer = _create_customer(username="owner-with-image")
     detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
@@ -246,3 +260,17 @@ def test_customer_pdf_download_passes_data_uris_to_template(client, monkeypatch)
     assert response.status_code == 200
     assert captured_context["google_maps_snapshot_data_uri"].startswith("data:image/png;base64,")
     assert captured_context["image_artifacts"][0]["url"].startswith("data:image/")
+
+
+@pytest.mark.django_db
+def test_customer_pdf_download_sanitizes_content_disposition_filename(client, monkeypatch):
+    customer = _create_customer(username="owner-pdf-filename")
+    customer.latest_so = "SO\r\nbad"
+    customer.save(update_fields=["latest_so"])
+    monkeypatch.setattr("apps.evergo.views._remote_image_data_uri", lambda _: "")
+    monkeypatch.setattr("apps.evergo.views._render_pdf_bytes", lambda html: b"%PDF-1.4 fake")
+
+    response = client.get(reverse("evergo:customer-pdf-download", kwargs={"public_id": customer.public_id}))
+
+    assert response.status_code == 200
+    assert response["Content-Disposition"] == 'attachment; filename="evergo-SObad.pdf"'

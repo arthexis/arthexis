@@ -19,6 +19,7 @@ from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.utils import timezone
+from django.utils.text import get_valid_filename
 from django.utils.translation import gettext as _
 
 from apps.features.utils import is_pages_chat_runtime_enabled, is_suite_feature_enabled
@@ -138,17 +139,23 @@ def _build_customer_maps_context(customer: EvergoCustomer) -> dict[str, str]:
             "google_maps_snapshot_url": "",
         }
     encoded_address = quote_plus(address)
-    static_map_api_key = getattr(settings, "GOOGLE_MAPS_API_KEY", "").strip()
-    static_map_key_fragment = f"&key={quote_plus(static_map_api_key)}" if static_map_api_key else ""
     return {
         "google_maps_url": f"https://www.google.com/maps/search/?api=1&query={encoded_address}",
         "google_maps_embed_url": f"https://maps.google.com/maps?q={encoded_address}&z=15&output=embed",
         "google_maps_snapshot_url": (
             "https://maps.googleapis.com/maps/api/staticmap"
             f"?center={encoded_address}&zoom=15&size=1200x600&markers=color:red%7C{encoded_address}"
-            f"{static_map_key_fragment}"
         ),
     }
+
+
+def _build_customer_private_maps_snapshot_url(customer: EvergoCustomer) -> str:
+    """Return a server-side map snapshot URL that can include an API key."""
+    snapshot_url = _build_customer_maps_context(customer)["google_maps_snapshot_url"]
+    static_map_api_key = getattr(settings, "GOOGLE_MAPS_API_KEY", "").strip()
+    if not snapshot_url or not static_map_api_key:
+        return snapshot_url
+    return f"{snapshot_url}&key={quote_plus(static_map_api_key)}"
 
 
 def _resequence_customer_image_artifacts(customer: EvergoCustomer) -> None:
@@ -281,7 +288,7 @@ def customer_pdf_download(request, public_id) -> HttpResponse:
     _resequence_customer_image_artifacts(customer)
     image_artifacts = list(customer.artifacts.filter(artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE))
     maps_context = _build_customer_maps_context(customer)
-    map_snapshot_data_uri = _remote_image_data_uri(maps_context.get("google_maps_snapshot_url", ""))
+    map_snapshot_data_uri = _remote_image_data_uri(_build_customer_private_maps_snapshot_url(customer))
     html = render_to_string(
         "evergo/customer_public_pdf.html",
         {
@@ -300,7 +307,7 @@ def customer_pdf_download(request, public_id) -> HttpResponse:
     payload = _render_pdf_bytes(html)
     if not payload:
         raise Http404("PDF renderer is unavailable.")
-    safe_so = customer.latest_so or str(customer.public_id)
+    safe_so = get_valid_filename(customer.latest_so or str(customer.public_id)) or str(customer.public_id)
     response = HttpResponse(payload, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="evergo-{safe_so}.pdf"'
     return response
