@@ -185,6 +185,19 @@ def test_customer_public_detail_delete_image_with_invalid_artifact_id_returns_40
 
 
 @pytest.mark.django_db
+def test_customer_public_detail_delete_image_with_unicode_numeric_artifact_id_returns_404(client):
+    customer = _create_customer(username="owner-invalid-unicode-artifact-id")
+    detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
+
+    response = client.post(
+        detail_url,
+        data={"action": "delete-image", "artifact_id": "²", "confirm_delete": "yes"},
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
 def test_customer_public_detail_enforces_image_and_storage_limits(client, settings):
     settings.EVERGO_PUBLIC_IMAGE_LIMIT = 1
     settings.EVERGO_PUBLIC_IMAGE_TOTAL_STORAGE_LIMIT = 50
@@ -324,3 +337,16 @@ def test_customer_pdf_download_sanitizes_content_disposition_filename(client, mo
 
     assert response.status_code == 200
     assert response["Content-Disposition"] == 'attachment; filename="evergo-SObad.pdf"'
+
+
+@pytest.mark.django_db
+def test_customer_pdf_download_not_blocked_by_reports_pdf_toggle(client, monkeypatch, settings):
+    settings.REPORTS_HTML_TO_PDF_ENABLED = False
+    settings.EVERGO_PUBLIC_HTML_TO_PDF_ENABLED = True
+    customer = _create_customer(username="owner-pdf-toggle")
+    monkeypatch.setattr("apps.evergo.views._remote_image_data_uri", lambda _: "")
+    monkeypatch.setattr("apps.evergo.views._render_pdf_bytes", lambda html: b"%PDF-1.4 fake")
+
+    response = client.get(reverse("evergo:customer-pdf-download", kwargs={"public_id": customer.public_id}))
+
+    assert response.status_code == 200
