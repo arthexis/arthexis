@@ -138,3 +138,53 @@ class CampaignStateTransitionTests(CampaignServiceTestCaseMixin, TestCase):
         self.assertEqual(campaign.status, ConnectUpdateCampaign.Status.COMPLETED)
         self.assertTrue(campaign.completed_at)
         self.assertTrue(campaign.events.filter(event_type="campaign.completed").exists())
+
+    def test_running_campaign_fails_if_next_stage_devices_were_deleted(self) -> None:
+        campaign = self.service.create_campaign(
+            release=self.release,
+            target_set={"device_ids": [self.device_a.device_id, self.device_b.device_id]},
+            strategy=ConnectUpdateCampaign.Strategy.CANARY,
+            canary_size=1,
+            created_by=self.user,
+        )
+        self.service.start_campaign(campaign, created_by=self.user)
+
+        first_deployment = campaign.deployments.get(device=self.device_a)
+        self.device_b.delete()
+        first_deployment.status = ConnectUpdateDeployment.Status.IN_PROGRESS
+        first_deployment.save(update_fields=["status", "updated_at"])
+        first_deployment.status = ConnectUpdateDeployment.Status.SUCCEEDED
+        with self.captureOnCommitCallbacks(execute=True):
+            first_deployment.save(update_fields=["status", "updated_at"])
+
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, ConnectUpdateCampaign.Status.FAILED)
+        self.assertTrue(
+            campaign.events.filter(event_type="campaign.stage_queue_failed_missing_devices").exists()
+        )
+        self.assertEqual(campaign.deployments.count(), 1)
+
+    def test_terminal_deployment_status_creates_durable_event(self) -> None:
+        campaign = self.service.create_campaign(
+            release=self.release,
+            target_set={"device_ids": [self.device_a.device_id]},
+            strategy=ConnectUpdateCampaign.Strategy.ALL_AT_ONCE,
+            created_by=self.user,
+        )
+        deployment = campaign.deployments.get()
+
+        deployment.status = ConnectUpdateDeployment.Status.IN_PROGRESS
+        deployment.save(update_fields=["status", "updated_at"])
+        deployment.status = ConnectUpdateDeployment.Status.SUCCEEDED
+        with self.captureOnCommitCallbacks(execute=True):
+            deployment.save(update_fields=["status", "updated_at"])
+
+        self.assertTrue(
+            ConnectCampaignEvent.objects.filter(
+                campaign=campaign,
+                deployment=deployment,
+                event_type="deployment.succeeded",
+                from_status=ConnectUpdateDeployment.Status.IN_PROGRESS,
+                to_status=ConnectUpdateDeployment.Status.SUCCEEDED,
+            ).exists()
+        )

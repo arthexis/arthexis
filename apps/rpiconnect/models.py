@@ -235,8 +235,11 @@ class ConnectUpdateDeployment(models.Model):
     def save(self, *args, **kwargs):
         """Persist only validated deployment state transitions."""
 
+        update_fields = kwargs.get("update_fields")
+        update_field_names = set(update_fields) if update_fields is not None else None
+        status_will_be_saved = update_field_names is None or "status" in update_field_names
         original_status = None
-        if self.pk:
+        if self.pk and status_will_be_saved:
             original_status = type(self).objects.filter(pk=self.pk).values_list("status", flat=True).first()
         self.full_clean()
         super().save(*args, **kwargs)
@@ -245,11 +248,29 @@ class ConnectUpdateDeployment(models.Model):
             self.Status.FAILED,
             self.Status.ROLLED_BACK,
         }
-        if original_status != self.status and self.status in terminal_statuses:
+        persisted_status = self.status
+        if status_will_be_saved:
+            persisted_status = type(self).objects.filter(pk=self.pk).values_list("status", flat=True).first()
+        if (
+            status_will_be_saved
+            and original_status != persisted_status
+            and persisted_status in terminal_statuses
+        ):
+            event_type = f"deployment.{persisted_status}"
+            ConnectCampaignEvent.objects.create(
+                campaign=self.campaign,
+                deployment=self,
+                event_type=event_type,
+                from_status=original_status or "",
+                to_status=persisted_status,
+            )
             from apps.rpiconnect.services import CampaignService
 
+            campaign_id = self.campaign_id
             transaction.on_commit(
-                lambda: CampaignService().sync_rollout_progress(campaign_id=self.campaign_id)
+                lambda campaign_id=campaign_id: CampaignService().sync_rollout_progress(
+                    campaign_id=campaign_id
+                )
             )
 
 

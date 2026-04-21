@@ -34,6 +34,8 @@ class RolloutStage:
 class CampaignService:
     """Handles campaign creation, rollout policies, and status transitions."""
 
+    EVENT_CAMPAIGN_CREATED = "campaign.created"
+
     TERMINAL_CAMPAIGN_STATUSES = {
         ConnectUpdateCampaign.Status.CANCELLED,
         ConnectUpdateCampaign.Status.COMPLETED,
@@ -130,7 +132,7 @@ class CampaignService:
             self._log_campaign_event(
                 campaign=campaign,
                 created_by=created_by,
-                event_type="campaign.created",
+                event_type=self.EVENT_CAMPAIGN_CREATED,
                 payload={
                     "strategy": strategy,
                     "target_count": len(devices),
@@ -389,7 +391,7 @@ class CampaignService:
         """Return immutable target device IDs captured for an existing campaign."""
 
         created_event = next(
-            (event for event in campaign.events.all() if event.event_type == "campaign.created"),
+            (event for event in campaign.events.all() if event.event_type == self.EVENT_CAMPAIGN_CREATED),
             None,
         )
         if created_event:
@@ -487,6 +489,23 @@ class CampaignService:
             next_ids = sorted(stage_device_ids - deployment_device_ids)
             if not next_ids:
                 continue
+            existing_device_ids = set(
+                ConnectDevice.objects.filter(pk__in=next_ids).values_list("pk", flat=True)
+            )
+            missing_device_ids = sorted(set(next_ids) - existing_device_ids)
+            if missing_device_ids:
+                self._transition_campaign(
+                    campaign,
+                    to_status=ConnectUpdateCampaign.Status.FAILED,
+                    event_type="campaign.failed",
+                    created_by=None,
+                )
+                self._log_campaign_event(
+                    campaign=campaign,
+                    event_type="campaign.stage_queue_failed_missing_devices",
+                    payload={"missing_device_ids": missing_device_ids},
+                )
+                return
             queued_at = timezone.now()
             ConnectUpdateDeployment.objects.bulk_create(
                 [
@@ -496,7 +515,7 @@ class CampaignService:
                         status=ConnectUpdateDeployment.Status.PENDING,
                         queued_at=queued_at,
                     )
-                    for device_pk in next_ids
+                    for device_pk in sorted(existing_device_ids)
                 ]
             )
             return
@@ -511,7 +530,9 @@ class CampaignService:
     def _load_rollout_stages(self, campaign: ConnectUpdateCampaign) -> list[RolloutStage]:
         """Load rollout stages from the creation event payload."""
 
-        created_event = campaign.events.filter(event_type="campaign.created").only("payload").first()
+        created_event = (
+            campaign.events.filter(event_type=self.EVENT_CAMPAIGN_CREATED).only("payload").first()
+        )
         if not created_event:
             return []
 
