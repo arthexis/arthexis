@@ -16,7 +16,6 @@ import hashlib
 import time
 from weakref import WeakKeyDictionary
 from typing import TYPE_CHECKING, Iterable, Any
-from datetime import datetime
 
 import django
 import importlib.util
@@ -46,7 +45,6 @@ os.environ.setdefault("NET_MESSAGE_DISABLE_PROPAGATION", "1")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 from apps.nodes.models import Node
-from django.contrib.sites.models import Site
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.management import create_contenttypes
 from django.contrib.contenttypes.models import ContentType
@@ -61,8 +59,6 @@ from apps.locals.user_data import (
 )
 from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
 from scripts.fixtures_changed import fixtures_changed
-from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from scripts.helpers.migration_reconcile import (
     backup_sqlite_database,
     reconcile_sqlite_tables,
@@ -742,7 +738,7 @@ def run_database_tasks(
 
     try:
         call_command("makemigrations", *local_apps, interactive=False)
-    except CommandError as exc:
+    except CommandError:
         call_command("makemigrations", *local_apps, merge=True, interactive=False)
     except InconsistentMigrationHistory:
         if using_sqlite:

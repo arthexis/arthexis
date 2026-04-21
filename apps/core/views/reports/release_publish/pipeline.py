@@ -2135,7 +2135,7 @@ def _step_wait_for_github_actions_publish(
         ),
         user=user,
     )
-    run = _wait_for_publish_workflow_completion(
+    _wait_for_publish_workflow_completion(
         release,
         ctx,
         log_path,

@@ -1,7 +1,6 @@
 from typing import Type
 
 from django.apps import apps
-from django.conf import settings
 from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator, validate_ipv46_address
@@ -195,7 +194,6 @@ class User(Entity, AbstractUser):
             self.temporary_expires_at = timezone.now()
         self.is_active = False
         temp_passwords.discard_temp_password(self.username)
-        updates = ["temporary_expires_at", "is_active"]
         if self.pk:
             type(self).all_objects.filter(pk=self.pk).update(
                 temporary_expires_at=self.temporary_expires_at, is_active=self.is_active
