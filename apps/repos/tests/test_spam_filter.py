@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import hashlib
+import hmac
 import json
 
 import pytest
 from django.urls import reverse
 
+from apps.repos.models.github_apps import GitHubApp
 from apps.repos.models.repositories import GitHubRepository
 from apps.repos.models.spam import RepositoryIssueSpamAssessment
 from apps.repos.services import github as github_service
@@ -38,6 +41,12 @@ def test_github_webhook_creates_spam_assessment(client, settings):
     settings.GITHUB_ISSUE_SPAM_THRESHOLD = "0.20"
 
     repo = GitHubRepository.objects.create(owner="octocat", name="hello-world")
+    app = GitHubApp.objects.create(
+        display_name="Webhook App",
+        app_id=1001,
+        webhook_secret="topsecret",
+        webhook_slug="webhook-app",
+    )
     url = reverse("repos:github-webhook")
     payload = {
         "action": "opened",
@@ -49,12 +58,22 @@ def test_github_webhook_creates_spam_assessment(client, settings):
             "user": {"login": "spambot"},
         },
     }
+    body = json.dumps(payload).encode("utf-8")
+    signature = "sha256=" + hmac.new(
+        app.webhook_secret.encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
 
     response = client.post(
         url,
-        data=json.dumps(payload),
+        data=body,
         content_type="application/json",
-        **{"HTTP_X_GITHUB_EVENT": "issues", "HTTP_X_GITHUB_DELIVERY": "delivery-42"},
+        **{
+            "HTTP_X_GITHUB_EVENT": "issues",
+            "HTTP_X_GITHUB_DELIVERY": "delivery-42",
+            "HTTP_X_HUB_SIGNATURE_256": signature,
+        },
     )
 
     assert response.status_code == 200
@@ -74,6 +93,12 @@ def test_github_webhook_auto_moderates_when_enabled(client, monkeypatch, setting
     settings.GITHUB_ISSUE_SPAM_AUTO_LABELS = ["spam-suspected", "triage"]
 
     repo = GitHubRepository.objects.create(owner="octocat", name="hello-world")
+    app = GitHubApp.objects.create(
+        display_name="Webhook App",
+        app_id=1002,
+        webhook_secret="topsecret",
+        webhook_slug="webhook-app",
+    )
     url = reverse("repos:github-webhook")
 
     calls: list[tuple[str, int]] = []
@@ -101,11 +126,21 @@ def test_github_webhook_auto_moderates_when_enabled(client, monkeypatch, setting
             "user": {"login": "spambot"},
         },
     }
+    body = json.dumps(payload).encode("utf-8")
+    signature = "sha256=" + hmac.new(
+        app.webhook_secret.encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
     response = client.post(
         url,
-        data=json.dumps(payload),
+        data=body,
         content_type="application/json",
-        **{"HTTP_X_GITHUB_EVENT": "issues", "HTTP_X_GITHUB_DELIVERY": "delivery-77"},
+        **{
+            "HTTP_X_GITHUB_EVENT": "issues",
+            "HTTP_X_GITHUB_DELIVERY": "delivery-77",
+            "HTTP_X_HUB_SIGNATURE_256": signature,
+        },
     )
 
     assert response.status_code == 200
@@ -123,6 +158,12 @@ def test_github_webhook_auto_moderation_closes_issue_when_labeling_fails(
     settings.GITHUB_ISSUE_SPAM_AUTO_LABELS = ["spam-suspected"]
 
     repo = GitHubRepository.objects.create(owner="octocat", name="hello-world")
+    app = GitHubApp.objects.create(
+        display_name="Webhook App",
+        app_id=1003,
+        webhook_secret="topsecret",
+        webhook_slug="webhook-app",
+    )
     url = reverse("repos:github-webhook")
 
     calls: list[tuple[str, int]] = []
@@ -149,12 +190,67 @@ def test_github_webhook_auto_moderation_closes_issue_when_labeling_fails(
             "user": {"login": "spambot"},
         },
     }
+    body = json.dumps(payload).encode("utf-8")
+    signature = "sha256=" + hmac.new(
+        app.webhook_secret.encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
     response = client.post(
         url,
-        data=json.dumps(payload),
+        data=body,
         content_type="application/json",
-        **{"HTTP_X_GITHUB_EVENT": "issues", "HTTP_X_GITHUB_DELIVERY": "delivery-88"},
+        **{
+            "HTTP_X_GITHUB_EVENT": "issues",
+            "HTTP_X_GITHUB_DELIVERY": "delivery-88",
+            "HTTP_X_HUB_SIGNATURE_256": signature,
+        },
     )
 
     assert response.status_code == 200
     assert calls == [("close", 88)]
+
+
+@pytest.mark.django_db
+def test_github_webhook_skips_spam_assessment_without_valid_signature(
+    client, monkeypatch, settings
+):
+    settings.GITHUB_ISSUE_SPAM_FILTER_ENABLED = True
+    settings.GITHUB_ISSUE_SPAM_AUTO_MODERATE = True
+    settings.GITHUB_ISSUE_SPAM_MAX_LINKS = 0
+    settings.GITHUB_ISSUE_SPAM_THRESHOLD = "0.20"
+
+    repo = GitHubRepository.objects.create(owner="octocat", name="hello-world")
+    url = reverse("repos:github-webhook")
+
+    calls: list[str] = []
+    monkeypatch.setattr("apps.repos.spam_filter.github_service.get_github_issue_token", lambda: "token")
+    monkeypatch.setattr(
+        "apps.repos.spam_filter.github_service.add_issue_labels",
+        lambda **kwargs: calls.append("labels"),
+    )
+    monkeypatch.setattr(
+        "apps.repos.spam_filter.github_service.close_issue",
+        lambda **kwargs: calls.append("close"),
+    )
+
+    payload = {
+        "action": "opened",
+        "repository": {"owner": {"login": repo.owner}, "name": repo.name},
+        "issue": {
+            "number": 90,
+            "title": "promo",
+            "body": "https://spam.example",
+            "user": {"login": "spambot"},
+        },
+    }
+    response = client.post(
+        url,
+        data=json.dumps(payload),
+        content_type="application/json",
+        **{"HTTP_X_GITHUB_EVENT": "issues", "HTTP_X_GITHUB_DELIVERY": "delivery-90"},
+    )
+
+    assert response.status_code == 200
+    assert RepositoryIssueSpamAssessment.objects.count() == 0
+    assert calls == []

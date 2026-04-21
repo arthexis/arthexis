@@ -6,8 +6,8 @@ import hashlib
 import hmac
 import json
 import logging
-from urllib.parse import parse_qs
 from typing import TypeAlias, TypedDict
+from urllib.parse import parse_qs
 
 from django.db.models import Q
 from django.http import HttpRequest, JsonResponse
@@ -169,6 +169,18 @@ def _verify_signature(request: HttpRequest, secret: str) -> bool:
     return False
 
 
+def _verify_signature_for_any_app(request: HttpRequest) -> bool:
+    signature_256 = request.headers.get("X-Hub-Signature-256", "")
+    signature = request.headers.get("X-Hub-Signature", "")
+    if not signature_256 and not signature:
+        return False
+
+    webhook_secrets = GitHubApp.objects.exclude(webhook_secret="").values_list(
+        "webhook_secret", flat=True
+    )
+    return any(_verify_signature(request, secret) for secret in webhook_secrets)
+
+
 @csrf_exempt
 def github_webhook(
     request: HttpRequest,
@@ -176,12 +188,16 @@ def github_webhook(
     name: str = "",
     app_slug: str = "",
 ) -> JsonResponse:
+    is_verified = False
     if app_slug:
         app = GitHubApp.objects.filter(
             Q(webhook_slug=app_slug) | Q(app_slug=app_slug)
         ).first()
         if not app or not _verify_signature(request, app.webhook_secret):
             return JsonResponse({"status": "unauthorized"}, status=401)
+        is_verified = True
+    else:
+        is_verified = _verify_signature_for_any_app(request)
 
     payload, raw_body = _extract_payload(request)
     owner, name = _resolve_event_route(owner, name, _payload_for_routing(payload))
@@ -209,9 +225,10 @@ def github_webhook(
         payload=payload,
         raw_body=raw_body,
     )
-    try:
-        assess_github_issue_event(event)
-    except Exception:  # pragma: no cover - defensive guard to keep webhook ingestion resilient
-        logger.exception("GitHub issue spam assessment failed for event_id=%s", event.pk)
+    if is_verified:
+        try:
+            assess_github_issue_event(event)
+        except Exception:  # pragma: no cover - defensive guard to keep webhook ingestion resilient
+            logger.exception("GitHub issue spam assessment failed for event_id=%s", event.pk)
 
     return JsonResponse({"status": "ok", "event_id": event.pk})

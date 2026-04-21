@@ -120,8 +120,20 @@ def test_github_webhook_app_rejects_invalid_signature(client):
 @pytest.mark.django_db
 def test_github_webhook_returns_ok_when_spam_assessment_fails(client, monkeypatch):
     repo = GitHubRepository.objects.create(owner="octocat", name="hello-world")
+    app = GitHubApp.objects.create(
+        display_name="Example App",
+        app_id=9999,
+        webhook_secret="topsecret",
+        webhook_slug="example-app",
+    )
     url = reverse("repos:github-webhook")
     payload = {"repository": {"owner": {"login": repo.owner}, "name": repo.name}}
+    body = json.dumps(payload).encode("utf-8")
+    signature = "sha256=" + hmac.new(
+        app.webhook_secret.encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
 
     def raise_assessment_error(event):
         del event
@@ -131,9 +143,9 @@ def test_github_webhook_returns_ok_when_spam_assessment_fails(client, monkeypatc
 
     response = client.post(
         url,
-        data=json.dumps(payload),
+        data=body,
         content_type="application/json",
-        **{"HTTP_X_GITHUB_EVENT": "issues"},
+        **{"HTTP_X_GITHUB_EVENT": "issues", "HTTP_X_HUB_SIGNATURE_256": signature},
     )
 
     assert response.status_code == 200
