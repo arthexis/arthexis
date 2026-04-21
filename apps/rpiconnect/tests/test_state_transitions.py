@@ -1,13 +1,15 @@
+from django.test import TestCase
+
 from apps.rpiconnect.models import (
     ConnectCampaignEvent,
     ConnectUpdateCampaign,
     ConnectUpdateDeployment,
 )
 from apps.rpiconnect.services import CampaignServiceError
-from apps.rpiconnect.tests.test_campaign_service import CampaignServiceTests
+from apps.rpiconnect.tests.test_campaign_service import CampaignServiceTestCaseMixin
 
 
-class CampaignStateTransitionTests(CampaignServiceTests):
+class CampaignStateTransitionTests(CampaignServiceTestCaseMixin, TestCase):
     def test_pause_resume_stop_transitions_are_audited(self) -> None:
         campaign = self.service.create_campaign(
             release=self.release,

@@ -249,7 +249,7 @@ class ConnectCampaignEvent(models.Model):
     )
     deployment = models.ForeignKey(
         ConnectUpdateDeployment,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="events",
         null=True,
         blank=True,

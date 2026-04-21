@@ -11,7 +11,7 @@ from apps.rpiconnect.models import (
 from apps.rpiconnect.services import CampaignService, CampaignServiceError
 
 
-class CampaignServiceTests(TestCase):
+class CampaignServiceTestCaseMixin:
     def setUp(self) -> None:
         self.service = CampaignService()
         self.user = get_user_model().objects.create_user(
@@ -50,6 +50,8 @@ class CampaignServiceTests(TestCase):
             ],
         )
 
+
+class CampaignServiceTests(CampaignServiceTestCaseMixin, TestCase):
     def test_creates_campaign_from_explicit_and_metadata_targets(self) -> None:
         campaign = self.service.create_campaign(
             release=self.release,
@@ -113,14 +115,14 @@ class CampaignServiceTests(TestCase):
     def test_campaign_summary_provides_per_device_aggregation(self) -> None:
         campaign = self.service.create_campaign(
             release=self.release,
-            target_set={"device_ids": [self.device_a.device_id]},
+            target_set={"device_ids": [self.device_a.device_id, self.device_b.device_id]},
             strategy=ConnectUpdateCampaign.Strategy.CANARY,
             created_by=self.user,
         )
 
         summary = self.service.campaign_summary(campaign)
 
-        self.assertEqual(summary["total_devices"], 1)
-        self.assertEqual(summary["counts"]["pending"], 1)
+        self.assertEqual(summary["total_devices"], 2)
+        self.assertEqual(summary["counts"]["pending"], 2)
         self.assertEqual(summary["per_device"][0]["device_id"], self.device_a.device_id)
         self.assertEqual(ConnectCampaignEvent.objects.filter(campaign=campaign).count(), 2)

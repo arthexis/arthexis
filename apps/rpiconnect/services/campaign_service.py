@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from django.core.exceptions import ValidationError
+from django.db import connection
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from apps.rpiconnect.models import (
@@ -89,7 +90,6 @@ class CampaignService:
             raise CampaignServiceError("No devices matched the provided target set.")
 
         self._validate_device_compatibility(release, devices)
-        self._validate_no_conflicts(devices, override_conflicts=override_conflicts)
         rollout_stages = self._build_rollout_stages(
             strategy=strategy,
             devices=devices,
@@ -98,6 +98,12 @@ class CampaignService:
         )
 
         with transaction.atomic():
+            list(
+                ConnectDevice.objects.select_for_update()
+                .filter(pk__in=[device.pk for device in devices])
+                .only("pk")
+            )
+            self._validate_no_conflicts(devices, override_conflicts=override_conflicts)
             campaign = ConnectUpdateCampaign.objects.create(
                 release=release,
                 target_set=target_set,
@@ -154,29 +160,39 @@ class CampaignService:
                 selected_devices[device.pk] = device
 
         if labels or cohorts:
-            label_set = set(labels)
-            cohort_set = set(cohorts)
-            for device in ConnectDevice.objects.all():
-                metadata = device.metadata or {}
-                device_labels = set(metadata.get("labels") or [])
-                device_cohort = metadata.get("cohort")
-                if label_set.intersection(device_labels) or device_cohort in cohort_set:
+            if connection.vendor == "postgresql":
+                query = Q()
+                if cohorts:
+                    query |= Q(metadata__cohort__in=cohorts)
+                for label in labels:
+                    query |= Q(metadata__contains={"labels": [label]})
+                for device in ConnectDevice.objects.filter(query):
                     selected_devices[device.pk] = device
+            else:
+                label_set = set(labels)
+                cohort_set = set(cohorts)
+                for device in ConnectDevice.objects.exclude(metadata=None):
+                    metadata = device.metadata or {}
+                    device_labels = set(metadata.get("labels") or [])
+                    device_cohort = metadata.get("cohort")
+                    if label_set.intersection(device_labels) or device_cohort in cohort_set:
+                        selected_devices[device.pk] = device
 
         return sorted(selected_devices.values(), key=lambda item: item.device_id)
 
     def start_campaign(self, campaign: ConnectUpdateCampaign, *, created_by=None) -> ConnectUpdateCampaign:
         """Move campaign into running state."""
 
-        self._transition_campaign(
-            campaign,
-            to_status=ConnectUpdateCampaign.Status.RUNNING,
-            event_type="campaign.started",
-            created_by=created_by,
-        )
-        if campaign.started_at is None:
-            campaign.started_at = timezone.now()
-            campaign.save(update_fields=["started_at", "updated_at"])
+        with transaction.atomic():
+            self._transition_campaign(
+                campaign,
+                to_status=ConnectUpdateCampaign.Status.RUNNING,
+                event_type="campaign.started",
+                created_by=created_by,
+            )
+            if campaign.started_at is None:
+                campaign.started_at = timezone.now()
+                campaign.save(update_fields=["started_at", "updated_at"])
         return campaign
 
     def pause_campaign(self, campaign: ConnectUpdateCampaign, *, created_by=None) -> ConnectUpdateCampaign:
@@ -209,25 +225,27 @@ class CampaignService:
     def stop_campaign(self, campaign: ConnectUpdateCampaign, *, created_by=None) -> ConnectUpdateCampaign:
         """Stop execution and mark remaining deployments rolled back."""
 
-        self._transition_campaign(
-            campaign,
-            to_status=ConnectUpdateCampaign.Status.STOPPED,
-            event_type="campaign.stopped",
-            created_by=created_by,
-        )
-        self._mark_open_deployments_as_rolled_back(campaign=campaign, created_by=created_by)
+        with transaction.atomic():
+            self._transition_campaign(
+                campaign,
+                to_status=ConnectUpdateCampaign.Status.STOPPED,
+                event_type="campaign.stopped",
+                created_by=created_by,
+            )
+            self._mark_open_deployments_as_rolled_back(campaign=campaign, created_by=created_by)
         return campaign
 
     def cancel_campaign(self, campaign: ConnectUpdateCampaign, *, created_by=None) -> ConnectUpdateCampaign:
         """Cancel campaign and mark in-flight work as rolled back."""
 
-        self._transition_campaign(
-            campaign,
-            to_status=ConnectUpdateCampaign.Status.CANCELLED,
-            event_type="campaign.cancelled",
-            created_by=created_by,
-        )
-        self._mark_open_deployments_as_rolled_back(campaign=campaign, created_by=created_by)
+        with transaction.atomic():
+            self._transition_campaign(
+                campaign,
+                to_status=ConnectUpdateCampaign.Status.CANCELLED,
+                event_type="campaign.cancelled",
+                created_by=created_by,
+            )
+            self._mark_open_deployments_as_rolled_back(campaign=campaign, created_by=created_by)
         return campaign
 
     def campaign_summary(self, campaign: ConnectUpdateCampaign) -> dict:
@@ -235,7 +253,7 @@ class CampaignService:
 
         status_counts = {
             entry["status"]: entry["count"]
-            for entry in campaign.deployments.values("status").annotate(count=Count("id"))
+            for entry in campaign.deployments.order_by().values("status").annotate(count=Count("id"))
         }
         per_device = [
             {
@@ -354,19 +372,23 @@ class CampaignService:
         event_type: str,
         created_by,
     ) -> None:
-        from_status = campaign.status
-        allowed = self.CAMPAIGN_TRANSITIONS.get(from_status, set())
-        if to_status not in allowed:
-            raise CampaignServiceError(
-                f"Invalid campaign transition: {from_status} -> {to_status}."
-            )
+        with transaction.atomic():
+            locked_campaign = type(campaign).objects.select_for_update().get(pk=campaign.pk)
+            from_status = locked_campaign.status
+            allowed = self.CAMPAIGN_TRANSITIONS.get(from_status, set())
+            if to_status not in allowed:
+                raise CampaignServiceError(
+                    f"Invalid campaign transition: {from_status} -> {to_status}."
+                )
 
-        campaign.status = to_status
-        update_fields = ["status", "updated_at"]
-        if to_status in self.TERMINAL_CAMPAIGN_STATUSES and campaign.completed_at is None:
-            campaign.completed_at = timezone.now()
-            update_fields.append("completed_at")
-        campaign.save(update_fields=update_fields)
+            locked_campaign.status = to_status
+            update_fields = ["status", "updated_at"]
+            if to_status in self.TERMINAL_CAMPAIGN_STATUSES and locked_campaign.completed_at is None:
+                locked_campaign.completed_at = timezone.now()
+                update_fields.append("completed_at")
+            locked_campaign.save(update_fields=update_fields)
+            campaign.status = locked_campaign.status
+            campaign.completed_at = locked_campaign.completed_at
 
         self._log_campaign_event(
             campaign=campaign,
@@ -381,19 +403,32 @@ class CampaignService:
             ConnectUpdateDeployment.Status.PENDING,
             ConnectUpdateDeployment.Status.IN_PROGRESS,
         }
-        for deployment in campaign.deployments.filter(status__in=open_statuses):
-            previous_status = deployment.status
-            deployment.status = ConnectUpdateDeployment.Status.ROLLED_BACK
-            deployment.completed_at = timezone.now()
-            deployment.save(update_fields=["status", "completed_at", "updated_at"])
-            self._log_campaign_event(
-                campaign=campaign,
-                deployment=deployment,
-                created_by=created_by,
-                event_type="deployment.rolled_back",
-                from_status=previous_status,
-                to_status=deployment.status,
-            )
+        open_deployments = list(
+            campaign.deployments.filter(status__in=open_statuses).only("id", "status")
+        )
+        if not open_deployments:
+            return
+
+        completed_at = timezone.now()
+        rollout_status = ConnectUpdateDeployment.Status.ROLLED_BACK
+        campaign.deployments.filter(pk__in=[deployment.pk for deployment in open_deployments]).update(
+            status=rollout_status,
+            completed_at=completed_at,
+            updated_at=completed_at,
+        )
+        ConnectCampaignEvent.objects.bulk_create(
+            [
+                ConnectCampaignEvent(
+                    campaign=campaign,
+                    deployment_id=deployment.pk,
+                    created_by=created_by,
+                    event_type="deployment.rolled_back",
+                    from_status=deployment.status,
+                    to_status=rollout_status,
+                )
+                for deployment in open_deployments
+            ]
+        )
 
     def _log_campaign_event(
         self,
