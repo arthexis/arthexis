@@ -113,14 +113,17 @@ class CampaignService:
                 notes=notes,
             )
 
+            initial_stage_device_ids = set(rollout_stages[0].device_ids)
+            queued_at = timezone.now()
             deployments = [
                 ConnectUpdateDeployment(
                     campaign=campaign,
                     device=device,
                     status=ConnectUpdateDeployment.Status.PENDING,
-                    queued_at=timezone.now(),
+                    queued_at=queued_at,
                 )
                 for device in devices
+                if device.pk in initial_stage_device_ids
             ]
             ConnectUpdateDeployment.objects.bulk_create(deployments)
 
@@ -404,14 +407,18 @@ class CampaignService:
             ConnectUpdateDeployment.Status.IN_PROGRESS,
         }
         open_deployments = list(
-            campaign.deployments.filter(status__in=open_statuses).only("id", "status")
+            campaign.deployments.select_for_update().filter(status__in=open_statuses).only("id", "status")
         )
         if not open_deployments:
             return
 
         completed_at = timezone.now()
         rollout_status = ConnectUpdateDeployment.Status.ROLLED_BACK
-        campaign.deployments.filter(pk__in=[deployment.pk for deployment in open_deployments]).update(
+        deployment_ids = [deployment.pk for deployment in open_deployments]
+        campaign.deployments.filter(
+            pk__in=deployment_ids,
+            status__in=open_statuses,
+        ).update(
             status=rollout_status,
             completed_at=completed_at,
             updated_at=completed_at,
