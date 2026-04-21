@@ -304,7 +304,7 @@ def test_resolve_sigils_table_driven_manager_method_dispatch(
 @pytest.mark.parametrize(
     ("token", "expected"),
     [
-        ("[USR=:count]", "2"),
+        ("[USR=:count]", lambda baseline, users: str(baseline + len(users))),
         ("[USR=id:total]", lambda baseline, users: str(baseline + sum(users))),
     ],
 )
@@ -316,9 +316,7 @@ def test_resolve_sigils_table_driven_aggregate_requests(user_root, token, expect
     user_ids = (first_user.id, second_user.id)
 
     resolved = sigil_resolver.resolve_sigils(token)
-    expected_value = (
-        expected if isinstance(expected, str) else expected(baseline_total, user_ids)
-    )
+    expected_value = expected(baseline_total, user_ids)
     assert resolved == expected_value
 
 @pytest.mark.django_db
