@@ -133,16 +133,18 @@ def _log_fd_snapshot(label: str) -> None:
         logger.debug(message)
 
 
-def _record_setup_failure(reason: str) -> None:
+def _record_setup_failure(reason: str, detail: str | None = None) -> None:
     """Track setup failures to avoid thrashing hardware when unavailable."""
 
     global _last_setup_failure
     _last_setup_failure = time.monotonic()
-    log = logger.warning
-    if _hardware_disabled_reason and is_expected_optional_hardware_absence(
-        _hardware_disabled_reason
-    ):
-        log = logger.info
+    if detail is None:
+        detail = _hardware_disabled_reason
+    log = (
+        logger.info
+        if detail and is_expected_optional_hardware_absence(detail)
+        else logger.warning
+    )
     log(
         "RFID hardware setup failed (%s); skipping retries for %.1fs",
         reason,
@@ -406,7 +408,7 @@ def _worker():  # pragma: no cover - background thread
 
     _log_fd_snapshot("worker-start")
     if not _setup_hardware():
-        _record_setup_failure("initialization")
+        _record_setup_failure("initialization", _hardware_disabled_reason)
         _log_fd_snapshot("worker-setup-failed")
         lock = lock_file_path()
         if lock.exists():

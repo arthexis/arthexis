@@ -14,25 +14,25 @@ def is_expected_i2c_absence(detail: object | None) -> bool:
     if not normalized:
         return False
 
-    if "i2cdetect is not available" in normalized:
-        return True
-
-    if "smbus module not found" in normalized:
-        return True
-
-    if (
-        "could not open file `/dev/i2c-" in normalized
-        and "no such file or directory" in normalized
+    if any(
+        marker in normalized
+        for marker in (
+            "i2cdetect is not available",
+            "smbus module not found",
+        )
     ):
         return True
 
-    if (
-        "i2c bus device for channel" in normalized
-        and "no such file or directory" in normalized
-    ):
-        return True
+    if "no such file or directory" not in normalized:
+        return False
 
-    return False
+    return any(
+        marker in normalized
+        for marker in (
+            "could not open file `/dev/i2c-",
+            "i2c bus device for channel",
+        )
+    )
 
 
 def is_expected_gpio_absence(detail: object | None) -> bool:
