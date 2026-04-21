@@ -344,9 +344,16 @@ def test_customer_pdf_download_not_blocked_by_reports_pdf_toggle(client, monkeyp
     settings.REPORTS_HTML_TO_PDF_ENABLED = False
     settings.EVERGO_PUBLIC_HTML_TO_PDF_ENABLED = True
     customer = _create_customer(username="owner-pdf-toggle")
+    captured = {}
+
+    def _fake_reports_render_pdf_bytes(html, *, enabled_setting_name="REPORTS_HTML_TO_PDF_ENABLED"):
+        captured["enabled_setting_name"] = enabled_setting_name
+        return b"%PDF-1.4 fake"
+
     monkeypatch.setattr("apps.evergo.views._remote_image_data_uri", lambda _: "")
-    monkeypatch.setattr("apps.evergo.views._render_pdf_bytes", lambda html: b"%PDF-1.4 fake")
+    monkeypatch.setattr("apps.evergo.views._reports_render_pdf_bytes", _fake_reports_render_pdf_bytes)
 
     response = client.get(reverse("evergo:customer-pdf-download", kwargs={"public_id": customer.public_id}))
 
     assert response.status_code == 200
+    assert captured["enabled_setting_name"] == "EVERGO_PUBLIC_HTML_TO_PDF_ENABLED"

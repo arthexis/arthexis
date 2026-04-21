@@ -254,9 +254,12 @@ def _render_pdf_bytes(
 
     Parameters:
         rendered_html: Rendered HTML payload.
+        enabled_setting_name: Django setting name that gates rendering for the
+            caller's feature. Missing settings default to enabled (fail-open).
 
     Returns:
-        PDF bytes.
+        PDF bytes, or ``b""`` when the feature toggle is disabled or the
+        renderer is unavailable.
     """
 
     if not getattr(settings, enabled_setting_name, True):
