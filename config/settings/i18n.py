@@ -1,7 +1,5 @@
 """Language and localization settings."""
 
-from .base import BASE_DIR
-
 LANGUAGE_CODE = "en"
 
 LANGUAGES = [
@@ -20,7 +18,6 @@ PARLER_LANGUAGES = {
     },
 }
 
-LOCALE_PATHS = [BASE_DIR / "apps" / "locale" / "locale"]
 FORMAT_MODULE_PATH = ["config.formats"]
 TIME_ZONE = "America/Monterrey"
 USE_I18N = False

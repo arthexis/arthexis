@@ -96,7 +96,6 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
     )
     app_slug = app.path.strip("/") if app else ""
     root_base = Path(settings.BASE_DIR).resolve()
-    locale_docs_base = root_base / "apps" / "locale" / "docs"
     docs_app_base = root_base / "apps" / "docs"
     readme_base = (root_base / app_slug).resolve() if app_slug else root_base
     candidates: list[Path] = []
@@ -135,12 +134,10 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
             add_localized_candidates(doc_path / "README.md")
 
         search_roots: list[Path] = []
-        if normalized.startswith(("docs/", "apps/docs/", "apps/locale/docs/")):
+        if normalized.startswith(("docs/", "apps/docs/")):
             search_roots.append(root_base)
         if docs_app_base.exists() and not normalized.startswith("apps/docs/"):
             search_roots.append(docs_app_base)
-        if locale_docs_base.exists() and not normalized.startswith("apps/locale/docs/"):
-            search_roots.append(locale_docs_base)
 
         for relative in relative_candidates:
             for base in search_roots:
@@ -179,13 +176,6 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
                 if short != lang:
                     candidates.append(locale_base / f"README.{short}.md")
             candidates.append(locale_base / "README.md")
-        if locale_docs_base.exists():
-            if lang:
-                candidates.append(locale_docs_base / f"README.{lang}.md")
-                short = lang.split("-")[0]
-                if short != lang:
-                    candidates.append(locale_docs_base / f"README.{short}.md")
-            candidates.append(locale_docs_base / "README.md")
         if root_default is not None:
             candidates.append(root_default)
 
