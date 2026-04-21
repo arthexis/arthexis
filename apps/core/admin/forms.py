@@ -322,41 +322,6 @@ class StripeProcessorAdminForm(PaymentProcessorAdminForm):
             "Enable to mark Stripe as live mode; disable for test mode."
         )
 
-class MaskedPasswordFormMixin:
-    """Mixin that hides stored passwords while allowing updates."""
-
-    password_sigil_fields: tuple[str, ...] = ()
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        field = self.fields.get("password")
-        if field is None:
-            return
-        if not isinstance(field.widget, forms.PasswordInput):
-            field.widget = forms.PasswordInput()
-        field.widget.attrs.setdefault("autocomplete", "new-password")
-        field.help_text = field.help_text or "Leave blank to keep the current password."
-        if self.instance.pk:
-            field.initial = ""
-            self.initial["password"] = ""
-        else:
-            field.required = True
-
-    def clean_password(self):
-        field = self.fields.get("password")
-        if field is None:
-            return self.cleaned_data.get("password")
-        pwd = self.cleaned_data.get("password")
-        if not pwd and self.instance.pk:
-            return keep_existing("password")
-        return pwd
-
-    def _post_clean(self):
-        super()._post_clean()
-        if self.password_sigil_fields:
-            _restore_sigil_values(self, self.password_sigil_fields)
-
-
 class EmailInboxAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
     """Admin form for :class:`apps.emails.models.EmailInbox` with hidden password."""
 
