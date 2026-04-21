@@ -7,8 +7,8 @@ from django.utils.translation import gettext_lazy as _
 from apps.cards import mse
 from apps.cards.models import CardFace, CardSet, OfferingSoul, get_cardface_bucket
 from apps.cards.soul import MAX_UPLOAD_BYTES, SoulDerivationError
+from apps.media.forms_mixins import MediaUploadAdminFormMixin
 from apps.media.models import MediaFile
-from apps.media.utils import create_media_file
 
 
 class CardFacePreviewForm(forms.Form):
@@ -52,12 +52,19 @@ class CardFacePreviewForm(forms.Form):
         return overrides
 
 
-class CardFaceAdminForm(forms.ModelForm):
+class CardFaceAdminForm(MediaUploadAdminFormMixin, forms.ModelForm):
     background_upload = forms.ImageField(
         required=False,
         label=_("Background upload"),
         help_text=_("Upload a printable background image for this card face."),
     )
+    media_upload_bindings = {
+        "background_upload": {
+            "media_field": "background_media",
+            "bucket_provider": get_cardface_bucket,
+            "extra_validator": CardFace.validate_background_file,
+        },
+    }
 
     class Meta:
         model = CardFace
@@ -65,8 +72,7 @@ class CardFaceAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        bucket = get_cardface_bucket()
-        self.fields["background_media"].queryset = MediaFile.objects.filter(bucket=bucket)
+        self.setup_bucket_aware_querysets()
 
     def clean(self):
         cleaned = super().clean()
@@ -74,26 +80,27 @@ class CardFaceAdminForm(forms.ModelForm):
         background_upload = cleaned.get("background_upload")
         if not background_media and not background_upload:
             raise ValidationError({"background_media": _("A background image is required.")})
-        if background_upload:
-            bucket = get_cardface_bucket()
-            if not bucket.allows_filename(background_upload.name):
-                raise ValidationError({"background_upload": _("File type is not allowed.")})
-            if not bucket.allows_size(background_upload.size):
-                raise ValidationError({"background_upload": _("File exceeds the allowed size.")})
-            CardFace.validate_background_file(background_upload)
+        if background_upload and not background_media:
+            bucket = self.get_media_bucket(get_cardface_bucket)
+            cleaned["background_media"] = MediaFile(
+                bucket=bucket,
+                file=background_upload,
+                original_name=background_upload.name,
+                content_type=getattr(background_upload, "content_type", "") or "",
+                size=getattr(background_upload, "size", 0) or 0,
+            )
         return cleaned
 
     def save(self, commit=True):
         instance = super().save(commit=False)
-        upload = self.cleaned_data.get("background_upload")
-        if upload:
-            bucket = get_cardface_bucket()
-            media_file = create_media_file(bucket=bucket, uploaded_file=upload)
-            instance.background_media = media_file
+        self.store_uploads_on_instance(instance)
         if commit:
             instance.save()
             self.save_m2m()
         return instance
+
+    def clean_background_upload(self):
+        return self.clean_upload_field("background_upload")
 
 
 class CardSetUploadForm(forms.Form):
