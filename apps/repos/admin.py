@@ -35,7 +35,7 @@ class FetchFromGitHubMixin(DjangoObjectActions):
     ):
         try:
             created, updated = sync_function()
-        except Exception as exc:  # pragma: no cover - defensive
+        except Exception as exc:
             self.message_user(
                 request,
                 error_message_template % {"error": exc},
