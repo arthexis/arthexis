@@ -24,6 +24,38 @@ class FetchFromGitHubMixin(DjangoObjectActions):
     changelist_actions: list[str] = []
     dashboard_actions: list[str] = []
 
+    def _run_fetch_from_github_action(
+        self,
+        request,
+        *,
+        sync_function,
+        error_message_template,
+        success_message_template,
+        empty_state_message_template,
+    ):
+        try:
+            created, updated = sync_function()
+        except Exception as exc:  # pragma: no cover - defensive
+            self.message_user(
+                request,
+                error_message_template % {"error": exc},
+                level=messages.ERROR,
+            )
+            return self._redirect_to_changelist()
+
+        if created or updated:
+            message = success_message_template % {
+                "created": created,
+                "updated": updated,
+            }
+            level = messages.SUCCESS
+        else:
+            message = empty_state_message_template
+            level = messages.INFO
+
+        self.message_user(request, message, level=level)
+        return self._redirect_to_changelist()
+
     def _redirect_to_changelist(self):
         opts = self.model._meta
         return HttpResponseRedirect(
@@ -59,28 +91,15 @@ class RepositoryIssueAdmin(
     raw_id_fields = ("repository",)
 
     def fetch_open_issues(self, request, queryset=None):
-        try:
-            created, updated = RepositoryIssue.fetch_open_issues()
-        except Exception as exc:  # pragma: no cover - defensive
-            self.message_user(
-                request,
-                _("Failed to fetch issues from GitHub: %s") % (exc,),
-                level=messages.ERROR,
-            )
-            return self._redirect_to_changelist()
-
-        if created or updated:
-            message = _("Fetched %(created)s new and %(updated)s updated issues.") % {
-                "created": created,
-                "updated": updated,
-            }
-            level = messages.SUCCESS
-        else:
-            message = _("No open issues found to sync.")
-            level = messages.INFO
-
-        self.message_user(request, message, level=level)
-        return self._redirect_to_changelist()
+        return self._run_fetch_from_github_action(
+            request,
+            sync_function=RepositoryIssue.fetch_open_issues,
+            error_message_template=_("Failed to fetch issues from GitHub: %(error)s"),
+            success_message_template=_(
+                "Fetched %(created)s new and %(updated)s updated issues."
+            ),
+            empty_state_message_template=_("No open issues found to sync."),
+        )
 
     fetch_open_issues.label = _("Fetch Open")
     fetch_open_issues.short_description = _("Fetch Open")
@@ -109,30 +128,17 @@ class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
     raw_id_fields = ("repository",)
 
     def fetch_open_pull_requests(self, request, queryset=None):
-        try:
-            created, updated = RepositoryPullRequest.fetch_open_pull_requests()
-        except Exception as exc:  # pragma: no cover - defensive
-            self.message_user(
-                request,
-                _("Failed to fetch pull requests from GitHub: %s") % (exc,),
-                level=messages.ERROR,
-            )
-            return self._redirect_to_changelist()
-
-        if created or updated:
-            message = _(
+        return self._run_fetch_from_github_action(
+            request,
+            sync_function=RepositoryPullRequest.fetch_open_pull_requests,
+            error_message_template=_(
+                "Failed to fetch pull requests from GitHub: %(error)s"
+            ),
+            success_message_template=_(
                 "Fetched %(created)s new and %(updated)s updated pull requests."
-            ) % {
-                "created": created,
-                "updated": updated,
-            }
-            level = messages.SUCCESS
-        else:
-            message = _("No open pull requests found to sync.")
-            level = messages.INFO
-
-        self.message_user(request, message, level=level)
-        return self._redirect_to_changelist()
+            ),
+            empty_state_message_template=_("No open pull requests found to sync."),
+        )
 
     fetch_open_pull_requests.label = _("Fetch Open")
     fetch_open_pull_requests.short_description = _("Fetch Open")
