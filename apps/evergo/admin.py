@@ -13,7 +13,7 @@ from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 from django.utils import timezone
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext_lazy as _, ngettext
 from django_object_actions import DjangoObjectActions
 
 from apps.core.admin import OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction
@@ -21,7 +21,14 @@ from apps.core.admin.mixins import _build_credentials_actions
 
 from .exceptions import EvergoAPIError
 from .forms import EvergoContractorLoginWizardForm, EvergoLoadCustomersForm, EvergoUserAdminForm
-from .models import EvergoArtifact, EvergoCustomer, EvergoOrder, EvergoOrderFieldValue, EvergoUser
+from .models import (
+    EvergoArtifact,
+    EvergoCustomer,
+    EvergoCustomerShareLink,
+    EvergoOrder,
+    EvergoOrderFieldValue,
+    EvergoUser,
+)
 
 LOADED_ENTITIES_LINK_ID_LIMIT = 100
 
@@ -1017,7 +1024,7 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
     """Inspect customer snapshots synchronized from Evergo orders."""
 
     changelist_actions = ("load_customers_wizard",)
-    actions = ("reload_selected_from_evergo",)
+    actions = ("reload_selected_from_evergo", "generate_share_links", "revoke_share_links")
     list_select_related = ("latest_order",)
 
     list_display = (
@@ -1183,3 +1190,63 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
             )
 
     reload_selected_from_evergo.short_description = _("Reload selected from Evergo")
+
+    @admin.action(description=_("Generate share links"))
+    def generate_share_links(self, request, queryset):
+        """Create active share links for selected customers using current admin user permissions."""
+        links: list[str] = []
+        for customer in queryset:
+            link = EvergoCustomerShareLink.objects.filter(
+                customer=customer,
+                created_by=request.user,
+                revoked_at__isnull=True,
+            ).order_by("-created_at").first()
+            if link is None:
+                link = EvergoCustomerShareLink.objects.create(
+                    customer=customer,
+                    created_by=request.user,
+                )
+            links.append(request.build_absolute_uri(link.get_absolute_url()))
+
+        if not links:
+            self.message_user(request, _("No share links were generated."), level=messages.WARNING)
+            return
+
+        links_markup = format_html_join(
+            "<br>",
+            '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
+            ((url, url) for url in links),
+        )
+        self.message_user(
+            request,
+            format_html("{}<br>{}", _("Share links created or reused:"), links_markup),
+            level=messages.SUCCESS,
+        )
+
+    @admin.action(description=_("Revoke share links"))
+    def revoke_share_links(self, request, queryset):
+        """Revoke active share links for selected customers created by current admin user."""
+        active_links = EvergoCustomerShareLink.objects.filter(
+            customer__in=queryset,
+            created_by=request.user,
+            revoked_at__isnull=True,
+        )
+        revoked_count = active_links.update(
+            revoked_at=timezone.now(),
+            revoked_by=request.user,
+        )
+
+        if not revoked_count:
+            self.message_user(request, _("No active share links were found to revoke."), level=messages.WARNING)
+            return
+
+        self.message_user(
+            request,
+            ngettext(
+                "Revoked %(count)d share link.",
+                "Revoked %(count)d share links.",
+                revoked_count,
+            )
+            % {"count": revoked_count},
+            level=messages.SUCCESS,
+        )

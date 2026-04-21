@@ -161,7 +161,7 @@
             </div>
 
             <div class="actions">
-                <a class="btn" href="{% url 'evergo:customer-pdf-download' customer.public_id %}">Download PDF</a>
+                <a class="btn" href="{{ pdf_download_url }}">Download PDF</a>
             </div>
 
             {% if google_maps_url %}

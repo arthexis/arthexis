@@ -10,9 +10,15 @@ urlpatterns = [
     path("dashboard/<uuid:token>/", views.my_evergo_dashboard, name="my-dashboard"),
     path("orders/<int:order_id>/tracking/", views.order_tracking_public, name="order-tracking-public"),
     path("customers/<uuid:public_id>/", views.customer_public_detail, name="customer-public-detail"),
+    path("customers/shared/<uuid:share_id>/", views.customer_shared_detail, name="customer-shared-detail"),
     path(
         "customers/<uuid:public_id>/download.pdf",
         views.customer_pdf_download,
         name="customer-pdf-download",
+    ),
+    path(
+        "customers/shared/<uuid:share_id>/download.pdf",
+        views.customer_shared_pdf_download,
+        name="customer-shared-pdf-download",
     ),
 ]
