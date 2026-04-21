@@ -205,6 +205,26 @@ class OperatorJourneyProvisionSuperuserForm(forms.Form):
 class OperatorJourneyGitHubAccessForm(forms.Form):
     """Configure and validate the current user's GitHub token."""
 
+    github_username = forms.CharField(
+        max_length=255,
+        required=False,
+        help_text="Optional GitHub username to confirm against the token.",
+        label="GitHub username",
+    )
+    token = forms.CharField(
+        max_length=255,
+        required=False,
+        widget=forms.PasswordInput(),
+        help_text="Personal access token used for repository, release, and issue tasks.",
+        label="GitHub token",
+    )
+    token_label = forms.CharField(
+        max_length=255,
+        required=False,
+        help_text="Optional label shown in token admin records.",
+        label="Token label",
+    )
+
     def __init__(self, *args, user, **kwargs):
         self.user = user
         super().__init__(*args, **kwargs)
