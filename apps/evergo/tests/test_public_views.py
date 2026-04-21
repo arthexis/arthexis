@@ -216,20 +216,21 @@ def test_customer_public_detail_enforces_image_and_storage_limits(client, settin
 
 
 @pytest.mark.django_db
-def test_customer_public_detail_upload_shows_form_error_for_model_validation(client, monkeypatch):
-    customer = _create_customer(username="owner-unsupported-suffix")
+def test_customer_public_detail_handles_artifact_model_validation_error(client, monkeypatch):
+    customer = _create_customer(username="owner-validation-error")
     detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
-    monkeypatch.setattr(
-        "apps.evergo.views.EvergoArtifact.objects.create",
-        lambda **_kwargs: (_ for _ in ()).throw(ValidationError({"file": ["Only image files and PDFs are allowed."]})),
-    )
+
+    def _raise_validation_error(**_kwargs):
+        raise ValidationError({"file": ["Only image files and PDFs are allowed."]})
+
+    monkeypatch.setattr("apps.evergo.views.EvergoArtifact.objects.create", _raise_validation_error)
 
     response = client.post(
         detail_url,
         data={
             "action": "upload-image",
             "image": SimpleUploadedFile(
-                "photo.gif",
+                "photo.jpg",
                 b"\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b",
                 content_type="image/gif",
             ),
@@ -238,6 +239,28 @@ def test_customer_public_detail_upload_shows_form_error_for_model_validation(cli
 
     assert response.status_code == 200
     assert "Only image files and PDFs are allowed." in response.content.decode()
+    assert not EvergoArtifact.objects.filter(customer=customer).exists()
+
+
+@pytest.mark.django_db
+def test_customer_public_detail_rejects_upload_that_resolves_to_non_image_artifact_type(client):
+    customer = _create_customer(username="owner-non-image-artifact")
+    detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
+
+    response = client.post(
+        detail_url,
+        data={
+            "action": "upload-image",
+            "image": SimpleUploadedFile(
+                "not-image.pdf",
+                b"\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b",
+                content_type="image/gif",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Only image files are allowed for this upload." in response.content.decode()
     assert not EvergoArtifact.objects.filter(customer=customer).exists()
 
 
