@@ -83,6 +83,23 @@ class CampaignServiceTests(CampaignServiceTestCaseMixin, TestCase):
         scheduled_event = campaign.events.get(event_type="campaign.scheduled")
         self.assertEqual(scheduled_event.payload["deployment_count"], 1)
 
+    def test_rejects_conflicts_for_later_stages_without_override(self) -> None:
+        self.service.create_campaign(
+            release=self.release,
+            target_set={"device_ids": [self.device_a.device_id, self.device_b.device_id]},
+            strategy=ConnectUpdateCampaign.Strategy.CANARY,
+            canary_size=1,
+            created_by=self.user,
+        )
+
+        with self.assertRaises(CampaignServiceError):
+            self.service.create_campaign(
+                release=self.release,
+                target_set={"device_ids": [self.device_b.device_id]},
+                strategy=ConnectUpdateCampaign.Strategy.ALL_AT_ONCE,
+                created_by=self.user,
+            )
+
     def test_rejects_incompatible_device_target(self) -> None:
         strict_release = ConnectImageRelease.objects.create(
             name="strict-release",

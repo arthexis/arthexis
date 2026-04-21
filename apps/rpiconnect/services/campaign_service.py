@@ -321,16 +321,28 @@ class CampaignService:
         if override_conflicts:
             return
 
-        device_ids = [device.pk for device in devices]
+        requested_devices = {device.pk: device.device_id for device in devices}
+        requested_device_ids = set(requested_devices)
+
         conflict_qs = ConnectUpdateDeployment.objects.filter(
-            device_id__in=device_ids,
+            device_id__in=requested_device_ids,
             campaign__status__in=self.ACTIVE_CAMPAIGN_STATUSES,
         ).values_list("device__device_id", flat=True)
-        conflicts = sorted(set(conflict_qs))
+        conflicts = set(conflict_qs)
+
+        active_campaigns = ConnectUpdateCampaign.objects.filter(
+            status__in=self.ACTIVE_CAMPAIGN_STATUSES,
+        ).only("target_set")
+        for active_campaign in active_campaigns:
+            target_devices = self.resolve_targets(active_campaign.target_set or {})
+            for target_device in target_devices:
+                if target_device.pk in requested_device_ids:
+                    conflicts.add(requested_devices[target_device.pk])
+
         if conflicts:
             raise CampaignServiceError(
                 "Conflicting active campaigns exist for devices: "
-                f"{', '.join(conflicts)}. Use explicit admin override to proceed."
+                f"{', '.join(sorted(conflicts))}. Use explicit admin override to proceed."
             )
 
     def _build_rollout_stages(
