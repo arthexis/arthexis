@@ -732,6 +732,15 @@ def _station_model_documents(bucket, image_ids):
     return [media_file for media_file in files if media_file.pk not in image_ids]
 
 
+def _landing_requires_station_models(*, request, landing, **kwargs) -> bool:
+    return StationModel.objects.exists()
+
+
+@landing("Supported CP Models")
+@module_pill_link_validation(
+    _landing_requires_station_models,
+    parameter_getter=_landing_visibility_params,
+)
 def supported_chargers(request):
     station_models = StationModel.objects.all().order_by(
         "vendor", "model_family", "model"
