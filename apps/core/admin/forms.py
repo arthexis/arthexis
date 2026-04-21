@@ -160,19 +160,30 @@ class MaskedPasswordFormMixin:
         field.widget.attrs.setdefault("autocomplete", "new-password")
         field.help_text = field.help_text or "Leave blank to keep the current password."
         if self.instance.pk:
+            field.required = False
             field.initial = ""
             self.initial[self.password_field_name] = ""
         else:
             field.required = True
 
-    def clean_password(self):
+    def _clean_password_field(self, cleaned_data):
         field = self.fields.get(self.password_field_name)
         if field is None:
-            return self.cleaned_data.get(self.password_field_name)
-        pwd = self.cleaned_data.get(self.password_field_name)
+            return cleaned_data
+        pwd = cleaned_data.get(self.password_field_name)
         if not pwd and self.instance.pk:
-            return keep_existing(self.password_field_name)
-        return pwd
+            cleaned_data[self.password_field_name] = keep_existing(
+                self.password_field_name
+            )
+        return cleaned_data
+
+    def clean_password(self):
+        cleaned_data = self._clean_password_field(self.cleaned_data)
+        return cleaned_data.get(self.password_field_name)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        return self._clean_password_field(cleaned_data)
 
     def _post_clean(self):
         super()._post_clean()
@@ -184,7 +195,6 @@ class OdooEmployeeAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
     """Admin form for :class:`core.models.OdooEmployee` with hidden password."""
 
     password = forms.CharField(
-        widget=forms.PasswordInput(render_value=True),
         required=False,
         help_text="Leave blank to keep the current password.",
     )

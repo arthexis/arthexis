@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from django import forms
 
 import pytest
 
-from apps.core.admin.forms import KeepExistingValue, OdooEmployeeAdminForm
+from apps.core.admin.forms import (
+    KeepExistingValue,
+    MaskedPasswordFormMixin,
+    OdooEmployeeAdminForm,
+)
 from apps.odoo.models import OdooEmployee
 
 
@@ -60,3 +66,17 @@ class TestMaskedPasswordFormMixinSupport:
 
         assert isinstance(form.fields["password"].widget, forms.PasswordInput)
         assert form.fields["password"].widget.render_value is True
+
+    def test_configurable_password_field_name_uses_keep_existing_on_update(self):
+        class DummyForm(MaskedPasswordFormMixin, forms.Form):
+            password_field_name = "secret"
+            secret = forms.CharField(required=False)
+
+            def __init__(self, *args, instance=None, **kwargs):
+                self.instance = instance or SimpleNamespace(pk=None)
+                super().__init__(*args, **kwargs)
+
+        form = DummyForm(data={"secret": ""}, instance=SimpleNamespace(pk=1))
+
+        assert form.is_valid(), form.errors
+        assert isinstance(form.cleaned_data["secret"], KeepExistingValue)
