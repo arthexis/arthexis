@@ -178,7 +178,7 @@ class OdooEmployeeAdminForm(forms.ModelForm):
 class PaymentProcessorAdminForm(forms.ModelForm):
     masked_fields: tuple[str, ...] = ()
     required_credential_fields: tuple[str, ...] = ()
-    required_credential_error = ""
+    required_credential_error = _("Provide all required credentials.")
     sigil_fields: tuple[str, ...] = ()
 
     def __init__(self, *args, **kwargs):
@@ -205,14 +205,11 @@ class PaymentProcessorAdminForm(forms.ModelForm):
             for field in self.masked_fields:
                 if cleaned.get(field) == "":
                     cleaned[field] = keep_existing(field)
+        self.validate_required_credentials(cleaned)
         return cleaned
 
     def validate_required_credentials(self, cleaned_data):
-        if (
-            cleaned_data.get("DELETE")
-            or self.errors
-            or not self.required_credential_fields
-        ):
+        if self.errors or not self.required_credential_fields:
             return
         provided = [
             name
@@ -258,12 +255,6 @@ class OpenPayProcessorAdminForm(PaymentProcessorAdminForm):
             "Enable to send requests to OpenPay's live environment."
         )
 
-    def clean(self):
-        cleaned = super().clean()
-        self.validate_required_credentials(cleaned)
-        return cleaned
-
-
 class PayPalProcessorAdminForm(PaymentProcessorAdminForm):
     masked_fields = ("client_secret",)
     required_credential_fields = ("client_id", "client_secret")
@@ -288,12 +279,6 @@ class PayPalProcessorAdminForm(PaymentProcessorAdminForm):
         self.fields["is_production"].help_text = _(
             "Enable to send requests to PayPal's live environment."
         )
-
-    def clean(self):
-        cleaned = super().clean()
-        self.validate_required_credentials(cleaned)
-        return cleaned
-
 
 class StripeProcessorAdminForm(PaymentProcessorAdminForm):
     masked_fields = ("secret_key", "webhook_secret")
@@ -321,12 +306,6 @@ class StripeProcessorAdminForm(PaymentProcessorAdminForm):
         self.fields["is_production"].help_text = _(
             "Enable to mark Stripe as live mode; disable for test mode."
         )
-
-    def clean(self):
-        cleaned = super().clean()
-        self.validate_required_credentials(cleaned)
-        return cleaned
-
 
 class MaskedPasswordFormMixin:
     """Mixin that hides stored passwords while allowing updates."""
