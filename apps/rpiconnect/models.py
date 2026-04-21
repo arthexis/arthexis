@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 
 
 class ConnectAccount(models.Model):
@@ -235,8 +235,22 @@ class ConnectUpdateDeployment(models.Model):
     def save(self, *args, **kwargs):
         """Persist only validated deployment state transitions."""
 
+        original_status = None
+        if self.pk:
+            original_status = type(self).objects.filter(pk=self.pk).values_list("status", flat=True).first()
         self.full_clean()
         super().save(*args, **kwargs)
+        terminal_statuses = {
+            self.Status.SUCCEEDED,
+            self.Status.FAILED,
+            self.Status.ROLLED_BACK,
+        }
+        if original_status != self.status and self.status in terminal_statuses:
+            from apps.rpiconnect.services import CampaignService
+
+            transaction.on_commit(
+                lambda: CampaignService().sync_rollout_progress(campaign_id=self.campaign_id)
+            )
 
 
 class ConnectCampaignEvent(models.Model):

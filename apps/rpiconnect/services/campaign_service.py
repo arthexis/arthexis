@@ -330,12 +330,11 @@ class CampaignService:
 
         active_campaigns = ConnectUpdateCampaign.objects.filter(
             status__in=self.ACTIVE_CAMPAIGN_STATUSES,
-        ).only("target_set")
+        ).prefetch_related("events")
         for active_campaign in active_campaigns:
-            target_devices = self.resolve_targets(active_campaign.target_set or {})
-            for target_device in target_devices:
-                if target_device.pk in requested_device_ids:
-                    conflicts.add(requested_devices[target_device.pk])
+            target_device_ids = self._campaign_target_device_ids(active_campaign)
+            for target_device_id in target_device_ids.intersection(requested_device_ids):
+                conflicts.add(requested_devices[target_device_id])
 
         if conflicts:
             raise CampaignServiceError(
@@ -384,6 +383,33 @@ class CampaignService:
         if isinstance(values, str) or not isinstance(values, list):
             raise CampaignServiceError(f"target_set.{key} must be a list.")
         return values
+
+    def _campaign_target_device_ids(self, campaign: ConnectUpdateCampaign) -> set[int]:
+        """Return immutable target device IDs captured for an existing campaign."""
+
+        created_event = next(
+            (event for event in campaign.events.all() if event.event_type == "campaign.created"),
+            None,
+        )
+        if created_event:
+            rollout_stage_ids = {
+                device_id
+                for stage in created_event.payload.get("rollout_stages", [])
+                for device_id in stage.get("device_ids", [])
+                if isinstance(device_id, int)
+            }
+            if rollout_stage_ids:
+                return rollout_stage_ids
+        return set(campaign.deployments.values_list("device_id", flat=True))
+
+    def sync_rollout_progress(self, *, campaign_id: int) -> None:
+        """Queue the next rollout stage when a running campaign has no open deployments."""
+
+        with transaction.atomic():
+            campaign = ConnectUpdateCampaign.objects.select_for_update().filter(pk=campaign_id).first()
+            if not campaign or campaign.status != ConnectUpdateCampaign.Status.RUNNING:
+                return
+            self._queue_next_rollout_stage(campaign=campaign)
 
     def _transition_campaign(
         self,

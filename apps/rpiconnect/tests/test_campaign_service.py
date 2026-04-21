@@ -100,6 +100,25 @@ class CampaignServiceTests(CampaignServiceTestCaseMixin, TestCase):
                 created_by=self.user,
             )
 
+    def test_rejects_conflicts_using_immutable_stage_snapshot(self) -> None:
+        self.service.create_campaign(
+            release=self.release,
+            target_set={"labels": ["edge", "stable"]},
+            strategy=ConnectUpdateCampaign.Strategy.CANARY,
+            canary_size=1,
+            created_by=self.user,
+        )
+        self.device_b.metadata = {"labels": ["renamed"], "cohort": "south"}
+        self.device_b.save(update_fields=["metadata", "updated_at"])
+
+        with self.assertRaises(CampaignServiceError):
+            self.service.create_campaign(
+                release=self.release,
+                target_set={"device_ids": [self.device_b.device_id]},
+                strategy=ConnectUpdateCampaign.Strategy.ALL_AT_ONCE,
+                created_by=self.user,
+            )
+
     def test_rejects_non_list_target_selectors(self) -> None:
         with self.assertRaisesMessage(CampaignServiceError, "target_set.device_ids must be a list."):
             self.service.create_campaign(

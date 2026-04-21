@@ -68,7 +68,7 @@ class CampaignStateTransitionTests(CampaignServiceTestCaseMixin, TestCase):
         with self.assertRaises(CampaignServiceError):
             self.service.resume_campaign(campaign, created_by=self.user)
 
-    def test_resume_queues_next_canary_stage_when_first_stage_finished(self) -> None:
+    def test_running_campaign_auto_queues_next_canary_stage_when_first_stage_finished(self) -> None:
         campaign = self.service.create_campaign(
             release=self.release,
             target_set={"device_ids": [self.device_a.device_id, self.device_b.device_id]},
@@ -76,15 +76,14 @@ class CampaignStateTransitionTests(CampaignServiceTestCaseMixin, TestCase):
             canary_size=1,
             created_by=self.user,
         )
+        self.service.start_campaign(campaign, created_by=self.user)
+
         first_deployment = campaign.deployments.get(device=self.device_a)
         first_deployment.status = ConnectUpdateDeployment.Status.IN_PROGRESS
         first_deployment.save(update_fields=["status", "updated_at"])
         first_deployment.status = ConnectUpdateDeployment.Status.SUCCEEDED
-        first_deployment.save(update_fields=["status", "updated_at"])
-
-        self.service.start_campaign(campaign, created_by=self.user)
-        self.service.pause_campaign(campaign, created_by=self.user)
-        self.service.resume_campaign(campaign, created_by=self.user)
+        with self.captureOnCommitCallbacks(execute=True):
+            first_deployment.save(update_fields=["status", "updated_at"])
 
         self.assertEqual(campaign.deployments.count(), 2)
         self.assertTrue(campaign.deployments.filter(device=self.device_b).exists())
