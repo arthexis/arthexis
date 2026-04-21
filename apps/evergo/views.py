@@ -245,6 +245,7 @@ def _handle_public_image_upload(
     customer: EvergoCustomer,
     image_limit: int,
     storage_limit_bytes: int,
+    redirect_url: str,
 ) -> tuple[EvergoCustomerImageUploadForm, HttpResponse | None]:
     """Handle upload-image POST processing and return the form and optional redirect."""
     upload_form = EvergoCustomerImageUploadForm(request.POST, request.FILES)
@@ -313,10 +314,10 @@ def _handle_public_image_upload(
             return upload_form, None
 
     messages.success(request, "Image added.")
-    return upload_form, redirect(customer.get_absolute_url())
+    return upload_form, redirect(redirect_url)
 
 
-def _handle_public_image_delete(request, *, customer: EvergoCustomer) -> HttpResponse | None:
+def _handle_public_image_delete(request, *, customer: EvergoCustomer, redirect_url: str) -> HttpResponse | None:
     """Handle delete-image POST processing and return redirect when deletion succeeds."""
     if request.POST.get("confirm_delete") != "yes":
         messages.error(request, "Deletion cancelled because confirmation was missing.")
@@ -336,7 +337,7 @@ def _handle_public_image_delete(request, *, customer: EvergoCustomer) -> HttpRes
     _delete_artifact_and_blob(artifact)
     _resequence_customer_image_artifacts(customer)
     messages.success(request, "Image deleted.")
-    return redirect(customer.get_absolute_url())
+    return redirect(redirect_url)
 
 
 def _can_user_access_customer(*, user, customer: EvergoCustomer) -> bool:
@@ -370,7 +371,13 @@ def _get_customer_for_share_request(*, share_id) -> EvergoCustomer:
     return share_link.customer
 
 
-def _render_customer_detail(request, *, customer: EvergoCustomer, pdf_download_url: str) -> HttpResponse:
+def _render_customer_detail(
+    request,
+    *,
+    customer: EvergoCustomer,
+    pdf_download_url: str,
+    detail_redirect_url: str,
+) -> HttpResponse:
     """Render customer detail page and process image upload/delete actions."""
     _resequence_customer_image_artifacts(customer)
     image_limit = _get_evergo_public_image_limit()
@@ -385,11 +392,16 @@ def _render_customer_detail(request, *, customer: EvergoCustomer, pdf_download_u
                 customer=customer,
                 image_limit=image_limit,
                 storage_limit_bytes=storage_limit_bytes,
+                redirect_url=detail_redirect_url,
             )
             if response:
                 return response
         elif action == "delete-image":
-            response = _handle_public_image_delete(request, customer=customer)
+            response = _handle_public_image_delete(
+                request,
+                customer=customer,
+                redirect_url=detail_redirect_url,
+            )
             if response:
                 return response
 
@@ -457,6 +469,7 @@ def customer_public_detail(request, public_id) -> HttpResponse:
         request,
         customer=customer,
         pdf_download_url=reverse("evergo:customer-pdf-download", kwargs={"public_id": customer.public_id}),
+        detail_redirect_url=reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id}),
     )
 
 
@@ -477,6 +490,7 @@ def customer_shared_detail(request, share_id) -> HttpResponse:
         request,
         customer=customer,
         pdf_download_url=reverse("evergo:customer-shared-pdf-download", kwargs={"share_id": share_id}),
+        detail_redirect_url=reverse("evergo:customer-shared-detail", kwargs={"share_id": share_id}),
     )
 
 

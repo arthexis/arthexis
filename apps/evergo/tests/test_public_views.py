@@ -465,3 +465,46 @@ def test_customer_shared_detail_uses_creator_permissions(client):
     response = client.get(reverse("evergo:customer-shared-detail", kwargs={"share_id": share_link.share_id}))
 
     assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_customer_shared_detail_upload_redirects_back_to_share_route(client):
+    customer = _create_customer(username="owner-shared-upload-redirect")
+    share_link = EvergoCustomerShareLink.objects.create(customer=customer, created_by=customer.user.user)
+    shared_url = reverse("evergo:customer-shared-detail", kwargs={"share_id": share_link.share_id})
+
+    response = client.post(
+        shared_url,
+        data={
+            "action": "upload-image",
+            "image": SimpleUploadedFile(
+                "evidence.jpg",
+                b"\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b",
+                content_type="image/gif",
+            ),
+        },
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == shared_url
+
+
+@pytest.mark.django_db
+def test_customer_shared_detail_delete_redirects_back_to_share_route(client):
+    customer = _create_customer(username="owner-shared-delete-redirect")
+    share_link = EvergoCustomerShareLink.objects.create(customer=customer, created_by=customer.user.user)
+    shared_url = reverse("evergo:customer-shared-detail", kwargs={"share_id": share_link.share_id})
+    artifact = EvergoArtifact.objects.create(
+        customer=customer,
+        file=SimpleUploadedFile("one.jpg", b"12345", content_type="image/jpeg"),
+        artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
+        display_order=1,
+    )
+
+    response = client.post(
+        shared_url,
+        data={"action": "delete-image", "artifact_id": artifact.pk, "confirm_delete": "yes"},
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == shared_url

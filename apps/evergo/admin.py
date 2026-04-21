@@ -1231,10 +1231,10 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
             created_by=request.user,
             revoked_at__isnull=True,
         )
-        revoked_count = 0
-        for share_link in active_links:
-            share_link.revoke(actor=request.user)
-            revoked_count += 1
+        revoked_count = active_links.update(
+            revoked_at=timezone.now(),
+            revoked_by=request.user,
+        )
 
         if not revoked_count:
             self.message_user(request, _("No active share links were found to revoke."), level=messages.WARNING)
