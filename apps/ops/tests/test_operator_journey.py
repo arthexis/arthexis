@@ -686,6 +686,9 @@ class OperatorJourneyViewTests(TestCase):
         self.assertEqual(callback_response.status_code, 302)
         mock_post.assert_not_called()
         self.assertFalse(GitHubToken.objects.filter(user=self.user).exists())
+        self.assertEqual(
+            self.client.session["ops_github_oauth_state"]["state"], "expected-state"
+        )
 
     @override_settings(
         GITHUB_OAUTH_CLIENT_ID="client-id",

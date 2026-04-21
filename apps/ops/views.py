@@ -625,7 +625,7 @@ def operator_journey_github_callback(
         OPERATOR_JOURNEY_STEP_URL_NAME,
         kwargs={"journey_slug": step.journey.slug, "step_slug": step.slug},
     )
-    state_payload = request.session.pop(GITHUB_OAUTH_SESSION_STATE_KEY, None)
+    state_payload = request.session.get(GITHUB_OAUTH_SESSION_STATE_KEY)
     request_state = (request.GET.get("state") or "").strip()
     if (
         not isinstance(state_payload, dict)
@@ -638,6 +638,7 @@ def operator_journey_github_callback(
             request, "GitHub authorization could not be validated. Please try again."
         )
         return redirect(step_url)
+    request.session.pop(GITHUB_OAUTH_SESSION_STATE_KEY, None)
 
     oauth_error = (request.GET.get("error") or "").strip()
     if oauth_error:
