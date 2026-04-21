@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from pathlib import Path
 
+from apps.core.optional_hardware import is_expected_optional_hardware_absence
 from apps.screens.history import LCDHistoryRecorder
 from apps.screens.lcd import LCDUnavailableError
 
@@ -806,6 +807,8 @@ def _disable_lcd(
     runner.lcd_disabled = True
     if exc is None:
         logger.warning("Disabling LCD feature: %s", reason)
+    elif is_expected_optional_hardware_absence(exc):
+        logger.info("Disabling LCD feature: %s: %s", reason, exc)
     else:
         logger.warning("Disabling LCD feature: %s: %s", reason, exc, exc_info=exc_info)
     _blank_display(runner.lcd)

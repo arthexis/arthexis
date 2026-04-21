@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -124,6 +125,30 @@ def test_disable_lcd_resets_mutable_runner_state(monkeypatch):
     assert coordinator.event.line_deadline == 0.0
     assert coordinator.frame_writer.lcd is None
     assert coordinator.frame_writer.history_recorder is previous_history
+
+
+def test_disable_lcd_logs_info_for_expected_missing_hardware(caplog):
+    coordinator = runner.LCDRunner()
+
+    with caplog.at_level(logging.INFO):
+        coordinator.disable_lcd(
+            "LCD unavailable during startup",
+            runner.LCDUnavailableError(
+                "I2C bus device for channel 1 is unavailable ([Errno 2] No such file or directory)"
+            ),
+        )
+
+    assert "Disabling LCD feature" in caplog.text
+    assert "WARNING" not in caplog.text
+
+
+def test_disable_lcd_logs_warning_for_unexpected_failures(caplog):
+    coordinator = runner.LCDRunner()
+
+    with caplog.at_level(logging.WARNING):
+        coordinator.disable_lcd("LCD startup failed", RuntimeError("permission denied"))
+
+    assert "Disabling LCD feature" in caplog.text
 
 
 def test_handle_external_event_interrupt_loads_and_renders(monkeypatch):
