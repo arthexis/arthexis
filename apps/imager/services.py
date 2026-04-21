@@ -120,6 +120,16 @@ class BuildEngineProfile:
     required_artifacts: tuple[str, ...]
     required_manifest_fields: tuple[str, ...]
 
+    def builds_manifest(self) -> bool:
+        """Return whether the profile requires rollout manifest generation."""
+
+        return bool(
+            self.required_base_os
+            or self.required_architecture
+            or self.required_artifacts
+            or self.required_manifest_fields
+        )
+
     def validate_base_requirements(self, metadata: dict[str, object]) -> None:
         """Validate source metadata against profile base OS and architecture requirements."""
 
@@ -143,6 +153,47 @@ class BuildEngineProfile:
             raise ImagerBuildError(
                 f"Profile '{self.name}' requires manifest fields: {fields}."
             )
+
+    def build_manifest(
+        self,
+        *,
+        profile_metadata: dict[str, object],
+        default_board: str,
+    ) -> dict[str, object]:
+        """Build and validate the rollout manifest for this profile."""
+
+        if not self.builds_manifest():
+            return {}
+
+        base_requirements = {
+            "base_os": profile_metadata.get("base_os"),
+            "architecture": profile_metadata.get("architecture"),
+        }
+        self.validate_base_requirements(base_requirements)
+
+        required_artifacts = profile_metadata.get("required_artifacts", self.required_artifacts)
+        if not isinstance(required_artifacts, list | tuple):
+            raise ImagerBuildError(f"Profile '{self.name}' requires required_artifacts as a list.")
+
+        required_artifacts_set = {str(entry) for entry in required_artifacts if str(entry)}
+        missing_artifacts = [name for name in self.required_artifacts if name not in required_artifacts_set]
+        if missing_artifacts:
+            raise ImagerBuildError(
+                f"Profile '{self.name}' is missing required update-enablement artifacts: "
+                + ", ".join(missing_artifacts)
+                + "."
+            )
+
+        manifest = {
+            "release_version": profile_metadata.get("release_version"),
+            "compatibility_model": profile_metadata.get("compatibility_model"),
+            "compatibility_board": profile_metadata.get("compatibility_board", default_board),
+            "ota_channel": profile_metadata.get("ota_channel"),
+            "ota_artifact_type": profile_metadata.get("ota_artifact_type", "raw-disk-image"),
+            "required_artifacts": sorted(required_artifacts_set),
+        }
+        self.validate_manifest(manifest)
+        return manifest
 
 
 @dataclass(frozen=True)
@@ -448,45 +499,10 @@ def _build_profile_manifest(
     profile_metadata: dict[str, object],
 ) -> dict[str, object]:
     """Build rollout manifest metadata for a profile and validate mandatory fields."""
-
-    if build_profile.name != "connect-ota":
-        return {}
-
-    base_requirements = {
-        "base_os": "raspberry-pi-os-trixie",
-        "architecture": "arm64",
-    }
-    base_requirements.update(
-        {
-            key: value
-            for key, value in profile_metadata.items()
-            if key in {"base_os", "architecture"}
-        }
+    return build_profile.build_manifest(
+        profile_metadata=profile_metadata,
+        default_board=TARGET_RPI4B,
     )
-    build_profile.validate_base_requirements(base_requirements)
-
-    required_artifacts = profile_metadata.get("required_artifacts", build_profile.required_artifacts)
-    if not isinstance(required_artifacts, list | tuple):
-        raise ImagerBuildError("Profile 'connect-ota' requires required_artifacts as a list.")
-    required_artifacts_set = {str(entry) for entry in required_artifacts if str(entry)}
-    missing_artifacts = [name for name in build_profile.required_artifacts if name not in required_artifacts_set]
-    if missing_artifacts:
-        raise ImagerBuildError(
-            "Profile 'connect-ota' is missing required update-enablement artifacts: "
-            + ", ".join(missing_artifacts)
-            + "."
-        )
-
-    manifest = {
-        "release_version": profile_metadata.get("release_version"),
-        "compatibility_model": profile_metadata.get("compatibility_model"),
-        "compatibility_board": profile_metadata.get("compatibility_board", TARGET_RPI4B),
-        "ota_channel": profile_metadata.get("ota_channel"),
-        "ota_artifact_type": profile_metadata.get("ota_artifact_type", "raw-disk-image"),
-        "required_artifacts": sorted(required_artifacts_set),
-    }
-    build_profile.validate_manifest(manifest)
-    return manifest
 
 
 def _build_download_uri(download_base_uri: str, output_filename: str) -> str:
