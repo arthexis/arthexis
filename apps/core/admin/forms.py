@@ -11,7 +11,7 @@ from import_export.forms import (
 from apps.cards.models import RFID
 from apps.core.widgets import OdooProductWidget
 from apps.emails.models import EmailInbox, EmailOutbox
-from apps.energy.models import CustomerAccount
+from apps.energy.admin.forms_shared import CustomerAccountRFIDForm
 from apps.odoo.models import OdooEmployee, OdooProduct
 from apps.payments.models.openpay import OpenPayProcessor
 from apps.payments.models.paypal import PayPalProcessor
@@ -66,22 +66,6 @@ def _restore_sigil_values(form, field_names):
         else:
             raw = _raw_instance_value(form.instance, name)
         setattr(form.instance, name, raw)
-
-
-class CustomerAccountRFIDForm(forms.ModelForm):
-    """Form for assigning existing RFIDs to a customer account."""
-
-    class Meta:
-        model = CustomerAccount.rfids.through
-        fields = ["rfid"]
-
-    def clean_rfid(self):
-        rfid = self.cleaned_data["rfid"]
-        if rfid.energy_accounts.exclude(pk=self.instance.customeraccount_id).exists():
-            raise forms.ValidationError(
-                "RFID is already assigned to another customer account"
-            )
-        return rfid
 
 
 class UserCreationWithExpirationForm(UserCreationForm):
