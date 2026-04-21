@@ -8,6 +8,7 @@
   <h1 class="h4 mb-3">{% trans "Upload Image" %}</h1>
   <form method="post" enctype="multipart/form-data" class="card card-body shadow-sm" id="upload-form">
     {% csrf_token %}
+    {{ form.staged_upload_key }}
     {{ form.non_field_errors }}
     <div class="row g-4 align-items-start">
       <div class="col-12 col-lg-6">
@@ -18,6 +19,9 @@
             {{ form.image }}
           </div>
           {{ form.image.errors }}
+          {% if form.staged_upload_key.value %}
+            <div class="form-text">{% trans "Image file is retained from your previous attempt. You can resubmit without re-uploading, or pick a new file to replace it." %}</div>
+          {% endif %}
         </div>
         <div class="border rounded p-3 bg-body-tertiary">
           <img

@@ -214,11 +214,59 @@ class OperatorJourneyViewTests(TestCase):
 
         self.assertContains(response, "Next:")
         self.assertContains(response, "Validate role")
+        self.assertInHTML(
+            (
+                f'<a class="button" '
+                f'href="{reverse("ops:operator-journey-dashboard")}">'
+                "Operator Journey"
+                "</a>"
+            ),
+            response.content.decode(),
+        )
         self.assertNotContains(response, "admin-home-operator-journey__age")
         self.assertContains(
             response,
             reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug}),
         )
+
+    def test_journey_dashboard_shows_completed_and_current_steps_only(self):
+        step_3 = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Future task",
+            slug="future-task",
+            instruction="Hidden until current task is complete.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        complete_step_for_user(user=self.user, step=self.step_1)
+
+        response = self.client.get(reverse("ops:operator-journey-dashboard"))
+
+        self.assertContains(response, self.step_1.title)
+        self.assertContains(response, self.step_2.title)
+        self.assertContains(response, "Current required task")
+        self.assertContains(response, "Completed")
+        self.assertContains(
+            response,
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            ),
+        )
+        self.assertNotContains(
+            response,
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            ),
+        )
+        self.assertNotContains(response, step_3.title)
 
     def test_step_view_redirects_when_opening_future_step(self):
         response = self.client.get(

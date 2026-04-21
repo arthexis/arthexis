@@ -35,24 +35,65 @@ def _build_credentials_actions(action_name, handler_name, description=TEST_CREDE
 
 
 class OwnableAdminForm(forms.ModelForm):
-    """Enforce mutual exclusivity between user and security group owners."""
+    """Enforce configurable ownership requirements for admin model forms."""
 
+    owner_exactly_one: bool = False
+    owner_field_names: tuple[str, ...] = ("user", "group")
     owner_required: bool = True
+
+    owner_conflict_message = _("Select either a user or a security group, not both.")
+    owner_required_message = _("Ownable objects must be assigned to a user or a security group.")
+    owner_exactly_one_message = _("Select exactly one owner.")
+
+    def _configured_owner_field_names(self) -> tuple[str, ...]:
+        configured_names = getattr(self, "owner_field_names", ())
+        owner_names: list[str] = []
+        for field_name in configured_names:
+            if field_name in self.fields:
+                owner_names.append(field_name)
+        return tuple(owner_names)
+
+    def _resolved_owner_required(self) -> bool:
+        return getattr(self._meta.model, "owner_required", self.owner_required)
+
+    def _owner_validation_message(self, message, owner_field_names):
+        if not owner_field_names:
+            return message
+        return {field_name: message for field_name in owner_field_names}
+
+    def normalize_owner_data(self, cleaned):
+        return cleaned
 
     def clean(self):
         cleaned = super().clean()
-        user = cleaned.get("user")
-        group = cleaned.get("group")
-        if user and group:
+        if cleaned is None:
+            return None
+        cleaned = self.normalize_owner_data(cleaned)
+        owner_field_names = self._configured_owner_field_names()
+        owners = [cleaned.get(field_name) for field_name in owner_field_names]
+        owner_count = sum(owner is not None for owner in owners)
+
+        if self.owner_exactly_one and owner_count != 1:
             raise ValidationError(
-                {
-                    "group": _("Select either a user or a security group, not both."),
-                    "user": _("Select either a user or a security group, not both."),
-                }
+                self._owner_validation_message(
+                    self.owner_exactly_one_message,
+                    owner_field_names,
+                )
             )
-        required = getattr(self._meta.model, "owner_required", self.owner_required)
-        if required and not user and not group:
-            raise ValidationError(_("Ownable objects must be assigned to a user or a security group."))
+        if not self.owner_exactly_one and owner_count > 1:
+            raise ValidationError(
+                self._owner_validation_message(
+                    self.owner_conflict_message,
+                    owner_field_names,
+                )
+            )
+        if self._resolved_owner_required() and owner_count == 0:
+            raise ValidationError(
+                self._owner_validation_message(
+                    self.owner_required_message,
+                    owner_field_names,
+                )
+            )
         return cleaned
 
 
