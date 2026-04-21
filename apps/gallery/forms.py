@@ -3,12 +3,13 @@ from django.contrib.auth import get_user_model
 
 from apps.groups.models import SecurityGroup
 
+from .constants import GALLERY_MANAGER_GROUP_NAME
 from .models import GalleryCategory, GalleryCredit, GalleryImage, GalleryImageTrait, GalleryTrait
 
 
 class GalleryUploadForm(forms.Form):
     image = forms.ImageField(
-        required=True,
+        required=False,
         widget=forms.ClearableFileInput(attrs={"class": "form-control", "accept": "image/*"}),
     )
     title = forms.CharField(max_length=255, widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -37,9 +38,24 @@ class GalleryUploadForm(forms.Form):
         required=False,
         widget=forms.Select(attrs={"class": "form-select"}),
     )
+    staged_upload_key = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        default_owner_group = SecurityGroup.objects.filter(name=GALLERY_MANAGER_GROUP_NAME).first()
+        if default_owner_group and not self.is_bound:
+            self.fields["owner_group"].initial = default_owner_group.pk
 
     def clean(self):
         cleaned = super().clean()
+        image = cleaned.get("image")
+        staged_upload_key = (cleaned.get("staged_upload_key") or "").strip()
+        if image is None and not staged_upload_key:
+            self.add_error("image", "Upload an image.")
+
         owner_user = cleaned.get("owner_user")
         owner_group = cleaned.get("owner_group")
         if bool(owner_user) == bool(owner_group):
