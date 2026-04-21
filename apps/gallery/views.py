@@ -1,6 +1,12 @@
+from pathlib import Path
+from uuid import uuid4
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.core.files import File
+from django.core.files.storage import default_storage
+from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -17,6 +23,34 @@ from .forms import (
 from .models import GalleryImage
 from .permissions import can_manage_gallery
 from .services import create_gallery_image
+
+_STAGED_UPLOAD_MAX_AGE_SECONDS = 60 * 60
+_STAGED_UPLOAD_SIGNER = TimestampSigner(salt="gallery-upload")
+
+
+def _stage_uploaded_image(*, uploaded_file, user_id: int) -> str:
+    suffix = Path(uploaded_file.name or "").suffix
+    staged_path = f"gallery/staged/{user_id}/{uuid4().hex}{suffix}"
+    saved_path = default_storage.save(staged_path, uploaded_file)
+    return _STAGED_UPLOAD_SIGNER.sign(saved_path)
+
+
+def _resolve_staged_upload(*, staged_upload_key: str):
+    try:
+        staged_path = _STAGED_UPLOAD_SIGNER.unsign(
+            staged_upload_key,
+            max_age=_STAGED_UPLOAD_MAX_AGE_SECONDS,
+        )
+    except (BadSignature, SignatureExpired):
+        return None
+    if not default_storage.exists(staged_path):
+        return None
+    return staged_path
+
+
+def _clear_staged_upload(*, staged_path: str | None):
+    if staged_path and default_storage.exists(staged_path):
+        default_storage.delete(staged_path)
 
 
 def _visible_images_for_user(user):
@@ -158,17 +192,42 @@ def gallery_upload(request):
                 form.add_error("owner_user", "User not found.")
                 return render(request, "gallery/upload.html", {"form": form})
 
-        image = create_gallery_image(
-            uploaded_file=form.cleaned_data["image"],
-            title=form.cleaned_data["title"],
-            description=form.cleaned_data.get("description", ""),
-            include_in_public_gallery=form.cleaned_data.get("include_in_public_gallery", False),
-            create_content_sample=form.cleaned_data.get("create_content_sample", False),
-            owner_user=owner_user,
-            owner_group=form.cleaned_data.get("owner_group"),
-        )
+        staged_upload_key = form.cleaned_data.get("staged_upload_key") or ""
+        staged_path = _resolve_staged_upload(staged_upload_key=staged_upload_key) if staged_upload_key else None
+        uploaded_file = form.cleaned_data.get("image")
+        staged_handle = None
+        if uploaded_file is None and staged_path:
+            staged_handle = default_storage.open(staged_path, mode="rb")
+            uploaded_file = File(staged_handle, name=Path(staged_path).name)
+
+        try:
+            image = create_gallery_image(
+                uploaded_file=uploaded_file,
+                title=form.cleaned_data["title"],
+                description=form.cleaned_data.get("description", ""),
+                include_in_public_gallery=form.cleaned_data.get("include_in_public_gallery", False),
+                create_content_sample=form.cleaned_data.get("create_content_sample", False),
+                owner_user=owner_user,
+                owner_group=form.cleaned_data.get("owner_group"),
+            )
+        finally:
+            if staged_handle is not None:
+                staged_handle.close()
+        _clear_staged_upload(staged_path=staged_path)
         messages.success(request, "Image uploaded successfully.")
         return redirect("gallery:detail", slug=image.slug)
+
+    if request.method == "POST" and request.FILES.get("image"):
+        previous_staged_upload_key = (request.POST.get("staged_upload_key") or "").strip()
+        previous_staged_path = (
+            _resolve_staged_upload(staged_upload_key=previous_staged_upload_key) if previous_staged_upload_key else None
+        )
+        _clear_staged_upload(staged_path=previous_staged_path)
+        form.data = form.data.copy()
+        form.data["staged_upload_key"] = _stage_uploaded_image(
+            uploaded_file=request.FILES["image"],
+            user_id=request.user.pk,
+        )
 
     return render(request, "gallery/upload.html", {"form": form})
 
