@@ -228,56 +228,44 @@ class OperatorJourneyGitHubAccessForm(forms.Form):
     def __init__(self, *args, user, **kwargs):
         self.user = user
         super().__init__(*args, **kwargs)
+        self._existing_token_record = (
+            GitHubToken.objects.filter(user=user, group__isnull=True)
+            .order_by("-pk")
+            .first()
+        )
 
-        self._existing_token_record = GitHubToken.objects.filter(user=user).order_by("-pk").first()
-        if self._existing_token_record is None or self.is_bound:
-            return
-        self.initial.setdefault("token", self._existing_token_record.__dict__.get("token", ""))
-        self.initial.setdefault("token_label", self._existing_token_record.label)
-
-    def clean_token(self) -> str:
-        submitted_token = (self.cleaned_data.get("token") or "").strip()
-        if submitted_token:
-            return submitted_token
-
-        existing_token = ""
-        if self._existing_token_record is not None:
-            existing_token = (self._existing_token_record.__dict__.get("token") or "").strip()
-        if existing_token:
-            return existing_token
-        raise forms.ValidationError("Enter a GitHub token.")
-
-    def save(self) -> GitHubToken:
+    def save(self, *, token: str, username: str) -> GitHubToken:
         """Persist the token for the active user."""
 
-        cleaned_data = self.cleaned_data
-        label = (cleaned_data.get("token_label") or "").strip()
-        username = (cleaned_data.get("github_username") or "").strip()
         defaults = {
-            "label": label or username or "GitHub access token",
-            "token": (cleaned_data.get("token") or "").strip(),
+            "label": (username or "GitHub access token").strip(),
+            "token": (token or "").strip(),
         }
-        token, _created = GitHubToken.objects.update_or_create(
+        token_record, _created = GitHubToken.objects.update_or_create(
             user=self.user,
+            group=None,
             defaults=defaults,
         )
-        return token
+        self._existing_token_record = token_record
+        return token_record
 
-    def validate_connection(self) -> tuple[bool, str]:
-        """Return whether the token authenticates and matches the requested username."""
+    @property
+    def existing_token(self) -> GitHubToken | None:
+        """Return the user's existing personal GitHub token record, if present."""
 
-        cleaned_data = self.cleaned_data
-        submitted_token = (cleaned_data.get("token") or "").strip()
-        success, message, login = github_service.validate_token(
-            resolve_sigils(submitted_token)
-        )
-        if not success:
-            return False, message
+        return self._existing_token_record
 
-        expected_username = (cleaned_data.get("github_username") or "").strip()
-        if expected_username and login and login.lower() != expected_username.lower():
-            return (
-                False,
-                f"Token authenticated as {login}, which does not match {expected_username}.",
-            )
-        return True, message
+    def validate_connection(self) -> tuple[bool, str, str]:
+        """Return whether the stored token authenticates with GitHub."""
+
+        if self._existing_token_record is None:
+            return False, "Sign in with GitHub before validating access.", ""
+        stored_token = self._existing_token_record.token
+        return github_service.validate_token(resolve_sigils(stored_token))
+
+    def stored_token_raw_value(self) -> str:
+        """Return the raw persisted token value without descriptor resolution."""
+
+        if self._existing_token_record is None:
+            return ""
+        return str(self._existing_token_record.__dict__.get("token", "")).strip()

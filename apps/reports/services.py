@@ -245,18 +245,25 @@ def run_due_scheduled_reports(
     return processed
 
 
-def _render_pdf_bytes(rendered_html: str) -> bytes:
+def _render_pdf_bytes(
+    rendered_html: str,
+    *,
+    enabled_setting_name: str = "REPORTS_HTML_TO_PDF_ENABLED",
+) -> bytes:
     """Render report HTML into PDF bytes using the configured HTML renderer.
 
     Parameters:
         rendered_html: Rendered HTML payload.
+        enabled_setting_name: Django setting name that gates rendering for the
+            caller's feature. Missing settings default to enabled (fail-open).
 
     Returns:
-        PDF bytes.
+        PDF bytes, or ``b""`` when the feature toggle is disabled or the
+        renderer is unavailable.
     """
 
-    if not getattr(settings, "REPORTS_HTML_TO_PDF_ENABLED", True):
-        logger.debug("Report PDF rendering disabled by REPORTS_HTML_TO_PDF_ENABLED")
+    if not getattr(settings, enabled_setting_name, True):
+        logger.debug("Report PDF rendering disabled by %s", enabled_setting_name)
         return b""
 
     if HTML is None:

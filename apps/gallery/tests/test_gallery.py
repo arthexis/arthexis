@@ -2,8 +2,9 @@ from io import BytesIO
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.core import signing
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from PIL import Image
 
 from apps.content.models import ContentSample
@@ -100,6 +101,11 @@ class GalleryManagementPermissionTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(GalleryImage.objects.filter(title="Managed").exists())
 
+    def test_upload_form_defaults_owner_group_to_gallery_manager(self):
+        self.client.force_login(self.manager)
+        response = self.client.get("/gallery/upload/")
+        self.assertContains(response, f'<option value="{self.group.pk}" selected>')
+
     def test_non_manager_cannot_upload(self):
         non_manager = get_user_model().objects.create_user(username="non-manager", password="pw")
         self.client.force_login(non_manager)
@@ -126,6 +132,67 @@ class GalleryManagementPermissionTests(TestCase):
         self.assertEqual(response.status_code, 302)
         image = GalleryImage.objects.get(title="Managed With Sample")
         self.assertIsNotNone(image.content_sample_id)
+
+    @override_settings(FILE_UPLOAD_MAX_MEMORY_SIZE=0)
+    def test_upload_reuses_staged_file_after_validation_error(self):
+        self.client.force_login(self.manager)
+        initial_response = self.client.post(
+            "/gallery/upload/",
+            {
+                "image": self._upload("retry.jpg"),
+                "title": "",
+                "description": "",
+                "owner_user": self.manager.username,
+            },
+        )
+        self.assertEqual(initial_response.status_code, 200)
+        self.assertContains(initial_response, "Image file is retained from your previous attempt.")
+        staged_upload_key = initial_response.context["form"]["staged_upload_key"].value()
+        self.assertTrue(staged_upload_key)
+
+        retry_response = self.client.post(
+            "/gallery/upload/",
+            {
+                "title": "Retry Works",
+                "description": "",
+                "owner_user": self.manager.username,
+                "staged_upload_key": staged_upload_key,
+            },
+        )
+        self.assertEqual(retry_response.status_code, 302)
+        self.assertTrue(GalleryImage.objects.filter(title="Retry Works").exists())
+
+    @override_settings(FILE_UPLOAD_MAX_MEMORY_SIZE=0)
+    def test_upload_with_invalid_image_does_not_stage_file(self):
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            "/gallery/upload/",
+            {
+                "image": SimpleUploadedFile("not-image.txt", b"not-an-image", content_type="text/plain"),
+                "title": "Invalid Image",
+                "description": "",
+                "owner_user": self.manager.username,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Upload a valid image.")
+        self.assertFalse(response.context["form"]["staged_upload_key"].value())
+        self.assertFalse(GalleryImage.objects.filter(title="Invalid Image").exists())
+
+    def test_expired_or_invalid_staged_key_returns_form_error(self):
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            "/gallery/upload/",
+            {
+                "title": "Retry Fails",
+                "description": "",
+                "owner_user": self.manager.username,
+                "staged_upload_key": signing.TimestampSigner(salt="gallery-upload").sign("gallery/staged/999/missing.jpg"),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "The previously uploaded image has expired or is invalid. Please upload it again.")
+        self.assertFalse(GalleryImage.objects.filter(title="Retry Fails").exists())
 
     def test_gallery_manager_can_view_private_image(self):
         image = create_gallery_image(

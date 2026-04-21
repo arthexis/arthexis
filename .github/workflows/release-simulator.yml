@@ -167,6 +167,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Validate release tag version gate (simulated)
+        id: validate_version_gate
         if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
         run: |
           python - <<'PY'
@@ -198,6 +199,7 @@ jobs:
           print(f'Simulated tag/version gate passed for VERSION={expected_version!r}.')
           PY
       - name: Preflight PyPI version availability (simulated)
+        id: preflight_pypi
         if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
         run: |
           python - <<'PY'
@@ -236,36 +238,68 @@ jobs:
           print(f'Simulated PyPI preflight passed for {package_name} {package_version}.')
           PY
       - name: Install build backend
+        id: install_build_backend
         if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
         run: |
           python -m pip install --upgrade pip
           python -m pip install build twine
       - name: Build sdist and wheel (simulated)
+        id: build_package
         if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
         run: |
           python -m build
       - name: Validate package metadata (simulated)
+        id: validate_metadata
         if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
         run: |
           python -m twine check dist/*
       - name: Stop before authorization-required publish step
+        id: authorization_boundary
         if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
         run: |
           echo "Release simulator intentionally stopped before PyPI trusted-publisher authorization/publish."
       - name: Generate release simulation summary
         id: finalize
+        if: ${{ always() }}
         run: |
           if [ "${{ needs.evaluate.outputs.can_simulate }}" = "true" ]; then
-            {
-              echo 'summary_markdown<<EOF'
-              echo '### Simulation result'
-              echo ''
-              echo '- ✅ Release simulation reached the authorization boundary successfully.'
-              echo '- ℹ️ Publish to PyPI was intentionally skipped because authorization is required.'
-              echo '- ✅ Recommendation: release is ready if maintainers approve and trigger a real publish.'
-              echo 'EOF'
-              echo 'simulated_ok=true'
-            } >> "$GITHUB_OUTPUT"
+            if [ "${{ job.status }}" = "success" ]; then
+              {
+                echo 'summary_markdown<<EOF'
+                echo '### Simulation result'
+                echo ''
+                echo '- ✅ Release simulation reached the authorization boundary successfully.'
+                echo '- ℹ️ Publish to PyPI was intentionally skipped because authorization is required.'
+                echo '- ✅ Recommendation: release is ready if maintainers approve and trigger a real publish.'
+                echo 'EOF'
+                echo 'simulated_ok=true'
+              } >> "$GITHUB_OUTPUT"
+            else
+              FAILED_STEP='the simulation pipeline'
+              if [ "${{ steps.validate_version_gate.outcome }}" = "failure" ]; then
+                FAILED_STEP='validate_version_gate'
+              elif [ "${{ steps.preflight_pypi.outcome }}" = "failure" ]; then
+                FAILED_STEP='preflight_pypi'
+              elif [ "${{ steps.install_build_backend.outcome }}" = "failure" ]; then
+                FAILED_STEP='install_build_backend'
+              elif [ "${{ steps.build_package.outcome }}" = "failure" ]; then
+                FAILED_STEP='build_package'
+              elif [ "${{ steps.validate_metadata.outcome }}" = "failure" ]; then
+                FAILED_STEP='validate_metadata'
+              elif [ "${{ steps.authorization_boundary.outcome }}" = "failure" ]; then
+                FAILED_STEP='authorization_boundary'
+              fi
+              {
+                echo 'summary_markdown<<EOF'
+                echo '### Simulation result'
+                echo ''
+                echo '- ❌ Release simulation failed before reaching the authorization boundary.'
+                echo "- ❌ First failing step: \`$FAILED_STEP\`."
+                echo "- 🔎 Inspect this workflow run for detailed logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                echo 'EOF'
+                echo 'simulated_ok=false'
+              } >> "$GITHUB_OUTPUT"
+            fi
           else
             {
               echo 'summary_markdown<<EOF'

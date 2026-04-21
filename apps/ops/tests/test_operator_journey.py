@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.test import TestCase, override_settings
 from django.template import Context, Template
 from django.urls import reverse
@@ -214,19 +215,86 @@ class OperatorJourneyViewTests(TestCase):
 
         self.assertContains(response, "Next:")
         self.assertContains(response, "Validate role")
+        self.assertInHTML(
+            (
+                f'<a class="button" '
+                f'href="{reverse("ops:operator-journey-dashboard")}">'
+                "Operator Journey"
+                "</a>"
+            ),
+            response.content.decode(),
+        )
         self.assertNotContains(response, "admin-home-operator-journey__age")
         self.assertContains(
             response,
-            reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug}),
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            ),
         )
+
+    def test_journey_dashboard_shows_completed_and_current_steps_only(self):
+        step_3 = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Future task",
+            slug="future-task",
+            instruction="Hidden until current task is complete.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        complete_step_for_user(user=self.user, step=self.step_1)
+
+        response = self.client.get(reverse("ops:operator-journey-dashboard"))
+
+        self.assertContains(response, self.step_1.title)
+        self.assertContains(response, self.step_2.title)
+        self.assertContains(response, "Current required task")
+        self.assertContains(response, "Completed")
+        self.assertContains(
+            response,
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            ),
+        )
+        self.assertNotContains(
+            response,
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            ),
+        )
+        self.assertNotContains(response, step_3.title)
 
     def test_step_view_redirects_when_opening_future_step(self):
         response = self.client.get(
-            reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            )
         )
 
         self.assertRedirects(
-            response, reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            response,
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            ),
         )
 
     def test_legacy_complete_url_resolves_to_legacy_view_for_get_requests(self):
@@ -297,56 +365,24 @@ class OperatorJourneyViewTests(TestCase):
             )
         )
 
-        self.assertContains(response, "GitHub token")
-        self.assertContains(response, "Test GitHub access")
+        self.assertContains(response, "GitHub username")
+        self.assertContains(response, "Not connected")
+        self.assertContains(
+            response, "Set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET"
+        )
         self.assertNotContains(response, "Guided action")
         self.assertNotContains(response, "Open task page")
 
     @patch("apps.ops.forms.github_service.validate_token")
-    def test_setup_github_token_test_action_validates_without_saving(self, mock_validate_token):
-        mock_validate_token.return_value = (True, "Connected to GitHub as arthexis.", "arthexis")
-        complete_step_for_user(user=self.user, step=self.step_1)
-        complete_step_for_user(user=self.user, step=self.step_2)
-        github_journey = OperatorJourney.objects.create(
-            name="Product Developer GitHub Access",
-            slug="product-developer-github-access",
-            security_group=self.group,
-            is_active=True,
-            priority=1,
+    def test_setup_github_token_complete_saves_after_successful_validation(
+        self, mock_validate_token
+    ):
+        mock_validate_token.return_value = (
+            True,
+            "Connected to GitHub as arthexis.",
+            "arthexis",
         )
-        github_step = OperatorJourneyStep.objects.create(
-            journey=github_journey,
-            title="Connect your GitHub access",
-            slug="setup-github-token",
-            instruction="Configure GitHub access directly in this step.",
-            iframe_url="/admin/repos/githubrepository/setup-token/",
-            order=1,
-        )
-
-        response = self.client.post(
-            reverse(
-                "ops:operator-journey-step-complete",
-                kwargs={
-                    "journey_slug": github_journey.slug,
-                    "step_slug": github_step.slug,
-                },
-            ),
-            {
-                "journey_action": "test",
-                "github_username": "arthexis",
-                "token": "ghp_demo_token",
-                "token_label": "Dev token",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(GitHubToken.objects.filter(user=self.user).exists())
-        mock_validate_token.assert_called_once_with("ghp_demo_token")
-        self.assertFalse(github_step.completions.filter(user=self.user).exists())
-
-    @patch("apps.ops.forms.github_service.validate_token")
-    def test_setup_github_token_complete_saves_after_successful_validation(self, mock_validate_token):
-        mock_validate_token.return_value = (True, "Connected to GitHub as arthexis.", "arthexis")
+        GitHubToken.objects.create(user=self.user, label="old", token="ghp_demo_token")
         complete_step_for_user(user=self.user, step=self.step_1)
         complete_step_for_user(user=self.user, step=self.step_2)
         github_journey = OperatorJourney.objects.create(
@@ -375,21 +411,21 @@ class OperatorJourneyViewTests(TestCase):
             ),
             {
                 "journey_action": "complete",
-                "github_username": "arthexis",
-                "token": "ghp_demo_token",
-                "token_label": "Dev token",
             },
         )
 
         self.assertEqual(response.status_code, 200)
         saved_token = GitHubToken.objects.get(user=self.user)
-        self.assertEqual(saved_token.label, "Dev token")
+        self.assertEqual(saved_token.label, "arthexis")
         self.assertEqual(saved_token.token, "ghp_demo_token")
         self.assertTrue(github_step.completions.filter(user=self.user).exists())
 
     @patch("apps.ops.forms.github_service.validate_token")
-    def test_setup_github_token_complete_requires_successful_validation(self, mock_validate_token):
+    def test_setup_github_token_complete_requires_successful_validation(
+        self, mock_validate_token
+    ):
         mock_validate_token.return_value = (False, "Bad credentials", "")
+        GitHubToken.objects.create(user=self.user, label="old", token="ghp_demo_token")
         complete_step_for_user(user=self.user, step=self.step_1)
         complete_step_for_user(user=self.user, step=self.step_2)
         github_journey = OperatorJourney.objects.create(
@@ -418,9 +454,6 @@ class OperatorJourneyViewTests(TestCase):
             ),
             {
                 "journey_action": "complete",
-                "github_username": "arthexis",
-                "token": "ghp_demo_token",
-                "token_label": "Dev token",
             },
         )
 
@@ -428,53 +461,7 @@ class OperatorJourneyViewTests(TestCase):
         self.assertContains(response, "Bad credentials")
         self.assertFalse(github_step.completions.filter(user=self.user).exists())
 
-    def test_setup_github_token_form_prefills_raw_stored_token(self):
-        token = GitHubToken.objects.create(
-            user=self.user,
-            label="Sigil token",
-            token="[ENV.GITHUB_TOKEN]",
-        )
-
-        form = OperatorJourneyGitHubAccessForm(user=self.user)
-
-        self.assertEqual(form.initial.get("github_username"), None)
-        self.assertEqual(
-            form.initial.get("token"),
-            token.__dict__.get("token"),
-        )
-
-    def test_setup_github_token_form_reuses_stored_token_when_submission_is_blank(self):
-        token = GitHubToken.objects.create(
-            user=self.user,
-            label="Sigil token",
-            token="[ENV.GITHUB_TOKEN]",
-        )
-        form = OperatorJourneyGitHubAccessForm(
-            data={
-                "github_username": "arthexis",
-                "token": "",
-                "token_label": "Existing token",
-            },
-            user=self.user,
-        )
-
-        self.assertTrue(form.is_valid())
-        self.assertEqual(form.cleaned_data["token"], token.__dict__.get("token"))
-
-    def test_setup_github_token_form_rejects_tokens_longer_than_model_limit(self):
-        form = OperatorJourneyGitHubAccessForm(
-            data={
-                "github_username": "arthexis",
-                "token": "t" * 256,
-                "token_label": "Too long token",
-            },
-            user=self.user,
-        )
-
-        self.assertFalse(form.is_valid())
-        self.assertIn("token", form.errors)
-
-    def test_setup_github_token_save_requires_githubtoken_permissions(self):
+    def test_setup_github_token_complete_requires_connected_token(self):
         limited_user = get_user_model().objects.create_user(
             username="ops-journey-limited",
             password="x",
@@ -509,20 +496,147 @@ class OperatorJourneyViewTests(TestCase):
                 },
             ),
             {
-                "journey_action": "save",
-                "github_username": "arthexis",
-                "token": "ghp_demo_token",
-                "token_label": "Dev token",
+                "journey_action": "complete",
             },
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "You do not have permission to save a GitHub token.")
+        self.assertContains(response, "Sign in with GitHub before validating access.")
         self.assertFalse(GitHubToken.objects.filter(user=limited_user).exists())
+        self.assertFalse(github_step.completions.filter(user=limited_user).exists())
 
     @patch("apps.ops.forms.github_service.validate_token")
-    def test_setup_github_token_test_requires_githubtoken_permissions(
+    def test_setup_github_token_complete_allows_add_only_permissions(
+        self, mock_validate_token
+    ):
+        add_only_user = get_user_model().objects.create_user(
+            username="ops-journey-add-only",
+            password="x",
+            is_staff=True,
+        )
+        add_only_user.groups.add(self.group)
+        add_only_user.user_permissions.add(
+            Permission.objects.get(codename="add_githubtoken")
+        )
+        self.client.force_login(add_only_user)
+        complete_step_for_user(user=add_only_user, step=self.step_1)
+        complete_step_for_user(user=add_only_user, step=self.step_2)
+        github_journey = OperatorJourney.objects.create(
+            name="Product Developer GitHub Access",
+            slug="product-developer-github-access",
+            security_group=self.group,
+            is_active=True,
+            priority=1,
+        )
+        github_step = OperatorJourneyStep.objects.create(
+            journey=github_journey,
+            title="Connect your GitHub access",
+            slug="setup-github-token",
+            instruction="Configure GitHub access directly in this step.",
+            iframe_url="/admin/repos/githubrepository/setup-token/",
+            order=1,
+        )
+        GitHubToken.objects.create(
+            user=add_only_user,
+            label="existing-label",
+            token="[ENV.GITHUB_TOKEN]",
+        )
+        mock_validate_token.return_value = (
+            True,
+            "Connected to GitHub as arthexis.",
+            "arthexis",
+        )
+
+        response = self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            ),
+            {"journey_action": "complete"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        saved_token = GitHubToken.objects.get(user=add_only_user)
+        self.assertEqual(saved_token.label, "existing-label")
+        self.assertEqual(saved_token.__dict__["token"], "[ENV.GITHUB_TOKEN]")
+        self.assertTrue(github_step.completions.filter(user=add_only_user).exists())
+
+    @patch("apps.ops.forms.github_service.validate_token")
+    @patch("apps.ops.forms.resolve_sigils")
+    def test_setup_github_token_validation_uses_stored_token(
         self,
+        mock_resolve_sigils,
+        mock_validate_token,
+    ):
+        GitHubToken.objects.create(
+            user=self.user,
+            label="Sigil token",
+            token="[ENV.GITHUB_TOKEN]",
+        )
+        mock_resolve_sigils.return_value = "resolved-token"
+        mock_validate_token.return_value = (
+            True,
+            "Connected to GitHub as arthexis.",
+            "arthexis",
+        )
+        form = OperatorJourneyGitHubAccessForm(user=self.user)
+        is_valid, message, login = form.validate_connection()
+
+        self.assertTrue(is_valid)
+        self.assertEqual(message, "Connected to GitHub as arthexis.")
+        self.assertEqual(login, "arthexis")
+        mock_resolve_sigils.assert_called_once_with("[ENV.GITHUB_TOKEN]")
+        mock_validate_token.assert_called_once_with("resolved-token")
+
+    @override_settings(
+        GITHUB_OAUTH_CLIENT_ID="client-id",
+        GITHUB_OAUTH_CLIENT_SECRET="client-secret",
+    )
+    def test_setup_github_token_login_redirects_to_github_authorize(self):
+        complete_step_for_user(user=self.user, step=self.step_1)
+        complete_step_for_user(user=self.user, step=self.step_2)
+        github_journey = OperatorJourney.objects.create(
+            name="Product Developer GitHub Access",
+            slug="product-developer-github-access",
+            security_group=self.group,
+            is_active=True,
+            priority=1,
+        )
+        github_step = OperatorJourneyStep.objects.create(
+            journey=github_journey,
+            title="Connect your GitHub access",
+            slug="setup-github-token",
+            instruction="Configure GitHub access directly in this step.",
+            iframe_url="/admin/repos/githubrepository/setup-token/",
+            order=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "ops:operator-journey-github-login",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("github.com/login/oauth/authorize", response["Location"])
+        self.assertIn("client_id=client-id", response["Location"])
+
+    @override_settings(
+        GITHUB_OAUTH_CLIENT_ID="client-id",
+        GITHUB_OAUTH_CLIENT_SECRET="client-secret",
+    )
+    @patch("apps.ops.views.github_service.validate_token")
+    @patch("apps.ops.views.requests.post")
+    def test_setup_github_token_callback_saves_username_as_label(
+        self,
+        mock_post,
         mock_validate_token,
     ):
         mock_validate_token.return_value = (
@@ -530,15 +644,9 @@ class OperatorJourneyViewTests(TestCase):
             "Connected to GitHub as arthexis.",
             "arthexis",
         )
-        limited_user = get_user_model().objects.create_user(
-            username="ops-journey-test-limited",
-            password="x",
-            is_staff=True,
-        )
-        limited_user.groups.add(self.group)
-        self.client.force_login(limited_user)
-        complete_step_for_user(user=limited_user, step=self.step_1)
-        complete_step_for_user(user=limited_user, step=self.step_2)
+        mock_post.return_value.json.return_value = {"access_token": "oauth-token"}
+        complete_step_for_user(user=self.user, step=self.step_1)
+        complete_step_for_user(user=self.user, step=self.step_2)
         github_journey = OperatorJourney.objects.create(
             name="Product Developer GitHub Access",
             slug="product-developer-github-access",
@@ -554,43 +662,41 @@ class OperatorJourneyViewTests(TestCase):
             iframe_url="/admin/repos/githubrepository/setup-token/",
             order=1,
         )
-
-        response = self.client.post(
+        login_response = self.client.get(
             reverse(
-                "ops:operator-journey-step-complete",
+                "ops:operator-journey-github-login",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            )
+        )
+        self.assertEqual(login_response.status_code, 302)
+        state = self.client.session["ops_github_oauth_state"]["state"]
+
+        callback_response = self.client.get(
+            reverse(
+                "ops:operator-journey-github-callback",
                 kwargs={
                     "journey_slug": github_journey.slug,
                     "step_slug": github_step.slug,
                 },
             ),
-            {
-                "journey_action": "test",
-                "github_username": "arthexis",
-                "token": "ghp_demo_token",
-                "token_label": "Dev token",
-            },
+            {"code": "oauth-code", "state": state},
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "You do not have permission to save a GitHub token.")
-        mock_validate_token.assert_not_called()
-        self.assertFalse(GitHubToken.objects.filter(user=limited_user).exists())
+        self.assertEqual(callback_response.status_code, 302)
+        saved_token = GitHubToken.objects.get(user=self.user)
+        self.assertEqual(saved_token.token, "oauth-token")
+        self.assertEqual(saved_token.label, "arthexis")
 
-    @patch("apps.ops.forms.github_service.validate_token")
-    def test_setup_github_token_complete_requires_githubtoken_permissions(
+    @patch("apps.ops.views.requests.post")
+    def test_setup_github_token_callback_rejects_invalid_oauth_state(
         self,
-        mock_validate_token,
+        mock_post,
     ):
-        mock_validate_token.return_value = (True, "Connected to GitHub as arthexis.", "arthexis")
-        limited_user = get_user_model().objects.create_user(
-            username="ops-journey-complete-limited",
-            password="x",
-            is_staff=True,
-        )
-        limited_user.groups.add(self.group)
-        self.client.force_login(limited_user)
-        complete_step_for_user(user=limited_user, step=self.step_1)
-        complete_step_for_user(user=limited_user, step=self.step_2)
+        complete_step_for_user(user=self.user, step=self.step_1)
+        complete_step_for_user(user=self.user, step=self.step_2)
         github_journey = OperatorJourney.objects.create(
             name="Product Developer GitHub Access",
             slug="product-developer-github-access",
@@ -606,53 +712,205 @@ class OperatorJourneyViewTests(TestCase):
             iframe_url="/admin/repos/githubrepository/setup-token/",
             order=1,
         )
+        session = self.client.session
+        session["ops_github_oauth_state"] = {
+            "journey_slug": github_journey.slug,
+            "step_slug": github_step.slug,
+            "state": "expected-state",
+        }
+        session.save()
 
-        response = self.client.post(
+        callback_response = self.client.get(
             reverse(
-                "ops:operator-journey-step-complete",
+                "ops:operator-journey-github-callback",
                 kwargs={
                     "journey_slug": github_journey.slug,
                     "step_slug": github_step.slug,
                 },
             ),
-            {
-                "journey_action": "complete",
-                "github_username": "arthexis",
-                "token": "ghp_demo_token",
-                "token_label": "Dev token",
-            },
+            {"code": "oauth-code", "state": "wrong-state"},
+            follow=True,
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "You do not have permission to save a GitHub token.")
-        self.assertFalse(GitHubToken.objects.filter(user=limited_user).exists())
-        self.assertFalse(github_step.completions.filter(user=limited_user).exists())
+        self.assertEqual(callback_response.status_code, 200)
+        self.assertContains(
+            callback_response,
+            "GitHub authorization could not be validated. Please try again.",
+        )
+        mock_post.assert_not_called()
+        self.assertFalse(GitHubToken.objects.filter(user=self.user).exists())
+        self.assertEqual(
+            self.client.session["ops_github_oauth_state"]["state"], "expected-state"
+        )
+
+    @override_settings(
+        GITHUB_OAUTH_CLIENT_ID="client-id",
+        GITHUB_OAUTH_CLIENT_SECRET="client-secret",
+    )
+    @patch("apps.ops.views.requests.post")
+    def test_setup_github_token_callback_preserves_state_on_oauth_error(
+        self,
+        mock_post,
+    ):
+        complete_step_for_user(user=self.user, step=self.step_1)
+        complete_step_for_user(user=self.user, step=self.step_2)
+        github_journey = OperatorJourney.objects.create(
+            name="Product Developer GitHub Access",
+            slug="product-developer-github-access",
+            security_group=self.group,
+            is_active=True,
+            priority=1,
+        )
+        github_step = OperatorJourneyStep.objects.create(
+            journey=github_journey,
+            title="Connect your GitHub access",
+            slug="setup-github-token",
+            instruction="Configure GitHub access directly in this step.",
+            iframe_url="/admin/repos/githubrepository/setup-token/",
+            order=1,
+        )
+        login_response = self.client.get(
+            reverse(
+                "ops:operator-journey-github-login",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            )
+        )
+        self.assertEqual(login_response.status_code, 302)
+        state = self.client.session["ops_github_oauth_state"]["state"]
+
+        callback_response = self.client.get(
+            reverse(
+                "ops:operator-journey-github-callback",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            ),
+            {"error": "access_denied", "state": state},
+            follow=True,
+        )
+
+        self.assertEqual(callback_response.status_code, 200)
+        self.assertContains(
+            callback_response, "GitHub returned an error: access_denied"
+        )
+        mock_post.assert_not_called()
+        self.assertEqual(self.client.session["ops_github_oauth_state"]["state"], state)
+
+    @override_settings(
+        GITHUB_OAUTH_CLIENT_ID="client-id",
+        GITHUB_OAUTH_CLIENT_SECRET="client-secret",
+    )
+    @patch("apps.ops.views.requests.post")
+    def test_setup_github_token_callback_rejects_non_current_step(
+        self,
+        mock_post,
+    ):
+        locked_journey = OperatorJourney.objects.create(
+            name="Locked First Step",
+            slug="locked-first-step",
+            security_group=self.group,
+            is_active=True,
+            priority=0,
+        )
+        OperatorJourneyStep.objects.create(
+            journey=locked_journey,
+            title="Locked setup",
+            slug="locked-step",
+            instruction="This step must be completed first.",
+            iframe_url="/admin/",
+            order=1,
+        )
+        github_journey = OperatorJourney.objects.create(
+            name="Product Developer GitHub Access",
+            slug="product-developer-github-access",
+            security_group=self.group,
+            is_active=True,
+            priority=1,
+        )
+        github_step = OperatorJourneyStep.objects.create(
+            journey=github_journey,
+            title="Connect your GitHub access",
+            slug="setup-github-token",
+            instruction="Configure GitHub access directly in this step.",
+            iframe_url="/admin/repos/githubrepository/setup-token/",
+            order=1,
+        )
+        session = self.client.session
+        session["ops_github_oauth_state"] = {
+            "journey_slug": github_journey.slug,
+            "step_slug": github_step.slug,
+            "state": "expected-state",
+        }
+        session.save()
+
+        callback_response = self.client.get(
+            reverse(
+                "ops:operator-journey-github-callback",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            ),
+            {"code": "oauth-code", "state": "expected-state"},
+        )
+
+        self.assertEqual(callback_response.status_code, 302)
+        mock_post.assert_not_called()
+        self.assertFalse(GitHubToken.objects.filter(user=self.user).exists())
 
     @patch("apps.ops.forms.github_service.validate_token")
     @patch("apps.ops.forms.resolve_sigils")
-    def test_setup_github_token_validation_resolves_sigil_tokens(
+    def test_setup_github_token_complete_preserves_raw_sigil_token(
         self,
         mock_resolve_sigils,
         mock_validate_token,
     ):
         mock_resolve_sigils.return_value = "resolved-token"
-        mock_validate_token.return_value = (True, "Connected to GitHub as arthexis.", "arthexis")
-        form = OperatorJourneyGitHubAccessForm(
-            data={
-                "github_username": "arthexis",
-                "token": "[ENV.GITHUB_TOKEN]",
-                "token_label": "",
-            },
-            user=self.user,
+        mock_validate_token.return_value = (
+            True,
+            "Connected to GitHub as arthexis.",
+            "arthexis",
+        )
+        GitHubToken.objects.create(
+            user=self.user, label="old", token="[ENV.GITHUB_TOKEN]"
+        )
+        complete_step_for_user(user=self.user, step=self.step_1)
+        complete_step_for_user(user=self.user, step=self.step_2)
+        github_journey = OperatorJourney.objects.create(
+            name="Product Developer GitHub Access",
+            slug="product-developer-github-access",
+            security_group=self.group,
+            is_active=True,
+            priority=1,
+        )
+        github_step = OperatorJourneyStep.objects.create(
+            journey=github_journey,
+            title="Connect your GitHub access",
+            slug="setup-github-token",
+            instruction="Configure GitHub access directly in this step.",
+            iframe_url="/admin/repos/githubrepository/setup-token/",
+            order=1,
         )
 
-        self.assertTrue(form.is_valid())
-        is_valid, message = form.validate_connection()
+        response = self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            ),
+            {"journey_action": "complete"},
+        )
 
-        self.assertTrue(is_valid)
-        self.assertEqual(message, "Connected to GitHub as arthexis.")
-        mock_resolve_sigils.assert_called_once_with("[ENV.GITHUB_TOKEN]")
-        mock_validate_token.assert_called_once_with("resolved-token")
+        self.assertEqual(response.status_code, 200)
+        saved_token = GitHubToken.objects.get(user=self.user)
+        self.assertEqual(saved_token.label, "arthexis")
+        self.assertEqual(saved_token.__dict__["token"], "[ENV.GITHUB_TOKEN]")
 
     def test_slug_step_url_that_matches_legacy_complete_shape_stays_canonical(self):
         numeric_journey = OperatorJourney.objects.create(
@@ -719,7 +977,13 @@ class OperatorJourneyViewTests(TestCase):
 
     def test_validate_role_step_shows_setup_check_instead_of_iframe(self):
         response = self.client.get(
-            reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
         )
 
         self.assertContains(
@@ -735,7 +999,13 @@ class OperatorJourneyViewTests(TestCase):
 
     def test_step_view_renders_breadcrumb_with_step_title(self):
         response = self.client.get(
-            reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
         )
 
         self.assertContains(response, '<div class="breadcrumbs">', html=False)
@@ -745,7 +1015,13 @@ class OperatorJourneyViewTests(TestCase):
     def test_validate_role_step_limits_role_choices_to_basic_configure_roles(self):
         NodeRole.objects.create(name="Gateway")
         response = self.client.get(
-            reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
         )
 
         self.assertNotContains(response, 'value="gateway"', html=False)
@@ -765,10 +1041,22 @@ class OperatorJourneyViewTests(TestCase):
 
     def test_completing_all_steps_shows_completion_message_on_dashboard(self):
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
         )
         complete_response = self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            )
         )
 
         self.assertContains(complete_response, "Operator journey complete")
@@ -826,14 +1114,32 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            )
         )
 
         response = self.client.get(
-            reverse("ops:operator-journey-step", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug})
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": provision_step.journey.slug,
+                    "step_slug": provision_step.slug,
+                },
+            )
         )
 
         self.assertContains(response, "Create account and complete step")
@@ -841,7 +1147,7 @@ class OperatorJourneyViewTests(TestCase):
         self.assertContains(response, "Staff")
         self.assertContains(response, "Apps")
         self.assertContains(response, "User details")
-        self.assertContains(response, "id=\"nav-sidebar\"", html=False)
+        self.assertContains(response, 'id="nav-sidebar"', html=False)
         self.assertNotContains(response, "<iframe", html=False)
 
     def test_security_group_rows_support_unbound_form_with_pk_initial_values(self):
@@ -902,15 +1208,33 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            )
         )
         extra_group = SecurityGroup.objects.create(name="Provisioned Ops Group")
 
         response = self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": provision_step.journey.slug,
+                    "step_slug": provision_step.slug,
+                },
+            ),
             {
                 "username": "ops-provisioned",
                 "email": "ops-provisioned@example.com",
@@ -939,14 +1263,32 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            )
         )
 
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": provision_step.journey.slug,
+                    "step_slug": provision_step.slug,
+                },
+            ),
             {
                 "username": "ops-random-password",
                 "email": "ops-random-password@example.com",
@@ -969,10 +1311,22 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            )
         )
         get_user_model().objects.create_user(
             username="existing-ops-user",
@@ -982,7 +1336,13 @@ class OperatorJourneyViewTests(TestCase):
         )
 
         response = self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": provision_step.journey.slug,
+                    "step_slug": provision_step.slug,
+                },
+            ),
             {
                 "username": "existing-ops-user",
                 "email": "ops-provisioned@example.com",
@@ -1004,10 +1364,22 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            )
         )
         existing_user = get_user_model().objects.create_user(
             username="existing-ops-user",
@@ -1024,7 +1396,13 @@ class OperatorJourneyViewTests(TestCase):
             existing_user.save(update_fields=["is_deleted"])
 
         response = self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": provision_step.journey.slug,
+                    "step_slug": provision_step.slug,
+                },
+            ),
             {
                 "username": "existing-ops-user",
                 "email": "ops-provisioned@example.com",
@@ -1068,14 +1446,32 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            )
         )
 
         response = self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": provision_step.journey.slug,
+                    "step_slug": provision_step.slug,
+                },
+            ),
             {
                 "username": "ops-provisioned-weak-password",
                 "email": "ops-provisioned-weak-password@example.com",
@@ -1113,10 +1509,22 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            )
         )
         existing_user = get_user_model().objects.create_user(
             username="existing-ops-user-email-change",
@@ -1128,7 +1536,13 @@ class OperatorJourneyViewTests(TestCase):
         )
 
         response = self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": provision_step.journey.slug,
+                    "step_slug": provision_step.slug,
+                },
+            ),
             {
                 "username": existing_user.username,
                 "email": "new-upgrade-email@example.com",
@@ -1159,7 +1573,13 @@ class OperatorJourneyViewTests(TestCase):
         )
 
         response = self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": blocked_step.journey.slug, "step_slug": blocked_step.slug}),
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": blocked_step.journey.slug,
+                    "step_slug": blocked_step.slug,
+                },
+            ),
             {
                 "username": "ops-not-allowed",
                 "email": "ops-provisioned@example.com",
@@ -1170,7 +1590,14 @@ class OperatorJourneyViewTests(TestCase):
         )
 
         self.assertRedirects(
-            response, reverse("ops:operator-journey-step", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            response,
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            ),
         )
         self.assertFalse(
             get_user_model().objects.filter(username="ops-not-allowed").exists()
@@ -1186,10 +1613,22 @@ class OperatorJourneyViewTests(TestCase):
             order=3,
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            )
         )
 
         staff_user = get_user_model().objects.create_user(
@@ -1201,20 +1640,44 @@ class OperatorJourneyViewTests(TestCase):
         staff_user.groups.add(self.group)
         self.client.force_login(staff_user)
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_1.journey.slug, "step_slug": self.step_1.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
         )
         self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": self.step_2.journey.slug, "step_slug": self.step_2.slug})
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            )
         )
 
         view_response = self.client.get(
-            reverse("ops:operator-journey-step", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug})
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": provision_step.journey.slug,
+                    "step_slug": provision_step.slug,
+                },
+            )
         )
         self.assertEqual(view_response.status_code, 200)
         self.assertContains(view_response, "Operator journey complete")
 
         submit_response = self.client.post(
-            reverse("ops:operator-journey-step-complete", kwargs={"journey_slug": provision_step.journey.slug, "step_slug": provision_step.slug}),
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": provision_step.journey.slug,
+                    "step_slug": provision_step.slug,
+                },
+            ),
             {
                 "username": "ops-should-not-create",
                 "security_groups": [self.group.pk],

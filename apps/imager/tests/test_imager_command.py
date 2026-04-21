@@ -117,6 +117,9 @@ def test_imager_build_command_prints_metadata(mock_build, tmp_path: Path) -> Non
             "sha256": "abc123",
             "size_bytes": 2,
             "download_uri": "https://downloads.example.com/artifact.img",
+            "build_engine": "arthexis-bootstrap",
+            "build_profile": "bootstrap",
+            "profile_manifest": {},
         },
     )()
 
@@ -135,6 +138,48 @@ def test_imager_build_command_prints_metadata(mock_build, tmp_path: Path) -> Non
     assert "Built image:" in output
     assert "sha256=abc123" in output
     assert "download_uri=https://downloads.example.com/artifact.img" in output
+    mock_build.assert_called_once()
+    assert mock_build.call_args.kwargs["build_engine"] == "arthexis-bootstrap"
+    assert mock_build.call_args.kwargs["profile"] == "bootstrap"
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+@patch("apps.imager.management.commands.imager.build_rpi4b_image")
+def test_imager_build_command_passes_connect_ota_profile_metadata(mock_build, tmp_path: Path) -> None:
+    """Regression: build command should pass selected engine/profile metadata to backend."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+    mock_build.return_value = type(
+        "BuildResult",
+        (),
+        {
+            "output_path": output_path,
+            "sha256": "abc123",
+            "size_bytes": 2,
+            "download_uri": "",
+            "build_engine": "arthexis-bootstrap",
+            "build_profile": "connect-ota",
+            "profile_manifest": {},
+        },
+    )()
+
+    call_command(
+        "imager",
+        "build",
+        "--name",
+        "ota-v1",
+        "--base-image-uri",
+        str(output_path),
+        "--profile",
+        "connect-ota",
+        "--profile-metadata",
+        '{"release_version":"2026.04.0","compatibility_model":"pi4","compatibility_board":"rpi-4b","ota_channel":"stable","ota_artifact_type":"raw-disk-image","required_artifacts":["connect-ota-agent","connect-ota-channel-config","connect-ota-device-identity"]}',
+    )
+
+    assert mock_build.call_args.kwargs["profile"] == "connect-ota"
+    assert mock_build.call_args.kwargs["profile_metadata"]["ota_channel"] == "stable"
 
 
 @pytest.mark.django_db
@@ -158,6 +203,106 @@ def test_build_rpi4b_image_creates_artifact_with_download_uri(tmp_path: Path) ->
     assert result.output_path.exists()
     assert artifact.sha256 == result.sha256
     assert artifact.download_uri == "https://cdn.example.com/images/stable-rpi-4b.img"
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_persists_connect_ota_engine_profile_metadata(tmp_path: Path) -> None:
+    """Regression: connect-ota profile metadata must persist for rollout eligibility checks."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+
+    profile_metadata = {
+        "base_os": "raspberry-pi-os-trixie",
+        "architecture": "arm64",
+        "release_version": "2026.04.0",
+        "compatibility_model": "raspberry-pi-4",
+        "compatibility_board": "rpi-4b",
+        "ota_channel": "stable",
+        "ota_artifact_type": "raw-disk-image",
+        "required_artifacts": [
+            "connect-ota-agent",
+            "connect-ota-channel-config",
+            "connect-ota-device-identity",
+        ],
+    }
+
+    with patch("apps.imager.services._customize_image"):
+        build_rpi4b_image(
+            name="connect-stable",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=True,
+            profile="connect-ota",
+            profile_metadata=profile_metadata,
+        )
+
+    artifact = RaspberryPiImageArtifact.objects.get(name="connect-stable")
+    assert artifact.build_engine == "arthexis-bootstrap"
+    assert artifact.build_profile == "connect-ota"
+    assert artifact.metadata["profile_manifest"]["compatibility_model"] == "raspberry-pi-4"
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_rejects_connect_ota_profile_when_manifest_fields_missing(tmp_path: Path) -> None:
+    """Regression: connect-ota profile should reject missing rollout manifest requirements."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+
+    with pytest.raises(ImagerBuildError, match="requires manifest fields"):
+        build_rpi4b_image(
+            name="connect-invalid",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+            profile="connect-ota",
+            profile_metadata={
+                "base_os": "raspberry-pi-os-trixie",
+                "architecture": "arm64",
+                "release_version": "2026.04.0",
+                "required_artifacts": [
+                    "connect-ota-agent",
+                    "connect-ota-channel-config",
+                    "connect-ota-device-identity",
+                ],
+            },
+        )
+
+
+@pytest.mark.django_db
+def test_build_rpi4b_image_rejects_connect_ota_profile_when_base_metadata_missing(tmp_path: Path) -> None:
+    """Regression: connect-ota profile must validate explicit source base metadata."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+
+    with pytest.raises(ImagerBuildError, match="requires base_os"):
+        build_rpi4b_image(
+            name="connect-missing-base",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+            profile="connect-ota",
+            profile_metadata={
+                "release_version": "2026.04.0",
+                "compatibility_model": "raspberry-pi-4",
+                "compatibility_board": "rpi-4b",
+                "ota_channel": "stable",
+                "ota_artifact_type": "raw-disk-image",
+                "required_artifacts": [
+                    "connect-ota-agent",
+                    "connect-ota-channel-config",
+                    "connect-ota-device-identity",
+                ],
+            },
+        )
 
 @pytest.mark.django_db
 @patch("apps.imager.services._download_remote_base_image")

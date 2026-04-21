@@ -25,12 +25,13 @@ class EvergoArtifact(models.Model):
     )
     file = models.FileField(upload_to="evergo/artifacts/")
     artifact_type = models.CharField(max_length=16, choices=ARTIFACT_TYPE_CHOICES, editable=False)
+    display_order = models.PositiveSmallIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = "Evergo Artifact"
         verbose_name_plural = "Evergo Artifacts"
-        ordering = ("created_at", "pk")
+        ordering = ("display_order", "created_at", "pk")
 
     def __str__(self) -> str:
         """Return a concise artifact label."""

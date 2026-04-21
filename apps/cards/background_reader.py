@@ -11,6 +11,7 @@ from typing import Optional
 
 from django.conf import settings
 
+from apps.core.optional_hardware import is_expected_optional_hardware_absence
 from .constants import DEFAULT_IRQ_PIN, DEFAULT_RST_PIN, GPIO_PIN_MODE_BCM
 from .reader import resolve_spi_bus_device, resolve_spi_device_path
 
@@ -132,12 +133,19 @@ def _log_fd_snapshot(label: str) -> None:
         logger.debug(message)
 
 
-def _record_setup_failure(reason: str) -> None:
+def _record_setup_failure(reason: str, detail: str | None = None) -> None:
     """Track setup failures to avoid thrashing hardware when unavailable."""
 
     global _last_setup_failure
     _last_setup_failure = time.monotonic()
-    logger.warning(
+    if detail is None:
+        detail = _hardware_disabled_reason
+    log = (
+        logger.info
+        if detail and is_expected_optional_hardware_absence(detail)
+        else logger.warning
+    )
+    log(
         "RFID hardware setup failed (%s); skipping retries for %.1fs",
         reason,
         _SETUP_BACKOFF_SECONDS,
@@ -152,7 +160,12 @@ def _disable_hardware(reason: str) -> None:
     if _hardware_disabled_reason:
         return
     _hardware_disabled_reason = reason
-    logger.warning(
+    log = (
+        logger.info
+        if is_expected_optional_hardware_absence(reason)
+        else logger.warning
+    )
+    log(
         "RFID hardware disabled for this process after setup failure: %s",
         reason,
     )
@@ -395,7 +408,7 @@ def _worker():  # pragma: no cover - background thread
 
     _log_fd_snapshot("worker-start")
     if not _setup_hardware():
-        _record_setup_failure("initialization")
+        _record_setup_failure("initialization", _hardware_disabled_reason)
         _log_fd_snapshot("worker-setup-failed")
         lock = lock_file_path()
         if lock.exists():
