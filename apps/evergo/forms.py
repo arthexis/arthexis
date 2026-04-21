@@ -4,7 +4,6 @@ import re
 
 from django import forms
 from django.core.exceptions import ValidationError
-from django.forms import ModelForm
 from django.utils import timezone
 
 from apps.core.admin import OwnableAdminForm
@@ -170,6 +169,10 @@ class EvergoContractorLoginWizardForm(forms.ModelForm):
 class EvergoUserAdminForm(OwnableAdminForm):
     """Allow user/group/avatar ownership while defaulting new records to the acting user."""
 
+    owner_field_names = ("user", "group", "avatar")
+    owner_conflict_message = "Choose exactly one owner: user, security group, or avatar."
+    owner_required_message = "Choose a user, security group, or avatar owner for this contractor."
+
     class Meta:
         model = EvergoUser
         fields = "__all__"
@@ -178,25 +181,16 @@ class EvergoUserAdminForm(OwnableAdminForm):
         super().__init__(*args, **kwargs)
         self.request_user = request_user
 
-    def clean(self):
-        cleaned_data = ModelForm.clean(self)
-        owners = [cleaned_data.get(field_name) for field_name in ("user", "group", "avatar")]
+    def normalize_owner_data(self, cleaned):
+        owners = [cleaned.get(field_name) for field_name in self.owner_field_names]
         owner_count = sum(owner is not None for owner in owners)
-        if owner_count > 1:
-            raise ValidationError("Choose exactly one owner: user, security group, or avatar.")
-
         if (
             owner_count == 0
             and not self.instance.pk
             and getattr(self.request_user, "is_authenticated", False)
         ):
-            cleaned_data["user"] = self.request_user
-            owner_count = 1
-
-        owner_required = getattr(self._meta.model, "owner_required", self.owner_required)
-        if owner_required and owner_count == 0:
-            raise ValidationError("Choose a user, security group, or avatar owner for this contractor.")
-        return cleaned_data
+            cleaned["user"] = self.request_user
+        return cleaned
 
 
 class EvergoOrderTrackingForm(forms.Form):
