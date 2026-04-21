@@ -6,13 +6,13 @@ from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponseRedirect
-from django.template.response import TemplateResponse
-from django.urls import path, reverse
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
 from apps.discovery.services import record_discovery_item, start_discovery
 
+from .admin_mixins import LightsailFetchAdminMixin
 from .forms import FetchDatabaseForm, FetchInstanceForm
 from .models import AWSCredentials, LightsailDatabase, LightsailInstance
 from .services import (
@@ -58,23 +58,6 @@ class LightsailActionMixin(DjangoObjectActions):
             raise PermissionDenied
         if not self.has_change_permission(request):
             raise PermissionDenied
-
-    def resolve_credentials(self, form):
-        """Resolve selected or inline credential values from a fetch form."""
-
-        credentials = form.cleaned_data.get("credentials")
-        access_key = form.cleaned_data.get("access_key_id")
-        secret_key = form.cleaned_data.get("secret_access_key")
-        created = False
-        if credentials is None and access_key and secret_key:
-            credentials, created = AWSCredentials.objects.update_or_create(
-                access_key_id=access_key,
-                defaults={
-                    "name": form.cleaned_data.get("credential_label") or access_key,
-                    "secret_access_key": secret_key,
-                },
-            )
-        return credentials, created
 
     def user_input_summary_text(self, obj) -> str:
         credentials_name = obj.credentials.name if obj.credentials else "—"
@@ -205,7 +188,22 @@ class AWSCredentialsAdmin(LightsailActionMixin, admin.ModelAdmin):
 
 
 @admin.register(LightsailInstance)
-class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
+class LightsailInstanceAdmin(LightsailFetchAdminMixin, LightsailActionMixin, admin.ModelAdmin):
+    fetch_route_name = "aws_lightsailinstance_fetch"
+    fetch_template_name = "admin/aws/lightsailinstance/fetch.html"
+    fetch_title = _("Fetch Lightsail Instance")
+    fetch_form_class = FetchInstanceForm
+    fetch_permission_method = "has_change_permission"
+    fetch_service = staticmethod(fetch_lightsail_instance)
+    fetch_parse_details = staticmethod(parse_instance_details)
+    fetch_update_or_create_target = staticmethod(LightsailInstance.objects.update_or_create)
+    fetch_discovery_action = "aws_lightsail_instance"
+    fetch_created_message = _("Instance %(name)s created from AWS data.")
+    fetch_updated_message = _("Instance %(name)s updated from AWS data.")
+    fetch_credentials_created_message = _(
+        "Stored new AWS credentials linked to this instance."
+    )
+
     actions = ["fetch", "load_instances"]
     changelist_actions = ["fetch", "load_instances"]
     dashboard_actions = ["fetch", "load_instances"]
@@ -244,28 +242,6 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
             "arn": obj.arn or "—",
         }
 
-    def get_urls(self):  # pragma: no cover - admin hook
-        urls = super().get_urls()
-        custom = [
-            path(
-                "fetch/",
-                self.admin_site.admin_view(self.fetch_view),
-                name="aws_lightsailinstance_fetch",
-            ),
-        ]
-        return custom + urls
-
-    def _action_url(self):
-        return reverse("admin:aws_lightsailinstance_fetch")
-
-    def fetch(self, request, queryset=None):  # pragma: no cover - admin action
-        return HttpResponseRedirect(self._action_url())
-
-    fetch.label = _("Discover")
-    fetch.short_description = _("Discover")
-    fetch.requires_queryset = False
-    fetch.is_discover_action = True
-
     def load_instances(self, request, queryset=None):  # pragma: no cover - admin action
         """Load and consolidate Lightsail instances for configured credentials."""
 
@@ -290,94 +266,25 @@ class LightsailInstanceAdmin(LightsailActionMixin, admin.ModelAdmin):
     load_instances.short_description = _("Load Instances")
     load_instances.requires_queryset = False
 
-    def fetch_view(self, request):
-        if not self.has_change_permission(request):
-            raise PermissionDenied
-
-        opts = self.model._meta
-        changelist_url = reverse("admin:aws_lightsailinstance_changelist")
-        form = FetchInstanceForm(request.POST or None)
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": opts,
-            "title": _("Fetch Lightsail Instance"),
-            "changelist_url": changelist_url,
-            "action_url": self._action_url(),
-            "form": form,
-        }
-
-        if request.method == "POST" and form.is_valid():
-            credentials, created_credentials = self.resolve_credentials(form)
-            try:
-                details = fetch_lightsail_instance(
-                    name=form.cleaned_data["name"],
-                    region=form.cleaned_data["region"],
-                    credentials=credentials,
-                    access_key_id=form.cleaned_data.get("access_key_id"),
-                    secret_access_key=form.cleaned_data.get("secret_access_key"),
-                )
-            except LightsailFetchError as exc:
-                self.message_user(request, str(exc), messages.ERROR)
-            else:
-                defaults = parse_instance_details(details)
-                defaults.update(
-                    {
-                        "region": form.cleaned_data["region"],
-                        "credentials": credentials,
-                    }
-                )
-                instance, created = LightsailInstance.objects.update_or_create(
-                    name=form.cleaned_data["name"],
-                    region=form.cleaned_data["region"],
-                    defaults=defaults,
-                )
-                discovery = start_discovery(
-                    _("Discover"),
-                    request,
-                    model=self.model,
-                    metadata={
-                        "action": "aws_lightsail_instance",
-                        "region": form.cleaned_data["region"],
-                    },
-                )
-                if discovery:
-                    record_discovery_item(
-                        discovery,
-                        obj=instance,
-                        label=instance.name,
-                        created=created,
-                        overwritten=not created,
-                        data={"region": instance.region},
-                    )
-                if created:
-                    self.message_user(
-                        request,
-                        _("Instance %(name)s created from AWS data.") % {"name": instance.name},
-                        messages.SUCCESS,
-                    )
-                else:
-                    self.message_user(
-                        request,
-                        _("Instance %(name)s updated from AWS data.") % {"name": instance.name},
-                        messages.SUCCESS,
-                    )
-                if created_credentials:
-                    self.message_user(
-                        request,
-                        _("Stored new AWS credentials linked to this instance."),
-                        messages.INFO,
-                    )
-                return HttpResponseRedirect(changelist_url)
-
-        return TemplateResponse(
-            request,
-            "admin/aws/lightsailinstance/fetch.html",
-            context,
-        )
 
 
 @admin.register(LightsailDatabase)
-class LightsailDatabaseAdmin(LightsailActionMixin, admin.ModelAdmin):
+class LightsailDatabaseAdmin(LightsailFetchAdminMixin, LightsailActionMixin, admin.ModelAdmin):
+    fetch_route_name = "aws_lightsaildatabase_fetch"
+    fetch_template_name = "admin/aws/lightsaildatabase/fetch.html"
+    fetch_title = _("Fetch Lightsail Database")
+    fetch_form_class = FetchDatabaseForm
+    fetch_permission_method = "has_view_or_change_permission"
+    fetch_service = staticmethod(fetch_lightsail_database)
+    fetch_parse_details = staticmethod(parse_database_details)
+    fetch_update_or_create_target = staticmethod(LightsailDatabase.objects.update_or_create)
+    fetch_discovery_action = "aws_lightsail_database"
+    fetch_created_message = _("Database %(name)s created from AWS data.")
+    fetch_updated_message = _("Database %(name)s updated from AWS data.")
+    fetch_credentials_created_message = _(
+        "Stored new AWS credentials linked to this database."
+    )
+
     actions = ["fetch"]
     changelist_actions = ["fetch"]
     dashboard_actions = ["fetch"]
@@ -415,110 +322,3 @@ class LightsailDatabaseAdmin(LightsailActionMixin, admin.ModelAdmin):
             "endpoint": obj.endpoint_address or "—",
             "port": obj.endpoint_port or "—",
         }
-
-    def get_urls(self):  # pragma: no cover - admin hook
-        urls = super().get_urls()
-        custom = [
-            path(
-                "fetch/",
-                self.admin_site.admin_view(self.fetch_view),
-                name="aws_lightsaildatabase_fetch",
-            ),
-        ]
-        return custom + urls
-
-    def _action_url(self):
-        return reverse("admin:aws_lightsaildatabase_fetch")
-
-    def fetch(self, request, queryset=None):  # pragma: no cover - admin action
-        return HttpResponseRedirect(self._action_url())
-
-    fetch.label = _("Discover")
-    fetch.short_description = _("Discover")
-    fetch.requires_queryset = False
-    fetch.is_discover_action = True
-
-    def fetch_view(self, request):
-        if not self.has_view_or_change_permission(request):
-            raise PermissionDenied
-
-        opts = self.model._meta
-        changelist_url = reverse("admin:aws_lightsaildatabase_changelist")
-        form = FetchDatabaseForm(request.POST or None)
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": opts,
-            "title": _("Fetch Lightsail Database"),
-            "changelist_url": changelist_url,
-            "action_url": self._action_url(),
-            "form": form,
-        }
-
-        if request.method == "POST" and form.is_valid():
-            credentials, created_credentials = self.resolve_credentials(form)
-            try:
-                details = fetch_lightsail_database(
-                    name=form.cleaned_data["name"],
-                    region=form.cleaned_data["region"],
-                    credentials=credentials,
-                    access_key_id=form.cleaned_data.get("access_key_id"),
-                    secret_access_key=form.cleaned_data.get("secret_access_key"),
-                )
-            except LightsailFetchError as exc:
-                self.message_user(request, str(exc), messages.ERROR)
-            else:
-                defaults = parse_database_details(details)
-                defaults.update(
-                    {
-                        "region": form.cleaned_data["region"],
-                        "credentials": credentials,
-                    }
-                )
-                database, created = LightsailDatabase.objects.update_or_create(
-                    name=form.cleaned_data["name"],
-                    region=form.cleaned_data["region"],
-                    defaults=defaults,
-                )
-                discovery = start_discovery(
-                    _("Discover"),
-                    request,
-                    model=self.model,
-                    metadata={
-                        "action": "aws_lightsail_database",
-                        "region": form.cleaned_data["region"],
-                    },
-                )
-                if discovery:
-                    record_discovery_item(
-                        discovery,
-                        obj=database,
-                        label=database.name,
-                        created=created,
-                        overwritten=not created,
-                        data={"region": database.region},
-                    )
-                if created:
-                    self.message_user(
-                        request,
-                        _("Database %(name)s created from AWS data.") % {"name": database.name},
-                        messages.SUCCESS,
-                    )
-                else:
-                    self.message_user(
-                        request,
-                        _("Database %(name)s updated from AWS data.") % {"name": database.name},
-                        messages.SUCCESS,
-                    )
-                if created_credentials:
-                    self.message_user(
-                        request,
-                        _("Stored new AWS credentials linked to this database."),
-                        messages.INFO,
-                    )
-                return HttpResponseRedirect(changelist_url)
-
-        return TemplateResponse(
-            request,
-            "admin/aws/lightsaildatabase/fetch.html",
-            context,
-        )
