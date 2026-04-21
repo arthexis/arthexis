@@ -14,6 +14,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.sites.models import Site
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -240,14 +241,27 @@ def customer_public_detail(request, public_id) -> HttpResponse:
                         )
                     else:
                         next_order = max((artifact.display_order for artifact in image_artifacts), default=0) + 1
-                        EvergoArtifact.objects.create(
-                            customer=customer,
-                            file=uploaded_image,
-                            artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
-                            display_order=next_order,
-                        )
-                        messages.success(request, "Image added.")
-                        return redirect(customer.get_absolute_url())
+                        try:
+                            artifact = EvergoArtifact.objects.create(
+                                customer=customer,
+                                file=uploaded_image,
+                                artifact_type=EvergoArtifact.ARTIFACT_TYPE_IMAGE,
+                                display_order=next_order,
+                            )
+                        except ValidationError as exc:
+                            field_errors = list(exc.message_dict.get("file", [])) if hasattr(exc, "message_dict") else []
+                            for error in field_errors or list(exc.messages):
+                                upload_form.add_error("image", error)
+                        else:
+                            if not artifact.is_image:
+                                _delete_artifact_and_blob(artifact)
+                                upload_form.add_error(
+                                    "image",
+                                    "Only image files are allowed for this upload.",
+                                )
+                            else:
+                                messages.success(request, "Image added.")
+                                return redirect(customer.get_absolute_url())
         elif action == "delete-image":
             artifact_id = request.POST.get("artifact_id")
             if request.POST.get("confirm_delete") != "yes":
