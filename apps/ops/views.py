@@ -40,6 +40,7 @@ from .redirects import safe_host_redirect
 from .status_surface import build_status_surface, scoped_log_excerpts
 
 OPERATOR_JOURNEY_STEP_URL_NAME = "ops:operator-journey-step"
+ADMIN_INDEX_URL_NAME = "admin:index"
 
 ROLE_VALIDATION_STEP_SLUG = "validate-local-node-role"
 PROVISION_SUPERUSER_STEP_SLUG = "provision-ops-superuser"
@@ -273,7 +274,7 @@ def _resolve_oauth_step_or_redirect(
 
     current_step = next_step_for_user(user=request.user)
     if current_step is None:
-        return None, redirect(reverse("admin:index"))
+        return None, redirect(reverse(ADMIN_INDEX_URL_NAME))
     if current_step.pk != step.pk:
         messages.warning(
             request,
@@ -354,8 +355,8 @@ def operator_journey_step(
             kwargs={"journey_slug": step.journey.slug, "step_slug": step.slug},
         )
         context["github_connected_username"] = (
-            github_access_form._existing_token_record.label
-            if github_access_form._existing_token_record
+            github_access_form.existing_token.label
+            if github_access_form.existing_token
             else ""
         )
 
@@ -442,7 +443,7 @@ def complete_operator_journey_step(
 
     current_step = next_step_for_user(user=request.user)
     if current_step is None:
-        return redirect(reverse("admin:index"))
+        return redirect(reverse(ADMIN_INDEX_URL_NAME))
     if current_step.pk != step.pk:
         messages.warning(
             request,
@@ -472,7 +473,7 @@ def complete_operator_journey_step(
             )
             locked_step = next_step_for_user(user=request.user)
             if locked_step is None:
-                return redirect(reverse("admin:index"))
+                return redirect(reverse(ADMIN_INDEX_URL_NAME))
             if locked_step.pk != step.pk:
                 messages.warning(
                     request,
@@ -511,9 +512,9 @@ def complete_operator_journey_step(
             if not is_valid_connection:
                 github_access_form.add_error(None, validation_message)
             elif (
-                github_access_form._existing_token_record is not None
+                github_access_form.existing_token is not None
                 and _can_manage_github_token(
-                    request, token=github_access_form._existing_token_record
+                    request, token=github_access_form.existing_token
                 )
             ):
                 github_access_form.save(
@@ -526,8 +527,8 @@ def complete_operator_journey_step(
                 "step": step,
                 "github_access_form": github_access_form,
                 "github_connected_username": (
-                    github_access_form._existing_token_record.label
-                    if github_access_form._existing_token_record
+                    github_access_form.existing_token.label
+                    if github_access_form.existing_token
                     else ""
                 ),
                 "github_login_url": reverse(
@@ -545,7 +546,7 @@ def complete_operator_journey_step(
     if not complete_step_for_user(user=request.user, step=step):
         next_step = next_step_for_user(user=request.user)
         if next_step is None:
-            return redirect(reverse("admin:index"))
+            return redirect(reverse(ADMIN_INDEX_URL_NAME))
         messages.warning(
             request,
             "That step is not available yet. Finish the current required operator step first.",
@@ -690,7 +691,6 @@ def operator_journey_github_callback(
             request, "GitHub authorization could not be validated. Please try again."
         )
         return redirect(step_url)
-    request.session.pop(GITHUB_OAUTH_SESSION_STATE_KEY, None)
 
     oauth_error = (request.GET.get("error") or "").strip()
     if oauth_error:
@@ -703,7 +703,7 @@ def operator_journey_github_callback(
         return redirect(step_url)
 
     form = OperatorJourneyGitHubAccessForm(user=request.user)
-    if not _can_manage_github_token(request, token=form._existing_token_record):
+    if not _can_manage_github_token(request, token=form.existing_token):
         messages.error(request, "You do not have permission to save a GitHub token.")
         return redirect(step_url)
 
@@ -749,6 +749,7 @@ def operator_journey_github_callback(
         )
         messages.error(request, f"GitHub authentication failed: {oauth_error_message}")
         return redirect(step_url)
+    request.session.pop(GITHUB_OAUTH_SESSION_STATE_KEY, None)
 
     validation_success, validation_message, validated_login = (
         github_service.validate_token(access_token)

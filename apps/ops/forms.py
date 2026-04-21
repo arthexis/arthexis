@@ -209,7 +209,9 @@ class OperatorJourneyGitHubAccessForm(forms.Form):
         self.user = user
         super().__init__(*args, **kwargs)
         self._existing_token_record = (
-            GitHubToken.objects.filter(user=user).order_by("-pk").first()
+            GitHubToken.objects.filter(user=user, group__isnull=True)
+            .order_by("-pk")
+            .first()
         )
 
     def save(self, *, token: str, username: str) -> GitHubToken:
@@ -221,10 +223,17 @@ class OperatorJourneyGitHubAccessForm(forms.Form):
         }
         token_record, _created = GitHubToken.objects.update_or_create(
             user=self.user,
+            group=None,
             defaults=defaults,
         )
         self._existing_token_record = token_record
         return token_record
+
+    @property
+    def existing_token(self) -> GitHubToken | None:
+        """Return the user's existing personal GitHub token record, if present."""
+
+        return self._existing_token_record
 
     def validate_connection(self) -> tuple[bool, str, str]:
         """Return whether the stored token authenticates with GitHub."""

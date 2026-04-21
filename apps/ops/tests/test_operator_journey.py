@@ -729,14 +729,76 @@ class OperatorJourneyViewTests(TestCase):
                 },
             ),
             {"code": "oauth-code", "state": "wrong-state"},
+            follow=True,
         )
 
-        self.assertEqual(callback_response.status_code, 302)
+        self.assertEqual(callback_response.status_code, 200)
+        self.assertContains(
+            callback_response,
+            "GitHub authorization could not be validated. Please try again.",
+        )
         mock_post.assert_not_called()
         self.assertFalse(GitHubToken.objects.filter(user=self.user).exists())
         self.assertEqual(
             self.client.session["ops_github_oauth_state"]["state"], "expected-state"
         )
+
+    @override_settings(
+        GITHUB_OAUTH_CLIENT_ID="client-id",
+        GITHUB_OAUTH_CLIENT_SECRET="client-secret",
+    )
+    @patch("apps.ops.views.requests.post")
+    def test_setup_github_token_callback_preserves_state_on_oauth_error(
+        self,
+        mock_post,
+    ):
+        complete_step_for_user(user=self.user, step=self.step_1)
+        complete_step_for_user(user=self.user, step=self.step_2)
+        github_journey = OperatorJourney.objects.create(
+            name="Product Developer GitHub Access",
+            slug="product-developer-github-access",
+            security_group=self.group,
+            is_active=True,
+            priority=1,
+        )
+        github_step = OperatorJourneyStep.objects.create(
+            journey=github_journey,
+            title="Connect your GitHub access",
+            slug="setup-github-token",
+            instruction="Configure GitHub access directly in this step.",
+            iframe_url="/admin/repos/githubrepository/setup-token/",
+            order=1,
+        )
+        login_response = self.client.get(
+            reverse(
+                "ops:operator-journey-github-login",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            )
+        )
+        self.assertEqual(login_response.status_code, 302)
+        state = self.client.session["ops_github_oauth_state"]["state"]
+
+        callback_response = self.client.get(
+            reverse(
+                "ops:operator-journey-github-callback",
+                kwargs={
+                    "journey_slug": github_journey.slug,
+                    "step_slug": github_step.slug,
+                },
+            ),
+            {"error": "access_denied", "state": state},
+            follow=True,
+        )
+
+        self.assertEqual(callback_response.status_code, 200)
+        self.assertContains(
+            callback_response, "GitHub returned an error: access_denied"
+        )
+        mock_post.assert_not_called()
+        self.assertEqual(self.client.session["ops_github_oauth_state"]["state"], state)
 
     @override_settings(
         GITHUB_OAUTH_CLIENT_ID="client-id",
