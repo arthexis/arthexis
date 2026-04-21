@@ -2,6 +2,7 @@ from io import BytesIO
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.core import signing
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from PIL import Image
@@ -160,6 +161,38 @@ class GalleryManagementPermissionTests(TestCase):
         )
         self.assertEqual(retry_response.status_code, 302)
         self.assertTrue(GalleryImage.objects.filter(title="Retry Works").exists())
+
+    @override_settings(FILE_UPLOAD_MAX_MEMORY_SIZE=0)
+    def test_upload_with_invalid_image_does_not_stage_file(self):
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            "/gallery/upload/",
+            {
+                "image": SimpleUploadedFile("not-image.txt", b"not-an-image", content_type="text/plain"),
+                "title": "Invalid Image",
+                "description": "",
+                "owner_user": self.manager.username,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Upload a valid image.")
+        self.assertFalse(response.context["form"]["staged_upload_key"].value())
+        self.assertFalse(GalleryImage.objects.filter(title="Invalid Image").exists())
+
+    def test_expired_or_invalid_staged_key_returns_form_error(self):
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            "/gallery/upload/",
+            {
+                "title": "Retry Fails",
+                "description": "",
+                "owner_user": self.manager.username,
+                "staged_upload_key": signing.TimestampSigner(salt="gallery-upload").sign("gallery/staged/999/missing.jpg"),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "The previously uploaded image has expired or is invalid. Please upload it again.")
+        self.assertFalse(GalleryImage.objects.filter(title="Retry Fails").exists())
 
     def test_gallery_manager_can_view_private_image(self):
         image = create_gallery_image(

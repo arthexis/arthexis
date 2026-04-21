@@ -29,19 +29,21 @@ _STAGED_UPLOAD_SIGNER = TimestampSigner(salt="gallery-upload")
 
 
 def _stage_uploaded_image(*, uploaded_file, user_id: int) -> str:
-    suffix = Path(uploaded_file.name or "").suffix
-    staged_path = f"gallery/staged/{user_id}/{uuid4().hex}{suffix}"
+    original_name = Path(uploaded_file.name or "image").name
+    staged_path = f"gallery/staged/{user_id}/{uuid4().hex}_{original_name}"
     saved_path = default_storage.save(staged_path, uploaded_file)
     return _STAGED_UPLOAD_SIGNER.sign(saved_path)
 
 
-def _resolve_staged_upload(*, staged_upload_key: str):
+def _resolve_staged_upload(*, staged_upload_key: str, user_id: int):
     try:
         staged_path = _STAGED_UPLOAD_SIGNER.unsign(
             staged_upload_key,
             max_age=_STAGED_UPLOAD_MAX_AGE_SECONDS,
         )
     except (BadSignature, SignatureExpired):
+        return None
+    if not str(staged_path).startswith(f"gallery/staged/{user_id}/"):
         return None
     if not default_storage.exists(staged_path):
         return None
@@ -193,7 +195,12 @@ def gallery_upload(request):
                 return render(request, "gallery/upload.html", {"form": form})
 
         staged_upload_key = form.cleaned_data.get("staged_upload_key") or ""
-        staged_path = _resolve_staged_upload(staged_upload_key=staged_upload_key) if staged_upload_key else None
+        staged_path = (
+            _resolve_staged_upload(staged_upload_key=staged_upload_key, user_id=request.user.pk) if staged_upload_key else None
+        )
+        if staged_upload_key and staged_path is None:
+            form.add_error("image", "The previously uploaded image has expired or is invalid. Please upload it again.")
+            return render(request, "gallery/upload.html", {"form": form})
         uploaded_file = form.cleaned_data.get("image")
         staged_handle = None
         if uploaded_file is None and staged_path:
@@ -217,10 +224,12 @@ def gallery_upload(request):
         messages.success(request, "Image uploaded successfully.")
         return redirect("gallery:detail", slug=image.slug)
 
-    if request.method == "POST" and request.FILES.get("image"):
+    if request.method == "POST" and request.FILES.get("image") and "image" not in form.errors:
         previous_staged_upload_key = (request.POST.get("staged_upload_key") or "").strip()
         previous_staged_path = (
-            _resolve_staged_upload(staged_upload_key=previous_staged_upload_key) if previous_staged_upload_key else None
+            _resolve_staged_upload(staged_upload_key=previous_staged_upload_key, user_id=request.user.pk)
+            if previous_staged_upload_key
+            else None
         )
         _clear_staged_upload(staged_path=previous_staged_path)
         form.data = form.data.copy()
