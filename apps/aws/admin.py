@@ -59,23 +59,6 @@ class LightsailActionMixin(DjangoObjectActions):
         if not self.has_change_permission(request):
             raise PermissionDenied
 
-    def resolve_credentials(self, form):
-        """Resolve selected or inline credential values from a fetch form."""
-
-        credentials = form.cleaned_data.get("credentials")
-        access_key = form.cleaned_data.get("access_key_id")
-        secret_key = form.cleaned_data.get("secret_access_key")
-        created = False
-        if credentials is None and access_key and secret_key:
-            credentials, created = AWSCredentials.objects.update_or_create(
-                access_key_id=access_key,
-                defaults={
-                    "name": form.cleaned_data.get("credential_label") or access_key,
-                    "secret_access_key": secret_key,
-                },
-            )
-        return credentials, created
-
     def user_input_summary_text(self, obj) -> str:
         credentials_name = obj.credentials.name if obj.credentials else "—"
         return _("name=%(name)s; region=%(region)s; credentials=%(credentials)s") % {
@@ -215,7 +198,11 @@ class LightsailInstanceAdmin(LightsailFetchAdminMixin, LightsailActionMixin, adm
     fetch_parse_details = staticmethod(parse_instance_details)
     fetch_update_or_create_target = staticmethod(LightsailInstance.objects.update_or_create)
     fetch_discovery_action = "aws_lightsail_instance"
-    fetch_success_noun = _("Instance")
+    fetch_created_message = _("Instance %(name)s created from AWS data.")
+    fetch_updated_message = _("Instance %(name)s updated from AWS data.")
+    fetch_credentials_created_message = _(
+        "Stored new AWS credentials linked to this instance."
+    )
 
     actions = ["fetch", "load_instances"]
     changelist_actions = ["fetch", "load_instances"]
@@ -292,7 +279,11 @@ class LightsailDatabaseAdmin(LightsailFetchAdminMixin, LightsailActionMixin, adm
     fetch_parse_details = staticmethod(parse_database_details)
     fetch_update_or_create_target = staticmethod(LightsailDatabase.objects.update_or_create)
     fetch_discovery_action = "aws_lightsail_database"
-    fetch_success_noun = _("Database")
+    fetch_created_message = _("Database %(name)s created from AWS data.")
+    fetch_updated_message = _("Database %(name)s updated from AWS data.")
+    fetch_credentials_created_message = _(
+        "Stored new AWS credentials linked to this database."
+    )
 
     actions = ["fetch"]
     changelist_actions = ["fetch"]

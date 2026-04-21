@@ -11,6 +11,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.discovery.services import record_discovery_item, start_discovery
 
+from .models import AWSCredentials
 from .services import LightsailFetchError
 
 
@@ -27,7 +28,11 @@ class LightsailFetchAdminMixin:
     fetch_parse_details: Callable
     fetch_update_or_create_target: Callable
     fetch_discovery_action: str
-    fetch_success_noun: str
+    fetch_created_message = _("%(name)s created from AWS data.")
+    fetch_updated_message = _("%(name)s updated from AWS data.")
+    fetch_credentials_created_message = _(
+        "Stored new AWS credentials linked to this record."
+    )
 
     def get_urls(self):  # pragma: no cover - admin hook
         urls = super().get_urls()
@@ -86,25 +91,23 @@ class LightsailFetchAdminMixin:
         return defaults
 
     def _fetch_success_messages(self, request, *, obj, created: bool, created_credentials: bool) -> None:
-        noun = self.fetch_success_noun
         if created:
             self.message_user(
                 request,
-                _("%(noun)s %(name)s created from AWS data.") % {"noun": noun, "name": obj.name},
+                self.fetch_created_message % {"name": obj.name},
                 messages.SUCCESS,
             )
         else:
             self.message_user(
                 request,
-                _("%(noun)s %(name)s updated from AWS data.") % {"noun": noun, "name": obj.name},
+                self.fetch_updated_message % {"name": obj.name},
                 messages.SUCCESS,
             )
 
         if created_credentials:
             self.message_user(
                 request,
-                _("Stored new AWS credentials linked to this %(kind)s.")
-                % {"kind": noun.lower()},
+                self.fetch_credentials_created_message,
                 messages.INFO,
             )
 
@@ -124,6 +127,23 @@ class LightsailFetchAdminMixin:
                 overwritten=not created,
                 data={"region": obj.region},
             )
+
+    def resolve_credentials(self, form):
+        """Resolve selected or inline credential values from a fetch form."""
+
+        credentials = form.cleaned_data.get("credentials")
+        access_key = form.cleaned_data.get("access_key_id")
+        secret_key = form.cleaned_data.get("secret_access_key")
+        created = False
+        if credentials is None and access_key and secret_key:
+            credentials, created = AWSCredentials.objects.update_or_create(
+                access_key_id=access_key,
+                defaults={
+                    "name": form.cleaned_data.get("credential_label") or access_key,
+                    "secret_access_key": secret_key,
+                },
+            )
+        return credentials, created
 
     def fetch_view(self, request):
         self._check_fetch_permission(request)
