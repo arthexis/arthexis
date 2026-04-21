@@ -177,6 +177,8 @@ class OdooEmployeeAdminForm(forms.ModelForm):
 
 class PaymentProcessorAdminForm(forms.ModelForm):
     masked_fields: tuple[str, ...] = ()
+    required_credential_fields: tuple[str, ...] = ()
+    required_credential_error = ""
     sigil_fields: tuple[str, ...] = ()
 
     def __init__(self, *args, **kwargs):
@@ -205,6 +207,21 @@ class PaymentProcessorAdminForm(forms.ModelForm):
                     cleaned[field] = keep_existing(field)
         return cleaned
 
+    def validate_required_credentials(self, cleaned_data):
+        if (
+            cleaned_data.get("DELETE")
+            or self.errors
+            or not self.required_credential_fields
+        ):
+            return
+        provided = [
+            name
+            for name in self.required_credential_fields
+            if self._has_value(cleaned_data.get(name))
+        ]
+        if len(provided) != len(self.required_credential_fields):
+            raise forms.ValidationError(self.required_credential_error)
+
     def _post_clean(self):
         super()._post_clean()
         if self.sigil_fields:
@@ -213,6 +230,10 @@ class PaymentProcessorAdminForm(forms.ModelForm):
 
 class OpenPayProcessorAdminForm(PaymentProcessorAdminForm):
     masked_fields = ("private_key", "webhook_secret")
+    required_credential_fields = ("merchant_id", "private_key", "public_key")
+    required_credential_error = _(
+        "Provide merchant ID, private key, and public key to configure OpenPay."
+    )
     sigil_fields = ("merchant_id", "private_key", "public_key", "webhook_secret")
 
     class Meta:
@@ -239,25 +260,16 @@ class OpenPayProcessorAdminForm(PaymentProcessorAdminForm):
 
     def clean(self):
         cleaned = super().clean()
-        if cleaned.get("DELETE") or self.errors:
-            return cleaned
-
-        required = ("merchant_id", "private_key", "public_key")
-        provided = [name for name in required if self._has_value(cleaned.get(name))]
-        missing = [name for name in required if not self._has_value(cleaned.get(name))]
-        if provided and missing:
-            raise forms.ValidationError(
-                _("Provide merchant ID, private key, and public key to configure OpenPay.")
-            )
-        if not provided:
-            raise forms.ValidationError(
-                _("Provide merchant ID, private key, and public key to configure OpenPay.")
-            )
+        self.validate_required_credentials(cleaned)
         return cleaned
 
 
 class PayPalProcessorAdminForm(PaymentProcessorAdminForm):
     masked_fields = ("client_secret",)
+    required_credential_fields = ("client_id", "client_secret")
+    required_credential_error = _(
+        "Provide PayPal client ID and client secret to configure PayPal."
+    )
     sigil_fields = ("client_id", "client_secret", "webhook_id")
 
     class Meta:
@@ -279,19 +291,16 @@ class PayPalProcessorAdminForm(PaymentProcessorAdminForm):
 
     def clean(self):
         cleaned = super().clean()
-        if cleaned.get("DELETE") or self.errors:
-            return cleaned
-        required = ("client_id", "client_secret")
-        provided = [name for name in required if self._has_value(cleaned.get(name))]
-        if len(provided) != len(required):
-            raise forms.ValidationError(
-                _("Provide PayPal client ID and client secret to configure PayPal.")
-            )
+        self.validate_required_credentials(cleaned)
         return cleaned
 
 
 class StripeProcessorAdminForm(PaymentProcessorAdminForm):
     masked_fields = ("secret_key", "webhook_secret")
+    required_credential_fields = ("secret_key", "publishable_key")
+    required_credential_error = _(
+        "Provide Stripe secret and publishable keys to configure Stripe."
+    )
     sigil_fields = ("secret_key", "publishable_key", "webhook_secret")
 
     class Meta:
@@ -315,14 +324,7 @@ class StripeProcessorAdminForm(PaymentProcessorAdminForm):
 
     def clean(self):
         cleaned = super().clean()
-        if cleaned.get("DELETE") or self.errors:
-            return cleaned
-        required = ("secret_key", "publishable_key")
-        provided = [name for name in required if self._has_value(cleaned.get(name))]
-        if len(provided) != len(required):
-            raise forms.ValidationError(
-                _("Provide Stripe secret and publishable keys to configure Stripe.")
-            )
+        self.validate_required_credentials(cleaned)
         return cleaned
 
 
