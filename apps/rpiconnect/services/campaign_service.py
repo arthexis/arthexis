@@ -213,14 +213,15 @@ class CampaignService:
     def resume_campaign(self, campaign: ConnectUpdateCampaign, *, created_by=None) -> ConnectUpdateCampaign:
         """Resume a paused campaign."""
 
-        self._transition_campaign(
-            campaign,
-            to_status=ConnectUpdateCampaign.Status.RUNNING,
-            event_type="campaign.resumed",
-            created_by=created_by,
-            required_from_status=ConnectUpdateCampaign.Status.PAUSED,
-        )
-        self._queue_next_rollout_stage(campaign=campaign)
+        with transaction.atomic():
+            self._transition_campaign(
+                campaign,
+                to_status=ConnectUpdateCampaign.Status.RUNNING,
+                event_type="campaign.resumed",
+                created_by=created_by,
+                required_from_status=ConnectUpdateCampaign.Status.PAUSED,
+            )
+            self._queue_next_rollout_stage(campaign=campaign)
         return campaign
 
     def stop_campaign(self, campaign: ConnectUpdateCampaign, *, created_by=None) -> ConnectUpdateCampaign:
