@@ -147,7 +147,7 @@
         {% if messages %}
             <ul class="messages">
                 {% for message in messages %}
-                    <li>{{ message }}</li>
+                    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
                 {% endfor %}
             </ul>
         {% endif %}
@@ -179,7 +179,7 @@
 
         <section class="images">
             <h2>Order images</h2>
-            <p>You can upload up to 10 images. Remaining shared storage: {{ remaining_storage_mb }} MB.</p>
+            <p>You can upload up to {{ image_limit }} images. Remaining shared storage: {{ remaining_storage_mb }} MB.</p>
             <form method="post" enctype="multipart/form-data">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="upload-image">

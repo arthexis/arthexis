@@ -225,7 +225,7 @@ def test_customer_public_detail_enforces_image_and_storage_limits(client, settin
     )
 
     assert response.status_code == 200
-    assert "You can only add up to 1 images." in response.content.decode()
+    assert "You can only add up to 1 image." in response.content.decode()
 
 
 @pytest.mark.django_db

@@ -6,8 +6,8 @@ import base64
 import mimetypes
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from urllib.error import URLError
 from urllib.parse import quote_plus
+from urllib.parse import urlparse
 from urllib.request import urlopen
 
 from django.conf import settings
@@ -22,7 +22,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.text import get_valid_filename
-from django.utils.translation import gettext as _
+from django.utils.translation import gettext as _, ngettext
 
 from apps.features.utils import is_pages_chat_runtime_enabled, is_suite_feature_enabled
 from apps.reports.services import _render_pdf_bytes as _reports_render_pdf_bytes
@@ -193,11 +193,13 @@ def _remote_image_data_uri(url: str) -> str:
     """Fetch remote image bytes and return a data URI, or an empty string on failure."""
     if not url:
         return ""
+    if urlparse(url).scheme not in {"http", "https"}:
+        return ""
     try:
         with urlopen(url, timeout=5) as response:
             content = response.read()
             content_type = response.headers.get_content_type() or "application/octet-stream"
-    except (OSError, URLError, ValueError):
+    except (OSError, ValueError):
         return ""
     return _to_data_uri(content, content_type=content_type)
 
@@ -241,7 +243,15 @@ def customer_public_detail(request, public_id) -> HttpResponse:
                         )
                     )
                     if len(locked_image_artifacts) >= image_limit:
-                        upload_form.add_error("image", f"You can only add up to {image_limit} images.")
+                        upload_form.add_error(
+                            "image",
+                            ngettext(
+                                "You can only add up to %(count)d image.",
+                                "You can only add up to %(count)d images.",
+                                image_limit,
+                            )
+                            % {"count": image_limit},
+                        )
                     else:
                         current_storage_bytes = sum(artifact.file.size for artifact in locked_image_artifacts)
                         projected_total = current_storage_bytes + uploaded_image.size
@@ -312,6 +322,7 @@ def customer_public_detail(request, public_id) -> HttpResponse:
         "image_artifacts": image_artifacts,
         "max_images_reached": len(image_artifacts) >= image_limit,
         "upload_form": upload_form,
+        "image_limit": image_limit,
         "remaining_storage_mb": max(0, (storage_limit_bytes - current_storage_bytes) // (1024 * 1024)),
         **maps_context,
     }
