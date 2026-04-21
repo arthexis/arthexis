@@ -202,8 +202,8 @@ def _verify_signature_for_payload(
             .filter(installation_id=installation_id)
             .first()
         )
-        if install and _verify_signature(request, install.app.webhook_secret):
-            return True
+        if install:
+            return _verify_signature(request, install.app.webhook_secret)
     return _verify_signature_for_any_app(request)
 
 

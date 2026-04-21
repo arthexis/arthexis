@@ -8,7 +8,7 @@ import json
 import pytest
 from django.urls import reverse
 
-from apps.repos.models.github_apps import GitHubApp
+from apps.repos.models.github_apps import GitHubApp, GitHubAppInstall
 from apps.repos.models.repositories import GitHubRepository
 from apps.repos.models.spam import RepositoryIssueSpamAssessment
 from apps.repos.services import github as github_service
@@ -249,6 +249,73 @@ def test_github_webhook_skips_spam_assessment_without_valid_signature(
         data=json.dumps(payload),
         content_type="application/json",
         **{"HTTP_X_GITHUB_EVENT": "issues", "HTTP_X_GITHUB_DELIVERY": "delivery-90"},
+    )
+
+    assert response.status_code == 200
+    assert RepositoryIssueSpamAssessment.objects.count() == 0
+    assert calls == []
+
+
+@pytest.mark.django_db
+def test_github_webhook_skips_spam_assessment_for_installation_secret_mismatch(
+    client, monkeypatch, settings
+):
+    settings.GITHUB_ISSUE_SPAM_FILTER_ENABLED = True
+    settings.GITHUB_ISSUE_SPAM_AUTO_MODERATE = True
+    settings.GITHUB_ISSUE_SPAM_MAX_LINKS = 0
+    settings.GITHUB_ISSUE_SPAM_THRESHOLD = "0.20"
+
+    repo = GitHubRepository.objects.create(owner="octocat", name="hello-world")
+    victim_app = GitHubApp.objects.create(
+        display_name="Victim App",
+        app_id=3001,
+        webhook_secret="victimsecret",
+    )
+    GitHubAppInstall.objects.create(app=victim_app, installation_id=4242)
+    attacker_app = GitHubApp.objects.create(
+        display_name="Attacker App",
+        app_id=3002,
+        webhook_secret="attackersecret",
+    )
+    url = reverse("repos:github-webhook")
+
+    calls: list[str] = []
+    monkeypatch.setattr("apps.repos.spam_filter.github_service.get_github_issue_token", lambda: "token")
+    monkeypatch.setattr(
+        "apps.repos.spam_filter.github_service.add_issue_labels",
+        lambda **kwargs: calls.append("labels"),
+    )
+    monkeypatch.setattr(
+        "apps.repos.spam_filter.github_service.close_issue",
+        lambda **kwargs: calls.append("close"),
+    )
+
+    payload = {
+        "action": "opened",
+        "installation": {"id": 4242},
+        "repository": {"owner": {"login": repo.owner}, "name": repo.name},
+        "issue": {
+            "number": 91,
+            "title": "promo",
+            "body": "https://spam.example",
+            "user": {"login": "spambot"},
+        },
+    }
+    body = json.dumps(payload).encode("utf-8")
+    signature = "sha256=" + hmac.new(
+        attacker_app.webhook_secret.encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+    response = client.post(
+        url,
+        data=body,
+        content_type="application/json",
+        **{
+            "HTTP_X_GITHUB_EVENT": "issues",
+            "HTTP_X_GITHUB_DELIVERY": "delivery-91",
+            "HTTP_X_HUB_SIGNATURE_256": signature,
+        },
     )
 
     assert response.status_code == 200
