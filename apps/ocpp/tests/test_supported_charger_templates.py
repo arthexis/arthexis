@@ -6,6 +6,7 @@ from django.urls import reverse
 
 from apps.media.models import MediaBucket, MediaFile
 from apps.ocpp.models import StationModel
+from apps.ocpp.views.public import _landing_requires_station_models
 
 
 @pytest.mark.django_db
@@ -64,6 +65,22 @@ def test_supported_charger_detail_renders_without_storage_blob_for_document(clie
     assert "manual.pdf" in content
     assert "KB" in content
     assert 'alt="ABB Terra 54"' in content
+
+
+@pytest.mark.django_db
+def test_supported_chargers_landing_validator_uses_station_models(rf):
+    request = rf.get(reverse("ocpp:supported-chargers"))
+
+    assert _landing_requires_station_models(request=request, landing=None) is False
+
+    StationModel.objects.create(
+        vendor="ABB",
+        model_family="Terra",
+        model="54",
+        integration_rating=4,
+    )
+
+    assert _landing_requires_station_models(request=request, landing=None) is True
 
 
 def test_supported_chargers_fixture_path_matches_named_route():
