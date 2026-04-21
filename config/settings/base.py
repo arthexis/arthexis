@@ -83,6 +83,7 @@ ROUTE_PROVIDERS = [
     "apps.odoo.routes",
     "apps.ops.routes",
     "apps.repos.routes",
+    "apps.rpiconnect.routes",
     "apps.shop.routes",
     "apps.sites.routes",
     "apps.souls.routes",
