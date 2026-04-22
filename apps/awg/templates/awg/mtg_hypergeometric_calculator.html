@@ -1,0 +1,85 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+{% block title %}{% trans "MTG Hypergeometric Calculator" %}{% endblock %}
+{% block content %}
+<style>
+  #mtg-hypergeometric-calculator input.form-control {
+    height: calc(2.25rem + 2px);
+  }
+</style>
+<h1>{% trans "Magic: The Gathering Hypergeometric Calculator" %}</h1>
+<form method="post" id="mtg-hypergeometric-calculator">
+  {% csrf_token %}
+  <div class="row g-4 mb-3">
+    <div class="col-lg-4">
+      <div class="mb-3">
+        <label class="form-label" for="deck_size">{% trans "Deck Size:" %}</label>
+        <input id="deck_size" type="number" class="form-control" name="deck_size" required min="1" value="{{ form.deck_size }}" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="success_states">{% trans "Target Cards in Deck:" %}</label>
+        <input id="success_states" type="number" class="form-control" name="success_states" required min="0" value="{{ form.success_states }}" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="draws">{% trans "Cards Drawn:" %}</label>
+        <input id="draws" type="number" class="form-control" name="draws" required min="1" value="{{ form.draws }}" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="min_successes">{% trans "Minimum Targets Drawn:" %}</label>
+        <input id="min_successes" type="number" class="form-control" name="min_successes" required min="0" value="{{ form.min_successes }}" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="exact_successes">{% trans "Exact Targets Drawn:" %}</label>
+        <input id="exact_successes" type="number" class="form-control" name="exact_successes" min="0" value="{{ form.exact_successes }}" />
+        <small class="text-muted">{% trans "Optional: leave empty if exact odds are not needed." %}</small>
+      </div>
+    </div>
+    <div class="col-lg-8 d-flex flex-column{% if result or error %} order-first order-lg-last{% endif %}">
+      {% if not result and not error %}
+      <div class="mb-3">
+        <div class="p-3 mb-3 rounded" style="border: 1px solid rgba(0, 0, 0, 0.15);">
+          {% blocktrans trimmed %}
+          Use this calculator to estimate opening-hand and draw-step consistency for key cards. This tool uses hypergeometric distribution assumptions (draws without replacement) and is ideal for MTG mulligan and deck-construction planning.
+          {% endblocktrans %}
+        </div>
+        <button type="submit" class="btn btn-primary w-100 fs-4">{% trans "Calculate" %}</button>
+      </div>
+      {% if templates %}
+      <div class="mb-3">
+        <p>{% trans "Or try a pre-loaded preset:" %}</p>
+        <ul>
+          {% for t in templates %}
+          <li>
+            <a href="{{ t.get_absolute_url }}" class="text-decoration-none">{{ t.name }}</a>
+            {% if t.description %}- {{ t.description }}{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      {% else %}
+      {% if error %}
+      <p class="text-danger">{% blocktrans %}Error: {{ error }}{% endblocktrans %}</p>
+      {% elif result %}
+      <div class="calc-result">
+        <h2>{% trans "Calculator Results" %}</h2>
+        <table class="table table-sm">
+          <tbody>
+            <tr><th>{% trans "Chance of at least target amount" %}</th><td>{{ result.probability_at_least|floatformat:4 }}</td></tr>
+            <tr><th>{% trans "Chance of any target card" %}</th><td>{{ result.probability_any|floatformat:4 }}</td></tr>
+            <tr><th>{% trans "Chance of no target cards" %}</th><td>{{ result.probability_none|floatformat:4 }}</td></tr>
+            {% if result.probability_exact is not None %}
+            <tr><th>{% trans "Chance of exact target amount" %}</th><td>{{ result.probability_exact|floatformat:4 }}</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+      <div class="mt-auto mb-3">
+        <button type="submit" class="btn btn-primary w-100 fs-4">{% trans "Calculate Again" %}</button>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</form>
+{% endblock %}

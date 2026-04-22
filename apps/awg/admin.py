@@ -1,8 +1,14 @@
-from django.contrib import admin
 from django import forms
+from django.contrib import admin
 
 from .constants import CONDUIT_CHOICES
-from .models import CableSize, ConduitFill, CalculatorTemplate, PowerLead
+from .models import (
+    CableSize,
+    CalculatorTemplate,
+    ConduitFill,
+    HypergeometricTemplate,
+    PowerLead,
+)
 from apps.locals.user_data import EntityModelAdmin
 
 
@@ -145,3 +151,42 @@ class PowerLeadAdmin(EntityModelAdmin):
         "malformed",
     )
 
+
+@admin.register(HypergeometricTemplate)
+class HypergeometricTemplateAdmin(EntityModelAdmin):
+    list_display = (
+        "name",
+        "description",
+        "public",
+        "deck_size",
+        "success_states",
+        "draws",
+        "min_successes",
+        "exact_successes",
+        "calculator_link",
+    )
+    readonly_fields = ("calculator_link",)
+    fields = (
+        "name",
+        "description",
+        "show_in_pages",
+        "deck_size",
+        "success_states",
+        "draws",
+        "min_successes",
+        "exact_successes",
+        "calculator_link",
+    )
+
+    @admin.display(boolean=True, description="Public", ordering="show_in_pages")
+    def public(self, obj):
+        return obj.show_in_pages
+
+    def calculator_link(self, obj):
+        from django.utils.html import format_html
+
+        return format_html(
+            '<a href="{}" target="_blank">open</a>', obj.get_absolute_url()
+        )
+
+    calculator_link.short_description = "Calculator"
