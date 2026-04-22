@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 
 from .models import OdooSaleFactor, OdooSaleOrderTemplate
 
@@ -26,14 +27,12 @@ class OdooSaleOrderBuilder:
             "sale.order.template.line",
             "search_read",
             [[("sale_order_template_id", "=", template_id)]],
-            {
-                "fields": [
-                    "name",
-                    "product_id",
-                    "price_unit",
-                    "product_uom_qty",
-                ],
-            },
+            fields=[
+                "name",
+                "product_id",
+                "price_unit",
+                "product_uom_qty",
+            ],
         )
         return list(rows or [])
 
@@ -51,10 +50,12 @@ class OdooSaleOrderBuilder:
         factor_values: dict[str, Decimal],
     ) -> list[tuple[int, int, dict[str, object]]]:
         lines: list[tuple[int, int, dict[str, object]]] = []
-        factors = OdooSaleFactor.objects.prefetch_related("templates", "product_rules")
+        factors = OdooSaleFactor.objects.filter(
+            Q(templates__isnull=True) | Q(templates=template)
+        ).distinct().prefetch_related("product_rules")
         for factor in factors:
             value = Decimal(str(factor_values.get(factor.code, 0) or 0))
-            if value <= 0 or not factor.applies_to_template(template):
+            if value <= 0:
                 continue
             for rule in factor.product_rules.all():
                 qty = rule.quantity_for_factor_value(value)
@@ -121,16 +122,20 @@ class OdooSaleOrderBuilder:
             or "en_US"
         )
 
-        partner_id = self.profile.execute(
+        partner_ids = self.profile.execute(
+            "res.partner",
+            "search",
+            [[("email", "=", customer_email)]],
+            limit=1,
+        )
+        partner_id = int(partner_ids[0]) if partner_ids else self.profile.execute(
             "res.partner",
             "create",
-            [
-                {
-                    "name": customer_name,
-                    "email": customer_email,
-                    "lang": language,
-                }
-            ],
+            {
+                "name": customer_name,
+                "email": customer_email,
+                "lang": language,
+            },
         )
         salesperson_uid = getattr(template.salesperson, "odoo_uid", None)
         order_values = {
@@ -142,7 +147,7 @@ class OdooSaleOrderBuilder:
         if salesperson_uid:
             order_values["user_id"] = salesperson_uid
 
-        order_id = self.profile.execute("sale.order", "create", [order_values])
+        order_id = self.profile.execute("sale.order", "create", order_values)
         host = str(self.profile.host).rstrip("/")
         return CreatedSaleOrder(
             order_id=order_id,

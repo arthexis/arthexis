@@ -56,6 +56,12 @@ def test_create_order_combines_template_and_factor_lines(monkeypatch):
     def _execute(model, method, *args, **kwargs):
         captured.append((model, method, args, kwargs))
         if model == "sale.order.template.line" and method == "search_read":
+            assert kwargs["fields"] == [
+                "name",
+                "product_id",
+                "price_unit",
+                "product_uom_qty",
+            ]
             return [
                 {
                     "name": "Base plan",
@@ -64,6 +70,8 @@ def test_create_order_combines_template_and_factor_lines(monkeypatch):
                     "price_unit": 10,
                 }
             ]
+        if model == "res.partner" and method == "search":
+            return []
         if model == "res.partner" and method == "create":
             return 456
         if model == "sale.order" and method == "create":
@@ -86,7 +94,7 @@ def test_create_order_combines_template_and_factor_lines(monkeypatch):
     )
 
     order_create = next(call for call in captured if call[0] == "sale.order")
-    payload = order_create[2][0][0]
+    payload = order_create[2][0]
     assert payload["user_id"] == 77
     assert payload["partner_id"] == 456
     assert payload["sale_order_template_id"] == 99
@@ -129,10 +137,12 @@ def test_factor_with_template_restrictions_applies_only_to_selected_template(mon
     def _execute(_model, _method, *args, **kwargs):
         if _model == "sale.order.template.line":
             return []
-        if _model == "res.partner":
+        if _model == "res.partner" and _method == "search":
+            return []
+        if _model == "res.partner" and _method == "create":
             return 1
         if _model == "sale.order":
-            return args[0][0]["order_line"]
+            return args[0]["order_line"]
         return []
 
     monkeypatch.setattr(profile, "execute", _execute)
@@ -155,3 +165,46 @@ def test_factor_with_template_restrictions_applies_only_to_selected_template(mon
     assert len(allowed_lines) == 1
     assert allowed_lines[0][2]["product_id"] == 700
     assert blocked_lines == []
+
+
+@pytest.mark.django_db
+def test_create_order_reuses_existing_partner(monkeypatch):
+    user = get_user_model().objects.create_user(username="agent-3")
+    profile = OdooEmployee.objects.create(
+        user=user,
+        host="https://odoo.example.com",
+        database="odoo",
+        username="user",
+        password="secret",
+        odoo_uid=14,
+    )
+    template = OdooSaleOrderTemplate.objects.create(
+        name="Template",
+        odoo_template={"id": 20, "name": "Template"},
+    )
+
+    calls: list[tuple[str, str, tuple, dict]] = []
+
+    def _execute(model, method, *args, **kwargs):
+        calls.append((model, method, args, kwargs))
+        if model == "sale.order.template.line":
+            return []
+        if model == "res.partner" and method == "search":
+            return [888]
+        if model == "sale.order" and method == "create":
+            return 999
+        raise AssertionError(f"Unexpected RPC call: {model}.{method}")
+
+    monkeypatch.setattr(profile, "execute", _execute)
+
+    result = OdooSaleOrderBuilder(profile=profile).create_order(
+        template=template,
+        customer_name="Acme",
+        customer_email="sales@acme.test",
+    )
+
+    assert result.customer_id == 888
+    assert not any(
+        model == "res.partner" and method == "create"
+        for model, method, _, _ in calls
+    )
