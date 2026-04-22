@@ -18,7 +18,10 @@ class SimulatorCommandTests(SimpleTestCase):
     def test_start_forwards_all_ui_options(self, choices_mock, start_mock) -> None:
         """Start action should forward every UI-exposed runtime option."""
 
-        choices_mock.return_value = (("arthexis", "arthexis"), ("mobilityhouse", "mobilityhouse"))
+        choices_mock.return_value = (
+            ("arthexis", "arthexis"),
+            ("mobilityhouse", "mobilityhouse"),
+        )
         start_mock.return_value = (True, "Connection accepted", "sim.log")
 
         out = io.StringIO()
@@ -105,7 +108,9 @@ class SimulatorCommandTests(SimpleTestCase):
 
     @patch("apps.ocpp.management.commands.simulator._start_simulator")
     @patch("apps.ocpp.management.commands.simulator.get_simulator_backend_choices")
-    def test_start_defaults_allow_private_network(self, choices_mock, start_mock) -> None:
+    def test_start_defaults_allow_private_network(
+        self, choices_mock, start_mock
+    ) -> None:
         """Start action should permit localhost defaults without extra flags."""
 
         choices_mock.return_value = (("arthexis", "arthexis"),)
@@ -118,7 +123,9 @@ class SimulatorCommandTests(SimpleTestCase):
 
     @patch("apps.ocpp.management.commands.simulator._start_simulator")
     @patch("apps.ocpp.management.commands.simulator.get_simulator_backend_choices")
-    def test_start_raises_error_when_runtime_rejects_request(self, choices_mock, start_mock) -> None:
+    def test_start_raises_error_when_runtime_rejects_request(
+        self, choices_mock, start_mock
+    ) -> None:
         """Start action should return non-zero via CommandError when not started."""
 
         choices_mock.return_value = (("arthexis", "arthexis"),)
@@ -149,3 +156,87 @@ class SimulatorCommandTests(SimpleTestCase):
         rendered = out.getvalue()
         self.assertIn('"running": false', rendered)
         self.assertIn('"last_status": "idle"', rendered)
+
+    @patch("apps.ocpp.management.commands.simulator._start_simulator")
+    @patch("apps.ocpp.management.commands.simulator.get_simulator_backend_choices")
+    def test_start_uses_named_preset_values(self, choices_mock, start_mock) -> None:
+        """Named preset values should seed start params when CLI options are omitted."""
+
+        choices_mock.return_value = (("arthexis", "arthexis"),)
+        start_mock.return_value = (True, "Connection accepted", "sim.log")
+
+        call_command("simulator", "start", "--preset", "demo")
+
+        params = start_mock.call_args.args[0]
+        self.assertEqual(params["duration"], 180)
+        self.assertEqual(params["interval"], 2.0)
+        self.assertEqual(params["average_kwh"], 20.0)
+        self.assertEqual(params["amperage"], 40.0)
+        self.assertTrue(params["demo_mode"])
+
+    @patch("apps.ocpp.management.commands.simulator._start_simulator")
+    @patch("apps.ocpp.management.commands.simulator.get_simulator_backend_choices")
+    def test_start_applies_preset_overrides(self, choices_mock, start_mock) -> None:
+        """Preset overrides should cast values using the preset schema."""
+
+        choices_mock.return_value = (("arthexis", "arthexis"),)
+        start_mock.return_value = (True, "Connection accepted", "sim.log")
+
+        call_command(
+            "simulator",
+            "start",
+            "--preset",
+            "default",
+            "--preset-override",
+            "duration=77",
+            "--preset-override",
+            "repeat=true",
+            "--preset-override",
+            "meter_interval=1.25",
+        )
+
+        params = start_mock.call_args.args[0]
+        self.assertEqual(params["duration"], 77)
+        self.assertTrue(params["repeat"])
+        self.assertEqual(params["meter_interval"], 1.25)
+
+    @patch("apps.ocpp.management.commands.simulator._start_simulator")
+    @patch("apps.ocpp.management.commands.simulator.get_simulator_backend_choices")
+    def test_start_rejects_invalid_preset_override_key(
+        self, choices_mock, start_mock
+    ) -> None:
+        """Unknown preset keys should fail before runtime start is attempted."""
+
+        choices_mock.return_value = (("arthexis", "arthexis"),)
+        start_mock.return_value = (True, "Connection accepted", "sim.log")
+
+        with self.assertRaisesMessage(CommandError, "Unsupported preset override key"):
+            call_command(
+                "simulator",
+                "start",
+                "--preset-override",
+                "unknown_key=1",
+            )
+        start_mock.assert_not_called()
+
+    @patch("apps.ocpp.management.commands.simulator._start_simulator")
+    @patch("apps.ocpp.management.commands.simulator.get_simulator_backend_choices")
+    def test_start_rejects_unknown_preset_name(self, choices_mock, start_mock) -> None:
+        """Unknown preset names should fail with available preset hints."""
+
+        choices_mock.return_value = (("arthexis", "arthexis"),)
+        start_mock.return_value = (True, "Connection accepted", "sim.log")
+
+        with self.assertRaisesMessage(CommandError, "Unknown simulator preset"):
+            call_command("simulator", "start", "--preset", "missing")
+        start_mock.assert_not_called()
+
+    def test_list_presets_prints_available_presets(self) -> None:
+        """Preset list mode should print all available names."""
+
+        out = io.StringIO()
+        call_command("simulator", "status", "--list-presets", stdout=out)
+        rendered = out.getvalue()
+        self.assertIn("default", rendered)
+        self.assertIn("demo", rendered)
+        self.assertIn("longhaul", rendered)
