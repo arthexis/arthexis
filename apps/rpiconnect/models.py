@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 
 
 class ConnectAccount(models.Model):
@@ -117,6 +117,8 @@ class ConnectUpdateCampaign(models.Model):
 
         DRAFT = "draft", "Draft"
         RUNNING = "running", "Running"
+        PAUSED = "paused", "Paused"
+        STOPPED = "stopped", "Stopped"
         COMPLETED = "completed", "Completed"
         FAILED = "failed", "Failed"
         CANCELLED = "cancelled", "Cancelled"
@@ -233,5 +235,79 @@ class ConnectUpdateDeployment(models.Model):
     def save(self, *args, **kwargs):
         """Persist only validated deployment state transitions."""
 
+        update_fields = kwargs.get("update_fields")
+        update_field_names = set(update_fields) if update_fields is not None else None
+        status_will_be_saved = update_field_names is None or "status" in update_field_names
+        original_status = None
+        if self.pk and status_will_be_saved:
+            original_status = type(self).objects.filter(pk=self.pk).values_list("status", flat=True).first()
         self.full_clean()
         super().save(*args, **kwargs)
+        terminal_statuses = {
+            self.Status.SUCCEEDED,
+            self.Status.FAILED,
+            self.Status.ROLLED_BACK,
+        }
+        persisted_status = self.status
+        if status_will_be_saved:
+            persisted_status = type(self).objects.filter(pk=self.pk).values_list("status", flat=True).first()
+        if (
+            status_will_be_saved
+            and original_status != persisted_status
+            and persisted_status in terminal_statuses
+        ):
+            event_type = f"deployment.{persisted_status}"
+            ConnectCampaignEvent.objects.create(
+                campaign=self.campaign,
+                deployment=self,
+                event_type=event_type,
+                from_status=original_status or "",
+                to_status=persisted_status,
+            )
+            from apps.rpiconnect.services import CampaignService
+
+            campaign_id = self.campaign_id
+            transaction.on_commit(
+                lambda campaign_id=campaign_id: CampaignService().sync_rollout_progress(
+                    campaign_id=campaign_id
+                )
+            )
+
+
+class ConnectCampaignEvent(models.Model):
+    """Durable event log for campaign and deployment state transitions."""
+
+    campaign = models.ForeignKey(
+        ConnectUpdateCampaign,
+        on_delete=models.SET_NULL,
+        related_name="events",
+        null=True,
+        blank=True,
+    )
+    deployment = models.ForeignKey(
+        ConnectUpdateDeployment,
+        on_delete=models.SET_NULL,
+        related_name="events",
+        null=True,
+        blank=True,
+    )
+    event_type = models.CharField(max_length=80)
+    from_status = models.CharField(max_length=20, blank=True)
+    to_status = models.CharField(max_length=20, blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="connect_campaign_events",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("created_at",)
+
+    def __str__(self) -> str:
+        """Return a readable event label."""
+
+        return f"Campaign {self.campaign_id}: {self.event_type}"
