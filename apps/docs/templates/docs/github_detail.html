@@ -25,6 +25,23 @@
       <p class="text-muted mb-3">
         {% trans "Overall checks" %}: <strong>{{ checks_state }}</strong>
       </p>
+      <p class="text-muted mb-1">
+        {% trans "Mergeable" %}: <strong>{{ mergeability.mergeable|default:"unknown" }}</strong>
+      </p>
+      <p class="text-muted mb-3">
+        {% trans "Merge status" %}: <strong>{{ mergeability.mergeable_state|default:"unknown" }}</strong>
+      </p>
+      <h2>{% trans "Review Summary" %}</h2>
+      <ul>
+        <li>{% trans "Approved" %}: <strong>{{ review_summary.approved }}</strong></li>
+        <li>{% trans "Changes requested" %}: <strong>{{ review_summary.changes_requested }}</strong></li>
+        <li>{% trans "Pending reviewers" %}: <strong>{{ review_summary.pending }}</strong></li>
+      </ul>
+      <h2>{% trans "Review Threads" %}</h2>
+      <ul>
+        <li>{% trans "Review comments" %}: <strong>{{ review_comment_summary.comments }}</strong></li>
+        <li>{% trans "Threads" %}: <strong>{{ review_comment_summary.threads }}</strong></li>
+      </ul>
     {% endif %}
 
     {% if error_message %}
@@ -36,6 +53,7 @@
     <h2>{% trans "Respond" %}</h2>
     <form method="post" class="mb-4">
       {% csrf_token %}
+      <input type="hidden" name="action" value="comment">
       <div class="mb-3">
         <label class="form-label" for="template">{% trans "Template" %}</label>
         <select class="form-select" id="template" name="template">
@@ -51,6 +69,55 @@
       </div>
       <button class="btn btn-primary" type="submit">{% trans "Post response" %}</button>
     </form>
+
+    {% if item.pull_request %}
+      <h2>{% trans "Pull Request Review" %}</h2>
+      <form method="post" class="mb-4">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="pr_review">
+        <div class="mb-3">
+          <label class="form-label" for="decision">{% trans "Review decision" %}</label>
+          <select class="form-select" id="decision" name="decision" required>
+            <option value="approve">{% trans "Approve" %}</option>
+            <option value="request_changes">{% trans "Request changes" %}</option>
+            <option value="comment">{% trans "Comment only" %}</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="review_body">{% trans "Review summary" %}</label>
+          <textarea class="form-control" id="review_body" name="review_body" rows="4" placeholder="{% trans 'Required for request changes and comment-only reviews.' %}"></textarea>
+        </div>
+        <button class="btn btn-outline-primary" type="submit">{% trans "Submit review" %}</button>
+      </form>
+
+      <h2>{% trans "Merge Pull Request" %}</h2>
+      {% if merge_guardrail %}
+        <div class="alert alert-warning" role="alert">{{ merge_guardrail }}</div>
+      {% endif %}
+      <form method="post" class="mb-4">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="pr_merge">
+        <div class="mb-3">
+          <label class="form-label" for="merge_method">{% trans "Merge method" %}</label>
+          <select class="form-select" id="merge_method" name="merge_method">
+            <option value="squash">{% trans "Squash merge" %}</option>
+            <option value="merge">{% trans "Create merge commit" %}</option>
+            <option value="rebase">{% trans "Rebase and merge" %}</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="commit_title">{% trans "Commit title (optional)" %}</label>
+          <input class="form-control" id="commit_title" name="commit_title" type="text">
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="commit_message">{% trans "Commit message (optional)" %}</label>
+          <textarea class="form-control" id="commit_message" name="commit_message" rows="4"></textarea>
+        </div>
+        <button class="btn btn-success" type="submit" {% if not merge_allowed %}disabled aria-disabled="true"{% endif %}>
+          {% trans "Merge pull request" %}
+        </button>
+      </form>
+    {% endif %}
 
     <h2>{% trans "Comments" %}</h2>
     {% for comment in comments %}
