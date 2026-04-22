@@ -100,11 +100,19 @@ class CampaignService:
         )
 
         with transaction.atomic():
-            list(
+            locked_device_ids = set(
                 ConnectDevice.objects.select_for_update()
                 .filter(pk__in=[device.pk for device in devices])
-                .only("pk")
+                .values_list("pk", flat=True)
             )
+            missing_locked_device_ids = sorted(
+                {device.pk for device in devices} - locked_device_ids
+            )
+            if missing_locked_device_ids:
+                raise CampaignServiceError(
+                    "Campaign targets no longer exist for device IDs: "
+                    f"{', '.join(str(device_id) for device_id in missing_locked_device_ids)}."
+                )
             self._validate_no_conflicts(devices, override_conflicts=override_conflicts)
             campaign = ConnectUpdateCampaign.objects.create(
                 release=release,
@@ -382,6 +390,8 @@ class CampaignService:
     def _target_values(self, target_set: dict, key: str) -> list[str]:
         """Validate and return list values for target set selectors."""
 
+        if not isinstance(target_set, dict):
+            raise CampaignServiceError("target_set must be an object.")
         values = target_set.get(key) or []
         if isinstance(values, str) or not isinstance(values, list):
             raise CampaignServiceError(f"target_set.{key} must be a list.")

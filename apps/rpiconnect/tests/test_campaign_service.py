@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
@@ -127,6 +129,33 @@ class CampaignServiceTests(CampaignServiceTestCaseMixin, TestCase):
                 strategy=ConnectUpdateCampaign.Strategy.ALL_AT_ONCE,
                 created_by=self.user,
             )
+
+    def test_rejects_non_object_target_set(self) -> None:
+        with self.assertRaisesMessage(CampaignServiceError, "target_set must be an object."):
+            self.service.create_campaign(
+                release=self.release,
+                target_set=None,
+                strategy=ConnectUpdateCampaign.Strategy.ALL_AT_ONCE,
+                created_by=self.user,
+            )
+
+    def test_rejects_targets_deleted_before_locking(self) -> None:
+        stale_device = self.device_a
+        stale_device_pk = stale_device.pk
+        stale_device.delete()
+        stale_device.pk = stale_device_pk
+
+        with patch.object(self.service, "resolve_targets", return_value=[stale_device]):
+            with self.assertRaisesMessage(
+                CampaignServiceError,
+                f"Campaign targets no longer exist for device IDs: {stale_device_pk}.",
+            ):
+                self.service.create_campaign(
+                    release=self.release,
+                    target_set={"device_ids": [stale_device.device_id]},
+                    strategy=ConnectUpdateCampaign.Strategy.ALL_AT_ONCE,
+                    created_by=self.user,
+                )
 
     def test_rejects_incompatible_device_target(self) -> None:
         strict_release = ConnectImageRelease.objects.create(
