@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import MutableMapping
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from math import comb
 from typing import Optional
 
 from django.contrib.auth.decorators import login_required
@@ -14,8 +15,11 @@ from django.utils.translation import gettext as _, gettext_lazy as _lazy
 from apps.energy.models import EnergyTariff
 from apps.sites.utils import landing
 
+from ..models import HypergeometricTemplate
+
 
 MAX_POWER_CALCULATOR_INPUT = Decimal("1000000000")
+MAX_HYPERGEOMETRIC_INPUT = 500
 
 
 def _format_decimal(value: Decimal, places: str = "0.0000") -> Decimal:
@@ -212,6 +216,74 @@ def _calculate_ev_charging_totals(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
     return totals
+
+
+def _hypergeometric_probability(
+    *,
+    population_size: int,
+    success_states: int,
+    draws: int,
+    successes_drawn: int,
+) -> float:
+    """Return P(X = k) for a hypergeometric distribution."""
+
+    if not 0 <= successes_drawn <= draws:
+        return 0.0
+    if successes_drawn > success_states or draws - successes_drawn > (
+        population_size - success_states
+    ):
+        return 0.0
+
+    numerator = comb(success_states, successes_drawn) * comb(
+        population_size - success_states, draws - successes_drawn
+    )
+    denominator = comb(population_size, draws)
+    return numerator / denominator
+
+
+def _calculate_hypergeometric_totals(
+    *,
+    deck_size: int,
+    success_states: int,
+    draws: int,
+    min_successes: int,
+    exact_successes: Optional[int],
+) -> dict[str, float]:
+    """Return probability totals used by the MTG hypergeometric calculator."""
+
+    probability_exact = (
+        _hypergeometric_probability(
+            population_size=deck_size,
+            success_states=success_states,
+            draws=draws,
+            successes_drawn=exact_successes,
+        )
+        if exact_successes is not None
+        else None
+    )
+
+    max_possible_successes = min(draws, success_states)
+    probability_at_least = sum(
+        _hypergeometric_probability(
+            population_size=deck_size,
+            success_states=success_states,
+            draws=draws,
+            successes_drawn=value,
+        )
+        for value in range(min_successes, max_possible_successes + 1)
+    )
+    probability_none = _hypergeometric_probability(
+        population_size=deck_size,
+        success_states=success_states,
+        draws=draws,
+        successes_drawn=0,
+    )
+    return {
+        "probability_exact": probability_exact,
+        "probability_at_least": probability_at_least,
+        "probability_none": probability_none,
+        "probability_any": 1 - probability_none,
+    }
 
 
 @landing(_lazy("Energy Tariff Calculator"))
@@ -473,3 +545,101 @@ def ev_charging_calculator(request):
         request=request,
     )
     return response
+
+
+@landing(_lazy("MTG Hypergeometric Calculator"))
+def mtg_hypergeometric_calculator(request):
+    """Estimate opening-hand draw odds for Magic: The Gathering deckbuilding."""
+
+    form_data = request.POST or request.GET
+    form = {k: v for k, v in form_data.items() if v not in (None, "", "None")}
+    form.setdefault("deck_size", "60")
+    form.setdefault("success_states", "4")
+    form.setdefault("draws", "7")
+    form.setdefault("min_successes", "1")
+
+    templates = HypergeometricTemplate.objects.filter(show_in_pages=True).order_by(
+        "name"
+    )
+    context: dict[str, object] = {"form": form, "templates": templates}
+
+    if request.method == "POST":
+        error: Optional[str] = None
+        fields = {
+            "deck_size": request.POST.get("deck_size"),
+            "success_states": request.POST.get("success_states"),
+            "draws": request.POST.get("draws"),
+            "min_successes": request.POST.get("min_successes"),
+            "exact_successes": request.POST.get("exact_successes"),
+        }
+        parsed_values: dict[str, int] = {}
+
+        for required in ("deck_size", "success_states", "draws", "min_successes"):
+            if not fields[required]:
+                error = _("%(field)s is required.") % {
+                    "field": required.replace("_", " ").title()
+                }
+                break
+
+        if not error:
+            try:
+                parsed_values["deck_size"] = int(fields["deck_size"] or "0")
+                parsed_values["success_states"] = int(fields["success_states"] or "0")
+                parsed_values["draws"] = int(fields["draws"] or "0")
+                parsed_values["min_successes"] = int(fields["min_successes"] or "0")
+                if fields["exact_successes"]:
+                    parsed_values["exact_successes"] = int(fields["exact_successes"])
+            except (TypeError, ValueError):
+                error = _("All inputs must be whole numbers.")
+
+        if not error:
+            deck_size = parsed_values["deck_size"]
+            success_states = parsed_values["success_states"]
+            draws = parsed_values["draws"]
+            min_successes = parsed_values["min_successes"]
+            exact_successes = parsed_values.get("exact_successes")
+
+            if deck_size <= 0:
+                error = _("Deck size must be greater than zero.")
+            elif deck_size > MAX_HYPERGEOMETRIC_INPUT:
+                error = _("Deck size must be %(max_value)s or less.") % {
+                    "max_value": MAX_HYPERGEOMETRIC_INPUT
+                }
+            elif success_states < 0:
+                error = _("Success states cannot be negative.")
+            elif success_states > deck_size:
+                error = _("Success states cannot exceed deck size.")
+            elif draws <= 0:
+                error = _("Draw count must be greater than zero.")
+            elif draws > deck_size:
+                error = _("Draw count cannot exceed deck size.")
+            elif draws > MAX_HYPERGEOMETRIC_INPUT:
+                error = _("Draw count must be %(max_value)s or less.") % {
+                    "max_value": MAX_HYPERGEOMETRIC_INPUT
+                }
+            elif min_successes < 0:
+                error = _("Minimum successes cannot be negative.")
+            elif min_successes > draws:
+                error = _("Minimum successes cannot exceed draws.")
+            elif exact_successes is not None and (
+                exact_successes < 0 or exact_successes > draws
+            ):
+                error = _("Exact successes must be between 0 and draws.")
+            elif exact_successes is not None and exact_successes > success_states:
+                error = _("Exact successes cannot exceed success states.")
+
+        if error:
+            context["error"] = error
+        else:
+            context["result"] = _calculate_hypergeometric_totals(
+                deck_size=parsed_values["deck_size"],
+                success_states=parsed_values["success_states"],
+                draws=parsed_values["draws"],
+                min_successes=parsed_values["min_successes"],
+                exact_successes=parsed_values.get("exact_successes"),
+            )
+            for field, value in fields.items():
+                if value not in (None, "", "None"):
+                    form[field] = value
+
+    return TemplateResponse(request, "awg/mtg_hypergeometric_calculator.html", context)

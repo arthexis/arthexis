@@ -1,7 +1,7 @@
-from django.db import models
 from apps.core.entity import Entity, EntityManager
-from django.utils.translation import gettext_lazy as _
 from apps.leads.models import Lead
+from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 
 class CableSizeManager(EntityManager):
@@ -15,6 +15,11 @@ class ConduitFillManager(EntityManager):
 
 
 class CalculatorTemplateManager(EntityManager):
+    def get_by_natural_key(self, name):
+        return self.get(name=name)
+
+
+class HypergeometricTemplateManager(EntityManager):
     def get_by_natural_key(self, name):
         return self.get(name=name)
 
@@ -169,4 +174,50 @@ class PowerLead(Lead):
     def __str__(self):  # pragma: no cover - simple representation
         return f"{self.user or 'anonymous'} @ {self.created_on}"
 
+
+class HypergeometricTemplate(Entity):
+    """Template containing parameters for the MTG hypergeometric calculator."""
+
+    objects = HypergeometricTemplateManager()
+
+    def natural_key(self):
+        return (self.name,)
+
+    name = models.CharField(max_length=100, blank=True)
+    description = models.CharField(max_length=255, blank=True)
+    deck_size = models.PositiveIntegerField(default=60)
+    success_states = models.PositiveIntegerField(default=4)
+    draws = models.PositiveIntegerField(default=7)
+    min_successes = models.PositiveIntegerField(default=1)
+    exact_successes = models.PositiveIntegerField(null=True, blank=True)
+    show_in_pages = models.BooleanField(
+        _("Show in public site"), default=False, blank=True
+    )
+
+    class Meta:
+        verbose_name = _("Hypergeometric Template")
+        verbose_name_plural = _("Hypergeometric Templates")
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return self.name
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+        from urllib.parse import urlencode
+
+        params: dict[str, object] = {}
+        for field in (
+            "deck_size",
+            "success_states",
+            "draws",
+            "min_successes",
+            "exact_successes",
+        ):
+            value = getattr(self, field)
+            default = self._meta.get_field(field).default
+            if value is not None and value != default:
+                params[field] = value
+
+        base = reverse("awg:mtg_hypergeometric")
+        return f"{base}?{urlencode(params)}" if params else base
 
