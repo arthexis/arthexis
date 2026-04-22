@@ -62,32 +62,12 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 > **Terminal** is the default role and keeps environment-changing capabilities disabled by default.
 > Other roles may enable host-level features (such as networking changes or background services), so choose them only when those capabilities are needed.
 
-<table border="1" cellpadding="8" cellspacing="0">
-  <thead>
-    <tr>
-      <th align="left">Role</th>
-      <th align="left">Description &amp; Common Features</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td valign="top"><strong>Terminal</strong></td>
-      <td valign="top"><strong>Single-User Research &amp; Development</strong><br />Features: GUI Toast</td>
-    </tr>
-    <tr>
-      <td valign="top"><strong>Control</strong></td>
-      <td valign="top"><strong>Single-Device Testing &amp; Special Task Appliances</strong><br />Features: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner</td>
-    </tr>
-    <tr>
-      <td valign="top"><strong>Satellite</strong></td>
-      <td valign="top"><strong>Multi-Device Edge, Network &amp; Data Acquisition</strong><br />Features: AP Router, Celery Queue, NGINX Server, RFID Scanner</td>
-    </tr>
-    <tr>
-      <td valign="top"><strong>Watchtower</strong></td>
-      <td valign="top"><strong>Multi-User Cloud &amp; Orchestration</strong><br />Features: Celery Queue, NGINX Server</td>
-    </tr>
-  </tbody>
-</table>
+| Role | Description & Common Features |
+| --- | --- |
+| **Terminal** | **Single-User Research & Development**<br>Features: GUI Toast |
+| **Control** | **Single-Device Testing & Special Task Appliances**<br>Features: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner |
+| **Satellite** | **Multi-Device Edge, Network & Data Acquisition**<br>Features: AP Router, Celery Queue, NGINX Server, RFID Scanner |
+| **Watchtower** | **Multi-User Cloud & Orchestration**<br>Features: Celery Queue, NGINX Server |
 
 ## Quick Guide
 
