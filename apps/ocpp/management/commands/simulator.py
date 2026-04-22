@@ -266,9 +266,15 @@ class Command(BaseCommand):
         if isinstance(existing, bool):
             return self._parse_bool(raw_value)
         if isinstance(existing, int) and not isinstance(existing, bool):
-            return int(raw_value)
+            try:
+                return int(raw_value)
+            except ValueError:
+                raise CommandError(f"Invalid integer value '{raw_value}' for key '{key}'.")
         if isinstance(existing, float):
-            return float(raw_value)
+            try:
+                return float(raw_value)
+            except ValueError:
+                raise CommandError(f"Invalid float value '{raw_value}' for key '{key}'.")
         return raw_value
 
     def _parse_bool(self, value: str) -> bool:
