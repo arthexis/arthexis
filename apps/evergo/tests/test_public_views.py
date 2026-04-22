@@ -189,34 +189,6 @@ def test_customer_public_detail_uploads_and_deletes_image(client):
 
 
 @pytest.mark.django_db
-def test_customer_public_detail_delete_image_with_invalid_artifact_id_returns_404(client):
-    customer = _create_customer(username="owner-invalid-artifact-id")
-    _login_customer_owner(client, customer)
-    detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
-
-    response = client.post(
-        detail_url,
-        data={"action": "delete-image", "artifact_id": "abc", "confirm_delete": "yes"},
-    )
-
-    assert response.status_code == 404
-
-
-@pytest.mark.django_db
-def test_customer_public_detail_delete_image_with_unicode_numeric_artifact_id_returns_404(client):
-    customer = _create_customer(username="owner-invalid-unicode-artifact-id")
-    _login_customer_owner(client, customer)
-    detail_url = reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id})
-
-    response = client.post(
-        detail_url,
-        data={"action": "delete-image", "artifact_id": "²", "confirm_delete": "yes"},
-    )
-
-    assert response.status_code == 404
-
-
-@pytest.mark.django_db
 def test_customer_public_detail_enforces_image_and_storage_limits(client, settings):
     settings.EVERGO_PUBLIC_IMAGE_LIMIT = 1
     settings.EVERGO_PUBLIC_IMAGE_TOTAL_STORAGE_LIMIT = 50

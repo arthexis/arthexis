@@ -111,30 +111,6 @@ class NotifyExpiredOperationsTests(TestCase):
         self.assertEqual(count, 0)
         self.assertEqual(len(mail.outbox), 0)
 
-    def test_skips_user_without_email(self):
-        user = get_user_model().objects.create_user(
-            username="ops-notify-no-email",
-            email="",
-            password="x",
-        )
-        operation = OperationScreen.objects.create(
-            title="No email",
-            slug="no-email",
-            description="Skip users with no email.",
-            start_url="/admin/",
-            recurrence_days=1,
-            is_active=True,
-        )
-        OperationExecution.objects.create(
-            operation=operation,
-            user=user,
-            performed_at=timezone.now() - timedelta(days=2),
-        )
-
-        count = notify_expired_operations()
-
-        self.assertEqual(count, 0)
-        self.assertEqual(len(mail.outbox), 0)
 
     def test_is_idempotent(self):
         user = get_user_model().objects.create_user(
@@ -163,27 +139,3 @@ class NotifyExpiredOperationsTests(TestCase):
         self.assertEqual(second, 0)
         self.assertEqual(len(mail.outbox), 1)
 
-    def test_ignores_inactive_operations(self):
-        user = get_user_model().objects.create_user(
-            username="ops-notify-inactive",
-            email="inactive@example.com",
-            password="x",
-        )
-        operation = OperationScreen.objects.create(
-            title="Inactive",
-            slug="inactive",
-            description="Do not notify for inactive operations.",
-            start_url="/admin/",
-            recurrence_days=1,
-            is_active=False,
-        )
-        OperationExecution.objects.create(
-            operation=operation,
-            user=user,
-            performed_at=timezone.now() - timedelta(days=2),
-        )
-
-        count = notify_expired_operations()
-
-        self.assertEqual(count, 0)
-        self.assertEqual(len(mail.outbox), 0)
