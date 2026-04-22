@@ -218,14 +218,18 @@ EOF
 }
 
 require_redis() {
+    local redis_host="${REDIS_HOST:-localhost}"
+    local redis_port="${REDIS_PORT:-6379}"
+
     if ! command -v redis-cli >/dev/null 2>&1; then
         echo "Redis is required for the $1 role but is not installed."
         echo "Install redis-server and re-run this script. For Debian/Ubuntu:"
         echo "  sudo apt update && sudo apt install redis-server"
         exit 1
     fi
-    if ! redis-cli ping >/dev/null 2>&1; then
+    if ! redis-cli -h "$redis_host" -p "$redis_port" ping >/dev/null 2>&1; then
         echo "Redis is required for the $1 role but does not appear to be running."
+        echo "Checked Redis at ${redis_host}:${redis_port}."
         echo "Start redis and re-run this script. For Debian/Ubuntu:"
         echo "  sudo systemctl start redis-server"
         exit 1
