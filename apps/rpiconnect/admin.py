@@ -6,6 +6,7 @@ from django.contrib import admin
 from .models import (
     ConnectAccount,
     ConnectDevice,
+    ConnectIngestionEvent,
     ConnectImageRelease,
     ConnectUpdateCampaign,
     ConnectUpdateDeployment,
@@ -61,6 +62,32 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
 
 @admin.register(ConnectUpdateDeployment)
 class ConnectUpdateDeploymentAdmin(admin.ModelAdmin):
-    list_display = ("campaign", "device", "status", "started_at", "completed_at")
-    list_filter = ("status", "started_at", "completed_at")
+    list_display = (
+        "campaign",
+        "device",
+        "status",
+        "failure_classification",
+        "retry_attempts",
+        "next_retry_at",
+        "started_at",
+        "completed_at",
+    )
+    list_filter = ("status", "failure_classification", "started_at", "completed_at")
     search_fields = ("device__device_id", "campaign__id", "campaign__release__name")
+
+
+@admin.register(ConnectIngestionEvent)
+class ConnectIngestionEventAdmin(admin.ModelAdmin):
+    list_display = (
+        "event_id",
+        "event_type",
+        "external_device_id",
+        "status",
+        "failure_classification",
+        "retry_attempt",
+        "cooldown_until",
+        "created_at",
+    )
+    list_filter = ("event_type", "failure_classification", "status")
+    readonly_fields = ("payload_snippet", "normalized_payload")
+    search_fields = ("event_id", "external_device_id", "deployment__id", "campaign__id")
