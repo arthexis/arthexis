@@ -7,9 +7,6 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 
-pytestmark = [pytest.mark.integration]
-
-
 def test_doctor_defaults_to_core_group(monkeypatch: pytest.MonkeyPatch) -> None:
     invoked: list[tuple[str, ...]] = []
 

@@ -3,13 +3,11 @@ import time
 from contextlib import contextmanager
 
 import pytest
+from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 
 from apps.sigils import sigil_resolver
 from apps.sigils.models import SigilRoot
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.auth import get_user_model
-
-pytestmark = pytest.mark.slow
 
 
 @contextmanager

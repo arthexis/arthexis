@@ -150,7 +150,7 @@ jobs:
           ./scripts/preflight-env.sh --pytest
           source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
-          python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 --junitxml=pytest-junit.xml -m "not slow and not integration" | tee pytest.log
+          python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 --junitxml=pytest-junit.xml | tee pytest.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v7

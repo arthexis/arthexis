@@ -1,5 +1,6 @@
 import json
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime
+from datetime import timezone as dt_timezone
 from functools import partial
 from unittest.mock import AsyncMock
 
@@ -8,7 +9,9 @@ import pytest
 from channels.db import database_sync_to_async
 from django.test import override_settings
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
+from apps.flows.models import Transition
 from apps.ocpp import call_error_handlers, store
 from apps.ocpp.call_result_handlers.profiles import handle_clear_charging_profile_result
 from apps.ocpp.call_result_handlers.transactions import (
@@ -16,36 +19,34 @@ from apps.ocpp.call_result_handlers.transactions import (
 )
 from apps.ocpp.consumers import CSMSConsumer
 from apps.ocpp.consumers import base as consumers_base
-from apps.flows.models import Transition
-from apps.ocpp.views import actions
-from apps.ocpp.views.common import ActionContext
 from apps.ocpp.models import (
-    Charger,
-    CPReservation,
-    CertificateRequest,
     CertificateOperation,
+    CertificateRequest,
     CertificateStatusCheck,
-    InstalledCertificate,
-    CostUpdate,
+    Charger,
     ChargingProfile,
     ChargingSchedule,
-    Transaction,
-    Variable,
-    MonitoringRule,
-    MonitoringReport,
-    DeviceInventorySnapshot,
-    DeviceInventoryItem,
-    CustomerInformationRequest,
-    CustomerInformationChunk,
-    DisplayMessageNotification,
-    DisplayMessage,
     ClearedChargingLimitEvent,
+    CostUpdate,
     CPFirmware,
     CPFirmwareDeployment,
+    CPReservation,
+    CustomerInformationChunk,
+    CustomerInformationRequest,
+    DeviceInventoryItem,
+    DeviceInventorySnapshot,
+    DisplayMessage,
+    DisplayMessageNotification,
+    InstalledCertificate,
+    MonitoringReport,
+    MonitoringRule,
+    Transaction,
+    Variable,
 )
-from apps.protocols.models import ProtocolCall as ProtocolCallModel
 from apps.ocpp.models.location import Location
-from django.utils.dateparse import parse_datetime
+from apps.ocpp.views import actions
+from apps.ocpp.views.common import ActionContext
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 
 @pytest.fixture(autouse=True)
@@ -115,7 +116,6 @@ def _reset_pending_calls() -> None:
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 async def test_handle_clear_charging_profile_result_updates_profile():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CLR-CP-1")
     profile = ChargingProfile(
@@ -154,7 +154,6 @@ async def test_handle_clear_charging_profile_result_updates_profile():
 
 
 @pytest.mark.anyio
-@pytest.mark.integration
 async def test_set_monitoring_base_result_clears_pending_call():
     _reset_pending_calls()
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -178,7 +177,6 @@ async def test_set_monitoring_base_result_clears_pending_call():
 
 
 @pytest.mark.anyio
-@pytest.mark.integration
 async def test_set_monitoring_level_error_clears_pending_call():
     _reset_pending_calls()
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -204,7 +202,6 @@ async def test_set_monitoring_level_error_clears_pending_call():
 
 
 @pytest.mark.anyio
-@pytest.mark.integration
 async def test_set_monitoring_base_result_clears_pending_call_from_action():
     _reset_pending_calls()
 
@@ -243,7 +240,6 @@ async def test_set_monitoring_base_result_clears_pending_call_from_action():
 
 
 @pytest.mark.anyio
-@pytest.mark.integration
 async def test_set_monitoring_level_error_clears_pending_call_from_action():
     _reset_pending_calls()
 
@@ -287,7 +283,6 @@ async def test_set_monitoring_level_error_clears_pending_call_from_action():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 async def test_unlock_connector_result_updates_state():
     _reset_pending_calls()
 
@@ -331,7 +326,6 @@ async def test_unlock_connector_result_updates_state():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 async def test_unlock_connector_error_records_failure():
     _reset_pending_calls()
 
@@ -421,7 +415,6 @@ async def test_handle_clear_charging_profile_error_records_failure():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 async def test_cleared_charging_limit_logs_payload():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-201"
@@ -445,7 +438,6 @@ async def test_cleared_charging_limit_logs_payload():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 async def test_cleared_charging_limit_persists_event():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-202")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -562,7 +554,6 @@ async def test_notify_report_persists_inventory_snapshot():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 async def test_publish_firmware_status_updates_deployment():
     firmware = await database_sync_to_async(CPFirmware.objects.create)(
         name="Test Firmware", payload_json={}
@@ -641,7 +632,6 @@ async def test_publish_firmware_status_updates_deployment():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 async def test_notify_report_requires_mandatory_fields():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "INV-MISSING"
@@ -660,8 +650,6 @@ async def test_notify_report_requires_mandatory_fields():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.slow
-@pytest.mark.integration
 async def test_cost_updated_persists_and_forwards():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="COST-1"
@@ -710,8 +698,6 @@ async def test_cost_updated_persists_and_forwards():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.slow
-@pytest.mark.integration
 async def test_cost_updated_rejects_invalid_payload():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="COST-2"
@@ -736,8 +722,6 @@ async def test_cost_updated_rejects_invalid_payload():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.slow
-@pytest.mark.integration
 async def test_cost_updated_requires_transaction_id():
     charger = await database_sync_to_async(Charger.objects.create)(
         charger_id="COST-3"
@@ -762,7 +746,6 @@ async def test_cost_updated_requires_transaction_id():
 
 @pytest.mark.anyio
 @pytest.mark.django_db
-@pytest.mark.integration
 async def test_transaction_event_registered_for_ocpp201_and_ocpp21():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-201"
@@ -794,7 +777,6 @@ async def test_transaction_event_registered_for_ocpp201_and_ocpp21():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 async def test_get_15118_ev_certificate_persists_request(monkeypatch):
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-1")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -826,8 +808,6 @@ async def test_get_15118_ev_certificate_persists_request(monkeypatch):
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
-@pytest.mark.slow
 async def test_get_certificate_status_persists_check():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-2")
     hash_data = {
@@ -864,7 +844,6 @@ async def test_get_certificate_status_persists_check():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 async def test_get_certificate_status_rejects_missing_certificate_by_default():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-4")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -1439,7 +1418,6 @@ async def test_notify_customer_information_rejects_non_dict_payload():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.slow
 async def test_notify_display_messages_persists_messages():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="DISP-1")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -1485,7 +1463,6 @@ async def test_notify_display_messages_persists_messages():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.slow
 async def test_notify_display_messages_updates_compliance_report():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="DISP-2")
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
@@ -1545,7 +1522,6 @@ async def test_request_start_transaction_result_tracks_status():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.integration
 async def test_transaction_event_updates_request_status(monkeypatch, charger_factory):
     charger = await charger_factory(
         charger_id="CP-TRX",
@@ -2665,7 +2641,6 @@ async def test_report_charging_profiles_resolves_evse_row_from_aggregate_charger
     "status,confirmed",
     [("Accepted", True), ("Rejected", False), ("Cancelled", False), ("Expired", False)],
 )
-@pytest.mark.slow
 async def test_reservation_status_update_persists_and_notifies(status, confirmed):
     from apps.ocpp.models import Charger as ChargerModel
 
@@ -2713,7 +2688,6 @@ async def test_reservation_status_update_persists_and_notifies(status, confirmed
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.slow
 async def test_reservation_status_update_tracks_accepted_to_rejected_transition():
     location = await database_sync_to_async(Location.objects.create)(name="Depot")
     charger = await database_sync_to_async(Charger.objects.create)(

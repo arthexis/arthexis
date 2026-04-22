@@ -7,9 +7,6 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 
-pytestmark = [pytest.mark.integration]
-
-
 def _seed_apps_root(base_dir):
     apps_dir = base_dir / "apps"
     apps_dir.mkdir(parents=True, exist_ok=True)

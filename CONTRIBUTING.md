@@ -106,9 +106,9 @@ If any core dependency is missing, the command fails fast before attempting any 
 `requirements.txt` is intentionally runtime-only, so `pytest` may be missing until the QA extras are installed. See [Dependency management](docs/development/dependency-management.md) for details.
 
 Useful subsets:
-- Default CI subset (exclude slow & integration):
+- Default CI subset:
   ```bash
-  ./.venv/bin/python manage.py test run -- -m "not slow and not integration"
+  ./.venv/bin/python manage.py test run -- 
   ```
 - Targeted module or file:
   ```bash

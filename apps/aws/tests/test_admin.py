@@ -7,7 +7,7 @@ from django.urls import reverse
 from apps.aws.admin import LightsailDatabaseAdmin, LightsailInstanceAdmin
 from apps.aws.models import AWSCredentials, LightsailDatabase, LightsailInstance
 
-pytestmark = [pytest.mark.django_db, pytest.mark.integration]
+pytestmark = [pytest.mark.django_db]
 
 
 def test_lightsail_fetch_admin_routes_and_actions_match_existing_names(admin_client):

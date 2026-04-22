@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from django.urls import reverse
-
 import pytest
+from django.urls import reverse
 
 from apps.core import environment
 
 
-@pytest.mark.integration
 @pytest.mark.django_db
 @pytest.mark.parametrize(
     ("config_sections", "expected_jump_links"),
