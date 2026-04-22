@@ -957,13 +957,14 @@ def _summarize_pull_request_reviews(
     reviews: list[Mapping[str, object]],
     pull_request: Mapping[str, object],
 ) -> dict[str, int]:
-    counts = Counter()
+    latest_review_state_by_user: dict[str, str] = {}
     for review in reviews:
+        user_login = str((review.get("user") or {}).get("login") or "").strip()
         state = str(review.get("state") or "").strip().upper()
-        if state == "APPROVED":
-            counts["approved"] += 1
-        elif state == "CHANGES_REQUESTED":
-            counts["changes_requested"] += 1
+        if user_login and state in {"APPROVED", "CHANGES_REQUESTED"}:
+            latest_review_state_by_user[user_login] = state
+
+    counts = Counter(latest_review_state_by_user.values())
 
     requested_reviewers = pull_request.get("requested_reviewers")
     if isinstance(requested_reviewers, list):
@@ -972,10 +973,33 @@ def _summarize_pull_request_reviews(
         counts["pending"] = 0
 
     return {
-        "approved": counts["approved"],
-        "changes_requested": counts["changes_requested"],
+        "approved": counts["APPROVED"],
+        "changes_requested": counts["CHANGES_REQUESTED"],
         "pending": counts["pending"],
     }
+
+
+def _build_pull_request_merge_guardrails(
+    *,
+    pull_request: Mapping[str, object],
+    checks_state: str,
+) -> tuple[bool, str]:
+    if str(pull_request.get("state") or "").lower() != "open":
+        return False, "Pull request is closed."
+
+    mergeable = pull_request.get("mergeable")
+    mergeable_state = str(pull_request.get("mergeable_state") or "unknown")
+    if mergeable is None:
+        return False, "Mergeability is still being calculated by GitHub."
+    if mergeable is not True:
+        return (
+            False,
+            "GitHub reports this pull request is currently not mergeable "
+            f"({mergeable_state}).",
+        )
+    if checks_state not in {"success", "not_applicable", "unknown"}:
+        return False, f"Checks are not passing (state: {checks_state})."
+    return True, ""
 
 
 def _summarize_pull_request_review_comments(
@@ -1078,6 +1102,36 @@ def github_issue_detail(request, number: int):
                 return redirect(reverse("docs:docs-github-item", kwargs={"number": number}))
 
             if action == "pr_merge":
+                merge_pull_request = dict(
+                    github_service.fetch_pull_request(
+                        token=connection.token,
+                        owner=connection.owner,
+                        name=connection.repo,
+                        number=number,
+                    )
+                )
+                merge_head_sha = str(
+                    (merge_pull_request.get("head") or {}).get("sha") or ""
+                ).strip()
+                merge_checks_state = "unknown"
+                if merge_head_sha:
+                    merge_status_payload = github_service.fetch_commit_status_summary(
+                        token=connection.token,
+                        owner=connection.owner,
+                        name=connection.repo,
+                        sha=merge_head_sha,
+                    )
+                    merge_checks_state = str(
+                        merge_status_payload.get("state") or "unknown"
+                    )
+                merge_allowed, merge_guardrail = _build_pull_request_merge_guardrails(
+                    pull_request=merge_pull_request,
+                    checks_state=merge_checks_state,
+                )
+                if not merge_allowed:
+                    raise GitHubRepositoryError(
+                        merge_guardrail or "Merge guardrails prevented this action."
+                    )
                 merge_method = (request.POST.get("merge_method") or "squash").strip()
                 github_service.merge_pull_request(
                     owner=connection.owner,
@@ -1161,19 +1215,6 @@ def github_issue_detail(request, number: int):
                 "mergeable": pull_request.get("mergeable"),
                 "mergeable_state": str(pull_request.get("mergeable_state") or "unknown"),
             }
-            if str(pull_request.get("state") or "").lower() != "open":
-                merge_guardrail = "Pull request is closed."
-            elif mergeability["mergeable"] is None:
-                merge_guardrail = "Mergeability is still being calculated by GitHub."
-            elif mergeability["mergeable"] is not True:
-                merge_guardrail = (
-                    "GitHub reports this pull request is currently not mergeable "
-                    f"({mergeability['mergeable_state']})."
-                )
-            elif checks_state not in {"success", "not_applicable", "unknown"}:
-                merge_guardrail = f"Checks are not passing (state: {checks_state})."
-            else:
-                merge_allowed = True
 
             if head_sha:
                 status_payload = github_service.fetch_commit_status_summary(
@@ -1183,11 +1224,12 @@ def github_issue_detail(request, number: int):
                     sha=head_sha,
                 )
                 checks_state = str(status_payload.get("state") or "unknown")
-                if merge_allowed and checks_state not in {"success", "not_applicable", "unknown"}:
-                    merge_allowed = False
-                    merge_guardrail = f"Checks are not passing (state: {checks_state})."
             else:
                 checks_state = "unknown"
+            merge_allowed, merge_guardrail = _build_pull_request_merge_guardrails(
+                pull_request=pull_request,
+                checks_state=checks_state,
+            )
     except GitHubRepositoryError as exc:
         post_error = post_error or str(exc)
 

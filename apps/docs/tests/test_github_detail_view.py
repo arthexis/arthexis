@@ -67,7 +67,10 @@ def test_github_detail_pr_open_mergeable_renders_review_and_merge_actions(staff_
     monkeypatch.setattr(
         views.github_service,
         "fetch_pull_request_reviews",
-        lambda **kwargs: [{"state": "APPROVED"}, {"state": "CHANGES_REQUESTED"}],
+        lambda **kwargs: [
+            {"state": "CHANGES_REQUESTED", "user": {"login": "alice"}},
+            {"state": "APPROVED", "user": {"login": "alice"}},
+        ],
     )
     monkeypatch.setattr(
         views.github_service,
@@ -87,6 +90,7 @@ def test_github_detail_pr_open_mergeable_renders_review_and_merge_actions(staff_
     assert "Review Summary" in content
     assert "Approved" in content
     assert "Changes requested" in content
+    assert "<strong>1</strong>" in content
     assert "Merge pull request" in content
     assert "disabled" not in content.split("Merge pull request")[0][-120:]
 
@@ -156,7 +160,10 @@ def test_github_detail_pr_merge_post_surfaces_merge_error(staff_client, monkeypa
     monkeypatch.setattr(views.github_service, "fetch_pull_request_reviews", lambda **kwargs: [])
     monkeypatch.setattr(views.github_service, "fetch_pull_request_review_comments", lambda **kwargs: [])
 
+    merge_calls: list[dict[str, str]] = []
+
     def fail_merge(**kwargs):
+        merge_calls.append(kwargs)
         raise views.GitHubRepositoryError("Mergeability is unknown")
 
     monkeypatch.setattr(views.github_service, "merge_pull_request", fail_merge)
@@ -167,4 +174,94 @@ def test_github_detail_pr_merge_post_surfaces_merge_error(staff_client, monkeypa
     )
 
     assert response.status_code == 200
-    assert "Mergeability is unknown" in response.content.decode()
+    assert "Mergeability is still being calculated by GitHub." in response.content.decode()
+    assert len(merge_calls) == 0
+
+
+def test_github_detail_pr_merge_post_blocks_crafted_request_when_checks_fail(staff_client, monkeypatch):
+    _mock_connection(monkeypatch)
+    monkeypatch.setattr(
+        views.github_service,
+        "fetch_issue_or_pull_request",
+        lambda **kwargs: {
+            "number": 18,
+            "title": "Guarded PR",
+            "state": "open",
+            "body": "Guarded",
+            "pull_request": {"url": "https://api.github.test/pulls/18"},
+        },
+    )
+    monkeypatch.setattr(views.github_service, "fetch_issue_comments", lambda **kwargs: [])
+    monkeypatch.setattr(
+        views.github_service,
+        "fetch_pull_request",
+        lambda **kwargs: {
+            "state": "open",
+            "mergeable": True,
+            "mergeable_state": "clean",
+            "requested_reviewers": [],
+            "head": {"sha": "abc123"},
+        },
+    )
+    monkeypatch.setattr(views.github_service, "fetch_pull_request_reviews", lambda **kwargs: [])
+    monkeypatch.setattr(views.github_service, "fetch_pull_request_review_comments", lambda **kwargs: [])
+    monkeypatch.setattr(
+        views.github_service, "fetch_commit_status_summary", lambda **kwargs: {"state": "failure"}
+    )
+    merge_attempted = {"called": False}
+
+    def fail_if_called(**kwargs):
+        merge_attempted["called"] = True
+        raise AssertionError("merge_pull_request should not run when guardrails fail")
+
+    monkeypatch.setattr(views.github_service, "merge_pull_request", fail_if_called)
+
+    response = staff_client.post(
+        reverse("docs:docs-github-item", kwargs={"number": 18}),
+        data={"action": "pr_merge", "merge_method": "squash"},
+    )
+
+    assert response.status_code == 200
+    assert "Checks are not passing" in response.content.decode()
+    assert merge_attempted["called"] is False
+
+
+def test_github_detail_pr_status_fetch_error_keeps_merge_disabled(staff_client, monkeypatch):
+    _mock_connection(monkeypatch)
+    monkeypatch.setattr(
+        views.github_service,
+        "fetch_issue_or_pull_request",
+        lambda **kwargs: {
+            "number": 19,
+            "title": "Status Error PR",
+            "state": "open",
+            "body": "Status Error",
+            "pull_request": {"url": "https://api.github.test/pulls/19"},
+        },
+    )
+    monkeypatch.setattr(views.github_service, "fetch_issue_comments", lambda **kwargs: [])
+    monkeypatch.setattr(
+        views.github_service,
+        "fetch_pull_request",
+        lambda **kwargs: {
+            "state": "open",
+            "mergeable": True,
+            "mergeable_state": "clean",
+            "requested_reviewers": [],
+            "head": {"sha": "abc123"},
+        },
+    )
+    monkeypatch.setattr(views.github_service, "fetch_pull_request_reviews", lambda **kwargs: [])
+    monkeypatch.setattr(views.github_service, "fetch_pull_request_review_comments", lambda **kwargs: [])
+
+    def raise_status_error(**kwargs):
+        raise views.GitHubRepositoryError("Status lookup failed")
+
+    monkeypatch.setattr(views.github_service, "fetch_commit_status_summary", raise_status_error)
+
+    response = staff_client.get(reverse("docs:docs-github-item", kwargs={"number": 19}))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Status lookup failed" in content
+    assert 'disabled aria-disabled="true"' in content

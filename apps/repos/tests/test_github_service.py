@@ -175,14 +175,10 @@ def test_close_issue_patches_closed_state(monkeypatch):
 def test_submit_pull_request_review_decision_posts_review_event(monkeypatch):
     calls: dict[str, Any] = {}
 
-    def fake_get(url, headers=None, timeout=None):
-        return DummyResponse({"state": "open"})
-
     def fake_post(url, json=None, headers=None, timeout=None):
         calls["request"] = {"url": url, "json": json, "headers": headers, "timeout": timeout}
         return DummyResponse({"id": 99}, status_code=200)
 
-    monkeypatch.setattr(github.requests, "get", fake_get)
     monkeypatch.setattr(github.requests, "post", fake_post)
 
     response = github.submit_pull_request_review_decision(
@@ -199,13 +195,17 @@ def test_submit_pull_request_review_decision_posts_review_event(monkeypatch):
     assert calls["request"]["json"] == {"event": "APPROVE", "body": "Ship it"}
 
 
-def test_submit_pull_request_review_decision_rejects_closed_pr(monkeypatch):
-    def fake_get(url, headers=None, timeout=None):
-        return DummyResponse({"state": "closed"})
+def test_submit_pull_request_review_decision_surfaces_api_validation_error(monkeypatch):
+    def fake_post(url, json=None, headers=None, timeout=None):
+        return DummyResponse(
+            {"message": "Review cannot be submitted on a closed pull request"},
+            status_code=422,
+            text="unprocessable",
+        )
 
-    monkeypatch.setattr(github.requests, "get", fake_get)
+    monkeypatch.setattr(github.requests, "post", fake_post)
 
-    with pytest.raises(github.GitHubRepositoryError, match="not open"):
+    with pytest.raises(github.GitHubRepositoryError, match="closed pull request"):
         github.submit_pull_request_review_decision(
             owner="octo",
             repository="demo",

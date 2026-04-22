@@ -26,7 +26,7 @@
         {% trans "Overall checks" %}: <strong>{{ checks_state }}</strong>
       </p>
       <p class="text-muted mb-1">
-        {% trans "Mergeable" %}: <strong>{{ mergeability.mergeable|default:"unknown" }}</strong>
+        {% trans "Mergeability flag" %}: <strong>{{ mergeability.mergeable|default_if_none:"unknown" }}</strong>
       </p>
       <p class="text-muted mb-3">
         {% trans "Merge status" %}: <strong>{{ mergeability.mergeable_state|default:"unknown" }}</strong>

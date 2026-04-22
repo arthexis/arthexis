@@ -689,17 +689,6 @@ def submit_pull_request_review_decision(
         )
 
     headers = build_headers(token, user_agent="arthexis-runtime-reporter")
-    if not _pull_request_is_open(
-        owner,
-        repository,
-        pull_number=pull_number,
-        headers=headers,
-        timeout=timeout,
-    ):
-        raise GitHubRepositoryError(
-            f"Cannot review PR #{pull_number} because it is not open"
-        )
-
     payload: dict[str, str] = {"event": normalized_decision}
     if cleaned_body:
         payload["body"] = cleaned_body
