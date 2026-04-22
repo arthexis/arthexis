@@ -19,6 +19,7 @@ from ..models import HypergeometricTemplate
 
 
 MAX_POWER_CALCULATOR_INPUT = Decimal("1000000000")
+MAX_HYPERGEOMETRIC_INPUT = 500
 
 
 def _format_decimal(value: Decimal, places: str = "0.0000") -> Decimal:
@@ -261,6 +262,7 @@ def _calculate_hypergeometric_totals(
         else None
     )
 
+    max_possible_successes = min(draws, success_states)
     probability_at_least = sum(
         _hypergeometric_probability(
             population_size=deck_size,
@@ -268,7 +270,7 @@ def _calculate_hypergeometric_totals(
             draws=draws,
             successes_drawn=value,
         )
-        for value in range(min_successes, draws + 1)
+        for value in range(min_successes, max_possible_successes + 1)
     )
     probability_none = _hypergeometric_probability(
         population_size=deck_size,
@@ -599,6 +601,10 @@ def mtg_hypergeometric_calculator(request):
 
             if deck_size <= 0:
                 error = _("Deck size must be greater than zero.")
+            elif deck_size > MAX_HYPERGEOMETRIC_INPUT:
+                error = _("Deck size must be %(max_value)s or less.") % {
+                    "max_value": MAX_HYPERGEOMETRIC_INPUT
+                }
             elif success_states < 0:
                 error = _("Success states cannot be negative.")
             elif success_states > deck_size:
@@ -607,6 +613,10 @@ def mtg_hypergeometric_calculator(request):
                 error = _("Draw count must be greater than zero.")
             elif draws > deck_size:
                 error = _("Draw count cannot exceed deck size.")
+            elif draws > MAX_HYPERGEOMETRIC_INPUT:
+                error = _("Draw count must be %(max_value)s or less.") % {
+                    "max_value": MAX_HYPERGEOMETRIC_INPUT
+                }
             elif min_successes < 0:
                 error = _("Minimum successes cannot be negative.")
             elif min_successes > draws:
