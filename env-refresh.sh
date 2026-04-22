@@ -465,7 +465,7 @@ collect_requirement_files() {
     out_array+=("$SCRIPT_DIR/requirements.txt")
   fi
 
-  if [ "$DEPS_ONLY" -eq 1 ] && [ -f "$ci_file" ]; then
+  if [ -f "$ci_file" ] && should_install_preview_dependencies; then
     out_array+=("$ci_file")
   fi
 
