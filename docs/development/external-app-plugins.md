@@ -65,7 +65,7 @@ arthexis_plugin_sample/
       health_ping.py
 ```
 
-### Install and enable
+## Install and enable
 
 1. Publish/install the plugin package into the same environment as Arthexis (wheel, editable install, or private index).
 2. Add the plugin `AppConfig` path to `ARTHEXIS_EXTERNAL_APPS`.
