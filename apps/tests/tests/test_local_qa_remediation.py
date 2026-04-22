@@ -56,7 +56,7 @@ def test_test_command_emits_dependency_refresh_remediation(
 
     with pytest.raises(CommandError) as excinfo:
         command._run_pytest(
-            ["--", "-k", "smoke and not slow", "apps/core/tests/test_doctor_command.py"]
+            ["--", "-k", "smoke", "apps/core/tests/test_doctor_command.py"]
         )
 
     payload = json.loads(str(excinfo.value))
@@ -66,7 +66,7 @@ def test_test_command_emits_dependency_refresh_remediation(
         "command": "./env-refresh.sh --deps-only",
         "event": "arthexis.qa.remediation",
         "retry": (
-            f"{retry_prefix} manage.py test run -- -k 'smoke and not slow' "
+            f"{retry_prefix} manage.py test run -- -k smoke "
             "apps/core/tests/test_doctor_command.py"
         ),
     }

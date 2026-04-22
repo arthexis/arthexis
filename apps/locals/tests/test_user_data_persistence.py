@@ -5,12 +5,11 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 
-from apps.locals.user_data import fixtures as user_data
 from apps.locals.models import Favorite
+from apps.locals.user_data import fixtures as user_data
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.slow
 def test_user_data_persisted_and_reloaded_after_db_flush(tmp_path):
     user_model = get_user_model()
     user = user_model.objects.create_user(
@@ -48,7 +47,6 @@ def test_user_data_persisted_and_reloaded_after_db_flush(tmp_path):
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.slow
 def test_user_data_applied_after_seed_fixture(tmp_path):
     user_model = get_user_model()
     user = user_model.objects.create_user(

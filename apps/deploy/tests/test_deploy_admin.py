@@ -7,7 +7,7 @@ from django.urls import reverse
 from apps.aws.models import AWSCredentials, LightsailInstance
 from apps.deploy.models import DeployInstance, DeployRun, DeployServer
 
-pytestmark = [pytest.mark.django_db, pytest.mark.integration]
+pytestmark = [pytest.mark.django_db]
 
 def test_deploy_server_lightsail_setup_view_registers_existing_instance(admin_client, monkeypatch):
     credentials = AWSCredentials.objects.create(

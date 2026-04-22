@@ -53,9 +53,6 @@ def test_ensure_auto_upgrade_periodic_task_reuses_duplicate_interval_schedules(
     assert task.interval_id == canonical_schedule.pk
     assert task.interval_id != duplicate_schedule.pk
     assert PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).count() == 1
-
-
-@pytest.mark.integration
 def test_ensure_auto_upgrade_periodic_task_disables_task_when_feature_is_off(
     monkeypatch,
 ):
@@ -84,8 +81,9 @@ def test_sync_auto_upgrade_periodic_task_for_feature_change_enables_task(
 ):
     """Regression: enabling auto-upgrade feature should re-enable beat scheduling."""
 
-    from apps.features.models import Feature
     from django_celery_beat.models import PeriodicTask
+
+    from apps.features.models import Feature
 
     monkeypatch.delenv("ARTHEXIS_UPGRADE_FREQ", raising=False)
     monkeypatch.setattr(

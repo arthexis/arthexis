@@ -13,8 +13,8 @@ from django.test import override_settings
 
 from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.services import (
-    BlockDeviceInfo,
     TARGET_RPI4B,
+    BlockDeviceInfo,
     ImagerBuildError,
     _build_download_uri,
     _download_remote_base_image,
@@ -102,7 +102,6 @@ def test_resolve_root_disk_path_walks_to_disk_parent() -> None:
 
 
 @pytest.mark.django_db
-@pytest.mark.integration
 @patch("apps.imager.management.commands.imager.build_rpi4b_image")
 def test_imager_build_command_prints_metadata(mock_build, tmp_path: Path) -> None:
     """Regression: imager build should print generated artifact metadata."""
@@ -144,7 +143,6 @@ def test_imager_build_command_prints_metadata(mock_build, tmp_path: Path) -> Non
 
 
 @pytest.mark.django_db
-@pytest.mark.integration
 @patch("apps.imager.management.commands.imager.build_rpi4b_image")
 def test_imager_build_command_passes_connect_ota_profile_metadata(mock_build, tmp_path: Path) -> None:
     """Regression: build command should pass selected engine/profile metadata to backend."""

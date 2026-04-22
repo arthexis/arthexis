@@ -6,27 +6,27 @@ import pytest
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import ChannelsLiveServerTestCase, WebsocketCommunicator
+from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.core.management import call_command
-from django.contrib.auth import get_user_model
 from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.features.models import Feature
+from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME
 from apps.nodes.models import Node
 from apps.ocpp import store
 from apps.ocpp.consumers import (
-    CSMSConsumer,
     OCPP_VERSION_16,
-    OCPP_VERSION_201,
     OCPP_VERSION_21,
+    OCPP_VERSION_201,
+    CSMSConsumer,
 )
 from apps.ocpp.models import Charger, Simulator
-from apps.simulators import ChargePointSimulator
 from apps.rates.models import RateLimit
-from apps.groups.constants import NETWORK_OPERATOR_GROUP_NAME
+from apps.simulators import ChargePointSimulator
 from config.asgi import application
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -99,14 +99,11 @@ def charge_point_features(local_node):
         suite_feature.save(update_fields=["is_enabled"])
         feature_map[slug] = suite_feature
     return local_node, feature_map
-
-@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 @pytest.mark.parametrize(
     "preferred",
     [OCPP_VERSION_201, OCPP_VERSION_21],
 )
-@pytest.mark.slow
 @override_settings(
     ROOT_URLCONF="apps.ocpp.urls",
     CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}},
@@ -130,8 +127,6 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
     def tearDown(self):
         self._reset_store()
         super().tearDown()
-
-    @pytest.mark.slow
     def test_cp_simulator_connects_with_default_fixture(self):
         call_command("loaddata", "apps/ocpp/fixtures/simulators__local_cp_2.json")
         simulator = Simulator.objects.get(name="Local CP 2")
@@ -157,8 +152,6 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
         assert cp_simulator._connected.is_set()
         assert cp_simulator._connect_error == "accepted"
         assert cp_simulator.status == "stopped"
-
-@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_rejects_invalid_serial_from_path_logs_reason():
     async def run_scenario():
@@ -177,8 +170,6 @@ def test_rejects_invalid_serial_from_path_logs_reason():
         in entry
         for entry in entries
     )
-
-@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_rejects_invalid_query_serial_and_logs_details():
     async def run_scenario():
@@ -196,10 +187,8 @@ def test_rejects_invalid_query_serial_and_logs_details():
     assert any("query_string='cid='" in entry for entry in entries)
 
 def _auth_header(username: str, password: str) -> list[tuple[bytes, bytes]]:
-    token = base64.b64encode(f"{username}:{password}".encode("utf-8"))
+    token = base64.b64encode(f"{username}:{password}".encode())
     return [(b"authorization", b"Basic " + token)]
-
-@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_basic_auth_accepts_charge_station_manager_user():
     authorized = get_user_model().objects.create_user(
@@ -229,8 +218,6 @@ def test_basic_auth_accepts_charge_station_manager_user():
     async_to_sync(run_scenario)()
 
     assert connection_result["connected"] is True
-
-@pytest.mark.slow
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_unknown_extension_action_replies_with_empty_call_result():
     async def run_scenario():

@@ -47,7 +47,6 @@ def test_godaddy_add_and_list():
 
 
 @pytest.mark.django_db
-@pytest.mark.integration
 def test_godaddy_remove_deletes_existing_credential():
     """Remove should delete an existing GoDaddy credential."""
 

@@ -36,7 +36,6 @@ class _ProbeResponse:
         return 200
 
 @pytest.mark.django_db
-@pytest.mark.integration
 @override_settings(
     IMAGER_ADMIN_BASE_IMAGE_ALLOWED_ROOTS=("/tmp/arthexis-imager-tests/base-roots",),
     IMAGER_ADMIN_OUTPUT_ALLOWED_ROOTS=("/tmp/arthexis-imager-tests/output-roots",),

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
+import pytest
 from django.contrib.auth.models import Permission
 from django.urls import reverse
-
-import pytest
 
 from apps.emails.models import EmailCollector, EmailInbox
 from apps.users.models import User
 
-@pytest.mark.integration
+
 @pytest.mark.django_db
 def test_setup_collector_view_saves_collector_and_runs_preview(admin_client, admin_user, monkeypatch):
     """The setup wizard updates collector data and renders test results."""
@@ -57,8 +56,6 @@ def test_setup_collector_view_saves_collector_and_runs_preview(admin_client, adm
     assert collector.name == "Updated Collector"
     assert collector.additional_inboxes.filter(pk=additional.pk).exists()
     assert "Match" in response.rendered_content
-
-@pytest.mark.integration
 @pytest.mark.django_db
 def test_setup_collector_view_forbids_staff_without_view_permission(client, admin_user):
     """Staff users without inbox view permission cannot open setup wizard."""

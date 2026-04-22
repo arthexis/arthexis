@@ -11,8 +11,7 @@ from django.urls import reverse
 from apps.cards import views
 from apps.cards.models import RFIDAttempt
 
-
-pytestmark = [pytest.mark.django_db, pytest.mark.integration]
+pytestmark = [pytest.mark.django_db]
 
 
 def _make_node(role_name: str) -> SimpleNamespace:

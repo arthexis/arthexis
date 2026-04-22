@@ -8,9 +8,6 @@ from django.conf import settings
 from django.core.management import call_command
 
 
-pytestmark = pytest.mark.integration
-
-
 def _write_lock(path: Path, content: str = "") -> None:
     """Write lock fixture content for command tests."""
     path.parent.mkdir(parents=True, exist_ok=True)
