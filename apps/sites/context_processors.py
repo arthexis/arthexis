@@ -281,6 +281,28 @@ def _select_primary_landings(module_path: str, landings: list):
     return landings
 
 
+def _sort_module_landings(module_path: str, landings: list):
+    """Return landings sorted by module-specific navigation priorities."""
+
+    normalized_module_path = module_path.rstrip("/") or "/"
+    if normalized_module_path != "/ocpp":
+        return landings
+
+    path_priority = {
+        "/ocpp/cpms/dashboard": 0,
+        "/ocpp/evcs/simulator": 1,
+        "/ocpp/charge-point-models": 2,
+    }
+
+    return sorted(
+        landings,
+        key=lambda landing: (
+            path_priority.get(landing.path.rstrip("/") or "/", len(path_priority)),
+            landing.path,
+        ),
+    )
+
+
 def _assign_module_menu(module):
     """Normalize special module menu labels in place.
 
@@ -355,7 +377,10 @@ def _annotate_module_landings(
             setattr(landing, key, value)
         landings.append(landing)
 
-    landings = _select_primary_landings(module.path, landings)
+    landings = _sort_module_landings(
+        module.path,
+        _select_primary_landings(module.path, landings),
+    )
 
     if not landings:
         return None

@@ -102,14 +102,14 @@ def test_ocpp_module_fixture_landings_prioritize_dashboard_simulator_supported()
     fixture_data = json.loads(fixture_path.read_text())
 
     ocpp_landings = [
-        item["fields"]["path"]
+        (item["fields"]["path"], item["fields"]["label"])
         for item in fixture_data
         if item.get("model") == "pages.landing"
         and item.get("fields", {}).get("module") == ["/ocpp/"]
     ]
 
     assert ocpp_landings == [
-        reverse("ocpp:ocpp-dashboard"),
-        reverse("ocpp:cp-simulator"),
-        reverse("ocpp:supported-chargers"),
+        (reverse("ocpp:ocpp-dashboard"), "Charging Station Dashboards"),
+        (reverse("ocpp:cp-simulator"), "EVCS Online Simulator"),
+        (reverse("ocpp:supported-chargers"), "Supported CP Models"),
     ]
