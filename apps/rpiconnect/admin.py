@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django import forms
 from django.contrib import admin, messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Count, Q
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -168,13 +168,14 @@ class ConnectDeviceAdmin(admin.ModelAdmin):
     @admin.display(description=_("Eligibility indicator"))
     def eligibility_indicator(self, obj: ConnectDevice) -> str:
         missing: list[str] = []
+        metadata = obj.metadata if isinstance(obj.metadata, dict) else {}
         if not obj.hardware_model:
             missing.append(_("Pi model"))
         if not obj.os_release:
             missing.append(_("OS release"))
-        if self.connectivity_indicator(obj) == _("Unknown"):
+        if not metadata.get("connectivity"):
             missing.append(_("connectivity"))
-        if self.free_space_indicator(obj) == _("Not reported"):
+        if not (metadata.get("free_space") or metadata.get("free_space_bytes")):
             missing.append(_("free space"))
 
         if missing:
@@ -225,6 +226,19 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
     list_filter = ("strategy", "status", "started_at", "completed_at")
     search_fields = ("id", "release__name")
 
+    def get_queryset(self, request: HttpRequest):
+        return super().get_queryset(request).annotate(
+            failed_count=Count(
+                "deployments",
+                filter=Q(deployments__status=ConnectUpdateDeployment.Status.FAILED),
+            ),
+            succeeded_count=Count(
+                "deployments",
+                filter=Q(deployments__status=ConnectUpdateDeployment.Status.SUCCEEDED),
+            ),
+            total_count=Count("deployments"),
+        )
+
     def get_urls(self):
         custom_urls = [
             path("wizard/", self.admin_site.admin_view(self.campaign_wizard_view), name="rpiconnect_campaign_wizard"),
@@ -258,13 +272,19 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
 
     @admin.display(description=_("Progress"))
     def progress_summary(self, obj: ConnectUpdateCampaign) -> str:
-        totals = obj.deployments.values("status").annotate(count=Count("id"))
-        status_counts = {entry["status"]: entry["count"] for entry in totals}
-        total = sum(status_counts.values())
+        total = getattr(obj, "total_count", None)
+        if total is None:
+            totals = obj.deployments.values("status").annotate(count=Count("id"))
+            status_counts = {entry["status"]: entry["count"] for entry in totals}
+            total = sum(status_counts.values())
+            succeeded = status_counts.get(ConnectUpdateDeployment.Status.SUCCEEDED, 0)
+            failed = status_counts.get(ConnectUpdateDeployment.Status.FAILED, 0)
+        else:
+            succeeded = getattr(obj, "succeeded_count", 0)
+            failed = getattr(obj, "failed_count", 0)
+
         if total == 0:
             return _("No deployments queued")
-        succeeded = status_counts.get(ConnectUpdateDeployment.Status.SUCCEEDED, 0)
-        failed = status_counts.get(ConnectUpdateDeployment.Status.FAILED, 0)
         return _("%(succeeded)s/%(total)s succeeded, %(failed)s failed") % {
             "failed": failed,
             "succeeded": succeeded,
@@ -287,9 +307,6 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
                 notes_sections.append(f"Timing notes: {cleaned['timing_notes'].strip()}")
             notes = "\n\n".join(section for section in notes_sections if section)
 
-            resolved_devices = CampaignService().resolve_targets(target_set)
-            canary_size = max(1, round(len(resolved_devices) * (cleaned.get("canary_percent") or 10) / 100))
-
             try:
                 campaign = CampaignService().create_campaign(
                     release=release,
@@ -299,17 +316,19 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
                     notes=notes,
                     override_conflicts=cleaned.get("override_conflicts", False),
                     batch_size=cleaned.get("batch_size") or 0,
-                    canary_size=canary_size,
+                    canary_percent=cleaned.get("canary_percent") or 10,
                 )
                 if cleaned.get("launch_timing") == "start_now":
                     CampaignService().start_campaign(campaign, created_by=request.user)
             except CampaignServiceError as exc:
                 form.add_error(None, exc)
             else:
+                creation_event = campaign.events.filter(event_type=CampaignService.EVENT_CAMPAIGN_CREATED).first()
+                target_count = (creation_event.payload or {}).get("target_count", 0) if creation_event else 0
                 messages.success(
                     request,
                     _("Campaign %(campaign)s created with %(count)s targeted devices.")
-                    % {"campaign": campaign.pk, "count": len(resolved_devices)},
+                    % {"campaign": campaign.pk, "count": target_count},
                 )
                 return HttpResponseRedirect(
                     reverse("admin:rpiconnect_connectupdatecampaign_change", args=[campaign.pk])
@@ -324,11 +343,15 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
         return TemplateResponse(request, "admin/rpiconnect/connectupdatecampaign/campaign_wizard.html", context)
 
     def campaign_progress_view(self, request: HttpRequest, campaign_id: int) -> HttpResponse:
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
         campaign = (
             ConnectUpdateCampaign.objects.select_related("release", "created_by")
             .prefetch_related("deployments__device")
             .get(pk=campaign_id)
         )
+        if not self.has_view_or_change_permission(request, campaign):
+            raise PermissionDenied
         status_counts = {
             entry["status"]: entry["count"]
             for entry in campaign.deployments.values("status").annotate(count=Count("id")).order_by("status")
@@ -349,6 +372,8 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
 
     def rollback_campaign_view(self, request: HttpRequest, campaign_id: int) -> HttpResponse:
         campaign = ConnectUpdateCampaign.objects.select_related("release").get(pk=campaign_id)
+        if not self.has_change_permission(request, campaign) or not self.has_add_permission(request):
+            raise PermissionDenied
         if request.method != "POST":
             messages.warning(request, _("Use the rollback button from the campaign form to confirm this action."))
             return HttpResponseRedirect(reverse("admin:rpiconnect_connectupdatecampaign_change", args=[campaign.pk]))
@@ -387,14 +412,14 @@ class ConnectUpdateCampaignAdmin(admin.ModelAdmin):
         )
 
     def _find_previous_known_good_release(self, campaign: ConnectUpdateCampaign) -> ConnectImageRelease | None:
-        successful_device_pk_set = set(
-            campaign.deployments.filter(status=ConnectUpdateDeployment.Status.SUCCEEDED).values_list("device_id", flat=True)
-        )
-        if not successful_device_pk_set:
+        successful_device_ids = campaign.deployments.filter(
+            status=ConnectUpdateDeployment.Status.SUCCEEDED
+        ).values_list("device_id", flat=True)
+        if not successful_device_ids:
             return None
 
         successful_campaign_ids = ConnectUpdateCampaign.objects.filter(
-            deployments__device_id__in=successful_device_pk_set,
+            deployments__device_id__in=successful_device_ids,
             deployments__status=ConnectUpdateDeployment.Status.SUCCEEDED,
             status=ConnectUpdateCampaign.Status.COMPLETED,
         ).exclude(pk=campaign.pk)

@@ -82,6 +82,7 @@ class CampaignService:
         notes: str = "",
         override_conflicts: bool = False,
         batch_size: int = 0,
+        canary_percent: int | None = None,
         canary_size: int = 1,
     ) -> ConnectUpdateCampaign:
         """Create campaign, resolve targets, and schedule deployments."""
@@ -90,6 +91,8 @@ class CampaignService:
         devices = self.resolve_targets(target_set)
         if not devices:
             raise CampaignServiceError("No devices matched the provided target set.")
+        if canary_percent is not None:
+            canary_size = max(1, round(len(devices) * canary_percent / 100))
 
         self._validate_device_compatibility(release, devices)
         rollout_stages = self._build_rollout_stages(
