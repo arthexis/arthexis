@@ -65,10 +65,6 @@ arthexis_plugin_sample/
       health_ping.py
 ```
 
-## Reference plugin package
-
-A reference standalone package is included in `examples/external_plugin_reference/` as a template you can publish in a separate repository.
-
 ### Install and enable
 
 1. Publish/install the plugin package into the same environment as Arthexis (wheel, editable install, or private index).
