@@ -43,6 +43,43 @@ class AccessPointLocalUserBackendTests(TestCase):
         assert authenticated is not None
         assert authenticated.pk == user.pk
 
+    def test_rejects_local_user_with_invalid_password(self):
+        user = get_user_model().objects.create_user(
+            username="ap-user-invalid-password",
+            email="ap-user-invalid-password@example.com",
+            password="correct-password",
+            is_staff=False,
+            is_superuser=False,
+            allow_local_network_passwordless_login=True,
+        )
+        request = self._request("127.0.0.1")
+
+        authenticated = self.backend.authenticate(
+            request,
+            username=user.username,
+            password="wrong-password",
+        )
+
+        assert authenticated is None
+
+    def test_rejects_user_when_passwordless_flag_is_disabled(self):
+        user = get_user_model().objects.create_user(
+            username="no-ap",
+            email="no-ap@example.com",
+            password="correct-password",
+            is_staff=False,
+            is_superuser=False,
+            allow_local_network_passwordless_login=False,
+        )
+        request = self._request("127.0.0.1")
+
+        authenticated = self.backend.authenticate(
+            request,
+            username=user.username,
+            password="correct-password",
+        )
+
+        assert authenticated is None
 
     def test_authenticates_access_point_user_with_unusable_password(self):
         user = get_user_model().objects.create_user(

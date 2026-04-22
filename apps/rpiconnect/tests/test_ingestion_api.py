@@ -46,6 +46,24 @@ class IngestionApiTests(TestCase):
         )
         self.url = reverse("rpiconnect-ingestion-events")
 
+    def test_requires_authentication_token(self) -> None:
+        response = self.client.post(
+            self.url,
+            data={"event_id": "evt-1", "device_id": "pi-001"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    @override_settings(RPICONNECT_INGESTION_TOKEN="")
+    def test_fails_closed_when_token_is_not_configured(self) -> None:
+        response = self.client.post(
+            self.url,
+            data={"event_id": "evt-1", "device_id": "pi-001"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 500)
 
     def test_ingests_event_idempotently_and_projects_status(self) -> None:
         payload = {

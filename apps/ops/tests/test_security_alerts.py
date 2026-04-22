@@ -81,6 +81,32 @@ def test_record_occurrence_keeps_last_occurred_at_monotonic() -> None:
     assert event.last_occurred_at == first_seen
 
 
+def test_record_occurrence_sanitizes_unsafe_remediation_urls() -> None:
+    """Unsafe URL schemes should be replaced with the admin fallback."""
+
+    SecurityAlertEvent.record_occurrence(
+        key="event-unsafe-url",
+        message="Unsafe link attempt.",
+        remediation_url="javascript:alert(1)",
+    )
+
+    event = SecurityAlertEvent.objects.get(key="event-unsafe-url")
+    assert event.remediation_url == "/admin/"
+
+
+def test_record_occurrence_keeps_safe_absolute_remediation_urls() -> None:
+    """HTTP(S) remediation URLs should remain unchanged."""
+
+    SecurityAlertEvent.record_occurrence(
+        key="event-safe-url",
+        message="Safe link.",
+        remediation_url="https://example.com/remediate",
+    )
+
+    event = SecurityAlertEvent.objects.get(key="event-safe-url")
+    assert event.remediation_url == "https://example.com/remediate"
+
+
 def test_build_security_alerts_clears_collector_failure_on_success(monkeypatch) -> None:
     """Collector failure events should be deactivated after successful collection."""
 
