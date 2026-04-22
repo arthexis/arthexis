@@ -1,19 +1,20 @@
-{% extends "ocpp/landing_base.html" %}
-{% load i18n %}
+{% extends "pages/base.html" %}
+{% load i18n static %}
 
 {% block title %}{% trans "Supported Chargers" %}{% endblock %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="{% static 'ocpp/supported_chargers.css' %}">
 <style>
   .supported-toolbar {
-    border: 1px solid rgba(15, 23, 42, 0.08);
+    border: 1px solid var(--bs-border-color-translucent);
     border-radius: var(--landing-card-radius);
-    background: #fff;
-    padding: 1rem;
+    background: var(--bs-body-bg);
+    padding: var(--bs-spacer);
   }
   .supported-toolbar .chip-label {
-    font-size: 0.75rem;
-    letter-spacing: 0.04em;
+    font-size: var(--landing-meta-font-size);
+    letter-spacing: var(--landing-meta-letter-spacing);
     text-transform: uppercase;
     color: var(--bs-secondary-color);
     margin-bottom: 0.5rem;
@@ -27,9 +28,9 @@
     border-radius: 999px;
   }
   .supported-card {
-    border: 1px solid rgba(15, 23, 42, 0.08);
+    border: 1px solid var(--bs-border-color-translucent);
     border-radius: 1rem;
-    background-color: #fff;
+    background-color: var(--bs-body-bg);
     box-shadow: 0 0.5rem 1rem rgba(15, 23, 42, 0.04);
     transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
@@ -168,7 +169,7 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}
+{% block extra_scripts %}
 <script>
   (() => {
     const cards = Array.from(document.querySelectorAll('[data-supported-card]'));
