@@ -64,6 +64,50 @@ class ReconciliationTests(TestCase):
             ).exists()
         )
 
+    def test_reconciliation_only_checks_non_terminal_deployments(self) -> None:
+        ConnectUpdateDeployment.objects.create(
+            campaign=self.campaign,
+            device=ConnectDevice.objects.create(
+                account=self.account,
+                device_id="pi-002",
+                hardware_model="Raspberry Pi 4",
+            ),
+            status=ConnectUpdateDeployment.Status.SUCCEEDED,
+        )
+        service = IngestionService()
+
+        result = service.reconcile_deployments(status_fetcher=lambda deployment: "succeeded")
+
+        self.assertEqual(result.checked, 1)
+
+    def test_reconciliation_continues_after_invalid_transition(self) -> None:
+        pending_deployment = ConnectUpdateDeployment.objects.create(
+            campaign=self.campaign,
+            device=ConnectDevice.objects.create(
+                account=self.account,
+                device_id="pi-003",
+                hardware_model="Raspberry Pi 3",
+            ),
+            status=ConnectUpdateDeployment.Status.PENDING,
+        )
+
+        service = IngestionService()
+        result = service.reconcile_deployments(
+            status_fetcher=lambda deployment: (
+                "succeeded"
+                if deployment.pk == pending_deployment.pk
+                else "failed"
+            ),
+        )
+
+        self.assertEqual(result.checked, 2)
+        self.assertEqual(result.repaired, 1)
+
+        self.deployment.refresh_from_db()
+        pending_deployment.refresh_from_db()
+        self.assertEqual(self.deployment.status, ConnectUpdateDeployment.Status.FAILED)
+        self.assertEqual(pending_deployment.status, ConnectUpdateDeployment.Status.PENDING)
+
     def test_reconciliation_command_uses_default_polling_hook(self) -> None:
         call_command("reconcile_rpiconnect")
 

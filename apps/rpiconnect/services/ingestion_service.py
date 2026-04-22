@@ -85,6 +85,13 @@ class IngestionService:
         checked = 0
         repaired = 0
         deployments = ConnectUpdateDeployment.objects.select_related("device", "campaign")
+        deployments = deployments.exclude(
+            status__in=[
+                ConnectUpdateDeployment.Status.SUCCEEDED,
+                ConnectUpdateDeployment.Status.FAILED,
+                ConnectUpdateDeployment.Status.ROLLED_BACK,
+            ]
+        )
         for deployment in deployments:
             checked += 1
             remote_status = status_fetcher(deployment)
@@ -93,30 +100,33 @@ class IngestionService:
             if not normalized_status or normalized_status == local_status:
                 continue
 
-            with transaction.atomic():
-                deployment.status = normalized_status
-                if normalized_status in {
-                    ConnectUpdateDeployment.Status.SUCCEEDED,
-                    ConnectUpdateDeployment.Status.FAILED,
-                    ConnectUpdateDeployment.Status.ROLLED_BACK,
-                }:
-                    deployment.completed_at = timezone.now()
-                deployment.save(
-                    update_fields=[
-                        "status",
-                        "completed_at",
-                        "updated_at",
-                    ]
-                )
-                ConnectCampaignEvent.objects.create(
-                    campaign=deployment.campaign,
-                    deployment=deployment,
-                    event_type="deployment.reconciled",
-                    from_status=local_status,
-                    to_status=normalized_status,
-                    payload={"source": "reconciler"},
-                )
-                repaired += 1
+            try:
+                with transaction.atomic():
+                    deployment.status = normalized_status
+                    if normalized_status in {
+                        ConnectUpdateDeployment.Status.SUCCEEDED,
+                        ConnectUpdateDeployment.Status.FAILED,
+                        ConnectUpdateDeployment.Status.ROLLED_BACK,
+                    }:
+                        deployment.completed_at = timezone.now()
+                    deployment.save(
+                        update_fields=[
+                            "status",
+                            "completed_at",
+                            "updated_at",
+                        ]
+                    )
+                    ConnectCampaignEvent.objects.create(
+                        campaign=deployment.campaign,
+                        deployment=deployment,
+                        event_type="deployment.reconciled",
+                        from_status=local_status,
+                        to_status=normalized_status,
+                        payload={"source": "reconciler"},
+                    )
+                    repaired += 1
+            except ValidationError:
+                continue
         return ReconciliationResult(checked=checked, repaired=repaired)
 
     def _normalize_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -140,12 +150,6 @@ class IngestionService:
         deployment = self._resolve_deployment(payload, device_id)
         campaign = deployment.campaign if deployment else None
         device = deployment.device if deployment else ConnectDevice.objects.filter(device_id=device_id).first()
-
-        cooldown_until = None
-        if deployment and status == "failed":
-            self._schedule_retry(deployment, failure_classification=failure_classification)
-            cooldown_until = deployment.next_retry_at
-            retry_attempt = deployment.retry_attempts
 
         payload_snippet = {
             "event_type": event_type,
@@ -174,7 +178,7 @@ class IngestionService:
             "status": status,
             "failure_classification": failure_classification,
             "retry_attempt": retry_attempt,
-            "cooldown_until": cooldown_until,
+            "cooldown_until": None,
             "payload_snippet": payload_snippet,
             "normalized_payload": normalized_payload,
             "occurred_at": occurred_at,
@@ -188,6 +192,15 @@ class IngestionService:
         normalized_status = self._normalize_status(event.status)
         if not normalized_status:
             return
+
+        if normalized_status == ConnectUpdateDeployment.Status.FAILED:
+            self._schedule_retry(
+                deployment,
+                failure_classification=event.failure_classification,
+            )
+            event.retry_attempt = deployment.retry_attempts
+            event.cooldown_until = deployment.next_retry_at
+            event.save(update_fields=["retry_attempt", "cooldown_until"])
 
         if deployment.status == normalized_status:
             return
