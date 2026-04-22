@@ -33,11 +33,12 @@ on:
       - '**/Dockerfile'
       - '**/*.sh'
   schedule:
-    - cron: "15 3 1 * *"
+    - cron: '15 3 1 * *'
   workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: write
   security-events: write
 
 jobs:
@@ -70,3 +71,84 @@ jobs:
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4
+
+      - name: Summarize CodeQL alerts on pull requests
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const marker = '<!-- codeql-alert-summary -->';
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullNumber = context.payload.pull_request.number;
+
+            const alerts = await github.paginate(github.rest.codeScanning.listAlertsForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              pr: pullNumber,
+              per_page: 100,
+            });
+
+            const formatSeverity = (alert) => {
+              return alert.rule.security_severity_level || alert.rule.severity || 'unknown';
+            };
+
+            const preview = alerts.slice(0, 20).map((alert) => {
+              const location = alert.most_recent_instance?.location || {};
+              const path = location.path || 'n/a';
+              const line = location.start_line || '?';
+              const severity = formatSeverity(alert);
+              return `- ${severity}: ${alert.rule.name} (${path}:${line})`;
+            });
+
+            const summaryLines = [
+              marker,
+              '## CodeQL alert summary',
+              '',
+              `Open alerts for PR #${pullNumber}: **${alerts.length}**`,
+              '',
+            ];
+
+            if (preview.length) {
+              summaryLines.push('Top alerts:');
+              summaryLines.push(...preview);
+              if (alerts.length > preview.length) {
+                summaryLines.push('', `…and ${alerts.length - preview.length} more.`);
+              }
+            } else {
+              summaryLines.push('No open CodeQL alerts detected for this pull request. ✅');
+            }
+
+            summaryLines.push('');
+            summaryLines.push(`Full results: https://github.com/${owner}/${repo}/security/code-scanning`);
+
+            const body = summaryLines.join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: pullNumber,
+              per_page: 100,
+            });
+
+            const existing = comments.find(
+              (comment) => comment.user.type === 'Bot' && comment.body.includes(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pullNumber,
+                body,
+              });
+            }
