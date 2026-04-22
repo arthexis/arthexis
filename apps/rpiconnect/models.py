@@ -165,6 +165,15 @@ class ConnectUpdateDeployment(models.Model):
         FAILED = "failed", "Failed"
         ROLLED_BACK = "rolled_back", "Rolled back"
 
+    class FailureClassification(models.TextChoices):
+        """Normalized failure buckets used for retries and troubleshooting."""
+
+        NONE = "", "Unknown/Not Set"
+        NETWORK = "network", "Network"
+        ARTIFACT_FETCH = "artifact_fetch", "Artifact Fetch"
+        VERIFICATION = "verification", "Verification"
+        APPLY_REBOOT = "apply_reboot", "Apply/Reboot"
+
     ALLOWED_STATUS_TRANSITIONS: dict[str, set[str]] = {
         Status.PENDING: {Status.IN_PROGRESS, Status.FAILED, Status.ROLLED_BACK},
         Status.IN_PROGRESS: {Status.SUCCEEDED, Status.FAILED, Status.ROLLED_BACK},
@@ -188,6 +197,16 @@ class ConnectUpdateDeployment(models.Model):
     queued_at = models.DateTimeField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    failure_classification = models.CharField(
+        max_length=20,
+        choices=FailureClassification.choices,
+        blank=True,
+        default=FailureClassification.NONE,
+    )
+    retry_attempts = models.PositiveSmallIntegerField(default=0)
+    retry_max_attempts = models.PositiveSmallIntegerField(default=3)
+    retry_cooldown_seconds = models.PositiveIntegerField(default=300)
+    next_retry_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -311,3 +330,65 @@ class ConnectCampaignEvent(models.Model):
         """Return a readable event label."""
 
         return f"Campaign {self.campaign_id}: {self.event_type}"
+
+
+class ConnectIngestionEvent(models.Model):
+    """Normalized + raw snippets for authenticated update event ingestion."""
+
+    class EventType(models.TextChoices):
+        """Supported external update/deployment event families."""
+
+        UPDATE = "update", "Update"
+        DEPLOYMENT = "deployment", "Deployment"
+
+    event_id = models.CharField(max_length=120)
+    event_type = models.CharField(max_length=20, choices=EventType.choices)
+    external_device_id = models.CharField(max_length=120)
+    device = models.ForeignKey(
+        ConnectDevice,
+        on_delete=models.SET_NULL,
+        related_name="ingestion_events",
+        null=True,
+        blank=True,
+    )
+    deployment = models.ForeignKey(
+        ConnectUpdateDeployment,
+        on_delete=models.SET_NULL,
+        related_name="ingestion_events",
+        null=True,
+        blank=True,
+    )
+    campaign = models.ForeignKey(
+        ConnectUpdateCampaign,
+        on_delete=models.SET_NULL,
+        related_name="ingestion_events",
+        null=True,
+        blank=True,
+    )
+    status = models.CharField(max_length=30, blank=True)
+    failure_classification = models.CharField(
+        max_length=20,
+        choices=ConnectUpdateDeployment.FailureClassification.choices,
+        blank=True,
+        default=ConnectUpdateDeployment.FailureClassification.NONE,
+    )
+    retry_attempt = models.PositiveSmallIntegerField(default=0)
+    cooldown_until = models.DateTimeField(null=True, blank=True)
+    payload_snippet = models.JSONField(default=dict, blank=True)
+    normalized_payload = models.JSONField(default=dict, blank=True)
+    occurred_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("event_id", "external_device_id"),
+                name="rpiconnect_ingestion_unique_event_device",
+            )
+        ]
+
+    def __str__(self) -> str:
+        """Return a readable event label."""
+
+        return f"{self.external_device_id} / {self.event_id}"
