@@ -1002,6 +1002,14 @@ def _build_pull_request_merge_guardrails(
     return True, ""
 
 
+def _derive_checks_state(status_payload: Mapping[str, object]) -> str:
+    state = str(status_payload.get("state") or "unknown").strip().lower()
+    total_count = status_payload.get("total_count")
+    if state == "pending" and isinstance(total_count, int) and total_count == 0:
+        return "not_applicable"
+    return state or "unknown"
+
+
 def _summarize_pull_request_review_comments(
     review_comments: list[Mapping[str, object]],
 ) -> dict[str, int]:
@@ -1121,9 +1129,7 @@ def github_issue_detail(request, number: int):
                         name=connection.repo,
                         sha=merge_head_sha,
                     )
-                    merge_checks_state = str(
-                        merge_status_payload.get("state") or "unknown"
-                    )
+                    merge_checks_state = _derive_checks_state(merge_status_payload)
                 merge_allowed, merge_guardrail = _build_pull_request_merge_guardrails(
                     pull_request=merge_pull_request,
                     checks_state=merge_checks_state,
@@ -1141,6 +1147,7 @@ def github_issue_detail(request, number: int):
                     merge_method=merge_method,
                     commit_title=(request.POST.get("commit_title") or "").strip(),
                     commit_message=(request.POST.get("commit_message") or "").strip(),
+                    expected_head_sha=merge_head_sha,
                 )
                 return redirect(reverse("docs:docs-github-item", kwargs={"number": number}))
 
@@ -1223,7 +1230,7 @@ def github_issue_detail(request, number: int):
                     name=connection.repo,
                     sha=head_sha,
                 )
-                checks_state = str(status_payload.get("state") or "unknown")
+                checks_state = _derive_checks_state(status_payload)
             else:
                 checks_state = "unknown"
             merge_allowed, merge_guardrail = _build_pull_request_merge_guardrails(

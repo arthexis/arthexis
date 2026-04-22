@@ -238,7 +238,12 @@ def test_merge_pull_request_calls_merge_endpoint(monkeypatch):
     monkeypatch.setattr(
         github,
         "fetch_pull_request",
-        lambda **kwargs: {"state": "open", "mergeable": True, "mergeable_state": "clean"},
+        lambda **kwargs: {
+            "state": "open",
+            "mergeable": True,
+            "mergeable_state": "clean",
+            "head": {"sha": "head123"},
+        },
     )
 
     def fake_put(url, json=None, headers=None, timeout=None):
@@ -261,6 +266,29 @@ def test_merge_pull_request_calls_merge_endpoint(monkeypatch):
     assert calls["request"]["url"].endswith("/repos/octo/demo/pulls/22/merge")
     assert calls["request"]["json"] == {
         "merge_method": "squash",
+        "sha": "head123",
         "commit_title": "Merge feature",
         "commit_message": "Includes tests",
     }
+
+
+def test_merge_pull_request_rejects_when_expected_head_sha_is_stale(monkeypatch):
+    monkeypatch.setattr(
+        github,
+        "fetch_pull_request",
+        lambda **kwargs: {
+            "state": "open",
+            "mergeable": True,
+            "mergeable_state": "clean",
+            "head": {"sha": "head123"},
+        },
+    )
+
+    with pytest.raises(github.GitHubRepositoryError, match="head changed"):
+        github.merge_pull_request(
+            owner="octo",
+            repository="demo",
+            pull_number=22,
+            token="tok",
+            expected_head_sha="different",
+        )

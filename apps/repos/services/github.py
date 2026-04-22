@@ -732,6 +732,7 @@ def merge_pull_request(
     merge_method: str = "squash",
     commit_title: str = "",
     commit_message: str = "",
+    expected_head_sha: str = "",
     timeout: int = REQUEST_TIMEOUT,
 ) -> Mapping[str, object]:
     """Merge a pull request when GitHub reports it is mergeable."""
@@ -760,8 +761,16 @@ def merge_pull_request(
         raise GitHubRepositoryError(
             f"Cannot merge PR #{pull_number} while mergeable state is '{mergeable_state}'"
         )
+    current_head_sha = str((pull.get("head") or {}).get("sha") or "").strip()
+    requested_head_sha = expected_head_sha.strip()
+    if requested_head_sha and current_head_sha != requested_head_sha:
+        raise GitHubRepositoryError(
+            "Pull request head changed while preparing merge; refresh and try again"
+        )
 
     payload: dict[str, str] = {"merge_method": method}
+    if current_head_sha:
+        payload["sha"] = requested_head_sha or current_head_sha
     cleaned_title = commit_title.strip()
     cleaned_message = commit_message.strip()
     if cleaned_title:

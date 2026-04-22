@@ -265,3 +265,54 @@ def test_github_detail_pr_status_fetch_error_keeps_merge_disabled(staff_client, 
     content = response.content.decode()
     assert "Status lookup failed" in content
     assert 'disabled aria-disabled="true"' in content
+
+
+def test_github_detail_pr_pending_without_statuses_allows_merge(staff_client, monkeypatch):
+    _mock_connection(monkeypatch)
+    monkeypatch.setattr(
+        views.github_service,
+        "fetch_issue_or_pull_request",
+        lambda **kwargs: {
+            "number": 20,
+            "title": "No status checks PR",
+            "state": "open",
+            "body": "No statuses yet",
+            "pull_request": {"url": "https://api.github.test/pulls/20"},
+        },
+    )
+    monkeypatch.setattr(views.github_service, "fetch_issue_comments", lambda **kwargs: [])
+    monkeypatch.setattr(
+        views.github_service,
+        "fetch_pull_request",
+        lambda **kwargs: {
+            "state": "open",
+            "mergeable": True,
+            "mergeable_state": "clean",
+            "requested_reviewers": [],
+            "head": {"sha": "abc123"},
+        },
+    )
+    monkeypatch.setattr(views.github_service, "fetch_pull_request_reviews", lambda **kwargs: [])
+    monkeypatch.setattr(views.github_service, "fetch_pull_request_review_comments", lambda **kwargs: [])
+    monkeypatch.setattr(
+        views.github_service,
+        "fetch_commit_status_summary",
+        lambda **kwargs: {"state": "pending", "total_count": 0},
+    )
+
+    merge_calls: list[dict[str, object]] = []
+
+    def fake_merge(**kwargs):
+        merge_calls.append(kwargs)
+        return {"merged": True}
+
+    monkeypatch.setattr(views.github_service, "merge_pull_request", fake_merge)
+
+    response = staff_client.post(
+        reverse("docs:docs-github-item", kwargs={"number": 20}),
+        data={"action": "pr_merge", "merge_method": "squash"},
+    )
+
+    assert response.status_code == 302
+    assert len(merge_calls) == 1
+    assert merge_calls[0]["expected_head_sha"] == "abc123"
