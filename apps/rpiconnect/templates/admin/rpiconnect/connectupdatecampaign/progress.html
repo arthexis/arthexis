@@ -1,0 +1,58 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:rpiconnect_connectupdatecampaign_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; <a href="{% url 'admin:rpiconnect_connectupdatecampaign_change' campaign.pk %}">{% trans "Campaign" %} {{ campaign.pk }}</a>
+  &rsaquo; {% trans "Live campaign progress" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{% trans "Live campaign progress" %}</h1>
+  <p>
+    {% trans "Campaign" %} {{ campaign.pk }}
+    &mdash; {% trans "Release" %}: {{ campaign.release.name }} ({{ campaign.release.version }})
+    &mdash; {% trans "Status" %}: {{ campaign.get_status_display }}
+  </p>
+
+  <h2>{% trans "Status totals" %}</h2>
+  <ul>
+    {% for status, count in status_counts.items %}
+      <li><strong>{{ status }}</strong>: {{ count }}</li>
+    {% empty %}
+      <li>{% trans "No deployments have been queued." %}</li>
+    {% endfor %}
+  </ul>
+
+  <h2>{% trans "Device-level failures and rollbacks" %}</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>{% trans "Device ID" %}</th>
+        <th>{% trans "Deployment status" %}</th>
+        <th>{% trans "Failure classification" %}</th>
+        <th>{% trans "Error payload" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for deployment in failed_deployments %}
+      <tr>
+        <td>{{ deployment.device.device_id }}</td>
+        <td>{{ deployment.get_status_display }}</td>
+        <td>{{ deployment.get_failure_classification_display|default:"Unknown" }}</td>
+        <td><pre>{{ deployment.error_payload }}</pre></td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="4">{% trans "No device-level failures or rollbacks recorded." %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

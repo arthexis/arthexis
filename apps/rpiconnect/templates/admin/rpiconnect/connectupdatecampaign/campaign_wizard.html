@@ -1,0 +1,36 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:rpiconnect_connectupdatecampaign_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; {% trans "Campaign wizard" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{% trans "Campaign wizard" %}</h1>
+  <p>{% trans "Create an update campaign with explicit targeting, rollout pacing, and launch timing controls." %}</p>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <fieldset class="module aligned">
+      {% for field in form %}
+      <div class="form-row">
+        {{ field.errors }}
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </fieldset>
+    <div class="submit-row">
+      <input type="submit" value="{% trans 'Create campaign' %}" class="default">
+      <a href="{% url 'admin:rpiconnect_connectupdatecampaign_changelist' %}" class="button cancel-link">{% trans "Cancel" %}</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
