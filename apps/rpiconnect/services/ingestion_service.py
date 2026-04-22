@@ -35,6 +35,8 @@ class IngestionServiceError(ValidationError):
 class IngestionService:
     """Handle inbound events and status reconciliation for update deployments."""
 
+    MAX_RETRY_ATTEMPT = 32767
+
     STATUS_MAP: dict[str, str] = {
         "queued": ConnectUpdateDeployment.Status.PENDING,
         "pending": ConnectUpdateDeployment.Status.PENDING,
@@ -144,7 +146,12 @@ class IngestionService:
 
         status = str(payload.get("status") or "").strip().lower()
         failure_classification = self.classify_failure(payload)
-        retry_attempt = self._parse_positive_int(payload.get("retry_attempt"), default=0)
+        retry_attempt = self._parse_positive_int(
+            payload.get("retry_attempt"),
+            default=0,
+            max_value=self.MAX_RETRY_ATTEMPT,
+            field_name="retry_attempt",
+        )
         occurred_at = self._parse_datetime(payload.get("occurred_at"))
 
         deployment = self._resolve_deployment(payload, device_id)
@@ -233,7 +240,7 @@ class IngestionService:
             deployment = ConnectUpdateDeployment.objects.select_related("campaign", "device").filter(
                 pk=deployment_id
             ).first()
-            if deployment:
+            if deployment and deployment.device.device_id == device_id:
                 return deployment
 
         campaign_id = payload.get("campaign_id")
@@ -293,14 +300,25 @@ class IngestionService:
             return timezone.make_aware(parsed, timezone=timezone.get_current_timezone())
         return parsed
 
-    def _parse_positive_int(self, value: Any, *, default: int) -> int:
-        if value is None:
+    def _parse_positive_int(
+        self,
+        value: Any,
+        *,
+        default: int,
+        max_value: int | None = None,
+        field_name: str = "value",
+    ) -> int:
+        if value in (None, ""):
             return default
         try:
             parsed = int(value)
-        except (TypeError, ValueError):
-            return default
-        return parsed if parsed >= 0 else default
+        except (TypeError, ValueError) as exc:
+            raise IngestionServiceError(f"{field_name} must be an integer") from exc
+        if parsed < 0:
+            raise IngestionServiceError(f"{field_name} must be a positive integer")
+        if max_value is not None and parsed > max_value:
+            raise IngestionServiceError(f"{field_name} must be <= {max_value}")
+        return parsed
 
 
 def default_reconciliation_status_fetcher(deployment: ConnectUpdateDeployment) -> str:

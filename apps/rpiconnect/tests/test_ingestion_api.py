@@ -187,3 +187,50 @@ class IngestionApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+    def test_ignores_mismatched_deployment_id_and_resolves_by_device(self) -> None:
+        other_device = ConnectDevice.objects.create(
+            account=self.account,
+            device_id="pi-099",
+            hardware_model="Raspberry Pi 4",
+        )
+        mismatched_deployment = ConnectUpdateDeployment.objects.create(
+            campaign=self.campaign,
+            device=other_device,
+            status=ConnectUpdateDeployment.Status.IN_PROGRESS,
+        )
+
+        response = self.client.post(
+            self.url,
+            data={
+                "event_id": "evt-mismatch",
+                "event_type": "deployment",
+                "device_id": self.device.device_id,
+                "deployment_id": mismatched_deployment.pk,
+                "status": "succeeded",
+            },
+            content_type="application/json",
+            HTTP_AUTHORIZATION="Bearer shared-secret",
+        )
+
+        self.assertEqual(response.status_code, 202)
+        event = ConnectIngestionEvent.objects.get(event_id="evt-mismatch")
+        self.assertEqual(event.deployment_id, self.deployment.pk)
+
+    def test_returns_400_for_out_of_range_retry_attempt(self) -> None:
+        response = self.client.post(
+            self.url,
+            data={
+                "event_id": "evt-overflow",
+                "event_type": "deployment",
+                "device_id": self.device.device_id,
+                "deployment_id": self.deployment.pk,
+                "status": "failed",
+                "retry_attempt": 100000,
+            },
+            content_type="application/json",
+            HTTP_AUTHORIZATION="Bearer shared-secret",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(ConnectIngestionEvent.objects.count(), 0)
