@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.db import migrations
+from django.db.models import Q
 
 
 OLD_GITHUB_FOOTER_VARIANTS = [
@@ -15,40 +16,38 @@ NEW_VALUE = "https://github.com/arthexis/arthexis"
 
 def fix_github_footer_reference(apps, schema_editor) -> None:
     Reference = apps.get_model("links", "Reference")
+    manager = getattr(Reference, "all_objects", Reference._base_manager)
 
-    candidate_rows = []
-    for alt_text, value in OLD_GITHUB_FOOTER_VARIANTS:
-        candidate_rows.extend(
-            Reference.objects.filter(
-                alt_text=alt_text,
-                value=value,
-                is_seed_data=True,
-            ).order_by("pk")
-        )
+    variants = [*OLD_GITHUB_FOOTER_VARIANTS, (NEW_ALT_TEXT, NEW_VALUE)]
 
-    if not candidate_rows:
-        candidate_rows.extend(
-            Reference.objects.filter(
-                alt_text=NEW_ALT_TEXT,
-                value=NEW_VALUE,
-                is_seed_data=True,
-            ).order_by("pk")
-        )
+    filters = Q()
+    for alt_text, value in variants:
+        filters |= Q(alt_text=alt_text, value=value)
 
+    candidate_rows = list(manager.filter(filters).order_by("pk"))
     if not candidate_rows:
         return
 
-    keep = candidate_rows[0]
-    duplicate_pks = [row.pk for row in candidate_rows[1:]]
+    keep = next(
+        (
+            row
+            for row in candidate_rows
+            if row.alt_text == NEW_ALT_TEXT and row.value == NEW_VALUE
+        ),
+        candidate_rows[0],
+    )
+
+    duplicate_pks = [row.pk for row in candidate_rows if row.pk != keep.pk]
     if duplicate_pks:
-        Reference.all_objects.filter(pk__in=duplicate_pks)._raw_delete(
-            schema_editor.connection.alias
-        )
+        manager.using(schema_editor.connection.alias).filter(pk__in=duplicate_pks).delete()
 
     if keep.alt_text != NEW_ALT_TEXT or keep.value != NEW_VALUE:
         keep.alt_text = NEW_ALT_TEXT
         keep.value = NEW_VALUE
-        keep.save(update_fields=["alt_text", "value"])
+        keep.save(
+            update_fields=["alt_text", "value"],
+            using=schema_editor.connection.alias,
+        )
 
 
 def noop_reverse(apps, schema_editor) -> None:
