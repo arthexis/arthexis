@@ -1,4 +1,4 @@
-from django.db import migrations
+from django.db import migrations, models
 
 PRODUCT_DEVELOPER_JOURNEY_SLUG = "product-developer-github-access"
 
@@ -86,6 +86,10 @@ def seed_product_developer_github_supervision_steps(apps, schema_editor):
     if journey is None:
         return
 
+    OperatorJourneyStep.objects.filter(journey=journey).update(
+        order=models.F("order") + 1000
+    )
+
     seeded_slugs = {definition["slug"] for definition in STEP_DEFINITIONS}
     steps_by_slug = {
         step.slug: step
@@ -136,10 +140,6 @@ def seed_product_developer_github_supervision_steps(apps, schema_editor):
         .exclude(id__in=ordered_step_ids)
         .order_by("order", "id")
     )
-
-    for step in ordered_steps + remaining_steps:
-        step.order += 1000
-        step.save(update_fields=["order"])
 
     for position, step in enumerate(ordered_steps + remaining_steps, start=1):
         step.order = position
