@@ -428,6 +428,30 @@ def fetch_pull_request(
     )
 
 
+def fetch_pull_request_reviews(
+    *,
+    token: str,
+    owner: str,
+    name: str,
+    number: int,
+) -> Iterator[Mapping[str, object]]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/pulls/{number}/reviews"
+    params: dict[str, RequestParamValue] = {"per_page": 100}
+    yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
+
+
+def fetch_pull_request_review_comments(
+    *,
+    token: str,
+    owner: str,
+    name: str,
+    number: int,
+) -> Iterator[Mapping[str, object]]:
+    endpoint = f"{API_ROOT}/repos/{owner}/{name}/pulls/{number}/comments"
+    params: dict[str, RequestParamValue] = {"per_page": 100}
+    yield from fetch_paginated_items(token=token, endpoint=endpoint, params=params)
+
+
 def _ensure_issue_lock_dir() -> None:
     ISSUE_LOCK_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -639,6 +663,141 @@ def create_pull_request_comment(
         response.status_code,
     )
     return response
+
+
+def submit_pull_request_review_decision(
+    *,
+    owner: str,
+    repository: str,
+    pull_number: int,
+    token: str,
+    decision: str,
+    body: str = "",
+    timeout: int = REQUEST_TIMEOUT,
+) -> requests.Response:
+    """Submit a pull request review decision for an open PR."""
+
+    normalized_decision = str(decision or "").strip().upper()
+    allowed_decisions = {"APPROVE", "REQUEST_CHANGES", "COMMENT"}
+    if normalized_decision not in allowed_decisions:
+        raise ValueError("Review decision must be APPROVE, REQUEST_CHANGES, or COMMENT")
+
+    cleaned_body = body.strip()
+    if normalized_decision in {"REQUEST_CHANGES", "COMMENT"} and not cleaned_body:
+        raise ValueError(
+            "Review body is required for request changes and comment decisions"
+        )
+
+    headers = build_headers(token, user_agent="arthexis-runtime-reporter")
+    payload: dict[str, str] = {"event": normalized_decision}
+    if cleaned_body:
+        payload["body"] = cleaned_body
+
+    url = f"{API_ROOT}/repos/{owner}/{repository}/pulls/{pull_number}/reviews"
+    response = None
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        raise GitHubRepositoryError(str(exc)) from exc
+
+    if not (200 <= response.status_code < 300):
+        try:
+            message = _extract_error_message(response)
+        finally:
+            with contextlib.suppress(Exception):
+                response.close()
+        raise GitHubRepositoryError(message)
+
+    logger.info(
+        "GitHub pull request review submitted for %s/%s#%s with decision %s",
+        owner,
+        repository,
+        pull_number,
+        normalized_decision,
+    )
+    return response
+
+
+def merge_pull_request(
+    *,
+    owner: str,
+    repository: str,
+    pull_number: int,
+    token: str,
+    merge_method: str = "squash",
+    commit_title: str = "",
+    commit_message: str = "",
+    expected_head_sha: str = "",
+    timeout: int = REQUEST_TIMEOUT,
+) -> Mapping[str, object]:
+    """Merge a pull request when GitHub reports it is mergeable."""
+
+    method = str(merge_method or "").strip().lower()
+    if method not in {"merge", "squash", "rebase"}:
+        raise ValueError("Merge method must be merge, squash, or rebase")
+
+    pull = fetch_pull_request(
+        token=token,
+        owner=owner,
+        name=repository,
+        number=pull_number,
+        timeout=timeout,
+    )
+    if str(pull.get("state") or "").lower() != "open":
+        raise GitHubRepositoryError(f"Cannot merge PR #{pull_number} because it is not open")
+
+    mergeable = pull.get("mergeable")
+    if mergeable is None:
+        raise GitHubRepositoryError(
+            f"Cannot merge PR #{pull_number} because mergeability is still being calculated"
+        )
+    if mergeable is not True:
+        mergeable_state = str(pull.get("mergeable_state") or "unknown")
+        raise GitHubRepositoryError(
+            f"Cannot merge PR #{pull_number} while mergeable state is '{mergeable_state}'"
+        )
+    current_head_sha = str((pull.get("head") or {}).get("sha") or "").strip()
+    requested_head_sha = expected_head_sha.strip()
+    if requested_head_sha and current_head_sha != requested_head_sha:
+        raise GitHubRepositoryError(
+            "Pull request head changed while preparing merge; refresh and try again"
+        )
+
+    payload: dict[str, str] = {"merge_method": method}
+    if current_head_sha:
+        payload["sha"] = requested_head_sha or current_head_sha
+    cleaned_title = commit_title.strip()
+    cleaned_message = commit_message.strip()
+    if cleaned_title:
+        payload["commit_title"] = cleaned_title
+    if cleaned_message:
+        payload["commit_message"] = cleaned_message
+
+    headers = build_headers(token, user_agent="arthexis-runtime-reporter")
+    url = f"{API_ROOT}/repos/{owner}/{repository}/pulls/{pull_number}/merge"
+    response = None
+    try:
+        response = requests.put(url, json=payload, headers=headers, timeout=timeout)
+    except requests.RequestException as exc:  # pragma: no cover - network failure
+        raise GitHubRepositoryError(str(exc)) from exc
+
+    try:
+        if not (200 <= response.status_code < 300):
+            raise GitHubRepositoryError(_extract_error_message(response))
+        body = _safe_json(response)
+        if isinstance(body, Mapping):
+            return body
+        raise GitHubRepositoryError("Unable to decode merge response from GitHub")
+    finally:
+        close = getattr(response, "close", None)
+        if callable(close):
+            with contextlib.suppress(Exception):
+                close()
 
 
 def create_issue_comment(

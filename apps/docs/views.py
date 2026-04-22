@@ -1,5 +1,7 @@
 import logging
 import mimetypes
+from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlencode, urlunsplit
@@ -951,6 +953,75 @@ def _parse_github_comment_payload(
     return True, body, None
 
 
+def _summarize_pull_request_reviews(
+    reviews: list[Mapping[str, object]],
+    pull_request: Mapping[str, object],
+) -> dict[str, int]:
+    latest_review_state_by_user: dict[str, str] = {}
+    for review in reviews:
+        user_login = str((review.get("user") or {}).get("login") or "").strip()
+        state = str(review.get("state") or "").strip().upper()
+        if user_login and state in {"APPROVED", "CHANGES_REQUESTED"}:
+            latest_review_state_by_user[user_login] = state
+
+    counts = Counter(latest_review_state_by_user.values())
+
+    requested_reviewers = pull_request.get("requested_reviewers")
+    if isinstance(requested_reviewers, list):
+        counts["pending"] = sum(1 for reviewer in requested_reviewers if isinstance(reviewer, Mapping))
+    else:
+        counts["pending"] = 0
+
+    return {
+        "approved": counts["APPROVED"],
+        "changes_requested": counts["CHANGES_REQUESTED"],
+        "pending": counts["pending"],
+    }
+
+
+def _build_pull_request_merge_guardrails(
+    *,
+    pull_request: Mapping[str, object],
+    checks_state: str,
+) -> tuple[bool, str]:
+    if str(pull_request.get("state") or "").lower() != "open":
+        return False, "Pull request is closed."
+
+    mergeable = pull_request.get("mergeable")
+    mergeable_state = str(pull_request.get("mergeable_state") or "unknown")
+    if mergeable is None:
+        return False, "Mergeability is still being calculated by GitHub."
+    if mergeable is not True:
+        return (
+            False,
+            "GitHub reports this pull request is currently not mergeable "
+            f"({mergeable_state}).",
+        )
+    if checks_state not in {"success", "not_applicable", "unknown"}:
+        return False, f"Checks are not passing (state: {checks_state})."
+    return True, ""
+
+
+def _derive_checks_state(status_payload: Mapping[str, object]) -> str:
+    state = str(status_payload.get("state") or "unknown").strip().lower()
+    total_count = status_payload.get("total_count")
+    if state == "pending" and isinstance(total_count, int) and total_count == 0:
+        return "not_applicable"
+    return state or "unknown"
+
+
+def _summarize_pull_request_review_comments(
+    review_comments: list[Mapping[str, object]],
+) -> dict[str, int]:
+    total = len(review_comments)
+    reply_count = sum(1 for comment in review_comments if comment.get("in_reply_to_id"))
+    thread_count = total - reply_count
+    return {
+        "comments": total,
+        "threads": max(thread_count, 0),
+    }
+
+
 @module_pill_link_validation(_show_docs_navigation_link)
 @security_group_required(*DEVELOPER_DOCUMENTS_SECURITY_GROUP_NAMES)
 def github_issue_viewer(request):
@@ -1015,24 +1086,94 @@ def github_issue_detail(request, number: int):
         )
 
     post_error = ""
-    is_post, comment_body, payload_error = _parse_github_comment_payload(request)
-    if is_post and payload_error:
-        post_error = payload_error
-    elif is_post:
+    if request.method == "POST":
+        action = (request.POST.get("action") or "comment").strip()
         try:
-            github_service.create_issue_comment(
-                connection.owner,
-                connection.repo,
-                issue_number=number,
-                token=connection.token,
-                body=comment_body,
-            )
-            return redirect(reverse("docs:docs-github-item", kwargs={"number": number}))
-        except GitHubRepositoryError as exc:
+            if action == "pr_review":
+                decision_map = {
+                    "approve": "APPROVE",
+                    "request_changes": "REQUEST_CHANGES",
+                    "comment": "COMMENT",
+                }
+                decision = decision_map.get((request.POST.get("decision") or "").strip())
+                if not decision:
+                    raise ValueError("Review decision is required.")
+                review_body = (request.POST.get("review_body") or "").strip()
+                github_service.submit_pull_request_review_decision(
+                    owner=connection.owner,
+                    repository=connection.repo,
+                    pull_number=number,
+                    token=connection.token,
+                    decision=decision,
+                    body=review_body,
+                )
+                return redirect(reverse("docs:docs-github-item", kwargs={"number": number}))
+
+            if action == "pr_merge":
+                merge_pull_request = dict(
+                    github_service.fetch_pull_request(
+                        token=connection.token,
+                        owner=connection.owner,
+                        name=connection.repo,
+                        number=number,
+                    )
+                )
+                merge_head_sha = str(
+                    (merge_pull_request.get("head") or {}).get("sha") or ""
+                ).strip()
+                merge_checks_state = "unknown"
+                if merge_head_sha:
+                    merge_status_payload = github_service.fetch_commit_status_summary(
+                        token=connection.token,
+                        owner=connection.owner,
+                        name=connection.repo,
+                        sha=merge_head_sha,
+                    )
+                    merge_checks_state = _derive_checks_state(merge_status_payload)
+                merge_allowed, merge_guardrail = _build_pull_request_merge_guardrails(
+                    pull_request=merge_pull_request,
+                    checks_state=merge_checks_state,
+                )
+                if not merge_allowed:
+                    raise GitHubRepositoryError(
+                        merge_guardrail or "Merge guardrails prevented this action."
+                    )
+                merge_method = (request.POST.get("merge_method") or "squash").strip()
+                github_service.merge_pull_request(
+                    owner=connection.owner,
+                    repository=connection.repo,
+                    pull_number=number,
+                    token=connection.token,
+                    merge_method=merge_method,
+                    commit_title=(request.POST.get("commit_title") or "").strip(),
+                    commit_message=(request.POST.get("commit_message") or "").strip(),
+                    expected_head_sha=merge_head_sha,
+                )
+                return redirect(reverse("docs:docs-github-item", kwargs={"number": number}))
+
+            is_post, comment_body, payload_error = _parse_github_comment_payload(request)
+            if is_post and payload_error:
+                post_error = payload_error
+            elif is_post:
+                github_service.create_issue_comment(
+                    connection.owner,
+                    connection.repo,
+                    issue_number=number,
+                    token=connection.token,
+                    body=comment_body,
+                )
+                return redirect(reverse("docs:docs-github-item", kwargs={"number": number}))
+        except (GitHubRepositoryError, ValueError) as exc:
             post_error = str(exc)
     item = None
     comments = []
     checks_state = "not_applicable"
+    pull_request = {}
+    review_summary = {"approved": 0, "changes_requested": 0, "pending": 0}
+    review_comment_summary = {"comments": 0, "threads": 0}
+    mergeability = {"mergeable": None, "mergeable_state": "not_applicable"}
+    merge_allowed = False
+    merge_guardrail = ""
     try:
         item = github_service.fetch_issue_or_pull_request(
             token=connection.token,
@@ -1050,13 +1191,38 @@ def github_issue_detail(request, number: int):
             )
         )
         if is_pull_request:
-            pull = github_service.fetch_pull_request(
-                token=connection.token,
-                owner=connection.owner,
-                name=connection.repo,
-                number=number,
+            pull_request = dict(
+                github_service.fetch_pull_request(
+                    token=connection.token,
+                    owner=connection.owner,
+                    name=connection.repo,
+                    number=number,
+                )
             )
-            head_sha = str((pull.get("head") or {}).get("sha") or "").strip()
+            head_sha = str((pull_request.get("head") or {}).get("sha") or "").strip()
+            reviews = list(
+                github_service.fetch_pull_request_reviews(
+                    token=connection.token,
+                    owner=connection.owner,
+                    name=connection.repo,
+                    number=number,
+                )
+            )
+            review_comments = list(
+                github_service.fetch_pull_request_review_comments(
+                    token=connection.token,
+                    owner=connection.owner,
+                    name=connection.repo,
+                    number=number,
+                )
+            )
+            review_summary = _summarize_pull_request_reviews(reviews, pull_request)
+            review_comment_summary = _summarize_pull_request_review_comments(review_comments)
+            mergeability = {
+                "mergeable": pull_request.get("mergeable"),
+                "mergeable_state": str(pull_request.get("mergeable_state") or "unknown"),
+            }
+
             if head_sha:
                 status_payload = github_service.fetch_commit_status_summary(
                     token=connection.token,
@@ -1064,9 +1230,13 @@ def github_issue_detail(request, number: int):
                     name=connection.repo,
                     sha=head_sha,
                 )
-                checks_state = str(status_payload.get("state") or "unknown")
+                checks_state = _derive_checks_state(status_payload)
             else:
                 checks_state = "unknown"
+            merge_allowed, merge_guardrail = _build_pull_request_merge_guardrails(
+                pull_request=pull_request,
+                checks_state=checks_state,
+            )
     except GitHubRepositoryError as exc:
         post_error = post_error or str(exc)
 
@@ -1080,6 +1250,12 @@ def github_issue_detail(request, number: int):
         "error_message": post_error,
         "github_connected": True,
         "item": item,
+        "merge_allowed": merge_allowed,
+        "merge_guardrail": merge_guardrail,
+        "mergeability": mergeability,
+        "pull_request": pull_request,
+        "review_comment_summary": review_comment_summary,
+        "review_summary": review_summary,
         "repository_slug": connection.slug,
         "response_templates": response_templates,
         "title": f"GitHub #{number}",
