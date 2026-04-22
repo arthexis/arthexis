@@ -1,10 +1,20 @@
-{% extends "ocpp/landing_base.html" %}
+{% extends "pages/base.html" %}
 {% load i18n %}
 
 {% block title %}{{ station_model.vendor }} {{ station_model.model_family }} {{ station_model.model }}{% endblock %}
 
 {% block extra_head %}
 <style>
+  .landing-card-section + .landing-card-section {
+    margin-top: 1.25rem;
+  }
+  .landing-card-section-title {
+    font-size: 0.9rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+    margin: 0 0 0.5rem;
+  }
   .spec-chip-grid {
     display: flex;
     flex-wrap: wrap;
