@@ -159,6 +159,45 @@ class ShopCheckoutTests(TestCase):
         self.assertContains(response, "Selected front image for Custom Card is unavailable")
         self.assertEqual(ShopOrder.objects.count(), 0)
 
+    @patch("apps.shop.views._gallery_images_for_checkout")
+    def test_checkout_skips_gallery_fetch_without_customizable_products(self, gallery_images_for_checkout):
+        shop = Shop.objects.create(name="Simple Shop", slug="simple-shop")
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Standard Card",
+            sku="STD-1",
+            unit_price=Decimal("12.00"),
+            stock_quantity=10,
+            supports_gallery_image_printing=False,
+        )
+
+        self.client.post(
+            reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": product.id}),
+            {"quantity": 1},
+            follow=True,
+        )
+
+        checkout_url = reverse("shop:checkout")
+        response = self.client.get(checkout_url)
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            checkout_url,
+            {
+                "customer_name": "Jane Buyer",
+                "customer_email": "jane@example.com",
+                "shipping_address_line1": "42 Main Street",
+                "shipping_address_line2": "",
+                "shipping_city": "Madrid",
+                "shipping_postal_code": "28001",
+                "shipping_country": "Spain",
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ShopOrder.objects.count(), 1)
+        gallery_images_for_checkout.assert_not_called()
+
     def _create_user(self, username: str, email: str):
         from django.contrib.auth import get_user_model
 
@@ -200,6 +239,59 @@ class ShopCheckoutTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, order.order_number)
+
+    def test_order_tracking_prefetches_customization_images(self):
+        shop = Shop.objects.create(name="Tracked Shop", slug="tracked-shop")
+        order = ShopOrder.objects.create(
+            shop=shop,
+            customer_name="User",
+            customer_email="user@example.com",
+            shipping_address_line1="Address",
+            shipping_city="Porto",
+            shipping_postal_code="1234",
+            shipping_country="Portugal",
+        )
+        owner = self._create_user("tracking-owner", "tracking-owner@example.com")
+        front = create_gallery_image(
+            uploaded_file=self._upload_image("tracking-front.jpg"),
+            title="Tracking Front",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+        back = create_gallery_image(
+            uploaded_file=self._upload_image("tracking-back.jpg"),
+            title="Tracking Back",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Tracked Product",
+            sku="TRK-1",
+            unit_price=Decimal("10.00"),
+            stock_quantity=5,
+        )
+        order.items.create(
+            product=product,
+            product_name="Tracked Product",
+            sku="TRK-1",
+            unit_price=Decimal("10.00"),
+            quantity=1,
+            line_total=Decimal("10.00"),
+            front_gallery_image=front,
+            back_gallery_image=back,
+        )
+
+        response = self.client.get(reverse("shop:order_tracking", kwargs={"tracking_token": order.tracking_token}))
+        self.assertEqual(response.status_code, 200)
+
+        tracked_order = response.context["order"]
+        with self.assertNumQueries(0):
+            for item in tracked_order.items.all():
+                if item.front_gallery_image is not None:
+                    _ = item.front_gallery_image.title
+                if item.back_gallery_image is not None:
+                    _ = item.back_gallery_image.title
 
     def test_add_to_cart_clears_items_from_different_shop(self):
         """Adding an item from another shop should clear existing cart items."""

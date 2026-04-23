@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q, QuerySet
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -71,7 +71,7 @@ def _resolve_cart_products(entries: list[dict]) -> tuple[Shop, dict[int, ShopPro
     return shop, products
 
 
-def _gallery_images_for_checkout(request: HttpRequest):
+def _gallery_images_for_checkout(request: HttpRequest) -> QuerySet[GalleryImage]:
     """Return gallery images visible to current user for card customization."""
 
     queryset = GalleryImage.objects.select_related("media_file")
@@ -121,7 +121,11 @@ def _extract_card_customizations(
                 messages.error(request, f"Selected back image for {product.name} is unavailable.")
                 has_errors = True
 
-        sides_selected = int(front_image is not None) + int(back_image is not None)
+        sides_selected = 0
+        if front_image is not None:
+            sides_selected += 1
+        if back_image is not None:
+            sides_selected += 1
         surcharge_per_unit = product.gallery_image_print_price * sides_selected
         customizations[product_id] = {
             "front": front_image,
@@ -268,14 +272,16 @@ def checkout(request: HttpRequest) -> HttpResponse:
         messages.error(request, str(exc))
         return redirect("shop:cart")
 
-    gallery_images_qs = _gallery_images_for_checkout(request)
-    gallery_images = list(gallery_images_qs.order_by("title", "id"))
-    gallery_image_map = {image.id: image for image in gallery_images}
     customization_entries = [
         {"entry": entry, "product": products[entry["product_id"]], "selected_front": "", "selected_back": ""}
         for entry in entries
         if products[entry["product_id"]].supports_gallery_image_printing
     ]
+    gallery_images: list[GalleryImage] = []
+    gallery_image_map: dict[int, GalleryImage] = {}
+    if customization_entries:
+        gallery_images = list(_gallery_images_for_checkout(request).order_by("title", "id"))
+        gallery_image_map = {image.id: image for image in gallery_images}
 
     if request.method == "GET":
         form = CheckoutForm()
@@ -381,5 +387,13 @@ def checkout(request: HttpRequest) -> HttpResponse:
 def order_tracking(request: HttpRequest, tracking_token: str) -> HttpResponse:
     """Show order status and shipping metadata using tracking token."""
 
-    order = get_object_or_404(ShopOrder.objects.prefetch_related("items"), tracking_token=tracking_token)
+    order = get_object_or_404(
+        ShopOrder.objects.prefetch_related(
+            Prefetch(
+                "items",
+                queryset=ShopOrderItem.objects.select_related("front_gallery_image", "back_gallery_image"),
+            )
+        ),
+        tracking_token=tracking_token,
+    )
     return render(request, "shop/order_tracking.html", {"order": order})
