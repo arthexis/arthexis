@@ -331,13 +331,14 @@ const setupSiteHighlightDismissal = () => {
     return;
   }
 
+  let localStorageAvailable = true;
   try {
     if (window.localStorage.getItem(cacheKey) === '1') {
       highlight.remove();
       return;
     }
   } catch (error) {
-    return;
+    localStorageAvailable = false;
   }
 
   const closeLink = highlight.querySelector('[data-highlight-close="true"]');
@@ -346,10 +347,12 @@ const setupSiteHighlightDismissal = () => {
   }
   closeLink.addEventListener('click', event => {
     event.preventDefault();
-    try {
-      window.localStorage.setItem(cacheKey, '1');
-    } catch (error) {
-      // Keep close behavior even if storage is unavailable.
+    if (localStorageAvailable) {
+      try {
+        window.localStorage.setItem(cacheKey, '1');
+      } catch (error) {
+        // Keep close behavior even if storage is unavailable.
+      }
     }
     highlight.remove();
   });

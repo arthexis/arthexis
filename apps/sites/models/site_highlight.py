@@ -19,9 +19,10 @@ class SiteHighlight(models.Model):
         help_text=_("Whether this highlight is eligible to appear on the public site."),
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ("-highlight_date", "-created_at", "-pk")
+        ordering = ("-highlight_date", "-updated_at", "-created_at", "-pk")
         verbose_name = _("Site Highlight")
         verbose_name_plural = _("Site Highlights")
 

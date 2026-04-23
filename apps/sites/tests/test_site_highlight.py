@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from datetime import timedelta
 
 import pytest
 from django.contrib.auth.models import AnonymousUser
@@ -38,6 +39,29 @@ def test_load_latest_site_highlight_prefers_recent_enabled_date() -> None:
 
     assert selected is not None
     assert selected.pk == newest_enabled.pk
+
+
+def test_load_latest_site_highlight_prefers_recent_update_for_same_date() -> None:
+    older = SiteHighlight.objects.create(
+        title="First version",
+        highlight_date=date(2026, 4, 21),
+        story="Initial copy",
+        is_enabled=True,
+    )
+    newer = SiteHighlight.objects.create(
+        title="Second version",
+        highlight_date=date(2026, 4, 21),
+        story="Updated copy",
+        is_enabled=True,
+    )
+    SiteHighlight.objects.filter(pk=older.pk).update(
+        updated_at=newer.updated_at + timedelta(seconds=1)
+    )
+
+    selected = context_processors._load_latest_site_highlight()
+
+    assert selected is not None
+    assert selected.pk == older.pk
 
 
 def test_nav_links_includes_selected_site_highlight(

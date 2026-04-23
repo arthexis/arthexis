@@ -448,11 +448,7 @@ def _load_latest_site_highlight():
     """Return the newest enabled site highlight, if available."""
 
     try:
-        return (
-            SiteHighlight.objects.filter(is_enabled=True)
-            .order_by("-highlight_date", "-created_at", "-pk")
-            .first()
-        )
+        return SiteHighlight.objects.filter(is_enabled=True).first()
     except (OperationalError, ProgrammingError):
         return None
 

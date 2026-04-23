@@ -9,9 +9,9 @@ class SiteHighlightAdmin(admin.ModelAdmin):
     """Admin for public-site highlight messages."""
 
     date_hierarchy = "highlight_date"
-    list_display = ("title", "highlight_date", "is_enabled", "created_at")
+    list_display = ("title", "highlight_date", "is_enabled", "updated_at", "created_at")
     list_filter = ("is_enabled", "highlight_date")
-    ordering = ("-highlight_date", "-created_at")
+    ordering = ("-highlight_date", "-updated_at", "-created_at")
     search_fields = ("title", "story")
     fieldsets = (
         (
@@ -28,8 +28,8 @@ class SiteHighlightAdmin(admin.ModelAdmin):
         (
             _("Audit"),
             {
-                "fields": ("created_at",),
+                "fields": ("updated_at", "created_at"),
             },
         ),
     )
-    readonly_fields = ("created_at",)
+    readonly_fields = ("updated_at", "created_at")
