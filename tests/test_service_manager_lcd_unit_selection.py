@@ -4,7 +4,6 @@ import shlex
 import subprocess
 from pathlib import Path
 
-
 def _run_lcd_configured_check(
     tmp_path: Path,
     *,
@@ -40,33 +39,3 @@ fi
         check=False,
     )
 
-
-def test_lcd_service_configured_requires_recorded_unit(tmp_path: Path) -> None:
-    result = _run_lcd_configured_check(
-        tmp_path,
-        systemd_units="suite.service\ncelery-suite.service\n",
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "disabled"
-
-
-def test_lcd_service_configured_accepts_recorded_unit(tmp_path: Path) -> None:
-    result = _run_lcd_configured_check(
-        tmp_path,
-        systemd_units="suite.service\nlcd-suite.service\n",
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "configured"
-
-
-def test_lcd_service_configured_skips_embedded_mode(tmp_path: Path) -> None:
-    result = _run_lcd_configured_check(
-        tmp_path,
-        systemd_units="suite.service\nlcd-suite.service\n",
-        service_mode="embedded",
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "disabled"

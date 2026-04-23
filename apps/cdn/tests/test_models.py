@@ -5,6 +5,7 @@ from django.db import IntegrityError
 
 from apps.cdn.models import CDNConfiguration
 
+
 def test_jsdelivr_configuration_is_valid_without_distribution_id():
     """Free jsDelivr provider should validate without AWS-only fields."""
 

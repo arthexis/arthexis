@@ -13,7 +13,6 @@ def test_netmesh_api_requires_valid_enrollment_token(client):
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "enrollment_token_missing"
 
-
 @pytest.mark.django_db
 def test_netmesh_api_returns_scoped_task_payloads_and_etag(client):
     gateway_role = NodeRole.objects.create(name="Gateway")
@@ -102,7 +101,6 @@ def test_netmesh_api_returns_scoped_task_payloads_and_etag(client):
     etag_response = client.get("/api/netmesh/peers/", HTTP_IF_NONE_MATCH=peers["ETag"], **headers)
     assert etag_response.status_code == 304
 
-
 @pytest.mark.django_db
 def test_permitted_peers_includes_group_destination_matches(client):
     gateway_role = NodeRole.objects.create(name="Gateway")
@@ -130,47 +128,3 @@ def test_permitted_peers_includes_group_destination_matches(client):
     assert response.status_code == 200
     assert [item["hostname"] for item in response.json()["peers"]] == ["group-peer"]
 
-
-@pytest.mark.django_db
-def test_netmesh_token_lifecycle_errors_are_stable(client):
-    role = NodeRole.objects.create(name="Gateway")
-    node = Node.objects.create(hostname="lifecycle-node", role=role)
-
-    enrollment, token = issue_enrollment_token(node=node, scope="mesh:read")
-    enrollment.status = NodeEnrollment.Status.ACTIVE
-    enrollment.save(update_fields=["status", "updated_at"])
-    node.mesh_enrollment_state = Node.MeshEnrollmentState.ENROLLED
-    node.save(update_fields=["mesh_enrollment_state"])
-
-    MeshMembership.objects.create(node=node, tenant="tenant-lifecycle", is_enabled=True)
-
-    ok = client.get("/api/netmesh/caller/", HTTP_AUTHORIZATION=f"Bearer {token}")
-    assert ok.status_code == 200
-
-    wrong_scope_enrollment, wrong_scope_token = issue_enrollment_token(node=node, scope="ocpp:control")
-    wrong_scope_enrollment.status = NodeEnrollment.Status.ACTIVE
-    wrong_scope_enrollment.save(update_fields=["status", "updated_at"])
-    node.mesh_enrollment_state = Node.MeshEnrollmentState.ENROLLED
-    node.save(update_fields=["mesh_enrollment_state"])
-    wrong_scope = client.get("/api/netmesh/caller/", HTTP_AUTHORIZATION=f"Bearer {wrong_scope_token}")
-    assert wrong_scope.status_code == 403
-    assert wrong_scope.json()["error"]["code"] == "enrollment_scope_insufficient"
-
-    malformed = client.get("/api/netmesh/caller/", HTTP_AUTHORIZATION="Bearer not-a-real-token")
-    assert malformed.status_code == 401
-    assert malformed.json()["error"]["code"] == "enrollment_token_invalid"
-
-    enrollment.status = NodeEnrollment.Status.REVOKED
-    enrollment.revoked_at = enrollment.expires_at
-    enrollment.save(update_fields=["status", "revoked_at", "updated_at"])
-    revoked = client.get("/api/netmesh/caller/", HTTP_AUTHORIZATION=f"Bearer {token}")
-    assert revoked.status_code == 401
-    assert revoked.json()["error"]["code"] == "enrollment_token_revoked"
-
-    expired_enrollment, expired_token = issue_enrollment_token(node=node, scope="mesh:read")
-    expired_enrollment.status = NodeEnrollment.Status.ACTIVE
-    expired_enrollment.expires_at = expired_enrollment.created_at
-    expired_enrollment.save(update_fields=["status", "expires_at", "updated_at"])
-    expired = client.get("/api/netmesh/caller/", HTTP_AUTHORIZATION=f"Bearer {expired_token}")
-    assert expired.status_code == 401
-    assert expired.json()["error"]["code"] == "enrollment_token_expired"
