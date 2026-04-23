@@ -34,7 +34,7 @@ fi
 """
 
     return subprocess.run(
-        ["bash", "-lc", script],
+        ["bash", "-c", script],
         text=True,
         capture_output=True,
         check=False,

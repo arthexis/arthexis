@@ -237,7 +237,7 @@ arthexis_systemd_unit_recorded() {
     return 1
   fi
 
-  grep -Fxq "$unit_name" "$lock_file"
+  grep -Fxq -- "$unit_name" "$lock_file"
 }
 
 arthexis_install_service_stack() {
