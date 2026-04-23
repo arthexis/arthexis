@@ -52,6 +52,7 @@ jobs:
               });
 
               const linkedPullRequests = new Map();
+              const reopenedTimestamps = [];
 
               const getSourcePullRequest = (event) => {
                 const sourceIssue = event.source?.issue;
@@ -83,6 +84,13 @@ jobs:
               };
 
               for (const event of orderedEvents) {
+                if (event.event === 'reopened') {
+                  const reopenedTime = Date.parse(event.created_at ?? '');
+                  if (!Number.isNaN(reopenedTime)) {
+                    reopenedTimestamps.push(reopenedTime);
+                  }
+                }
+
                 if (!['cross-referenced', 'connected', 'disconnected'].includes(event.event)) {
                   continue;
                 }
@@ -121,10 +129,18 @@ jobs:
                     continue;
                   }
 
+                  if (
+                    pullRequest.base?.repo?.owner?.login !== owner ||
+                    pullRequest.base?.repo?.name !== repo
+                  ) {
+                    continue;
+                  }
+
                   mergedToDefaultBranch.push({
                     number: pullRequest.number,
                     owner: linkedPullRequest.owner,
                     repo: linkedPullRequest.repo,
+                    mergedAt: pullRequest.merged_at,
                   });
                 } catch (error) {
                   if (error.status === 404) {
@@ -141,6 +157,19 @@ jobs:
               if (mergedToDefaultBranch.length === 0) {
                 core.info(`#${issue.number}: linked PR(s) found, but none merged to ${defaultBranch}.`);
                 continue;
+              }
+
+              const latestReopenedAt = reopenedTimestamps.length > 0 ? Math.max(...reopenedTimestamps) : null;
+              if (latestReopenedAt !== null) {
+                const latestMergedAt = Math.max(
+                  ...mergedToDefaultBranch.map((pullRequest) => Date.parse(pullRequest.mergedAt ?? '')),
+                );
+                if (!Number.isNaN(latestMergedAt) && latestReopenedAt > latestMergedAt) {
+                  core.info(
+                    `#${issue.number}: skipped because issue was reopened after linked PR(s) merged to ${defaultBranch}.`,
+                  );
+                  continue;
+                }
               }
 
               const linkedPullsText = mergedToDefaultBranch
