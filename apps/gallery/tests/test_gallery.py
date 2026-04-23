@@ -261,6 +261,15 @@ class GalleryManagementPermissionTests(TestCase):
         self.assertEqual(assignment.float_value, 0.8)
 
 
+class GalleryCategoryDefaultsTests(TestCase):
+    def test_default_gallery_categories_are_seeded(self):
+        self.assertQuerySetEqual(
+            GalleryCategory.objects.filter(slug__in=("artist", "designer", "developer", "template")).order_by("slug"),
+            ["artist", "designer", "developer", "template"],
+            transform=lambda category: category.slug,
+        )
+
+
 class GalleryImageSharingTests(TestCase):
     def setUp(self):
         self.owner = get_user_model().objects.create_user(username="owner-share", password="pw")
