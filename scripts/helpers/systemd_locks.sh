@@ -222,6 +222,24 @@ arthexis_read_systemd_unit_records() {
   cat "$lock_file"
 }
 
+arthexis_systemd_unit_recorded() {
+  local lock_dir="$1"
+  local unit_name="$2"
+
+  if [ -z "$lock_dir" ] || [ -z "$unit_name" ]; then
+    return 1
+  fi
+
+  local lock_file
+  lock_file="$(_arthexis_systemd_lock_file "$lock_dir")"
+
+  if [ ! -f "$lock_file" ]; then
+    return 1
+  fi
+
+  grep -Fxq -- "$unit_name" "$lock_file"
+}
+
 arthexis_install_service_stack() {
   local base_dir="$1"
   local lock_dir="$2"

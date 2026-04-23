@@ -38,8 +38,6 @@ class StatusResetNoDatabaseTests(SimpleTestCase):
 
 class StatusResetTests(TransactionTestCase):
     reset_sequences = True
-
-    @pytest.mark.slow
     def test_clear_stale_cached_statuses_resets_expected_fields(self):
         now = timezone.now()
         stale_non_placeholder = Charger.objects.create(
@@ -90,8 +88,6 @@ class StatusResetTests(TransactionTestCase):
         assert fresh.last_status_vendor_info == "vendor"
         assert fresh.last_status_timestamp == now
         assert fresh.last_error_code == "SomeError"
-
-    @pytest.mark.slow
     def test_session_lock_cleanup_runs_for_expired_lock(self):
         now = timezone.now()
         lock_dir = Path(mkdtemp())

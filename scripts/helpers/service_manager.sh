@@ -327,6 +327,22 @@ arthexis_lcd_feature_enabled() {
   return 0
 }
 
+arthexis_lcd_service_configured() {
+  local lock_dir="$1"
+  local service_name="$2"
+  local service_mode="${3:-$ARTHEXIS_SERVICE_MODE_EMBEDDED}"
+
+  if [ -z "$lock_dir" ] || [ -z "$service_name" ]; then
+    return 1
+  fi
+
+  if [ "$service_mode" != "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+    return 1
+  fi
+
+  arthexis_systemd_unit_recorded "$lock_dir" "lcd-${service_name}.service"
+}
+
 arthexis_enable_lcd_feature_flag() {
   local lock_dir="$1"
   if [ -z "$lock_dir" ]; then

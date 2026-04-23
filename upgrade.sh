@@ -643,6 +643,10 @@ lcd_service_lockfiles_present() {
   return 1
 }
 
+lcd_service_configured() {
+  arthexis_lcd_service_configured "$LOCK_DIR" "$1" "$SERVICE_MANAGEMENT_MODE"
+}
+
 lcd_systemd_unit_present() {
   _prefixed_systemd_unit_present "lcd" "$1"
 }
@@ -2093,13 +2097,15 @@ if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_M
   fi
 fi
 
-if [ -n "$SERVICE_NAME" ] && lcd_systemd_unit_present "$SERVICE_NAME"; then
-  arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
-elif [ -n "$SERVICE_NAME" ] && [ "$NODE_ROLE_NAME" = "Control" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-  arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
+if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+  if lcd_service_configured "$SERVICE_NAME"; then
+    arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
+  else
+    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "lcd-${SERVICE_NAME}.service"
+  fi
 fi
 
-if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && lcd_systemd_unit_present "$SERVICE_NAME"; then
+if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && lcd_service_configured "$SERVICE_NAME"; then
   clear_lcd_lockfiles
 fi
 

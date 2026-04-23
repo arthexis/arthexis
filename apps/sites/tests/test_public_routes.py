@@ -82,8 +82,6 @@ def test_client_report_download_enforces_login_and_ownership(client, monkeypatch
     staff_response = client.get(download_url, follow=True)
     assert staff_response.status_code == 200
     assert staff_response["Content-Type"] == "application/pdf"
-
-@pytest.mark.integration
 def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
     url = reverse("pages:whatsapp-webhook")
 
@@ -99,8 +97,6 @@ def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
         content_type="application/json",
     )
     assert disabled.status_code == 404
-
-@pytest.mark.integration
 @pytest.mark.parametrize(
     ("path", "expected_status"),
     [
@@ -117,8 +113,6 @@ def test_legacy_language_redirect_rejects_scheme_relative_targets(
     assert response.status_code == expected_status
     if response.status_code in {301, 302, 307, 308}:
         assert not response["Location"].startswith("//")
-
-@pytest.mark.integration
 @pytest.mark.parametrize(
     ("payload", "expected_status"),
     [

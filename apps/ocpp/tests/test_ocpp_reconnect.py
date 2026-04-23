@@ -157,7 +157,6 @@ async def _wait_for_pending_result(message_id: str, timeout: float = 2.0):
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-@pytest.mark.slow
 def test_reconnect_resumes_pending_call(fake_state_redis, temp_store_dirs):
     async def run_scenario():
         serial = "CP-RESUME"
@@ -195,7 +194,6 @@ def test_reconnect_resumes_pending_call(fake_state_redis, temp_store_dirs):
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-@pytest.mark.slow
 def test_reconnect_resumes_pending_call_case_insensitive(
     fake_state_redis, temp_store_dirs
 ):
@@ -235,7 +233,6 @@ def test_reconnect_resumes_pending_call_case_insensitive(
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-@pytest.mark.slow
 def test_replayed_result_keeps_pending_queue_intact(fake_state_redis, temp_store_dirs):
     async def run_scenario():
         serial = "CP-REPLAY"
@@ -277,7 +274,6 @@ def test_replayed_result_keeps_pending_queue_intact(fake_state_redis, temp_store
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-@pytest.mark.slow
 def test_unexpected_message_does_not_drop_restored_pending(fake_state_redis, temp_store_dirs):
     async def run_scenario():
         serial = "CP-UNEXPECTED"

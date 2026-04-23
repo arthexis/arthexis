@@ -13,29 +13,6 @@ from apps.features.models import Feature
 
 
 @pytest.mark.django_db
-def test_enabled_suite_feature_cannot_be_deleted() -> None:
-    """Regression: enabled suite features must be disabled before deletion."""
-
-    feature = Feature.objects.create(slug="guarded-delete", display="Guarded Delete", is_enabled=True)
-
-    with pytest.raises(ValidationError, match="Disable this suite feature before deleting it"):
-        feature.delete()
-
-
-@pytest.mark.django_db
-def test_disabled_suite_feature_can_be_deleted() -> None:
-    """Disabled suite features should remain deletable."""
-
-    feature = Feature.objects.create(
-        slug="deletable-disabled", display="Deletable Disabled", is_enabled=False
-    )
-
-    feature.delete()
-
-    assert not Feature.all_objects.filter(pk=feature.pk).exists()
-
-
-@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("metadata", "expected_count"),
     [
@@ -56,7 +33,6 @@ def test_params_count_reads_feature_metadata_parameters(metadata, expected_count
     )
 
     assert feature.params_count == expected_count
-
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(

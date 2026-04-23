@@ -22,7 +22,7 @@ from apps.nodes.utils import FeatureChecker
 from apps.sites.utils import user_in_site_operator_group
 from utils.sites import get_site
 
-from .models import SiteTemplate
+from .models import SiteHighlight, SiteTemplate
 
 _FAVICON_DIR = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data"
 _FAVICON_FILENAMES = {
@@ -281,6 +281,28 @@ def _select_primary_landings(module_path: str, landings: list):
     return landings
 
 
+def _sort_module_landings(module_path: str, landings: list):
+    """Return landings sorted by module-specific navigation priorities."""
+
+    normalized_module_path = module_path.rstrip("/") or "/"
+    if normalized_module_path != "/ocpp":
+        return landings
+
+    path_priority = {
+        "/ocpp/cpms/dashboard": 0,
+        "/ocpp/evcs/simulator": 1,
+        "/ocpp/charge-point-models": 2,
+    }
+
+    return sorted(
+        landings,
+        key=lambda landing: (
+            path_priority.get(landing.path.rstrip("/") or "/", len(path_priority)),
+            landing.path,
+        ),
+    )
+
+
 def _assign_module_menu(module):
     """Normalize special module menu labels in place.
 
@@ -355,7 +377,10 @@ def _annotate_module_landings(
             setattr(landing, key, value)
         landings.append(landing)
 
-    landings = _select_primary_landings(module.path, landings)
+    landings = _sort_module_landings(
+        module.path,
+        _select_primary_landings(module.path, landings),
+    )
 
     if not landings:
         return None
@@ -417,6 +442,15 @@ def _load_header_references(request, site, node):
         )
     except (OperationalError, ProgrammingError):
         return []
+
+
+def _load_latest_site_highlight():
+    """Return the newest enabled site highlight, if available."""
+
+    try:
+        return SiteHighlight.objects.filter(is_enabled=True).first()
+    except (OperationalError, ProgrammingError):
+        return None
 
 
 def _build_chat_context(site, user, *, pages_chat_enabled: bool):
@@ -574,6 +608,7 @@ def nav_links(request):
         "current_module": current_module,
         "favicon_url": _select_favicon_url(current_module, site, node),
         "header_references": _load_header_references(request, site, node),
+        "site_highlight": _load_latest_site_highlight(),
         "login_url": resolve_url(settings.LOGIN_URL),
         "site_template": _select_site_template(site, user),
         "operator_interface_mode": operator_interface_mode,

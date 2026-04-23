@@ -4,7 +4,9 @@ import pytest
 from channels.db import database_sync_to_async
 from django.utils import timezone
 
-from apps.ocpp.call_result_handlers.authorization import handle_get_local_list_version_result
+from apps.ocpp.call_result_handlers.authorization import (
+    handle_get_local_list_version_result,
+)
 from apps.ocpp.call_result_handlers.certificates import handle_certificate_signed_result
 from apps.ocpp.call_result_handlers.configuration import (
     handle_change_availability_result,
@@ -21,22 +23,20 @@ from apps.ocpp.call_result_handlers.profiles import (
 )
 from apps.ocpp.call_result_handlers.transactions import handle_reserve_now_result
 from apps.ocpp.consumers import CSMSConsumer
-from apps.ocpp.models.location import Location
-
 from apps.ocpp.models import (
-    CPReservation,
+    CertificateOperation,
     Charger,
     ChargerLogRequest,
     ChargingProfile,
-    CertificateOperation,
     CPFirmware,
     CPFirmwareDeployment,
+    CPReservation,
 )
+from apps.ocpp.models.location import Location
 
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.slow
 async def test_configuration_domain_tracks_status_and_resilience():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.charger_id = "CFG-1"
@@ -91,7 +91,6 @@ async def test_firmware_domain_updates_deployment():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.slow
 async def test_transactions_domain_updates_reservation_and_status_mapping():
     location = await database_sync_to_async(Location.objects.create)(name="Depot")
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="TRX-1", connector_id=1, location=location)
@@ -120,7 +119,6 @@ async def test_transactions_domain_updates_reservation_and_status_mapping():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.slow
 async def test_authorization_domain_handles_unknown_payloads():
     consumer = CSMSConsumer(scope={}, receive=None, send=None)
     consumer.charger_id = "AUTH-1"
@@ -141,7 +139,6 @@ async def test_authorization_domain_handles_unknown_payloads():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.slow
 async def test_profiles_domain_updates_profile_and_ignores_malformed_variable_payload():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="PROF-1")
     profile_obj = await database_sync_to_async(ChargingProfile.objects.create)(
@@ -202,7 +199,6 @@ async def test_certificates_domain_updates_operation_status():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.slow
 async def test_diagnostics_domain_updates_log_request_and_diagnostics_metadata():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="DIA-1")
     request = await database_sync_to_async(ChargerLogRequest.objects.create)(

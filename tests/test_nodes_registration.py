@@ -455,7 +455,6 @@ def test_register_visitor_proxy_reports_partial_failure_on_visitor_confirmation(
 
 
 @pytest.mark.django_db
-@pytest.mark.integration
 def test_register_visitor_telemetry_logs(client, caplog):
     """Telemetry endpoint should record structured registration diagnostics."""
     url = reverse("register-telemetry")
@@ -481,7 +480,6 @@ def test_register_visitor_telemetry_logs(client, caplog):
 
 
 @pytest.mark.django_db
-@pytest.mark.integration
 def test_register_visitor_telemetry_adds_route_ip(client, caplog, monkeypatch):
     """Telemetry logging should include the routed host IP when available."""
     url = reverse("register-telemetry")

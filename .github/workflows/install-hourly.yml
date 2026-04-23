@@ -3,7 +3,6 @@ name: Install Health Check
 env:
   PYTHONDONTWRITEBYTECODE: '1'
   NODE_OPTIONS: '--no-deprecation'
-  ARTHEXIS_DB_BACKEND: sqlite
   PYTEST_WORKERS: 'auto'
 
 concurrency:
@@ -17,19 +16,93 @@ on:
 
 jobs:
   install:
-    name: install (${{ matrix.role }})
+    name: install (${{ matrix.os_flavor }}, ${{ matrix.db_backend }}, ${{ matrix.role }})
     runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.container_image }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - role: terminal
+          - os_flavor: ubuntu
+            container_image: ubuntu:24.04
+            db_backend: sqlite
+            role: terminal
             install_args: --terminal
-          - role: control
+          - os_flavor: ubuntu
+            container_image: ubuntu:24.04
+            db_backend: sqlite
+            role: control
             install_args: --control
-          - role: satellite
+          - os_flavor: ubuntu
+            container_image: ubuntu:24.04
+            db_backend: sqlite
+            role: satellite
             install_args: --satellite
-          - role: watchtower
+          - os_flavor: ubuntu
+            container_image: ubuntu:24.04
+            db_backend: sqlite
+            role: watchtower
+            install_args: --watchtower
+          - os_flavor: ubuntu
+            container_image: ubuntu:24.04
+            db_backend: postgres
+            role: terminal
+            install_args: --terminal
+          - os_flavor: ubuntu
+            container_image: ubuntu:24.04
+            db_backend: postgres
+            role: control
+            install_args: --control
+          - os_flavor: ubuntu
+            container_image: ubuntu:24.04
+            db_backend: postgres
+            role: satellite
+            install_args: --satellite
+          - os_flavor: ubuntu
+            container_image: ubuntu:24.04
+            db_backend: postgres
+            role: watchtower
+            install_args: --watchtower
+          - os_flavor: debian
+            container_image: debian:12
+            db_backend: sqlite
+            role: terminal
+            install_args: --terminal
+          - os_flavor: debian
+            container_image: debian:12
+            db_backend: sqlite
+            role: control
+            install_args: --control
+          - os_flavor: debian
+            container_image: debian:12
+            db_backend: sqlite
+            role: satellite
+            install_args: --satellite
+          - os_flavor: debian
+            container_image: debian:12
+            db_backend: sqlite
+            role: watchtower
+            install_args: --watchtower
+          - os_flavor: debian
+            container_image: debian:12
+            db_backend: postgres
+            role: terminal
+            install_args: --terminal
+          - os_flavor: debian
+            container_image: debian:12
+            db_backend: postgres
+            role: control
+            install_args: --control
+          - os_flavor: debian
+            container_image: debian:12
+            db_backend: postgres
+            role: satellite
+            install_args: --satellite
+          - os_flavor: debian
+            container_image: debian:12
+            db_backend: postgres
+            role: watchtower
             install_args: --watchtower
     permissions:
       contents: read
@@ -43,9 +116,35 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: arthexis
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d arthexis"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
-      OCPP_STATE_REDIS_URL: redis://localhost:6379
+      ARTHEXIS_DB_BACKEND: ${{ matrix.db_backend }}
+      OCPP_STATE_REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      POSTGRES_DB: arthexis
+      POSTGRES_HOST: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_USER: postgres
     steps:
+      - name: Install base system dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates curl git sudo python3 python3-venv
       - uses: actions/checkout@v6
         with:
           clean: false
@@ -57,16 +156,18 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          key: pip-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
           restore-keys: |
-            pip-${{ runner.os }}-
+            pip-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ steps.setup-python.outputs.python-version }}-
+            pip-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-
+            pip-${{ runner.os }}-${{ matrix.os_flavor }}-
       - name: Cache virtualenv
         uses: actions/cache@v5
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ matrix.role }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
+          key: venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.role }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
           restore-keys: |
-            venv-${{ runner.os }}-${{ matrix.role }}-${{ steps.setup-python.outputs.python-version }}-
+            venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.role }}-${{ steps.setup-python.outputs.python-version }}-
       - name: Validate pyproject dependency ordering
         run: |
           python "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
@@ -76,11 +177,16 @@ jobs:
       - name: Install redis CLI
         if: ${{ matrix.role == 'control' || matrix.role == 'satellite' || matrix.role == 'watchtower' }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends redis-tools
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends redis-tools
+          else
+            apt-get update
+            apt-get install -y --no-install-recommends redis-tools
+          fi
       - name: Install suite from repository
         run: |
-          ./install.sh ${{ matrix.install_args }} --no-start
+          ./install.sh ${{ matrix.install_args }} --embedded --no-start
       - name: Refresh environment dependencies
         run: |
           ./env-refresh.sh
@@ -150,12 +256,12 @@ jobs:
           ./scripts/preflight-env.sh --pytest
           source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
-          python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 --junitxml=pytest-junit.xml -m "not slow and not integration" | tee pytest.log
+          python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 --junitxml=pytest-junit.xml | tee pytest.log
       - name: Upload pytest log
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: install-hourly-pytest-results-${{ matrix.role }}
+          name: install-hourly-pytest-results-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.role }}
           path: |
             pytest.log
             pytest-junit.xml
@@ -180,7 +286,7 @@ jobs:
             const marker = '<!-- install-health-check-failure -->';
             let runData = null;
             let failedSteps = '';
-            let failedRoles = '';
+            let failedTargets = '';
             let failedJobCount = 0;
 
             try {
@@ -199,14 +305,14 @@ jobs:
               });
 
               const failedJobs = jobsData.jobs.filter((job) => job.conclusion === 'failure');
-              const failedRoleSet = new Set();
+              const failedTargetSet = new Set();
               failedJobs.forEach((job) => {
                 const match = /^install \((.+)\)$/.exec(job.name || '');
                 if (match?.[1]) {
-                  failedRoleSet.add(match[1]);
+                  failedTargetSet.add(match[1]);
                 }
               });
-              failedRoles = Array.from(failedRoleSet).sort().join(', ');
+              failedTargets = Array.from(failedTargetSet).sort().join(', ');
               failedJobCount = failedJobs.length;
               failedSteps = failedJobs
                 .map((job) => {
@@ -240,7 +346,7 @@ jobs:
               '',
               '## Failure details',
               '',
-              failedRoles ? `- Failed roles: ${failedRoles}` : '- Failed roles: Unable to determine failed roles from workflow metadata.',
+              failedTargets ? `- Failed matrix targets: ${failedTargets}` : '- Failed matrix targets: Unable to determine failed matrix targets from workflow metadata.',
               failedJobCount ? `- Failed jobs: ${failedJobCount}` : '- Failed jobs: Unable to determine failed jobs from workflow metadata.',
               '',
               failedSteps ? failedSteps : '- Unable to identify failed steps from workflow metadata.',
@@ -266,7 +372,7 @@ jobs:
                   `- Commit: ${context.sha}`,
                   `- Run attempt: ${runData?.run_attempt ?? 1}`,
                   '',
-                  failedRoles ? `### Failed roles\n- ${failedRoles}` : '### Failed roles\n- Unable to determine failed roles from workflow metadata.',
+                  failedTargets ? `### Failed matrix targets\n- ${failedTargets}` : '### Failed matrix targets\n- Unable to determine failed matrix targets from workflow metadata.',
                   failedJobCount ? `### Failed jobs\n- ${failedJobCount}` : '### Failed jobs\n- Unable to determine failed jobs from workflow metadata.',
                   '',
                   failedSteps ? '### Failed steps\n' + failedSteps : '### Failed steps\n- Unable to identify failed steps from workflow metadata.'
