@@ -536,6 +536,28 @@ body.user-story-open {
   transition: transform 0.25s ease;
 }
 
+.user-story-card .card-title {
+  color: var(--site-support);
+}
+
+.user-story-card .btn-primary {
+  --bs-btn-bg: var(--site-support);
+  --bs-btn-border-color: var(--site-support);
+  --bs-btn-hover-bg: var(--site-support-strong);
+  --bs-btn-hover-border-color: var(--site-support-strong);
+  --bs-btn-active-bg: var(--site-support-strong);
+  --bs-btn-active-border-color: var(--site-support-strong);
+  --bs-btn-focus-shadow-rgb: var(--site-support-rgb);
+  --bs-btn-color: var(--site-support-icon);
+  --bs-btn-hover-color: var(--site-support-icon);
+  --bs-btn-active-color: var(--site-support-icon);
+}
+
+.user-story-card .btn-link {
+  --bs-btn-color: var(--site-support);
+  --bs-btn-hover-color: var(--site-support-strong);
+}
+
 .user-story-card,
 .user-story-card *,
 .user-story-card *::before,
