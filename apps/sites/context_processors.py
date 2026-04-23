@@ -450,11 +450,10 @@ def _load_latest_site_highlight():
         return None
 
 
-def _build_chat_context(site, user):
+def _build_chat_context(user):
     """Return chat follow-up preference context for the current request.
 
     Parameters:
-        site: Current Django site-like object.
         user: Current request user.
     Returns:
         dict[str, object]: Chat preference flags for feedback forms.
@@ -590,7 +589,6 @@ def nav_links(request):
     }
     context.update(
         _build_chat_context(
-            site,
             user,
         )
     )

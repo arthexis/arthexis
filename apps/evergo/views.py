@@ -13,7 +13,6 @@ from urllib.request import urlopen
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
@@ -87,8 +86,7 @@ def _build_public_widget_context(*, user) -> dict[str, object]:
     """
 
     feedback_ingestion_enabled = is_suite_feature_enabled("feedback-ingestion", default=True)
-    site = Site.objects.get_current()
-    chat_context = _build_chat_context(site, user)
+    chat_context = _build_chat_context(user)
     return {
         "chat_opt_in_checked": chat_context["chat_opt_in_checked"],
         "feedback_ingestion_enabled": feedback_ingestion_enabled,
