@@ -25,6 +25,7 @@ from django.utils import timezone
 from apps.imager.models import RaspberryPiImageArtifact
 
 TARGET_RPI4B = "rpi-4b"
+DEFAULT_RECOVERY_SSH_USER = "arthe"
 
 BOOTSTRAP_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
@@ -37,6 +38,33 @@ fi
 cd "$APP_HOME"
 ./env-refresh.sh --deps-only
 ./start.sh
+"""
+
+RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH = "/usr/local/share/arthexis/recovery_authorized_keys"
+RECOVERY_SSHD_CONFIG_REMOTE_PATH = "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf"
+
+RECOVERY_ACCESS_SCRIPT = """#!/usr/bin/env bash
+set -euo pipefail
+
+RECOVERY_USER={ssh_user}
+RECOVERY_HOME="/home/$RECOVERY_USER"
+
+if ! id -u "$RECOVERY_USER" >/dev/null 2>&1; then
+  useradd --create-home --shell /bin/bash "$RECOVERY_USER"
+fi
+
+passwd -l "$RECOVERY_USER" >/dev/null 2>&1 || true
+install -d -m 700 -o "$RECOVERY_USER" -g "$RECOVERY_USER" "$RECOVERY_HOME/.ssh"
+install -m 600 -o "$RECOVERY_USER" -g "$RECOVERY_USER" {authorized_keys_path} "$RECOVERY_HOME/.ssh/authorized_keys"
+systemctl enable ssh
+systemctl restart ssh || systemctl start ssh
+"""
+
+RECOVERY_SSHD_CONFIG = """PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin no
 """
 
 SYSTEMD_SERVICE = """[Unit]
@@ -56,6 +84,10 @@ WantedBy=multi-user.target
 
 FIRST_RUN_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
+
+if [ -x /usr/local/bin/arthexis-recovery-access.sh ]; then
+  /usr/local/bin/arthexis-recovery-access.sh
+fi
 
 chmod +x /usr/local/bin/arthexis-bootstrap.sh
 systemctl daemon-reload
@@ -108,6 +140,20 @@ class WriteResult:
     source_sha256: str
     written_sha256: str
     verified: bool
+
+
+@dataclass(frozen=True)
+class RecoverySSHAccess:
+    """Recovery SSH access configuration baked into an image artifact."""
+
+    username: str
+    authorized_keys: tuple[str, ...]
+
+    @property
+    def enabled(self) -> bool:
+        """Return True when recovery SSH provisioning should be injected."""
+
+        return bool(self.username and self.authorized_keys)
 
 
 @dataclass(frozen=True)
@@ -465,7 +511,31 @@ def _guestfish_write(image_path: Path, local_path: Path, remote_path: str, chmod
         raise ImagerBuildError(result.stderr.strip() or "guestfish failed while writing files")
 
 
-def _customize_image(image_path: Path, *, git_url: str) -> None:
+def _normalize_recovery_ssh_access(
+    *,
+    recovery_ssh_user: str,
+    recovery_authorized_keys: list[str] | tuple[str, ...] | None,
+) -> RecoverySSHAccess | None:
+    """Normalize build input into an optional recovery SSH config."""
+
+    normalized_keys = tuple(
+        line.strip()
+        for line in (recovery_authorized_keys or ())
+        if str(line).strip()
+    )
+    if not normalized_keys:
+        return None
+
+    username = (recovery_ssh_user or "").strip() or DEFAULT_RECOVERY_SSH_USER
+    return RecoverySSHAccess(username=username, authorized_keys=normalized_keys)
+
+
+def _customize_image(
+    image_path: Path,
+    *,
+    git_url: str,
+    recovery_ssh_access: RecoverySSHAccess | None = None,
+) -> None:
     """Inject bootstrap scripts and systemd units into the image."""
 
     _ensure_guestfish()
@@ -481,6 +551,42 @@ def _customize_image(image_path: Path, *, git_url: str) -> None:
 
         _guestfish_write(image_path, bootstrap, "/usr/local/bin/arthexis-bootstrap.sh", chmod_mode="0755")
         _guestfish_write(image_path, service, "/etc/systemd/system/arthexis-bootstrap.service")
+        if recovery_ssh_access and recovery_ssh_access.enabled:
+            recovery_keys = work_dir / "recovery_authorized_keys"
+            recovery_script = work_dir / "arthexis-recovery-access.sh"
+            recovery_sshd_config = work_dir / "arthexis-recovery.conf"
+
+            recovery_keys.write_text(
+                "\n".join(recovery_ssh_access.authorized_keys) + "\n",
+                encoding="utf-8",
+            )
+            recovery_script.write_text(
+                RECOVERY_ACCESS_SCRIPT.format(
+                    ssh_user=recovery_ssh_access.username,
+                    authorized_keys_path=RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH,
+                ),
+                encoding="utf-8",
+            )
+            recovery_sshd_config.write_text(RECOVERY_SSHD_CONFIG, encoding="utf-8")
+
+            _guestfish_write(
+                image_path,
+                recovery_keys,
+                RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH,
+                chmod_mode="0600",
+            )
+            _guestfish_write(
+                image_path,
+                recovery_script,
+                "/usr/local/bin/arthexis-recovery-access.sh",
+                chmod_mode="0755",
+            )
+            _guestfish_write(
+                image_path,
+                recovery_sshd_config,
+                RECOVERY_SSHD_CONFIG_REMOTE_PATH,
+                chmod_mode="0644",
+            )
         try:
             _guestfish_write(image_path, firstrun, "/boot/firstrun.sh", chmod_mode="0755")
         except ImagerBuildError:
@@ -741,6 +847,8 @@ def build_rpi4b_image(
     build_engine: str = "arthexis-bootstrap",
     profile: str = "bootstrap",
     profile_metadata: dict[str, object] | None = None,
+    recovery_ssh_user: str = "",
+    recovery_authorized_keys: list[str] | tuple[str, ...] | None = None,
 ) -> BuildResult:
     """Build and register a Raspberry Pi 4B Arthexis image artifact."""
 
@@ -761,6 +869,10 @@ def build_rpi4b_image(
         build_profile=selected_profile,
         profile_metadata=normalized_profile_metadata,
     )
+    recovery_ssh_access = _normalize_recovery_ssh_access(
+        recovery_ssh_user=recovery_ssh_user,
+        recovery_authorized_keys=recovery_authorized_keys,
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     output_filename = f"{name}-{TARGET_RPI4B}.img"
@@ -772,7 +884,11 @@ def build_rpi4b_image(
         shutil.copyfile(source_path, output_path)
 
     if customize:
-        _customize_image(output_path, git_url=git_url)
+        _customize_image(
+            output_path,
+            git_url=git_url,
+            recovery_ssh_access=recovery_ssh_access,
+        )
 
     sha256 = _sha256_for_file(output_path)
     size_bytes = output_path.stat().st_size
@@ -797,6 +913,13 @@ def build_rpi4b_image(
                     "bootstrap_script": "/usr/local/bin/arthexis-bootstrap.sh",
                     "first_boot_script": "firstrun.sh",
                     "git_url": git_url,
+                    "recovery_ssh": {
+                        "enabled": bool(recovery_ssh_access and recovery_ssh_access.enabled),
+                        "user": recovery_ssh_access.username if recovery_ssh_access else "",
+                        "authorized_key_count": len(recovery_ssh_access.authorized_keys)
+                        if recovery_ssh_access
+                        else 0,
+                    },
                 },
                 "build_engine": build_engine,
                 "build_profile": profile,

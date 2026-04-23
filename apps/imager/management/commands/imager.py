@@ -7,6 +7,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.imager.models import RaspberryPiImageArtifact
 from apps.imager.services import (
+    DEFAULT_RECOVERY_SSH_USER,
     ImagerBuildError,
     build_rpi4b_image,
     list_block_devices,
@@ -66,6 +67,20 @@ class Command(BaseCommand):
             default="{}",
             help="JSON object carrying profile metadata, required artifacts, and rollout fields.",
         )
+        build_parser.add_argument(
+            "--recovery-ssh-user",
+            default="",
+            help=(
+                "Recovery SSH username baked into the image when --recovery-authorized-key-file is used "
+                f"(default: {DEFAULT_RECOVERY_SSH_USER})."
+            ),
+        )
+        build_parser.add_argument(
+            "--recovery-authorized-key-file",
+            action="append",
+            default=[],
+            help="Path to a public-key file to authorize for recovery SSH access. May be repeated.",
+        )
 
         subparsers.add_parser("devices", help="List candidate block devices for image writing.")
         subparsers.add_parser("list", help="List generated Raspberry Pi image artifacts.")
@@ -115,6 +130,13 @@ class Command(BaseCommand):
         if not isinstance(profile_metadata, dict):
             raise CommandError("--profile-metadata must decode to a JSON object.")
 
+        recovery_authorized_keys = self._read_recovery_authorized_keys(
+            [str(path) for path in options.get("recovery_authorized_key_file", [])]
+        )
+        recovery_ssh_user = str(options["recovery_ssh_user"]).strip()
+        if recovery_authorized_keys:
+            recovery_ssh_user = recovery_ssh_user or DEFAULT_RECOVERY_SSH_USER
+
         try:
             result = build_rpi4b_image(
                 name=str(options["name"]),
@@ -126,6 +148,8 @@ class Command(BaseCommand):
                 build_engine=str(options["build_engine"]),
                 profile=str(options["profile"]),
                 profile_metadata=profile_metadata,
+                recovery_ssh_user=recovery_ssh_user,
+                recovery_authorized_keys=recovery_authorized_keys,
             )
         except ImagerBuildError as exc:
             raise CommandError(str(exc)) from exc
@@ -135,6 +159,28 @@ class Command(BaseCommand):
         self.stdout.write(f"size_bytes={result.size_bytes}")
         if result.download_uri:
             self.stdout.write(f"download_uri={result.download_uri}")
+
+    def _read_recovery_authorized_keys(self, paths: list[str]) -> list[str]:
+        """Load recovery authorized keys from one or more public-key files."""
+
+        keys: list[str] = []
+        for raw_path in paths:
+            path = Path(raw_path).expanduser()
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except OSError as exc:
+                raise CommandError(
+                    f"Could not read recovery authorized key file '{path}': {exc}"
+                ) from exc
+            for line in lines:
+                normalized = line.strip()
+                if not normalized or normalized.startswith("#"):
+                    continue
+                keys.append(normalized)
+
+        if paths and not keys:
+            raise CommandError("Recovery authorized key files did not contain any usable public keys.")
+        return keys
 
     def _handle_list(self) -> None:
         """Print known Raspberry Pi image artifacts."""

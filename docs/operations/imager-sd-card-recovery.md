@@ -15,6 +15,7 @@ Build a Raspberry Pi image artifact with first-boot bootstrap scripts:
 .venv/bin/python manage.py imager build \
   --name stable \
   --base-image-uri /path/to/raspios.img \
+  --recovery-authorized-key-file /path/to/operator-recovery.pub \
   --download-base-uri https://downloads.example.com/images
 ```
 
@@ -84,3 +85,24 @@ When `--artifact` is used, the artifact record stores `metadata.last_write` with
 - bytes written
 - checksum
 - verification timestamp
+
+## Recovery SSH customization
+
+For field recovery images, bake in a key-only SSH lane before writing media:
+
+```bash
+.venv/bin/python manage.py imager build \
+  --name repair-2026-04-23 \
+  --base-image-uri /path/to/raspios.img \
+  --recovery-authorized-key-file ~/.ssh/rpi-putty-key.pub \
+  --recovery-ssh-user arthe
+```
+
+What this adds:
+
+- a first-boot recovery user, defaulting to `arthe`
+- `authorized_keys` for the provided public key file(s)
+- `ssh` enabled and started on first boot
+- password login disabled in the generated image's SSH config
+
+This is intended to give operators a safe default recovery path over the address the device gets on `eth0` before Arthexis finishes bootstrapping.
