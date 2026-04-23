@@ -10,7 +10,7 @@ Arthexis Constellation is a Django-based software suite that centralizes tools f
 
 Visit our [Changelog Report](https://arthexis.com/changelog/) to browse release history and operational updates.
 
-For release confidence and version lifecycle expectations, see the [Versioning and Maturity Policy](docs/development/versioning-maturity-policy.md).
+For release confidence and version lifecycle expectations, see the [Versioning and Maturity Policy](https://github.com/arthexis/arthexis/blob/main/docs/development/versioning-maturity-policy.md).
 
 ## Suite Features
 
