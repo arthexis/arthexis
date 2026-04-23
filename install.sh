@@ -197,21 +197,24 @@ reset_service_units_for_repair() {
 
 write_redis_env() {
     local role="$1"
+    local redis_host="${REDIS_HOST:-localhost}"
+    local redis_port="${REDIS_PORT:-6379}"
+    local redis_base="redis://${redis_host}:${redis_port}"
 
-    cat > "$BASE_DIR/redis.env" <<'EOF'
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/0
+    cat > "$BASE_DIR/redis.env" <<EOF
+CELERY_BROKER_URL=${redis_base}/0
+CELERY_RESULT_BACKEND=${redis_base}/0
 EOF
 
     case "${role,,}" in
         satellite)
-            cat >> "$BASE_DIR/redis.env" <<'EOF'
-OCPP_STATE_REDIS_URL=redis://localhost:6379/0
+            cat >> "$BASE_DIR/redis.env" <<EOF
+OCPP_STATE_REDIS_URL=${redis_base}/0
 EOF
             ;;
         watchtower)
-            cat >> "$BASE_DIR/redis.env" <<'EOF'
-CHANNEL_REDIS_URL=redis://localhost:6379/0
+            cat >> "$BASE_DIR/redis.env" <<EOF
+CHANNEL_REDIS_URL=${redis_base}/0
 EOF
             ;;
     esac
