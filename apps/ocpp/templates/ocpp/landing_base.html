@@ -10,6 +10,9 @@
     <style>
       :root {
         --landing-card-radius: 1.25rem;
+        --public-window-inset-width: calc(var(--bs-border-width) * 2);
+        --public-window-inset-color: color-mix(in srgb, var(--bs-emphasis-color) 12%, transparent);
+        --public-window-inset-shadow: color-mix(in srgb, var(--bs-emphasis-color) 10%, transparent);
       }
       html[data-bs-theme='light'] {
         --bs-body-bg: #f8f9fa;
@@ -22,6 +25,17 @@
         font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         display: flex;
         flex-direction: column;
+        position: relative;
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        box-shadow:
+          inset 0 0 0 var(--public-window-inset-width) var(--public-window-inset-color),
+          inset 0 0.2rem 0.3rem var(--public-window-inset-shadow);
+        z-index: 1080;
       }
       main.landing-main {
         width: 100%;
