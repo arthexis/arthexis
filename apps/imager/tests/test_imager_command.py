@@ -303,6 +303,7 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
 
     with (
         patch("apps.imager.services._ensure_guestfish"),
+        patch("apps.imager.services._guestfish_mkdir_p") as mkdir_mock,
         patch("apps.imager.services._guestfish_write", side_effect=capture_write),
     ):
         _customize_image(
@@ -311,6 +312,7 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
             recovery_ssh_access=recovery_access,
         )
 
+    mkdir_mock.assert_called_once_with(image_path, "/usr/local/share/arthexis")
     assert "/usr/local/bin/arthexis-bootstrap.sh" in written_files
     assert "/usr/local/bin/arthexis-recovery-access.sh" in written_files
     assert "/usr/local/share/arthexis/recovery_authorized_keys" in written_files
@@ -348,6 +350,26 @@ def test_build_rpi4b_image_rejects_invalid_recovery_ssh_username(tmp_path: Path)
             git_url="https://github.com/arthexis/arthexis.git",
             customize=False,
             recovery_ssh_user="arthe;touch /tmp/pwned",
+            recovery_authorized_keys=[
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestRecovery recovery",
+            ],
+        )
+
+
+def test_build_rpi4b_image_rejects_recovery_ssh_when_customize_is_disabled(tmp_path: Path) -> None:
+    """Regression: recovery SSH options must not be accepted for skip-customize builds."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+
+    with pytest.raises(ImagerBuildError, match="requires image customization"):
+        build_rpi4b_image(
+            name="recovery-no-customize",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
             recovery_authorized_keys=[
                 "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestRecovery recovery",
             ],

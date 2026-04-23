@@ -516,6 +516,21 @@ def _guestfish_write(image_path: Path, local_path: Path, remote_path: str, chmod
         raise ImagerBuildError(result.stderr.strip() or "guestfish failed while writing files")
 
 
+def _guestfish_mkdir_p(image_path: Path, remote_path: str) -> None:
+    """Create a directory path in the disk image using guestfish."""
+
+    script = f"mkdir-p {shlex.quote(remote_path)}\n"
+    result = subprocess.run(
+        ["guestfish", "--rw", "-a", str(image_path), "-i"],
+        input=script,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ImagerBuildError(result.stderr.strip() or "guestfish failed while creating directories")
+
+
 def _normalize_recovery_ssh_access(
     *,
     recovery_ssh_user: str,
@@ -559,6 +574,7 @@ def _customize_image(
         _guestfish_write(image_path, bootstrap, "/usr/local/bin/arthexis-bootstrap.sh", chmod_mode="0755")
         _guestfish_write(image_path, service, "/etc/systemd/system/arthexis-bootstrap.service")
         if recovery_ssh_access and recovery_ssh_access.enabled:
+            _guestfish_mkdir_p(image_path, str(Path(RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH).parent))
             recovery_keys = work_dir / "recovery_authorized_keys"
             recovery_script = work_dir / "arthexis-recovery-access.sh"
             recovery_sshd_config = work_dir / "arthexis-recovery.conf"
@@ -880,6 +896,10 @@ def build_rpi4b_image(
         recovery_ssh_user=recovery_ssh_user,
         recovery_authorized_keys=recovery_authorized_keys,
     )
+    if recovery_ssh_access and recovery_ssh_access.enabled and not customize:
+        raise ImagerBuildError(
+            "Recovery SSH access requires image customization. Remove --skip-customize or omit recovery key options."
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     output_filename = f"{name}-{TARGET_RPI4B}.img"
@@ -921,7 +941,7 @@ def build_rpi4b_image(
                     "first_boot_script": "firstrun.sh",
                     "git_url": git_url,
                     "recovery_ssh": {
-                        "enabled": bool(recovery_ssh_access and recovery_ssh_access.enabled),
+                        "enabled": bool(customize and recovery_ssh_access and recovery_ssh_access.enabled),
                         "user": recovery_ssh_access.username if recovery_ssh_access else "",
                         "authorized_key_count": len(recovery_ssh_access.authorized_keys)
                         if recovery_ssh_access
