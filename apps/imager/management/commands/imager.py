@@ -4,6 +4,8 @@ import json
 import re
 from pathlib import Path
 
+from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.primitives.serialization import load_ssh_public_key
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.imager.models import RaspberryPiImageArtifact
@@ -231,6 +233,15 @@ class Command(BaseCommand):
             self.stderr.write(
                 self.style.WARNING(
                     f"Skipping unrecognized key line from {source}."
+                )
+            )
+            return
+        try:
+            load_ssh_public_key(normalized.encode("utf-8"))
+        except (TypeError, ValueError, UnsupportedAlgorithm):
+            self.stderr.write(
+                self.style.WARNING(
+                    f"Skipping malformed public key line from {source}."
                 )
             )
             return

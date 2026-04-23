@@ -26,6 +26,10 @@ from apps.imager.services import (
     write_image_to_device,
 )
 
+VALID_RECOVERY_KEY_ONE = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILOoi93uar4kpDufSrgJPoOKh8UzGiiAsz+GIspRlj7p recovery-one"
+VALID_RECOVERY_KEY_TWO = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPxEAcOg5erwB9w67f4eyf3DZiTLQ3sPik4Q6WLTl2XB recovery-two"
+MALFORMED_RECOVERY_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAA malformed"
+
 
 def test_list_block_devices_requests_tree_output_for_partition_mountpoints() -> None:
     """Regression: lsblk JSON discovery should request tree mode for children[]."""
@@ -191,9 +195,9 @@ def test_imager_build_command_reads_recovery_authorized_key_files(mock_build, tm
     authorized_key_file = tmp_path / "recovery.pub"
     authorized_key_file.write_text(
         "# comment\n"
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyOne test-one\n"
+        f"{VALID_RECOVERY_KEY_ONE}\n"
         "\n"
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyTwo test-two\n",
+        f"{VALID_RECOVERY_KEY_TWO}\n",
         encoding="utf-8",
     )
     mock_build.return_value = type(
@@ -223,8 +227,8 @@ def test_imager_build_command_reads_recovery_authorized_key_files(mock_build, tm
 
     assert mock_build.call_args.kwargs["recovery_ssh_user"] == "arthe"
     assert mock_build.call_args.kwargs["recovery_authorized_keys"] == [
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyOne test-one",
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyTwo test-two",
+        VALID_RECOVERY_KEY_ONE,
+        VALID_RECOVERY_KEY_TWO,
     ]
 
 
@@ -240,7 +244,8 @@ def test_imager_build_command_ignores_non_public_key_lines(mock_build, tmp_path:
         "# comment\n"
         "-----BEGIN OPENSSH PRIVATE KEY-----\n"
         "invalid-content\n"
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyValid valid\n",
+        f"{MALFORMED_RECOVERY_KEY}\n"
+        f"{VALID_RECOVERY_KEY_ONE}\n",
         encoding="utf-8",
     )
     mock_build.return_value = type(
@@ -271,10 +276,11 @@ def test_imager_build_command_ignores_non_public_key_lines(mock_build, tmp_path:
     )
 
     assert mock_build.call_args.kwargs["recovery_authorized_keys"] == [
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyValid valid",
+        VALID_RECOVERY_KEY_ONE,
     ]
     warnings = stderr.getvalue()
     assert "Skipping unrecognized key line" in warnings
+    assert "Skipping malformed public key line" in warnings
     assert str(authorized_key_file) in warnings
     assert "BEGIN OPENSSH PRIVATE KEY" not in warnings
     assert "invalid-content" not in warnings
@@ -309,15 +315,15 @@ def test_imager_build_command_reads_inline_recovery_authorized_keys(mock_build, 
         "--base-image-uri",
         str(output_path),
         "--recovery-authorized-key",
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestInlineOne inline-one",
+        VALID_RECOVERY_KEY_ONE,
         "--recovery-authorized-key",
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestInlineTwo inline-two",
+        VALID_RECOVERY_KEY_TWO,
     )
 
     assert mock_build.call_args.kwargs["recovery_ssh_user"] == "arthe"
     assert mock_build.call_args.kwargs["recovery_authorized_keys"] == [
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestInlineOne inline-one",
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestInlineTwo inline-two",
+        VALID_RECOVERY_KEY_ONE,
+        VALID_RECOVERY_KEY_TWO,
     ]
 
 
