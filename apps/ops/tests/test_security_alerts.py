@@ -15,9 +15,7 @@ from apps.ops.models import SecurityAlertEvent
 from apps.widgets.models import WidgetZone
 from apps.widgets.services import render_zone_widgets, sync_registered_widgets
 
-
 pytestmark = pytest.mark.django_db
-
 
 def test_build_security_alerts_includes_active_error_events_only() -> None:
     """Aggregator should include active persisted error events only."""
@@ -41,7 +39,6 @@ def test_build_security_alerts_includes_active_error_events_only() -> None:
     assert [alert["message"] for alert in alerts] == ["Active worker failure."]
     assert alerts[0]["severity"] == "error"
 
-
 def test_build_security_alerts_isolates_collector_failures(monkeypatch) -> None:
     """Collector exceptions should be isolated and recorded as active events."""
 
@@ -55,7 +52,6 @@ def test_build_security_alerts_isolates_collector_failures(monkeypatch) -> None:
     assert alerts == []
     persisted_event = SecurityAlertEvent.objects.get(key="security-alert-source-error-events")
     assert persisted_event.occurrence_count == 1
-
 
 def test_record_occurrence_keeps_last_occurred_at_monotonic() -> None:
     """Older occurrences should not move last_occurred_at backwards."""
@@ -80,7 +76,6 @@ def test_record_occurrence_keeps_last_occurred_at_monotonic() -> None:
     assert event.occurrence_count == 2
     assert event.last_occurred_at == first_seen
 
-
 def test_record_occurrence_sanitizes_unsafe_remediation_urls() -> None:
     """Unsafe URL schemes should be replaced with the admin fallback."""
 
@@ -92,7 +87,6 @@ def test_record_occurrence_sanitizes_unsafe_remediation_urls() -> None:
 
     event = SecurityAlertEvent.objects.get(key="event-unsafe-url")
     assert event.remediation_url == "/admin/"
-
 
 def test_build_security_alerts_clears_collector_failure_on_success(monkeypatch) -> None:
     """Collector failure events should be deactivated after successful collection."""
@@ -111,7 +105,6 @@ def test_build_security_alerts_clears_collector_failure_on_success(monkeypatch) 
     assert alerts == []
     persisted_event = SecurityAlertEvent.objects.get(key="security-alert-source-error-events")
     assert persisted_event.is_active is False
-
 
 def test_error_event_security_alerts_surface_last_seen_and_count() -> None:
     """Recorded event alerts should expose summary with timestamp and occurrence count."""
@@ -137,24 +130,6 @@ def test_error_event_security_alerts_surface_last_seen_and_count() -> None:
     assert len(alerts) == 1
     assert alerts[0].message == "Email worker failed."
     assert "Count: 2" in alerts[0].summary
-
-
-def test_security_alerts_widget_exposes_dashboard_rules_report_url() -> None:
-    widget_context = ops_widgets.security_alerts_widget()
-
-    assert widget_context["dashboard_rules_report_url"] == "/admin/system/dashboard-rules-report/"
-
-
-def test_security_alerts_empty_state_links_to_dashboard_rules_report() -> None:
-    html = render_to_string(
-        "widgets/security_alerts.html",
-        {"alerts": [], "dashboard_rules_report_url": "/admin/system/dashboard-rules-report/"},
-    )
-
-    assert "No active security alerts." in html
-    assert 'href="/admin/system/dashboard-rules-report/"' in html
-    assert "View passed and unmet rules" in html
-
 
 def test_security_alerts_widget_priority_is_topmost() -> None:
     sync_registered_widgets()

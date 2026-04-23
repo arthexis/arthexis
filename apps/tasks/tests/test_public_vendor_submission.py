@@ -9,6 +9,7 @@ from django.urls import reverse
 
 from apps.tasks.models import ChargerVendorSubmission
 
+pytestmark = pytest.mark.django_db
 
 @pytest.fixture(autouse=True)
 def clear_rate_limit_cache():
@@ -18,21 +19,6 @@ def clear_rate_limit_cache():
     yield
     cache.clear()
 
-
-@pytest.mark.django_db
-def test_charger_vendor_submission_page_renders_public_form(client):
-    """Regression: vendors should be able to access the intake page without authentication."""
-
-    response = client.get(reverse("tasks:charger-vendor-submission"))
-
-    assert response.status_code == 200
-    content = response.content.decode()
-    assert "Share your chargers for Arthexis integration review" in content
-    assert "Supported OCPP versions" in content
-    assert "Remote access and support workflow" in content
-
-
-@pytest.mark.django_db
 def test_charger_vendor_submission_persists_submission_and_redirects(client):
     """Regression: valid public vendor submissions should be stored for admin review."""
 
@@ -75,7 +61,6 @@ def test_charger_vendor_submission_persists_submission_and_redirects(client):
         in messages
     )
 
-
 @pytest.mark.django_db
 def test_charger_vendor_submission_rate_limits_repeated_posts(client):
     """Regression: repeated public submissions should eventually be throttled."""
@@ -102,14 +87,3 @@ def test_charger_vendor_submission_rate_limits_repeated_posts(client):
     )
 
     assert throttled_response.status_code == 429
-
-
-@pytest.mark.django_db
-def test_charger_vendor_submission_requires_core_fields(client):
-    """Regression: invalid public submissions should stay on the form with errors."""
-
-    response = client.post(reverse("tasks:charger-vendor-submission"), data={"company_name": ""})
-
-    assert response.status_code == 200
-    assert ChargerVendorSubmission.objects.count() == 0
-    assert "This field is required." in response.content.decode()

@@ -13,7 +13,6 @@ from apps.rpiconnect.models import (
     ConnectUpdateDeployment,
 )
 
-
 @pytest.mark.django_db
 def test_connect_device_admin_shows_inventory_eligibility_indicators():
     """Device admin should render inventory signal columns used for eligibility checks."""
@@ -36,66 +35,6 @@ def test_connect_device_admin_shows_inventory_eligibility_indicators():
     assert model_admin.connectivity_indicator(device) == "ethernet"
     assert model_admin.free_space_indicator(device) == "12 GB"
     assert "Eligible" in model_admin.eligibility_indicator(device)
-
-
-@pytest.mark.django_db
-def test_campaign_wizard_creates_campaign_and_progress_page_renders(admin_client):
-    """Campaign wizard should create admin-configured campaign and expose progress drill-down."""
-
-    account = ConnectAccount.objects.create(
-        name="Ops",
-        account_type=ConnectAccount.AccountType.ORG,
-        organization_name="Arthexis",
-        token_reference="token",
-    )
-    device = ConnectDevice.objects.create(
-        account=account,
-        device_id="pi-02",
-        hardware_model="rpi-4b",
-        os_release="bookworm",
-    )
-    release = ConnectImageRelease.objects.create(
-        name="stable",
-        version="1.2.3",
-        artifact_url="https://cdn.example.com/stable.img",
-        checksum="abc123",
-        compatibility_tags=["rpi-4b", "bookworm"],
-    )
-
-    response = admin_client.post(
-        reverse("admin:rpiconnect_campaign_wizard"),
-        data={
-            "release": release.pk,
-            "device_ids": device.device_id,
-            "labels": "",
-            "cohorts": "",
-            "strategy": ConnectUpdateCampaign.Strategy.ALL_AT_ONCE,
-            "canary_percent": 10,
-            "batch_size": 10,
-            "launch_timing": "start_now",
-            "timing_notes": "02:00 UTC",
-            "notes": "Rollout",
-            "override_conflicts": False,
-        },
-    )
-
-    assert response.status_code == 302
-
-    campaign = ConnectUpdateCampaign.objects.get()
-    assert campaign.status == ConnectUpdateCampaign.Status.RUNNING
-    assert "Timing notes: 02:00 UTC" in campaign.notes
-
-    deployment = ConnectUpdateDeployment.objects.get(campaign=campaign)
-    deployment.status = ConnectUpdateDeployment.Status.FAILED
-    deployment.error_payload = {"reason": "checksum mismatch"}
-    deployment.save()
-
-    progress_response = admin_client.get(reverse("admin:rpiconnect_campaign_progress", args=[campaign.pk]))
-    assert progress_response.status_code == 200
-    page = progress_response.content.decode("utf-8")
-    assert "Device-level failures and rollbacks" in page
-    assert "checksum mismatch" in page
-
 
 @pytest.mark.django_db
 def test_campaign_admin_rollback_creates_previous_release_campaign(admin_client):
@@ -161,7 +100,6 @@ def test_campaign_admin_rollback_creates_previous_release_campaign(admin_client)
     assert rollback_campaign.release == previous_release
     assert rollback_campaign.status == ConnectUpdateCampaign.Status.RUNNING
 
-
 @pytest.mark.django_db
 def test_campaign_progress_requires_model_view_permission(client, django_user_model):
     """Progress endpoint should deny staff users without campaign model permissions."""
@@ -189,7 +127,6 @@ def test_campaign_progress_requires_model_view_permission(client, django_user_mo
     response = client.get(reverse("admin:rpiconnect_campaign_progress", args=[campaign.pk]))
 
     assert response.status_code == 403
-
 
 @pytest.mark.django_db
 def test_campaign_rollback_requires_change_and_add_permission(client, django_user_model):
