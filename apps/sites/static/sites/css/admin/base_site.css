@@ -781,8 +781,8 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
     height: 3rem;
     border-radius: 50%;
     border: 0;
-    background: linear-gradient(135deg, #facc15, #fb923c);
-    color: #1f2937;
+    background: linear-gradient(135deg, #15803d, #34d399);
+    color: #f0fdf4;
     display: flex;
     align-items: center;
     justify-content: center;

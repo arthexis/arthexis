@@ -411,8 +411,8 @@ html[data-bs-theme='dark'] .markdown-body tbody tr:nth-of-type(odd) td {
   height: 3rem;
   border-radius: 50%;
   border: 0;
-  background: linear-gradient(135deg, var(--site-accent), var(--site-accent-strong));
-  color: #1f2937;
+  background: linear-gradient(135deg, var(--site-support), var(--site-support-strong));
+  color: var(--site-support-text);
   display: flex;
   align-items: center;
   justify-content: center;
