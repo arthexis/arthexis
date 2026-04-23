@@ -1568,6 +1568,7 @@ class StationModelAdmin(EntityModelAdmin):
         "integration_rating",
         "max_power_kw",
         "max_voltage_v",
+        "connector_type",
     )
     search_fields = ("vendor", "model_family", "model")
     list_filter = ("preferred_ocpp_version", "connector_type", "integration_rating")
