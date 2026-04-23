@@ -138,7 +138,7 @@ ASGI_APPLICATION = "config.asgi.application"
 # Email settings
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 DEFAULT_ADMIN_EMAIL = os.environ.get(
-    "DEFAULT_ADMIN_EMAIL", "tecnologia@gelectriic.com"
+    "DEFAULT_ADMIN_EMAIL", ""
 ).strip()
 DEFAULT_ADMIN_USERNAME = (
     os.environ.get("DEFAULT_ADMIN_USERNAME", "arthexis").strip() or "arthexis"
