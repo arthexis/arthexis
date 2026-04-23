@@ -89,6 +89,7 @@ def test_lifecycle_scripts_expose_documented_entrypoints() -> None:
             "--stop",
             "--branch",
         ),
+        "uninstall.sh": ("--service NAME", "--no-warn", "--rfid-service", "--no-rfid-service"),
     }
 
     for script_name, tokens in scripts_and_tokens.items():
