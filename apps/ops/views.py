@@ -155,6 +155,7 @@ def _build_security_group_rows(
                 "apps": app_names,
                 "is_staff_group": group.is_canonical_staff_group,
                 "name": group.name,
+                "name_label": group.name or "Unnamed security group",
                 "selected": str(group.pk) in selected_group_ids,
             }
         )

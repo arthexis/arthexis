@@ -874,7 +874,7 @@ body.user-story-open {
     align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
-    padding: 1.25rem 1.25rem 0.75rem;
+    padding: var(--admin-ui-space-3, 0.75rem) var(--admin-ui-space-4, 1rem) var(--admin-ui-space-2, 0.5rem);
     border-bottom: 1px solid var(--user-story-card-border);
 }
 
