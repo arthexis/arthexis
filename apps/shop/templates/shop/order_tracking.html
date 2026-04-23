@@ -18,7 +18,7 @@
     {% for item in order.items.all %}
       <li>
         {{ item.product_name }} — {{ item.quantity }} × {{ item.unit_price }} = {{ item.line_total }}
-        {% if item.customization_surcharge_per_unit > 0 %}
+        {% if item.front_gallery_image or item.back_gallery_image or item.customization_surcharge_per_unit > 0 %}
           <div class="small text-muted">
             Custom image surcharge per unit: {{ item.customization_surcharge_per_unit }}.
             {% if item.front_gallery_image %}Front: {{ item.front_gallery_image.title }}.{% endif %}
