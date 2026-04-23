@@ -1570,7 +1570,7 @@ class StationModelAdmin(EntityModelAdmin):
         "max_voltage_v",
     )
     search_fields = ("vendor", "model_family", "model")
-    list_filter = ("preferred_ocpp_version", "integration_rating")
+    list_filter = ("preferred_ocpp_version", "connector_type", "integration_rating")
     raw_id_fields = ("images_bucket", "documents_bucket")
 
     def get_urls(self):
