@@ -565,6 +565,7 @@ document.addEventListener('DOMContentLoaded', function () {
   <h1 id="site-name">
     <a href="{% url 'admin:index' %}"><span id="server-clock"></span></a>
   </h1>
+{% endif %}
   <div id="site-badges">
     {% for admin_badge in admin_badges %}
       <span class="badge {% if not admin_badge.is_present %}badge-unknown{% endif %}" style="background-color: {{ admin_badge.color }};">
@@ -582,7 +583,6 @@ document.addEventListener('DOMContentLoaded', function () {
       </span>
     {% endfor %}
   </div>
-{% endif %}
 {% endblock %}
 {% block userlinks %}
   {% include "admin/includes/user_tools.html" %}
