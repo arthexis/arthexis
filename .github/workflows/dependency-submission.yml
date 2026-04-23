@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - 'release/**'
     paths:
       - '**/pyproject.toml'
       - '**/requirements*.txt'
@@ -22,6 +21,7 @@ permissions:
 jobs:
   dependency-submission:
     name: Submit dependencies
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     continue-on-error: true
     env:
