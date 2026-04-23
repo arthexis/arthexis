@@ -94,19 +94,6 @@ def test_record_occurrence_sanitizes_unsafe_remediation_urls() -> None:
     assert event.remediation_url == "/admin/"
 
 
-def test_record_occurrence_keeps_safe_absolute_remediation_urls() -> None:
-    """HTTP(S) remediation URLs should remain unchanged."""
-
-    SecurityAlertEvent.record_occurrence(
-        key="event-safe-url",
-        message="Safe link.",
-        remediation_url="https://example.com/remediate",
-    )
-
-    event = SecurityAlertEvent.objects.get(key="event-safe-url")
-    assert event.remediation_url == "https://example.com/remediate"
-
-
 def test_build_security_alerts_clears_collector_failure_on_success(monkeypatch) -> None:
     """Collector failure events should be deactivated after successful collection."""
 

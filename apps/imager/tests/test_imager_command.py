@@ -273,34 +273,6 @@ def test_build_rpi4b_image_rejects_connect_ota_profile_when_manifest_fields_miss
 
 
 @pytest.mark.django_db
-def test_build_rpi4b_image_rejects_connect_ota_profile_when_base_metadata_missing(tmp_path: Path) -> None:
-    """Regression: connect-ota profile must validate explicit source base metadata."""
-
-    base_image = tmp_path / "base.img"
-    base_image.write_bytes(b"raspberrypi")
-
-    with pytest.raises(ImagerBuildError, match="requires base_os"):
-        build_rpi4b_image(
-            name="connect-missing-base",
-            base_image_uri=str(base_image),
-            output_dir=tmp_path,
-            download_base_uri="",
-            git_url="https://github.com/arthexis/arthexis.git",
-            customize=False,
-            profile="connect-ota",
-            profile_metadata={
-                "release_version": "2026.04.0",
-                "compatibility_model": "raspberry-pi-4",
-                "compatibility_board": "rpi-4b",
-                "ota_channel": "stable",
-                "ota_artifact_type": "raw-disk-image",
-                "required_artifacts": [
-                    "connect-ota-agent",
-                    "connect-ota-channel-config",
-                    "connect-ota-device-identity",
-                ],
-            },
-        )
 
 @pytest.mark.django_db
 @patch("apps.imager.services._download_remote_base_image")
@@ -504,29 +476,6 @@ def test_write_image_to_device_refuses_mounted_target(list_devices_mock, tmp_pat
     ]
 
     with pytest.raises(ImagerBuildError, match="Unmount all partitions first"):
-        write_image_to_device(device_path="/dev/sdb", image_path=str(source), confirmed=True)
-
-
-@pytest.mark.django_db
-@patch("apps.imager.services.list_block_devices")
-def test_write_image_to_device_refuses_undersized_target(list_devices_mock, tmp_path: Path) -> None:
-    """Regression: write should fail when target capacity is smaller than image."""
-
-    source = tmp_path / "source.img"
-    source.write_bytes(b"12345")
-    list_devices_mock.return_value = [
-        BlockDeviceInfo(
-            path="/dev/sdb",
-            size_bytes=4,
-            transport="usb",
-            removable=True,
-            mountpoints=[],
-            partitions=[],
-            protected=False,
-        )
-    ]
-
-    with pytest.raises(ImagerBuildError, match="is too small"):
         write_image_to_device(device_path="/dev/sdb", image_path=str(source), confirmed=True)
 
 

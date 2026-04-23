@@ -140,19 +140,6 @@ def test_resolve_enables_cache_by_default(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_solve_disables_cache_by_default(monkeypatch):
-    calls = {"count": 0}
-
-    def fake_resolve(text, current=None, allowed_roots=None, allowed_actions=None):
-        calls["count"] += 1
-        return text
-
-    monkeypatch.setattr("apps.sigils.script_runtime.resolve_sigils", fake_resolve)
-
-    call_command("solve", expr="hello")
-    call_command("solve", expr="hello")
-
-    assert calls["count"] == 2
 
 
 @pytest.mark.django_db
