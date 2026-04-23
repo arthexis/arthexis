@@ -14,9 +14,17 @@ Build a Raspberry Pi image artifact with first-boot bootstrap scripts:
 ```bash
 .venv/bin/python manage.py imager build \
   --name stable \
-  --base-image-uri /path/to/raspios.img \
+  --base-image-uri /path/to/raspios.img.xz \
   --download-base-uri https://downloads.example.com/images
 ```
+
+Accepted base image inputs include:
+
+- raw `.img` files
+- compressed `.img.xz` and `.img.gz` files
+- `.zip` archives that contain a single image file
+
+When bootstrap customization is enabled, the build now keeps `guestfish` temp and cache files under `build/rpi-imager` instead of relying on `/var/tmp`.
 
 List registered artifacts:
 
@@ -38,6 +46,8 @@ This output includes:
 - transport and removable indicators
 - mountpoints/partitions
 - `protected=yes/no` to identify the current system/root disk
+
+The protection check falls back to mountpoint inspection, so hosts that expose the live root disk as `/dev/root` still keep that disk marked as protected.
 
 ## 3) Write an artifact to removable media
 
