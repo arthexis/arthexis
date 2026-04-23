@@ -1659,6 +1659,12 @@ confirm_database_deletion() {
     return 0
   fi
 
+  if ! can_prompt_for_confirmation; then
+    echo "Warning: $action will delete database files, but interactive confirmation is unavailable in this session." >&2
+    echo "Re-run in the foreground or pass --no-warn to allow non-interactive execution." >&2
+    return 1
+  fi
+
   echo "Warning: $action will delete the following database files without creating a backup:"
   local target
   for target in "${targets[@]}"; do
@@ -1672,6 +1678,17 @@ confirm_database_deletion() {
   fi
 
   return 0
+}
+
+can_prompt_for_confirmation() {
+  if ! [ -t 0 ] || ! [ -t 1 ]; then
+    return 1
+  fi
+
+  local process_state=""
+  process_state="$(ps -o stat= -p "$$" 2>/dev/null | tr -d '[:space:]')" || return 1
+
+  [[ "$process_state" == *"+"* ]]
 }
 
 NODE_ROLE_NAME=$(determine_node_role)
