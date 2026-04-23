@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+import gzip
 import ipaddress
 import json
+import lzma
 import os
 import re
 import shlex
 import shutil
 import socket
 import subprocess
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -349,6 +352,46 @@ def _download_remote_base_image(base_image_uri: str, destination: Path) -> None:
     raise ImagerBuildError(f"Remote base image URL '{base_image_uri}' exceeded redirect limit.")
 
 
+def _copy_stream_to_file(source_handle, destination: Path) -> Path:
+    """Copy a binary stream into a destination file path."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("wb") as output_handle:
+        shutil.copyfileobj(source_handle, output_handle)
+    return destination
+
+
+def _extract_base_image_archive(source_path: Path, workspace: Path) -> Path:
+    """Expand compressed base image formats into a local raw image path."""
+
+    suffix = source_path.suffix.lower()
+    if suffix not in {".xz", ".gz", ".zip"}:
+        return source_path
+
+    if suffix == ".zip":
+        with zipfile.ZipFile(source_path) as archive:
+            members = [member for member in archive.infolist() if not member.is_dir()]
+            image_members = [
+                member for member in members if Path(member.filename).suffix.lower() == ".img"
+            ]
+            if len(image_members) == 1:
+                selected_member = image_members[0]
+            elif len(members) == 1:
+                selected_member = members[0]
+            else:
+                raise ImagerBuildError(
+                    f"Base image archive '{source_path.name}' must contain exactly one image file."
+                )
+            destination = workspace / Path(selected_member.filename).name
+            with archive.open(selected_member) as input_handle:
+                return _copy_stream_to_file(input_handle, destination)
+
+    destination = workspace / source_path.stem
+    opener = lzma.open if suffix == ".xz" else gzip.open
+    with opener(source_path, "rb") as input_handle:
+        return _copy_stream_to_file(input_handle, destination)
+
+
 def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
     """Resolve local/file/http(s) base image inputs to a local filesystem path."""
 
@@ -358,7 +401,7 @@ def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
         path = local_path.expanduser().resolve()
         if not path.exists():
             raise ImagerBuildError(f"Base image does not exist: {path}")
-        return path
+        return _extract_base_image_archive(path, workspace)
 
     if parsed.scheme not in {"http", "https"}:
         raise ImagerBuildError("Only file, http, and https base image URIs are supported.")
@@ -370,7 +413,7 @@ def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
     except (HTTPError, URLError) as exc:
         reason = getattr(exc, "reason", str(exc))
         raise ImagerBuildError(f"Could not download base image: {reason}") from exc
-    return destination
+    return _extract_base_image_archive(destination, workspace)
 
 
 def _is_disallowed_remote_host_address(
@@ -454,12 +497,21 @@ def _guestfish_write(image_path: Path, local_path: Path, remote_path: str, chmod
     if chmod_mode:
         script_parts.append(f"chmod {chmod_mode} {shlex.quote(remote_path)}")
     script = "\n".join(script_parts) + "\n"
+    temp_dir = image_path.parent / ".libguestfs-tmp"
+    cache_dir = image_path.parent / ".libguestfs-cache"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    guestfish_env = os.environ.copy()
+    guestfish_env["TMPDIR"] = str(temp_dir)
+    guestfish_env["LIBGUESTFS_TMPDIR"] = str(temp_dir)
+    guestfish_env["LIBGUESTFS_CACHEDIR"] = str(cache_dir)
     result = subprocess.run(
         ["guestfish", "--rw", "-a", str(image_path), "-i"],
         input=script,
         text=True,
         capture_output=True,
         check=False,
+        env=guestfish_env,
     )
     if result.returncode != 0:
         raise ImagerBuildError(result.stderr.strip() or "guestfish failed while writing files")
@@ -610,6 +662,7 @@ def list_block_devices() -> list[BlockDeviceInfo]:
             for mount in (child.get("mountpoints") or [])
             if mount
         )
+        normalized_mountpoints = sorted(set(mountpoints))
         partitions = [child.get("path", "") for child in descendants if child.get("path")]
         devices.append(
             BlockDeviceInfo(
@@ -617,9 +670,9 @@ def list_block_devices() -> list[BlockDeviceInfo]:
                 size_bytes=int(entry.get("size") or 0),
                 transport=str(entry.get("tran") or ""),
                 removable=bool(entry.get("rm")),
-                mountpoints=sorted(set(mountpoints)),
+                mountpoints=normalized_mountpoints,
                 partitions=partitions,
-                protected=str(entry.get("path", "")) == root_disk,
+                protected=str(entry.get("path", "")) == root_disk or "/" in normalized_mountpoints,
             )
         )
     return sorted(devices, key=lambda item: item.path)
