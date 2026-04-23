@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: write
+  dependency-graph: write
   issues: write
 
 jobs:
@@ -24,10 +25,12 @@ jobs:
     name: Submit dependencies
     runs-on: ubuntu-latest
     continue-on-error: true
+    timeout-minutes: 15
     env:
       DEPENDENCY_DETECTOR_ARGS: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Poetry=EnableIfDefaultOff,UvLock=EnableIfDefaultOff
       DEPENDENCY_SUBMISSION_FAIL_AFTER: '0'
       DEPENDENCY_SUBMISSION_TRACKING_LABEL: dependency-submission-failure
+      GH_DEPENDENCY_SUBMISSION_SKIP_CACHE: 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
