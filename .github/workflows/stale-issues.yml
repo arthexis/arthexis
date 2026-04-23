@@ -1,0 +1,81 @@
+name: Close stale issues without linked PRs
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: read
+  contents: read
+
+jobs:
+  close-stale-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const DAY_MS = 24 * 60 * 60 * 1000;
+            const CLOSE_AFTER_DAYS = 7;
+            const now = Date.now();
+
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            const issuesOnly = openIssues.filter((issue) => !issue.pull_request);
+
+            for (const issue of issuesOnly) {
+              const inactivityDays = (now - Date.parse(issue.updated_at)) / DAY_MS;
+
+              if (Number.isNaN(inactivityDays) || inactivityDays < CLOSE_AFTER_DAYS) {
+                core.info(`#${issue.number}: skipped (inactive ${inactivityDays.toFixed(1)} days)`);
+                continue;
+              }
+
+              const timelineEvents = await github.paginate(github.rest.issues.listEventsForTimeline, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                per_page: 100,
+              });
+
+              const hasAssociatedPr = timelineEvents.some((event) => {
+                if (event.event !== 'cross-referenced') {
+                  return false;
+                }
+
+                const sourceIssue = event.source?.issue;
+                return Boolean(sourceIssue?.pull_request);
+              });
+
+              if (hasAssociatedPr) {
+                core.info(`#${issue.number}: skipped (associated PR found)`);
+                continue;
+              }
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: [
+                  'Closing this issue after 7+ days without updates and without an associated PR.',
+                  '',
+                  'If you still want this to land as functionality in the repo, please submit a PR and comment here to reopen momentum, or tag a sponsored developer for help driving implementation.',
+                ].join('\n'),
+              });
+
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+              });
+
+              core.info(`#${issue.number}: closed`);
+            }
