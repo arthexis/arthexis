@@ -97,6 +97,15 @@ class Command(BaseCommand):
             default=[],
             help="Path to a public-key file to authorize for recovery SSH access. May be repeated.",
         )
+        build_parser.add_argument(
+            "--recovery-authorized-key",
+            action="append",
+            default=[],
+            help=(
+                "Inline OpenSSH public key to authorize for recovery SSH access. "
+                "May be repeated to avoid bundling key material in repository files."
+            ),
+        )
 
         subparsers.add_parser("devices", help="List candidate block devices for image writing.")
         subparsers.add_parser("list", help="List generated Raspberry Pi image artifacts.")
@@ -147,7 +156,8 @@ class Command(BaseCommand):
             raise CommandError("--profile-metadata must decode to a JSON object.")
 
         recovery_authorized_keys = self._read_recovery_authorized_keys(
-            [str(path) for path in options.get("recovery_authorized_key_file", [])]
+            file_paths=[str(path) for path in options.get("recovery_authorized_key_file", [])],
+            inline_keys=[str(key) for key in options.get("recovery_authorized_key", [])],
         )
         recovery_ssh_user = str(options["recovery_ssh_user"]).strip()
         if recovery_authorized_keys:
@@ -176,11 +186,16 @@ class Command(BaseCommand):
         if result.download_uri:
             self.stdout.write(f"download_uri={result.download_uri}")
 
-    def _read_recovery_authorized_keys(self, paths: list[str]) -> list[str]:
-        """Load recovery authorized keys from one or more public-key files."""
+    def _read_recovery_authorized_keys(
+        self,
+        *,
+        file_paths: list[str],
+        inline_keys: list[str],
+    ) -> list[str]:
+        """Load recovery authorized keys from file and inline command options."""
 
         keys: list[str] = []
-        for raw_path in paths:
+        for raw_path in file_paths:
             path = Path(raw_path).expanduser()
             try:
                 lines = path.read_text(encoding="utf-8").splitlines()
@@ -188,22 +203,38 @@ class Command(BaseCommand):
                 raise CommandError(
                     f"Could not read recovery authorized key file '{path}': {exc}"
                 ) from exc
-            for line in lines:
-                normalized = line.strip()
-                if not normalized or normalized.startswith("#"):
-                    continue
-                if not VALID_PUBLIC_KEY_PATTERN.match(normalized):
-                    self.stderr.write(
-                        self.style.WARNING(
-                            f"Skipping unrecognized key line in '{path}': {normalized}"
-                        )
-                    )
-                    continue
-                keys.append(normalized)
+            for line_number, line in enumerate(lines, start=1):
+                self._append_recovery_key_line(
+                    keys=keys,
+                    source=f"{path}:{line_number}",
+                    line=line,
+                )
 
-        if paths and not keys:
-            raise CommandError("Recovery authorized key files did not contain any usable public keys.")
+        for key_number, key_line in enumerate(inline_keys, start=1):
+            self._append_recovery_key_line(
+                keys=keys,
+                source=f"--recovery-authorized-key[{key_number}]",
+                line=key_line,
+            )
+
+        if (file_paths or inline_keys) and not keys:
+            raise CommandError("Recovery authorized key inputs did not contain any usable public keys.")
         return keys
+
+    def _append_recovery_key_line(self, *, keys: list[str], source: str, line: str) -> None:
+        """Normalize and append a single recovery authorized-key line when valid."""
+
+        normalized = line.strip()
+        if not normalized or normalized.startswith("#"):
+            return
+        if not VALID_PUBLIC_KEY_PATTERN.match(normalized):
+            self.stderr.write(
+                self.style.WARNING(
+                    f"Skipping unrecognized key line from {source}."
+                )
+            )
+            return
+        keys.append(normalized)
 
     def _handle_list(self) -> None:
         """Print known Raspberry Pi image artifacts."""

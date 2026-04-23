@@ -275,8 +275,50 @@ def test_imager_build_command_ignores_non_public_key_lines(mock_build, tmp_path:
     ]
     warnings = stderr.getvalue()
     assert "Skipping unrecognized key line" in warnings
-    assert "-----BEGIN OPENSSH PRIVATE KEY-----" in warnings
-    assert "invalid-content" in warnings
+    assert str(authorized_key_file) in warnings
+    assert "BEGIN OPENSSH PRIVATE KEY" not in warnings
+    assert "invalid-content" not in warnings
+
+
+@pytest.mark.django_db
+@patch("apps.imager.management.commands.imager.build_rpi4b_image")
+def test_imager_build_command_reads_inline_recovery_authorized_keys(mock_build, tmp_path: Path) -> None:
+    """Regression: inline recovery key options should be accepted as command params."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+    mock_build.return_value = type(
+        "BuildResult",
+        (),
+        {
+            "output_path": output_path,
+            "sha256": "abc123",
+            "size_bytes": 2,
+            "download_uri": "",
+            "build_engine": "arthexis-bootstrap",
+            "build_profile": "bootstrap",
+            "profile_manifest": {},
+        },
+    )()
+
+    call_command(
+        "imager",
+        "build",
+        "--name",
+        "recovery-inline",
+        "--base-image-uri",
+        str(output_path),
+        "--recovery-authorized-key",
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestInlineOne inline-one",
+        "--recovery-authorized-key",
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestInlineTwo inline-two",
+    )
+
+    assert mock_build.call_args.kwargs["recovery_ssh_user"] == "arthe"
+    assert mock_build.call_args.kwargs["recovery_authorized_keys"] == [
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestInlineOne inline-one",
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestInlineTwo inline-two",
+    ]
 
 
 def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided(tmp_path: Path) -> None:

@@ -93,9 +93,12 @@ For field recovery images, bake in a key-only SSH lane before writing media:
 .venv/bin/python manage.py imager build \
   --name repair-2026-04-23 \
   --base-image-uri /path/to/raspios.img \
-  --recovery-authorized-key-file ~/.ssh/rpi-putty-key.pub \
+  --recovery-authorized-key "ssh-ed25519 AAAAC3Nza... operator-laptop" \
   --recovery-ssh-user arthe
 ```
+
+You can still use `--recovery-authorized-key-file /path/to/key.pub` when needed, but passing
+`--recovery-authorized-key` directly is recommended for workflows that should avoid bundling credential files in the repo.
 
 What this adds:
 
