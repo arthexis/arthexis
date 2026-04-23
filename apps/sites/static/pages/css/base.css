@@ -8,6 +8,7 @@
   --site-support: #15803d;
   --site-support-strong: #34d399;
   --site-support-rgb: 21, 128, 61;
+  --site-support-icon: #0f172a;
   --site-support-text: #f0fdf4;
   --bs-primary: var(--site-primary);
   --bs-primary-rgb: var(--site-primary-rgb);
@@ -457,8 +458,8 @@ html[data-bs-theme='dark'] .markdown-body tbody tr:nth-of-type(odd) td {
   height: 3rem;
   border-radius: 50%;
   border: 0;
-  background: linear-gradient(135deg, var(--site-accent), var(--site-accent-strong));
-  color: #1f2937;
+  background: linear-gradient(135deg, var(--site-support), var(--site-support-strong));
+  color: var(--site-support-icon);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -633,11 +634,11 @@ body.user-story-open {
 .user-story-rating label:hover,
 .user-story-rating label:focus-visible,
 .user-story-rating label:hover ~ label {
-  color: var(--site-accent);
+  color: var(--site-support-strong);
 }
 
 .user-story-rating input:checked ~ label {
-  color: var(--site-accent-strong);
+  color: var(--site-support);
 }
 
 .user-story-rating label:active {
