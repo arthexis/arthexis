@@ -544,7 +544,7 @@ def _guestfish_mkdir_p(image_path: Path, remote_path: str) -> None:
 def _guestfish_remove_file(image_path: Path, remote_path: str) -> None:
     """Remove a file from the disk image using guestfish, ignoring missing paths."""
 
-    script = f'sh "rm -f -- {remote_path}"\n'
+    script = f"rm-f {shlex.quote(remote_path)}\n"
     result = subprocess.run(
         ["guestfish", "--rw", "-a", str(image_path), "-i"],
         input=script,
