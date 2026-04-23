@@ -10,7 +10,14 @@ from django_object_actions import DjangoObjectActions
 from apps.discovery.services import record_discovery_item, start_discovery
 from apps.locals.user_data import EntityModelAdmin
 
-from .models import OdooDeployment, OdooQuery, OdooQueryVariable
+from .models import (
+    OdooDeployment,
+    OdooQuery,
+    OdooQueryVariable,
+    OdooSaleFactor,
+    OdooSaleFactorProductRule,
+    OdooSaleOrderTemplate,
+)
 from .public_query_features import (
     PUBLIC_QUERY_EXECUTION_RESTRICTION_MESSAGE,
     is_public_query_execution_secure_mode_enabled,
@@ -289,5 +296,74 @@ class OdooQueryAdmin(EntityModelAdmin):
         (
             _("Metadata"),
             {"fields": ("created_at", "updated_at")},
+        ),
+    )
+
+
+class OdooSaleFactorProductRuleInline(admin.TabularInline):
+    model = OdooSaleFactorProductRule
+    extra = 0
+    fields = (
+        "name",
+        "odoo_product",
+        "quantity_mode",
+        "fixed_quantity",
+        "factor_multiplier",
+    )
+
+
+@admin.register(OdooSaleOrderTemplate)
+class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
+    list_display = (
+        "name",
+        "default_new_customer_language",
+        "fallback_new_customer_language",
+        "resolve_note_sigils",
+        "salesperson",
+    )
+    search_fields = ("name",)
+    list_filter = ("resolve_note_sigils",)
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "odoo_template",
+                    "salesperson",
+                )
+            },
+        ),
+        (
+            _("Customer and Notes"),
+            {
+                "fields": (
+                    "note_template",
+                    "resolve_note_sigils",
+                    "default_new_customer_language",
+                    "fallback_new_customer_language",
+                )
+            },
+        ),
+    )
+
+
+@admin.register(OdooSaleFactor)
+class OdooSaleFactorAdmin(EntityModelAdmin):
+    list_display = ("name", "code")
+    search_fields = ("name", "code", "description")
+    filter_horizontal = ("templates",)
+    inlines = [OdooSaleFactorProductRuleInline]
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "code",
+                    "description",
+                    "templates",
+                )
+            },
         ),
     )
