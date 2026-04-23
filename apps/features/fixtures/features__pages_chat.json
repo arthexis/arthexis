@@ -4,15 +4,15 @@
     "fields": {
       "slug": "pages-chat",
       "display": "Pages Chat",
-      "summary": "Controls visitor-facing chat launchers, widget context, and websocket access across public pages.",
+      "summary": "Legacy toggle for page-level chat UI runtime; chat bridge models remain available for integrations.",
       "is_enabled": true,
       "main_app": [
         "pages"
       ],
       "node_feature": null,
-      "admin_requirements": "Staff bridge widgets may connect only when the visitor chat product feature and deployment prerequisites are active.",
-      "public_requirements": "Public pages should only render chat launchers and websocket wiring when this suite feature is enabled and deployment prerequisites are met.",
-      "service_requirements": "Requires settings.PAGES_CHAT_ENABLED and the configured pages chat socket path to be available in the deployment.",
+      "admin_requirements": "No admin chat widgets are rendered; operators configure bridge integrations in dedicated bridge apps.",
+      "public_requirements": "Public pages do not render in-app chat interfaces.",
+      "service_requirements": "No local websocket chat runtime is exposed by Arthexis pages.",
       "admin_views": [
         "admin:index"
       ],
@@ -20,17 +20,11 @@
         "pages:index",
         "evergo:order-tracking-public"
       ],
-      "service_views": [
-        "settings:PAGES_CHAT_ENABLED",
-        "settings:PAGES_CHAT_SOCKET_PATH",
-        "apps.sites.consumers.ChatConsumer.connect"
-      ],
+      "service_views": [],
       "code_locations": [
-        "apps/sites/consumers.py",
         "apps/sites/context_processors.py",
         "apps/evergo/views.py",
-        "apps/sites/templates/pages/base.html",
-        "apps/sites/templates/pages/includes/public_chat_widget.html"
+        "apps/sites/templates/pages/base.html"
       ],
       "protocol_coverage": {},
       "created_at": "2024-02-28T00:00:00Z",

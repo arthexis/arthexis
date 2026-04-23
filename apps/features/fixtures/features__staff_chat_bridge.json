@@ -4,27 +4,24 @@
     "fields": {
       "slug": "staff-chat-bridge",
       "display": "Staff Chat Bridge",
-      "summary": "Gates staff-only chat bridge and escalation affordances layered on top of the visitor chat runtime.",
+      "summary": "Legacy toggle for staff chat bridge UI affordances that are no longer rendered locally.",
       "is_enabled": true,
       "main_app": [
         "pages"
       ],
       "node_feature": null,
-      "admin_requirements": "Admin and staff surfaces should only render bridge-specific chat widgets when this suite feature is enabled and Pages Chat runtime prerequisites are active.",
-      "public_requirements": "Does not enable visitor chat by itself; only controls staff bridge behavior once Pages Chat is available.",
-      "service_requirements": "Relies on the Pages Chat suite feature and deployment socket prerequisites for any live bridge activity.",
+      "admin_requirements": "Admin and staff pages do not render local chat widgets.",
+      "public_requirements": "Does not enable visitor chat interfaces.",
+      "service_requirements": "Bridge messaging is managed by integration apps and webhook flows.",
       "admin_views": [
         "admin:index"
       ],
       "public_views": [
         "pages:index"
       ],
-      "service_views": [
-        "apps.sites.context_processors._build_chat_context"
-      ],
+      "service_views": [],
       "code_locations": [
-        "apps/sites/context_processors.py",
-        "apps/sites/templates/admin/base_site.html"
+        "apps/sites/context_processors.py"
       ],
       "protocol_coverage": {},
       "created_at": "2024-02-28T00:00:00Z",

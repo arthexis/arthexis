@@ -13,7 +13,6 @@ from urllib.request import urlopen
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
@@ -25,7 +24,7 @@ from django.utils import timezone
 from django.utils.text import get_valid_filename
 from django.utils.translation import gettext as _, ngettext
 
-from apps.features.utils import is_pages_chat_runtime_enabled, is_suite_feature_enabled
+from apps.features.utils import is_suite_feature_enabled
 from apps.reports.services import _render_pdf_bytes as _reports_render_pdf_bytes
 from apps.sites.context_processors import _build_chat_context
 
@@ -77,7 +76,7 @@ def _parse_user_story_attachment_limit() -> int:
 
 
 def _build_public_widget_context(*, user) -> dict[str, object]:
-    """Return chat and feedback flags for Evergo public pages.
+    """Return feedback widget flags for Evergo public pages.
 
     Parameters:
         user: Current authenticated Django user viewing the page.
@@ -87,16 +86,9 @@ def _build_public_widget_context(*, user) -> dict[str, object]:
     """
 
     feedback_ingestion_enabled = is_suite_feature_enabled("feedback-ingestion", default=True)
-    pages_chat_enabled = is_pages_chat_runtime_enabled(default=False)
-    site = Site.objects.get_current()
-    chat_context = _build_chat_context(
-        site,
-        user,
-        pages_chat_enabled=pages_chat_enabled,
-    )
+    chat_context = _build_chat_context(user)
     return {
-        "chat_enabled": chat_context["chat_enabled"],
-        "chat_socket_path": chat_context["chat_socket_path"],
+        "chat_opt_in_checked": chat_context["chat_opt_in_checked"],
         "feedback_ingestion_enabled": feedback_ingestion_enabled,
         "user_story_attachment_limit": _parse_user_story_attachment_limit(),
     }
