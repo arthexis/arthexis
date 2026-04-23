@@ -468,9 +468,49 @@ def test_build_rpi4b_image_rejects_recovery_username_without_keys(tmp_path: Path
             output_dir=tmp_path,
             download_base_uri="",
             git_url="https://github.com/arthexis/arthexis.git",
-            customize=False,
+            customize=True,
             recovery_ssh_user="fieldops",
             recovery_authorized_keys=[],
+        )
+
+
+def test_build_rpi4b_image_rejects_default_recovery_username_without_keys(tmp_path: Path) -> None:
+    """Regression: explicitly supplied default recovery user without keys should fail fast."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+
+    with pytest.raises(ImagerBuildError, match="Recovery SSH user was provided without recovery authorized keys"):
+        build_rpi4b_image(
+            name="recovery-default-user-without-keys",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=True,
+            recovery_ssh_user="arthe",
+            recovery_authorized_keys=[],
+        )
+
+
+def test_build_rpi4b_image_rejects_root_recovery_username(tmp_path: Path) -> None:
+    """Regression: root must not be accepted as a recovery SSH username."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+
+    with pytest.raises(ImagerBuildError, match="Invalid recovery SSH username"):
+        build_rpi4b_image(
+            name="recovery-root-user",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+            recovery_ssh_user="root",
+            recovery_authorized_keys=[
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestRecovery recovery",
+            ],
         )
 
 

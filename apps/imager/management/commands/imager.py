@@ -87,7 +87,7 @@ class Command(BaseCommand):
             "--recovery-ssh-user",
             default="",
             help=(
-                "Recovery SSH username baked into the image when --recovery-authorized-key-file is used "
+                "Recovery SSH username baked into the image when recovery keys are provided via --recovery-authorized-key-file or --recovery-authorized-key "
                 f"(default: {DEFAULT_RECOVERY_SSH_USER})."
             ),
         )

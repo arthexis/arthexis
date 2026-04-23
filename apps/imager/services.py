@@ -27,6 +27,7 @@ from apps.imager.models import RaspberryPiImageArtifact
 TARGET_RPI4B = "rpi-4b"
 DEFAULT_RECOVERY_SSH_USER = "arthe"
 RECOVERY_SSH_USERNAME_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]*$")
+RECOVERY_SSH_FORBIDDEN_USERS = frozenset({"root"})
 
 BOOTSTRAP_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
@@ -547,11 +548,14 @@ def _normalize_recovery_ssh_access(
         if str(line).strip()
     )
 
-    username = (recovery_ssh_user or "").strip() or DEFAULT_RECOVERY_SSH_USER
+    supplied_username = (recovery_ssh_user or "").strip()
+    username = supplied_username or DEFAULT_RECOVERY_SSH_USER
     if not RECOVERY_SSH_USERNAME_PATTERN.fullmatch(username):
         raise ImagerBuildError(f"Invalid recovery SSH username: '{username}'")
+    if username in RECOVERY_SSH_FORBIDDEN_USERS:
+        raise ImagerBuildError(f"Invalid recovery SSH username: '{username}'")
     if not normalized_keys:
-        if recovery_ssh_user.strip() and username != DEFAULT_RECOVERY_SSH_USER:
+        if supplied_username:
             raise ImagerBuildError(
                 "Recovery SSH user was provided without recovery authorized keys. "
                 "Provide --recovery-authorized-key-file or omit --recovery-ssh-user."
