@@ -76,7 +76,15 @@ arthexis_record_upgrade_duration() {
   local end_time
   end_time=$(date +%s)
   local duration=$((end_time - UPGRADE_STARTED_AT))
-  python - "$UPGRADE_DURATION_LOCK" "$UPGRADE_STARTED_AT" "$end_time" "$duration" "$status" <<'PY'
+  local duration_python="${PYTHON_BIN:-}"
+  if [ -z "$duration_python" ]; then
+    duration_python="$(command -v python3 || command -v python || true)"
+  fi
+  if [ -z "$duration_python" ]; then
+    echo "Warning: no Python interpreter available to record upgrade duration." >&2
+    return 0
+  fi
+  if ! "$duration_python" - "$UPGRADE_DURATION_LOCK" "$UPGRADE_STARTED_AT" "$end_time" "$duration" "$status" <<'PY'
 import json
 import sys
 from datetime import datetime, timezone
@@ -98,6 +106,10 @@ payload = {
 lock_path.parent.mkdir(parents=True, exist_ok=True)
 lock_path.write_text(json.dumps(payload), encoding="utf-8")
 PY
+  then
+    echo "Warning: failed to record upgrade duration metadata." >&2
+    return 0
+  fi
 }
 
 auto_upgrade_enabled() {
