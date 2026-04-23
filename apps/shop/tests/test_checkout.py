@@ -3,12 +3,14 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.cards.models import OfferingSoul
+from apps.gallery.services import create_gallery_image
 from apps.shop.models import Shop, ShopOrder, ShopProduct
 from apps.souls.models import ShopOrderSoulAttachment, Soul
 from apps.survey.models import Survey, SurveyResponse
@@ -61,6 +63,106 @@ class ShopCheckoutTests(TestCase):
         self.assertEqual(order.total_amount, Decimal("99.80"))
         self.assertEqual(order.payment_provider, "stripe")
         self.assertEqual(order.items.count(), 1)
+
+
+    def _upload_image(self, name: str = "gallery.jpg") -> SimpleUploadedFile:
+        return SimpleUploadedFile(name, b"fake-image", content_type="image/jpeg")
+
+    def test_checkout_applies_gallery_image_customization_surcharge(self):
+        shop = Shop.objects.create(
+            name="Card Shop",
+            slug="card-shop",
+            default_payment_provider="stripe",
+        )
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Custom Card",
+            sku="CARD-1",
+            unit_price=Decimal("10.00"),
+            stock_quantity=20,
+            supports_gallery_image_printing=True,
+            gallery_image_print_price=Decimal("3.50"),
+        )
+        owner = self._create_user("gallery-owner", "owner@example.com")
+        front = create_gallery_image(
+            uploaded_file=self._upload_image("front.jpg"),
+            title="Front Art",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+        back = create_gallery_image(
+            uploaded_file=self._upload_image("back.jpg"),
+            title="Back Art",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+
+        add_url = reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": product.id})
+        self.client.post(add_url, {"quantity": 2}, follow=True)
+
+        response = self.client.post(
+            reverse("shop:checkout"),
+            {
+                "customer_name": "Jane Buyer",
+                "customer_email": "jane@example.com",
+                "shipping_address_line1": "42 Main Street",
+                "shipping_address_line2": "",
+                "shipping_city": "Madrid",
+                "shipping_postal_code": "28001",
+                "shipping_country": "Spain",
+                f"front_gallery_image_{product.id}": str(front.id),
+                f"back_gallery_image_{product.id}": str(back.id),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        order = ShopOrder.objects.get(customer_email="jane@example.com")
+        item = order.items.get()
+        self.assertEqual(item.customization_surcharge_per_unit, Decimal("7.00"))
+        self.assertEqual(item.front_gallery_image_id, front.id)
+        self.assertEqual(item.back_gallery_image_id, back.id)
+        self.assertEqual(item.line_total, Decimal("34.00"))
+        self.assertEqual(order.total_amount, Decimal("34.00"))
+
+    def test_checkout_rejects_unavailable_gallery_image_selection(self):
+        shop = Shop.objects.create(name="Card Shop", slug="card-shop-invalid")
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Custom Card",
+            sku="CARD-2",
+            unit_price=Decimal("10.00"),
+            stock_quantity=20,
+            supports_gallery_image_printing=True,
+            gallery_image_print_price=Decimal("3.50"),
+        )
+
+        add_url = reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": product.id})
+        self.client.post(add_url, {"quantity": 1}, follow=True)
+
+        response = self.client.post(
+            reverse("shop:checkout"),
+            {
+                "customer_name": "Jane Buyer",
+                "customer_email": "jane@example.com",
+                "shipping_address_line1": "42 Main Street",
+                "shipping_address_line2": "",
+                "shipping_city": "Madrid",
+                "shipping_postal_code": "28001",
+                "shipping_country": "Spain",
+                f"front_gallery_image_{product.id}": "999999",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Selected front image for Custom Card is unavailable")
+        self.assertEqual(ShopOrder.objects.count(), 0)
+
+    def _create_user(self, username: str, email: str):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.create_user(username=username, email=email, password="x")
 
     def test_order_number_keeps_prefix_and_length_limit(self):
         """Generated order number should preserve SO prefix within max length."""

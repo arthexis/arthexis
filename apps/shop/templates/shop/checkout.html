@@ -3,9 +3,48 @@
 {% block content %}
 <div class="container py-4">
   <h1>Checkout</h1>
-  <p>Total: <strong>{{ total }}</strong></p>
-  <form method="post">
+  <p>Total before card customizations: <strong>{{ total }}</strong></p>
+
+  <form method="post" id="checkout-form">
     {% csrf_token %}
+
+    {% if customization_entries %}
+      <div class="card mb-4">
+        <div class="card-header">Card customization</div>
+        <div class="card-body">
+          {% for item in customization_entries %}
+            <div class="mb-4">
+              <h2 class="h6">{{ item.entry.name }}</h2>
+              <p class="text-muted small mb-2">
+                Optional: choose images from the gallery for the front and/or back.
+                Extra cost per selected side: {{ item.product.gallery_image_print_price }} {{ item.product.currency }}.
+              </p>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label" for="front-gallery-{{ item.product.id }}">Front image</label>
+                  <select class="form-select" id="front-gallery-{{ item.product.id }}" name="front_gallery_image_{{ item.product.id }}">
+                    <option value="">Use default front</option>
+                    {% for image in gallery_images %}
+                      <option value="{{ image.id }}" {% if item.selected_front == image.id|stringformat:'s' %}selected{% endif %}>{{ image.title }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label" for="back-gallery-{{ item.product.id }}">Back image</label>
+                  <select class="form-select" id="back-gallery-{{ item.product.id }}" name="back_gallery_image_{{ item.product.id }}">
+                    <option value="">Use default back</option>
+                    {% for image in gallery_images %}
+                      <option value="{{ image.id }}" {% if item.selected_back == image.id|stringformat:'s' %}selected{% endif %}>{{ image.title }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
     {{ form.as_p }}
     <button class="btn btn-success" type="submit">Place order</button>
   </form>

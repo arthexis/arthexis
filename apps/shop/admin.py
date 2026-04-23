@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import reverse
 
 from apps.core.admin.mixins import PublicViewLinksAdminMixin
+
 from .models import Shop, ShopOrder, ShopOrderItem, ShopProduct
 
 
@@ -64,9 +65,11 @@ class ShopProductAdmin(admin.ModelAdmin):
         "currency",
         "stock_quantity",
         "supports_soul_seed_preload",
+        "supports_gallery_image_printing",
+        "gallery_image_print_price",
         "is_active",
     )
-    list_filter = ("is_active", "supports_soul_seed_preload", "currency", "shop")
+    list_filter = ("is_active", "supports_soul_seed_preload", "supports_gallery_image_printing", "currency", "shop")
     search_fields = ("name", "sku")
 
 
@@ -75,7 +78,17 @@ class ShopOrderItemInline(admin.TabularInline):
 
     model = ShopOrderItem
     extra = 0
-    readonly_fields = ("product", "product_name", "sku", "unit_price", "quantity", "line_total")
+    readonly_fields = (
+        "product",
+        "product_name",
+        "sku",
+        "unit_price",
+        "quantity",
+        "customization_surcharge_per_unit",
+        "front_gallery_image",
+        "back_gallery_image",
+        "line_total",
+    )
     can_delete = False
 
 
@@ -123,5 +136,15 @@ class ShopOrderAdmin(PublicViewLinksAdminMixin, admin.ModelAdmin):
 class ShopOrderItemAdmin(admin.ModelAdmin):
     """Admin configuration for line items."""
 
-    list_display = ("order", "product_name", "sku", "unit_price", "quantity", "line_total")
+    list_display = (
+        "order",
+        "product_name",
+        "sku",
+        "unit_price",
+        "quantity",
+        "customization_surcharge_per_unit",
+        "front_gallery_image",
+        "back_gallery_image",
+        "line_total",
+    )
     search_fields = ("product_name", "sku", "order__order_number")
