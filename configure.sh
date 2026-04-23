@@ -45,11 +45,12 @@ FEATURE_SLUG=""
 FEATURE_KIND=""
 FEATURE_MODE=""
 FEATURE_PARAM_SPEC=""
+ADMIN_EMAIL=""
 
 LOCK_DIR="$BASE_DIR/.locks"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--stable|--regular|--normal|--unstable] [--fixed] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--celery|--no-celery] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--boot-upgrade|--no-boot-upgrade] [--feature SLUG [--kind suite|node] [--enabled|--disabled]] [--feature-param FEATURE:KEY=VALUE] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--stable|--regular|--normal|--unstable] [--fixed] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--celery|--no-celery] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--boot-upgrade|--no-boot-upgrade] [--feature SLUG [--kind suite|node] [--enabled|--disabled]] [--feature-param FEATURE:KEY=VALUE] [--email ADMIN_EMAIL] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]" >&2
     exit 1
 }
 
@@ -57,6 +58,53 @@ write_debug_env() {
     cat > "$BASE_DIR/debug.env" <<EOF
 DEBUG=$1
 EOF
+}
+
+write_default_admin_email_env() {
+    local email="$1"
+    local env_file="$BASE_DIR/arthexis.env"
+    local python_bin=""
+
+    if [ -x "$BASE_DIR/.venv/bin/python" ]; then
+        python_bin="$BASE_DIR/.venv/bin/python"
+    elif command -v python3 >/dev/null 2>&1; then
+        python_bin="$(command -v python3)"
+    else
+        echo "Python 3 is required to configure DEFAULT_ADMIN_EMAIL." >&2
+        exit 1
+    fi
+
+    if [ -z "$email" ] || [[ "$email" =~ [[:space:]] ]]; then
+        echo "--email requires a non-empty email address without spaces." >&2
+        usage
+    fi
+
+    "$python_bin" - "$env_file" "$email" <<'PYCODE'
+from pathlib import Path
+import sys
+
+env_file = Path(sys.argv[1])
+email = sys.argv[2].strip()
+key = "DEFAULT_ADMIN_EMAIL"
+prefix = f"{key}="
+
+lines: list[str] = []
+if env_file.exists():
+    lines = env_file.read_text(encoding="utf-8").splitlines()
+
+updated = False
+for index, line in enumerate(lines):
+    stripped = line.strip()
+    if stripped.startswith(prefix):
+        lines[index] = f"{prefix}{email}"
+        updated = True
+        break
+
+if not updated:
+    lines.append(f"{prefix}{email}")
+
+env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PYCODE
 }
 
 apply_rfid_service_setting() {
@@ -592,6 +640,11 @@ while [[ $# -gt 0 ]]; do
             FEATURE_PARAM_SPEC="$2"
             shift 2
             ;;
+        --email)
+            [ -z "$2" ] && usage
+            ADMIN_EMAIL="$2"
+            shift 2
+            ;;
         --satellite)
             NODE_ROLE="Satellite"
             ENABLE_CELERY=true
@@ -661,7 +714,7 @@ if [ "$REPAIR" = true ]; then
        [ -n "$AUTO_UPGRADE_MODE" ] || [ -n "$DEBUG_MODE" ] || [ -n "$UPGRADE_CHANNEL" ] || \
        [ -n "$RFID_SERVICE_MODE" ] || [ -n "$CAMERA_SERVICE_MODE" ] || [ -n "$BOOT_UPGRADE_MODE" ] || [ -n "$CELERY_MODE" ] || \
        [ -n "$LCD_SCREEN_MODE" ] || [ -n "$FEATURE_SLUG" ] || [ -n "$FEATURE_MODE" ] || \
-       [ -n "$FEATURE_KIND" ] || [ -n "$FEATURE_PARAM_SPEC" ]; then
+       [ -n "$FEATURE_KIND" ] || [ -n "$FEATURE_PARAM_SPEC" ] || [ -n "$ADMIN_EMAIL" ]; then
         echo "--repair cannot be combined with other options" >&2
         usage
     fi
@@ -723,6 +776,7 @@ if [ "$CHECK" = true ]; then
        [ -n "$DEBUG_MODE" ] || [ -n "$UPGRADE_CHANNEL" ] || [ -n "$RFID_SERVICE_MODE" ] || \
        [ -n "$CAMERA_SERVICE_MODE" ] || [ -n "$BOOT_UPGRADE_MODE" ] || [ -n "$CELERY_MODE" ] || [ -n "$LCD_SCREEN_MODE" ] || \
        [ -n "$FEATURE_SLUG" ] || [ -n "$FEATURE_MODE" ] || [ -n "$FEATURE_KIND" ] || \
+       [ -n "$ADMIN_EMAIL" ] || \
        [ -n "$FEATURE_PARAM_SPEC" ]; then
         echo "--check cannot be combined with other options" >&2
         usage
@@ -884,6 +938,12 @@ if [ -n "$FEATURE_PARAM_SPEC" ] && [ -z "$NODE_ROLE" ]; then
         usage
     fi
     run_feature_param_set "$feature_part" "$feature_key" "$feature_value"
+fi
+
+if [ -n "$ADMIN_EMAIL" ] && [ -z "$NODE_ROLE" ]; then
+    ACTION_PERFORMED=true
+    write_default_admin_email_env "$ADMIN_EMAIL"
+    echo "Default admin email configured for upgrade notifications."
 fi
 
 if [ -n "$AUTO_UPGRADE_MODE" ] && [ -z "$NODE_ROLE" ]; then
