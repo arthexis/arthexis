@@ -26,7 +26,7 @@
     --user-story-input-border: rgba(15, 23, 42, 0.15);
     --user-story-checkbox-border: rgba(15, 23, 42, 0.25);
     --user-story-muted: rgba(15, 23, 42, 0.6);
-    --user-story-focus-ring: color-mix(in srgb, var(--site-support) 30%, transparent);
+    --user-story-focus-ring: color-mix(in srgb, var(--admin-primary-accent, var(--user-story-accent)) 35%, transparent);
     --user-story-alert-success-bg: rgba(34, 197, 94, 0.12);
     --user-story-alert-success-border: rgba(34, 197, 94, 0.35);
     --user-story-alert-success-fg: #047857;
@@ -34,6 +34,10 @@
     --user-story-alert-danger-border: rgba(248, 113, 113, 0.35);
     --user-story-alert-danger-fg: #b91c1c;
     --user-story-close-hover-bg: rgba(15, 23, 42, 0.08);
+    --user-story-accent: #4d7c0f;
+    --user-story-accent-rgb: 77, 124, 15;
+    --user-story-accent-strong: #3f6212;
+    --user-story-accent-text: #f8fafc;
     --user-story-contact-gap: var(--admin-ui-space-3, 0.75rem);
     --user-story-contact-optin-offset: var(--admin-ui-space-2, 0.5rem);
     --user-story-contact-breakpoint: 48rem;
@@ -402,7 +406,7 @@ body.chat-open {
     --user-story-input-border: rgba(148, 163, 184, 0.35);
     --user-story-checkbox-border: rgba(148, 163, 184, 0.35);
     --user-story-muted: rgba(148, 163, 184, 0.85);
-    --user-story-focus-ring: rgba(59, 130, 246, 0.45);
+    --user-story-focus-ring: color-mix(in srgb, var(--admin-accent-strong, var(--user-story-accent-strong)) 45%, transparent);
     --user-story-alert-success-bg: rgba(34, 197, 94, 0.16);
     --user-story-alert-success-border: rgba(34, 197, 94, 0.45);
     --user-story-alert-success-fg: #22c55e;
@@ -410,6 +414,10 @@ body.chat-open {
     --user-story-alert-danger-border: rgba(248, 113, 113, 0.45);
     --user-story-alert-danger-fg: #fca5a5;
     --user-story-close-hover-bg: rgba(148, 163, 184, 0.25);
+    --user-story-accent: #84cc16;
+    --user-story-accent-rgb: 132, 204, 22;
+    --user-story-accent-strong: #bef264;
+    --user-story-accent-text: #1f2937;
 }
 
 body.login #header {
@@ -785,8 +793,8 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
     height: 3rem;
     border-radius: 50%;
     border: 0;
-    background: linear-gradient(135deg, var(--site-support), var(--site-support-strong));
-    color: var(--site-support-icon);
+    background: linear-gradient(135deg, var(--user-story-accent), var(--user-story-accent-strong));
+    color: var(--user-story-accent-text);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -879,7 +887,7 @@ body.user-story-open {
 
 .user-story-card .user-story-title {
     margin-bottom: 0.25rem;
-    color: var(--site-support);
+    color: var(--user-story-accent);
 }
 
 .user-story-card .user-story-subtitle {
@@ -898,8 +906,8 @@ body.user-story-open {
     border-radius: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.02em;
-    background: linear-gradient(135deg, var(--site-support), var(--site-support-strong));
-    color: var(--site-support-icon);
+    background: linear-gradient(135deg, var(--user-story-accent), var(--user-story-accent-strong));
+    color: var(--user-story-accent-text);
     cursor: pointer;
     transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
@@ -907,7 +915,7 @@ body.user-story-open {
 .user-story-card .user-story-submit:hover,
 .user-story-card .user-story-submit:focus-visible {
     transform: translateY(-1px);
-    box-shadow: 0 1rem 2rem rgba(21, 128, 61, 0.35);
+    box-shadow: 0 1rem 2rem color-mix(in srgb, var(--admin-primary-accent, var(--user-story-accent)) 35%, transparent);
     text-decoration: none;
 }
 
@@ -962,7 +970,7 @@ body.user-story-open {
 
 .user-story-card .user-story-input:focus,
 .user-story-card textarea:focus {
-    border-color: var(--site-support);
+    border-color: var(--user-story-accent);
     box-shadow: 0 0 0 0.2rem var(--user-story-focus-ring);
     outline: none;
 }
@@ -986,7 +994,7 @@ body.user-story-open {
 }
 
 .user-story-card .form-check-input:focus {
-    border-color: var(--site-support);
+    border-color: var(--user-story-accent);
     box-shadow: 0 0 0 0.2rem var(--user-story-focus-ring);
 }
 
@@ -1109,11 +1117,11 @@ body.user-story-open {
 .user-story-rating label:hover,
 .user-story-rating label:focus-visible,
 .user-story-rating label:hover ~ label {
-    color: var(--site-support-strong);
+    color: var(--user-story-accent-strong);
 }
 
 .user-story-rating input:checked ~ label {
-    color: var(--site-support);
+    color: var(--user-story-accent);
 }
 
 .user-story-rating label:active {
