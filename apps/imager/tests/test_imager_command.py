@@ -108,12 +108,15 @@ def test_resolve_root_disk_path_walks_to_disk_parent() -> None:
     assert root_disk == "/dev/nvme0n1"
 
 
-def test_guestfish_remove_file_uses_architecture_neutral_command() -> None:
-    """Regression: stale cleanup should not shell out inside the guest image."""
+def test_guestfish_remove_file_uses_architecture_neutral_rm_f(tmp_path: Path) -> None:
+    """Regression: stale-file cleanup should not depend on guest /bin/sh architecture."""
 
-    run_result = SimpleNamespace(returncode=0, stdout="", stderr="")
-    with patch("apps.imager.services.subprocess.run", return_value=run_result) as run_mock:
-        _guestfish_remove_file(Path("/tmp/image.img"), "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf")
+    image_path = tmp_path / "image.img"
+    image_path.write_bytes(b"img")
+    result = SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    with patch("apps.imager.services.subprocess.run", return_value=result) as run_mock:
+        _guestfish_remove_file(image_path, "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf")
 
     assert run_mock.call_args.kwargs["input"] == "rm-f /etc/ssh/sshd_config.d/20-arthexis-recovery.conf\n"
 
