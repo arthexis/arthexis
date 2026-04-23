@@ -29,7 +29,6 @@ urlpatterns = [
     path("login/passkey/verify/", management.passkey_login_verify, name="passkey-login-verify"),
     path("login/", management.login_view, name="login"),
     path("logout/", management.logout_view, name="logout"),
-    path("webhooks/whatsapp/", management.whatsapp_webhook, name="whatsapp-webhook"),
     path("request-invite/", management.request_invite, name="request-invite"),
     path(
         "invitation/<uidb64>/<token>/",

@@ -52,7 +52,6 @@ from apps.chats.models import ChatSession
 from apps.core.models import InviteLead
 from apps.emails import mailer
 from apps.features.utils import is_suite_feature_enabled
-from apps.meta.models import WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG
 from apps.nodes.models import Node
 from apps.nodes.utils import ensure_feature_enabled
 from apps.users.models import PasskeyCredential
@@ -930,69 +929,3 @@ def admin_user_tools(request):
     )
 
 
-# WhatsApp callbacks originate outside the site and cannot include CSRF tokens.
-@csrf_exempt
-def whatsapp_webhook(request):
-    """Accept site-level WhatsApp webhook payloads and bridge valid traffic into chat."""
-
-    if request.method != "POST":
-        return HttpResponseNotAllowed(["POST"])
-    if not getattr(settings, "PAGES_WHATSAPP_ENABLED", False):
-        return HttpResponse(status=404)
-    try:
-        payload = json.loads(request.body.decode("utf-8") or "{}")
-    except json.JSONDecodeError:
-        return HttpResponseBadRequest(_("Invalid JSON payload."))
-
-    from_number = (payload.get("from") or payload.get("from_number") or "").strip()
-    text = (payload.get("message") or payload.get("text") or "").strip()
-    if not from_number or not text:
-        return HttpResponseBadRequest(
-            _("Missing WhatsApp sender or message body."),
-        )
-    if not is_suite_feature_enabled(WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG, default=True):
-        return JsonResponse(
-            {
-                "status": "accepted",
-                "detail": _(
-                    "WhatsApp chat bridge is disabled; payload accepted without session activity."
-                ),
-            },
-            status=202,
-        )
-    display_name = (payload.get("display_name") or from_number).strip()
-
-    site_value = payload.get("site") or payload.get("site_domain")
-    site = None
-    if site_value:
-        site = Site.objects.filter(Q(id=site_value) | Q(domain=site_value)).first()
-    if site is None:
-        try:
-            site = Site.objects.get_current()
-        except Exception:
-            site = None
-
-    session = (
-        ChatSession.objects.filter(whatsapp_number=from_number)
-        .order_by("-last_activity_at")
-        .first()
-    )
-    if session is None:
-        session = ChatSession.objects.create(
-            site=site,
-            visitor_key=f"whatsapp:{from_number}",
-            whatsapp_number=from_number,
-        )
-    elif site and session.site_id is None:
-        session.site = site
-        session.save(update_fields=["site"])
-
-    message = session.add_message(
-        content=text,
-        display_name=display_name,
-        source="whatsapp",
-    )
-    response_payload = {"status": "ok", "session": str(session.uuid)}
-    if getattr(message, "pk", None):
-        response_payload["message"] = message.pk
-    return JsonResponse(response_payload, status=201)

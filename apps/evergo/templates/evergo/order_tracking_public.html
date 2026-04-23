@@ -175,12 +175,8 @@
         </div>
     </form>
 
-    {% include "pages/includes/public_chat_widget.html" %}
     {% include "pages/includes/public_feedback_widget.html" %}
 
-    {% if chat_enabled %}
-      <script src="{% static 'pages/js/chat.js' %}" defer></script>
-    {% endif %}
     {% if feedback_ingestion_enabled %}
       <script src="{% static 'pages/js/user_story_feedback.js' %}" defer></script>
     {% endif %}

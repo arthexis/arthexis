@@ -82,21 +82,6 @@ def test_client_report_download_enforces_login_and_ownership(client, monkeypatch
     staff_response = client.get(download_url, follow=True)
     assert staff_response.status_code == 200
     assert staff_response["Content-Type"] == "application/pdf"
-def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
-    url = reverse("pages:whatsapp-webhook")
-
-    assert client.get(url).status_code == 405
-    prefixed = client.get(f"/en{url}", follow=False)
-    assert prefixed.status_code == 301
-    assert prefixed["Location"] == url
-
-    settings.PAGES_WHATSAPP_ENABLED = False
-    disabled = client.post(
-        url,
-        data=json.dumps({"from": "+15551234", "message": "Hello"}),
-        content_type="application/json",
-    )
-    assert disabled.status_code == 404
 @pytest.mark.parametrize(
     ("path", "expected_status"),
     [
@@ -113,28 +98,6 @@ def test_legacy_language_redirect_rejects_scheme_relative_targets(
     assert response.status_code == expected_status
     if response.status_code in {301, 302, 307, 308}:
         assert not response["Location"].startswith("//")
-@pytest.mark.parametrize(
-    ("payload", "expected_status"),
-    [
-        ({"from": "+15551234", "message": "Hello"}, 201),
-        ("{not-json}", 400),
-        ({"from": "", "message": ""}, 400),
-    ],
-)
-def test_whatsapp_webhook_post_payload_validation(
-    client, settings, payload, expected_status
-):
-    settings.PAGES_WHATSAPP_ENABLED = True
-    url = reverse("pages:whatsapp-webhook")
-    response = client.post(
-        url,
-        data=payload if isinstance(payload, str) else json.dumps(payload),
-        content_type="application/json",
-    )
-    assert response.status_code == expected_status
-    if expected_status == 201:
-        assert response.json()["status"] == "ok"
-
 def test_docs_library_shows_gallery_sidebar_with_latest_four_images(client):
     user = get_user_model().objects.create_user(
         username="docs-gallery-sidebar-user",

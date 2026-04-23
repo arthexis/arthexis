@@ -24,7 +24,6 @@ from .management import (
     logout_view,
     request_invite,
     rfid_login_page,
-    whatsapp_webhook,
 )
 
 __all__ = [
@@ -52,5 +51,4 @@ __all__ = [
     "rfid_login_page",
     "sitemap",
     "submit_user_story",
-    "whatsapp_webhook",
 ]
