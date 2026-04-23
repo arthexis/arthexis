@@ -10,7 +10,6 @@
     border: 1px solid var(--bs-border-color-translucent);
     border-radius: var(--landing-card-radius);
     background: var(--bs-body-bg);
-    padding: var(--bs-spacer);
   }
   .supported-toolbar .chip-label {
     font-size: var(--landing-meta-font-size);
@@ -23,10 +22,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-  }
-  .supported-toolbar-row {
-    --bs-gutter-x: var(--bs-spacer);
-    --bs-gutter-y: calc(var(--bs-spacer) * 0.75);
   }
   .supported-chip {
     border-radius: 999px;
@@ -82,17 +77,17 @@
       </div>
       <div class="card-body pt-2">
         <div class="supported-toolbar mb-3 mb-sm-4" data-supported-filter-toolbar>
-          <div class="row align-items-start supported-toolbar-row">
-            <div class="col-12 col-md-4">
-              <p class="chip-label mb-0">{% trans "Vendor" %}</p>
+          <div class="row align-items-start g-0">
+            <div class="col-12 col-md-4 px-3 py-3">
+              <p class="chip-label mb-2">{% trans "Vendor" %}</p>
               <div class="supported-chip-group" data-chip-group="vendor"></div>
             </div>
-            <div class="col-12 col-md-4">
-              <p class="chip-label mb-0">{% trans "OCPP preference" %}</p>
+            <div class="col-12 col-md-4 px-3 py-3">
+              <p class="chip-label mb-2">{% trans "OCPP preference" %}</p>
               <div class="supported-chip-group" data-chip-group="ocpp"></div>
             </div>
-            <div class="col-12 col-md-4">
-              <p class="chip-label mb-0">{% trans "Integration rating" %}</p>
+            <div class="col-12 col-md-4 px-3 py-3">
+              <p class="chip-label mb-2">{% trans "Integration rating" %}</p>
               <div class="supported-chip-group" data-chip-group="rating"></div>
             </div>
           </div>
