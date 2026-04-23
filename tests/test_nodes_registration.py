@@ -459,6 +459,10 @@ def test_register_visitor_proxy_handles_unexpected_registration_errors(
     admin_client, monkeypatch
 ):
     """Regression: unexpected registration errors should return a safe proxy response."""
+
+    def _raise_runtime_error(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
     node = Node.objects.create(
         hostname="local-unexpected-failure",
         address="198.51.100.3",
@@ -484,7 +488,7 @@ def test_register_visitor_proxy_handles_unexpected_registration_errors(
     )
     monkeypatch.setattr(
         "apps.nodes.views.registration.handlers._build_registration_payload",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+        _raise_runtime_error,
     )
     class FakeResponse:
         status_code = 200
