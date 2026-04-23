@@ -47,6 +47,7 @@ if [ ! -d .venv ]; then
 fi
 source .venv/bin/activate
 
+# Lifecycle CLI contract: this public interface is documented in install-lifecycle-scripts-manual.md and regression-tested.
 # Supported interface:
 #   Usage: ./command.sh <operational-command> [args...]
 #   Usage: ./command.sh list

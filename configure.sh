@@ -48,6 +48,7 @@ FEATURE_PARAM_SPEC=""
 
 LOCK_DIR="$BASE_DIR/.locks"
 
+# Lifecycle CLI contract: keep reconfiguration flags aligned with docs/development/install-lifecycle-scripts-manual.md and contract tests.
 usage() {
     echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--stable|--regular|--normal|--unstable] [--fixed] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--celery|--no-celery] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--boot-upgrade|--no-boot-upgrade] [--feature SLUG [--kind suite|node] [--enabled|--disabled]] [--feature-param FEATURE:KEY=VALUE] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]" >&2
     exit 1
