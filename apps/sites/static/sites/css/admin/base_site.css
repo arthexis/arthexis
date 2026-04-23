@@ -26,7 +26,7 @@
     --user-story-input-border: rgba(15, 23, 42, 0.15);
     --user-story-checkbox-border: rgba(15, 23, 42, 0.25);
     --user-story-muted: rgba(15, 23, 42, 0.6);
-    --user-story-focus-ring: rgba(37, 99, 235, 0.2);
+    --user-story-focus-ring: color-mix(in srgb, var(--site-support) 30%, transparent);
     --user-story-alert-success-bg: rgba(34, 197, 94, 0.12);
     --user-story-alert-success-border: rgba(34, 197, 94, 0.35);
     --user-story-alert-success-fg: #047857;
@@ -879,6 +879,7 @@ body.user-story-open {
 
 .user-story-card .user-story-title {
     margin-bottom: 0.25rem;
+    color: var(--site-support);
 }
 
 .user-story-card .user-story-subtitle {
@@ -961,7 +962,7 @@ body.user-story-open {
 
 .user-story-card .user-story-input:focus,
 .user-story-card textarea:focus {
-    border-color: #2563eb;
+    border-color: var(--site-support);
     box-shadow: 0 0 0 0.2rem var(--user-story-focus-ring);
     outline: none;
 }
@@ -985,7 +986,7 @@ body.user-story-open {
 }
 
 .user-story-card .form-check-input:focus {
-    border-color: #2563eb;
+    border-color: var(--site-support);
     box-shadow: 0 0 0 0.2rem var(--user-story-focus-ring);
 }
 
