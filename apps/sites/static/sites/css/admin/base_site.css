@@ -410,6 +410,10 @@ body.chat-open {
     --user-story-alert-danger-border: rgba(248, 113, 113, 0.45);
     --user-story-alert-danger-fg: #fca5a5;
     --user-story-close-hover-bg: rgba(148, 163, 184, 0.25);
+    --user-story-accent: #84cc16;
+    --user-story-accent-rgb: 132, 204, 22;
+    --user-story-accent-strong: #bef264;
+    --user-story-accent-text: #1f2937;
 }
 
 body.login #header {

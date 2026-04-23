@@ -467,6 +467,14 @@ html[data-bs-theme='dark'] .markdown-body tbody tr:nth-of-type(odd) td {
   --user-story-accent-text: #f8fafc;
 }
 
+html[data-bs-theme='dark'] .user-story-toggle,
+html[data-bs-theme='dark'] .user-story-overlay {
+  --user-story-accent: #84cc16;
+  --user-story-accent-rgb: 132, 204, 22;
+  --user-story-accent-strong: #bef264;
+  --user-story-accent-text: #1f2937;
+}
+
 .user-story-toggle {
   position: fixed;
   right: 1.75rem;
