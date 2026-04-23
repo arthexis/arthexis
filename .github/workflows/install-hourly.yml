@@ -16,7 +16,7 @@ on:
 
 jobs:
   install:
-    name: install (${{ matrix.os_flavor }}, ${{ matrix.db_backend }}, ${{ matrix.role }})
+    name: install (${{ matrix.os_flavor }}, ${{ matrix.db_backend }})
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.container_image }}
@@ -27,83 +27,15 @@ jobs:
           - os_flavor: ubuntu
             container_image: ubuntu:24.04
             db_backend: sqlite
-            role: terminal
-            install_args: --terminal
-          - os_flavor: ubuntu
-            container_image: ubuntu:24.04
-            db_backend: sqlite
-            role: control
-            install_args: --control
-          - os_flavor: ubuntu
-            container_image: ubuntu:24.04
-            db_backend: sqlite
-            role: satellite
-            install_args: --satellite
-          - os_flavor: ubuntu
-            container_image: ubuntu:24.04
-            db_backend: sqlite
-            role: watchtower
-            install_args: --watchtower
           - os_flavor: ubuntu
             container_image: ubuntu:24.04
             db_backend: postgres
-            role: terminal
-            install_args: --terminal
-          - os_flavor: ubuntu
-            container_image: ubuntu:24.04
-            db_backend: postgres
-            role: control
-            install_args: --control
-          - os_flavor: ubuntu
-            container_image: ubuntu:24.04
-            db_backend: postgres
-            role: satellite
-            install_args: --satellite
-          - os_flavor: ubuntu
-            container_image: ubuntu:24.04
-            db_backend: postgres
-            role: watchtower
-            install_args: --watchtower
           - os_flavor: debian
             container_image: debian:12
             db_backend: sqlite
-            role: terminal
-            install_args: --terminal
-          - os_flavor: debian
-            container_image: debian:12
-            db_backend: sqlite
-            role: control
-            install_args: --control
-          - os_flavor: debian
-            container_image: debian:12
-            db_backend: sqlite
-            role: satellite
-            install_args: --satellite
-          - os_flavor: debian
-            container_image: debian:12
-            db_backend: sqlite
-            role: watchtower
-            install_args: --watchtower
           - os_flavor: debian
             container_image: debian:12
             db_backend: postgres
-            role: terminal
-            install_args: --terminal
-          - os_flavor: debian
-            container_image: debian:12
-            db_backend: postgres
-            role: control
-            install_args: --control
-          - os_flavor: debian
-            container_image: debian:12
-            db_backend: postgres
-            role: satellite
-            install_args: --satellite
-          - os_flavor: debian
-            container_image: debian:12
-            db_backend: postgres
-            role: watchtower
-            install_args: --watchtower
     permissions:
       contents: read
     services:
@@ -165,9 +97,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.role }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
+          key: venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
           restore-keys: |
-            venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.role }}-${{ steps.setup-python.outputs.python-version }}-
+            venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ steps.setup-python.outputs.python-version }}-
       - name: Validate pyproject dependency ordering
         run: |
           python3 "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
@@ -175,7 +107,6 @@ jobs:
         run: |
           python3 "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
       - name: Install redis CLI
-        if: ${{ matrix.role == 'control' || matrix.role == 'satellite' || matrix.role == 'watchtower' }}
         run: |
           if command -v sudo >/dev/null 2>&1; then
             sudo apt-get update
@@ -186,7 +117,7 @@ jobs:
           fi
       - name: Install suite from repository
         run: |
-          ./install.sh ${{ matrix.install_args }} --embedded --no-start
+          ./install.sh --embedded --no-start
       - name: Refresh environment dependencies
         run: |
           ./env-refresh.sh
@@ -261,7 +192,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: install-hourly-pytest-results-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.role }}
+          name: install-hourly-pytest-results-${{ matrix.os_flavor }}-${{ matrix.db_backend }}
           path: |
             pytest.log
             pytest-junit.xml
