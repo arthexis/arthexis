@@ -15,6 +15,10 @@
 }
 
 :root {
+    --site-support: #15803d;
+    --site-support-strong: #34d399;
+    --site-support-icon: #0f172a;
+    --site-support-text: #f0fdf4;
     --user-story-card-bg: var(--body-bg, #ffffff);
     --user-story-card-fg: var(--body-fg, #212529);
     --user-story-card-border: rgba(15, 23, 42, 0.12);
@@ -58,8 +62,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #15803d, #34d399);
-    color: #f0fdf4;
+    background: linear-gradient(135deg, var(--site-support), var(--site-support-strong));
+    color: var(--site-support-icon);
     box-shadow: 0 1.25rem 2.5rem rgba(15, 23, 42, 0.35);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -781,8 +785,8 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
     height: 3rem;
     border-radius: 50%;
     border: 0;
-    background: linear-gradient(135deg, #15803d, #34d399);
-    color: #f0fdf4;
+    background: linear-gradient(135deg, var(--site-support), var(--site-support-strong));
+    color: var(--site-support-icon);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -893,8 +897,8 @@ body.user-story-open {
     border-radius: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.02em;
-    background: linear-gradient(135deg, #2563eb, #0ea5e9);
-    color: #ffffff;
+    background: linear-gradient(135deg, var(--site-support), var(--site-support-strong));
+    color: var(--site-support-icon);
     cursor: pointer;
     transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
@@ -902,7 +906,7 @@ body.user-story-open {
 .user-story-card .user-story-submit:hover,
 .user-story-card .user-story-submit:focus-visible {
     transform: translateY(-1px);
-    box-shadow: 0 1rem 2rem rgba(14, 165, 233, 0.35);
+    box-shadow: 0 1rem 2rem rgba(21, 128, 61, 0.35);
     text-decoration: none;
 }
 
@@ -1104,11 +1108,11 @@ body.user-story-open {
 .user-story-rating label:hover,
 .user-story-rating label:focus-visible,
 .user-story-rating label:hover ~ label {
-    color: #fbbf24;
+    color: var(--site-support-strong);
 }
 
 .user-story-rating input:checked ~ label {
-    color: #f59e0b;
+    color: var(--site-support);
 }
 
 .user-story-rating label:active {
