@@ -218,7 +218,6 @@
       {% endif %}
       {% block content %}{% endblock %}
     </div>
-    {% include "pages/includes/public_chat_widget.html" %}
     {% include "pages/includes/public_feedback_widget.html" %}
     {% if quick_web_share_enabled %}
     <div class="modal fade" id="shareModal" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
@@ -300,9 +299,6 @@
     {% endif %}
     <script src="{% static 'htmx/htmx.min.js' %}"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-    {% if chat_enabled %}
-    <script src="{% static 'pages/js/chat.js' %}" defer></script>
-    {% endif %}
     <script src="{% static 'pages/js/base.js' %}" defer></script>
     {% if feedback_ingestion_enabled %}
     <script src="{% static 'pages/js/user_story_feedback.js' %}" defer></script>

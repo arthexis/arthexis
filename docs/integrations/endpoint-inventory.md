@@ -303,7 +303,7 @@ Arthexis should be extended as an integration pivot (apps + models + migrations)
 
 ---
 
-## 4) `apps.sites` (auth + webhook + chat socket)
+## 4) `apps.sites` (auth + webhook)
 
 ### HTTP
 
@@ -312,12 +312,6 @@ Arthexis should be extended as an integration pivot (apps + models + migrations)
 | `POST /login/passkey/options/` | Browser login flow | Create WebAuthn challenge | In progress |
 | `POST /login/passkey/verify/` | Browser login flow | Verify WebAuthn assertion and establish session | In progress |
 | `POST /webhooks/whatsapp/` | External system (WhatsApp bridge) | Accept WhatsApp payload and append to chat session | Complete |
-
-### WebSocket
-
-| Endpoint | Caller | Purpose | Status |
-|---|---|---|---|
-| `ws://<host>/ws/pages/chat/` | Browser visitor/staff UI | Realtime chat session transport | In progress |
 
 #### `POST /webhooks/whatsapp/` detailed
 - **Expected caller**: external WhatsApp delivery service.

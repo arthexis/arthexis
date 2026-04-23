@@ -21,7 +21,7 @@ Operational audit artifact for endpoint-documentation status across the Arthexis
 | `apps.nodes` | `/nodes/net-message/`, `/nodes/net-message/pull/`, `/nodes/register/proxy/`, `/nodes/register/telemetry/` | Partially documented (current state) | Error matrices and replay-policy details are incomplete. |
 | `apps.actions.api` | `/actions/api/v1/security-groups/` | Documented (current state) | Caller/auth and payload contract are documented. |
 | `apps.sites` | `/webhooks/whatsapp/` | Documented (current state) | Webhook request/response and feature gating are documented. |
-| `apps.sites` | `/login/passkey/options/`, `/login/passkey/verify/`, `/ws/pages/chat/` | Partially documented (current state) | Role/scope/session-expiry detail and socket event schema are incomplete. |
+| `apps.sites` | `/login/passkey/options/`, `/login/passkey/verify/` | Partially documented (current state) | Role/scope/session-expiry detail is incomplete. |
 | `apps.cards` | RFID scan/import/export endpoints | Partially documented (current state) | Request/response examples for endpoint variants are incomplete. |
 | `apps.video` | `/ws/video/...` sockets | Partially documented (current state) | Signaling/frame/error schema documentation is incomplete. |
 | `apps.odoo` | `/odoo/query/<slug>/` | Partially documented (current state) | Auth and parameter-validation examples are incomplete. |
