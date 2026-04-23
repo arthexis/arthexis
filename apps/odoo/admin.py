@@ -1,9 +1,11 @@
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
@@ -12,6 +14,8 @@ from apps.locals.user_data import EntityModelAdmin
 
 from .models import (
     OdooDeployment,
+    OdooEmployee,
+    OdooProduct,
     OdooQuery,
     OdooQueryVariable,
     OdooSaleFactor,
@@ -27,6 +31,71 @@ from .sync_features import (
     ODOO_SYNC_DEPLOYMENT_DISCOVERY_PARAMETER_KEY,
     is_odoo_sync_integration_enabled,
 )
+
+
+class OdooTemplateSetupImportForm(forms.Form):
+    SOURCE_TEMPLATES = "templates"
+    SOURCE_PRODUCTS = "products"
+    SOURCE_EMPLOYEES = "employees"
+    SOURCE_CHOICES = (
+        (SOURCE_TEMPLATES, _("Quotation templates")),
+        (SOURCE_PRODUCTS, _("Extra products")),
+        (SOURCE_EMPLOYEES, _("Employees")),
+    )
+
+    source_type = forms.ChoiceField(
+        choices=SOURCE_CHOICES,
+        label=_("Object type"),
+    )
+    selected_ids = forms.MultipleChoiceField(
+        required=False,
+        choices=(),
+        widget=forms.CheckboxSelectMultiple,
+        label=_("Records to import"),
+        help_text=_("Select one or more records to import from Odoo."),
+    )
+
+    def __init__(
+        self,
+        *args,
+        source_options: list[tuple[str, str]] | None = None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.fields["selected_ids"].choices = source_options or []
+
+
+class OdooTemplateSetupCreateForm(forms.Form):
+    name_prefix = forms.CharField(
+        max_length=120,
+        initial="Setup Template",
+        label=_("Template name prefix"),
+    )
+    templates = forms.ModelMultipleChoiceField(
+        queryset=OdooSaleOrderTemplate.objects.none(),
+        required=True,
+        label=_("Templates"),
+        help_text=_("Pick at least one local template imported from Odoo."),
+        widget=forms.CheckboxSelectMultiple,
+    )
+    products = forms.ModelMultipleChoiceField(
+        queryset=OdooProduct.objects.none(),
+        required=False,
+        label=_("Products"),
+        widget=forms.CheckboxSelectMultiple,
+    )
+    employees = forms.ModelMultipleChoiceField(
+        queryset=OdooEmployee.objects.none(),
+        required=False,
+        label=_("Employees"),
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["templates"].queryset = OdooSaleOrderTemplate.objects.order_by("name")
+        self.fields["products"].queryset = OdooProduct.objects.order_by("name")
+        self.fields["employees"].queryset = OdooEmployee.objects.order_by("username")
 
 
 @admin.register(OdooDeployment)
@@ -314,6 +383,7 @@ class OdooSaleFactorProductRuleInline(admin.TabularInline):
 
 @admin.register(OdooSaleOrderTemplate)
 class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
+    changelist_actions = ["setup_templates"]
     list_display = (
         "name",
         "default_new_customer_language",
@@ -346,6 +416,370 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
             },
         ),
     )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "setup-templates/",
+                self.admin_site.admin_view(self.setup_templates_view),
+                name="odoo_odoosaleordertemplate_setup_templates",
+            ),
+            path(
+                "setup-templates/create/",
+                self.admin_site.admin_view(self.setup_templates_create_view),
+                name="odoo_odoosaleordertemplate_setup_templates_create",
+            ),
+        ]
+        return custom + urls
+
+    def _setup_templates_url(self) -> str:
+        return reverse("admin:odoo_odoosaleordertemplate_setup_templates")
+
+    def _setup_templates_create_url(self) -> str:
+        return reverse("admin:odoo_odoosaleordertemplate_setup_templates_create")
+
+    def get_dashboard_actions(self, request):
+        if not self.has_change_permission(request):
+            return []
+        return ["setup_templates"]
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        links = list(extra_context.get("public_view_links") or [])
+        setup_url = self._setup_templates_url()
+        if not any(link.get("url") == setup_url for link in links):
+            links.append({"label": self.setup_templates.label, "url": setup_url})
+        extra_context["public_view_links"] = links
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def _verified_profile_or_redirect(self, request):
+        profile = getattr(request.user, "odoo_employee", None)
+        if not profile or not profile.is_verified:
+            self.message_user(
+                request,
+                _("Configure and verify your Odoo employee before running template setup."),
+                level=messages.ERROR,
+            )
+            return None
+        return profile
+
+    def _remote_options(self, profile, source_type: str) -> list[tuple[str, str]]:
+        if source_type == OdooTemplateSetupImportForm.SOURCE_TEMPLATES:
+            rows = profile.execute(
+                "sale.order.template",
+                "search_read",
+                [[]],
+                fields=["id", "name"],
+                order="name asc",
+                limit=0,
+            )
+            return [
+                (str(row["id"]), row.get("name") or f"Template {row['id']}")
+                for row in rows
+                if row.get("id")
+            ]
+        if source_type == OdooTemplateSetupImportForm.SOURCE_PRODUCTS:
+            rows = profile.execute(
+                "product.product",
+                "search_read",
+                [[]],
+                fields=["id", "name"],
+                order="name asc",
+                limit=0,
+            )
+            return [
+                (str(row["id"]), row.get("name") or f"Product {row['id']}")
+                for row in rows
+                if row.get("id")
+            ]
+        rows = profile.execute(
+            "res.users",
+            "search_read",
+            [[("active", "=", True), ("share", "=", False)]],
+            fields=["id", "name", "email", "login", "partner_id"],
+            order="name asc",
+            limit=0,
+        )
+        return [
+            (
+                str(row["id"]),
+                row.get("name") or row.get("login") or f"Employee {row['id']}",
+            )
+            for row in rows
+            if row.get("id")
+        ]
+
+    def _find_remote_row(
+        self, profile, source_type: str, source_id: int
+    ) -> dict[str, object] | None:
+        model_map = {
+            OdooTemplateSetupImportForm.SOURCE_TEMPLATES: "sale.order.template",
+            OdooTemplateSetupImportForm.SOURCE_PRODUCTS: "product.product",
+            OdooTemplateSetupImportForm.SOURCE_EMPLOYEES: "res.users",
+        }
+        fields_map = {
+            OdooTemplateSetupImportForm.SOURCE_TEMPLATES: ["id", "name", "note"],
+            OdooTemplateSetupImportForm.SOURCE_PRODUCTS: ["id", "name", "description_sale"],
+            OdooTemplateSetupImportForm.SOURCE_EMPLOYEES: ["id", "name", "email", "login", "partner_id"],
+        }
+        rows = profile.execute(
+            model_map[source_type],
+            "search_read",
+            [[("id", "=", source_id)]],
+            fields=fields_map[source_type],
+            limit=1,
+        )
+        if not rows:
+            return None
+        return rows[0]
+
+    def _resolve_unique_username(self, base_username: str, odoo_uid: int) -> str:
+        user_model = get_user_model()
+        if not user_model.all_objects.filter(username=base_username).exists():
+            return base_username
+        suffix = f"-odoo-{odoo_uid}"
+        candidate = f"{base_username}{suffix}"
+        counter = 2
+        while user_model.all_objects.filter(username=candidate).exists():
+            candidate = f"{base_username}{suffix}-{counter}"
+            counter += 1
+        return candidate
+
+    def _import_template(self, source_row: dict[str, object]) -> tuple[OdooSaleOrderTemplate, bool]:
+        source_id = int(source_row["id"])
+        existing = OdooSaleOrderTemplate.objects.filter(odoo_template__id=source_id).first()
+        defaults = {
+            "name": str(source_row.get("name") or f"Odoo Template {source_id}"),
+            "odoo_template": {"id": source_id, "name": source_row.get("name") or f"Template {source_id}"},
+            "note_template": str(source_row.get("note") or ""),
+        }
+        if existing:
+            for key, value in defaults.items():
+                setattr(existing, key, value)
+            existing.save(update_fields=list(defaults.keys()))
+            return existing, False
+        return OdooSaleOrderTemplate.objects.create(**defaults), True
+
+    def _import_product(self, source_row: dict[str, object]) -> tuple[OdooProduct, bool]:
+        source_id = int(source_row["id"])
+        existing = OdooProduct.objects.filter(odoo_product__id=source_id).first()
+        defaults = {
+            "name": str(source_row.get("name") or f"Odoo Product {source_id}"),
+            "description": str(source_row.get("description_sale") or ""),
+            "renewal_period": 30,
+            "odoo_product": {"id": source_id, "name": source_row.get("name") or f"Product {source_id}"},
+        }
+        if existing:
+            for key, value in defaults.items():
+                setattr(existing, key, value)
+            existing.save(update_fields=list(defaults.keys()))
+            return existing, False
+        return OdooProduct.objects.create(**defaults), True
+
+    def _import_employee(self, profile, source_row: dict[str, object]) -> tuple[OdooEmployee, bool]:
+        source_id = int(source_row["id"])
+        existing = OdooEmployee.objects.filter(
+            host=profile.host,
+            database=profile.database,
+            odoo_uid=source_id,
+        ).first()
+        login = str(source_row.get("login") or "").strip()
+        email = str(source_row.get("email") or "").strip()
+        username_base = login or email or f"odoo-user-{source_id}"
+        if existing:
+            existing.username = login or existing.username
+            existing.email = email
+            existing.name = str(source_row.get("name") or existing.name)
+            existing.partner_id = None
+            partner_id = source_row.get("partner_id")
+            if isinstance(partner_id, (list, tuple)) and partner_id:
+                try:
+                    existing.partner_id = int(partner_id[0])
+                except (TypeError, ValueError):
+                    existing.partner_id = None
+            existing.save(update_fields=["username", "email", "name", "partner_id"])
+            return existing, False
+
+        user_model = get_user_model()
+        username = self._resolve_unique_username(username_base, source_id)
+        user = user_model.objects.create(username=username, email=email)
+        user.set_unusable_password()
+        user.save(update_fields=["password"])
+        partner_data = source_row.get("partner_id")
+        partner_id = None
+        if isinstance(partner_data, (list, tuple)) and partner_data:
+            try:
+                partner_id = int(partner_data[0])
+            except (TypeError, ValueError):
+                partner_id = None
+
+        employee = OdooEmployee.objects.create(
+            user=user,
+            host=profile.host,
+            database=profile.database,
+            username=login or username,
+            password="",
+            odoo_uid=source_id,
+            name=str(source_row.get("name") or ""),
+            email=email,
+            partner_id=partner_id,
+        )
+        return employee, True
+
+    def _import_source_selection(self, profile, source_type: str, selected_ids: list[str]) -> tuple[int, int]:
+        created = 0
+        updated = 0
+        for raw_id in selected_ids:
+            try:
+                source_id = int(raw_id)
+            except (TypeError, ValueError):
+                continue
+            source_row = self._find_remote_row(profile, source_type, source_id)
+            if not source_row:
+                continue
+            if source_type == OdooTemplateSetupImportForm.SOURCE_TEMPLATES:
+                _, was_created = self._import_template(source_row)
+            elif source_type == OdooTemplateSetupImportForm.SOURCE_PRODUCTS:
+                _, was_created = self._import_product(source_row)
+            else:
+                _, was_created = self._import_employee(profile, source_row)
+            if was_created:
+                created += 1
+            else:
+                updated += 1
+        return created, updated
+
+    def setup_templates(self, request, queryset=None):
+        return HttpResponseRedirect(self._setup_templates_url())
+
+    setup_templates.label = _("Setup Templates")
+    setup_templates.short_description = _("Setup Templates")
+    setup_templates.requires_queryset = False
+    setup_templates.dashboard_url = "admin:odoo_odoosaleordertemplate_setup_templates"
+
+    def setup_templates_view(self, request):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        profile = self._verified_profile_or_redirect(request)
+        if profile is None:
+            return HttpResponseRedirect(
+                reverse(f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist")
+            )
+
+        source_type = request.POST.get("source_type") or request.GET.get("source_type")
+        if source_type not in dict(OdooTemplateSetupImportForm.SOURCE_CHOICES):
+            source_type = OdooTemplateSetupImportForm.SOURCE_TEMPLATES
+
+        options = self._remote_options(profile, source_type)
+        form = OdooTemplateSetupImportForm(
+            request.POST or None,
+            initial={"source_type": source_type},
+            source_options=options,
+        )
+
+        if request.method == "POST" and form.is_valid():
+            created, updated = self._import_source_selection(
+                profile,
+                source_type=form.cleaned_data["source_type"],
+                selected_ids=form.cleaned_data["selected_ids"],
+            )
+            self.message_user(
+                request,
+                _("Imported from Odoo. Created: %(created)s | Updated: %(updated)s")
+                % {"created": created, "updated": updated},
+                level=messages.SUCCESS,
+            )
+            return HttpResponseRedirect(
+                f"{self._setup_templates_url()}?source_type={form.cleaned_data['source_type']}"
+            )
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Setup Templates"),
+            "form": form,
+            "step_two_url": self._setup_templates_create_url(),
+            "changelist_url": reverse(
+                f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist"
+            ),
+        }
+        return TemplateResponse(
+            request,
+            "admin/odoo/odoosaleordertemplate/setup_templates_step1.html",
+            context,
+        )
+
+    def setup_templates_create_view(self, request):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        form = OdooTemplateSetupCreateForm(request.POST or None)
+        if request.method == "POST" and form.is_valid():
+            templates = list(form.cleaned_data["templates"])
+            products = list(form.cleaned_data["products"])
+            employees = list(form.cleaned_data["employees"])
+            name_prefix = form.cleaned_data["name_prefix"].strip() or "Setup Template"
+            primary_employee = employees[0] if employees else None
+
+            created_templates: list[OdooSaleOrderTemplate] = []
+            for source_template in templates:
+                copied = OdooSaleOrderTemplate.objects.create(
+                    name=f"{name_prefix}: {source_template.name}",
+                    odoo_template=source_template.odoo_template,
+                    note_template=source_template.note_template,
+                    resolve_note_sigils=source_template.resolve_note_sigils,
+                    default_new_customer_language=source_template.default_new_customer_language,
+                    fallback_new_customer_language=source_template.fallback_new_customer_language,
+                    salesperson=primary_employee,
+                )
+                created_templates.append(copied)
+
+            factor = None
+            created_rules = 0
+            if created_templates:
+                factor_name = f"{name_prefix} Products"
+                factor = OdooSaleFactor.objects.create(
+                    name=factor_name,
+                    code=slugify(factor_name)[:64] or "setup-template-products",
+                )
+                factor.templates.set(created_templates)
+                for product in products:
+                    OdooSaleFactorProductRule.objects.create(
+                        factor=factor,
+                        name=product.name,
+                        odoo_product=product.odoo_product,
+                    )
+                    created_rules += 1
+
+            self.message_user(
+                request,
+                _(
+                    "Template setup completed. Templates created: %(templates)s | Product rules created: %(rules)s"
+                )
+                % {"templates": len(created_templates), "rules": created_rules},
+                level=messages.SUCCESS,
+            )
+            return HttpResponseRedirect(
+                reverse(f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist")
+            )
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Setup Templates · Step 2"),
+            "form": form,
+            "step_one_url": self._setup_templates_url(),
+            "changelist_url": reverse(
+                f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist"
+            ),
+        }
+        return TemplateResponse(
+            request,
+            "admin/odoo/odoosaleordertemplate/setup_templates_step2.html",
+            context,
+        )
 
 
 @admin.register(OdooSaleFactor)
