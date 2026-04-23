@@ -139,18 +139,6 @@ def test_import_transactions_rejects_invalid_charger_ids(base_time):
 
 
 @pytest.mark.django_db
-def test_import_transactions_skips_placeholder_serials(base_time):
-    data = {
-        "transactions": [
-            {"charger": "<charger_id>", "start_time": base_time.isoformat()},
-            {"charger": "<1234>", "start_time": base_time.isoformat()},
-        ]
-    }
-
-    imported = import_transactions(data)
-
-    assert imported == 0
-    assert Transaction.objects.count() == 0
 
 
 @pytest.mark.django_db

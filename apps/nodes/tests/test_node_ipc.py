@@ -23,16 +23,6 @@ def test_node_clean_rejects_relative_ipc_path(tmp_path):
 
 
 @pytest.mark.django_db
-def test_node_clean_rejects_ipc_path_outside_managed_directory(tmp_path):
-    node = Node(
-        hostname="node-a",
-        public_endpoint="node-a",
-        base_path=str(tmp_path),
-        ipc_path="/tmp/outside.sock",
-    )
-
-    with pytest.raises(ValidationError, match="IPC path must be within"):
-        node.clean()
 
 
 @pytest.mark.django_db

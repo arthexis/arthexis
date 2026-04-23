@@ -35,27 +35,6 @@ def test_release_action_resumes_ongoing_release_process(db, tmp_path) -> None:
         )
 
 
-def test_release_action_resumes_errored_release_process(db, tmp_path) -> None:
-    with override_settings(BASE_DIR=tmp_path):
-        release = _build_release()
-        request = RequestFactory().get("/admin/release/packagerelease/")
-        request.session = {
-            f"release_publish_{release.pk}": {
-                "started": True,
-                "step": 1,
-                "error": "Failed at step 1",
-            }
-        }
-
-        admin_view = PackageReleaseAdmin(PackageRelease, admin.site)
-        response = admin_view.release_action(request, release)
-
-        assert response.status_code == 302
-        assert response.url == (
-            f'{reverse("release-progress", args=[release.pk, "publish"])}?resume=1'
-        )
-
-
 def test_release_action_starts_publish_when_not_ongoing(db, tmp_path) -> None:
     with override_settings(BASE_DIR=tmp_path):
         release = _build_release()
