@@ -34,6 +34,10 @@
     --user-story-alert-danger-border: rgba(248, 113, 113, 0.35);
     --user-story-alert-danger-fg: #b91c1c;
     --user-story-close-hover-bg: rgba(15, 23, 42, 0.08);
+    --user-story-accent: #4d7c0f;
+    --user-story-accent-rgb: 77, 124, 15;
+    --user-story-accent-strong: #3f6212;
+    --user-story-accent-text: #f8fafc;
     --user-story-contact-gap: var(--admin-ui-space-3, 0.75rem);
     --user-story-contact-optin-offset: var(--admin-ui-space-2, 0.5rem);
     --user-story-contact-breakpoint: 48rem;
@@ -779,14 +783,6 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
 
 .selector-chosen {
     order: 2;
-}
-
-.user-story-toggle,
-.user-story-overlay {
-    --user-story-accent: #4d7c0f;
-    --user-story-accent-rgb: 77, 124, 15;
-    --user-story-accent-strong: #3f6212;
-    --user-story-accent-text: #f8fafc;
 }
 
 .user-story-toggle {
