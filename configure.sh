@@ -88,7 +88,7 @@ email = sys.argv[2].strip()
 key = "DEFAULT_ADMIN_EMAIL"
 prefix = f"{key}="
 
-lines: list[str] = []
+lines = []
 if env_file.exists():
     lines = env_file.read_text(encoding="utf-8").splitlines()
 
@@ -940,7 +940,7 @@ if [ -n "$FEATURE_PARAM_SPEC" ] && [ -z "$NODE_ROLE" ]; then
     run_feature_param_set "$feature_part" "$feature_key" "$feature_value"
 fi
 
-if [ -n "$ADMIN_EMAIL" ] && [ -z "$NODE_ROLE" ]; then
+if [ -n "$ADMIN_EMAIL" ]; then
     ACTION_PERFORMED=true
     write_default_admin_email_env "$ADMIN_EMAIL"
     echo "Default admin email configured for upgrade notifications."
