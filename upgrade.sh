@@ -25,11 +25,15 @@ fi
 # Record upgrade lifecycle in the startup report for visibility in admin reports.
 UPGRADE_SCRIPT_NAME="$(basename "$0")"
 arthexis_log_startup_event "$BASE_DIR" "$UPGRADE_SCRIPT_NAME" "start" "invoked"
+UPGRADE_NOTIFICATION_REQUIRED=0
+UPGRADE_SELF_UPDATE_RERUN_ACTIVE=0
 
 log_upgrade_exit() {
-  local status=$?
+  local status="${1:-$?}"
   arthexis_log_startup_event "$BASE_DIR" "$UPGRADE_SCRIPT_NAME" "finish" "status=$status"
-  arthexis_record_upgrade_duration "$status"
+  if declare -F arthexis_record_upgrade_duration >/dev/null 2>&1; then
+    arthexis_record_upgrade_duration "$status"
+  fi
 }
 trap log_upgrade_exit EXIT
 # shellcheck source=scripts/helpers/ports.sh
@@ -1130,6 +1134,7 @@ rerun_with_updated_script() {
   fi
 
   echo "upgrade.sh was updated during git pull; restarting upgrade automatically with the new script..."
+  UPGRADE_SELF_UPDATE_RERUN_ACTIVE=1
   export ARTHEXIS_UPGRADE_SELF_UPDATE_DEPTH=$((depth + 1))
   "${rerun_cmd[@]}"
 }
@@ -1169,7 +1174,102 @@ printf "%s\n" "$(date -Iseconds)" > "$UPGRADE_IN_PROGRESS_LOCK"
 cleanup_upgrade_progress_lock() {
   rm -f "$UPGRADE_IN_PROGRESS_LOCK"
 }
-trap cleanup_upgrade_progress_lock EXIT INT TERM
+
+should_notify_upgrade_completion() {
+  local status="${1:-0}"
+
+  if [[ ${UPGRADE_NOTIFICATION_REQUIRED:-0} -ne 1 ]]; then
+    return 1
+  fi
+
+  if [[ ${CHECK_ONLY:-0} -eq 1 || ${STOP_ONLY:-0} -eq 1 ]]; then
+    return 1
+  fi
+
+  if [[ ${UPGRADE_SELF_UPDATE_RERUN_ACTIVE:-0} -eq 1 ]]; then
+    return 1
+  fi
+
+  if [[ "${status}" -eq "${UPGRADE_RERUN_EXIT_CODE:-3}" ]]; then
+    return 1
+  fi
+
+  return 0
+}
+
+notify_upgrade_completion_email() {
+  local status="$1"
+  local notify_python="${PYTHON_BIN:-}"
+
+  if [ -z "$notify_python" ] || [ ! -x "$notify_python" ]; then
+    if [ -x "$BASE_DIR/.venv/bin/python" ]; then
+      notify_python="$BASE_DIR/.venv/bin/python"
+    else
+      notify_python="$(command -v python3 || command -v python || true)"
+    fi
+  fi
+
+  if [ -z "$notify_python" ]; then
+    echo "Warning: Python interpreter not found; could not send upgrade status email." >&2
+    return 1
+  fi
+
+  local -a notify_cmd=(
+    "$notify_python"
+    "manage.py"
+    "upgrade"
+    "notify"
+    "--exit-status"
+    "$status"
+    "--source"
+    "$UPGRADE_SCRIPT_NAME"
+    "--channel"
+    "$CHANNEL"
+  )
+
+  if [[ -n "${BRANCH:-}" ]]; then
+    notify_cmd+=("--branch" "$BRANCH")
+  fi
+  if [[ -n "${SERVICE_NAME:-}" ]]; then
+    notify_cmd+=("--service" "$SERVICE_NAME")
+  fi
+  if [[ -n "${LOCAL_VERSION:-}" ]]; then
+    notify_cmd+=("--initial-version" "$LOCAL_VERSION")
+  fi
+  if [[ -n "${REMOTE_VERSION:-}" ]]; then
+    notify_cmd+=("--target-version" "$REMOTE_VERSION")
+  fi
+  if [[ -n "${LOCAL_REVISION:-}" ]]; then
+    notify_cmd+=("--initial-revision" "$LOCAL_REVISION")
+  fi
+  if [[ -n "${REMOTE_REVISION:-}" ]]; then
+    notify_cmd+=("--target-revision" "$REMOTE_REVISION")
+  fi
+
+  if ! (cd "$BASE_DIR" && "${notify_cmd[@]}"); then
+    echo "Warning: upgrade status email was not sent." >&2
+    return 1
+  fi
+
+  return 0
+}
+
+finalize_upgrade_exit() {
+  local status=$?
+
+  cleanup_upgrade_progress_lock
+  log_upgrade_exit "$status"
+
+  if should_notify_upgrade_completion "$status"; then
+    notify_upgrade_completion_email "$status" || true
+  fi
+
+  return "$status"
+}
+
+trap finalize_upgrade_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 UPGRADE_RERUN_LOCK="$LOCK_DIR/upgrade_rerun_required.lck"
 RERUN_AFTER_SELF_UPDATE=0
@@ -1964,6 +2064,7 @@ else
 fi
 
 # Normalize VERSION by removing any trailing development markers.
+UPGRADE_NOTIFICATION_REQUIRED=1
 arthexis_update_version_marker "$BASE_DIR"
 
 # Create virtual environment automatically if missing

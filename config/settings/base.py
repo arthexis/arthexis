@@ -137,8 +137,17 @@ ASGI_APPLICATION = "config.asgi.application"
 
 # Email settings
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@example.com")
-SERVER_EMAIL = DEFAULT_FROM_EMAIL
+DEFAULT_ADMIN_EMAIL = os.environ.get(
+    "DEFAULT_ADMIN_EMAIL", "tecnologia@gelectriic.com"
+).strip()
+DEFAULT_ADMIN_USERNAME = (
+    os.environ.get("DEFAULT_ADMIN_USERNAME", "arthexis").strip() or "arthexis"
+)
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL", DEFAULT_ADMIN_EMAIL or "noreply@example.com"
+).strip()
+SERVER_EMAIL = os.environ.get("SERVER_EMAIL", DEFAULT_FROM_EMAIL).strip()
+ADMINS = [("Arthexis Admin", DEFAULT_ADMIN_EMAIL)] if DEFAULT_ADMIN_EMAIL else []
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
