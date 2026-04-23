@@ -124,6 +124,38 @@ def test_solve_parse_error_returns_command_error(tmp_path):
 
 
 @pytest.mark.django_db
+def test_resolve_enables_cache_by_default(monkeypatch):
+    calls = {"count": 0}
+
+    def fake_resolve(text, current=None, allowed_roots=None, allowed_actions=None):
+        calls["count"] += 1
+        return text
+
+    monkeypatch.setattr("apps.sigils.script_runtime.resolve_sigils", fake_resolve)
+
+    call_command("resolve", expr="hello")
+    call_command("resolve", expr="hello")
+
+    assert calls["count"] == 1
+
+
+@pytest.mark.django_db
+def test_solve_disables_cache_by_default(monkeypatch):
+    calls = {"count": 0}
+
+    def fake_resolve(text, current=None, allowed_roots=None, allowed_actions=None):
+        calls["count"] += 1
+        return text
+
+    monkeypatch.setattr("apps.sigils.script_runtime.resolve_sigils", fake_resolve)
+
+    call_command("solve", expr="hello")
+    call_command("solve", expr="hello")
+
+    assert calls["count"] == 2
+
+
+@pytest.mark.django_db
 def test_execute_script_interpolates_longest_variable_name_first(monkeypatch):
     monkeypatch.setattr("apps.sigils.script_runtime.resolve_sigils", lambda *args, **kwargs: args[0])
 
