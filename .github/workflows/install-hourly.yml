@@ -147,7 +147,7 @@ jobs:
             ca-certificates curl git sudo python3 python3-venv
       - uses: actions/checkout@v6
         with:
-          clean: false
+          clean: true
       - uses: actions/setup-python@v6
         id: setup-python
         with:
