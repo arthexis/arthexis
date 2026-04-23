@@ -26,7 +26,7 @@
     --user-story-input-border: rgba(15, 23, 42, 0.15);
     --user-story-checkbox-border: rgba(15, 23, 42, 0.25);
     --user-story-muted: rgba(15, 23, 42, 0.6);
-    --user-story-focus-ring: rgba(132, 204, 22, 0.35);
+    --user-story-focus-ring: color-mix(in srgb, var(--admin-primary-accent) 35%, transparent);
     --user-story-alert-success-bg: rgba(34, 197, 94, 0.12);
     --user-story-alert-success-border: rgba(34, 197, 94, 0.35);
     --user-story-alert-success-fg: #047857;
@@ -402,7 +402,7 @@ body.chat-open {
     --user-story-input-border: rgba(148, 163, 184, 0.35);
     --user-story-checkbox-border: rgba(148, 163, 184, 0.35);
     --user-story-muted: rgba(148, 163, 184, 0.85);
-    --user-story-focus-ring: rgba(163, 230, 53, 0.45);
+    --user-story-focus-ring: color-mix(in srgb, var(--admin-accent-strong) 45%, transparent);
     --user-story-alert-success-bg: rgba(34, 197, 94, 0.16);
     --user-story-alert-success-border: rgba(34, 197, 94, 0.45);
     --user-story-alert-success-fg: #22c55e;
@@ -779,9 +779,10 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
 
 .user-story-toggle,
 .user-story-overlay {
-    --user-story-accent: #84cc16;
-    --user-story-accent-strong: #bef264;
-    --user-story-accent-text: #1f2937;
+    --user-story-accent: #4d7c0f;
+    --user-story-accent-rgb: 77, 124, 15;
+    --user-story-accent-strong: #3f6212;
+    --user-story-accent-text: #f8fafc;
 }
 
 .user-story-toggle {
@@ -914,7 +915,7 @@ body.user-story-open {
 .user-story-card .user-story-submit:hover,
 .user-story-card .user-story-submit:focus-visible {
     transform: translateY(-1px);
-    box-shadow: 0 1rem 2rem rgba(132, 204, 22, 0.35);
+    box-shadow: 0 1rem 2rem color-mix(in srgb, var(--admin-primary-accent) 35%, transparent);
     text-decoration: none;
 }
 

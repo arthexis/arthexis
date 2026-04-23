@@ -461,9 +461,10 @@ html[data-bs-theme='dark'] .markdown-body tbody tr:nth-of-type(odd) td {
 
 .user-story-toggle,
 .user-story-overlay {
-  --user-story-accent: #84cc16;
-  --user-story-accent-strong: #bef264;
-  --user-story-accent-text: #1f2937;
+  --user-story-accent: #4d7c0f;
+  --user-story-accent-rgb: 77, 124, 15;
+  --user-story-accent-strong: #3f6212;
+  --user-story-accent-text: #f8fafc;
 }
 
 .user-story-toggle {
@@ -554,7 +555,7 @@ body.user-story-open {
   --bs-btn-hover-border-color: var(--user-story-accent-strong);
   --bs-btn-active-bg: var(--user-story-accent-strong);
   --bs-btn-active-border-color: var(--user-story-accent-strong);
-  --bs-btn-focus-shadow-rgb: 132, 204, 22;
+  --bs-btn-focus-shadow-rgb: var(--user-story-accent-rgb);
   --bs-btn-color: var(--user-story-accent-text);
   --bs-btn-hover-color: var(--user-story-accent-text);
   --bs-btn-active-color: var(--user-story-accent-text);
