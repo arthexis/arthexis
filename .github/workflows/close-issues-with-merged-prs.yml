@@ -1,0 +1,207 @@
+name: Close issues linked to merged PRs
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  close-linked-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close open issues when a linked PR is merged to default branch
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const defaultBranch = context.payload.repository?.default_branch || 'main';
+
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            const issuesOnly = openIssues.filter((issue) => !issue.pull_request);
+            core.info(`Evaluating ${issuesOnly.length} open issues.`);
+
+            for (const issue of issuesOnly) {
+              const timelineEvents = await github.paginate(github.rest.issues.listEventsForTimeline, {
+                owner,
+                repo,
+                issue_number: issue.number,
+                per_page: 100,
+              });
+
+              const orderedEvents = [...timelineEvents].sort((left, right) => {
+                const leftTime = Date.parse(left.created_at ?? '');
+                const rightTime = Date.parse(right.created_at ?? '');
+
+                if (Number.isNaN(leftTime) || Number.isNaN(rightTime) || leftTime === rightTime) {
+                  return (left.id ?? 0) - (right.id ?? 0);
+                }
+
+                return leftTime - rightTime;
+              });
+
+              const linkedPullRequests = new Map();
+              const reopenedTimestamps = [];
+
+              const getSourcePullRequest = (event) => {
+                const sourceIssue = event.source?.issue;
+                const sourceIssueNumber = sourceIssue?.number;
+
+                if (!sourceIssue?.pull_request || !sourceIssueNumber) {
+                  return null;
+                }
+
+                const repositoryUrl = sourceIssue.repository_url;
+                if (!repositoryUrl) {
+                  return null;
+                }
+
+                const repoMatch = repositoryUrl.match(/\/repos\/([^/]+)\/([^/]+)$/);
+                if (!repoMatch) {
+                  return null;
+                }
+
+                const sourceOwner = repoMatch[1];
+                const sourceRepo = repoMatch[2];
+
+                return {
+                  key: `${sourceOwner}/${sourceRepo}#${sourceIssueNumber}`,
+                  number: sourceIssueNumber,
+                  owner: sourceOwner,
+                  repo: sourceRepo,
+                };
+              };
+
+              for (const event of orderedEvents) {
+                if (event.event === 'reopened') {
+                  const reopenedTime = Date.parse(event.created_at ?? '');
+                  if (!Number.isNaN(reopenedTime)) {
+                    reopenedTimestamps.push(reopenedTime);
+                  }
+                }
+
+                if (!['cross-referenced', 'connected', 'disconnected'].includes(event.event)) {
+                  continue;
+                }
+
+                const sourcePullRequest = getSourcePullRequest(event);
+                if (!sourcePullRequest) {
+                  continue;
+                }
+
+                if (event.event === 'disconnected') {
+                  linkedPullRequests.delete(sourcePullRequest.key);
+                  continue;
+                }
+
+                linkedPullRequests.set(sourcePullRequest.key, sourcePullRequest);
+              }
+
+              if (linkedPullRequests.size === 0) {
+                continue;
+              }
+
+              const mergedToDefaultBranch = [];
+              for (const linkedPullRequest of linkedPullRequests.values()) {
+                try {
+                  const { data: pullRequest } = await github.rest.pulls.get({
+                    owner: linkedPullRequest.owner,
+                    repo: linkedPullRequest.repo,
+                    pull_number: linkedPullRequest.number,
+                  });
+
+                  if (!pullRequest.merged_at) {
+                    continue;
+                  }
+
+                  if (pullRequest.base?.ref !== defaultBranch) {
+                    continue;
+                  }
+
+                  if (
+                    pullRequest.base?.repo?.owner?.login !== owner ||
+                    pullRequest.base?.repo?.name !== repo
+                  ) {
+                    continue;
+                  }
+
+                  mergedToDefaultBranch.push({
+                    number: pullRequest.number,
+                    owner: linkedPullRequest.owner,
+                    repo: linkedPullRequest.repo,
+                    mergedAt: pullRequest.merged_at,
+                  });
+                } catch (error) {
+                  if (error.status === 404) {
+                    core.info(
+                      `#${issue.number}: linked PR ${linkedPullRequest.owner}/${linkedPullRequest.repo}#${linkedPullRequest.number} is unavailable.`,
+                    );
+                    continue;
+                  }
+
+                  throw error;
+                }
+              }
+
+              if (mergedToDefaultBranch.length === 0) {
+                core.info(`#${issue.number}: linked PR(s) found, but none merged to ${defaultBranch}.`);
+                continue;
+              }
+
+              const latestReopenedAt = reopenedTimestamps.length > 0 ? Math.max(...reopenedTimestamps) : null;
+              if (latestReopenedAt !== null) {
+                const latestMergedAt = Math.max(
+                  ...mergedToDefaultBranch.map((pullRequest) => Date.parse(pullRequest.mergedAt ?? '')),
+                );
+                if (!Number.isNaN(latestMergedAt) && latestReopenedAt > latestMergedAt) {
+                  core.info(
+                    `#${issue.number}: skipped because issue was reopened after linked PR(s) merged to ${defaultBranch}.`,
+                  );
+                  continue;
+                }
+              }
+
+              const linkedPullsText = mergedToDefaultBranch
+                .sort((left, right) =>
+                  `${left.owner}/${left.repo}#${left.number}`.localeCompare(
+                    `${right.owner}/${right.repo}#${right.number}`,
+                  ),
+                )
+                .map((pullRequest) =>
+                  pullRequest.owner === owner && pullRequest.repo === repo
+                    ? `#${pullRequest.number}`
+                    : `${pullRequest.owner}/${pullRequest.repo}#${pullRequest.number}`,
+                )
+                .join(', ');
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issue.number,
+                body: [
+                  `Closing automatically because linked PR(s) ${linkedPullsText} were merged into \`${defaultBranch}\`.`,
+                  '',
+                  'If this issue still needs follow-up work, please reopen it with details.',
+                ].join('\n'),
+              });
+
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: issue.number,
+                state: 'closed',
+              });
+
+              core.info(`#${issue.number}: closed (merged PR(s): ${linkedPullsText}).`);
+            }
