@@ -45,14 +45,46 @@ jobs:
                 per_page: 100,
               });
 
-              const hasAssociatedPr = timelineEvents.some((event) => {
-                if (event.event !== 'cross-referenced') {
-                  return false;
+              const associatedPrKeys = new Set();
+              const timelineEventsByTime = [...timelineEvents].sort((left, right) => {
+                const leftTime = Date.parse(left.created_at ?? '');
+                const rightTime = Date.parse(right.created_at ?? '');
+
+                if (Number.isNaN(leftTime) || Number.isNaN(rightTime) || leftTime === rightTime) {
+                  return (left.id ?? 0) - (right.id ?? 0);
+                }
+
+                return leftTime - rightTime;
+              });
+
+              for (const event of timelineEventsByTime) {
+                if (event.event !== 'cross-referenced' && event.event !== 'disconnected') {
+                  continue;
                 }
 
                 const sourceIssue = event.source?.issue;
-                return Boolean(sourceIssue?.pull_request);
-              });
+                if (!sourceIssue?.pull_request) {
+                  continue;
+                }
+
+                const sourcePrKey =
+                  sourceIssue.pull_request?.url ??
+                  sourceIssue.node_id ??
+                  (sourceIssue.id ? String(sourceIssue.id) : null);
+
+                if (!sourcePrKey) {
+                  continue;
+                }
+
+                if (event.event === 'cross-referenced') {
+                  associatedPrKeys.add(sourcePrKey);
+                  continue;
+                }
+
+                associatedPrKeys.delete(sourcePrKey);
+              }
+
+              const hasAssociatedPr = associatedPrKeys.size > 0;
 
               if (hasAssociatedPr) {
                 core.info(`#${issue.number}: skipped (associated PR found)`);
