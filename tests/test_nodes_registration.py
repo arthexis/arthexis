@@ -455,6 +455,79 @@ def test_register_visitor_proxy_reports_partial_failure_on_visitor_confirmation(
 
 
 @pytest.mark.django_db
+def test_register_visitor_proxy_handles_unexpected_registration_errors(
+    admin_client, monkeypatch
+):
+    """Regression: unexpected registration errors should return a safe proxy response."""
+    node = Node.objects.create(
+        hostname="local-unexpected-failure",
+        address="198.51.100.3",
+        mac_address="00:11:22:33:44:77",
+        port=8888,
+        public_endpoint="local-unexpected-failure",
+        public_key="local-key",
+    )
+
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+    monkeypatch.setattr(
+        registration_views.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("93.184.216.34", 443),
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "apps.nodes.views.registration.handlers._build_registration_payload",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "hostname": "visitor-host",
+                "mac_address": "aa:bb:cc:dd:ee:aa",
+                "address": "203.0.113.11",
+                "port": 8000,
+                "public_key": "visitor-key",
+                "features": [],
+            }
+
+    class FakeSession:
+        def mount(self, prefix, adapter):
+            return None
+
+        def get(self, url, timeout=None, headers=None):
+            return FakeResponse()
+
+    monkeypatch.setattr(requests, "Session", lambda: FakeSession())
+
+    response = admin_client.post(
+        reverse("register-visitor-proxy"),
+        data=json.dumps(
+            {
+                "visitor_info_url": "https://visitor.test/nodes/info/",
+                "visitor_register_url": "https://visitor.test/nodes/register/",
+                "token": "",
+            }
+        ),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "registration failed"
+
+
+@pytest.mark.django_db
 def test_register_visitor_telemetry_logs(client, caplog):
     """Telemetry endpoint should record structured registration diagnostics."""
     url = reverse("register-telemetry")
