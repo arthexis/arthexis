@@ -32,3 +32,17 @@ def test_mtg_hypergeometric_calculator_returns_probability_results(db):
     assert "Chance of at least target amount" in body
     assert "0.3995" in body
 
+def test_mtg_hypergeometric_calculator_rejects_excessive_deck_size(db):
+    response = Client().post(
+        reverse("awg:mtg_hypergeometric"),
+        data={
+            "deck_size": "5000",
+            "success_states": "4",
+            "draws": "7",
+            "min_successes": "1",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Deck size must be 500 or less." in response.content.decode()
+

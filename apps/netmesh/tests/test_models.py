@@ -11,6 +11,16 @@ from apps.netmesh.services.key_material import ensure_active_transport_key, rota
 from apps.nodes.models import Node, NodeRole
 from apps.ocpp.models import Charger
 
+
+@pytest.mark.django_db
+def test_node_key_material_only_one_active_key():
+    node = Node.objects.create(hostname="mesh-a")
+
+    NodeKeyMaterial.objects.create(node=node, public_key="pk-1", revoked=False)
+
+    with pytest.raises(IntegrityError):
+        NodeKeyMaterial.objects.create(node=node, public_key="pk-2", revoked=False)
+
 @pytest.mark.django_db
 def test_peer_policy_rejects_ambiguous_allow_and_deny_with_reordered_tag_selectors():
     source = Node.objects.create(hostname="mesh-reordered-tag-source")

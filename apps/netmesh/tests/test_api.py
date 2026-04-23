@@ -5,6 +5,14 @@ from apps.netmesh.models import MeshMembership, NodeKeyMaterial, PeerPolicy
 from apps.nodes.models import Node, NodeEnrollment, NodeRole
 from apps.nodes.services.enrollment import issue_enrollment_token
 
+
+@pytest.mark.django_db
+def test_netmesh_api_requires_valid_enrollment_token(client):
+    response = client.get("/api/netmesh/caller/")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "enrollment_token_missing"
+
 @pytest.mark.django_db
 def test_netmesh_api_returns_scoped_task_payloads_and_etag(client):
     gateway_role = NodeRole.objects.create(name="Gateway")

@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 import pytest
-from django.core.exceptions import ValidationError
-
 from apps.features.models import Feature
 
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("metadata", "expected_count"),
+    [
+        ({"parameters": {"one": "1", "two": "2"}}, 2),
+        ({"parameters": {}}, 0),
+        ({"parameters": "not-a-dict"}, 0),
+        ({"parameters": None}, 0),
+        ({}, 0),
+    ],
+)
 def test_params_count_reads_feature_metadata_parameters(metadata, expected_count: int) -> None:
     """params_count should only count dictionary-backed parameter values."""
 
