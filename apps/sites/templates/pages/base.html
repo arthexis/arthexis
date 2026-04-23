@@ -193,6 +193,20 @@
         </div>
       </nav>
       {% endif %}
+      {% if site_highlight %}
+        <div
+          id="site-highlight"
+          class="site-highlight mt-3"
+          data-highlight-cache-key="site-highlight-dismissed-{{ site_highlight.pk }}"
+        >
+          <div class="site-highlight__header">
+            <strong class="site-highlight__title">{{ site_highlight.title }}</strong>
+            <a href="#" class="site-highlight__close" data-highlight-close="true">{% trans "[X] Close" %}</a>
+          </div>
+          <div class="site-highlight__date">{{ site_highlight.highlight_date|date:"F j, Y" }}</div>
+          <p class="site-highlight__story mb-0">{{ site_highlight.story|linebreaksbr|urlize }}</p>
+        </div>
+      {% endif %}
       {% if messages %}
         <div class="mt-3" aria-live="polite" aria-atomic="true">
           {% for message in messages %}

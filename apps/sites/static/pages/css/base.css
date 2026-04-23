@@ -216,6 +216,47 @@ html[data-bs-theme='dark'] .language-select {
   color: var(--bs-body-color);
 }
 
+.site-highlight {
+  background:
+    linear-gradient(180deg, rgba(var(--site-primary-rgb), 0.2), rgba(var(--site-primary-rgb), 0.08)),
+    var(--bs-body-bg);
+  border: 1px solid rgba(var(--site-primary-rgb), 0.4);
+  border-radius: 0.75rem;
+  box-shadow: 0 0.75rem 1.75rem rgba(0, 0, 0, 0.2);
+  color: var(--bs-body-color);
+  padding: 0.9rem 1rem;
+}
+
+html[data-bs-theme='light'] .site-highlight {
+  box-shadow: 0 0.75rem 1.75rem rgba(var(--site-primary-rgb), 0.15);
+}
+
+.site-highlight__header {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.site-highlight__title {
+  font-size: 1.02rem;
+}
+
+.site-highlight__close {
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.site-highlight__date {
+  color: var(--bs-secondary-color);
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+
+.site-highlight__story {
+  margin-top: 0.6rem;
+}
+
 .markdown-body {
   font-size: 1rem;
   line-height: 1.7;

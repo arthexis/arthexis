@@ -318,6 +318,43 @@ const setupShareModal = () => {
   }
 };
 
+/**
+ * Dismiss the site highlight in browser-local storage only.
+ */
+const setupSiteHighlightDismissal = () => {
+  const highlight = document.getElementById('site-highlight');
+  if (!highlight) {
+    return;
+  }
+  const cacheKey = highlight.dataset.highlightCacheKey;
+  if (!cacheKey) {
+    return;
+  }
+
+  try {
+    if (window.localStorage.getItem(cacheKey) === '1') {
+      highlight.remove();
+      return;
+    }
+  } catch (error) {
+    return;
+  }
+
+  const closeLink = highlight.querySelector('[data-highlight-close="true"]');
+  if (!closeLink) {
+    return;
+  }
+  closeLink.addEventListener('click', event => {
+    event.preventDefault();
+    try {
+      window.localStorage.setItem(cacheKey, '1');
+    } catch (error) {
+      // Keep close behavior even if storage is unavailable.
+    }
+    highlight.remove();
+  });
+};
+
 applySiteThemeVariables();
 setupThemeToggle();
 initThemeState();
@@ -325,4 +362,5 @@ setupDropdowns();
 setupUserInfoTooltip();
 setupLanguageSelect();
 setupShareModal();
+setupSiteHighlightDismissal();
 window.addEventListener('load', syncDebugToolbarTheme);

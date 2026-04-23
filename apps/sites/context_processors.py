@@ -22,7 +22,7 @@ from apps.nodes.utils import FeatureChecker
 from apps.sites.utils import user_in_site_operator_group
 from utils.sites import get_site
 
-from .models import SiteTemplate
+from .models import SiteHighlight, SiteTemplate
 
 _FAVICON_DIR = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data"
 _FAVICON_FILENAMES = {
@@ -444,6 +444,19 @@ def _load_header_references(request, site, node):
         return []
 
 
+def _load_latest_site_highlight():
+    """Return the newest enabled site highlight, if available."""
+
+    try:
+        return (
+            SiteHighlight.objects.filter(is_enabled=True)
+            .order_by("-highlight_date", "-created_at", "-pk")
+            .first()
+        )
+    except (OperationalError, ProgrammingError):
+        return None
+
+
 def _build_chat_context(site, user, *, pages_chat_enabled: bool):
     """Return chat-related context flags for the current request.
 
@@ -599,6 +612,7 @@ def nav_links(request):
         "current_module": current_module,
         "favicon_url": _select_favicon_url(current_module, site, node),
         "header_references": _load_header_references(request, site, node),
+        "site_highlight": _load_latest_site_highlight(),
         "login_url": resolve_url(settings.LOGIN_URL),
         "site_template": _select_site_template(site, user),
         "operator_interface_mode": operator_interface_mode,
