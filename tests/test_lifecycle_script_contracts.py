@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MANUAL = ROOT / "docs/development/install-lifecycle-scripts-manual.md"
@@ -15,6 +15,17 @@ def _read_shell_contract(path: str) -> str:
     return "\n".join(
         line for line in _read(path).splitlines() if not line.lstrip().startswith("#")
     )
+
+
+def _read_usage_block(path: str) -> str:
+    script_text = _read(path)
+    usage_match = re.search(
+        r"^usage\(\)\s*\{\n(?P<body>.*?)^\}\n",
+        script_text,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert usage_match, f"{path} is missing usage() block"
+    return usage_match.group("body")
 
 
 def test_lifecycle_manual_covers_operator_entrypoints() -> None:
@@ -39,7 +50,7 @@ def test_lifecycle_manual_covers_operator_entrypoints() -> None:
 
 
 def test_install_usage_keeps_core_lifecycle_flags() -> None:
-    install_script = _read_shell_contract("install.sh")
+    install_usage = _read_usage_block("install.sh")
     expected_flags = (
         "--service",
         "--port",
@@ -55,7 +66,7 @@ def test_install_usage_keeps_core_lifecycle_flags() -> None:
     )
 
     for flag in expected_flags:
-        assert re.search(rf"(?<![\w-]){re.escape(flag)}(?![\w-])", install_script), (
+        assert re.search(rf"(?<![\w-]){re.escape(flag)}(?![\w-])", install_usage), (
             f"install.sh usage is missing lifecycle flag: {flag}"
         )
 
@@ -78,9 +89,6 @@ def test_lifecycle_scripts_expose_documented_entrypoints() -> None:
             "--stop",
             "--branch",
         ),
-        "command.sh": (
-            "python -m utils.command_api",
-        ),
     }
 
     for script_name, tokens in scripts_and_tokens.items():
@@ -92,3 +100,10 @@ def test_lifecycle_scripts_expose_documented_entrypoints() -> None:
     assert re.search(r"^\s*--branch\)\s*$", upgrade_script, re.MULTILINE), (
         "upgrade.sh is missing expected parser label: --branch)"
     )
+
+    command_script = _read_shell_contract("command.sh")
+    assert 'python -m utils.command_api "$@"' in command_script
+
+    manual = MANUAL.read_text(encoding="utf-8")
+    assert "`./command.sh list`" in manual
+    assert "`./command.sh <operational-command> [args...]`" in manual
