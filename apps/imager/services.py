@@ -26,6 +26,7 @@ from apps.imager.models import RaspberryPiImageArtifact
 
 TARGET_RPI4B = "rpi-4b"
 DEFAULT_RECOVERY_SSH_USER = "arthe"
+RECOVERY_SSH_USERNAME_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]*$")
 
 BOOTSTRAP_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
@@ -50,14 +51,18 @@ RECOVERY_USER={ssh_user}
 RECOVERY_HOME="/home/$RECOVERY_USER"
 
 if ! id -u "$RECOVERY_USER" >/dev/null 2>&1; then
-  useradd --create-home --shell /bin/bash "$RECOVERY_USER"
+  useradd --create-home --shell /bin/bash --groups sudo "$RECOVERY_USER"
 fi
+
+usermod -aG sudo "$RECOVERY_USER" >/dev/null 2>&1 || true
+echo "$RECOVERY_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-arthexis-recovery
+chmod 0440 /etc/sudoers.d/90-arthexis-recovery
 
 passwd -l "$RECOVERY_USER" >/dev/null 2>&1 || true
 install -d -m 700 -o "$RECOVERY_USER" -g "$RECOVERY_USER" "$RECOVERY_HOME/.ssh"
 install -m 600 -o "$RECOVERY_USER" -g "$RECOVERY_USER" {authorized_keys_path} "$RECOVERY_HOME/.ssh/authorized_keys"
 systemctl enable ssh
-systemctl restart ssh || systemctl start ssh
+systemctl restart ssh
 """
 
 RECOVERY_SSHD_CONFIG = """PasswordAuthentication no
@@ -527,6 +532,8 @@ def _normalize_recovery_ssh_access(
         return None
 
     username = (recovery_ssh_user or "").strip() or DEFAULT_RECOVERY_SSH_USER
+    if not RECOVERY_SSH_USERNAME_PATTERN.fullmatch(username):
+        raise ImagerBuildError(f"Invalid recovery SSH username: '{username}'")
     return RecoverySSHAccess(username=username, authorized_keys=normalized_keys)
 
 
@@ -562,7 +569,7 @@ def _customize_image(
             )
             recovery_script.write_text(
                 RECOVERY_ACCESS_SCRIPT.format(
-                    ssh_user=recovery_ssh_access.username,
+                    ssh_user=shlex.quote(recovery_ssh_access.username),
                     authorized_keys_path=RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH,
                 ),
                 encoding="utf-8",

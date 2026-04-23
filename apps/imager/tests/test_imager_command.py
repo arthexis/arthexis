@@ -228,6 +228,51 @@ def test_imager_build_command_reads_recovery_authorized_key_files(mock_build, tm
     ]
 
 
+@pytest.mark.django_db
+@patch("apps.imager.management.commands.imager.build_rpi4b_image")
+def test_imager_build_command_ignores_non_public_key_lines(mock_build, tmp_path: Path) -> None:
+    """Regression: recovery key ingestion should ignore malformed and private key lines."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+    authorized_key_file = tmp_path / "recovery.pub"
+    authorized_key_file.write_text(
+        "# comment\n"
+        "-----BEGIN OPENSSH PRIVATE KEY-----\n"
+        "invalid-content\n"
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyValid valid\n",
+        encoding="utf-8",
+    )
+    mock_build.return_value = type(
+        "BuildResult",
+        (),
+        {
+            "output_path": output_path,
+            "sha256": "abc123",
+            "size_bytes": 2,
+            "download_uri": "",
+            "build_engine": "arthexis-bootstrap",
+            "build_profile": "bootstrap",
+            "profile_manifest": {},
+        },
+    )()
+
+    call_command(
+        "imager",
+        "build",
+        "--name",
+        "recovery-v2",
+        "--base-image-uri",
+        str(output_path),
+        "--recovery-authorized-key-file",
+        str(authorized_key_file),
+    )
+
+    assert mock_build.call_args.kwargs["recovery_authorized_keys"] == [
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyValid valid",
+    ]
+
+
 def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided(tmp_path: Path) -> None:
     """Regression: recovery customization must enable first-boot SSH access files."""
 
@@ -281,10 +326,32 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
     assert keys_mode == "0600"
     assert sshd_mode == "0644"
     assert "RECOVERY_USER=arthe" in recovery_script
+    assert "NOPASSWD:ALL" in recovery_script
     assert "systemctl enable ssh" in recovery_script
     assert recovery_keys == "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestRecovery recovery\n"
     assert "/usr/local/bin/arthexis-recovery-access.sh" in firstrun_script
     assert "PasswordAuthentication no" in sshd_config
+
+
+def test_build_rpi4b_image_rejects_invalid_recovery_ssh_username(tmp_path: Path) -> None:
+    """Regression: recovery SSH usernames must be Linux-safe for first-boot scripting."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+
+    with pytest.raises(ImagerBuildError, match="Invalid recovery SSH username"):
+        build_rpi4b_image(
+            name="recovery-invalid-user",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+            recovery_ssh_user="arthe;touch /tmp/pwned",
+            recovery_authorized_keys=[
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestRecovery recovery",
+            ],
+        )
 
 
 @pytest.mark.django_db

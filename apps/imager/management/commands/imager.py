@@ -1,6 +1,7 @@
 """Management command for Raspberry Pi image artifact workflows."""
 
 import json
+import re
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
@@ -12,6 +13,21 @@ from apps.imager.services import (
     build_rpi4b_image,
     list_block_devices,
     write_image_to_device,
+)
+
+VALID_PUBLIC_KEY_PREFIXES = (
+    "ecdsa-sha2-nistp256",
+    "ecdsa-sha2-nistp384",
+    "ecdsa-sha2-nistp521",
+    "sk-ecdsa-sha2-nistp256@openssh.com",
+    "sk-ssh-ed25519@openssh.com",
+    "ssh-ed25519",
+    "ssh-rsa",
+)
+VALID_PUBLIC_KEY_PATTERN = re.compile(
+    r"^(?:"
+    + "|".join(re.escape(prefix) for prefix in VALID_PUBLIC_KEY_PREFIXES)
+    + r")\s+[A-Za-z0-9+/=]+(?:\s+.+)?$"
 )
 
 
@@ -175,6 +191,8 @@ class Command(BaseCommand):
             for line in lines:
                 normalized = line.strip()
                 if not normalized or normalized.startswith("#"):
+                    continue
+                if not VALID_PUBLIC_KEY_PATTERN.match(normalized):
                     continue
                 keys.append(normalized)
 
