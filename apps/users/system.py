@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Iterator, Tuple
+from typing import Callable, Iterator, Literal, Tuple, overload
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -97,12 +97,30 @@ def ensure_system_user(*, record_updates: bool = False):
     return user
 
 
+@overload
+def ensure_default_admin_user(
+    *,
+    username: str | None = None,
+    email: str | None = None,
+    record_updates: Literal[False] = False,
+) -> object | None: ...
+
+
+@overload
+def ensure_default_admin_user(
+    *,
+    username: str | None = None,
+    email: str | None = None,
+    record_updates: Literal[True],
+) -> tuple[object, set[str]] | None: ...
+
+
 def ensure_default_admin_user(
     *,
     username: str | None = None,
     email: str | None = None,
     record_updates: bool = False,
-):
+) -> object | tuple[object, set[str]] | None:
     """Return the configured default admin user, creating or repairing it as needed."""
 
     User = get_user_model()
