@@ -8,6 +8,7 @@ from . import (
     landing_admin,
     reports_admin,
     site_admin,
+    site_highlight_admin,
     story_admin,
 )
 
@@ -19,5 +20,6 @@ __all__ = [
     "landing_admin",
     "reports_admin",
     "site_admin",
+    "site_highlight_admin",
     "story_admin",
 ]
