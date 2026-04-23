@@ -7,6 +7,10 @@ from types import SimpleNamespace
 from django.core.management import call_command
 
 from apps.core.management.commands.startup_orchestrate import Command
+from gate_markers import gate
+
+
+pytestmark = [gate.upgrade]
 
 
 def _invoke_startup_orchestrate(

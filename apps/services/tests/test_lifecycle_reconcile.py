@@ -8,20 +8,27 @@ import pytest
 from django.core.management import call_command
 from django.test import override_settings
 
+from gate_markers import gate
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.services.lifecycle import write_lifecycle_config
 from apps.services.models import LifecycleService
 
 
+pytestmark = [gate.upgrade]
+
+
 @pytest.mark.django_db
 @override_settings(BASE_DIR="/tmp")
-def test_write_lifecycle_config_reconciles_camera_lock_from_feature_assignment(tmp_path, settings):
+def test_write_lifecycle_config_reconciles_camera_lock_from_feature_assignment(
+    monkeypatch, tmp_path, settings
+):
     """Feature-activated camera service should drive lockfile and unit lock output."""
 
     settings.BASE_DIR = tmp_path
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
     (lock_dir / "service.lck").write_text("suite", encoding="utf-8")
+    monkeypatch.setattr(Node, "_detect_auto_feature", lambda self, slug, **kwargs: False)
 
     node = Node.objects.create(
         hostname="suite-node",
@@ -67,15 +74,6 @@ def test_reconcile_node_features_services_command_uses_auto_detection(monkeypatc
     lock_dir.mkdir(parents=True, exist_ok=True)
     (lock_dir / "service.lck").write_text("suite", encoding="utf-8")
 
-    Node.objects.create(
-        hostname="auto-video-node",
-        mac_address=Node.get_current_mac(),
-        current_relation=Node.Relation.SELF,
-        public_endpoint="auto-video-node",
-        base_path=str(tmp_path),
-    )
-    NodeFeature.objects.create(slug="video-cam", display="Video Camera")
-
     LifecycleService.objects.update_or_create(
         slug="camera-service",
         defaults={
@@ -92,6 +90,15 @@ def test_reconcile_node_features_services_command_uses_auto_detection(monkeypatc
         "_detect_auto_feature",
         lambda self, slug, **kwargs: slug == "video-cam",
     )
+
+    Node.objects.create(
+        hostname="auto-video-node",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+        public_endpoint="auto-video-node",
+        base_path=str(tmp_path),
+    )
+    NodeFeature.objects.create(slug="video-cam", display="Video Camera")
 
     call_command("reconcile_node_features_services")
 

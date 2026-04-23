@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
+from gate_markers import gate
 from scripts.helpers.migration_reconcile import reconcile_sqlite_tables
+
+
+pytestmark = [gate.upgrade]
 
 
 def _exec_many(db_path: Path, statements: list[str]) -> None:

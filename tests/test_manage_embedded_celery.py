@@ -5,6 +5,10 @@ import subprocess
 from pathlib import Path
 
 import manage
+from gate_markers import gate
+
+
+pytestmark = [gate.upgrade]
 
 
 def test_service_mode_allows_embedded_celery_by_default(tmp_path: Path) -> None:
