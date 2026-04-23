@@ -87,7 +87,7 @@ must rerun with explicit reconciliation (for example `./upgrade.sh --migrate`).
    recovery source).
 3. Restore the repository working tree to the matching pre-upgrade revision
    (for example with your Git tag/commit pinning process for that environment).
-4. Re-run upgrade and inspect migration health before continuing.
+4. Re-run upgrade with the --local flag and inspect migration health before continuing.
 
 Do not perform reverse migrations as an operational recovery path; Arthexis
 upgrade recovery is database + repository restore based.
