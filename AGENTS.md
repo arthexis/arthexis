@@ -272,6 +272,15 @@ Any modification to database models must include appropriate migrations.
 
 # Pull Requests
 
+## Issue and PR Linking
+
+When issue and PR workflows overlap:
+
+* When an Issue is opened, it is highly recommended to also create a PR.
+* When a PR is created, check existing Issues and link the PR to any applicable Issues.
+
+---
+
 ## Branch Naming
 
 Branch names must include the **affected apps**.
