@@ -1681,7 +1681,7 @@ confirm_database_deletion() {
 }
 
 can_prompt_for_confirmation() {
-  if ! [ -t 0 ] || ! [ -t 1 ]; then
+  if ! [ -t 0 ]; then
     return 1
   fi
 
