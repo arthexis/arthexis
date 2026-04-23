@@ -540,7 +540,7 @@ def test_imager_devices_command_lists_discovery_metadata(list_devices_mock) -> N
 
 
 def test_guestfish_write_scopes_temp_dirs_to_image_output_directory(tmp_path: Path) -> None:
-    """Regression: guestfish temp/cache paths should stay under the artifact workspace."""
+    """Regression: guestfish temp dir should be scoped and cleaned while cache persists."""
 
     image_path = tmp_path / "artifact.img"
     image_path.write_bytes(b"img")
@@ -552,11 +552,39 @@ def test_guestfish_write_scopes_temp_dirs_to_image_output_directory(tmp_path: Pa
         _guestfish_write(image_path, local_path, "/usr/local/bin/arthexis-bootstrap.sh", chmod_mode="0755")
 
     env = run_mock.call_args.kwargs["env"]
-    assert env["TMPDIR"] == str(tmp_path / ".libguestfs-tmp")
-    assert env["LIBGUESTFS_TMPDIR"] == str(tmp_path / ".libguestfs-tmp")
+    assert env["TMPDIR"].startswith(str(tmp_path))
+    assert env["LIBGUESTFS_TMPDIR"] == env["TMPDIR"]
     assert env["LIBGUESTFS_CACHEDIR"] == str(tmp_path / ".libguestfs-cache")
-    assert (tmp_path / ".libguestfs-tmp").is_dir()
+    assert not Path(env["TMPDIR"]).exists()
     assert (tmp_path / ".libguestfs-cache").is_dir()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("extension", "writer"),
+    [
+        (".img.xz", lambda path: path.write_bytes(b"not-xz")),
+        (".img.gz", lambda path: path.write_bytes(b"not-gzip")),
+        (".zip", lambda path: path.write_bytes(b"not-zip")),
+    ],
+)
+def test_build_rpi4b_image_rejects_corrupted_archives(tmp_path: Path, extension: str, writer) -> None:
+    """Regression: malformed compressed base images should raise a user-facing build error."""
+
+    compressed_source = tmp_path / f"base{extension}"
+    writer(compressed_source)
+
+    with patch("apps.imager.services._customize_image"), pytest.raises(
+        ImagerBuildError, match="invalid or corrupted"
+    ):
+        build_rpi4b_image(
+            name=f"corrupt-{extension.replace('.', '-')}",
+            base_image_uri=str(compressed_source),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=True,
+        )
 
 
 @pytest.mark.django_db

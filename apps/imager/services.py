@@ -368,28 +368,33 @@ def _extract_base_image_archive(source_path: Path, workspace: Path) -> Path:
     if suffix not in {".xz", ".gz", ".zip"}:
         return source_path
 
-    if suffix == ".zip":
-        with zipfile.ZipFile(source_path) as archive:
-            members = [member for member in archive.infolist() if not member.is_dir()]
-            image_members = [
-                member for member in members if Path(member.filename).suffix.lower() == ".img"
-            ]
-            if len(image_members) == 1:
-                selected_member = image_members[0]
-            elif len(members) == 1:
-                selected_member = members[0]
-            else:
-                raise ImagerBuildError(
-                    f"Base image archive '{source_path.name}' must contain exactly one image file."
-                )
-            destination = workspace / Path(selected_member.filename).name
-            with archive.open(selected_member) as input_handle:
-                return _copy_stream_to_file(input_handle, destination)
+    try:
+        if suffix == ".zip":
+            with zipfile.ZipFile(source_path) as archive:
+                members = [member for member in archive.infolist() if not member.is_dir()]
+                image_members = [
+                    member for member in members if Path(member.filename).suffix.lower() == ".img"
+                ]
+                if len(image_members) == 1:
+                    selected_member = image_members[0]
+                elif len(members) == 1:
+                    selected_member = members[0]
+                else:
+                    raise ImagerBuildError(
+                        f"Base image archive '{source_path.name}' must contain exactly one image file."
+                    )
+                destination = workspace / Path(selected_member.filename).name
+                with archive.open(selected_member) as input_handle:
+                    return _copy_stream_to_file(input_handle, destination)
 
-    destination = workspace / source_path.stem
-    opener = lzma.open if suffix == ".xz" else gzip.open
-    with opener(source_path, "rb") as input_handle:
-        return _copy_stream_to_file(input_handle, destination)
+        destination = workspace / source_path.stem
+        opener = lzma.open if suffix == ".xz" else gzip.open
+        with opener(source_path, "rb") as input_handle:
+            return _copy_stream_to_file(input_handle, destination)
+    except (EOFError, gzip.BadGzipFile, lzma.LZMAError, zipfile.BadZipFile) as exc:
+        raise ImagerBuildError(
+            f"Base image archive '{source_path.name}' is invalid or corrupted: {exc}"
+        ) from exc
 
 
 def _resolve_base_image(base_image_uri: str, workspace: Path) -> Path:
@@ -497,24 +502,23 @@ def _guestfish_write(image_path: Path, local_path: Path, remote_path: str, chmod
     if chmod_mode:
         script_parts.append(f"chmod {chmod_mode} {shlex.quote(remote_path)}")
     script = "\n".join(script_parts) + "\n"
-    temp_dir = image_path.parent / ".libguestfs-tmp"
     cache_dir = image_path.parent / ".libguestfs-cache"
-    temp_dir.mkdir(parents=True, exist_ok=True)
     cache_dir.mkdir(parents=True, exist_ok=True)
-    guestfish_env = os.environ.copy()
-    guestfish_env["TMPDIR"] = str(temp_dir)
-    guestfish_env["LIBGUESTFS_TMPDIR"] = str(temp_dir)
-    guestfish_env["LIBGUESTFS_CACHEDIR"] = str(cache_dir)
-    result = subprocess.run(
-        ["guestfish", "--rw", "-a", str(image_path), "-i"],
-        input=script,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=guestfish_env,
-    )
-    if result.returncode != 0:
-        raise ImagerBuildError(result.stderr.strip() or "guestfish failed while writing files")
+    with TemporaryDirectory(dir=image_path.parent) as temp_dir:
+        guestfish_env = os.environ.copy()
+        guestfish_env["TMPDIR"] = temp_dir
+        guestfish_env["LIBGUESTFS_TMPDIR"] = temp_dir
+        guestfish_env["LIBGUESTFS_CACHEDIR"] = str(cache_dir)
+        result = subprocess.run(
+            ["guestfish", "--rw", "-a", str(image_path), "-i"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=guestfish_env,
+        )
+        if result.returncode != 0:
+            raise ImagerBuildError(result.stderr.strip() or "guestfish failed while writing files")
 
 
 def _customize_image(image_path: Path, *, git_url: str) -> None:
