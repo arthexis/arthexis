@@ -47,6 +47,15 @@ html {
   font-size: clamp(16px, 1.2vw, 24px);
 }
 
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--bs-border-color-translucent, rgba(108, 117, 125, 0.35));
+  z-index: 1090;
+}
+
 @media (min-width: 1600px) {
   .container {
     max-width: 90%;
