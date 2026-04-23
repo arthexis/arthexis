@@ -312,7 +312,7 @@ jobs:
           fi
 
   report:
-    if: ${{ always() && github.event_name != 'push' && needs.evaluate.outputs.can_simulate == 'true' }}
+    if: ${{ always() && github.event_name != 'push' }}
     needs:
       - evaluate
       - simulate_release
@@ -334,10 +334,6 @@ jobs:
             const marker = '<!-- release-readiness-report -->';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const blockers = JSON.parse(process.env.BLOCKERS_JSON || '[]');
-            if (blockers.length) {
-              core.info('Skipping release readiness issue update because pre-CI blockers are present.');
-              return;
-            }
             const canSimulate = process.env.CAN_SIMULATE === 'true';
             const simulatedOk = process.env.SIMULATED_OK === 'true';
             const simulationSummary = process.env.SIM_SUMMARY || [
