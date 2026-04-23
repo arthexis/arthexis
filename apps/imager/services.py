@@ -44,6 +44,12 @@ cd "$APP_HOME"
 
 RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH = "/usr/local/share/arthexis/recovery_authorized_keys"
 RECOVERY_SSHD_CONFIG_REMOTE_PATH = "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf"
+RECOVERY_STALE_FILE_PATHS = (
+    RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH,
+    "/usr/local/bin/arthexis-recovery-access.sh",
+    RECOVERY_SSHD_CONFIG_REMOTE_PATH,
+    "/etc/sudoers.d/90-arthexis-recovery",
+)
 
 RECOVERY_ACCESS_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
@@ -535,6 +541,21 @@ def _guestfish_mkdir_p(image_path: Path, remote_path: str) -> None:
         raise ImagerBuildError(result.stderr.strip() or "guestfish failed while creating directories")
 
 
+def _guestfish_remove_file(image_path: Path, remote_path: str) -> None:
+    """Remove a file from the disk image using guestfish, ignoring missing paths."""
+
+    script = f'sh "rm -f -- {remote_path}"\n'
+    result = subprocess.run(
+        ["guestfish", "--rw", "-a", str(image_path), "-i"],
+        input=script,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ImagerBuildError(result.stderr.strip() or "guestfish failed while removing files")
+
+
 def _normalize_recovery_ssh_access(
     *,
     recovery_ssh_user: str,
@@ -629,6 +650,9 @@ def _customize_image(
                 RECOVERY_SSHD_CONFIG_REMOTE_PATH,
                 chmod_mode="0644",
             )
+        else:
+            for stale_file_path in RECOVERY_STALE_FILE_PATHS:
+                _guestfish_remove_file(image_path, stale_file_path)
         try:
             _guestfish_write(image_path, firstrun, "/boot/firstrun.sh", chmod_mode="0755")
         except ImagerBuildError:

@@ -9,6 +9,7 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import override_settings
 
 from apps.imager.models import RaspberryPiImageArtifact
@@ -327,6 +328,27 @@ def test_imager_build_command_reads_inline_recovery_authorized_keys(mock_build, 
     ]
 
 
+def test_imager_build_command_reports_non_utf8_recovery_key_file(tmp_path: Path) -> None:
+    """Regression: non-UTF8 key files should return a clean command error."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+    authorized_key_file = tmp_path / "recovery.pub"
+    authorized_key_file.write_bytes(b"\xff\xfe\x00")
+
+    with pytest.raises(CommandError, match="Could not read recovery authorized key file"):
+        call_command(
+            "imager",
+            "build",
+            "--name",
+            "recovery-binary-key-file",
+            "--base-image-uri",
+            str(output_path),
+            "--recovery-authorized-key-file",
+            str(authorized_key_file),
+        )
+
+
 def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided(tmp_path: Path) -> None:
     """Regression: recovery customization must enable first-boot SSH access files."""
 
@@ -408,6 +430,7 @@ def test_customize_image_does_not_add_recovery_boot_hook_when_recovery_is_disabl
 
     with (
         patch("apps.imager.services._ensure_guestfish"),
+        patch("apps.imager.services._guestfish_remove_file") as remove_file_mock,
         patch("apps.imager.services._guestfish_write", side_effect=capture_write),
     ):
         _customize_image(
@@ -418,6 +441,12 @@ def test_customize_image_does_not_add_recovery_boot_hook_when_recovery_is_disabl
 
     firstrun_script, _firstrun_mode = written_files["/boot/firstrun.sh"]
     assert "/usr/local/bin/arthexis-recovery-access.sh" not in firstrun_script
+    assert remove_file_mock.call_args_list == [
+        call(image_path, "/usr/local/share/arthexis/recovery_authorized_keys"),
+        call(image_path, "/usr/local/bin/arthexis-recovery-access.sh"),
+        call(image_path, "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf"),
+        call(image_path, "/etc/sudoers.d/90-arthexis-recovery"),
+    ]
 
 
 def test_build_rpi4b_image_rejects_invalid_recovery_ssh_username(tmp_path: Path) -> None:

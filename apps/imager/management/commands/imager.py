@@ -201,7 +201,7 @@ class Command(BaseCommand):
             path = Path(raw_path).expanduser()
             try:
                 lines = path.read_text(encoding="utf-8").splitlines()
-            except OSError as exc:
+            except (OSError, UnicodeDecodeError) as exc:
                 raise CommandError(
                     f"Could not read recovery authorized key file '{path}': {exc}"
                 ) from exc
