@@ -109,6 +109,15 @@ nav.toc a:hover {
   gap: 0.35rem 0.3rem;
 }
 
+.navbar {
+  --site-navbar-item-padding-y: var(--bs-navbar-padding-y);
+  --bs-navbar-brand-padding-y: var(--site-navbar-item-padding-y);
+}
+
+.navbar .navbar-nav {
+  --bs-nav-link-padding-y: var(--site-navbar-item-padding-y);
+}
+
 @media (min-width: 992px) {
   .reader-sidebar {
     position: sticky;
