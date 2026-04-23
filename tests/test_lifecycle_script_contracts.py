@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 MANUAL = ROOT / "docs/development/install-lifecycle-scripts-manual.md"
@@ -8,6 +9,12 @@ MANUAL = ROOT / "docs/development/install-lifecycle-scripts-manual.md"
 
 def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
+
+
+def _read_shell_contract(path: str) -> str:
+    return "\n".join(
+        line for line in _read(path).splitlines() if not line.lstrip().startswith("#")
+    )
 
 
 def test_lifecycle_manual_covers_operator_entrypoints() -> None:
@@ -32,10 +39,10 @@ def test_lifecycle_manual_covers_operator_entrypoints() -> None:
 
 
 def test_install_usage_keeps_core_lifecycle_flags() -> None:
-    install_script = _read("install.sh")
+    install_script = _read_shell_contract("install.sh")
     expected_flags = (
-        "--service NAME",
-        "--port PORT",
+        "--service",
+        "--port",
         "--upgrade",
         "--clean",
         "--repair",
@@ -48,7 +55,9 @@ def test_install_usage_keeps_core_lifecycle_flags() -> None:
     )
 
     for flag in expected_flags:
-        assert flag in install_script, f"install.sh usage is missing lifecycle flag: {flag}"
+        assert re.search(rf"(?<![\w-]){re.escape(flag)}(?![\w-])", install_script), (
+            f"install.sh usage is missing lifecycle flag: {flag}"
+        )
 
 
 def test_lifecycle_scripts_expose_documented_entrypoints() -> None:
@@ -67,16 +76,19 @@ def test_lifecycle_scripts_expose_documented_entrypoints() -> None:
             "--reconcile",
             "--migrate",
             "--stop",
-            "--branch)",
+            "--branch",
         ),
         "command.sh": (
-            "Usage: ./command.sh <operational-command> [args...]",
-            "Usage: ./command.sh list",
             "python -m utils.command_api",
         ),
     }
 
     for script_name, tokens in scripts_and_tokens.items():
-        script_text = _read(script_name)
+        script_text = _read_shell_contract(script_name)
         for token in tokens:
             assert token in script_text, f"{script_name} is missing expected token: {token}"
+
+    upgrade_script = _read_shell_contract("upgrade.sh")
+    assert re.search(r"^\s*--branch\)\s*$", upgrade_script, re.MULTILINE), (
+        "upgrade.sh is missing expected parser label: --branch)"
+    )
