@@ -116,6 +116,14 @@ class ShopProduct(Entity):
     stock_quantity = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     supports_soul_seed_preload = models.BooleanField(default=False)
+    supports_gallery_image_printing = models.BooleanField(default=False)
+    gallery_image_print_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        help_text="Additional price per selected side (front or back) when printing with gallery images.",
+    )
     odoo_product = models.ForeignKey(
         "odoo.OdooProduct",
         null=True,
@@ -203,6 +211,21 @@ class ShopOrderItem(Entity):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     line_total = models.DecimalField(max_digits=10, decimal_places=2)
+    front_gallery_image = models.ForeignKey(
+        "gallery.GalleryImage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="shop_order_items_front",
+    )
+    back_gallery_image = models.ForeignKey(
+        "gallery.GalleryImage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="shop_order_items_back",
+    )
+    customization_surcharge_per_unit = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
 
     def __str__(self) -> str:
         """Return display name with quantity for admin readability."""
