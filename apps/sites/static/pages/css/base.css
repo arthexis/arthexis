@@ -459,6 +459,13 @@ html[data-bs-theme='dark'] .markdown-body tbody tr:nth-of-type(odd) td {
   }
 }
 
+.user-story-toggle,
+.user-story-overlay {
+  --user-story-accent: #84cc16;
+  --user-story-accent-strong: #bef264;
+  --user-story-accent-text: #1f2937;
+}
+
 .user-story-toggle {
   position: fixed;
   right: 1.75rem;
@@ -467,8 +474,8 @@ html[data-bs-theme='dark'] .markdown-body tbody tr:nth-of-type(odd) td {
   height: 3rem;
   border-radius: 50%;
   border: 0;
-  background: linear-gradient(135deg, var(--site-support), var(--site-support-strong));
-  color: var(--site-support-icon);
+  background: linear-gradient(135deg, var(--user-story-accent), var(--user-story-accent-strong));
+  color: var(--user-story-accent-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -537,25 +544,25 @@ body.user-story-open {
 }
 
 .user-story-card .card-title {
-  color: var(--site-support);
+  color: var(--user-story-accent);
 }
 
 .user-story-card .btn-primary {
-  --bs-btn-bg: var(--site-support);
-  --bs-btn-border-color: var(--site-support);
-  --bs-btn-hover-bg: var(--site-support-strong);
-  --bs-btn-hover-border-color: var(--site-support-strong);
-  --bs-btn-active-bg: var(--site-support-strong);
-  --bs-btn-active-border-color: var(--site-support-strong);
-  --bs-btn-focus-shadow-rgb: var(--site-support-rgb);
-  --bs-btn-color: var(--site-support-icon);
-  --bs-btn-hover-color: var(--site-support-icon);
-  --bs-btn-active-color: var(--site-support-icon);
+  --bs-btn-bg: var(--user-story-accent);
+  --bs-btn-border-color: var(--user-story-accent);
+  --bs-btn-hover-bg: var(--user-story-accent-strong);
+  --bs-btn-hover-border-color: var(--user-story-accent-strong);
+  --bs-btn-active-bg: var(--user-story-accent-strong);
+  --bs-btn-active-border-color: var(--user-story-accent-strong);
+  --bs-btn-focus-shadow-rgb: 132, 204, 22;
+  --bs-btn-color: var(--user-story-accent-text);
+  --bs-btn-hover-color: var(--user-story-accent-text);
+  --bs-btn-active-color: var(--user-story-accent-text);
 }
 
 .user-story-card .btn-link {
-  --bs-btn-color: var(--site-support);
-  --bs-btn-hover-color: var(--site-support-strong);
+  --bs-btn-color: var(--user-story-accent);
+  --bs-btn-hover-color: var(--user-story-accent-strong);
 }
 
 .user-story-card,
@@ -665,11 +672,11 @@ body.user-story-open {
 .user-story-rating label:hover,
 .user-story-rating label:focus-visible,
 .user-story-rating label:hover ~ label {
-  color: var(--site-support-strong);
+  color: var(--user-story-accent-strong);
 }
 
 .user-story-rating input:checked ~ label {
-  color: var(--site-support);
+  color: var(--user-story-accent);
 }
 
 .user-story-rating label:active {
