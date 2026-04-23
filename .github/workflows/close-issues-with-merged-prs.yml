@@ -51,39 +51,66 @@ jobs:
                 return leftTime - rightTime;
               });
 
-              const linkedPullRequestNumbers = new Set();
+              const linkedPullRequests = new Map();
+
+              const getSourcePullRequest = (event) => {
+                const sourceIssue = event.source?.issue;
+                const sourceIssueNumber = sourceIssue?.number;
+
+                if (!sourceIssue?.pull_request || !sourceIssueNumber) {
+                  return null;
+                }
+
+                const repositoryUrl = sourceIssue.repository_url;
+                if (!repositoryUrl) {
+                  return null;
+                }
+
+                const repoMatch = repositoryUrl.match(/\/repos\/([^/]+)\/([^/]+)$/);
+                if (!repoMatch) {
+                  return null;
+                }
+
+                const sourceOwner = repoMatch[1];
+                const sourceRepo = repoMatch[2];
+
+                return {
+                  key: `${sourceOwner}/${sourceRepo}#${sourceIssueNumber}`,
+                  number: sourceIssueNumber,
+                  owner: sourceOwner,
+                  repo: sourceRepo,
+                };
+              };
 
               for (const event of orderedEvents) {
                 if (!['cross-referenced', 'connected', 'disconnected'].includes(event.event)) {
                   continue;
                 }
 
-                const sourceIssue = event.source?.issue;
-                const sourceIssueNumber = sourceIssue?.number;
-
-                if (!sourceIssue?.pull_request || !sourceIssueNumber) {
+                const sourcePullRequest = getSourcePullRequest(event);
+                if (!sourcePullRequest) {
                   continue;
                 }
 
                 if (event.event === 'disconnected') {
-                  linkedPullRequestNumbers.delete(sourceIssueNumber);
+                  linkedPullRequests.delete(sourcePullRequest.key);
                   continue;
                 }
 
-                linkedPullRequestNumbers.add(sourceIssueNumber);
+                linkedPullRequests.set(sourcePullRequest.key, sourcePullRequest);
               }
 
-              if (linkedPullRequestNumbers.size === 0) {
+              if (linkedPullRequests.size === 0) {
                 continue;
               }
 
               const mergedToDefaultBranch = [];
-              for (const pullNumber of linkedPullRequestNumbers) {
+              for (const linkedPullRequest of linkedPullRequests.values()) {
                 try {
                   const { data: pullRequest } = await github.rest.pulls.get({
-                    owner,
-                    repo,
-                    pull_number: pullNumber,
+                    owner: linkedPullRequest.owner,
+                    repo: linkedPullRequest.repo,
+                    pull_number: linkedPullRequest.number,
                   });
 
                   if (!pullRequest.merged_at) {
@@ -94,10 +121,16 @@ jobs:
                     continue;
                   }
 
-                  mergedToDefaultBranch.push(pullRequest.number);
+                  mergedToDefaultBranch.push({
+                    number: pullRequest.number,
+                    owner: linkedPullRequest.owner,
+                    repo: linkedPullRequest.repo,
+                  });
                 } catch (error) {
                   if (error.status === 404) {
-                    core.info(`#${issue.number}: linked PR #${pullNumber} is unavailable.`);
+                    core.info(
+                      `#${issue.number}: linked PR ${linkedPullRequest.owner}/${linkedPullRequest.repo}#${linkedPullRequest.number} is unavailable.`,
+                    );
                     continue;
                   }
 
@@ -111,8 +144,16 @@ jobs:
               }
 
               const linkedPullsText = mergedToDefaultBranch
-                .sort((a, b) => a - b)
-                .map((number) => `#${number}`)
+                .sort((left, right) =>
+                  `${left.owner}/${left.repo}#${left.number}`.localeCompare(
+                    `${right.owner}/${right.repo}#${right.number}`,
+                  ),
+                )
+                .map((pullRequest) =>
+                  pullRequest.owner === owner && pullRequest.repo === repo
+                    ? `#${pullRequest.number}`
+                    : `${pullRequest.owner}/${pullRequest.repo}#${pullRequest.number}`,
+                )
                 .join(', ');
 
               await github.rest.issues.createComment({
