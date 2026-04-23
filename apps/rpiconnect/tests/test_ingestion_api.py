@@ -47,7 +47,11 @@ class IngestionApiTests(TestCase):
         self.url = reverse("rpiconnect-ingestion-events")
 
     def test_requires_authentication_token(self) -> None:
-        response = self.client.post(self.url, data={"event_id": "evt-1", "device_id": "pi-001"}, content_type="application/json")
+        response = self.client.post(
+            self.url,
+            data={"event_id": "evt-1", "device_id": "pi-001"},
+            content_type="application/json",
+        )
 
         self.assertEqual(response.status_code, 401)
 

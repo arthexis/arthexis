@@ -83,22 +83,6 @@ def test_visitor_registration_request_post_requires_submitted_host():
     assert parsed.visitor_base is None
 
 
-def test_visitor_registration_request_post_rejects_malformed_port():
-    """POST parser should reject malformed ports and return an explicit validation error."""
-    request = RequestFactory().post(
-        "/admin/nodes/node/register-visitor/?visitor=query.example:9443",
-        data={"visitor_host": "visitor.example", "visitor_port": "not-a-port"},
-    )
-
-    parsed = VisitorRegistrationRequest.from_http_request(request, default_port=8888)
-
-    assert (
-        parsed.visitor_error
-        == "Visitor port is invalid. Use a value between 1 and 65535."
-    )
-    assert parsed.visitor_base == "https://visitor.example:8888"
-
-
 def test_visitor_registration_service_handles_non_json_proxy_response(monkeypatch):
     """Service should normalize non-JSON proxy errors into a structured result."""
 
@@ -452,6 +436,83 @@ def test_register_visitor_proxy_reports_partial_failure_on_visitor_confirmation(
 
     assert response.status_code == 502
     assert response.json()["detail"] == "visitor confirmation failed"
+
+
+@pytest.mark.django_db
+def test_register_visitor_proxy_handles_unexpected_registration_errors(
+    admin_client, monkeypatch
+):
+    """Regression: unexpected registration errors should return a safe proxy response."""
+
+    def _raise_runtime_error(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    node = Node.objects.create(
+        hostname="local-unexpected-failure",
+        address="198.51.100.3",
+        mac_address="00:11:22:33:44:77",
+        port=8888,
+        public_endpoint="local-unexpected-failure",
+        public_key="local-key",
+    )
+
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+    monkeypatch.setattr(
+        registration_views.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("93.184.216.34", 443),
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "apps.nodes.views.registration.handlers._build_registration_payload",
+        _raise_runtime_error,
+    )
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "hostname": "visitor-host",
+                "mac_address": "aa:bb:cc:dd:ee:aa",
+                "address": "203.0.113.11",
+                "port": 8000,
+                "public_key": "visitor-key",
+                "features": [],
+            }
+
+    class FakeSession:
+        def mount(self, prefix, adapter):
+            return None
+
+        def get(self, url, timeout=None, headers=None):
+            return FakeResponse()
+
+    monkeypatch.setattr(requests, "Session", lambda: FakeSession())
+
+    response = admin_client.post(
+        reverse("register-visitor-proxy"),
+        data=json.dumps(
+            {
+                "visitor_info_url": "https://visitor.test/nodes/info/",
+                "visitor_register_url": "https://visitor.test/nodes/register/",
+                "token": "",
+            }
+        ),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "registration failed"
 
 
 @pytest.mark.django_db

@@ -79,13 +79,18 @@ When enabled, if `env-refresh.py` detects mismatch failures (for example
 Without this flag, upgrade remains fail-fast for mismatch failures, and operators
 must rerun with explicit reconciliation (for example `./upgrade.sh --migrate`).
 
-#### Rollback steps after fallback
+#### Recovery steps after fallback (forward-only policy)
 
 1. Stop services (`./upgrade.sh --stop`) before restoration.
-2. Restore from your pre-upgrade DB backup/snapshot (or from the generated
-   `.locks/*.pre_major_migrate.*` artifact if that is your approved rollback
-   source).
-3. Re-run upgrade and inspect migration health before continuing.
+2. Restore the database from your pre-upgrade DB backup/snapshot (or from the
+   generated `.locks/*.pre_major_migrate.*` artifact if that is your approved
+   recovery source).
+3. Restore the repository working tree to the matching pre-upgrade revision
+   (for example with your Git tag/commit pinning process for that environment).
+4. Re-run upgrade with the --local flag and inspect migration health before continuing.
+
+Do not perform reverse migrations as an operational recovery path; Arthexis
+upgrade recovery is database + repository restore based.
 
 #### Post-check steps after fallback
 

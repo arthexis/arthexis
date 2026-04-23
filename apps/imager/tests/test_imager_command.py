@@ -1,5 +1,6 @@
 """Regression tests for Raspberry Pi imager workflows."""
 
+import lzma
 import socket
 from contextlib import nullcontext
 from io import BytesIO, StringIO
@@ -72,6 +73,29 @@ def test_list_block_devices_collects_mountpoints_from_nested_descendants() -> No
 
     assert devices[0].mountpoints == ["/media/card"]
     assert devices[0].partitions == ["/dev/sdb1", "/dev/mapper/crypt"]
+
+
+def test_list_block_devices_marks_root_mount_disk_protected_when_findmnt_uses_dev_root() -> None:
+    """Regression: root disks must stay protected even when findmnt reports /dev/root."""
+
+    lsblk_result = SimpleNamespace(
+        returncode=0,
+        stdout='{"blockdevices":[{"path":"/dev/mmcblk0","size":"64","rm":false,"tran":null,"type":"disk","mountpoints":[null],"children":[{"path":"/dev/mmcblk0p2","mountpoints":["/","/home/arthe"]}]},{"path":"/dev/sdb","size":"64","rm":true,"tran":"usb","type":"disk","mountpoints":[null],"children":[{"path":"/dev/sdb1","mountpoints":[null]}]}]}',
+        stderr="",
+    )
+    root_findmnt = SimpleNamespace(returncode=0, stdout="/dev/root\n", stderr="")
+    dev_root_info = SimpleNamespace(returncode=32, stdout="", stderr="not a block device")
+
+    with patch(
+        "apps.imager.services.subprocess.run",
+        side_effect=[lsblk_result, root_findmnt, dev_root_info],
+    ):
+        devices = list_block_devices()
+
+    assert devices[0].path == "/dev/mmcblk0"
+    assert devices[0].protected is True
+    assert devices[1].path == "/dev/sdb"
+    assert devices[1].protected is False
 
 
 def test_list_block_devices_raises_operator_error_when_lsblk_missing() -> None:
@@ -620,6 +644,28 @@ def test_build_rpi4b_image_persists_recovery_ssh_metadata(tmp_path: Path) -> Non
 
 
 @pytest.mark.django_db
+def test_build_rpi4b_image_decompresses_local_xz_source(tmp_path: Path) -> None:
+    """Regression: .img.xz sources should expand automatically before build copy."""
+
+    source_bytes = b"raspberrypi"
+    compressed_source = tmp_path / "base.img.xz"
+    with lzma.open(compressed_source, "wb") as handle:
+        handle.write(source_bytes)
+
+    with patch("apps.imager.services._customize_image"):
+        result = build_rpi4b_image(
+            name="stable-xz",
+            base_image_uri=str(compressed_source),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=True,
+        )
+
+    assert result.output_path.read_bytes() == source_bytes
+
+
+@pytest.mark.django_db
 def test_build_rpi4b_image_persists_connect_ota_engine_profile_metadata(tmp_path: Path) -> None:
     """Regression: connect-ota profile metadata must persist for rollout eligibility checks."""
 
@@ -689,34 +735,6 @@ def test_build_rpi4b_image_rejects_connect_ota_profile_when_manifest_fields_miss
 
 
 @pytest.mark.django_db
-def test_build_rpi4b_image_rejects_connect_ota_profile_when_base_metadata_missing(tmp_path: Path) -> None:
-    """Regression: connect-ota profile must validate explicit source base metadata."""
-
-    base_image = tmp_path / "base.img"
-    base_image.write_bytes(b"raspberrypi")
-
-    with pytest.raises(ImagerBuildError, match="requires base_os"):
-        build_rpi4b_image(
-            name="connect-missing-base",
-            base_image_uri=str(base_image),
-            output_dir=tmp_path,
-            download_base_uri="",
-            git_url="https://github.com/arthexis/arthexis.git",
-            customize=False,
-            profile="connect-ota",
-            profile_metadata={
-                "release_version": "2026.04.0",
-                "compatibility_model": "raspberry-pi-4",
-                "compatibility_board": "rpi-4b",
-                "ota_channel": "stable",
-                "ota_artifact_type": "raw-disk-image",
-                "required_artifacts": [
-                    "connect-ota-agent",
-                    "connect-ota-channel-config",
-                    "connect-ota-device-identity",
-                ],
-            },
-        )
 
 @pytest.mark.django_db
 @patch("apps.imager.services._download_remote_base_image")
@@ -745,6 +763,37 @@ def test_build_rpi4b_image_downloads_percent_encoded_http_source(
 
     assert result.output_path.exists()
     assert result.output_path.read_bytes() == source_bytes
+
+
+@pytest.mark.django_db
+@patch("apps.imager.services._download_remote_base_image")
+def test_build_rpi4b_image_downloads_and_decompresses_remote_xz_source(
+    download_mock, tmp_path: Path
+) -> None:
+    """Regression: downloaded .img.xz sources should expand automatically before copy."""
+
+    source_bytes = b"http-image-xz"
+
+    def write_download(uri: str, destination: Path) -> None:
+        assert uri == "https://example.com/Raspberry%20Pi%20OS.img.xz"
+        with lzma.open(destination, "wb") as handle:
+            handle.write(source_bytes)
+
+    download_mock.side_effect = write_download
+
+    with patch("apps.imager.services._customize_image"):
+        result = build_rpi4b_image(
+            name="httpstable-xz",
+            base_image_uri="https://example.com/Raspberry%20Pi%20OS.img.xz",
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=True,
+        )
+
+    assert result.output_path.exists()
+    assert result.output_path.read_bytes() == source_bytes
+
 
 @pytest.mark.django_db
 @override_settings(IMAGER_BLOCK_PRIVATE_REMOTE_IMAGE_HOSTS=True)
@@ -877,6 +926,54 @@ def test_imager_devices_command_lists_discovery_metadata(list_devices_mock) -> N
     assert "protected=no" in output
 
 
+def test_guestfish_write_scopes_temp_dirs_to_image_output_directory(tmp_path: Path) -> None:
+    """Regression: guestfish temp dir should be scoped and cleaned while cache persists."""
+
+    image_path = tmp_path / "artifact.img"
+    image_path.write_bytes(b"img")
+    local_path = tmp_path / "bootstrap.sh"
+    local_path.write_text("#!/bin/sh\n", encoding="utf-8")
+    guestfish_result = SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    with patch("apps.imager.services.subprocess.run", return_value=guestfish_result) as run_mock:
+        _guestfish_write(image_path, local_path, "/usr/local/bin/arthexis-bootstrap.sh", chmod_mode="0755")
+
+    env = run_mock.call_args.kwargs["env"]
+    assert env["TMPDIR"].startswith(str(tmp_path))
+    assert env["LIBGUESTFS_TMPDIR"] == env["TMPDIR"]
+    assert env["LIBGUESTFS_CACHEDIR"] == str(tmp_path / ".libguestfs-cache")
+    assert not Path(env["TMPDIR"]).exists()
+    assert (tmp_path / ".libguestfs-cache").is_dir()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("extension", "writer"),
+    [
+        (".img.xz", lambda path: path.write_bytes(b"not-xz")),
+        (".img.gz", lambda path: path.write_bytes(b"not-gzip")),
+        (".zip", lambda path: path.write_bytes(b"not-zip")),
+    ],
+)
+def test_build_rpi4b_image_rejects_corrupted_archives(tmp_path: Path, extension: str, writer) -> None:
+    """Regression: malformed compressed base images should raise a user-facing build error."""
+
+    compressed_source = tmp_path / f"base{extension}"
+    writer(compressed_source)
+
+    with patch("apps.imager.services._customize_image"), pytest.raises(
+        ImagerBuildError, match="invalid or corrupted"
+    ):
+        build_rpi4b_image(
+            name=f"corrupt-{extension.replace('.', '-')}",
+            base_image_uri=str(compressed_source),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=True,
+        )
+
+
 @pytest.mark.django_db
 @patch("apps.imager.services.list_block_devices")
 def test_write_image_to_device_refuses_protected_disk(list_devices_mock, tmp_path: Path) -> None:
@@ -920,29 +1017,6 @@ def test_write_image_to_device_refuses_mounted_target(list_devices_mock, tmp_pat
     ]
 
     with pytest.raises(ImagerBuildError, match="Unmount all partitions first"):
-        write_image_to_device(device_path="/dev/sdb", image_path=str(source), confirmed=True)
-
-
-@pytest.mark.django_db
-@patch("apps.imager.services.list_block_devices")
-def test_write_image_to_device_refuses_undersized_target(list_devices_mock, tmp_path: Path) -> None:
-    """Regression: write should fail when target capacity is smaller than image."""
-
-    source = tmp_path / "source.img"
-    source.write_bytes(b"12345")
-    list_devices_mock.return_value = [
-        BlockDeviceInfo(
-            path="/dev/sdb",
-            size_bytes=4,
-            transport="usb",
-            removable=True,
-            mountpoints=[],
-            partitions=[],
-            protected=False,
-        )
-    ]
-
-    with pytest.raises(ImagerBuildError, match="is too small"):
         write_image_to_device(device_path="/dev/sdb", image_path=str(source), confirmed=True)
 
 

@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - 'release/**'
     paths:
       - '**/pyproject.toml'
       - '**/requirements*.txt'
@@ -22,6 +21,7 @@ permissions:
 jobs:
   dependency-submission:
     name: Submit dependencies
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     continue-on-error: true
     env:
@@ -65,8 +65,32 @@ jobs:
         with:
           detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
 
-      - name: Track persistent submission failures
+      - name: Extended backoff before retry
         if: steps.submit_snapshot_attempt_3.outcome == 'failure'
+        run: sleep 90
+
+      - name: Submit dependency snapshot (attempt 4)
+        id: submit_snapshot_attempt_4
+        if: steps.submit_snapshot_attempt_3.outcome == 'failure'
+        continue-on-error: true
+        uses: advanced-security/component-detection-dependency-submission-action@7c766a0966c66533ae37f76556cf9a33be50e5f8
+        with:
+          detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
+
+      - name: Extended backoff before final retry
+        if: steps.submit_snapshot_attempt_4.outcome == 'failure'
+        run: sleep 120
+
+      - name: Submit dependency snapshot (attempt 5)
+        id: submit_snapshot_attempt_5
+        if: steps.submit_snapshot_attempt_4.outcome == 'failure'
+        continue-on-error: true
+        uses: advanced-security/component-detection-dependency-submission-action@7c766a0966c66533ae37f76556cf9a33be50e5f8
+        with:
+          detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
+
+      - name: Track persistent submission failures
+        if: steps.submit_snapshot_attempt_5.outcome == 'failure'
         uses: actions/github-script@v9
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

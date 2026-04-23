@@ -926,141 +926,158 @@ def register_visitor_proxy(request):
             status=400,
         )
 
-    visitor_info_url = append_token(visitor_info_url, token)
-    factory = RequestFactory()
-    host_info_request = factory.get("/nodes/info/", {"token": token} if token else {})
-    host_info_request.user = request.user
-    host_info_request._cached_user = request.user
     try:
-        host_info = _parse_json_response_mapping(node_info(host_info_request))
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
-        return JsonResponse({"detail": "host info unavailable"}, status=502)
+        visitor_info_url = append_token(visitor_info_url, token)
+        factory = RequestFactory()
+        host_info_request = factory.get(
+            "/nodes/info/", {"token": token} if token else {}
+        )
+        host_info_request.user = request.user
+        host_info_request._cached_user = request.user
+        try:
+            host_info = _parse_json_response_mapping(node_info(host_info_request))
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            return JsonResponse({"detail": "host info unavailable"}, status=502)
 
-    session = requests.Session()
-    timeout_seconds = 45
+        session = requests.Session()
+        timeout_seconds = 45
 
-    try:
-        visitor_info, visitor_info_url, last_error, info_attempt = (
-            _try_proxy_json_request(
-                session=session,
-                url=visitor_info_url,
-                timeout_seconds=timeout_seconds,
-                method="get",
-                log_prefix="Visitor registration proxy",
-                request_error_message="info request failed",
-                response_error_message="info response json parse failed",
+        try:
+            visitor_info, visitor_info_url, last_error, info_attempt = (
+                _try_proxy_json_request(
+                    session=session,
+                    url=visitor_info_url,
+                    timeout_seconds=timeout_seconds,
+                    method="get",
+                    log_prefix="Visitor registration proxy",
+                    request_error_message="info request failed",
+                    response_error_message="info response json parse failed",
+                )
             )
-        )
-    except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
-        registration_logger.warning(
-            "Visitor registration proxy: unexpected visitor info proxy failure",
-            extra={
-                "target": redact_url_token(visitor_info_url),
-                "attempt": "visitor_info_proxy",
-                "exception_class": exc.__class__.__name__,
-            },
-        )
-        return JsonResponse({"detail": "visitor info unavailable"}, status=502)
-    if visitor_info is None:
-        registration_logger.warning(
-            "Visitor registration proxy: unable to fetch visitor info from %s: %s",
-            redact_url_token(visitor_info_url),
-            last_error,
-            extra={
-                "target": redact_url_token(visitor_info_url),
-                "attempt": info_attempt,
-                "exception_class": (
-                    last_error.__class__.__name__ if last_error else ""
-                ),
-            },
-        )
-        return JsonResponse({"detail": "visitor info unavailable"}, status=502)
+        except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
+            registration_logger.warning(
+                "Visitor registration proxy: unexpected visitor info proxy failure",
+                extra={
+                    "target": redact_url_token(visitor_info_url),
+                    "attempt": "visitor_info_proxy",
+                    "exception_class": exc.__class__.__name__,
+                },
+            )
+            return JsonResponse({"detail": "visitor info unavailable"}, status=502)
+        if visitor_info is None:
+            registration_logger.warning(
+                "Visitor registration proxy: unable to fetch visitor info from %s: %s",
+                redact_url_token(visitor_info_url),
+                last_error,
+                extra={
+                    "target": redact_url_token(visitor_info_url),
+                    "attempt": info_attempt,
+                    "exception_class": (
+                        last_error.__class__.__name__ if last_error else ""
+                    ),
+                },
+            )
+            return JsonResponse({"detail": "visitor info unavailable"}, status=502)
 
-    host_payload = _build_registration_payload(visitor_info, "Downstream")
-    _apply_token_signature(host_payload, visitor_info, token)
-    host_register_request = factory.post(
-        "/nodes/register/",
-        data=json.dumps(host_payload),
-        content_type="application/json",
-    )
-    host_register_request.user = request.user
-    host_register_request._cached_user = request.user
-    host_register_response = register_node(host_register_request)
-    try:
-        host_register_body = _parse_json_response_mapping(host_register_response)
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
-        return JsonResponse({"detail": "host registration failed"}, status=502)
-    if host_register_response.status_code != 200 or not host_register_body.get("id"):
-        status_code = host_register_response.status_code or 400
-        if 200 <= status_code < 300:
-            status_code = 400
+        host_payload = _build_registration_payload(visitor_info, "Downstream")
+        _apply_token_signature(host_payload, visitor_info, token)
+        host_register_request = factory.post(
+            "/nodes/register/",
+            data=json.dumps(host_payload),
+            content_type="application/json",
+        )
+        host_register_request.user = request.user
+        host_register_request._cached_user = request.user
+        host_register_response = register_node(host_register_request)
+        try:
+            host_register_body = _parse_json_response_mapping(host_register_response)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            return JsonResponse({"detail": "host registration failed"}, status=502)
+        if host_register_response.status_code != 200 or not host_register_body.get(
+            "id"
+        ):
+            status_code = host_register_response.status_code or 400
+            if 200 <= status_code < 300:
+                status_code = 400
+            return JsonResponse(
+                {"detail": "host registration failed"},
+                status=status_code,
+            )
+
+        visitor_payload = _build_registration_payload(host_info, "Upstream")
+        _apply_token_signature(visitor_payload, host_info, token)
+
+        try:
+            visitor_register_body, visitor_register_url, last_error, register_attempt = (
+                _try_proxy_json_request(
+                    session=session,
+                    url=visitor_register_url,
+                    timeout_seconds=timeout_seconds,
+                    method="post",
+                    payload=visitor_payload,
+                    log_prefix="Visitor registration proxy",
+                    request_error_message="visitor notification request failed",
+                    response_error_message="visitor response json parse failed",
+                )
+            )
+        except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
+            registration_logger.warning(
+                "Visitor registration proxy: unexpected visitor confirmation proxy failure",
+                extra={
+                    "target": redact_url_token(visitor_register_url),
+                    "attempt": "visitor_register_proxy",
+                    "exception_class": exc.__class__.__name__,
+                },
+            )
+            return JsonResponse({"detail": "visitor confirmation failed"}, status=502)
+        if visitor_register_body is None:
+            registration_logger.warning(
+                "Visitor registration proxy: unable to notify visitor at %s: %s",
+                redact_url_token(visitor_register_url),
+                last_error,
+                extra={
+                    "target": redact_url_token(visitor_register_url),
+                    "attempt": register_attempt,
+                    "exception_class": (
+                        last_error.__class__.__name__ if last_error else ""
+                    ),
+                },
+            )
+            return JsonResponse({"detail": "visitor confirmation failed"}, status=502)
+
+        visitor_id = visitor_register_body.get("id")
+        visitor_detail = (
+            "visitor confirmation accepted"
+            if visitor_id
+            else "visitor confirmation failed"
+        )
+
         return JsonResponse(
-            {"detail": "host registration failed"},
-            status=status_code,
+            {
+                "host": {
+                    "detail": "host registration accepted",
+                    "id": host_register_body.get("id"),
+                },
+                "visitor": {
+                    "detail": visitor_detail,
+                    "id": visitor_id,
+                },
+                "host_requires_https": bool(host_info.get("base_site_requires_https")),
+                "visitor_requires_https": bool(
+                    visitor_info.get("base_site_requires_https")
+                ),
+            }
         )
-
-    visitor_payload = _build_registration_payload(host_info, "Upstream")
-    _apply_token_signature(visitor_payload, host_info, token)
-
-    try:
-        visitor_register_body, visitor_register_url, last_error, register_attempt = (
-            _try_proxy_json_request(
-                session=session,
-                url=visitor_register_url,
-                timeout_seconds=timeout_seconds,
-                method="post",
-                payload=visitor_payload,
-                log_prefix="Visitor registration proxy",
-                request_error_message="visitor notification request failed",
-                response_error_message="visitor response json parse failed",
-            )
-        )
-    except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
+    except Exception as exc:
         registration_logger.warning(
-            "Visitor registration proxy: unexpected visitor confirmation proxy failure",
+            "Visitor registration proxy: unexpected registration flow failure",
             extra={
-                "target": redact_url_token(visitor_register_url),
-                "attempt": "visitor_register_proxy",
+                "target": redact_url_token(visitor_info_url),
+                "attempt": "registration_flow",
                 "exception_class": exc.__class__.__name__,
             },
         )
-        return JsonResponse({"detail": "visitor confirmation failed"}, status=502)
-    if visitor_register_body is None:
-        registration_logger.warning(
-            "Visitor registration proxy: unable to notify visitor at %s: %s",
-            redact_url_token(visitor_register_url),
-            last_error,
-            extra={
-                "target": redact_url_token(visitor_register_url),
-                "attempt": register_attempt,
-                "exception_class": (
-                    last_error.__class__.__name__ if last_error else ""
-                ),
-            },
-        )
-        return JsonResponse({"detail": "visitor confirmation failed"}, status=502)
-
-    visitor_id = visitor_register_body.get("id")
-    visitor_detail = (
-        "visitor confirmation accepted" if visitor_id else "visitor confirmation failed"
-    )
-
-    return JsonResponse(
-        {
-            "host": {
-                "detail": "host registration accepted",
-                "id": host_register_body.get("id"),
-            },
-            "visitor": {
-                "detail": visitor_detail,
-                "id": visitor_id,
-            },
-            "host_requires_https": bool(host_info.get("base_site_requires_https")),
-            "visitor_requires_https": bool(
-                visitor_info.get("base_site_requires_https")
-            ),
-        }
-    )
+        return JsonResponse({"detail": "registration failed"}, status=502)
 
 
 @csrf_exempt

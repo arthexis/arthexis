@@ -3,12 +3,14 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.cards.models import OfferingSoul
+from apps.gallery.services import create_gallery_image
 from apps.shop.models import Shop, ShopOrder, ShopProduct
 from apps.souls.models import ShopOrderSoulAttachment, Soul
 from apps.survey.models import Survey, SurveyResponse
@@ -62,6 +64,145 @@ class ShopCheckoutTests(TestCase):
         self.assertEqual(order.payment_provider, "stripe")
         self.assertEqual(order.items.count(), 1)
 
+
+    def _upload_image(self, name: str = "gallery.jpg") -> SimpleUploadedFile:
+        return SimpleUploadedFile(name, b"fake-image", content_type="image/jpeg")
+
+    def test_checkout_applies_gallery_image_customization_surcharge(self):
+        shop = Shop.objects.create(
+            name="Card Shop",
+            slug="card-shop",
+            default_payment_provider="stripe",
+        )
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Custom Card",
+            sku="CARD-1",
+            unit_price=Decimal("10.00"),
+            stock_quantity=20,
+            supports_gallery_image_printing=True,
+            gallery_image_print_price=Decimal("3.50"),
+        )
+        owner = self._create_user("gallery-owner", "owner@example.com")
+        front = create_gallery_image(
+            uploaded_file=self._upload_image("front.jpg"),
+            title="Front Art",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+        back = create_gallery_image(
+            uploaded_file=self._upload_image("back.jpg"),
+            title="Back Art",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+
+        add_url = reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": product.id})
+        self.client.post(add_url, {"quantity": 2}, follow=True)
+
+        response = self.client.post(
+            reverse("shop:checkout"),
+            {
+                "customer_name": "Jane Buyer",
+                "customer_email": "jane@example.com",
+                "shipping_address_line1": "42 Main Street",
+                "shipping_address_line2": "",
+                "shipping_city": "Madrid",
+                "shipping_postal_code": "28001",
+                "shipping_country": "Spain",
+                f"front_gallery_image_{product.id}": str(front.id),
+                f"back_gallery_image_{product.id}": str(back.id),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        order = ShopOrder.objects.get(customer_email="jane@example.com")
+        item = order.items.get()
+        self.assertEqual(item.customization_surcharge_per_unit, Decimal("7.00"))
+        self.assertEqual(item.front_gallery_image_id, front.id)
+        self.assertEqual(item.back_gallery_image_id, back.id)
+        self.assertEqual(item.line_total, Decimal("34.00"))
+        self.assertEqual(order.total_amount, Decimal("34.00"))
+
+    def test_checkout_rejects_unavailable_gallery_image_selection(self):
+        shop = Shop.objects.create(name="Card Shop", slug="card-shop-invalid")
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Custom Card",
+            sku="CARD-2",
+            unit_price=Decimal("10.00"),
+            stock_quantity=20,
+            supports_gallery_image_printing=True,
+            gallery_image_print_price=Decimal("3.50"),
+        )
+
+        add_url = reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": product.id})
+        self.client.post(add_url, {"quantity": 1}, follow=True)
+
+        response = self.client.post(
+            reverse("shop:checkout"),
+            {
+                "customer_name": "Jane Buyer",
+                "customer_email": "jane@example.com",
+                "shipping_address_line1": "42 Main Street",
+                "shipping_address_line2": "",
+                "shipping_city": "Madrid",
+                "shipping_postal_code": "28001",
+                "shipping_country": "Spain",
+                f"front_gallery_image_{product.id}": "999999",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Selected front image for Custom Card is unavailable")
+        self.assertEqual(ShopOrder.objects.count(), 0)
+
+    @patch("apps.shop.views._gallery_images_for_checkout")
+    def test_checkout_skips_gallery_fetch_without_customizable_products(self, gallery_images_for_checkout):
+        shop = Shop.objects.create(name="Simple Shop", slug="simple-shop")
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Standard Card",
+            sku="STD-1",
+            unit_price=Decimal("12.00"),
+            stock_quantity=10,
+            supports_gallery_image_printing=False,
+        )
+
+        self.client.post(
+            reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": product.id}),
+            {"quantity": 1},
+            follow=True,
+        )
+
+        checkout_url = reverse("shop:checkout")
+        response = self.client.get(checkout_url)
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            checkout_url,
+            {
+                "customer_name": "Jane Buyer",
+                "customer_email": "jane@example.com",
+                "shipping_address_line1": "42 Main Street",
+                "shipping_address_line2": "",
+                "shipping_city": "Madrid",
+                "shipping_postal_code": "28001",
+                "shipping_country": "Spain",
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ShopOrder.objects.count(), 1)
+        gallery_images_for_checkout.assert_not_called()
+
+    def _create_user(self, username: str, email: str):
+        from django.contrib.auth import get_user_model
+
+        return get_user_model().objects.create_user(username=username, email=email, password="x")
+
     def test_order_number_keeps_prefix_and_length_limit(self):
         """Generated order number should preserve SO prefix within max length."""
 
@@ -98,6 +239,100 @@ class ShopCheckoutTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, order.order_number)
+
+    def test_order_tracking_prefetches_customization_images(self):
+        shop = Shop.objects.create(name="Tracked Shop", slug="tracked-shop")
+        order = ShopOrder.objects.create(
+            shop=shop,
+            customer_name="User",
+            customer_email="user@example.com",
+            shipping_address_line1="Address",
+            shipping_city="Porto",
+            shipping_postal_code="1234",
+            shipping_country="Portugal",
+        )
+        owner = self._create_user("tracking-owner", "tracking-owner@example.com")
+        front = create_gallery_image(
+            uploaded_file=self._upload_image("tracking-front.jpg"),
+            title="Tracking Front",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+        back = create_gallery_image(
+            uploaded_file=self._upload_image("tracking-back.jpg"),
+            title="Tracking Back",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Tracked Product",
+            sku="TRK-1",
+            unit_price=Decimal("10.00"),
+            stock_quantity=5,
+        )
+        order.items.create(
+            product=product,
+            product_name="Tracked Product",
+            sku="TRK-1",
+            unit_price=Decimal("10.00"),
+            quantity=1,
+            line_total=Decimal("10.00"),
+            front_gallery_image=front,
+            back_gallery_image=back,
+        )
+
+        response = self.client.get(reverse("shop:order_tracking", kwargs={"tracking_token": order.tracking_token}))
+        self.assertEqual(response.status_code, 200)
+
+        tracked_order = response.context["order"]
+        with self.assertNumQueries(0):
+            for item in tracked_order.items.all():
+                if item.front_gallery_image is not None:
+                    _ = item.front_gallery_image.title
+                if item.back_gallery_image is not None:
+                    _ = item.back_gallery_image.title
+
+    def test_order_tracking_shows_zero_cost_customization_details(self):
+        shop = Shop.objects.create(name="Zero Cost Shop", slug="zero-cost-shop")
+        order = ShopOrder.objects.create(
+            shop=shop,
+            customer_name="User",
+            customer_email="user@example.com",
+            shipping_address_line1="Address",
+            shipping_city="Porto",
+            shipping_postal_code="1234",
+            shipping_country="Portugal",
+        )
+        owner = self._create_user("zero-cost-owner", "zero-cost-owner@example.com")
+        front = create_gallery_image(
+            uploaded_file=self._upload_image("zero-front.jpg"),
+            title="Zero Front",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Tracked Product",
+            sku="TRK-2",
+            unit_price=Decimal("10.00"),
+            stock_quantity=5,
+        )
+        order.items.create(
+            product=product,
+            product_name="Tracked Product",
+            sku="TRK-2",
+            unit_price=Decimal("10.00"),
+            quantity=1,
+            line_total=Decimal("10.00"),
+            customization_surcharge_per_unit=Decimal("0.00"),
+            front_gallery_image=front,
+        )
+
+        response = self.client.get(reverse("shop:order_tracking", kwargs={"tracking_token": order.tracking_token}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Custom image surcharge per unit: 0.00")
+        self.assertContains(response, "Front: Zero Front")
 
     def test_add_to_cart_clears_items_from_different_shop(self):
         """Adding an item from another shop should clear existing cart items."""

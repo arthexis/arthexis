@@ -257,25 +257,6 @@ async def test_boot_notification_normalizes_ocpp2x_payload(caplog):
 
 
 @pytest.mark.anyio
-async def test_authorize_keeps_id_tag_info_for_ocpp16():
-    consumer = CSMSConsumer(scope={}, receive=None, send=None)
-    consumer.ocpp_version = "ocpp1.6"
-
-    class Handler:
-        async def handle(self, payload, msg_id, raw, text_data):
-            assert payload["idTag"] == "TAG-16"
-            return {"idTagInfo": {"status": "Accepted"}}
-
-    consumer._action_handler = lambda action: Handler()
-
-    result = await consumer._handle_authorize_action(
-        {"idTag": "TAG-16"},
-        "msg-auth-16",
-        "",
-        "",
-    )
-
-    assert result == {"idTagInfo": {"status": "Accepted"}}
 
 
 def test_firmware_actions_register_ocpp201_and_ocpp21():

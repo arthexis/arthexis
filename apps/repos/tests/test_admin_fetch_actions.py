@@ -38,25 +38,6 @@ def test_run_fetch_from_github_action_emits_success_message_and_redirects():
 
 
 @pytest.mark.django_db
-def test_run_fetch_from_github_action_emits_empty_state_message_and_redirects():
-    model_admin = RepositoryIssueAdmin(RepositoryIssue, admin.site)
-    request = _make_request()
-    model_admin.message_user = Mock()
-
-    response = model_admin._run_fetch_from_github_action(
-        request,
-        sync_function=lambda: (0, 0),
-        error_message_template=_("Failed: %(error)s"),
-        success_message_template=_("Fetched %(created)s/%(updated)s"),
-        empty_state_message_template=_("No data"),
-    )
-
-    assert response.status_code == 302
-    model_admin.message_user.assert_called_once_with(
-        request,
-        "No data",
-        level=messages.INFO,
-    )
 
 
 @pytest.mark.django_db

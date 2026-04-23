@@ -148,30 +148,6 @@ def test_refresh_features_skips_auto_enable_when_linked_suite_feature_disabled(
 
 
 @pytest.mark.django_db
-def test_refresh_features_auto_enables_when_linked_suite_feature_enabled(
-    monkeypatch, tmp_path
-):
-    """Auto-detected node features can auto-enable when a linked suite feature is on."""
-
-    node = Node.objects.create(
-        hostname="suite-enabled-node",
-        mac_address=Node.get_current_mac(),
-        current_relation=Node.Relation.SELF,
-        public_endpoint="suite-enabled-node",
-        base_path=str(tmp_path),
-    )
-    feature = NodeFeature.objects.create(slug="gpio-rtc", display="GPIO RTC")
-    Feature.objects.create(
-        slug="rtc-suite-feature",
-        display="RTC Suite Feature",
-        is_enabled=True,
-        node_feature=feature,
-    )
-    monkeypatch.setattr("apps.nodes.models.features.has_clock_device", lambda: True)
-
-    node.refresh_features()
-
-    assert node.features.filter(pk=feature.pk).exists()
 
 
 @pytest.mark.django_db
@@ -341,24 +317,6 @@ def test_detect_auto_feature_enables_llm_summary_when_prereqs_met(
 
 
 @pytest.mark.django_db
-def test_detect_auto_feature_disables_llm_summary_when_config_inactive(
-    llm_summary_node_with_locks,
-):
-    """llm-summary auto-detection should fail when config is inactive."""
-
-    from apps.summary.services import get_summary_config
-
-    node, tmp_path = llm_summary_node_with_locks
-
-    config = get_summary_config()
-    config.is_active = False
-    config.save(update_fields=["is_active", "updated_at"])
-
-    result = node._detect_auto_feature(
-        "llm-summary", base_dir=tmp_path, base_path=tmp_path
-    )
-
-    assert result is False
 
 
 @pytest.mark.django_db

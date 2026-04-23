@@ -4,12 +4,15 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.db import transaction
+from django.db.models import Prefetch, Q, QuerySet
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from apps.gallery.models import GalleryImage
+from apps.gallery.permissions import can_manage_gallery
 from apps.souls.services import attach_soul_to_order_items
 
 from .forms import CartQuantityForm, CheckoutForm
@@ -66,6 +69,71 @@ def _resolve_cart_products(entries: list[dict]) -> tuple[Shop, dict[int, ShopPro
     shop = next(iter(products.values())).shop
 
     return shop, products
+
+
+def _gallery_images_for_checkout(request: HttpRequest) -> QuerySet[GalleryImage]:
+    """Return gallery images visible to current user for card customization."""
+
+    queryset = GalleryImage.objects.select_related("media_file")
+    if can_manage_gallery(request.user):
+        return queryset
+
+    visibility_filter = Q(include_in_public_gallery=True)
+    if request.user.is_authenticated:
+        visibility_filter |= Q(owner_user=request.user)
+        visibility_filter |= Q(owner_group__in=request.user.groups.all())
+        visibility_filter |= Q(shared_with_users=request.user)
+    return queryset.filter(visibility_filter).distinct()
+
+
+def _extract_card_customizations(
+    request: HttpRequest,
+    entries: list[dict],
+    products: dict[int, ShopProduct],
+    gallery_images: dict[int, GalleryImage],
+) -> tuple[dict[int, dict], bool]:
+    """Parse and validate optional front/back gallery image selections."""
+
+    customizations: dict[int, dict] = {}
+    has_errors = False
+    for entry in entries:
+        product = products[entry["product_id"]]
+        if not product.supports_gallery_image_printing:
+            continue
+
+        product_id = product.id
+        front_value = (request.POST.get(f"front_gallery_image_{product_id}") or "").strip()
+        back_value = (request.POST.get(f"back_gallery_image_{product_id}") or "").strip()
+
+        front_image = None
+        back_image = None
+        if front_value:
+            try:
+                front_image = gallery_images[int(front_value)]
+            except (ValueError, KeyError):
+                messages.error(request, f"Selected front image for {product.name} is unavailable.")
+                has_errors = True
+
+        if back_value:
+            try:
+                back_image = gallery_images[int(back_value)]
+            except (ValueError, KeyError):
+                messages.error(request, f"Selected back image for {product.name} is unavailable.")
+                has_errors = True
+
+        sides_selected = 0
+        if front_image is not None:
+            sides_selected += 1
+        if back_image is not None:
+            sides_selected += 1
+        surcharge_per_unit = product.gallery_image_print_price * sides_selected
+        customizations[product_id] = {
+            "front": front_image,
+            "back": back_image,
+            "surcharge_per_unit": surcharge_per_unit,
+        }
+
+    return customizations, has_errors
 
 
 @require_GET
@@ -197,24 +265,65 @@ def checkout(request: HttpRequest) -> HttpResponse:
         messages.warning(request, "Your cart is empty.")
         return redirect("shop:index")
 
+    base_total = calculate_cart_total(entries)
+    try:
+        shop, products = _resolve_cart_products(entries)
+    except CartValidationError as exc:
+        messages.error(request, str(exc))
+        return redirect("shop:cart")
+
+    customization_entries = [
+        {"entry": entry, "product": products[entry["product_id"]], "selected_front": "", "selected_back": ""}
+        for entry in entries
+        if products[entry["product_id"]].supports_gallery_image_printing
+    ]
+    gallery_images: list[GalleryImage] = []
+    gallery_image_map: dict[int, GalleryImage] = {}
+    if customization_entries:
+        gallery_images = list(_gallery_images_for_checkout(request).order_by("title", "id"))
+        gallery_image_map = {image.id: image for image in gallery_images}
+
     if request.method == "GET":
         form = CheckoutForm()
         return render(
             request,
             "shop/checkout.html",
-            {"form": form, "entries": entries, "total": calculate_cart_total(entries)},
+            {
+                "form": form,
+                "entries": entries,
+                "products": products,
+                "gallery_images": gallery_images,
+                "customization_entries": customization_entries,
+                "total": base_total,
+            },
         )
 
     form = CheckoutForm(request.POST)
-    if not form.is_valid():
+    for entry_data in customization_entries:
+        product = entry_data["product"]
+        entry_data["selected_front"] = (request.POST.get(f"front_gallery_image_{product.id}") or "").strip()
+        entry_data["selected_back"] = (request.POST.get(f"back_gallery_image_{product.id}") or "").strip()
+    customizations, customization_errors = _extract_card_customizations(
+        request,
+        entries,
+        products,
+        gallery_image_map,
+    )
+    if not form.is_valid() or customization_errors:
         return render(
             request,
             "shop/checkout.html",
-            {"form": form, "entries": entries, "total": calculate_cart_total(entries)},
+            {
+                "form": form,
+                "entries": entries,
+                "products": products,
+                "gallery_images": gallery_images,
+                "customization_entries": customization_entries,
+                "total": base_total,
+            },
         )
 
     try:
-        shop, products = _resolve_cart_products(entries)
         _require_shop_open(shop)
     except CartValidationError as exc:
         messages.error(request, str(exc))
@@ -238,9 +347,13 @@ def checkout(request: HttpRequest) -> HttpResponse:
         for entry in entries:
             unit_price = Decimal(entry["unit_price"])
             quantity = int(entry["quantity"])
-            line_total = unit_price * quantity
-            total += line_total
             product = products[entry["product_id"]]
+            customization = customizations.get(
+                product.id,
+                {"front": None, "back": None, "surcharge_per_unit": Decimal("0.00")},
+            )
+            line_total = (unit_price + customization["surcharge_per_unit"]) * quantity
+            total += line_total
             created_item = ShopOrderItem.objects.create(
                 order=order,
                 product=product,
@@ -250,6 +363,9 @@ def checkout(request: HttpRequest) -> HttpResponse:
                 unit_price=unit_price,
                 quantity=quantity,
                 line_total=line_total,
+                customization_surcharge_per_unit=customization["surcharge_per_unit"],
+                front_gallery_image=customization["front"],
+                back_gallery_image=customization["back"],
             )
             created_items.append(created_item)
 
@@ -271,5 +387,13 @@ def checkout(request: HttpRequest) -> HttpResponse:
 def order_tracking(request: HttpRequest, tracking_token: str) -> HttpResponse:
     """Show order status and shipping metadata using tracking token."""
 
-    order = get_object_or_404(ShopOrder.objects.prefetch_related("items"), tracking_token=tracking_token)
+    order = get_object_or_404(
+        ShopOrder.objects.prefetch_related(
+            Prefetch(
+                "items",
+                queryset=ShopOrderItem.objects.select_related("front_gallery_image", "back_gallery_image"),
+            )
+        ),
+        tracking_token=tracking_token,
+    )
     return render(request, "shop/order_tracking.html", {"order": order})

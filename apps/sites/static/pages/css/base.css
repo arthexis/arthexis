@@ -8,7 +8,12 @@
   --site-support: #15803d;
   --site-support-strong: #34d399;
   --site-support-rgb: 21, 128, 61;
+  --site-support-icon: #0f172a;
   --site-support-text: #f0fdf4;
+  --user-story-accent: #4d7c0f;
+  --user-story-accent-rgb: 77, 124, 15;
+  --user-story-accent-strong: #3f6212;
+  --user-story-accent-text: #f8fafc;
   --bs-primary: var(--site-primary);
   --bs-primary-rgb: var(--site-primary-rgb);
   --bs-link-color: var(--site-primary);
@@ -40,6 +45,13 @@
 html[data-bs-theme='light'] {
   --bs-body-bg: #ffffff;
   --bs-body-bg-rgb: 255, 255, 255;
+}
+
+html[data-bs-theme='dark'] {
+  --user-story-accent: #84cc16;
+  --user-story-accent-rgb: 132, 204, 22;
+  --user-story-accent-strong: #bef264;
+  --user-story-accent-text: #1f2937;
 }
 
 html {
@@ -106,6 +118,15 @@ nav.toc a:hover {
 .navbar-nav-wrap {
   flex-wrap: wrap;
   gap: 0.35rem 0.3rem;
+}
+
+.navbar {
+  --site-navbar-item-padding-y: var(--bs-navbar-padding-y);
+  --bs-navbar-brand-padding-y: var(--site-navbar-item-padding-y);
+}
+
+.navbar .navbar-nav {
+  --bs-nav-link-padding-y: var(--site-navbar-item-padding-y);
 }
 
 @media (min-width: 992px) {
@@ -214,6 +235,52 @@ html[data-bs-theme='dark'] .language-select {
 .language-select option {
   background-color: var(--bs-body-bg);
   color: var(--bs-body-color);
+}
+
+.site-highlight {
+  background:
+    linear-gradient(180deg, rgba(var(--site-primary-rgb), 0.2), rgba(var(--site-primary-rgb), 0.08)),
+    var(--bs-body-bg);
+  border: var(--bs-border-width) solid color-mix(in srgb, rgb(var(--site-primary-rgb)) 40%, transparent);
+  border-radius: var(--bs-border-radius-lg);
+  box-shadow: var(--bs-box-shadow);
+  color: var(--bs-body-color);
+  padding: var(--bs-spacer) var(--bs-spacer);
+}
+
+html[data-bs-theme='light'] .site-highlight {
+  box-shadow: var(--bs-box-shadow-sm);
+}
+
+.site-highlight__header {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--bs-gap, 0.5rem);
+  justify-content: space-between;
+}
+
+.site-highlight__title {
+  font-size: var(--bs-body-font-size);
+}
+
+.site-highlight__close {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font-size: var(--bs-font-size-sm);
+  padding: 0;
+  white-space: nowrap;
+}
+
+.site-highlight__date {
+  color: var(--bs-secondary-color);
+  font-size: var(--bs-font-size-sm);
+  margin-top: calc(var(--bs-spacer) * 0.25);
+}
+
+.site-highlight__story {
+  margin-top: calc(var(--bs-spacer) * 0.75);
 }
 
 .markdown-body {
@@ -411,8 +478,8 @@ html[data-bs-theme='dark'] .markdown-body tbody tr:nth-of-type(odd) td {
   height: 3rem;
   border-radius: 50%;
   border: 0;
-  background: linear-gradient(135deg, var(--site-accent), var(--site-accent-strong));
-  color: #1f2937;
+  background: linear-gradient(135deg, var(--user-story-accent), var(--user-story-accent-strong));
+  color: var(--user-story-accent-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -478,6 +545,28 @@ body.user-story-open {
   color: var(--bs-body-color);
   transform: translateY(1rem);
   transition: transform 0.25s ease;
+}
+
+.user-story-card .card-title {
+  color: var(--user-story-accent);
+}
+
+.user-story-card .btn-primary {
+  --bs-btn-bg: var(--user-story-accent);
+  --bs-btn-border-color: var(--user-story-accent);
+  --bs-btn-hover-bg: var(--user-story-accent-strong);
+  --bs-btn-hover-border-color: var(--user-story-accent-strong);
+  --bs-btn-active-bg: var(--user-story-accent-strong);
+  --bs-btn-active-border-color: var(--user-story-accent-strong);
+  --bs-btn-focus-shadow-rgb: var(--user-story-accent-rgb);
+  --bs-btn-color: var(--user-story-accent-text);
+  --bs-btn-hover-color: var(--user-story-accent-text);
+  --bs-btn-active-color: var(--user-story-accent-text);
+}
+
+.user-story-card .btn-link {
+  --bs-btn-color: var(--user-story-accent);
+  --bs-btn-hover-color: var(--user-story-accent-strong);
 }
 
 .user-story-card,
@@ -587,11 +676,11 @@ body.user-story-open {
 .user-story-rating label:hover,
 .user-story-rating label:focus-visible,
 .user-story-rating label:hover ~ label {
-  color: var(--site-accent);
+  color: var(--user-story-accent-strong);
 }
 
 .user-story-rating input:checked ~ label {
-  color: var(--site-accent-strong);
+  color: var(--user-story-accent);
 }
 
 .user-story-rating label:active {

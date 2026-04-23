@@ -10,7 +10,11 @@ from apps.groups.constants import (
 )
 from apps.users import temp_passwords
 from apps.users.backends import TempPasswordBackend
-from apps.users.system import collect_system_user_issues, ensure_system_user
+from apps.users.system import (
+    collect_system_user_issues,
+    ensure_default_admin_user,
+    ensure_system_user,
+)
 
 
 @pytest.mark.django_db
@@ -107,3 +111,59 @@ def test_system_user_only_authenticates_with_temp_password():
         backend.authenticate(request, username=user.username, password="incorrect")
         is None
     )
+
+
+@pytest.mark.django_db
+def test_ensure_default_admin_user_uses_configured_defaults(settings):
+    settings.DEFAULT_ADMIN_USERNAME = "ops-admin"
+    settings.DEFAULT_ADMIN_EMAIL = "tecnologia@gelectriic.com"
+
+    User = get_user_model()
+    delegate = User.objects.create(username="delegate-admin", is_staff=True)
+    existing = User.all_objects.create_user(
+        username="ops-admin",
+        email="wrong@example.com",
+        is_active=False,
+        is_staff=False,
+        is_superuser=False,
+        allow_local_network_passwordless_login=True,
+    )
+    existing.is_deleted = True
+    existing.operate_as = delegate
+    existing.save()
+
+    user, updates = ensure_default_admin_user(record_updates=True)
+
+    assert user.pk == existing.pk
+    assert user.username == "ops-admin"
+    assert user.email == "tecnologia@gelectriic.com"
+    assert user.is_active is True
+    assert user.is_staff is True
+    assert user.is_superuser is True
+    assert user.is_deleted is False
+    assert user.allow_local_network_passwordless_login is False
+    assert user.operate_as_id is None
+    assert "email" in updates
+    assert "is_active" in updates
+    assert "is_staff" in updates
+    assert "is_superuser" in updates
+
+
+@pytest.mark.django_db
+def test_ensure_default_admin_user_creates_unusable_password_account(settings):
+    settings.DEFAULT_ADMIN_USERNAME = "ops-admin"
+    settings.DEFAULT_ADMIN_EMAIL = "tecnologia@gelectriic.com"
+
+    User = get_user_model()
+    User.all_objects.filter(username="ops-admin").delete()
+
+    user, updates = ensure_default_admin_user(record_updates=True)
+
+    assert user.username == "ops-admin"
+    assert user.email == "tecnologia@gelectriic.com"
+    assert user.is_active is True
+    assert user.is_staff is True
+    assert user.is_superuser is True
+    assert user.has_usable_password() is False
+    assert "created" in updates
+    assert "password" in updates

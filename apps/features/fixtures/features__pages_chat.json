@@ -7,7 +7,7 @@
       "summary": "Controls visitor-facing chat launchers, widget context, and websocket access across public pages.",
       "is_enabled": true,
       "main_app": [
-        "sites"
+        "pages"
       ],
       "node_feature": null,
       "admin_requirements": "Staff bridge widgets may connect only when the visitor chat product feature and deployment prerequisites are active.",

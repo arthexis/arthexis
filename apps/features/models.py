@@ -154,15 +154,32 @@ class Feature(Ownable):
         if not isinstance(code_locations, list):
             return None
 
+        local_app_paths = sorted(
+            (
+                (
+                    config.label,
+                    tuple(part for part in config.name.split(".")[1:] if part),
+                )
+                for config in django_apps.get_app_configs()
+                if config.name.startswith("apps.")
+            ),
+            key=lambda item: len(item[1]),
+            reverse=True,
+        )
+
         for location in code_locations:
             if not isinstance(location, str):
                 continue
             location_parts = [part for part in location.strip(" /").split("/") if part]
             if len(location_parts) < 2 or location_parts[0] != "apps":
                 continue
-            label = location_parts[1].strip()
-            if label:
-                return label
+            candidate_parts = tuple(location_parts[1:])
+            for label, app_parts in local_app_paths:
+                if candidate_parts[: len(app_parts)] == app_parts:
+                    return label
+            fallback = location_parts[1].strip()
+            if fallback:
+                return fallback
         return None
 
     @property

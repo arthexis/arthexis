@@ -19,6 +19,12 @@ on:
       - '**/Dockerfile'
       - '**/*.sh'
   pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - converted_to_draft
     paths:
       - '**/*.py'
       - '**/requirements*.txt'

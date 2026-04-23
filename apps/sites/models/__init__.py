@@ -5,6 +5,7 @@ from .landing import Landing, LandingManager
 from .landing_lead import LandingLead
 from .referrer_landing import ReferrerLanding, ReferrerLandingManager
 from .site_badge import SiteBadge, get_site_badge_favicon_bucket
+from .site_highlight import SiteHighlight
 from .site_profile import SiteProfile
 from .site_proxy import SiteProxy
 from .site_template import SiteTemplate, SiteTemplateManager
@@ -23,6 +24,7 @@ __all__ = [
     "ReferrerLanding",
     "ReferrerLandingManager",
     "SiteBadge",
+    "SiteHighlight",
     "SiteProfile",
     "SiteProxy",
     "SiteTemplate",

@@ -25,11 +25,15 @@ fi
 # Record upgrade lifecycle in the startup report for visibility in admin reports.
 UPGRADE_SCRIPT_NAME="$(basename "$0")"
 arthexis_log_startup_event "$BASE_DIR" "$UPGRADE_SCRIPT_NAME" "start" "invoked"
+UPGRADE_NOTIFICATION_REQUIRED=0
+UPGRADE_SELF_UPDATE_RERUN_ACTIVE=0
 
 log_upgrade_exit() {
-  local status=$?
+  local status="${1:-$?}"
   arthexis_log_startup_event "$BASE_DIR" "$UPGRADE_SCRIPT_NAME" "finish" "status=$status"
-  arthexis_record_upgrade_duration "$status"
+  if declare -F arthexis_record_upgrade_duration >/dev/null 2>&1; then
+    arthexis_record_upgrade_duration "$status"
+  fi
 }
 trap log_upgrade_exit EXIT
 # shellcheck source=scripts/helpers/ports.sh
@@ -72,7 +76,15 @@ arthexis_record_upgrade_duration() {
   local end_time
   end_time=$(date +%s)
   local duration=$((end_time - UPGRADE_STARTED_AT))
-  python - "$UPGRADE_DURATION_LOCK" "$UPGRADE_STARTED_AT" "$end_time" "$duration" "$status" <<'PY'
+  local duration_python="${PYTHON_BIN:-}"
+  if [ -z "$duration_python" ]; then
+    duration_python="$(command -v python3 || command -v python || true)"
+  fi
+  if [ -z "$duration_python" ]; then
+    echo "Warning: no Python interpreter available to record upgrade duration." >&2
+    return 0
+  fi
+  if ! "$duration_python" - "$UPGRADE_DURATION_LOCK" "$UPGRADE_STARTED_AT" "$end_time" "$duration" "$status" <<'PY'
 import json
 import sys
 from datetime import datetime, timezone
@@ -94,6 +106,10 @@ payload = {
 lock_path.parent.mkdir(parents=True, exist_ok=True)
 lock_path.write_text(json.dumps(payload), encoding="utf-8")
 PY
+  then
+    echo "Warning: failed to record upgrade duration metadata." >&2
+    return 0
+  fi
 }
 
 auto_upgrade_enabled() {
@@ -643,6 +659,10 @@ lcd_service_lockfiles_present() {
   return 1
 }
 
+lcd_service_configured() {
+  arthexis_lcd_service_configured "$LOCK_DIR" "$1" "$SERVICE_MANAGEMENT_MODE"
+}
+
 lcd_systemd_unit_present() {
   _prefixed_systemd_unit_present "lcd" "$1"
 }
@@ -1130,6 +1150,7 @@ rerun_with_updated_script() {
   fi
 
   echo "upgrade.sh was updated during git pull; restarting upgrade automatically with the new script..."
+  UPGRADE_SELF_UPDATE_RERUN_ACTIVE=1
   export ARTHEXIS_UPGRADE_SELF_UPDATE_DEPTH=$((depth + 1))
   "${rerun_cmd[@]}"
 }
@@ -1169,7 +1190,102 @@ printf "%s\n" "$(date -Iseconds)" > "$UPGRADE_IN_PROGRESS_LOCK"
 cleanup_upgrade_progress_lock() {
   rm -f "$UPGRADE_IN_PROGRESS_LOCK"
 }
-trap cleanup_upgrade_progress_lock EXIT INT TERM
+
+should_notify_upgrade_completion() {
+  local status="${1:-0}"
+
+  if [[ ${UPGRADE_NOTIFICATION_REQUIRED:-0} -ne 1 ]]; then
+    return 1
+  fi
+
+  if [[ ${CHECK_ONLY:-0} -eq 1 || ${STOP_ONLY:-0} -eq 1 ]]; then
+    return 1
+  fi
+
+  if [[ ${UPGRADE_SELF_UPDATE_RERUN_ACTIVE:-0} -eq 1 ]]; then
+    return 1
+  fi
+
+  if [[ "${status}" -eq "${UPGRADE_RERUN_EXIT_CODE:-3}" ]]; then
+    return 1
+  fi
+
+  return 0
+}
+
+notify_upgrade_completion_email() {
+  local status="$1"
+  local notify_python="${PYTHON_BIN:-}"
+
+  if [ -z "$notify_python" ] || [ ! -x "$notify_python" ]; then
+    if [ -x "$BASE_DIR/.venv/bin/python" ]; then
+      notify_python="$BASE_DIR/.venv/bin/python"
+    else
+      notify_python="$(command -v python3 || command -v python || true)"
+    fi
+  fi
+
+  if [ -z "$notify_python" ]; then
+    echo "Warning: Python interpreter not found; could not send upgrade status email." >&2
+    return 1
+  fi
+
+  local -a notify_cmd=(
+    "$notify_python"
+    "manage.py"
+    "upgrade"
+    "notify"
+    "--exit-status"
+    "$status"
+    "--source"
+    "$UPGRADE_SCRIPT_NAME"
+    "--channel"
+    "$CHANNEL"
+  )
+
+  if [[ -n "${BRANCH:-}" ]]; then
+    notify_cmd+=("--branch" "$BRANCH")
+  fi
+  if [[ -n "${SERVICE_NAME:-}" ]]; then
+    notify_cmd+=("--service" "$SERVICE_NAME")
+  fi
+  if [[ -n "${LOCAL_VERSION:-}" ]]; then
+    notify_cmd+=("--initial-version" "$LOCAL_VERSION")
+  fi
+  if [[ -n "${REMOTE_VERSION:-}" ]]; then
+    notify_cmd+=("--target-version" "$REMOTE_VERSION")
+  fi
+  if [[ -n "${LOCAL_REVISION:-}" ]]; then
+    notify_cmd+=("--initial-revision" "$LOCAL_REVISION")
+  fi
+  if [[ -n "${REMOTE_REVISION:-}" ]]; then
+    notify_cmd+=("--target-revision" "$REMOTE_REVISION")
+  fi
+
+  if ! (cd "$BASE_DIR" && "${notify_cmd[@]}"); then
+    echo "Warning: upgrade status email was not sent." >&2
+    return 1
+  fi
+
+  return 0
+}
+
+finalize_upgrade_exit() {
+  local status=$?
+
+  cleanup_upgrade_progress_lock
+  log_upgrade_exit "$status"
+
+  if should_notify_upgrade_completion "$status"; then
+    notify_upgrade_completion_email "$status" || true
+  fi
+
+  return "$status"
+}
+
+trap finalize_upgrade_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 UPGRADE_RERUN_LOCK="$LOCK_DIR/upgrade_rerun_required.lck"
 RERUN_AFTER_SELF_UPDATE=0
@@ -1655,6 +1771,12 @@ confirm_database_deletion() {
     return 0
   fi
 
+  if ! can_prompt_for_confirmation; then
+    echo "Warning: $action will delete database files, but interactive confirmation is unavailable in this session." >&2
+    echo "Re-run in the foreground or pass --no-warn to allow non-interactive execution." >&2
+    return 1
+  fi
+
   echo "Warning: $action will delete the following database files without creating a backup:"
   local target
   for target in "${targets[@]}"; do
@@ -1668,6 +1790,17 @@ confirm_database_deletion() {
   fi
 
   return 0
+}
+
+can_prompt_for_confirmation() {
+  if ! [ -t 0 ]; then
+    return 1
+  fi
+
+  local process_state=""
+  process_state="$(ps -o stat= -p "$$" 2>/dev/null | tr -d '[:space:]')" || return 1
+
+  [[ "$process_state" == *"+"* ]]
 }
 
 NODE_ROLE_NAME=$(determine_node_role)
@@ -1964,6 +2097,7 @@ else
 fi
 
 # Normalize VERSION by removing any trailing development markers.
+UPGRADE_NOTIFICATION_REQUIRED=1
 arthexis_update_version_marker "$BASE_DIR"
 
 # Create virtual environment automatically if missing
@@ -2093,13 +2227,15 @@ if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_M
   fi
 fi
 
-if [ -n "$SERVICE_NAME" ] && lcd_systemd_unit_present "$SERVICE_NAME"; then
-  arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
-elif [ -n "$SERVICE_NAME" ] && [ "$NODE_ROLE_NAME" = "Control" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-  arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
+if [ -n "$SERVICE_NAME" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+  if lcd_service_configured "$SERVICE_NAME"; then
+    arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
+  else
+    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "lcd-${SERVICE_NAME}.service"
+  fi
 fi
 
-if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && lcd_systemd_unit_present "$SERVICE_NAME"; then
+if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && lcd_service_configured "$SERVICE_NAME"; then
   clear_lcd_lockfiles
 fi
 

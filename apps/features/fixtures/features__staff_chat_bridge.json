@@ -7,7 +7,7 @@
       "summary": "Gates staff-only chat bridge and escalation affordances layered on top of the visitor chat runtime.",
       "is_enabled": true,
       "main_app": [
-        "sites"
+        "pages"
       ],
       "node_feature": null,
       "admin_requirements": "Admin and staff surfaces should only render bridge-specific chat widgets when this suite feature is enabled and Pages Chat runtime prerequisites are active.",

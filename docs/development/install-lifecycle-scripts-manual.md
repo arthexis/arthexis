@@ -143,6 +143,7 @@ Both supported backends emit a consistent reconciliation report that includes co
 | `--kind suite|node` | Scope for `--feature`. |
 | `--enabled`, `--disabled` | Enable/disable selected feature. |
 | `--feature-param FEATURE:KEY=VALUE` | Set feature metadata parameter. |
+| `--email ADMIN_EMAIL` | Set `DEFAULT_ADMIN_EMAIL` in `arthexis.env` for upgrade notifications. |
 | `--satellite`, `--terminal`, `--control`, `--watchtower` | Set role profile and associated defaults. |
 | `--check` | Print current role/port/upgrade/debug/feature state. |
 | `--repair` | Restore lock state from existing role and lock files. |

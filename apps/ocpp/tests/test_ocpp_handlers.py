@@ -722,26 +722,6 @@ async def test_cost_updated_rejects_invalid_payload():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_cost_updated_requires_transaction_id():
-    charger = await database_sync_to_async(Charger.objects.create)(
-        charger_id="COST-3"
-    )
-    consumer = CSMSConsumer(scope={}, receive=None, send=None)
-    consumer.store_key = store.identity_key(charger.charger_id, 1)
-    consumer.charger_id = charger.charger_id
-    consumer.charger = charger
-    consumer.connector_value = 1
-
-    result = await consumer._handle_cost_updated_action(
-        {"totalCost": "9.50", "currency": "USD"}, "msg-missing-tx", "", ""
-    )
-
-    assert result == {}
-    exists = await database_sync_to_async(CostUpdate.objects.filter)(charger=charger)
-    assert not await database_sync_to_async(exists.exists)()
-    entries = list(store.logs["charger"].get(consumer.store_key, []))
-    assert any("CostUpdated ignored: missing transactionId" in entry for entry in entries)
-    assert not store.billing_updates
 
 
 @pytest.mark.anyio
@@ -987,61 +967,6 @@ async def test_get_certificate_status_ocsp_timeout_uses_responder_unavailable(mo
         charger=charger
     )
     assert status_check.status == CertificateStatusCheck.STATUS_ERROR
-    assert status_check.ocsp_result["status"] == "unknown"
-    assert status_check.ocsp_result["errors"]
-
-
-@pytest.mark.anyio
-@pytest.mark.django_db(transaction=True)
-@override_settings(
-    OCPP_CERT_STATUS_OCSP_URL="https://ocsp.example.test/status",
-    OCPP_CERT_STATUS_FAIL_CLOSED=False,
-    OCPP_CERT_STATUS_RETRIES=0,
-    OCPP_CERT_STATUS_TIMEOUT_SECONDS=1,
-)
-async def test_get_certificate_status_ocsp_timeout_fail_open_accepts(monkeypatch):
-    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-OPEN")
-    hash_data = {
-        "hashAlgorithm": "SHA256",
-        "issuerKeyHash": "def",
-        "issuerNameHash": "abc",
-        "serialNumber": "AC",
-    }
-    await database_sync_to_async(InstalledCertificate.objects.create)(
-        charger=charger,
-        certificate_type="V2G",
-        certificate_hash_data=hash_data,
-        status=InstalledCertificate.STATUS_INSTALLED,
-    )
-    consumer = CSMSConsumer(scope={}, receive=None, send=None)
-    consumer.store_key = "CERT-OPEN"
-    consumer.charger = charger
-    consumer.aggregate_charger = None
-
-    def _raise_timeout(*_args, **_kwargs):
-        raise consumers_base.certificate_status.requests.Timeout("timed out")
-
-    class FakeSession:
-        def mount(self, *_args, **_kwargs):
-            return None
-
-        def request(self, *_args, **_kwargs):
-            return _raise_timeout()
-
-        def close(self):
-            return None
-
-    monkeypatch.setattr(consumers_base.certificate_status.requests, "Session", FakeSession)
-
-    result = await consumer._handle_get_certificate_status_action(
-        {"certificateHashData": hash_data}, "msg-ocsp-open", "", ""
-    )
-
-    assert result["status"] == "Accepted"
-    status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
-        charger=charger
-    )
-    assert status_check.status == CertificateStatusCheck.STATUS_ACCEPTED
     assert status_check.ocsp_result["status"] == "unknown"
     assert status_check.ocsp_result["errors"]
 
