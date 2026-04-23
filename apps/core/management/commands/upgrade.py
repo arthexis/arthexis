@@ -7,6 +7,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.core.services.upgrade_notifications import notify_upgrade_completion
 from apps.core.system.filesystem import _clear_auto_upgrade_skip_revisions
 from apps.core.system.upgrade import (
     UPGRADE_CHANNEL_CHOICES,
@@ -63,6 +64,57 @@ class Command(BaseCommand):
         channel_parser.add_argument(
             "channel",
             help="Target channel (stable, unstable, latest).",
+        )
+
+        notify_parser = subparsers.add_parser(
+            "notify",
+            help="Send the post-upgrade status email and rotate the default admin temp password.",
+        )
+        notify_parser.add_argument(
+            "--exit-status",
+            type=int,
+            default=0,
+            help="Exit status from the completed upgrade script.",
+        )
+        notify_parser.add_argument(
+            "--source",
+            default="upgrade.sh",
+            help="Source command or workflow that completed the upgrade.",
+        )
+        notify_parser.add_argument(
+            "--channel",
+            default="",
+            help="Upgrade channel used for the completed run.",
+        )
+        notify_parser.add_argument(
+            "--branch",
+            default="",
+            help="Git branch associated with the completed run.",
+        )
+        notify_parser.add_argument(
+            "--service",
+            default="",
+            help="Service name for the upgraded instance when known.",
+        )
+        notify_parser.add_argument(
+            "--initial-version",
+            default="",
+            help="Version recorded before the upgrade started.",
+        )
+        notify_parser.add_argument(
+            "--target-version",
+            default="",
+            help="Version observed as the intended target before the upgrade ran.",
+        )
+        notify_parser.add_argument(
+            "--initial-revision",
+            default="",
+            help="Git revision recorded before the upgrade started.",
+        )
+        notify_parser.add_argument(
+            "--target-revision",
+            default="",
+            help="Git revision observed as the intended target before the upgrade ran.",
         )
 
     def handle(self, *args, **options):
@@ -161,5 +213,35 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 f"Upgrade channel set to '{channel}' for {updated} assigned policy"
                 f"{'ies' if updated != 1 else ''}."
+            )
+        )
+
+    def _handle_notify(self, options: dict[str, object]) -> None:
+        """Send the post-upgrade status email and rotate the default admin temp password."""
+
+        result = notify_upgrade_completion(
+            base_dir=Path(settings.BASE_DIR),
+            exit_status=int(options["exit_status"]),
+            source=str(options.get("source") or "upgrade.sh").strip() or "upgrade.sh",
+            channel=str(options.get("channel") or "").strip() or None,
+            branch=str(options.get("branch") or "").strip() or None,
+            service_name=str(options.get("service") or "").strip() or None,
+            initial_version=str(options.get("initial_version") or "").strip() or None,
+            target_version=str(options.get("target_version") or "").strip() or None,
+            initial_revision=str(options.get("initial_revision") or "").strip() or None,
+            target_revision=str(options.get("target_revision") or "").strip() or None,
+        )
+        if not result.email_sent:
+            raise CommandError(
+                result.error or "Upgrade notification email was not sent."
+            )
+
+        expires_at = result.expires_at.isoformat() if result.expires_at else "unknown"
+        recipients = ", ".join(result.recipients) or "<none>"
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Upgrade notification sent to {recipients}; "
+                f"temporary password rotated for {result.admin_username} "
+                f"(expires {expires_at})."
             )
         )
