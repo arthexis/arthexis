@@ -74,8 +74,8 @@ def test_staff_task_resolves_named_internal_action_for_visible_tasks():
 
 
 @pytest.mark.django_db
-def test_ensure_default_staff_tasks_exist_preserves_existing_seeded_task_edits():
-    """Regression: reseeding should not overwrite operator changes to seeded tasks."""
+def test_ensure_default_staff_tasks_exist_overrides_existing_seeded_task_edits():
+    """Regression: reseeding should enforce canonical defaults for seeded tasks."""
 
     StaffTask.objects.create(
         slug="groups",
@@ -92,10 +92,10 @@ def test_ensure_default_staff_tasks_exist_preserves_existing_seeded_task_edits()
     ensure_default_staff_tasks_exist()
 
     task = StaffTask.objects.get(slug="groups")
-    assert task.label == "Customized Groups"
-    assert task.description == "Customized description."
-    assert task.order == 5
-    assert task.default_enabled is False
-    assert task.staff_only is False
-    assert task.superuser_only is True
-    assert task.is_active is False
+    assert task.label == "Groups"
+    assert task.description == "Browse the current user's security groups."
+    assert task.order == 55
+    assert task.default_enabled is True
+    assert task.staff_only is True
+    assert task.superuser_only is False
+    assert task.is_active is True

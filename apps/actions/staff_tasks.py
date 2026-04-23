@@ -180,21 +180,21 @@ def user_can_access_staff_task(user, task: StaffTask) -> bool:
 def ensure_default_staff_tasks_exist() -> None:
     """Backfill missing default staff tasks in existing and new environments.
 
-    Existing rows are left intact so operator edits to labels, ordering, and
-    visibility remain persistent after the defaults have been seeded once.
+    Existing rows are synchronized to the suite defaults so each reseed keeps
+    labels, ordering, and visibility aligned across environments.
     """
 
     for task in DEFAULT_STAFF_TASKS:
-        StaffTask.objects.get_or_create(
+        StaffTask.objects.update_or_create(
             slug=task["slug"],
             defaults={
-                "label": task["label"],
-                "description": task["description"],
                 "action_name": task["action_name"],
-                "order": task["order"],
                 "default_enabled": True,
+                "description": task["description"],
+                "is_active": True,
+                "label": task["label"],
+                "order": task["order"],
                 "staff_only": True,
                 "superuser_only": bool(task.get("superuser_only", False)),
-                "is_active": True,
             },
         )
