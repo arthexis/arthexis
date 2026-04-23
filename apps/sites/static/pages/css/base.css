@@ -129,15 +129,6 @@ nav.toc a:hover {
   --bs-nav-link-padding-y: var(--site-navbar-item-padding-y);
 }
 
-.navbar .navbar-brand {
-  color: var(--user-story-accent);
-}
-
-.navbar .navbar-brand:focus-visible,
-.navbar .navbar-brand:hover {
-  color: var(--user-story-accent-strong);
-}
-
 @media (min-width: 992px) {
   .reader-sidebar {
     position: sticky;
