@@ -1,0 +1,137 @@
+name: Close issues linked to merged PRs
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  close-linked-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close open issues when a linked PR is merged to default branch
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const defaultBranch = context.payload.repository?.default_branch || 'main';
+
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            const issuesOnly = openIssues.filter((issue) => !issue.pull_request);
+            core.info(`Evaluating ${issuesOnly.length} open issues.`);
+
+            for (const issue of issuesOnly) {
+              const timelineEvents = await github.paginate(github.rest.issues.listEventsForTimeline, {
+                owner,
+                repo,
+                issue_number: issue.number,
+                per_page: 100,
+              });
+
+              const orderedEvents = [...timelineEvents].sort((left, right) => {
+                const leftTime = Date.parse(left.created_at ?? '');
+                const rightTime = Date.parse(right.created_at ?? '');
+
+                if (Number.isNaN(leftTime) || Number.isNaN(rightTime) || leftTime === rightTime) {
+                  return (left.id ?? 0) - (right.id ?? 0);
+                }
+
+                return leftTime - rightTime;
+              });
+
+              const linkedPullRequestNumbers = new Set();
+
+              for (const event of orderedEvents) {
+                if (!['cross-referenced', 'connected', 'disconnected'].includes(event.event)) {
+                  continue;
+                }
+
+                const sourceIssue = event.source?.issue;
+                const sourceIssueNumber = sourceIssue?.number;
+
+                if (!sourceIssue?.pull_request || !sourceIssueNumber) {
+                  continue;
+                }
+
+                if (event.event === 'disconnected') {
+                  linkedPullRequestNumbers.delete(sourceIssueNumber);
+                  continue;
+                }
+
+                linkedPullRequestNumbers.add(sourceIssueNumber);
+              }
+
+              if (linkedPullRequestNumbers.size === 0) {
+                continue;
+              }
+
+              const mergedToDefaultBranch = [];
+              for (const pullNumber of linkedPullRequestNumbers) {
+                try {
+                  const { data: pullRequest } = await github.rest.pulls.get({
+                    owner,
+                    repo,
+                    pull_number: pullNumber,
+                  });
+
+                  if (!pullRequest.merged_at) {
+                    continue;
+                  }
+
+                  if (pullRequest.base?.ref !== defaultBranch) {
+                    continue;
+                  }
+
+                  mergedToDefaultBranch.push(pullRequest.number);
+                } catch (error) {
+                  if (error.status === 404) {
+                    core.info(`#${issue.number}: linked PR #${pullNumber} is unavailable.`);
+                    continue;
+                  }
+
+                  throw error;
+                }
+              }
+
+              if (mergedToDefaultBranch.length === 0) {
+                core.info(`#${issue.number}: linked PR(s) found, but none merged to ${defaultBranch}.`);
+                continue;
+              }
+
+              const linkedPullsText = mergedToDefaultBranch
+                .sort((a, b) => a - b)
+                .map((number) => `#${number}`)
+                .join(', ');
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issue.number,
+                body: [
+                  `Closing automatically because linked PR(s) ${linkedPullsText} were merged into \`${defaultBranch}\`.`,
+                  '',
+                  'If this issue still needs follow-up work, please reopen it with details.',
+                ].join('\n'),
+              });
+
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: issue.number,
+                state: 'closed',
+              });
+
+              core.info(`#${issue.number}: closed (merged PR(s): ${linkedPullsText}).`);
+            }
