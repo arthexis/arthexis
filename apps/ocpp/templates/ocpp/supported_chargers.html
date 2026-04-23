@@ -24,6 +24,11 @@
     flex-wrap: wrap;
     gap: 0.5rem;
   }
+  .supported-toolbar-row {
+    --bs-gutter-x: var(--bs-spacer);
+    --bs-gutter-y: calc(var(--bs-spacer) * 0.75);
+    margin-inline: 0;
+  }
   .supported-chip {
     border-radius: 999px;
   }
@@ -78,7 +83,7 @@
       </div>
       <div class="card-body pt-2">
         <div class="supported-toolbar mb-3 mb-sm-4" data-supported-filter-toolbar>
-          <div class="row g-3 align-items-start">
+          <div class="row align-items-start supported-toolbar-row">
             <div class="col-12 col-md-4">
               <p class="chip-label mb-0">{% trans "Vendor" %}</p>
               <div class="supported-chip-group" data-chip-group="vendor"></div>
