@@ -13,6 +13,7 @@ from django.http import HttpResponse, JsonResponse
 from django.test import RequestFactory
 
 from apps.nodes.models import Node, NodeRole
+from apps.nodes.models.upgrade_policy import UpgradePolicy
 from apps.nodes.services import registration
 from apps.nodes.services.enrollment import issue_enrollment_token
 from apps.nodes.views import node_info, register_node
@@ -218,3 +219,84 @@ def test_get_local_logs_redacted_mac_values(monkeypatch, caplog):
     assert not hasattr(record, "stored_mac")
     assert "aa:bb:cc:dd:ee:ff" not in caplog.text
     assert "00:11:22:33:44:55" not in caplog.text
+
+
+def _stub_local_registration(monkeypatch, *, hostname: str, ipv4: str, mac: str):
+    monkeypatch.setattr(registration, "_resolve_local_role_name", lambda: "Terminal")
+    monkeypatch.setattr(registration.socket, "gethostname", lambda: hostname)
+    monkeypatch.setattr(registration.socket, "getfqdn", lambda _host: hostname)
+    monkeypatch.setattr(registration.socket, "gethostbyname", lambda _host: ipv4)
+    monkeypatch.setattr(
+        Node,
+        "_resolve_ip_addresses",
+        staticmethod(lambda *_hosts: ([ipv4], [])),
+    )
+    monkeypatch.setattr(
+        Node,
+        "_detect_managed_site",
+        classmethod(lambda cls: (None, "", False)),
+    )
+    monkeypatch.setattr(Node, "get_current_mac", classmethod(lambda cls: mac))
+    monkeypatch.setattr(
+        Node,
+        "get_host_instance_id",
+        classmethod(lambda cls: "machine-1"),
+    )
+    monkeypatch.setattr(Node, "ensure_keys", lambda self: None)
+    monkeypatch.setattr(Node, "refresh_features", lambda self: None)
+
+
+@pytest.mark.django_db
+def test_register_current_assigns_default_role_upgrade_policy_on_create(monkeypatch):
+    policy = UpgradePolicy.objects.create(
+        name="Terminal Stable",
+        channel=UpgradePolicy.Channel.STABLE,
+        interval_minutes=10080,
+    )
+    NodeRole.objects.create(name="Terminal", default_upgrade_policy=policy)
+    _stub_local_registration(
+        monkeypatch,
+        hostname="terminal-create",
+        ipv4="192.0.2.10",
+        mac="aa:bb:cc:dd:ee:99",
+    )
+
+    node, created = registration.register_current(Node, notify_peers=False)
+
+    assert created is True
+    assert node.role.name == "Terminal"
+    assert list(node.upgrade_policies.values_list("name", flat=True)) == [policy.name]
+
+
+@pytest.mark.django_db
+def test_register_current_backfills_missing_default_role_upgrade_policy(monkeypatch):
+    policy = UpgradePolicy.objects.create(
+        name="Terminal Stable",
+        channel=UpgradePolicy.Channel.STABLE,
+        interval_minutes=10080,
+    )
+    role = NodeRole.objects.create(name="Terminal", default_upgrade_policy=policy)
+    node = Node.objects.create(
+        hostname="terminal-refresh",
+        mac_address="aa:bb:cc:dd:ee:98",
+        address="192.0.2.11",
+        port=8888,
+        public_endpoint="terminal-refresh",
+        role=role,
+        current_relation=Node.Relation.SELF,
+    )
+    node.upgrade_policies.clear()
+    _stub_local_registration(
+        monkeypatch,
+        hostname="terminal-refresh",
+        ipv4="192.0.2.11",
+        mac="aa:bb:cc:dd:ee:98",
+    )
+
+    refreshed, created = registration.register_current(Node, notify_peers=False)
+
+    assert created is False
+    assert refreshed.pk == node.pk
+    assert list(refreshed.upgrade_policies.values_list("name", flat=True)) == [
+        policy.name
+    ]

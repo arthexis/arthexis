@@ -176,6 +176,10 @@ def register_current(node_model: type["Node"], notify_peers: bool = True) -> tup
             node.role = terminal
             node.save(update_fields=["role"])
 
+    # ``register_current`` can assign or retain a role outside the model's
+    # initial save path, so ensure the role default policy is backfilled here.
+    node._apply_role_upgrade_policy()
+
     node.ensure_keys()
     if notify_peers:
         node.notify_peers_of_update()
