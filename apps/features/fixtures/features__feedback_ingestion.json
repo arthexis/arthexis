@@ -19,7 +19,7 @@
       "is_enabled": true,
       "is_seed_data": true,
       "main_app": [
-        "sites"
+        "pages"
       ],
       "metadata": {},
       "node_feature": null,
