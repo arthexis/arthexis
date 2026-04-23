@@ -217,6 +217,7 @@ class ChatConsumerAccessControlTests(TestCase):
 
         self.assertTrue(allowed)
 
+
     def test_current_site_prefers_websocket_host_header(self):
         """Site resolution should follow the websocket host, not only the default site."""
 

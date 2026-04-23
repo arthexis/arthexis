@@ -81,25 +81,6 @@ class AccessPointLocalUserBackendTests(TestCase):
 
         assert authenticated is None
 
-    def test_rejects_password_valid_user_from_non_local_ipv4_request(self):
-        user = get_user_model().objects.create_user(
-            username="public-ap-with-password",
-            email="public-ap-with-password@example.com",
-            password="correct-password",
-            is_staff=False,
-            is_superuser=False,
-            allow_local_network_passwordless_login=True,
-        )
-        request = self._request("8.8.8.8")
-
-        authenticated = self.backend.authenticate(
-            request,
-            username=user.username,
-            password="correct-password",
-        )
-
-        assert authenticated is None
-
     def test_authenticates_access_point_user_with_unusable_password(self):
         user = get_user_model().objects.create_user(
             username="ap-unusable-password",

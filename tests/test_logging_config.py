@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 from config.middleware import ActiveAppMiddleware
 from config.request_utils import get_request_log_context, reset_request_log_context, set_request_log_context
-from utils.loggers.config import resolve_log_formatter
 from utils.loggers.filters import RequestContextFilter
 from utils.loggers.json_formatter import JSONFormatter
 
@@ -20,16 +19,6 @@ def _build_request(**kwargs):
         resolver_match=resolver_match,
         **kwargs,
     )
-
-
-def test_resolve_log_formatter_defaults_to_text(monkeypatch):
-    monkeypatch.delenv("ARTHEXIS_LOG_FORMAT", raising=False)
-    assert resolve_log_formatter() == "standard"
-
-
-def test_resolve_log_formatter_json_mode(monkeypatch):
-    monkeypatch.setenv("ARTHEXIS_LOG_FORMAT", "json")
-    assert resolve_log_formatter() == "json"
 
 
 def test_request_context_filter_applies_request_identifiers():

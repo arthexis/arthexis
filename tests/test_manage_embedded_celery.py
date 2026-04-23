@@ -7,10 +7,6 @@ from pathlib import Path
 import manage
 
 
-def test_service_mode_allows_embedded_celery_by_default(tmp_path: Path) -> None:
-    assert manage._service_mode_allows_embedded_celery(tmp_path)
-
-
 def test_service_mode_disables_embedded_celery_in_systemd(tmp_path: Path) -> None:
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir()

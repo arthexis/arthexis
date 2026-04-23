@@ -443,6 +443,7 @@ def test_step_confirm_pypi_trusted_publisher_settings_fails_on_mismatch(
     assert "workflow tag pattern must be refs/tags/v*" in ctx["error"]
     assert "jobs.publish-to-pypi.environment.name" in ctx["error"]
 
+
 def test_step_confirm_pypi_trusted_publisher_settings_rejects_mixed_tag_patterns(
     monkeypatch, tmp_path: Path
 ):
@@ -469,6 +470,7 @@ def test_step_confirm_pypi_trusted_publisher_settings_rejects_mixed_tag_patterns
         )
 
     assert "workflow tag pattern must be refs/tags/v*" in ctx["error"]
+
 
 def test_step_confirm_pypi_trusted_publisher_settings_requires_oidc_permissions_and_action(
     monkeypatch, tmp_path: Path
@@ -498,6 +500,7 @@ def test_step_confirm_pypi_trusted_publisher_settings_requires_oidc_permissions_
 
     assert "jobs.publish-to-pypi.permissions.id-token" in ctx["error"]
     assert "jobs.publish-to-pypi.steps[*].uses" in ctx["error"]
+
 
 def test_step_confirm_pypi_trusted_publisher_settings_rejects_static_publish_tokens(
     monkeypatch, tmp_path: Path
@@ -529,6 +532,7 @@ def test_step_confirm_pypi_trusted_publisher_settings_rejects_static_publish_tok
         )
 
     assert "must not set static token credentials" in ctx["error"]
+
 
 def test_step_confirm_pypi_trusted_publisher_settings_allows_non_publish_step_tokens(
     monkeypatch, tmp_path: Path
