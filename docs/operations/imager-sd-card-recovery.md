@@ -15,7 +15,6 @@ Build a Raspberry Pi image artifact with first-boot bootstrap scripts:
 .venv/bin/python manage.py imager build \
   --name stable \
   --base-image-uri /path/to/raspios.img \
-  --recovery-authorized-key-file /path/to/operator-recovery.pub \
   --download-base-uri https://downloads.example.com/images
 ```
 

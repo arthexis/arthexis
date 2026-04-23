@@ -90,9 +90,7 @@ WantedBy=multi-user.target
 FIRST_RUN_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
 
-if [ -x /usr/local/bin/arthexis-recovery-access.sh ]; then
-  /usr/local/bin/arthexis-recovery-access.sh
-fi
+{recovery_boot_hook}
 
 chmod +x /usr/local/bin/arthexis-bootstrap.sh
 systemctl daemon-reload
@@ -100,6 +98,11 @@ systemctl enable arthexis-bootstrap.service
 systemctl start arthexis-bootstrap.service
 rm -f /boot/firstrun.sh /boot/firmware/firstrun.sh
 """
+
+RECOVERY_BOOT_HOOK = """if [ -x /usr/local/bin/arthexis-recovery-access.sh ]; then
+  /usr/local/bin/arthexis-recovery-access.sh || \\
+    echo "arthexis-recovery-access.sh failed; continuing with bootstrap" >&2
+fi"""
 
 
 class ImagerBuildError(RuntimeError):
@@ -543,12 +546,17 @@ def _normalize_recovery_ssh_access(
         for line in (recovery_authorized_keys or ())
         if str(line).strip()
     )
-    if not normalized_keys:
-        return None
 
     username = (recovery_ssh_user or "").strip() or DEFAULT_RECOVERY_SSH_USER
     if not RECOVERY_SSH_USERNAME_PATTERN.fullmatch(username):
         raise ImagerBuildError(f"Invalid recovery SSH username: '{username}'")
+    if not normalized_keys:
+        if recovery_ssh_user.strip() and username != DEFAULT_RECOVERY_SSH_USER:
+            raise ImagerBuildError(
+                "Recovery SSH user was provided without recovery authorized keys. "
+                "Provide --recovery-authorized-key-file or omit --recovery-ssh-user."
+            )
+        return None
     return RecoverySSHAccess(username=username, authorized_keys=normalized_keys)
 
 
@@ -569,7 +577,14 @@ def _customize_image(
 
         bootstrap.write_text(BOOTSTRAP_SCRIPT, encoding="utf-8")
         service.write_text(SYSTEMD_SERVICE.format(git_url=git_url), encoding="utf-8")
-        firstrun.write_text(FIRST_RUN_SCRIPT, encoding="utf-8")
+        firstrun.write_text(
+            FIRST_RUN_SCRIPT.format(
+                recovery_boot_hook=RECOVERY_BOOT_HOOK
+                if recovery_ssh_access and recovery_ssh_access.enabled
+                else ""
+            ),
+            encoding="utf-8",
+        )
 
         _guestfish_write(image_path, bootstrap, "/usr/local/bin/arthexis-bootstrap.sh", chmod_mode="0755")
         _guestfish_write(image_path, service, "/etc/systemd/system/arthexis-bootstrap.service")

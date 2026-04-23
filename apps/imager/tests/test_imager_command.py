@@ -257,6 +257,7 @@ def test_imager_build_command_ignores_non_public_key_lines(mock_build, tmp_path:
         },
     )()
 
+    stderr = StringIO()
     call_command(
         "imager",
         "build",
@@ -266,11 +267,16 @@ def test_imager_build_command_ignores_non_public_key_lines(mock_build, tmp_path:
         str(output_path),
         "--recovery-authorized-key-file",
         str(authorized_key_file),
+        stderr=stderr,
     )
 
     assert mock_build.call_args.kwargs["recovery_authorized_keys"] == [
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyValid valid",
     ]
+    warnings = stderr.getvalue()
+    assert "Skipping unrecognized key line" in warnings
+    assert "-----BEGIN OPENSSH PRIVATE KEY-----" in warnings
+    assert "invalid-content" in warnings
 
 
 def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided(tmp_path: Path) -> None:
@@ -332,7 +338,38 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
     assert "systemctl enable ssh" in recovery_script
     assert recovery_keys == "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestRecovery recovery\n"
     assert "/usr/local/bin/arthexis-recovery-access.sh" in firstrun_script
+    assert "arthexis-recovery-access.sh failed; continuing with bootstrap" in firstrun_script
     assert "PasswordAuthentication no" in sshd_config
+
+
+def test_customize_image_does_not_add_recovery_boot_hook_when_recovery_is_disabled(tmp_path: Path) -> None:
+    """Regression: first-boot recovery hook should be gated by explicit recovery settings."""
+
+    image_path = tmp_path / "artifact.img"
+    image_path.write_bytes(b"pi")
+    written_files: dict[str, tuple[str, str | None]] = {}
+
+    def capture_write(
+        image_path_arg: Path,
+        local_path: Path,
+        remote_path: str,
+        chmod_mode: str | None = None,
+    ) -> None:
+        assert image_path_arg == image_path
+        written_files[remote_path] = (local_path.read_text(encoding="utf-8"), chmod_mode)
+
+    with (
+        patch("apps.imager.services._ensure_guestfish"),
+        patch("apps.imager.services._guestfish_write", side_effect=capture_write),
+    ):
+        _customize_image(
+            image_path,
+            git_url="https://github.com/arthexis/arthexis.git",
+            recovery_ssh_access=None,
+        )
+
+    firstrun_script, _firstrun_mode = written_files["/boot/firstrun.sh"]
+    assert "/usr/local/bin/arthexis-recovery-access.sh" not in firstrun_script
 
 
 def test_build_rpi4b_image_rejects_invalid_recovery_ssh_username(tmp_path: Path) -> None:
@@ -373,6 +410,25 @@ def test_build_rpi4b_image_rejects_recovery_ssh_when_customize_is_disabled(tmp_p
             recovery_authorized_keys=[
                 "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestRecovery recovery",
             ],
+        )
+
+
+def test_build_rpi4b_image_rejects_recovery_username_without_keys(tmp_path: Path) -> None:
+    """Regression: explicit recovery usernames without keys should fail fast."""
+
+    base_image = tmp_path / "base.img"
+    base_image.write_bytes(b"raspberrypi")
+
+    with pytest.raises(ImagerBuildError, match="Recovery SSH user was provided without recovery authorized keys"):
+        build_rpi4b_image(
+            name="recovery-user-without-keys",
+            base_image_uri=str(base_image),
+            output_dir=tmp_path,
+            download_base_uri="",
+            git_url="https://github.com/arthexis/arthexis.git",
+            customize=False,
+            recovery_ssh_user="fieldops",
+            recovery_authorized_keys=[],
         )
 
 

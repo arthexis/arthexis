@@ -193,6 +193,11 @@ class Command(BaseCommand):
                 if not normalized or normalized.startswith("#"):
                     continue
                 if not VALID_PUBLIC_KEY_PATTERN.match(normalized):
+                    self.stderr.write(
+                        self.style.WARNING(
+                            f"Skipping unrecognized key line in '{path}': {normalized}"
+                        )
+                    )
                     continue
                 keys.append(normalized)
 
