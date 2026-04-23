@@ -109,7 +109,12 @@ nav.toc a:hover {
 }
 
 .navbar {
-  --bs-navbar-brand-padding-y: var(--bs-nav-link-padding-y);
+  --site-navbar-item-padding-y: var(--bs-navbar-padding-y);
+  --bs-navbar-brand-padding-y: var(--site-navbar-item-padding-y);
+}
+
+.navbar .navbar-nav {
+  --bs-nav-link-padding-y: var(--site-navbar-item-padding-y);
 }
 
 @media (min-width: 992px) {
