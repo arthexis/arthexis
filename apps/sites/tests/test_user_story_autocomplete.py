@@ -15,13 +15,27 @@ def test_user_story_autocomplete_uses_standard_model_for_anonymous(client, monke
 
     monkeypatch.setattr(autocomplete.FeedbackAutocompleteHarness, "suggest", fake_suggest)
 
-    response = client.get(reverse("pages:user-story-autocomplete"), {"q": "needs faster"})
+    response = client.post(reverse("pages:user-story-autocomplete"), {"q": "needs faster"})
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["success"] is True
     assert payload["model"] == "standard"
     assert payload["suggestions"] == ["response", "time"]
+
+
+@pytest.mark.django_db
+def test_user_story_autocomplete_rejects_get_payload(client, monkeypatch):
+    from apps.sites import autocomplete
+
+    def fake_suggest(self, *, text, is_staff, limit):
+        raise AssertionError("GET requests should not invoke autocomplete suggestions")
+
+    monkeypatch.setattr(autocomplete.FeedbackAutocompleteHarness, "suggest", fake_suggest)
+
+    response = client.get(reverse("pages:user-story-autocomplete"), {"q": "sensitive draft"})
+
+    assert response.status_code == 405
 
 
 @pytest.mark.django_db
@@ -36,11 +50,7 @@ def test_user_story_autocomplete_accepts_post_body_for_anonymous(client, monkeyp
 
     monkeypatch.setattr(autocomplete.FeedbackAutocompleteHarness, "suggest", fake_suggest)
 
-    response = client.post(
-        reverse("pages:user-story-autocomplete"),
-        {"q": "sensitive draft", "limit": "4"},
-        HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-    )
+    response = client.post(reverse("pages:user-story-autocomplete"), {"q": "sensitive draft", "limit": "4"})
 
     assert response.status_code == 200
     payload = response.json()
@@ -68,7 +78,7 @@ def test_user_story_autocomplete_uses_repo_trained_model_for_staff(client, monke
 
     monkeypatch.setattr(autocomplete.FeedbackAutocompleteHarness, "suggest", fake_suggest)
 
-    response = client.get(
+    response = client.post(
         reverse("pages:user-story-autocomplete"),
         {"q": "status panel", "limit": "3"},
     )

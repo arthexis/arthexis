@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
-from django.views.decorators.http import require_GET, require_http_methods, require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from apps.core import changelog
 from apps.docs import rendering
@@ -339,11 +339,10 @@ def changelog_report_data(request):
 
 
 
-@require_http_methods(["GET", "POST"])
+@require_POST
 def user_story_autocomplete(request):
-    payload = request.POST if request.method == "POST" else request.GET
-    text = payload.get("q", "")
-    limit_raw = payload.get("limit", "5")
+    text = request.POST.get("q", "")
+    limit_raw = request.POST.get("limit", "5")
     try:
         limit = max(1, min(int(limit_raw), 10))
     except (TypeError, ValueError):
