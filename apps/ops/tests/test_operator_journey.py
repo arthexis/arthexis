@@ -904,6 +904,113 @@ class OperatorJourneyViewTests(TestCase):
             get_user_model().objects.filter(username="ops-not-allowed").exists()
         )
 
+    def test_provision_step_allows_skip_without_creating_user(self):
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        follow_up_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Continue setup",
+            slug="continue-setup",
+            instruction="Continue setup.",
+            iframe_url="/admin/",
+            order=4,
+        )
+        self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
+        )
+        self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            )
+        )
+
+        response = self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": provision_step.journey.slug,
+                    "step_slug": provision_step.slug,
+                },
+            ),
+            {"journey_action": "skip"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": follow_up_step.journey.slug,
+                    "step_slug": follow_up_step.slug,
+                },
+            ),
+        )
+        self.assertTrue(provision_step.completions.filter(user=self.user).exists())
+        self.assertFalse(
+            get_user_model().objects.filter(username="ops-skip-account").exists()
+        )
+
+    def test_provision_step_view_includes_skip_button(self):
+        provision_step = OperatorJourneyStep.objects.create(
+            journey=self.journey,
+            title="Create ops superuser",
+            slug="provision-ops-superuser",
+            instruction="Create account.",
+            iframe_url="/admin/",
+            order=3,
+        )
+        self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_1.journey.slug,
+                    "step_slug": self.step_1.slug,
+                },
+            )
+        )
+        self.client.post(
+            reverse(
+                "ops:operator-journey-step-complete",
+                kwargs={
+                    "journey_slug": self.step_2.journey.slug,
+                    "step_slug": self.step_2.slug,
+                },
+            )
+        )
+
+        response = self.client.get(
+            reverse(
+                "ops:operator-journey-step",
+                kwargs={
+                    "journey_slug": provision_step.journey.slug,
+                    "step_slug": provision_step.slug,
+                },
+            )
+        )
+
+        self.assertContains(response, "Skip this step and continue")
+        self.assertContains(
+            response,
+            'name="journey_action" value="skip" formnovalidate',
+            html=False,
+        )
+
     def test_tag_returns_empty_status_without_request_context(self):
         rendered = Template(
             "{% load operator_journey %}"
