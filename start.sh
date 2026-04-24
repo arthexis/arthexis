@@ -35,6 +35,7 @@ SHOW_LEVEL=""
 SERVICE_ARGS=()
 RELOAD_REQUESTED=false
 CLEAR_LOGS=false
+# Lifecycle CLI contract: argument parsing must stay in sync with docs/development/install-lifecycle-scripts-manual.md.
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --silent)

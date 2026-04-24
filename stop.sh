@@ -68,6 +68,7 @@ CONFIRM=false
 DEFAULT_PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
 PORT="$DEFAULT_PORT"
 
+# Lifecycle CLI contract: stop flags are operator-facing and guarded by lifecycle contract tests.
 while [[ $# -gt 0 ]]; do
     case "$1" in
       --all)
