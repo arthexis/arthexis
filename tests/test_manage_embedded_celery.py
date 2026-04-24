@@ -60,6 +60,30 @@ def test_main_skips_embedded_celery_for_systemd_mode(
     assert popen_calls == []
 
 
+def test_main_preserves_environment_debug_for_runserver(
+    monkeypatch, tmp_path: Path
+) -> None:
+    captured: dict[str, object] = {}
+
+    def capture_runserver(
+        _base_dir: Path, argv: list[str], is_debug_session: bool
+    ) -> None:
+        captured["argv"] = argv
+        captured["is_debug_session"] = is_debug_session
+
+    monkeypatch.setenv("DEBUG", "1")
+    monkeypatch.setattr(manage, "__file__", str(tmp_path / "manage.py"))
+    monkeypatch.setattr(manage, "loadenv", lambda: None)
+    monkeypatch.setattr(manage, "bootstrap_sqlite_driver", lambda: None)
+    monkeypatch.setattr(manage, "_run_runserver", capture_runserver)
+    monkeypatch.setattr(manage, "_execute_django", lambda *_args, **_kwargs: None)
+
+    manage.main(["runserver"])
+
+    assert manage.os.environ["DEBUG"] == "1"
+    assert captured["is_debug_session"] is False
+
+
 def test_main_allows_explicit_embedded_celery_override(
     monkeypatch, tmp_path: Path
 ) -> None:
