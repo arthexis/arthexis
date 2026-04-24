@@ -1,3 +1,4 @@
+from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import Client
@@ -133,6 +134,79 @@ def test_site_operator_cannot_remove_self_to_bypass_add_restriction(db):
     assert response.status_code == 302
     assert user.groups.filter(pk=site_operator_group.pk).exists()
     assert client.get(reverse("admin:groups_securitygroup_add")).status_code == 403
+
+
+def test_site_operator_cannot_delete_own_group_to_bypass_add_restriction(db):
+    user = create_staff_user_with_security_group_permissions(
+        "local-admin",
+        "add_securitygroup",
+        "change_securitygroup",
+        "delete_securitygroup",
+    )
+    site_operator_group = add_site_operator_membership(user)
+
+    client = Client()
+    client.force_login(user)
+
+    response = client.post(
+        reverse("admin:groups_securitygroup_delete", args=[site_operator_group.pk]),
+        data={"post": "yes"},
+    )
+
+    assert response.status_code == 403
+    assert SecurityGroup.objects.filter(pk=site_operator_group.pk).exists()
+    assert user.groups.filter(pk=site_operator_group.pk).exists()
+    assert client.get(reverse("admin:groups_securitygroup_add")).status_code == 403
+
+
+def test_site_operator_bulk_delete_skips_own_group_to_preserve_add_restriction(db):
+    user = create_staff_user_with_security_group_permissions(
+        "local-admin",
+        "add_securitygroup",
+        "change_securitygroup",
+        "delete_securitygroup",
+    )
+    site_operator_group = add_site_operator_membership(user)
+    managed_group = SecurityGroup.objects.create(name="managed-group")
+
+    client = Client()
+    client.force_login(user)
+
+    response = client.post(
+        reverse("admin:groups_securitygroup_changelist"),
+        data={
+            "action": "delete_selected",
+            ACTION_CHECKBOX_NAME: [site_operator_group.pk, managed_group.pk],
+            "post": "yes",
+        },
+    )
+
+    assert response.status_code == 403
+    assert SecurityGroup.objects.filter(pk=site_operator_group.pk).exists()
+    assert SecurityGroup.objects.filter(pk=managed_group.pk).exists()
+    assert user.groups.filter(pk=site_operator_group.pk).exists()
+    assert client.get(reverse("admin:groups_securitygroup_add")).status_code == 403
+
+
+def test_site_operator_can_delete_other_security_groups(db):
+    user = create_staff_user_with_security_group_permissions(
+        "local-admin",
+        "change_securitygroup",
+        "delete_securitygroup",
+    )
+    add_site_operator_membership(user)
+    managed_group = SecurityGroup.objects.create(name="managed-group")
+
+    client = Client()
+    client.force_login(user)
+
+    response = client.post(
+        reverse("admin:groups_securitygroup_delete", args=[managed_group.pk]),
+        data={"post": "yes"},
+    )
+
+    assert response.status_code == 302
+    assert not SecurityGroup.objects.filter(pk=managed_group.pk).exists()
 
 
 def test_superuser_can_still_create_security_groups(db):

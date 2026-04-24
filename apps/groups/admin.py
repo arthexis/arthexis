@@ -72,6 +72,22 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
             return True
         return not self._site_operator_group_ids_for_user(request.user)
 
+    def has_delete_permission(self, request, obj=None):
+        if not super().has_delete_permission(request, obj=obj):
+            return False
+        if request.user.is_superuser or obj is None:
+            return True
+        return obj.pk not in self._site_operator_group_ids_for_user(request.user)
+
+    def delete_queryset(self, request, queryset):
+        if request.user.is_superuser:
+            return super().delete_queryset(request, queryset)
+        site_operator_group_ids = self._site_operator_group_ids_for_user(request.user)
+        return super().delete_queryset(
+            request,
+            queryset.exclude(pk__in=site_operator_group_ids),
+        )
+
     def get_readonly_fields(self, request, obj=None):
         readonly_fields = list(super().get_readonly_fields(request, obj))
         if "security_model_label" not in readonly_fields:
