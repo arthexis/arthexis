@@ -150,3 +150,60 @@ def test_rfid_scan_no_irq_bypasses_attempt_polling(monkeypatch):
     result = command._scan({"timeout": 1.0, "no_irq": True})
 
     assert result == {"rfid": "ABCD1234", "no_irq": True}
+
+
+@pytest.mark.django_db
+def test_rfid_scan_fallback_uses_remaining_timeout(monkeypatch):
+    """Fallback polling should not restart the full scan timeout."""
+
+    rfid_command = importlib.import_module("apps.cards.management.commands.rfid")
+    monotonic_values = iter([10.0, 11.5])
+    captured: dict[str, float] = {}
+    command = rfid_command.Command()
+
+    monkeypatch.setattr(rfid_command.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(
+        command,
+        "_scan_via_attempt",
+        lambda timeout: {"rfid": None, "label_id": None},
+    )
+
+    def fake_scan_via_local(timeout):
+        captured["timeout"] = timeout
+        return {"rfid": None, "label_id": None}
+
+    monkeypatch.setattr(command, "_scan_via_local", fake_scan_via_local)
+    monkeypatch.setattr(rfid_command, "service_available", lambda: True)
+
+    result = command._scan({"timeout": 2.0, "no_irq": False})
+
+    assert result == {"error": "No RFID detected before timeout"}
+    assert captured["timeout"] == pytest.approx(0.5)
+
+
+@pytest.mark.django_db
+def test_rfid_scan_fallback_skips_local_when_timeout_spent(monkeypatch):
+    """Fallback polling should stop when service polling used the budget."""
+
+    rfid_command = importlib.import_module("apps.cards.management.commands.rfid")
+    monotonic_values = iter([10.0, 12.1])
+    command = rfid_command.Command()
+
+    monkeypatch.setattr(rfid_command.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(
+        command,
+        "_scan_via_attempt",
+        lambda timeout: {"rfid": None, "label_id": None},
+    )
+    monkeypatch.setattr(
+        command,
+        "_scan_via_local",
+        lambda timeout: (_ for _ in ()).throw(
+            AssertionError("local fallback should not run")
+        ),
+    )
+    monkeypatch.setattr(rfid_command, "service_available", lambda: True)
+
+    result = command._scan({"timeout": 2.0, "no_irq": False})
+
+    assert result == {"error": "No RFID detected before timeout"}

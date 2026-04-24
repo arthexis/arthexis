@@ -160,9 +160,15 @@ class Command(BaseCommand):
         if options.get("no_irq"):
             result = scan_sources(timeout=timeout, no_irq=True)
         else:
+            start = time.monotonic()
             result = self._scan_via_attempt(timeout)
             if (result.get("rfid") is None) and not result.get("error"):
-                result = self._scan_via_local(timeout)
+                elapsed = time.monotonic() - start
+                remaining = max(0.0, timeout - elapsed)
+                if remaining <= 0:
+                    result = {"rfid": None, "label_id": None}
+                else:
+                    result = self._scan_via_local(remaining)
         if result.get("error"):
             return result
         if not result.get("rfid"):
@@ -208,7 +214,10 @@ class Command(BaseCommand):
         while True:
             if interactive and user_requested_stop():
                 return {"error": "Scan cancelled by user"}
-            result = scan_sources(timeout=0.2)
+            remaining = max(0.0, timeout - (time.monotonic() - start))
+            if remaining <= 0:
+                return {"rfid": None, "label_id": None}
+            result = scan_sources(timeout=min(0.2, remaining))
             if result.get("rfid") or result.get("error"):
                 return result
             if not interactive and time.monotonic() - start >= timeout:

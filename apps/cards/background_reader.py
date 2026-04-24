@@ -184,7 +184,7 @@ def lock_file_path() -> Path:
 
 
 def lock_file_active() -> tuple[bool, Path]:
-    """Return whether a current-suite lock file exists and its path."""
+    """Return whether the RFID service lock file exists and its path."""
 
     lock = lock_file_path()
     return lock.exists(), lock

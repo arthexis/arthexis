@@ -243,9 +243,7 @@ def scan_sources(
                 source=RFIDAttempt.Source.ON_DEMAND,
                 status=RFIDAttempt.Status.SCANNED,
             )
-            if attempt is not None:
-                return build_attempt_response(attempt, endianness=endianness)
-            result["service_mode"] = "on-demand"
+            return build_attempt_response(attempt, endianness=endianness)
         return result
 
     result = request_service("scan", payload={"timeout": timeout_value}, timeout=timeout_value + 0.2)

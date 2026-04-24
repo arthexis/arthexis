@@ -89,3 +89,31 @@ def test_scan_sources_no_irq_uses_direct_reader(monkeypatch):
     result = scanner.scan_sources(timeout=0.5, no_irq=True)
 
     assert result == sentinel
+
+
+def test_scan_sources_no_irq_returns_direct_empty_result(monkeypatch):
+    """Empty direct reads should return without recording an attempt."""
+
+    monkeypatch.setattr(
+        scanner,
+        "request_service",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("service should not be called")
+        ),
+    )
+    monkeypatch.setattr(
+        reader,
+        "read_rfid",
+        lambda **kwargs: {"rfid": None, "label_id": None},
+    )
+    monkeypatch.setattr(
+        scanner,
+        "record_scan_attempt",
+        lambda result, **kwargs: (_ for _ in ()).throw(
+            AssertionError("empty scan should not be recorded")
+        ),
+    )
+
+    result = scanner.scan_sources(timeout=0.5, no_irq=True)
+
+    assert result == {"rfid": None, "label_id": None}
