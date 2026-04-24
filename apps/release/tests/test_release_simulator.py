@@ -256,6 +256,27 @@ def test_release_simulation_quotes_package_name_for_pypi(
     assert user_agents == ["arthexis-release-simulator/1.2.3"]
 
 
+def test_release_simulation_reports_invalid_pypi_timeout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_project(tmp_path)
+
+    def fake_urlopen(url: str, *, timeout: float) -> _FakeResponse:
+        raise AssertionError("urlopen should not be called for invalid timeouts")
+
+    monkeypatch.setattr("apps.release.simulator.urlopen", fake_urlopen)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_build=True,
+        pypi_timeout=0,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "preflight_pypi"
+    assert "PyPI timeout must be greater than zero seconds" in result.error
+
+
 def test_release_simulation_reports_invalid_pypi_json(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -441,6 +441,11 @@ def _preflight_pypi(
     package_version: str,
     timeout: float,
 ) -> None:
+    if timeout <= 0:
+        raise ReleaseSimulationError(
+            "preflight_pypi",
+            f"PyPI timeout must be greater than zero seconds: {timeout}.",
+        )
     pypi_url = f"https://pypi.org/pypi/{quote(package_name, safe='')}/json"
     request = Request(
         pypi_url,
