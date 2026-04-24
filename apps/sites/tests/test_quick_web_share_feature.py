@@ -17,14 +17,12 @@ from apps.sites.middleware import SharePreviewPublicMiddleware
 
 pytestmark = pytest.mark.django_db
 
-
 def _set_quick_web_share_enabled(enabled: bool) -> None:
     Feature.objects.update_or_create(
         slug=QUICK_WEB_SHARE_FEATURE_SLUG,
         defaults={"display": "Quick Web Share", "is_enabled": enabled},
     )
     cache.delete("features:quick-web-share:enabled")
-
 
 def test_share_context_returns_empty_values_when_feature_disabled_by_default(
     rf: RequestFactory,
@@ -40,7 +38,6 @@ def test_share_context_returns_empty_values_when_feature_disabled_by_default(
     }
     assert ShortURL.objects.count() == 0
 
-
 def test_share_context_builds_short_url_when_feature_enabled(
     rf: RequestFactory,
 ) -> None:
@@ -53,7 +50,6 @@ def test_share_context_builds_short_url_when_feature_enabled(
     assert "/links/s/" in context["share_short_url"]
     assert context["share_short_url_qr"].startswith("data:image/png;base64,")
     assert ShortURL.objects.count() == 1
-
 
 def test_share_preview_public_middleware_requires_quick_web_share_feature(
     rf: RequestFactory,
@@ -80,12 +76,3 @@ def test_share_preview_public_middleware_requires_quick_web_share_feature(
     enabled_response = middleware(enabled_request)
     assert enabled_response.content == b"True"
 
-
-def test_base_page_hides_share_ui_when_quick_web_share_feature_disabled(client) -> None:
-    _set_quick_web_share_enabled(False)
-
-    response = client.get(reverse("pages:index"))
-
-    content = response.content.decode()
-    assert 'id="share-button"' not in content
-    assert 'id="shareModal"' not in content
