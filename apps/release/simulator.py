@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import secrets
 import shutil
 import subprocess
 import sys
@@ -21,7 +22,6 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
 
 
 DEFAULT_PACKAGE_NAME = "arthexis"
-GITHUB_OUTPUT_DELIMITER = "__ARTHEXIS_RELEASE_SIMULATE__"
 
 
 @dataclass
@@ -188,7 +188,12 @@ def run_release_simulation(
 
             if clean:
                 _clean_artifacts(root=root, dist_dir=dist_dir)
-            resolved_dist = _resolve_child_path(root, dist_dir, label="dist directory")
+            resolved_dist = _resolve_child_path(
+                root,
+                dist_dir,
+                label="dist directory",
+                step="build_package",
+            )
             _run_subprocess(
                 [
                     sys.executable,
@@ -251,7 +256,7 @@ def run_release_simulation(
         summary = _failure_summary(exc.step, run_url=run_url)
         return ReleaseSimulationResult(
             package_name=package_name,
-            version=_safe_read_text(root / version_file),
+            version=_safe_read_child_text(root, version_file),
             ok=False,
             skipped=False,
             failed_step=exc.step,
@@ -302,13 +307,22 @@ def write_github_output(result: ReleaseSimulationResult, path: Path) -> None:
     """Append GitHub Actions step outputs for the release simulator."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
+    delimiter = _github_output_delimiter(result.summary_markdown)
     with path.open("a", encoding="utf-8") as handle:
-        handle.write(f"summary_markdown<<{GITHUB_OUTPUT_DELIMITER}\n")
+        handle.write(f"summary_markdown<<{delimiter}\n")
         handle.write(result.summary_markdown.rstrip() + "\n")
-        handle.write(f"{GITHUB_OUTPUT_DELIMITER}\n")
+        handle.write(f"{delimiter}\n")
         handle.write(f"simulated_ok={str(result.ok).lower()}\n")
         handle.write(f"simulated_skipped={str(result.skipped).lower()}\n")
         handle.write(f"failed_step={result.failed_step}\n")
+
+
+def _github_output_delimiter(markdown: str) -> str:
+    markdown_lines = set(markdown.splitlines())
+    while True:
+        delimiter = f"ghadelim_{secrets.token_hex(16)}"
+        if delimiter not in markdown_lines:
+            return delimiter
 
 
 def _validate_version_gate(
@@ -405,7 +419,14 @@ def _preflight_pypi(
             f"Network failure while checking PyPI for an existing release: {exc.reason}.",
         ) from exc
 
-    releases = payload.get("releases", {})
+    releases = payload.get("releases")
+    if releases is None:
+        releases = {}
+    elif not isinstance(releases, dict):
+        raise ReleaseSimulationError(
+            "preflight_pypi",
+            f"Unexpected 'releases' payload type from PyPI: {type(releases).__name__}.",
+        )
     if package_version in releases:
         raise ReleaseSimulationError(
             "preflight_pypi",
@@ -427,21 +448,35 @@ def _run_subprocess(cmd: list[str], *, cwd: Path, step: str) -> None:
 
 
 def _clean_artifacts(*, root: Path, dist_dir: Path) -> None:
-    for target in (_resolve_child_path(root, dist_dir, label="dist directory"), root / "build"):
+    for target in (
+        _resolve_child_path(
+            root,
+            dist_dir,
+            label="dist directory",
+            step="build_package",
+        ),
+        root / "build",
+    ):
         if target.is_dir():
             shutil.rmtree(target)
         elif target.exists():
             target.unlink()
 
 
-def _resolve_child_path(root: Path, path: Path, *, label: str) -> Path:
+def _resolve_child_path(
+    root: Path,
+    path: Path,
+    *,
+    label: str,
+    step: str = "validate_version_gate",
+) -> Path:
     candidate = path if path.is_absolute() else root / path
     resolved = candidate.resolve()
     try:
         resolved.relative_to(root)
     except ValueError as exc:
         raise ReleaseSimulationError(
-            "validate_version_gate",
+            step,
             f"{label.capitalize()} escapes repository root: {resolved}",
         ) from exc
     return resolved
@@ -487,6 +522,14 @@ def _safe_read_text(path: Path) -> str:
         return path.read_text(encoding="utf-8").strip()
     except OSError:
         return ""
+
+
+def _safe_read_child_text(root: Path, path: Path) -> str:
+    try:
+        resolved_path = _resolve_child_path(root, path, label="version file")
+    except ReleaseSimulationError:
+        return ""
+    return _safe_read_text(resolved_path)
 
 
 def _build_parser() -> argparse.ArgumentParser:

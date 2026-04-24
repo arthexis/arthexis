@@ -151,6 +151,60 @@ def test_release_simulation_reports_invalid_pypi_json(
     assert "Received invalid JSON from PyPI" in result.error
 
 
+def test_release_simulation_reports_invalid_pypi_releases_payload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_project(tmp_path)
+
+    def fake_urlopen(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(b'{"releases": []}')
+
+    monkeypatch.setattr("apps.release.simulator.urlopen", fake_urlopen)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_build=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "preflight_pypi"
+    assert "Unexpected 'releases' payload type from PyPI: list" in result.error
+
+
+def test_release_simulation_does_not_read_escaped_version_file(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    external_version = tmp_path.parent / "external-version.txt"
+    external_version.write_text("secret-version\n", encoding="utf-8")
+
+    result = run_release_simulation(
+        root=tmp_path,
+        version_file=external_version,
+        skip_pypi=True,
+        skip_build=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "validate_version_gate"
+    assert result.version == ""
+    assert "secret-version" not in result.error
+
+
+def test_release_simulation_reports_escaped_dist_dir_as_build_failure(
+    tmp_path: Path,
+) -> None:
+    _write_project(tmp_path)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        dist_dir=tmp_path.parent / "dist-outside-root",
+        skip_pypi=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "build_package"
+    assert "Dist directory escapes repository root" in result.error
+
+
 def test_release_simulation_skips_when_blockers_are_provided(tmp_path: Path) -> None:
     result = run_release_simulation(
         root=tmp_path,
@@ -184,6 +238,37 @@ def test_release_simulation_writes_github_outputs(tmp_path: Path) -> None:
     assert "simulated_ok=true" in rendered
     assert "simulated_skipped=false" in rendered
     assert "failed_step=" in rendered
+
+
+def test_release_simulation_avoids_github_output_delimiter_collisions(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_project(tmp_path)
+    output_path = tmp_path / "github-output.txt"
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_pypi=True,
+        skip_build=True,
+    )
+    result.summary_markdown = "\n".join(
+        [
+            "### Simulation result",
+            "ghadelim_collision",
+            "- OK summary still renders.",
+        ]
+    )
+    tokens = iter(["collision", "safe"])
+    monkeypatch.setattr(
+        "apps.release.simulator.secrets.token_hex",
+        lambda _size: next(tokens),
+    )
+
+    write_github_output(result, output_path)
+
+    rendered = output_path.read_text(encoding="utf-8")
+    assert "summary_markdown<<ghadelim_safe" in rendered
+    assert "\nghadelim_collision\n" in rendered
+    assert rendered.count("\nghadelim_safe\n") == 1
 
 
 def test_release_command_wraps_simulator_for_local_runs(tmp_path: Path) -> None:
