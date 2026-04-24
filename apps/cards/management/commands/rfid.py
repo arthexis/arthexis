@@ -157,7 +157,8 @@ class Command(BaseCommand):
         if timeout is None or timeout <= 0:
             raise CommandError("Timeout must be a positive number of seconds")
 
-        if options.get("no_irq"):
+        no_irq = options.get("no_irq")
+        if no_irq:
             result = scan_sources(timeout=timeout, no_irq=True)
         else:
             start = time.monotonic()
@@ -172,7 +173,7 @@ class Command(BaseCommand):
         if result.get("error"):
             return result
         if not result.get("rfid"):
-            if not service_available():
+            if not no_irq and not service_available():
                 return {"error": "RFID scanner service not configured or detected"}
             return {"error": "No RFID detected before timeout"}
         return result

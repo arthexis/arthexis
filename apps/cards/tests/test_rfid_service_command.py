@@ -153,6 +153,24 @@ def test_rfid_scan_no_irq_bypasses_attempt_polling(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_rfid_scan_no_irq_empty_result_bypasses_service_state(monkeypatch):
+    """Direct polling should report timeout even when the service is unavailable."""
+
+    rfid_command = importlib.import_module("apps.cards.management.commands.rfid")
+    monkeypatch.setattr(
+        rfid_command,
+        "scan_sources",
+        lambda **kwargs: {"rfid": None, "label_id": None, "no_irq": kwargs.get("no_irq")},
+    )
+    monkeypatch.setattr(rfid_command, "service_available", lambda: False)
+
+    command = rfid_command.Command()
+    result = command._scan({"timeout": 1.0, "no_irq": True})
+
+    assert result == {"error": "No RFID detected before timeout"}
+
+
+@pytest.mark.django_db
 def test_rfid_scan_fallback_uses_remaining_timeout(monkeypatch):
     """Fallback polling should not restart the full scan timeout."""
 
