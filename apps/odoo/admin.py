@@ -106,11 +106,11 @@ class OdooTemplateSetupCreateForm(forms.Form):
         label=_("Products"),
         widget=forms.CheckboxSelectMultiple,
     )
-    employees = forms.ModelMultipleChoiceField(
+    employees = forms.ModelChoiceField(
         queryset=OdooEmployee.objects.none(),
         required=False,
-        label=_("Employees"),
-        widget=forms.CheckboxSelectMultiple,
+        label=_("Salesperson"),
+        help_text=_("Optionally assign one salesperson to the created templates."),
     )
 
     def __init__(self, *args, **kwargs):
@@ -130,6 +130,13 @@ class OdooTemplateSetupCreateForm(forms.Form):
                 _("Select only products imported from Odoo before creating product rules."),
             )
         return cleaned_data
+
+    def clean_employees(self):
+        if self.is_bound and hasattr(self.data, "getlist"):
+            selected_employees = [value for value in self.data.getlist(self.add_prefix("employees")) if value]
+            if len(selected_employees) > 1:
+                raise forms.ValidationError(_("Select only one salesperson."))
+        return self.cleaned_data["employees"]
 
 
 @admin.register(OdooDeployment)
@@ -913,9 +920,8 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         if request.method == "POST" and form.is_valid():
             templates = list(form.cleaned_data["templates"])
             products = list(form.cleaned_data["products"])
-            employees = list(form.cleaned_data["employees"])
+            primary_employee = form.cleaned_data["employees"]
             name_prefix = form.cleaned_data["name_prefix"]
-            primary_employee = employees[0] if employees else None
             template_name_max_length = (
                 OdooSaleOrderTemplate._meta.get_field("name").max_length or 255
             )

@@ -178,6 +178,81 @@ def test_setup_templates_step_two_creates_linked_objects(admin_client):
 
 
 @pytest.mark.django_db
+def test_setup_templates_step_two_assigns_one_salesperson(
+    admin_client, admin_user
+):
+    source_template = OdooSaleOrderTemplate.objects.create(
+        name="Base",
+        odoo_template={"id": 90, "name": "Base"},
+    )
+    salesperson = OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoo",
+        username="salesperson",
+        password="secret",
+        odoo_uid=2,
+        verified_on=timezone.now(),
+    )
+
+    response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates_create"),
+        {
+            "name_prefix": "Setup",
+            "templates": [str(source_template.pk)],
+            "products": [],
+            "employees": str(salesperson.pk),
+        },
+    )
+
+    assert response.status_code == 302
+    copied = OdooSaleOrderTemplate.objects.get(name="Setup: Base")
+    assert copied.salesperson == salesperson
+
+
+@pytest.mark.django_db
+def test_setup_templates_step_two_rejects_multiple_salespeople(
+    admin_client, admin_user, django_user_model
+):
+    source_template = OdooSaleOrderTemplate.objects.create(
+        name="Base",
+        odoo_template={"id": 90, "name": "Base"},
+    )
+    first = OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoo",
+        username="first-salesperson",
+        password="secret",
+        odoo_uid=2,
+        verified_on=timezone.now(),
+    )
+    second_user = django_user_model.objects.create_user(username="second-salesperson")
+    second = OdooEmployee.objects.create(
+        user=second_user,
+        host="https://odoo.example.com",
+        database="odoo",
+        username="second-salesperson",
+        password="secret",
+        odoo_uid=3,
+        verified_on=timezone.now(),
+    )
+
+    response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates_create"),
+        {
+            "name_prefix": "Setup",
+            "templates": [str(source_template.pk)],
+            "products": [],
+            "employees": [str(first.pk), str(second.pk)],
+        },
+    )
+
+    assert response.status_code == 200
+    assert OdooSaleOrderTemplate.objects.filter(name="Setup: Base").count() == 0
+
+
+@pytest.mark.django_db
 def test_setup_templates_step_one_truncates_imported_product_name(
     admin_client, admin_user, monkeypatch
 ):
