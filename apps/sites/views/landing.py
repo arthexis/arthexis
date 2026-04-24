@@ -3,21 +3,21 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from django.conf import settings
+from django.core.cache import cache
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.template import loader
 from django.template.response import TemplateResponse
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.utils.cache import patch_cache_control, patch_vary_headers
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET, require_POST
-from django.core.cache import cache
 
 from apps.core import changelog
+from apps.docs import rendering
 from apps.docs import views as docs_views
 from apps.features.utils import is_suite_feature_enabled
-from apps.docs import rendering
 from apps.groups.constants import AP_USER_GROUP_NAME
 from apps.links.templatetags.ref_tags import build_footer_context
 from apps.modules.models import Module
@@ -27,6 +27,7 @@ from apps.ocpp.utils.websocket import resolve_ws_scheme
 from utils.decorators import security_group_required, staff_required
 from utils.sites import get_site
 
+from ..autocomplete import FeedbackAutocompleteHarness
 from ..forms import UserStoryForm
 from ..utils import (
     get_original_referer,
@@ -336,6 +337,25 @@ def changelog_report_data(request):
         {"html": html, "has_more": page_data.has_more, "next_page": page_data.next_page}
     )
 
+
+
+@require_POST
+def user_story_autocomplete(request):
+    text = request.POST.get("q", "")
+    limit_raw = request.POST.get("limit", "5")
+    try:
+        limit = max(1, min(int(limit_raw), 10))
+    except (TypeError, ValueError):
+        limit = 5
+
+    harness = FeedbackAutocompleteHarness()
+    suggestions = harness.suggest(
+        text=text,
+        is_staff=bool(request.user.is_authenticated and request.user.is_staff),
+        limit=limit,
+    )
+    model = "repo-trained" if request.user.is_authenticated and request.user.is_staff else "standard"
+    return JsonResponse({"success": True, "model": model, "suggestions": suggestions})
 
 @require_POST
 def submit_user_story(request):

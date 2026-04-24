@@ -47,6 +47,7 @@
         data-copy-success="{% trans 'Copied!' %}"
         data-copy-error="{% trans 'Copy failed. Please try again.' %}"
         data-copy-staff-details="{% if request.user.is_staff %}1{% else %}0{% endif %}"
+        data-autocomplete-url="{% url 'pages:user-story-autocomplete' %}"
       >
         {% csrf_token %}
         <input type="hidden" name="path" value="{{ request.get_full_path|default:'/' }}">
