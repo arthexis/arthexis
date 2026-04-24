@@ -110,6 +110,31 @@ def test_site_operator_cannot_rename_own_group_to_bypass_add_restriction(db):
     assert client.get(reverse("admin:groups_securitygroup_add")).status_code == 403
 
 
+def test_site_operator_cannot_remove_self_to_bypass_add_restriction(db):
+    user = create_staff_user_with_security_group_permissions(
+        "local-admin",
+        "add_securitygroup",
+        "change_securitygroup",
+    )
+    site_operator_group = add_site_operator_membership(user)
+
+    client = Client()
+    client.force_login(user)
+
+    response = client.post(
+        reverse("admin:groups_securitygroup_change", args=[site_operator_group.pk]),
+        data={
+            "name": SITE_OPERATOR_GROUP_NAME,
+            "permissions": [],
+            "users": [],
+        },
+    )
+
+    assert response.status_code == 302
+    assert user.groups.filter(pk=site_operator_group.pk).exists()
+    assert client.get(reverse("admin:groups_securitygroup_add")).status_code == 403
+
+
 def test_superuser_can_still_create_security_groups(db):
     user_model = get_user_model()
     superuser = user_model.objects.create_superuser(

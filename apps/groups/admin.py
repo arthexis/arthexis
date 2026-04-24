@@ -25,12 +25,14 @@ class SecurityGroupAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.instance.pk:
+        if self.instance.pk and "users" in self.fields:
             self.fields["users"].initial = self.instance.user_set.all()
 
     def save(self, commit=True):
         instance = super().save(commit)
-        users = self.cleaned_data.get("users")
+        if "users" not in self.cleaned_data:
+            return instance
+        users = self.cleaned_data["users"]
         if commit:
             instance.user_set.set(users)
         else:
@@ -78,9 +80,10 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
             obj is not None
             and not request.user.is_superuser
             and obj.pk in self._site_operator_group_ids_for_user(request.user)
-            and "name" not in readonly_fields
         ):
-            readonly_fields.append("name")
+            for field_name in ("name", "users"):
+                if field_name not in readonly_fields:
+                    readonly_fields.append(field_name)
         if obj is not None and obj.pk == request.user.groups.first():  # type: ignore[comparison-overlap]
             messages.warning(
                 request,
