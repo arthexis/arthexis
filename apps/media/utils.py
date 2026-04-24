@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import mimetypes
 from pathlib import Path
 
@@ -9,10 +8,12 @@ from django.core.files import File
 from django.core.files.uploadedfile import UploadedFile
 from django.utils.translation import gettext_lazy as _
 
-from .models import MediaBucket, MediaFile, MediaSourceFile
+from .models import MediaBucket, MediaFile, MediaSourceFile, file_sha256
 
 
-def guess_content_type(filename: str, *, default: str = "application/octet-stream") -> str:
+def guess_content_type(
+    filename: str, *, default: str = "application/octet-stream"
+) -> str:
     guessed_type, _encoding = mimetypes.guess_type(filename)
     return (guessed_type or default).strip() or default
 
@@ -23,16 +24,7 @@ def _rewind(file_obj) -> None:
 
 
 def _sha256_for_file(file_obj) -> str:
-    digest = hashlib.sha256()
-    _rewind(file_obj)
-    if hasattr(file_obj, "chunks"):
-        for chunk in file_obj.chunks():
-            digest.update(chunk)
-    else:
-        while chunk := file_obj.read(1024 * 1024):
-            digest.update(chunk)
-    _rewind(file_obj)
-    return digest.hexdigest()
+    return file_sha256(file_obj)
 
 
 def ensure_media_bucket(
@@ -86,7 +78,9 @@ def create_media_file(
     if size_value is None:
         size_value = getattr(uploaded_file, "size", 0) or 0
     if not bucket.allows_size(size_value):
-        raise ValidationError({"file": _("File exceeds the allowed size for this bucket.")})
+        raise ValidationError(
+            {"file": _("File exceeds the allowed size for this bucket.")}
+        )
 
     media_file = MediaFile(
         bucket=bucket,
@@ -122,7 +116,9 @@ def create_media_source_file(
         name=name or Path(filename).stem,
         source_type=source_type,
         original_name=filename,
-        content_type=content_type or getattr(uploaded_file, "content_type", "") or guess_content_type(filename),
+        content_type=content_type
+        or getattr(uploaded_file, "content_type", "")
+        or guess_content_type(filename),
         size=size_value or 0,
         checksum_sha256=checksum_value,
         source_uri=source_uri,

@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db.models import Count
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
@@ -43,8 +44,22 @@ class SourceDerivedMediaInline(admin.TabularInline):
     model = MediaFile
     fk_name = "source_file"
     extra = 0
-    readonly_fields = ("download", "bucket", "original_name", "source_member", "size", "uploaded_at")
-    fields = ("download", "bucket", "original_name", "source_member", "size", "uploaded_at")
+    readonly_fields = (
+        "download",
+        "bucket",
+        "original_name",
+        "source_member",
+        "size",
+        "uploaded_at",
+    )
+    fields = (
+        "download",
+        "bucket",
+        "original_name",
+        "source_member",
+        "size",
+        "uploaded_at",
+    )
     can_delete = False
     show_change_link = True
 
@@ -61,7 +76,14 @@ class SourceDerivedMediaInline(admin.TabularInline):
 
 @admin.register(MediaBucket)
 class MediaBucketAdmin(EntityModelAdmin):
-    list_display = ("name", "slug", "expires_at", "is_active", "max_bytes", "file_count")
+    list_display = (
+        "name",
+        "slug",
+        "expires_at",
+        "is_active",
+        "max_bytes",
+        "file_count",
+    )
     search_fields = ("name", "slug")
     readonly_fields = ("upload_endpoint", "created_at", "updated_at")
     inlines = [MediaFileInline]
@@ -139,6 +161,13 @@ class MediaSourceFileAdmin(EntityModelAdmin):
     )
     inlines = [SourceDerivedMediaInline]
 
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(derived_file_total=Count("derived_files"))
+        )
+
     @admin.display(description=_("File"))
     def file_link(self, obj):
         if obj and obj.file:
@@ -151,12 +180,22 @@ class MediaSourceFileAdmin(EntityModelAdmin):
 
     @admin.display(description=_("Images"))
     def derived_file_count(self, obj):
+        if hasattr(obj, "derived_file_total"):
+            return obj.derived_file_total
         return obj.derived_files.count()
 
 
 @admin.register(MediaFile)
 class MediaFileAdmin(EntityModelAdmin):
-    list_display = ("original_name", "bucket", "source_file", "source_member", "size", "uploaded_at")
+    list_display = (
+        "original_name",
+        "bucket",
+        "source_file",
+        "source_member",
+        "size",
+        "uploaded_at",
+    )
+    list_select_related = ("bucket", "source_file")
     search_fields = (
         "original_name",
         "bucket__name",
@@ -165,7 +204,13 @@ class MediaFileAdmin(EntityModelAdmin):
         "source_file__original_name",
         "source_member",
     )
-    readonly_fields = ("file_link", "original_name", "content_type", "size", "uploaded_at")
+    readonly_fields = (
+        "file_link",
+        "original_name",
+        "content_type",
+        "size",
+        "uploaded_at",
+    )
     fields = (
         "bucket",
         "file_link",

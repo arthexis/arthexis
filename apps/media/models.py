@@ -1,5 +1,6 @@
 import fnmatch
 import hashlib
+import mimetypes
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -51,6 +52,22 @@ def file_sha256(file_obj) -> str:
     return digest.hexdigest()
 
 
+def _file_content_type(file_obj) -> str:
+    content_type = getattr(file_obj, "content_type", "")
+    if not content_type:
+        content_type = getattr(getattr(file_obj, "file", None), "content_type", "")
+    if not content_type:
+        content_type = mimetypes.guess_type(getattr(file_obj, "name", ""))[0] or ""
+    return content_type
+
+
+def _file_size(file_obj) -> int:
+    try:
+        return getattr(file_obj, "size", 0) or 0
+    except (FileNotFoundError, OSError, ValueError):
+        return 0
+
+
 class MediaBucket(Entity):
     name = models.CharField(_("Name"), max_length=100, blank=True, default="")
     slug = models.SlugField(
@@ -88,7 +105,11 @@ class MediaBucket(Entity):
 
     @property
     def patterns(self) -> list[str]:
-        return [value.strip() for value in self.allowed_patterns.splitlines() if value.strip()]
+        return [
+            value.strip()
+            for value in self.allowed_patterns.splitlines()
+            if value.strip()
+        ]
 
     def is_expired(self, *, reference: datetime | None = None) -> bool:
         if not self.expires_at:
@@ -133,8 +154,12 @@ class MediaSourceFile(Entity):
         default=SourceType.MSE_SET,
     )
     file = models.FileField(_("File"), upload_to=media_source_file_path)
-    original_name = models.CharField(_("Original name"), max_length=255, blank=True, default="")
-    content_type = models.CharField(_("Content type"), max_length=255, blank=True, default="")
+    original_name = models.CharField(
+        _("Original name"), max_length=255, blank=True, default=""
+    )
+    content_type = models.CharField(
+        _("Content type"), max_length=255, blank=True, default=""
+    )
     size = models.BigIntegerField(_("Size (bytes)"), default=0)
     checksum_sha256 = models.CharField(
         _("SHA-256 checksum"), max_length=64, blank=True, default="", db_index=True
@@ -144,7 +169,9 @@ class MediaSourceFile(Entity):
         max_length=512,
         blank=True,
         default="",
-        help_text=_("Original local path, upload source, or external URI for provenance."),
+        help_text=_(
+            "Original local path, upload source, or external URI for provenance."
+        ),
     )
     uploaded_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -159,22 +186,69 @@ class MediaSourceFile(Entity):
         return self.name or self.original_name or Path(self.file.name).name
 
     def save(self, *args, **kwargs):
-        if self.file and not self.original_name:
+        previous = self._previous_version()
+        file_changed = self._file_has_changed(previous)
+        if self.file and (
+            not self.original_name
+            or (
+                file_changed
+                and previous
+                and self.original_name == previous.original_name
+            )
+        ):
             self.original_name = Path(self.file.name).name
-        if self.file and not self.name:
+        if self.file and (
+            not self.name or (file_changed and previous and self.name == previous.name)
+        ):
             self.name = Path(self.original_name or self.file.name).stem
-        if self.file and not self.size:
-            self.size = getattr(self.file, "size", 0) or 0
-        if self.file and not self.content_type:
-            self.content_type = getattr(self.file, "content_type", "") or ""
-        if self.file and not self.checksum_sha256:
+        if self.file and (
+            not self.size or (file_changed and previous and self.size == previous.size)
+        ):
+            self.size = _file_size(self.file)
+        if self.file and (
+            not self.content_type
+            or (
+                file_changed and previous and self.content_type == previous.content_type
+            )
+        ):
+            self.content_type = _file_content_type(self.file)
+        if self.file and (
+            not self.checksum_sha256
+            or (
+                file_changed
+                and previous
+                and self.checksum_sha256 == previous.checksum_sha256
+            )
+        ):
             self.checksum_sha256 = file_sha256(self.file)
         super().save(*args, **kwargs)
+
+    def _previous_version(self):
+        if not self.pk:
+            return None
+        return (
+            type(self)
+            .objects.filter(pk=self.pk)
+            .only("file", "name", "original_name")
+            .first()
+        )
+
+    def _file_has_changed(self, previous) -> bool:
+        if not self.file:
+            return False
+        if getattr(self.file, "_committed", True) is False:
+            return True
+        if previous is None:
+            return True
+        return previous.file.name != self.file.name
 
 
 class MediaFile(Entity):
     bucket = models.ForeignKey(
-        MediaBucket, on_delete=models.CASCADE, related_name="files", verbose_name=_("Bucket")
+        MediaBucket,
+        on_delete=models.CASCADE,
+        related_name="files",
+        verbose_name=_("Bucket"),
     )
     file = models.FileField(upload_to=media_file_path)
     source_file = models.ForeignKey(
@@ -193,8 +267,12 @@ class MediaFile(Entity):
         default="",
         help_text=_("Path or member name inside the source file, when applicable."),
     )
-    original_name = models.CharField(_("Original name"), max_length=255, blank=True, default="")
-    content_type = models.CharField(_("Content type"), max_length=255, blank=True, default="")
+    original_name = models.CharField(
+        _("Original name"), max_length=255, blank=True, default=""
+    )
+    content_type = models.CharField(
+        _("Content type"), max_length=255, blank=True, default=""
+    )
     size = models.BigIntegerField(_("Size (bytes)"), default=0)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
