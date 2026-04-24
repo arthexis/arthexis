@@ -157,9 +157,12 @@ class Command(BaseCommand):
         if timeout is None or timeout <= 0:
             raise CommandError("Timeout must be a positive number of seconds")
 
-        result = self._scan_via_attempt(timeout)
-        if (result.get("rfid") is None) and not result.get("error"):
-            result = self._scan_via_local(timeout)
+        if options.get("no_irq"):
+            result = scan_sources(timeout=timeout, no_irq=True)
+        else:
+            result = self._scan_via_attempt(timeout)
+            if (result.get("rfid") is None) and not result.get("error"):
+                result = self._scan_via_local(timeout)
         if result.get("error"):
             return result
         if not result.get("rfid"):

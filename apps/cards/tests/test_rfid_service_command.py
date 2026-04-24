@@ -125,3 +125,28 @@ def test_rfid_scan_requires_feature(monkeypatch):
 
     with pytest.raises(rfid_command.CommandError, match="rfid-scanner feature is not active"):
         call_command("rfid", "check", "--scan", "--no-irq")
+
+
+@pytest.mark.django_db
+def test_rfid_scan_no_irq_bypasses_attempt_polling(monkeypatch):
+    """`rfid check --scan --no-irq` should use the direct scanner path."""
+
+    rfid_command = importlib.import_module("apps.cards.management.commands.rfid")
+    monkeypatch.setattr(rfid_command.Command, "_scanner_feature_available", lambda _self: True)
+    monkeypatch.setattr(
+        rfid_command.Command,
+        "_scan_via_attempt",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("attempt polling should be bypassed")
+        ),
+    )
+    monkeypatch.setattr(
+        rfid_command,
+        "scan_sources",
+        lambda **kwargs: {"rfid": "ABCD1234", "no_irq": kwargs.get("no_irq")},
+    )
+
+    command = rfid_command.Command()
+    result = command._scan({"timeout": 1.0, "no_irq": True})
+
+    assert result == {"rfid": "ABCD1234", "no_irq": True}

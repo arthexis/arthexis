@@ -233,6 +233,21 @@ def scan_sources(
 ):
     """Read the next RFID tag from the scanner service."""
     timeout_value = timeout if timeout is not None else 0.5
+    if no_irq:
+        from .reader import read_rfid
+
+        result = read_rfid(timeout=timeout_value, poll_interval=0.05, use_irq=False)
+        if result.get("rfid"):
+            attempt = record_scan_attempt(
+                result,
+                source=RFIDAttempt.Source.ON_DEMAND,
+                status=RFIDAttempt.Status.SCANNED,
+            )
+            if attempt is not None:
+                return build_attempt_response(attempt, endianness=endianness)
+            result["service_mode"] = "on-demand"
+        return result
+
     result = request_service("scan", payload={"timeout": timeout_value}, timeout=timeout_value + 0.2)
     if result is None:
         return {"error": "scanner service unavailable", "service_mode": "service"}

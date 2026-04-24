@@ -183,36 +183,11 @@ def lock_file_path() -> Path:
     return _lock_path()
 
 
-def _read_lock_marker(lock: Path) -> str | None:
-    """Return the stored suite marker for a lock file when available."""
-
-    try:
-        contents = lock.read_text(encoding="utf-8").strip()
-        return contents or None
-    except Exception:
-        return None
-
-
-def _lock_matches_current(lock: Path) -> bool:
-    """Return ``True`` when the lock file belongs to this suite instance."""
-
-    marker = _read_lock_marker(lock)
-    return bool(marker and marker == _suite_marker)
-
-
 def lock_file_active() -> tuple[bool, Path]:
     """Return whether a current-suite lock file exists and its path."""
 
     lock = lock_file_path()
-    if lock.exists():
-        if _lock_matches_current(lock):
-            return True, lock
-        try:
-            lock.unlink()
-            logger.info("Removed stale RFID lock file from previous suite: %s", lock)
-        except Exception as exc:  # pragma: no cover - defensive filesystem guard
-            logger.debug("Unable to remove stale RFID lock file %s: %s", lock, exc)
-    return False, lock
+    return lock.exists(), lock
 
 
 def _mark_scanner_used() -> None:
@@ -221,7 +196,10 @@ def _mark_scanner_used() -> None:
     lock = _lock_path()
     try:
         lock.parent.mkdir(parents=True, exist_ok=True)
-        lock.write_text(_suite_marker, encoding="utf-8")
+        if lock.exists():
+            lock.touch()
+        else:
+            lock.write_text(_suite_marker, encoding="utf-8")
     except Exception as exc:  # pragma: no cover - defensive filesystem fallback
         logger.debug("RFID auto-detect: unable to update lock file %s: %s", lock, exc)
 
@@ -410,15 +388,6 @@ def _worker():  # pragma: no cover - background thread
     if not _setup_hardware():
         _record_setup_failure("initialization", _hardware_disabled_reason)
         _log_fd_snapshot("worker-setup-failed")
-        lock = lock_file_path()
-        if lock.exists():
-            try:
-                lock.unlink()
-                logger.info("Removed stale RFID lock file after setup failure: %s", lock)
-            except Exception as exc:
-                logger.debug(
-                    "Unable to remove RFID lock file %s after setup failure: %s", lock, exc
-                )
         _thread = None
         return
     _last_setup_failure = None
@@ -519,7 +488,6 @@ def get_next_tag(timeout: float | None = 0) -> Optional[dict]:
     if timeout is None:
         timeout = 0.0
     timeout = max(0.0, timeout)
-    start_time = time.monotonic()
     try:
         result = _tag_queue.get(timeout=timeout)
         if result and result.get("rfid"):
@@ -532,9 +500,8 @@ def get_next_tag(timeout: float | None = 0) -> Optional[dict]:
         try:
             from .reader import read_rfid
 
-            elapsed = time.monotonic() - start_time
-            remaining_timeout = max(0.0, timeout - elapsed)
-            res = read_rfid(mfrc=_reader, cleanup=False, timeout=remaining_timeout)
+            poll_timeout = max(0.0, timeout)
+            res = read_rfid(mfrc=_reader, cleanup=False, timeout=poll_timeout)
             if res.get("rfid") or res.get("error"):
                 _irq_empty_tracker.log_summary("polling read")
                 logger.debug("Polling read result: %s", res)
