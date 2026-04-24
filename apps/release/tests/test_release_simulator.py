@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,7 @@ class _FakeResponse:
     def __init__(self, payload: bytes) -> None:
         self.payload = payload
 
-    def __enter__(self) -> "_FakeResponse":
+    def __enter__(self) -> _FakeResponse:
         return self
 
     def __exit__(self, *_args: Any) -> None:
@@ -113,9 +114,11 @@ def test_release_simulation_quotes_package_name_for_pypi(
 ) -> None:
     _write_project(tmp_path)
     requested_urls: list[str] = []
+    user_agents: list[str | None] = []
 
-    def fake_urlopen(url: str, *, timeout: float) -> _FakeResponse:
-        requested_urls.append(url)
+    def fake_urlopen(url: Any, *, timeout: float) -> _FakeResponse:
+        requested_urls.append(url.full_url if hasattr(url, "full_url") else url)
+        user_agents.append(url.get_header("User-agent") if hasattr(url, "get_header") else None)
         assert timeout == 15.0
         return _FakeResponse(b'{"releases": {}}')
 
@@ -129,6 +132,7 @@ def test_release_simulation_quotes_package_name_for_pypi(
 
     assert result.ok is True
     assert requested_urls == ["https://pypi.org/pypi/arthexis%20suite%2Ftest/json"]
+    assert user_agents == ["arthexis-release-simulator/1.2.3"]
 
 
 def test_release_simulation_reports_invalid_pypi_json(
@@ -171,6 +175,24 @@ def test_release_simulation_reports_invalid_pypi_releases_payload(
     assert "Unexpected 'releases' payload type from PyPI: list" in result.error
 
 
+def test_release_simulation_treats_null_pypi_releases_as_empty(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_project(tmp_path)
+
+    def fake_urlopen(url: Any, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(b'{"releases": null}')
+
+    monkeypatch.setattr("apps.release.simulator.urlopen", fake_urlopen)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_build=True,
+    )
+
+    assert result.ok is True
+
+
 def test_release_simulation_does_not_read_escaped_version_file(tmp_path: Path) -> None:
     _write_project(tmp_path)
     external_version = tmp_path.parent / "external-version.txt"
@@ -203,6 +225,27 @@ def test_release_simulation_reports_escaped_dist_dir_as_build_failure(
     assert result.ok is False
     assert result.failed_step == "build_package"
     assert "Dist directory escapes repository root" in result.error
+
+
+def test_release_simulation_reports_build_timeout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_project(tmp_path)
+
+    def fake_run(cmd: list[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(cmd, timeout=1800.0)
+
+    monkeypatch.setattr("apps.release.simulator.subprocess.run", fake_run)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_pypi=True,
+        clean=False,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "build_package"
+    assert "timed out after 1800s" in result.error
 
 
 def test_release_simulation_skips_when_blockers_are_provided(tmp_path: Path) -> None:

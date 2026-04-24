@@ -8,20 +8,25 @@ import secrets
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 try:  # Python 3.11+
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
-    import toml as tomllib  # type: ignore[no-redef]
+    import tomli as tomllib  # type: ignore[no-redef]
 
 
 DEFAULT_PACKAGE_NAME = "arthexis"
+BUILD_SKIPPED_DETAIL = "Build was skipped by caller."
+PYPI_USER_AGENT = "arthexis-release-simulator"
+SIMULATION_RESULT_HEADING = "### Simulation result"
+SUBPROCESS_TIMEOUT_SECONDS = 1800.0
 
 
 @dataclass
@@ -144,17 +149,17 @@ def run_release_simulation(
                     SimulationStep(
                         name="install_build_backend",
                         outcome="skipped",
-                        detail="Build was skipped by caller.",
+                        detail=BUILD_SKIPPED_DETAIL,
                     ),
                     SimulationStep(
                         name="build_package",
                         outcome="skipped",
-                        detail="Build was skipped by caller.",
+                        detail=BUILD_SKIPPED_DETAIL,
                     ),
                     SimulationStep(
                         name="validate_metadata",
                         outcome="skipped",
-                        detail="Build was skipped by caller.",
+                        detail=BUILD_SKIPPED_DETAIL,
                     ),
                 ]
             )
@@ -186,14 +191,14 @@ def run_release_simulation(
                     )
                 )
 
-            if clean:
-                _clean_artifacts(root=root, dist_dir=dist_dir)
             resolved_dist = _resolve_child_path(
                 root,
                 dist_dir,
                 label="dist directory",
                 step="build_package",
             )
+            if clean:
+                _clean_artifacts(root=root, resolved_dist=resolved_dist)
             _run_subprocess(
                 [
                     sys.executable,
@@ -396,8 +401,12 @@ def _preflight_pypi(
     timeout: float,
 ) -> None:
     pypi_url = f"https://pypi.org/pypi/{quote(package_name, safe='')}/json"
+    request = Request(
+        pypi_url,
+        headers={"User-Agent": f"{PYPI_USER_AGENT}/{package_version}"},
+    )
     try:
-        with urlopen(pypi_url, timeout=timeout) as response:
+        with urlopen(request, timeout=timeout) as response:
             try:
                 payload = json.load(response)
             except json.JSONDecodeError as exc:
@@ -434,11 +443,23 @@ def _preflight_pypi(
         )
 
 
-def _run_subprocess(cmd: list[str], *, cwd: Path, step: str) -> None:
+def _run_subprocess(
+    cmd: list[str],
+    *,
+    cwd: Path,
+    step: str,
+    timeout_seconds: float = SUBPROCESS_TIMEOUT_SECONDS,
+) -> None:
     try:
-        completed = subprocess.run(cmd, cwd=cwd, check=False)
+        completed = subprocess.run(cmd, cwd=cwd, check=False, timeout=timeout_seconds)
     except FileNotFoundError as exc:
         raise ReleaseSimulationError(step, f"Unable to run {cmd[0]!r}: {exc}") from exc
+    except subprocess.TimeoutExpired as exc:
+        rendered = " ".join(cmd)
+        raise ReleaseSimulationError(
+            step,
+            f"`{rendered}` timed out after {timeout_seconds:.0f}s.",
+        ) from exc
     if completed.returncode != 0:
         rendered = " ".join(cmd)
         raise ReleaseSimulationError(
@@ -447,14 +468,9 @@ def _run_subprocess(cmd: list[str], *, cwd: Path, step: str) -> None:
         )
 
 
-def _clean_artifacts(*, root: Path, dist_dir: Path) -> None:
+def _clean_artifacts(*, root: Path, resolved_dist: Path) -> None:
     for target in (
-        _resolve_child_path(
-            root,
-            dist_dir,
-            label="dist directory",
-            step="build_package",
-        ),
+        resolved_dist,
         root / "build",
     ):
         if target.is_dir():
@@ -485,7 +501,7 @@ def _resolve_child_path(
 def _success_summary() -> str:
     return "\n".join(
         [
-            "### Simulation result",
+            SIMULATION_RESULT_HEADING,
             "",
             "- OK Release simulation reached the authorization boundary successfully.",
             "- INFO Publish to PyPI was intentionally skipped because authorization is required.",
@@ -497,7 +513,7 @@ def _success_summary() -> str:
 
 def _failure_summary(failed_step: str, *, run_url: str = "") -> str:
     lines = [
-        "### Simulation result",
+        SIMULATION_RESULT_HEADING,
         "",
         "- FAIL Release simulation failed before reaching the authorization boundary.",
         f"- FAIL First failing step: `{failed_step}`.",
@@ -510,7 +526,7 @@ def _failure_summary(failed_step: str, *, run_url: str = "") -> str:
 def _skipped_summary() -> str:
     return "\n".join(
         [
-            "### Simulation result",
+            SIMULATION_RESULT_HEADING,
             "",
             "- SKIP Release simulation was skipped because install/upgrade blockers are open.",
         ]

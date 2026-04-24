@@ -23,6 +23,7 @@ from apps.release.domain import (
 from apps.release.models import Package as PackageModel
 from apps.release.models import PackageRelease
 from apps.release.simulator import (
+    DEFAULT_PACKAGE_NAME,
     ReleaseSimulationError,
     emit_result,
     parse_blockers_json,
@@ -169,7 +170,7 @@ class Command(BaseCommand):
             "--root",
             help="Repository root. Defaults to Django BASE_DIR.",
         )
-        simulate_parser.add_argument("--package-name", default="arthexis")
+        simulate_parser.add_argument("--package-name", default=DEFAULT_PACKAGE_NAME)
         simulate_parser.add_argument("--version-file", default="VERSION")
         simulate_parser.add_argument("--pyproject", default="pyproject.toml")
         simulate_parser.add_argument("--dist-dir", default="dist")
@@ -381,12 +382,12 @@ class Command(BaseCommand):
         )
 
     def _handle_simulate(self, options: dict[str, object]) -> None:
-        root = Path(str(options.get("root") or settings.BASE_DIR))
+        root = Path(options.get("root") or settings.BASE_DIR)
         try:
             blockers = parse_blockers_json(str(options.get("blockers_json") or ""))
             result = run_release_simulation(
                 root=root,
-                package_name=str(options.get("package_name") or "arthexis"),
+                package_name=str(options.get("package_name") or DEFAULT_PACKAGE_NAME),
                 version_file=Path(str(options.get("version_file") or "VERSION")),
                 pyproject_path=Path(str(options.get("pyproject") or "pyproject.toml")),
                 dist_dir=Path(str(options.get("dist_dir") or "dist")),
@@ -395,7 +396,7 @@ class Command(BaseCommand):
                 skip_build=bool(options.get("skip_build")),
                 clean=bool(options.get("clean", True)),
                 install_missing_tools=bool(options.get("install_missing_tools")),
-                pypi_timeout=float(options.get("pypi_timeout") or 15.0),
+                pypi_timeout=float(options.get("pypi_timeout", 15.0)),
                 run_url=str(options.get("run_url") or ""),
             )
         except ReleaseSimulationError as exc:
