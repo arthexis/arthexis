@@ -1,10 +1,11 @@
 """RFID scanner service and UDP client helpers.
 
 Design note:
-The long-running RFID worker intentionally communicates through lock/log files
-(``.locks/rfid-scan.json`` and ``logs/rfid-scans.ndjson``). Django processes
-ingest those artifacts separately, so this service can run via ``python -m``
-without a Django management command invocation.
+The long-running RFID worker intentionally communicates through lock/log files.
+``.locks/rfid-scan.json`` is the latest-scan state for local agents to inspect
+until the next card is scanned, while ``logs/rfid-scans.ndjson`` is the durable
+append-only ingest stream for Django processes. This lets the service run via
+``python -m`` without a Django management command invocation.
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ SENSITIVE_RFID_KEYS = {"keys", "dump"}
 
 SCAN_STATE_FILE = "rfid-scan.json"
 SCAN_LOG_FILE = "rfid-scans.ndjson"
+SCAN_STATE_SCHEMA = "arthexis.rfid.scan.v1"
 SERVICE_SCAN_LOCKFILE_ERROR = "scan requests are handled via lock-file ingest"
 RFID_LCD_SCAN_EVENT_DURATION_SECONDS = 10
 RFID_LCD_SCAN_EVENT_ID = 0
@@ -420,10 +422,37 @@ def rfid_scan_log_path(base_dir: Path | None = None) -> Path:
     return log_dir / SCAN_LOG_FILE
 
 
+def build_scan_state_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return normalized latest-scan state for local lockfile consumers."""
+
+    state = dict(payload)
+    state["schema"] = SCAN_STATE_SCHEMA
+    rfid_value = str(state.get("rfid") or "").strip().upper()
+    if rfid_value:
+        state["rfid"] = rfid_value
+    state.setdefault("scanned_at", datetime.now(datetime_timezone.utc).isoformat())
+    return state
+
+
 def write_rfid_scan_lock(payload: dict[str, Any], *, base_dir: Path | None = None) -> None:
     lock_path = rfid_scan_lock_path(base_dir)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    state = build_scan_state_payload(payload)
+    tmp_path = lock_path.with_name(
+        f".{lock_path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+    )
+    try:
+        tmp_path.write_text(
+            json.dumps(state, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        tmp_path.replace(lock_path)
+    finally:
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except OSError:
+            logger.debug("Unable to remove temporary RFID scan state file %s", tmp_path)
 
 
 def append_scan_log(payload: dict[str, Any], *, base_dir: Path | None = None) -> None:

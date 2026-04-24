@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from apps.cards import rfid_service
 from apps.cards import scanner
 
@@ -56,6 +58,30 @@ def test_scan_sources_falls_back_to_attempts_for_lockfile_ingest_error(monkeypat
     result = scanner.scan_sources(timeout=0.5)
 
     assert result == sentinel
+
+
+def test_write_rfid_scan_lock_persists_latest_scan_state(settings, tmp_path):
+    settings.BASE_DIR = tmp_path
+
+    rfid_service.write_rfid_scan_lock(
+        {"rfid": "abcd1234", "label_id": 7, "custom_label": "Front Desk"}
+    )
+    path = rfid_service.rfid_scan_lock_path(tmp_path)
+
+    first = json.loads(path.read_text(encoding="utf-8"))
+    assert first["schema"] == rfid_service.SCAN_STATE_SCHEMA
+    assert first["rfid"] == "ABCD1234"
+    assert first["label_id"] == 7
+    assert first["custom_label"] == "Front Desk"
+    assert first["scanned_at"]
+
+    rfid_service.write_rfid_scan_lock({"rfid": "feed01", "label_id": 8})
+
+    latest = json.loads(path.read_text(encoding="utf-8"))
+    assert latest["rfid"] == "FEED01"
+    assert latest["label_id"] == 8
+    assert "custom_label" not in latest
+    assert not any(entry.name.endswith(".tmp") for entry in path.parent.iterdir())
 
 
 def test_format_lcd_scan_event_prefers_card_label():
