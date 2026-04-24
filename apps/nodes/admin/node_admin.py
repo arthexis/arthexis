@@ -59,7 +59,6 @@ from .actions import (
     register_visitor,
     reissue_mesh_enrollment_token,
     revoke_mesh_enrollment,
-    rotate_mesh_key,
     send_net_message,
     take_screenshots,
     update_selected_nodes,
@@ -94,7 +93,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "relation",
         "trusted",
         "mesh_status_badge",
-        "mesh_key_age",
         "last_mesh_heartbeat",
         "version_display",
         "sibling_ipc_status_badge",
@@ -171,7 +169,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         enroll_mesh_nodes,
         approve_mesh_enrollment,
         revoke_mesh_enrollment,
-        rotate_mesh_key,
         reissue_mesh_enrollment_token,
         take_screenshots,
         download_evcs_firmware,
@@ -276,33 +273,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             '<span style="display:inline-block;padding:0.2rem 0.5rem;border-radius:999px;background:{};color:#fff;font-weight:600;">{}</span>',
             color,
             label,
-        )
-
-    @admin.display(description=_("Key age / rotation"))
-    def mesh_key_age(self, obj):
-        active_key = (
-            obj.netmesh_keys.filter(revoked=False)
-            .order_by("-created_at", "-id")
-            .first()
-        )
-        if not active_key:
-            return _("No active key")
-        key_age_days = max((timezone.now() - active_key.created_at).days, 0)
-        due_days = 30
-        if key_age_days >= due_days:
-            due_label = _("Rotation due")
-            color = "#dc3545"
-        elif key_age_days >= due_days - 7:
-            due_label = _("Rotation soon")
-            color = "#fd7e14"
-        else:
-            due_label = _("Healthy")
-            color = "#198754"
-        return format_html(
-            '{} <span style="color:{};font-weight:600;">({})</span>',
-            _("%(days)d days") % {"days": key_age_days},
-            color,
-            due_label,
         )
 
     @admin.display(description=_("IP Address"), ordering="address")

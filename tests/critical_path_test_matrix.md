@@ -3,7 +3,6 @@
 ## Covered scenarios
 
 - ✅ Invalid/expired/revoked token behavior:
-  - `apps/netmesh/tests/test_api.py::test_netmesh_token_lifecycle_errors_are_stable`
   - `apps/nodes/tests/test_enrollment.py::test_submit_enrollment_public_key_rejects_duplicate_submission_regression`
 - ✅ Duplicate requests and idempotency for state-changing operations:
   - `apps/nodes/tests/test_enrollment.py::test_submit_enrollment_public_key_rejects_duplicate_submission_regression`

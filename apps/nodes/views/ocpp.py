@@ -14,7 +14,7 @@ from apps.ocpp import store
 from apps.ocpp.models import Charger
 from apps.ocpp.network import _parse_remote_datetime
 
-from apps.netmesh.api.auth import authenticate_enrollment
+from apps.nodes.services.enrollment_auth import authenticate_enrollment
 from utils.api_errors import json_api_error
 
 from ..models import Node

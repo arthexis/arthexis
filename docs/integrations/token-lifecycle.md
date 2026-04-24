@@ -22,7 +22,6 @@ Arthexis API consumers that use enrollment bearer tokens (Netmesh peer policy en
   - expiry,
   - status and revocation timestamps.
 - Required scope per endpoint family:
-  - `mesh:read` for Netmesh peer policy APIs (`/api/netmesh/...`),
   - `ocpp:control` for OCPP-adjacent control actions (`/nodes/network/chargers/action/`) when bearer auth is used.
 
 ## 3) Refresh/rotation strategy

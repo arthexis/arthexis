@@ -10,7 +10,6 @@ from django.db.models import Q
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import ngettext
 
@@ -18,7 +17,6 @@ from apps.cards.models import RFID
 from apps.cards.sync import serialize_rfid
 from apps.content.utils import capture_screenshot, save_screenshot
 from apps.core.system_ui import systemd_unit_status
-from apps.netmesh.models import NodeKeyMaterial
 from apps.ocpp.models import Charger, CPForwarder
 
 from ..models import NetMessage, Node
@@ -119,19 +117,6 @@ def revoke_mesh_enrollment(modeladmin, request, queryset):
 def rotate_mesh_key(modeladmin, request, queryset):
     rotated = 0
     for node in queryset:
-        active_key = (
-            NodeKeyMaterial.objects.filter(
-                node=node,
-                key_state=NodeKeyMaterial.KeyState.ACTIVE,
-            )
-            .order_by("-created_at", "-id")
-            .first()
-        )
-        if active_key:
-            active_key.rotated_at = timezone.now()
-            active_key.key_state = NodeKeyMaterial.KeyState.RETIRED
-            active_key.revoked_at = timezone.now()
-            active_key.save(update_fields=["rotated_at", "key_state", "revoked_at", "revoked"])
         issue_enrollment_token(
             node=node,
             actor=request.user,
