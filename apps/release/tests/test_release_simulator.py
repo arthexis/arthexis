@@ -110,6 +110,21 @@ def test_release_simulation_reports_directory_version_file(tmp_path: Path) -> No
     assert "Version file is not a regular file" in result.error
 
 
+def test_release_simulation_reports_unreadable_version_file(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    (tmp_path / "VERSION").write_bytes(b"\xff\xfe\xfa")
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_pypi=True,
+        skip_build=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "validate_version_gate"
+    assert "Failed to read version file" in result.error
+
+
 def test_release_simulation_reports_malformed_pyproject(tmp_path: Path) -> None:
     _write_project(tmp_path)
     (tmp_path / "pyproject.toml").write_text("[project\n", encoding="utf-8")

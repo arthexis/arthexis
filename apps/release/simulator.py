@@ -397,7 +397,13 @@ def _read_required_file_text(path: Path, *, label: str) -> str:
             "validate_version_gate",
             f"{label} is not a regular file: {path}",
         )
-    return path.read_text(encoding="utf-8").strip()
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ReleaseSimulationError(
+            "validate_version_gate",
+            f"Failed to read {label.lower()}: {exc}",
+        ) from exc
 
 
 def _dynamic_version_files(pyproject_data: dict[str, Any]) -> list[str]:
@@ -629,7 +635,7 @@ def _skipped_summary() -> str:
 def _safe_read_text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8").strip()
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return ""
 
 
