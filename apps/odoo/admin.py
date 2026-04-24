@@ -5,7 +5,7 @@ from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import Q
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -693,7 +693,6 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         defaults = {
             "name": bounded_name,
             "description": str(source_row.get("description_sale") or ""),
-            "renewal_period": 30,
             "odoo_product": {
                 "id": source_id,
                 "name": source_row.get("name") or f"Product {source_id}",
@@ -706,7 +705,7 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                 setattr(existing, key, value)
             existing.save(update_fields=list(defaults.keys()))
             return existing, False
-        return OdooProduct.objects.create(**defaults), True
+        return OdooProduct.objects.create(**defaults, renewal_period=30), True
 
     def _import_employee(self, profile, source_row: dict[str, object]) -> tuple[OdooEmployee, bool]:
         source_id = int(source_row["id"])
@@ -860,6 +859,19 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                 return HttpResponseRedirect(
                     f"{self._setup_templates_url()}?source_type={form.cleaned_data['source_type']}"
                 )
+            except DatabaseError:
+                logger.exception(
+                    "Could not persist Odoo import for source_type=%s",
+                    form.cleaned_data["source_type"],
+                )
+                self.message_user(
+                    request,
+                    _("Import failed while saving local records. Please try again."),
+                    level=messages.ERROR,
+                )
+                return HttpResponseRedirect(
+                    f"{self._setup_templates_url()}?source_type={form.cleaned_data['source_type']}"
+                )
             self.message_user(
                 request,
                 _("Imported from Odoo. Created: %(created)s | Updated: %(updated)s")
@@ -977,6 +989,17 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                         return HttpResponseRedirect(self._setup_templates_create_url())
                     factor.templates.set(created_templates)
                     for product in products:
+                        if not _has_valid_odoo_product_payload(product):
+                            self.message_user(
+                                request,
+                                _(
+                                    "Select only products imported from Odoo before creating "
+                                    "product rules."
+                                ),
+                                level=messages.ERROR,
+                            )
+                            transaction.set_rollback(True)
+                            return HttpResponseRedirect(self._setup_templates_create_url())
                         OdooSaleFactorProductRule.objects.create(
                             factor=factor,
                             name=product.name,

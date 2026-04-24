@@ -211,6 +211,61 @@ def test_setup_templates_step_one_truncates_imported_product_name(
 
 
 @pytest.mark.django_db
+def test_setup_templates_step_one_preserves_product_renewal_period_on_reimport(
+    admin_client, admin_user, monkeypatch
+):
+    OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoo",
+        username="admin",
+        password="secret",
+        odoo_uid=1,
+        verified_on=timezone.now(),
+    )
+    product = OdooProduct.objects.create(
+        name="Local Addon",
+        description="Old description",
+        renewal_period=90,
+        odoo_product={
+            "id": 701,
+            "name": "Local Addon",
+            "host": "https://odoo.example.com",
+            "database": "odoo",
+        },
+    )
+
+    def execute(model, method, *args, **kwargs):
+        assert method == "search_read"
+        if model != "product.product":
+            raise AssertionError(f"Unexpected model: {model}")
+        fields = kwargs.get("fields") or []
+        if fields == ["id", "name"]:
+            return [{"id": 701, "name": "Remote Addon"}]
+        return [{"id": 701, "name": "Remote Addon", "description_sale": "Updated"}]
+
+    monkeypatch.setattr(
+        OdooEmployee,
+        "execute",
+        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+    )
+
+    response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates"),
+        {
+            "source_type": "products",
+            "selected_ids": ["701"],
+        },
+    )
+
+    assert response.status_code == 302
+    product.refresh_from_db()
+    assert product.name == "Remote Addon"
+    assert product.description == "Updated"
+    assert product.renewal_period == 90
+
+
+@pytest.mark.django_db
 def test_setup_templates_step_one_truncates_imported_template_name(
     admin_client, admin_user, monkeypatch
 ):
@@ -522,6 +577,51 @@ def test_setup_templates_step_one_employee_import_requires_auth_user_permissions
 
 
 @pytest.mark.django_db
+def test_setup_templates_step_one_reports_database_write_failures(
+    admin_client, admin_user, monkeypatch
+):
+    OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoo",
+        username="admin",
+        password="secret",
+        odoo_uid=1,
+        verified_on=timezone.now(),
+    )
+
+    def execute(model, method, *args, **kwargs):
+        assert method == "search_read"
+        if model != "product.product":
+            raise AssertionError(f"Unexpected model: {model}")
+        return [{"id": 701, "name": "Remote Addon"}]
+
+    def fail_import(*args, **kwargs):
+        raise IntegrityError("forced write failure")
+
+    monkeypatch.setattr(
+        OdooEmployee,
+        "execute",
+        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+    )
+    monkeypatch.setattr(OdooSaleOrderTemplateAdmin, "_import_source_selection", fail_import)
+
+    response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates"),
+        {
+            "source_type": "products",
+            "selected_ids": ["701"],
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url.endswith("?source_type=products")
+    response = admin_client.get(response.url)
+    response_messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert any("Import failed while saving local records" in message for message in response_messages)
+
+
+@pytest.mark.django_db
 def test_setup_templates_step_two_rejects_overlong_cloned_template_name(admin_client):
     source_template = OdooSaleOrderTemplate.objects.create(
         name="T" * 200,
@@ -584,7 +684,7 @@ def test_setup_templates_step_two_rechecks_product_payload_before_rule_creation(
         renewal_period=30,
         odoo_product={"id": 501, "name": "Addon"},
     )
-    checks = iter([True, False])
+    checks = iter([True, True, False])
 
     monkeypatch.setattr(
         odoo_admin,
