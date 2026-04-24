@@ -1,9 +1,0 @@
-{% extends "admin/base/entity_change_list.html" %}
-{% load i18n %}
-
-{% block object-tools-items %}
-    <li>
-        <a href="{{ policy_matrix_url }}">{% trans "Policy Matrix" %}</a>
-    </li>
-    {{ block.super }}
-{% endblock %}

@@ -125,7 +125,6 @@ Prefer extending Arthexis directly through apps/models/migrations/admin when you
   - `apps.ocpp.models.transaction.Transaction`
 - **Endpoint/action integration surfaces**:
   - `apps.actions.api` endpoints
-  - `apps.netmesh.api` peer task policy endpoints
 
 ### Admin entry points for operations and extension
 
@@ -140,7 +139,7 @@ When adding new integration behavior, model it first (Django model + migration),
 
 ## Ownership and update triggers (living doc contract)
 
-- **Primary owner**: maintainers touching `apps.nodes`, `apps.netmesh`, `apps.actions`, or `apps.ocpp` auth/control paths.
+- **Primary owner**: maintainers touching `apps.nodes`, `apps.actions`, or `apps.ocpp` auth/control paths.
 - **Secondary owner**: docs maintainer for integration docs consistency.
 
 Update this page in the same PR whenever one of these changes occurs:

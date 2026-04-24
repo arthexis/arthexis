@@ -67,7 +67,6 @@ PROJECT_LOCAL_APPS = [
     "apps.media",
     "apps.meta",
     "apps.modules",
-    "apps.netmesh",
     "apps.nginx",
     "apps.nmcli",
     "apps.nodes",
@@ -143,6 +142,7 @@ INSTALLED_APPS = _dedupe_app_entries(INSTALLED_APPS)
 SITE_ID = 1
 
 MIGRATION_MODULES = {
+    "netmesh": "apps._legacy.netmesh_migration_only.migrations",
     # Pin django_celery_beat migrations to a local copy so we can override
     # upstream changes that introduce optional dependencies (e.g. Google
     # Calendar profile) and avoid InvalidBases errors during migrate.
