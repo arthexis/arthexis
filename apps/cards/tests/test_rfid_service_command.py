@@ -165,9 +165,34 @@ def test_rfid_scan_no_irq_empty_result_bypasses_service_state(monkeypatch):
     monkeypatch.setattr(rfid_command, "service_available", lambda: False)
 
     command = rfid_command.Command()
-    result = command._scan({"timeout": 1.0, "no_irq": True})
+    result = command._scan({"timeout": 0.01, "no_irq": True})
 
     assert result == {"error": "No RFID detected before timeout"}
+
+
+@pytest.mark.django_db
+def test_rfid_scan_no_irq_interactive_cancel(monkeypatch):
+    """Direct polling should preserve interactive cancellation."""
+
+    rfid_command = importlib.import_module("apps.cards.management.commands.rfid")
+    command = rfid_command.Command()
+    drained = []
+
+    monkeypatch.setattr(rfid_command.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(rfid_command, "drain_stdin", lambda: drained.append(True))
+    monkeypatch.setattr(rfid_command, "user_requested_stop", lambda: True)
+    monkeypatch.setattr(
+        rfid_command,
+        "scan_sources",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("scan should not run after interactive cancellation")
+        ),
+    )
+
+    result = command._scan({"timeout": 1.0, "no_irq": True})
+
+    assert result == {"error": "Scan cancelled by user"}
+    assert drained == [True]
 
 
 @pytest.mark.django_db
