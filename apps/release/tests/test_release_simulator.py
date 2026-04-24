@@ -260,6 +260,27 @@ def test_release_simulation_rejects_file_dist_dir_before_cleanup(tmp_path: Path)
     assert dist_file.read_text(encoding="utf-8") == "keep me\n"
 
 
+def test_release_simulation_rejects_non_artifact_dist_dir_before_cleanup(
+    tmp_path: Path,
+) -> None:
+    _write_project(tmp_path)
+    source_dir = tmp_path / "apps" / "release"
+    source_dir.mkdir(parents=True)
+    source_file = source_dir / "simulator.py"
+    source_file.write_text("keep me\n", encoding="utf-8")
+
+    result = run_release_simulation(
+        root=tmp_path,
+        dist_dir=Path("apps/release"),
+        skip_pypi=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "build_package"
+    assert "contains non-artifact files" in result.error
+    assert source_file.read_text(encoding="utf-8") == "keep me\n"
+
+
 def test_release_simulation_reports_build_timeout(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

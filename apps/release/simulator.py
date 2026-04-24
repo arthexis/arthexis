@@ -23,6 +23,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
 
 
 DEFAULT_PACKAGE_NAME = "arthexis"
+DIST_ARTIFACT_SUFFIXES = (".tar.gz", ".whl", ".zip")
 BUILD_SKIPPED_DETAIL = "Build was skipped by caller."
 PYPI_USER_AGENT = "arthexis-release-simulator"
 SIMULATION_RESULT_HEADING = "### Simulation result"
@@ -491,6 +492,19 @@ def _validate_dist_directory(*, root: Path, resolved_dist: Path) -> None:
             "build_package",
             f"Dist directory exists but is not a directory: {resolved_dist}",
         )
+    if resolved_dist.is_dir():
+        unsafe_children = [
+            child
+            for child in resolved_dist.iterdir()
+            if child.is_dir()
+            or not any(child.name.endswith(suffix) for suffix in DIST_ARTIFACT_SUFFIXES)
+        ]
+        if unsafe_children:
+            raise ReleaseSimulationError(
+                "build_package",
+                "Dist directory contains non-artifact files and will not be cleaned: "
+                f"{resolved_dist}",
+            )
 
 
 def _resolve_child_path(
