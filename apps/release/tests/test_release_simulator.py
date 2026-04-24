@@ -95,6 +95,21 @@ def test_release_simulation_reports_version_gate_mismatch(tmp_path: Path) -> Non
     assert "validate_version_gate" in result.summary_markdown
 
 
+def test_release_simulation_reports_directory_version_file(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        version_file=Path("."),
+        skip_pypi=True,
+        skip_build=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "validate_version_gate"
+    assert "Version file is not a regular file" in result.error
+
+
 def test_release_simulation_reports_malformed_pyproject(tmp_path: Path) -> None:
     _write_project(tmp_path)
     (tmp_path / "pyproject.toml").write_text("[project\n", encoding="utf-8")
@@ -168,6 +183,36 @@ def test_release_simulation_reports_invalid_dynamic_version_metadata_shape(
     assert result.ok is False
     assert result.failed_step == "validate_version_gate"
     assert "pyproject metadata at 'version' must be a table" in result.error
+
+
+def test_release_simulation_reports_directory_dynamic_version_file(
+    tmp_path: Path,
+) -> None:
+    _write_project(tmp_path)
+    (tmp_path / "pyproject.toml").write_text(
+        "\n".join(
+            [
+                "[project]",
+                'name = "arthexis"',
+                'dynamic = ["version"]',
+                "",
+                "[tool.setuptools.dynamic.version]",
+                'file = ["."]',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_pypi=True,
+        skip_build=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "validate_version_gate"
+    assert "Dynamic version file is not a regular file" in result.error
 
 
 def test_release_simulation_quotes_package_name_for_pypi(

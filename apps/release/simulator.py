@@ -351,7 +351,7 @@ def _validate_version_gate(
             f"pyproject file not found: {pyproject}",
         )
 
-    expected_version = version_path.read_text(encoding="utf-8").strip()
+    expected_version = _read_required_file_text(version_path, label="Version file")
     if not expected_version:
         raise ReleaseSimulationError(
             "validate_version_gate",
@@ -378,7 +378,10 @@ def _validate_version_gate(
                 "validate_version_gate",
                 f"Dynamic version file not found: {dynamic_path}",
             )
-        dynamic_version = dynamic_path.read_text(encoding="utf-8").strip()
+        dynamic_version = _read_required_file_text(
+            dynamic_path,
+            label="Dynamic version file",
+        )
         if dynamic_version != expected_version:
             raise ReleaseSimulationError(
                 "validate_version_gate",
@@ -386,6 +389,15 @@ def _validate_version_gate(
                 f"VERSION={expected_version!r}; {dynamic_path}={dynamic_version!r}.",
             )
     return expected_version
+
+
+def _read_required_file_text(path: Path, *, label: str) -> str:
+    if not path.is_file():
+        raise ReleaseSimulationError(
+            "validate_version_gate",
+            f"{label} is not a regular file: {path}",
+        )
+    return path.read_text(encoding="utf-8").strip()
 
 
 def _dynamic_version_files(pyproject_data: dict[str, Any]) -> list[str]:
