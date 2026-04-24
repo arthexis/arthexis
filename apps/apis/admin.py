@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -12,10 +13,13 @@ from django.utils import timezone
 
 from apps.apis.models import (
     APIExplorer,
+    GeneralServiceToken,
+    GeneralServiceTokenEvent,
     ResourceMethod,
     ServiceToken,
     ServiceTokenEvent,
 )
+from apps.groups.models import SecurityGroup
 
 
 class ResourceMethodInline(admin.TabularInline):
@@ -56,6 +60,69 @@ class ServiceTokenConfirmForm(forms.Form):
         help_text="Document expected impact before changing token status.",
     )
     reason = forms.CharField(max_length=300)
+
+
+class GeneralServiceTokenCreateForm(forms.Form):
+    """Wizard form to create manual JWT tokens for a target user."""
+
+    name = forms.CharField(max_length=120)
+    user_id = forms.IntegerField(min_value=1, help_text="User id that owns the token access scope.")
+    expires_in_days = forms.IntegerField(
+        min_value=1,
+        max_value=GeneralServiceToken.MAX_EXPIRY_DAYS,
+        initial=30,
+        help_text=f"Maximum allowed: {GeneralServiceToken.MAX_EXPIRY_DAYS} days.",
+    )
+    security_group_ids = forms.CharField(
+        required=False,
+        help_text="Optional comma-separated Security Group ids. Empty means all user groups.",
+    )
+    custom_claims = forms.JSONField(
+        required=False,
+        initial=dict,
+        help_text="Optional JSON object merged into JWT payload.",
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        user_model = get_user_model()
+        user_id = cleaned.get("user_id")
+        if user_id:
+            user = user_model.objects.filter(pk=user_id).first()
+            if user is None:
+                self.add_error("user_id", "User not found.")
+            else:
+                cleaned["user"] = user
+        group_ids_raw = cleaned.get("security_group_ids") or ""
+        try:
+            group_ids = sorted({int(part.strip()) for part in group_ids_raw.split(",") if part.strip()})
+        except ValueError:
+            self.add_error(
+                "security_group_ids",
+                "Security Group ids must be a comma-separated list of integers.",
+            )
+            group_ids = []
+        if group_ids:
+            groups = list(SecurityGroup.objects.filter(id__in=group_ids))
+            found_ids = {group.id for group in groups}
+            missing = [group_id for group_id in group_ids if group_id not in found_ids]
+            if missing:
+                self.add_error("security_group_ids", f"Unknown Security Group ids: {missing}")
+            if "user" in cleaned:
+                user_group_ids = set(cleaned["user"].groups.values_list("id", flat=True))
+                invalid = [group_id for group_id in group_ids if group_id not in user_group_ids]
+                if invalid:
+                    self.add_error(
+                        "security_group_ids",
+                        f"User lacks access to Security Group ids: {invalid}",
+                    )
+            cleaned["security_groups"] = groups
+        else:
+            cleaned["security_groups"] = []
+        custom_claims = cleaned.get("custom_claims")
+        if custom_claims is not None and not isinstance(custom_claims, dict):
+            self.add_error("custom_claims", "Custom claims must be a JSON object.")
+        return cleaned
 
 
 @admin.register(APIExplorer)
@@ -260,6 +327,160 @@ class ServiceTokenAdmin(admin.ModelAdmin):
 @admin.register(ServiceTokenEvent)
 class ServiceTokenEventAdmin(admin.ModelAdmin):
     """Read-only audit trail view for token lifecycle events."""
+
+    list_display = ("token", "event_type", "actor", "created_at")
+    list_filter = ("event_type", "created_at")
+    readonly_fields = ("token", "event_type", "actor", "details", "created_at")
+    search_fields = ("token__name", "actor__username", "token__token_prefix")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(GeneralServiceToken)
+class GeneralServiceTokenAdmin(admin.ModelAdmin):
+    """Admin wizard for general JWT token issue/reveal/revoke and automatic retirement."""
+
+    list_display = ("name", "user", "token_prefix", "status", "expires_at", "created_by", "created_at")
+    list_filter = ("status", "created_at")
+    readonly_fields = (
+        "claims",
+        "created_at",
+        "created_by",
+        "expires_at",
+        "name",
+        "retired_at",
+        "revoked_at",
+        "revoked_reason",
+        "security_groups",
+        "status",
+        "token_hash",
+        "token_prefix",
+        "updated_at",
+        "user",
+    )
+    search_fields = ("name", "token_prefix", "user__username", "created_by__username")
+    change_list_template = "admin/apis/generaltoken/change_list.html"
+
+    def _require_manage_permission(self, request: HttpRequest) -> None:
+        if not request.user.has_perm("apis.manage_general_service_tokens"):
+            raise PermissionDenied
+
+    def _require_reveal_permission(self, request: HttpRequest) -> None:
+        if not request.user.has_perm("apis.reveal_general_service_token_secret"):
+            raise PermissionDenied
+
+    def get_urls(self):
+        urls = super().get_urls()
+        opts = self.model._meta
+        custom = [
+            path("create/", self.admin_site.admin_view(self.create_token), name=f"{opts.app_label}_{opts.model_name}_create"),
+            path("<int:token_id>/reveal/", self.admin_site.admin_view(self.reveal_token), name=f"{opts.app_label}_{opts.model_name}_reveal"),
+            path("<int:token_id>/revoke/", self.admin_site.admin_view(self.revoke_token), name=f"{opts.app_label}_{opts.model_name}_revoke"),
+        ]
+        return custom + urls
+
+    def changelist_view(self, request: HttpRequest, extra_context=None):
+        GeneralServiceToken.retire_expired_tokens()
+        context = extra_context or {}
+        context["create_url"] = reverse("admin:apis_generalservicetoken_create")
+        return super().changelist_view(request, extra_context=context)
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_delete_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+    def changeform_view(self, request: HttpRequest, object_id=None, form_url="", extra_context=None):
+        if request.method == "POST":
+            raise PermissionDenied
+        return super().changeform_view(
+            request,
+            object_id=object_id,
+            form_url=form_url,
+            extra_context=extra_context,
+        )
+
+    def create_token(self, request: HttpRequest) -> HttpResponse:
+        self._require_manage_permission(request)
+        self._require_reveal_permission(request)
+        form = GeneralServiceTokenCreateForm(request.POST or None)
+        if request.method == "POST" and form.is_valid():
+            expires_at = timezone.now() + timedelta(days=form.cleaned_data["expires_in_days"])
+            token, raw_token = GeneralServiceToken.issue(
+                actor=request.user,
+                user=form.cleaned_data["user"],
+                name=form.cleaned_data["name"],
+                expires_at=expires_at,
+                security_groups=form.cleaned_data["security_groups"],
+                claims=form.cleaned_data.get("custom_claims") or {},
+            )
+            request.session[f"general-service-token-secret:{token.pk}"] = raw_token
+            return HttpResponseRedirect(reverse("admin:apis_generalservicetoken_reveal", args=[token.pk]))
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": "Create general service token",
+            "form": form,
+        }
+        return TemplateResponse(request, "admin/apis/generaltoken/create.html", context)
+
+    def reveal_token(self, request: HttpRequest, token_id: int) -> HttpResponse:
+        self._require_reveal_permission(request)
+        token = self.get_object(request, token_id)
+        if token is None:
+            raise PermissionDenied
+        session_key = f"general-service-token-secret:{token.pk}"
+        secret = request.session.pop(session_key, None)
+        if secret:
+            GeneralServiceTokenEvent.record(
+                token=token,
+                event_type=GeneralServiceTokenEvent.EventType.REVEALED,
+                actor=request.user,
+                details={"message": "Secret displayed once via admin reveal flow."},
+            )
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": "General service token secret",
+            "token": token,
+            "secret": secret,
+        }
+        return TemplateResponse(request, "admin/apis/generaltoken/reveal.html", context)
+
+    def revoke_token(self, request: HttpRequest, token_id: int) -> HttpResponse:
+        self._require_manage_permission(request)
+        token = self.get_object(request, token_id)
+        if token is None:
+            raise PermissionDenied
+        form = ServiceTokenConfirmForm(request.POST or None)
+        if request.method == "POST" and form.is_valid():
+            token.revoke(
+                actor=request.user,
+                reason=form.cleaned_data["reason"],
+                impact_note=form.cleaned_data["impact_note"],
+            )
+            messages.success(request, f"Revoked {token.name}.")
+            return HttpResponseRedirect(reverse("admin:apis_generalservicetoken_changelist"))
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": f"Revoke {token.name}",
+            "token": token,
+            "action_name": "Revoke token",
+            "impact_note": "Impact: integrations using this token lose access immediately.",
+            "form": form,
+        }
+        return TemplateResponse(request, "admin/apis/servicetoken/confirm_action.html", context)
+
+
+@admin.register(GeneralServiceTokenEvent)
+class GeneralServiceTokenEventAdmin(admin.ModelAdmin):
+    """Read-only audit trail view for general service token lifecycle events."""
 
     list_display = ("token", "event_type", "actor", "created_at")
     list_filter = ("event_type", "created_at")
