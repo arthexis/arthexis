@@ -1,10 +1,38 @@
 from __future__ import annotations
 
+import hashlib
+import mimetypes
+from pathlib import Path
+
 from django.core.exceptions import ValidationError
+from django.core.files import File
 from django.core.files.uploadedfile import UploadedFile
 from django.utils.translation import gettext_lazy as _
 
-from .models import MediaBucket, MediaFile
+from .models import MediaBucket, MediaFile, MediaSourceFile
+
+
+def guess_content_type(filename: str, *, default: str = "application/octet-stream") -> str:
+    guessed_type, _encoding = mimetypes.guess_type(filename)
+    return (guessed_type or default).strip() or default
+
+
+def _rewind(file_obj) -> None:
+    if hasattr(file_obj, "seek"):
+        file_obj.seek(0)
+
+
+def _sha256_for_file(file_obj) -> str:
+    digest = hashlib.sha256()
+    _rewind(file_obj)
+    if hasattr(file_obj, "chunks"):
+        for chunk in file_obj.chunks():
+            digest.update(chunk)
+    else:
+        while chunk := file_obj.read(1024 * 1024):
+            digest.update(chunk)
+    _rewind(file_obj)
+    return digest.hexdigest()
 
 
 def ensure_media_bucket(
@@ -69,3 +97,64 @@ def create_media_file(
     )
     media_file.save()
     return media_file
+
+
+def create_media_source_file(
+    *,
+    uploaded_file,
+    name: str | None = None,
+    source_type: str = MediaSourceFile.SourceType.MSE_SET,
+    source_uri: str = "",
+    original_name: str | None = None,
+    content_type: str | None = None,
+    size: int | None = None,
+    checksum_sha256: str | None = None,
+) -> MediaSourceFile:
+    filename = original_name or getattr(uploaded_file, "name", "")
+    if not filename:
+        raise ValidationError({"file": _("Source file name is required.")})
+
+    size_value = size
+    if size_value is None:
+        size_value = getattr(uploaded_file, "size", 0) or 0
+    checksum_value = checksum_sha256 or _sha256_for_file(uploaded_file)
+    media_source = MediaSourceFile(
+        name=name or Path(filename).stem,
+        source_type=source_type,
+        original_name=filename,
+        content_type=content_type or getattr(uploaded_file, "content_type", "") or guess_content_type(filename),
+        size=size_value or 0,
+        checksum_sha256=checksum_value,
+        source_uri=source_uri,
+    )
+    _rewind(uploaded_file)
+    media_source.file.save(Path(filename).name, uploaded_file, save=False)
+    media_source.save()
+    return media_source
+
+
+def copy_media_source_file_from_path(
+    path: str | Path,
+    *,
+    name: str | None = None,
+    source_type: str = MediaSourceFile.SourceType.MSE_SET,
+    source_uri: str | None = None,
+    content_type: str | None = None,
+) -> MediaSourceFile:
+    source_path = Path(path).expanduser().resolve()
+    if not source_path.exists():
+        raise FileNotFoundError(source_path)
+    if not source_path.is_file():
+        raise IsADirectoryError(source_path)
+
+    with source_path.open("rb") as handle:
+        uploaded_file = File(handle, name=source_path.name)
+        return create_media_source_file(
+            uploaded_file=uploaded_file,
+            name=name,
+            source_type=source_type,
+            source_uri=source_uri if source_uri is not None else source_path.as_posix(),
+            original_name=source_path.name,
+            content_type=content_type or guess_content_type(source_path.name),
+            size=source_path.stat().st_size,
+        )
