@@ -192,7 +192,7 @@ def run_release_simulation(
                     )
                 )
 
-            resolved_dist = _resolve_child_path(
+            resolved_dist = _resolve_dist_directory(
                 root,
                 dist_dir,
                 label="dist directory",
@@ -475,7 +475,9 @@ def _clean_artifacts(*, root: Path, resolved_dist: Path) -> None:
         resolved_dist,
         root / "build",
     ):
-        if target.is_dir():
+        if target.is_symlink():
+            target.unlink()
+        elif target.is_dir():
             shutil.rmtree(target)
         elif target.exists():
             target.unlink()
@@ -492,6 +494,8 @@ def _validate_dist_directory(*, root: Path, resolved_dist: Path) -> None:
             "build_package",
             f"Dist directory exists but is not a directory: {resolved_dist}",
         )
+    if resolved_dist.is_symlink():
+        return
     if resolved_dist.is_dir():
         unsafe_children = [
             child
@@ -505,6 +509,29 @@ def _validate_dist_directory(*, root: Path, resolved_dist: Path) -> None:
                 "Dist directory contains non-artifact files and will not be cleaned: "
                 f"{resolved_dist}",
             )
+
+
+def _resolve_dist_directory(
+    root: Path,
+    path: Path,
+    *,
+    label: str,
+    step: str,
+) -> Path:
+    candidate = path if path.is_absolute() else root / path
+    resolved = (
+        candidate.parent.resolve() / candidate.name
+        if candidate.is_symlink()
+        else candidate.resolve()
+    )
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ReleaseSimulationError(
+            step,
+            f"{label.capitalize()} escapes repository root: {resolved}",
+        ) from exc
+    return resolved
 
 
 def _resolve_child_path(

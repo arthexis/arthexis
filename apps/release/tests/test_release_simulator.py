@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -279,6 +280,65 @@ def test_release_simulation_rejects_non_artifact_dist_dir_before_cleanup(
     assert result.failed_step == "build_package"
     assert "contains non-artifact files" in result.error
     assert source_file.read_text(encoding="utf-8") == "keep me\n"
+
+
+def test_release_simulation_unlinks_symlinked_dist_dir_before_cleanup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_project(tmp_path)
+    target_dir = tmp_path / "existing-artifacts"
+    target_dir.mkdir()
+    target_file = target_dir / "keep.txt"
+    target_file.write_text("keep me\n", encoding="utf-8")
+    (tmp_path / "dist").symlink_to(target_dir, target_is_directory=True)
+
+    def fake_run(cmd: list[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if cmd[:3] == [sys.executable, "-m", "build"]:
+            out_dir = Path(cmd[-1])
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "package.whl").write_text("artifact\n", encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr("apps.release.simulator.subprocess.run", fake_run)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_pypi=True,
+    )
+
+    assert result.ok is True
+    assert (tmp_path / "dist").is_dir()
+    assert not (tmp_path / "dist").is_symlink()
+    assert target_file.read_text(encoding="utf-8") == "keep me\n"
+
+
+def test_release_simulation_unlinks_symlinked_build_dir_before_cleanup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_project(tmp_path)
+    target_dir = tmp_path / "existing-build"
+    target_dir.mkdir()
+    target_file = target_dir / "keep.txt"
+    target_file.write_text("keep me\n", encoding="utf-8")
+    (tmp_path / "build").symlink_to(target_dir, target_is_directory=True)
+
+    def fake_run(cmd: list[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if cmd[:3] == [sys.executable, "-m", "build"]:
+            out_dir = Path(cmd[-1])
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "package.whl").write_text("artifact\n", encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr("apps.release.simulator.subprocess.run", fake_run)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_pypi=True,
+    )
+
+    assert result.ok is True
+    assert not (tmp_path / "build").exists()
+    assert target_file.read_text(encoding="utf-8") == "keep me\n"
 
 
 def test_release_simulation_reports_build_timeout(
