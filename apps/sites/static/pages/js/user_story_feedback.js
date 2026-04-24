@@ -37,6 +37,7 @@
     commentField.parentNode.appendChild(autocompleteContainer);
   }
   let autocompleteAbortController = null;
+  let autocompleteRequestId = 0;
 
   const setCommentValue = value => {
     if (!commentField) {
@@ -97,28 +98,44 @@
       return;
     }
 
-    autocompleteAbortController = new AbortController();
+    const requestId = autocompleteRequestId + 1;
+    autocompleteRequestId = requestId;
+    const query = commentField.value;
+    const abortController = new AbortController();
+    autocompleteAbortController = abortController;
 
     const url = new URL(autocompleteUrl, window.location.origin);
-    url.searchParams.set('q', commentField.value);
+    url.searchParams.set('q', query);
     url.searchParams.set('limit', '5');
+
+    const isCurrentAutocompleteRequest = () =>
+      autocompleteRequestId === requestId &&
+      autocompleteAbortController === abortController &&
+      commentField &&
+      commentField.value === query;
 
     try {
       const response = await fetch(url.toString(), {
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        signal: autocompleteAbortController.signal,
+        signal: abortController.signal,
       });
       if (!response.ok) {
-        clearAutocompleteSuggestions();
+        if (isCurrentAutocompleteRequest()) {
+          clearAutocompleteSuggestions();
+        }
         return;
       }
       const data = await response.json();
-      renderAutocompleteSuggestions(data.suggestions || []);
+      if (isCurrentAutocompleteRequest()) {
+        renderAutocompleteSuggestions(data.suggestions || []);
+      }
     } catch (error) {
       if (error && error.name === 'AbortError') {
         return;
       }
-      clearAutocompleteSuggestions();
+      if (isCurrentAutocompleteRequest()) {
+        clearAutocompleteSuggestions();
+      }
     }
   };
 
