@@ -140,6 +140,36 @@ def test_release_simulation_reports_invalid_dynamic_version_file_metadata(
     assert "dynamic version file metadata must be a string or list" in result.error
 
 
+def test_release_simulation_reports_invalid_dynamic_version_metadata_shape(
+    tmp_path: Path,
+) -> None:
+    _write_project(tmp_path)
+    (tmp_path / "pyproject.toml").write_text(
+        "\n".join(
+            [
+                "[project]",
+                'name = "arthexis"',
+                'dynamic = ["version"]',
+                "",
+                "[tool.setuptools.dynamic]",
+                'version = "VERSION"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_pypi=True,
+        skip_build=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "validate_version_gate"
+    assert "pyproject metadata at 'version' must be a table" in result.error
+
+
 def test_release_simulation_quotes_package_name_for_pypi(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

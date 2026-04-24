@@ -365,13 +365,7 @@ def _validate_version_gate(
             "validate_version_gate",
             f"Failed to parse pyproject file: {exc}",
         ) from exc
-    dynamic_version_files = _normalize_dynamic_version_files(
-        pyproject_data.get("tool", {})
-        .get("setuptools", {})
-        .get("dynamic", {})
-        .get("version", {})
-        .get("file", []),
-    )
+    dynamic_version_files = _dynamic_version_files(pyproject_data)
 
     if dynamic_version_files:
         dynamic_path = _resolve_child_path(
@@ -392,6 +386,24 @@ def _validate_version_gate(
                 f"VERSION={expected_version!r}; {dynamic_path}={dynamic_version!r}.",
             )
     return expected_version
+
+
+def _dynamic_version_files(pyproject_data: dict[str, Any]) -> list[str]:
+    tool_data = _optional_mapping(pyproject_data, "tool")
+    setuptools_data = _optional_mapping(tool_data, "setuptools")
+    dynamic_data = _optional_mapping(setuptools_data, "dynamic")
+    version_data = _optional_mapping(dynamic_data, "version")
+    return _normalize_dynamic_version_files(version_data.get("file", []))
+
+
+def _optional_mapping(data: dict[str, Any], key: str) -> dict[str, Any]:
+    value = data.get(key, {})
+    if isinstance(value, dict):
+        return value
+    raise ReleaseSimulationError(
+        "validate_version_gate",
+        f"pyproject metadata at {key!r} must be a table.",
+    )
 
 
 def _normalize_dynamic_version_files(value: Any) -> list[str]:
