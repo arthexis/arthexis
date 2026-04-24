@@ -1,0 +1,145 @@
+"""Tests for the local and CI release simulator."""
+
+from __future__ import annotations
+
+from io import StringIO
+from pathlib import Path
+
+import pytest
+from django.core.management import call_command
+from django.core.management.base import CommandError
+
+from apps.release.simulator import (
+    ReleaseSimulationError,
+    parse_blockers_json,
+    run_release_simulation,
+    write_github_output,
+)
+
+
+def _write_project(root: Path, *, version: str = "1.2.3", dynamic_path: str = "VERSION") -> None:
+    (root / "VERSION").write_text(f"{version}\n", encoding="utf-8")
+    if dynamic_path != "VERSION":
+        dynamic_file = root / dynamic_path
+        dynamic_file.parent.mkdir(parents=True, exist_ok=True)
+        dynamic_file.write_text(f"{version}\n", encoding="utf-8")
+    (root / "pyproject.toml").write_text(
+        "\n".join(
+            [
+                "[project]",
+                'name = "arthexis"',
+                'dynamic = ["version"]',
+                "",
+                "[tool.setuptools.dynamic.version]",
+                f'file = ["{dynamic_path}"]',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_release_simulation_can_run_without_pypi_or_build(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_pypi=True,
+        skip_build=True,
+    )
+
+    assert result.ok is True
+    assert result.version == "1.2.3"
+    assert result.failed_step == ""
+    assert "authorization boundary" in result.summary_markdown
+    assert [step.name for step in result.steps] == [
+        "validate_version_gate",
+        "preflight_pypi",
+        "install_build_backend",
+        "build_package",
+        "validate_metadata",
+        "authorization_boundary",
+    ]
+
+
+def test_release_simulation_reports_version_gate_mismatch(tmp_path: Path) -> None:
+    _write_project(tmp_path, version="1.2.3", dynamic_path="apps/pkg/VERSION")
+    (tmp_path / "apps/pkg/VERSION").write_text("1.2.4\n", encoding="utf-8")
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_pypi=True,
+        skip_build=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "validate_version_gate"
+    assert "differ" in result.error
+    assert "validate_version_gate" in result.summary_markdown
+
+
+def test_release_simulation_skips_when_blockers_are_provided(tmp_path: Path) -> None:
+    result = run_release_simulation(
+        root=tmp_path,
+        blockers=["Open install failure issue: #1"],
+    )
+
+    assert result.ok is False
+    assert result.skipped is True
+    assert result.blockers == ["Open install failure issue: #1"]
+    assert "SKIP" in result.summary_markdown
+
+
+def test_parse_blockers_json_requires_list() -> None:
+    with pytest.raises(ReleaseSimulationError, match="must be a list"):
+        parse_blockers_json('{"blocker": true}')
+
+
+def test_release_simulation_writes_github_outputs(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    output_path = tmp_path / "github-output.txt"
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_pypi=True,
+        skip_build=True,
+    )
+
+    write_github_output(result, output_path)
+
+    rendered = output_path.read_text(encoding="utf-8")
+    assert "summary_markdown<<" in rendered
+    assert "simulated_ok=true" in rendered
+    assert "simulated_skipped=false" in rendered
+    assert "failed_step=" in rendered
+
+
+def test_release_command_wraps_simulator_for_local_runs(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    stdout = StringIO()
+
+    call_command(
+        "release",
+        "simulate",
+        "--root",
+        str(tmp_path),
+        "--skip-pypi",
+        "--skip-build",
+        stdout=stdout,
+    )
+
+    assert "Release simulation reached" in stdout.getvalue()
+
+
+def test_release_command_raises_on_failed_simulation(tmp_path: Path) -> None:
+    _write_project(tmp_path, version="1.2.3", dynamic_path="apps/pkg/VERSION")
+    (tmp_path / "apps/pkg/VERSION").write_text("1.2.4\n", encoding="utf-8")
+
+    with pytest.raises(CommandError, match="validate_version_gate"):
+        call_command(
+            "release",
+            "simulate",
+            "--root",
+            str(tmp_path),
+            "--skip-pypi",
+            "--skip-build",
+        )

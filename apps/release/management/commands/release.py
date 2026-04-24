@@ -22,6 +22,12 @@ from apps.release.domain import (
 )
 from apps.release.models import Package as PackageModel
 from apps.release.models import PackageRelease
+from apps.release.simulator import (
+    ReleaseSimulationError,
+    emit_result,
+    parse_blockers_json,
+    run_release_simulation,
+)
 
 REQUIRED_PACKAGE_FIELDS = (
     "name",
@@ -77,7 +83,7 @@ class Command(BaseCommand):
 
     help = (
         "Run release actions (prepare, build, snap/capture-state, clean/clean-logs, "
-        "check-pypi, migrate/apply-migrations, xforms/run-data-transforms)."
+        "check-pypi, simulate, migrate/apply-migrations, xforms/run-data-transforms)."
     )
 
     def add_arguments(self, parser):
@@ -154,6 +160,54 @@ class Command(BaseCommand):
                 "Defaults to the latest release for the active package."
             ),
         )
+
+        simulate_parser = subparsers.add_parser(
+            "simulate",
+            help="Run the release-readiness simulator without publishing.",
+        )
+        simulate_parser.add_argument(
+            "--root",
+            help="Repository root. Defaults to Django BASE_DIR.",
+        )
+        simulate_parser.add_argument("--package-name", default="arthexis")
+        simulate_parser.add_argument("--version-file", default="VERSION")
+        simulate_parser.add_argument("--pyproject", default="pyproject.toml")
+        simulate_parser.add_argument("--dist-dir", default="dist")
+        simulate_parser.add_argument(
+            "--blockers-json",
+            default="",
+            help="JSON list of precomputed install/upgrade blockers.",
+        )
+        simulate_parser.add_argument(
+            "--skip-pypi",
+            action="store_true",
+            help="Skip the PyPI duplicate-version preflight for offline local runs.",
+        )
+        simulate_parser.add_argument(
+            "--skip-build",
+            action="store_true",
+            help="Skip package build and twine metadata validation.",
+        )
+        simulate_parser.add_argument(
+            "--no-clean",
+            action="store_false",
+            dest="clean",
+            default=True,
+            help="Do not remove prior dist/build artifacts before building.",
+        )
+        simulate_parser.add_argument(
+            "--install-missing-tools",
+            action="store_true",
+            help="Install/upgrade pip, build, and twine before building.",
+        )
+        simulate_parser.add_argument("--pypi-timeout", type=float, default=15.0)
+        simulate_parser.add_argument("--run-url", default="")
+        simulate_parser.add_argument(
+            "--github-output",
+            help="Append GitHub Actions outputs to this file.",
+        )
+        simulate_parser.add_argument("--summary-file", help="Write markdown summary to this file.")
+        simulate_parser.add_argument("--json", action="store_true", dest="json_output")
 
         migration_parser = subparsers.add_parser(
             "apply-migrations",
@@ -325,6 +379,43 @@ class Command(BaseCommand):
             stdout=self.stdout,
             stderr=self.stderr,
         )
+
+    def _handle_simulate(self, options: dict[str, object]) -> None:
+        root = Path(str(options.get("root") or settings.BASE_DIR))
+        try:
+            blockers = parse_blockers_json(str(options.get("blockers_json") or ""))
+            result = run_release_simulation(
+                root=root,
+                package_name=str(options.get("package_name") or "arthexis"),
+                version_file=Path(str(options.get("version_file") or "VERSION")),
+                pyproject_path=Path(str(options.get("pyproject") or "pyproject.toml")),
+                dist_dir=Path(str(options.get("dist_dir") or "dist")),
+                blockers=blockers,
+                skip_pypi=bool(options.get("skip_pypi")),
+                skip_build=bool(options.get("skip_build")),
+                clean=bool(options.get("clean", True)),
+                install_missing_tools=bool(options.get("install_missing_tools")),
+                pypi_timeout=float(options.get("pypi_timeout") or 15.0),
+                run_url=str(options.get("run_url") or ""),
+            )
+        except ReleaseSimulationError as exc:
+            raise CommandError(exc.message) from exc
+
+        emit_result(
+            result,
+            github_output=Path(str(options["github_output"]))
+            if options.get("github_output")
+            else None,
+            summary_file=Path(str(options["summary_file"]))
+            if options.get("summary_file")
+            else None,
+            json_output=bool(options.get("json_output")),
+            stdout=self.stdout,
+        )
+        if not result.ok and not result.skipped:
+            raise CommandError(
+                f"Release simulation failed at {result.failed_step}: {result.error}"
+            )
 
     def _handle_run_data_transforms(self, options: dict[str, object]) -> None:
         max_batches = int(options["max_batches"])
