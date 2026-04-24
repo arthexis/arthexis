@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import secrets
 import shutil
 import subprocess
@@ -368,27 +369,34 @@ def _validate_version_gate(
     dynamic_version_files = _dynamic_version_files(pyproject_data)
 
     if dynamic_version_files:
-        dynamic_path = _resolve_child_path(
-            root,
-            Path(str(dynamic_version_files[0])),
-            label="dynamic version file",
-        )
-        if not dynamic_path.exists():
-            raise ReleaseSimulationError(
-                "validate_version_gate",
-                f"Dynamic version file not found: {dynamic_path}",
-            )
-        dynamic_version = _read_required_file_text(
-            dynamic_path,
-            label="Dynamic version file",
+        dynamic_version = "".join(
+            _read_dynamic_version_file(root=root, dynamic_file=dynamic_file)
+            for dynamic_file in dynamic_version_files
         )
         if dynamic_version != expected_version:
             raise ReleaseSimulationError(
                 "validate_version_gate",
                 "VERSION and setuptools dynamic version file differ. "
-                f"VERSION={expected_version!r}; {dynamic_path}={dynamic_version!r}.",
+                f"VERSION={expected_version!r}; dynamic version={dynamic_version!r}.",
             )
     return expected_version
+
+
+def _read_dynamic_version_file(*, root: Path, dynamic_file: str) -> str:
+    dynamic_path = _resolve_child_path(
+        root,
+        Path(dynamic_file),
+        label="dynamic version file",
+    )
+    if not dynamic_path.exists():
+        raise ReleaseSimulationError(
+            "validate_version_gate",
+            f"Dynamic version file not found: {dynamic_path}",
+        )
+    return _read_required_file_text(
+        dynamic_path,
+        label="Dynamic version file",
+    )
 
 
 def _read_required_file_text(path: Path, *, label: str) -> str:
@@ -441,10 +449,10 @@ def _preflight_pypi(
     package_version: str,
     timeout: float,
 ) -> None:
-    if timeout <= 0:
+    if not math.isfinite(timeout) or timeout <= 0:
         raise ReleaseSimulationError(
             "preflight_pypi",
-            f"PyPI timeout must be greater than zero seconds: {timeout}.",
+            f"PyPI timeout must be a finite value greater than zero seconds: {timeout}.",
         )
     pypi_url = f"https://pypi.org/pypi/{quote(package_name, safe='')}/json"
     request = Request(

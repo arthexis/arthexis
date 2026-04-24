@@ -95,6 +95,36 @@ def test_release_simulation_reports_version_gate_mismatch(tmp_path: Path) -> Non
     assert "validate_version_gate" in result.summary_markdown
 
 
+def test_release_simulation_accepts_multi_file_dynamic_version(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    (tmp_path / "VERSION").write_text("1.2.3\n", encoding="utf-8")
+    (tmp_path / "version-prefix.txt").write_text("1.2", encoding="utf-8")
+    (tmp_path / "version-suffix.txt").write_text(".3", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text(
+        "\n".join(
+            [
+                "[project]",
+                'name = "arthexis"',
+                'dynamic = ["version"]',
+                "",
+                "[tool.setuptools.dynamic.version]",
+                'file = ["version-prefix.txt", "version-suffix.txt"]',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_pypi=True,
+        skip_build=True,
+    )
+
+    assert result.ok is True
+    assert result.version == "1.2.3"
+
+
 def test_release_simulation_reports_directory_version_file(tmp_path: Path) -> None:
     _write_project(tmp_path)
 
@@ -274,7 +304,28 @@ def test_release_simulation_reports_invalid_pypi_timeout(
 
     assert result.ok is False
     assert result.failed_step == "preflight_pypi"
-    assert "PyPI timeout must be greater than zero seconds" in result.error
+    assert "PyPI timeout must be a finite value greater than zero seconds" in result.error
+
+
+def test_release_simulation_reports_non_finite_pypi_timeout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_project(tmp_path)
+
+    def fake_urlopen(url: str, *, timeout: float) -> _FakeResponse:
+        raise AssertionError("urlopen should not be called for invalid timeouts")
+
+    monkeypatch.setattr("apps.release.simulator.urlopen", fake_urlopen)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_build=True,
+        pypi_timeout=float("nan"),
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "preflight_pypi"
+    assert "PyPI timeout must be a finite value greater than zero seconds" in result.error
 
 
 def test_release_simulation_reports_invalid_pypi_json(
