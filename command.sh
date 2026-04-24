@@ -47,8 +47,10 @@ if [ ! -d .venv ]; then
 fi
 source .venv/bin/activate
 
+# Lifecycle CLI contract: this public interface is documented in install-lifecycle-scripts-manual.md and regression-tested.
 # Supported interface:
 #   Usage: ./command.sh <operational-command> [args...]
 #   Usage: ./command.sh list
-# For non-operational/admin commands, use ./manage.py directly.
+# For non-operational/admin commands, use .venv/bin/python manage.py ...
+# Keep ./command.sh for operator-facing runtime actions.
 python -m utils.command_api "$@"

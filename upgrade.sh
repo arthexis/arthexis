@@ -212,6 +212,8 @@ fi
 
 arthexis_timing_setup "upgrade"
 
+# Lifecycle CLI contract: top-level upgrade flags and aliases are validated by tests to prevent accidental drift.
+
 is_non_terminal_role() {
   case "$1" in
     Control|Constellation|Watchtower)
