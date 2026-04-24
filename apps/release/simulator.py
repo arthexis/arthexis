@@ -495,7 +495,10 @@ def _validate_dist_directory(*, root: Path, resolved_dist: Path) -> None:
             f"Dist directory exists but is not a directory: {resolved_dist}",
         )
     if resolved_dist.is_symlink():
-        return
+        raise ReleaseSimulationError(
+            "build_package",
+            f"Dist directory must not be a symlink: {resolved_dist}",
+        )
     if resolved_dist.is_dir():
         unsafe_children = [
             child
