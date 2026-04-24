@@ -276,6 +276,26 @@ def test_release_simulation_reports_invalid_pypi_json(
     assert "Received invalid JSON from PyPI" in result.error
 
 
+def test_release_simulation_reports_pypi_decode_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_project(tmp_path)
+
+    def fake_urlopen(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(b"\xff\xfe\xfa")
+
+    monkeypatch.setattr("apps.release.simulator.urlopen", fake_urlopen)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_build=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "preflight_pypi"
+    assert "Received invalid JSON from PyPI" in result.error
+
+
 def test_release_simulation_reports_invalid_pypi_payload_type(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -450,7 +450,7 @@ def _preflight_pypi(
         with urlopen(request, timeout=timeout) as response:
             try:
                 payload = json.load(response)
-            except json.JSONDecodeError as exc:
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
                 raise ReleaseSimulationError(
                     "preflight_pypi",
                     f"Received invalid JSON from PyPI: {exc}",
