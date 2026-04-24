@@ -9,6 +9,7 @@ from pathlib import Path
 from django.conf import settings
 
 TOKEN_RE = re.compile(r"[a-zA-Z0-9_/-]{2,}")
+INPUT_TOKEN_RE = re.compile(r"[a-zA-Z0-9_/-]+")
 
 STANDARD_FEEDBACK_PHRASES: tuple[str, ...] = (
     "The page loaded quickly and worked as expected",
@@ -62,7 +63,7 @@ class FeedbackAutocompleteHarness:
         return suggestions[:limit]
 
     def _repo_trained_suggestions(self, *, text: str, limit: int) -> list[str]:
-        tokens = [token.lower() for token in TOKEN_RE.findall(text)]
+        tokens = [token.lower() for token in INPUT_TOKEN_RE.findall(text)]
         has_trailing_space = bool(text) and text[-1].isspace()
         previous = tokens[-1] if has_trailing_space and tokens else ""
         active = "" if has_trailing_space or not tokens else tokens[-1]

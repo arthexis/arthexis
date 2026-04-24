@@ -145,6 +145,7 @@ def test_repo_autocomplete_completes_active_staff_token(monkeypatch):
 
     harness = autocomplete.FeedbackAutocompleteHarness()
 
+    assert harness.suggest(text="status p", is_staff=True, limit=3) == ["panel", "status"]
     assert harness.suggest(text="status pa", is_staff=True, limit=3) == ["panel", "status"]
     assert harness.suggest(text="status ", is_staff=True, limit=3) == [
         "panel",
