@@ -40,6 +40,18 @@ from .sync_features import (
 logger = logging.getLogger(__name__)
 
 
+def _has_valid_odoo_product_payload(product: OdooProduct) -> bool:
+    payload = product.odoo_product or {}
+    if not isinstance(payload, dict):
+        return False
+    value = payload.get("id")
+    try:
+        int(value)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
 class OdooTemplateSetupImportForm(forms.Form):
     SOURCE_TEMPLATES = "templates"
     SOURCE_PRODUCTS = "products"
@@ -104,24 +116,12 @@ class OdooTemplateSetupCreateForm(forms.Form):
         self.fields["products"].queryset = OdooProduct.objects.order_by("name")
         self.fields["employees"].queryset = OdooEmployee.objects.order_by("username")
 
-    @staticmethod
-    def _has_valid_odoo_product(product: OdooProduct) -> bool:
-        payload = product.odoo_product or {}
-        if not isinstance(payload, dict):
-            return False
-        value = payload.get("id")
-        try:
-            int(value)
-        except (TypeError, ValueError):
-            return False
-        return True
-
     def clean(self):
         cleaned_data = super().clean()
         name_prefix = (cleaned_data.get("name_prefix") or "").strip() or "Setup Template"
         cleaned_data["name_prefix"] = name_prefix
         products = cleaned_data.get("products") or []
-        if any(not self._has_valid_odoo_product(product) for product in products):
+        if any(not _has_valid_odoo_product_payload(product) for product in products):
             self.add_error(
                 "products",
                 _("Select only products imported from Odoo before creating product rules."),
@@ -907,6 +907,14 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                 raise PermissionDenied
             if products and not self._has_add_and_change_permission(request, OdooSaleFactorProductRule):
                 raise PermissionDenied
+
+            if any(not _has_valid_odoo_product_payload(product) for product in products):
+                self.message_user(
+                    request,
+                    _("Select only products imported from Odoo before creating product rules."),
+                    level=messages.ERROR,
+                )
+                return HttpResponseRedirect(self._setup_templates_create_url())
 
             invalid_template_name = next(
                 (

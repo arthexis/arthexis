@@ -8,6 +8,7 @@ from django.db import IntegrityError
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.odoo import admin as odoo_admin
 from apps.odoo.admin import OdooSaleOrderTemplateAdmin
 from apps.odoo.models import (
     OdooEmployee,
@@ -565,6 +566,44 @@ def test_setup_templates_step_two_rejects_products_without_odoo_payload(admin_cl
 
     assert response.status_code == 200
     assert "Select only products imported from Odoo" in response.content.decode()
+    assert OdooSaleOrderTemplate.objects.filter(name="Setup: Base").count() == 0
+    assert OdooSaleFactor.objects.count() == 0
+    assert OdooSaleFactorProductRule.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_setup_templates_step_two_rechecks_product_payload_before_rule_creation(
+    admin_client, monkeypatch
+):
+    source_template = OdooSaleOrderTemplate.objects.create(
+        name="Base",
+        odoo_template={"id": 90, "name": "Base"},
+    )
+    product = OdooProduct.objects.create(
+        name="Addon",
+        renewal_period=30,
+        odoo_product={"id": 501, "name": "Addon"},
+    )
+    checks = iter([True, False])
+
+    monkeypatch.setattr(
+        odoo_admin,
+        "_has_valid_odoo_product_payload",
+        lambda product: next(checks),
+    )
+
+    response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates_create"),
+        {
+            "name_prefix": "Setup",
+            "templates": [str(source_template.pk)],
+            "products": [str(product.pk)],
+            "employees": [],
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse("admin:odoo_odoosaleordertemplate_setup_templates_create")
     assert OdooSaleOrderTemplate.objects.filter(name="Setup: Base").count() == 0
     assert OdooSaleFactor.objects.count() == 0
     assert OdooSaleFactorProductRule.objects.count() == 0
