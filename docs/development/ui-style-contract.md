@@ -78,13 +78,13 @@ Avoid ad-hoc or ambiguous class names, including:
 
 - Generic utility-like names without semantic intent (for example, `.left`, `.big`).
 - Numbered style names that do not communicate purpose (for example, `.button2`).
-- Visual-only replacement classes where a state or component class should exist.
+- Visual-only replacement classes where a state or component class should exist (for example, using `.text-red` instead of `.is-error`).
 
 ## Token usage and sizing policy
 
 Do not hardcode `rem` or `px` for control sizing when a design token already exists.
 
-- Prefer framework tokens such as `--admin-ui-control-height` and related spacing/radius tokens from the admin UI framework.
+- Prefer framework tokens such as `--admin-ui-control-height` and related spacing/radius tokens from the admin UI framework (for example, `--admin-ui-spacing-md`, `--admin-ui-radius-sm`).
 - Hardcoded lengths are acceptable only when no suitable token exists and the value is truly app-specific.
 - If the same hardcoded value appears in multiple places, promote it to a shared token or shared primitive.
 
@@ -96,7 +96,7 @@ When migrating legacy templates and CSS:
 
 1. Audit classes in the target template and stylesheet.
 2. Map global layout/action/control patterns to `admin-ui-*` primitives first.
-3. Rename app-specific structures to `ui-<component>`, `__<element>`, and `--<variant>`.
+3. Rename app-specific structures to the full BEM-style patterns: `ui-<component>`, `ui-<component>__<element>`, and `ui-<component>--<variant>`.
 4. Convert visual state toggles to `is-*` classes.
 5. Move JavaScript selectors to `js-*` classes where behavior hooks are needed.
 6. Replace hardcoded control sizing with existing tokens where available.
