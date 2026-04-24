@@ -84,7 +84,7 @@ Avoid ad-hoc or ambiguous class names, including:
 
 Do not hardcode `rem` or `px` for control sizing when a design token already exists.
 
-- Prefer framework tokens such as `--admin-ui-control-height` and related spacing/radius tokens from the admin UI framework (for example, `--admin-ui-spacing-md`, `--admin-ui-radius-sm`).
+- Prefer framework tokens such as `--admin-ui-control-height` and related spacing/radius tokens from the admin UI framework (for example, `--admin-ui-space-4`, `--admin-ui-radius-sm`).
 - Hardcoded lengths are acceptable only when no suitable token exists and the value is truly app-specific.
 - If the same hardcoded value appears in multiple places, promote it to a shared token or shared primitive.
 
