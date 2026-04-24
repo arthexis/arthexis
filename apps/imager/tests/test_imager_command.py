@@ -21,6 +21,7 @@ from apps.imager.services import (
     _build_download_uri,
     _customize_image,
     _download_remote_base_image,
+    _guestfish_write,
     _guestfish_remove_file,
     _resolve_root_disk_path,
     _validate_remote_base_image_url,
