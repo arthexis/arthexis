@@ -86,3 +86,120 @@ def test_setup_templates_step_two_creates_linked_objects(admin_client):
         factor=factor,
         odoo_product__id=501,
     ).exists()
+
+
+@pytest.mark.django_db
+def test_setup_templates_step_two_generates_unique_factor_code(admin_client):
+    source_template = OdooSaleOrderTemplate.objects.create(
+        name="Base",
+        odoo_template={"id": 90, "name": "Base"},
+    )
+
+    payload = {
+        "name_prefix": "Setup",
+        "templates": [str(source_template.pk)],
+        "products": [],
+        "employees": [],
+    }
+
+    first_response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates_create"),
+        payload,
+    )
+    second_response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates_create"),
+        payload,
+    )
+
+    assert first_response.status_code == 302
+    assert second_response.status_code == 302
+    assert OdooSaleFactor.objects.filter(code="setup-products").exists()
+    assert OdooSaleFactor.objects.filter(code="setup-products-2").exists()
+
+
+@pytest.mark.django_db
+def test_setup_templates_step_one_employee_update_syncs_user(
+    admin_client,
+    admin_user,
+    django_user_model,
+    monkeypatch,
+):
+    profile = OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoo",
+        username="profile-admin",
+        password="secret",
+        odoo_uid=1,
+        verified_on=timezone.now(),
+    )
+
+    linked_user = django_user_model.objects.create_user(
+        username="legacy-login",
+        password="secret",
+        email="legacy@example.com",
+    )
+    OdooEmployee.objects.create(
+        user=linked_user,
+        host=profile.host,
+        database=profile.database,
+        username="legacy-login",
+        password="",
+        odoo_uid=55,
+        verified_on=timezone.now(),
+    )
+
+    def execute(model, method, domain, **kwargs):
+        assert method == "search_read"
+        if model == "res.users":
+            if domain == [[("active", "=", True), ("share", "=", False)]]:
+                return [
+                    {
+                        "id": 55,
+                        "name": "Updated User",
+                        "email": "new@example.com",
+                        "login": "new-login",
+                        "partner_id": [301, "Partner"],
+                    }
+                ]
+            return [
+                {
+                    "id": 55,
+                    "name": "Updated User",
+                    "email": "new@example.com",
+                    "login": "new-login",
+                    "partner_id": [301, "Partner"],
+                }
+            ]
+        raise AssertionError(f"Unexpected model: {model}")
+
+    monkeypatch.setattr(
+        OdooEmployee,
+        "execute",
+        lambda self, model, method, domain, **kwargs: execute(
+            model, method, domain, **kwargs
+        ),
+    )
+
+    response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates"),
+        {
+            "source_type": "employees",
+            "selected_ids": ["55"],
+        },
+    )
+
+    assert response.status_code == 302
+    updated_employee = OdooEmployee.objects.get(
+        odoo_uid=55,
+        host=profile.host,
+        database=profile.database,
+    )
+    updated_user = updated_employee.user
+    assert updated_user is not None
+    assert updated_user.username.startswith("new-login")
+    assert updated_user.username != "legacy-login"
+    assert updated_user.email == "new@example.com"
+    assert updated_employee.username == "legacy-login"
+    assert updated_employee.email == "new@example.com"
+    assert updated_employee.partner_id == 301

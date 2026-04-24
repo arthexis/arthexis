@@ -1,7 +1,8 @@
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -96,6 +97,29 @@ class OdooTemplateSetupCreateForm(forms.Form):
         self.fields["templates"].queryset = OdooSaleOrderTemplate.objects.order_by("name")
         self.fields["products"].queryset = OdooProduct.objects.order_by("name")
         self.fields["employees"].queryset = OdooEmployee.objects.order_by("username")
+
+    @staticmethod
+    def _resolve_unique_factor_code(name_prefix: str) -> str:
+        base_code = slugify(f"{name_prefix} Products")[:64] or "setup-template-products"
+        if not OdooSaleFactor.objects.filter(code=base_code).exists():
+            return base_code
+
+        max_base_length = 64 - len("-99")
+        trimmed_base = base_code[:max_base_length]
+        counter = 2
+        while counter < 100:
+            candidate = f"{trimmed_base}-{counter}"
+            if not OdooSaleFactor.objects.filter(code=candidate).exists():
+                return candidate
+            counter += 1
+        raise ValidationError(_("Unable to generate a unique sale factor code."))
+
+    def clean(self):
+        cleaned_data = super().clean()
+        name_prefix = (cleaned_data.get("name_prefix") or "").strip() or "Setup Template"
+        cleaned_data["name_prefix"] = name_prefix
+        cleaned_data["factor_code"] = self._resolve_unique_factor_code(name_prefix)
+        return cleaned_data
 
 
 @admin.register(OdooDeployment)
@@ -384,6 +408,7 @@ class OdooSaleFactorProductRuleInline(admin.TabularInline):
 @admin.register(OdooSaleOrderTemplate)
 class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
     changelist_actions = ["setup_templates"]
+    remote_selection_limit = 200
     list_display = (
         "name",
         "default_new_customer_language",
@@ -472,7 +497,7 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                 [[]],
                 fields=["id", "name"],
                 order="name asc",
-                limit=0,
+                limit=self.remote_selection_limit,
             )
             return [
                 (str(row["id"]), row.get("name") or f"Template {row['id']}")
@@ -486,7 +511,7 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                 [[]],
                 fields=["id", "name"],
                 order="name asc",
-                limit=0,
+                limit=self.remote_selection_limit,
             )
             return [
                 (str(row["id"]), row.get("name") or f"Product {row['id']}")
@@ -499,7 +524,7 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
             [[("active", "=", True), ("share", "=", False)]],
             fields=["id", "name", "email", "login", "partner_id"],
             order="name asc",
-            limit=0,
+            limit=self.remote_selection_limit,
         )
         return [
             (
@@ -536,15 +561,26 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
 
     def _resolve_unique_username(self, base_username: str, odoo_uid: int) -> str:
         user_model = get_user_model()
-        if not user_model.all_objects.filter(username=base_username).exists():
+        user_manager = getattr(user_model, "all_objects", user_model.objects)
+        if not user_manager.filter(username=base_username).exists():
             return base_username
         suffix = f"-odoo-{odoo_uid}"
         candidate = f"{base_username}{suffix}"
         counter = 2
-        while user_model.all_objects.filter(username=candidate).exists():
+        while user_manager.filter(username=candidate).exists():
             candidate = f"{base_username}{suffix}-{counter}"
             counter += 1
         return candidate
+
+    @staticmethod
+    def _extract_partner_id(source_row: dict[str, object]) -> int | None:
+        partner_data = source_row.get("partner_id")
+        if not isinstance(partner_data, (list, tuple)) or not partner_data:
+            return None
+        try:
+            return int(partner_data[0])
+        except (TypeError, ValueError):
+            return None
 
     def _import_template(self, source_row: dict[str, object]) -> tuple[OdooSaleOrderTemplate, bool]:
         source_id = int(source_row["id"])
@@ -587,18 +623,20 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         login = str(source_row.get("login") or "").strip()
         email = str(source_row.get("email") or "").strip()
         username_base = login or email or f"odoo-user-{source_id}"
+        partner_id = self._extract_partner_id(source_row)
         if existing:
-            existing.username = login or existing.username
+            desired_username = login or existing.username
+            user = existing.user
+            if user is not None:
+                if user.username != desired_username:
+                    desired_username = self._resolve_unique_username(desired_username, source_id)
+                user.username = desired_username
+                user.email = email
+                user.save(update_fields=["username", "email"])
             existing.email = email
             existing.name = str(source_row.get("name") or existing.name)
-            existing.partner_id = None
-            partner_id = source_row.get("partner_id")
-            if isinstance(partner_id, (list, tuple)) and partner_id:
-                try:
-                    existing.partner_id = int(partner_id[0])
-                except (TypeError, ValueError):
-                    existing.partner_id = None
-            existing.save(update_fields=["username", "email", "name", "partner_id"])
+            existing.partner_id = partner_id
+            existing.save(update_fields=["email", "name", "partner_id"])
             return existing, False
 
         user_model = get_user_model()
@@ -606,13 +644,6 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         user = user_model.objects.create(username=username, email=email)
         user.set_unusable_password()
         user.save(update_fields=["password"])
-        partner_data = source_row.get("partner_id")
-        partner_id = None
-        if isinstance(partner_data, (list, tuple)) and partner_data:
-            try:
-                partner_id = int(partner_data[0])
-            except (TypeError, ValueError):
-                partner_id = None
 
         employee = OdooEmployee.objects.create(
             user=user,
@@ -661,6 +692,8 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
     def setup_templates_view(self, request):
         if not self.has_change_permission(request):
             raise PermissionDenied
+        if not self.has_add_permission(request):
+            raise PermissionDenied
 
         profile = self._verified_profile_or_redirect(request)
         if profile is None:
@@ -672,7 +705,15 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         if source_type not in dict(OdooTemplateSetupImportForm.SOURCE_CHOICES):
             source_type = OdooTemplateSetupImportForm.SOURCE_TEMPLATES
 
-        options = self._remote_options(profile, source_type)
+        try:
+            options = self._remote_options(profile, source_type)
+        except Exception:
+            self.message_user(
+                request,
+                _("Could not fetch Odoo records right now. Please verify your Odoo connection."),
+                level=messages.ERROR,
+            )
+            options = []
         form = OdooTemplateSetupImportForm(
             request.POST or None,
             initial={"source_type": source_type},
@@ -680,11 +721,21 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         )
 
         if request.method == "POST" and form.is_valid():
-            created, updated = self._import_source_selection(
-                profile,
-                source_type=form.cleaned_data["source_type"],
-                selected_ids=form.cleaned_data["selected_ids"],
-            )
+            try:
+                created, updated = self._import_source_selection(
+                    profile,
+                    source_type=form.cleaned_data["source_type"],
+                    selected_ids=form.cleaned_data["selected_ids"],
+                )
+            except Exception:
+                self.message_user(
+                    request,
+                    _("Import failed due to an Odoo communication error. Please try again."),
+                    level=messages.ERROR,
+                )
+                return HttpResponseRedirect(
+                    f"{self._setup_templates_url()}?source_type={form.cleaned_data['source_type']}"
+                )
             self.message_user(
                 request,
                 _("Imported from Odoo. Created: %(created)s | Updated: %(updated)s")
@@ -714,44 +765,46 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
     def setup_templates_create_view(self, request):
         if not self.has_change_permission(request):
             raise PermissionDenied
+        if not self.has_add_permission(request):
+            raise PermissionDenied
 
         form = OdooTemplateSetupCreateForm(request.POST or None)
         if request.method == "POST" and form.is_valid():
             templates = list(form.cleaned_data["templates"])
             products = list(form.cleaned_data["products"])
             employees = list(form.cleaned_data["employees"])
-            name_prefix = form.cleaned_data["name_prefix"].strip() or "Setup Template"
+            name_prefix = form.cleaned_data["name_prefix"]
+            factor_code = form.cleaned_data["factor_code"]
             primary_employee = employees[0] if employees else None
 
-            created_templates: list[OdooSaleOrderTemplate] = []
-            for source_template in templates:
-                copied = OdooSaleOrderTemplate.objects.create(
-                    name=f"{name_prefix}: {source_template.name}",
-                    odoo_template=source_template.odoo_template,
-                    note_template=source_template.note_template,
-                    resolve_note_sigils=source_template.resolve_note_sigils,
-                    default_new_customer_language=source_template.default_new_customer_language,
-                    fallback_new_customer_language=source_template.fallback_new_customer_language,
-                    salesperson=primary_employee,
-                )
-                created_templates.append(copied)
-
-            factor = None
-            created_rules = 0
-            if created_templates:
-                factor_name = f"{name_prefix} Products"
-                factor = OdooSaleFactor.objects.create(
-                    name=factor_name,
-                    code=slugify(factor_name)[:64] or "setup-template-products",
-                )
-                factor.templates.set(created_templates)
-                for product in products:
-                    OdooSaleFactorProductRule.objects.create(
-                        factor=factor,
-                        name=product.name,
-                        odoo_product=product.odoo_product,
+            with transaction.atomic():
+                created_templates: list[OdooSaleOrderTemplate] = []
+                for source_template in templates:
+                    copied = OdooSaleOrderTemplate.objects.create(
+                        name=f"{name_prefix}: {source_template.name}",
+                        odoo_template=source_template.odoo_template,
+                        note_template=source_template.note_template,
+                        resolve_note_sigils=source_template.resolve_note_sigils,
+                        default_new_customer_language=source_template.default_new_customer_language,
+                        fallback_new_customer_language=source_template.fallback_new_customer_language,
+                        salesperson=primary_employee,
                     )
-                    created_rules += 1
+                    created_templates.append(copied)
+
+                created_rules = 0
+                if created_templates:
+                    factor = OdooSaleFactor.objects.create(
+                        name=f"{name_prefix} Products",
+                        code=factor_code,
+                    )
+                    factor.templates.set(created_templates)
+                    for product in products:
+                        OdooSaleFactorProductRule.objects.create(
+                            factor=factor,
+                            name=product.name,
+                            odoo_product=product.odoo_product,
+                        )
+                        created_rules += 1
 
             self.message_user(
                 request,
