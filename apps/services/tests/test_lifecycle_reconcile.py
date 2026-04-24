@@ -8,11 +8,11 @@ import pytest
 from django.core.management import call_command
 from django.test import override_settings
 
-from gate_markers import gate
+from apps.nodes.feature_detection import node_feature_detection_registry
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.services.lifecycle import write_lifecycle_config
 from apps.services.models import LifecycleService
-
+from gate_markers import gate
 
 pytestmark = [gate.upgrade]
 
@@ -28,7 +28,9 @@ def test_write_lifecycle_config_reconciles_camera_lock_from_feature_assignment(
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
     (lock_dir / "service.lck").write_text("suite", encoding="utf-8")
-    monkeypatch.setattr(Node, "_detect_auto_feature", lambda self, slug, **kwargs: False)
+    monkeypatch.setattr(
+        node_feature_detection_registry, "detect", lambda slug, **kwargs: False
+    )
 
     node = Node.objects.create(
         hostname="suite-node",
@@ -66,7 +68,9 @@ def test_write_lifecycle_config_reconciles_camera_lock_from_feature_assignment(
 
 @pytest.mark.django_db
 @override_settings(BASE_DIR="/tmp")
-def test_reconcile_node_features_services_command_uses_auto_detection(monkeypatch, tmp_path, settings):
+def test_reconcile_node_features_services_command_uses_auto_detection(
+    monkeypatch, tmp_path, settings
+):
     """Reconciliation command should refresh auto features before lifecycle writes."""
 
     settings.BASE_DIR = tmp_path
@@ -86,9 +90,9 @@ def test_reconcile_node_features_services_command_uses_auto_detection(monkeypatc
     )
 
     monkeypatch.setattr(
-        Node,
-        "_detect_auto_feature",
-        lambda self, slug, **kwargs: slug == "video-cam",
+        node_feature_detection_registry,
+        "detect",
+        lambda slug, **kwargs: slug == "video-cam",
     )
 
     Node.objects.create(
@@ -103,5 +107,7 @@ def test_reconcile_node_features_services_command_uses_auto_detection(monkeypatc
     call_command("reconcile_node_features_services")
 
     assert (lock_dir / "camera-service.lck").exists()
-    payload = json.loads((lock_dir / "lifecycle_services.json").read_text(encoding="utf-8"))
+    payload = json.loads(
+        (lock_dir / "lifecycle_services.json").read_text(encoding="utf-8")
+    )
     assert "camera-suite.service" in payload["systemd_units"]
