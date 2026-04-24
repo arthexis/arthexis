@@ -108,8 +108,12 @@
     const csrfToken = form.querySelector('input[name="csrfmiddlewaretoken"]');
     payload.set('q', query);
     payload.set('limit', '5');
+    const headers = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-Requested-With': 'XMLHttpRequest',
+    };
     if (csrfToken) {
-      payload.set('csrfmiddlewaretoken', csrfToken.value);
+      headers['X-CSRFToken'] = csrfToken.value;
     }
 
     const isCurrentAutocompleteRequest = () =>
@@ -121,10 +125,7 @@
     try {
       const response = await fetch(autocompleteUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'X-Requested-With': 'XMLHttpRequest',
-        },
+        headers,
         body: payload,
         signal: abortController.signal,
       });
