@@ -35,7 +35,7 @@ Do not execute arbitrary shell strings. Preserve administrator power through exp
 - `BluetoothDevice`: trusted device address, alias, class/profile metadata, pairing state, and last seen timestamp.
 - `BluetoothButtonEvent`: raw event payload, normalized event key, source path, debounce key, status, and handling result.
 - `BluetoothCommandProfile`: device/event mapping to an approved suite action or command.
-- `BluetoothAssistantSession`: optional push-to-talk session metadata, linked audio sample, transcript, parsed command, and result.
+- `BluetoothAssistantSession`: optional push-to-talk session metadata, a link to file-backed audio records such as `AudioSample` or `ContentSample`, transcript, parsed command, and result. Do not store audio blobs directly in the Bluetooth app tables.
 
 ## Plan Tasks
 
@@ -43,7 +43,7 @@ Do not execute arbitrary shell strings. Preserve administrator power through exp
 
 * Intent: Create the `bluetooth` Django app and baseline domain models for adapters, devices, button events, command profiles, and assistant sessions.
 * Scope: `apps/bluetooth/`, `apps/bluetooth/models.py`, `apps/bluetooth/admin.py`, `apps/bluetooth/manifest.py`, `apps/bluetooth/migrations/`, `apps/bluetooth/tests/`.
-* Constraints: Use `.venv/bin/python manage.py create app bluetooth`; keep the app web-capable because it needs admin and ingest routes; create admin configuration using suite patterns; keep model fields auditable and avoid storing secret button-ingest credentials in plaintext.
+* Constraints: Use the repository-specific `.venv/bin/python manage.py create app bluetooth` scaffold command; keep the app web-capable because it needs admin and ingest routes; create admin configuration using suite patterns; keep model fields auditable and avoid storing secret button-ingest credentials in plaintext.
 * Acceptance Criteria: The app loads through its manifest, models are registered in admin, migrations exist, and smoke tests prove the app can be imported and the core models can be created.
 * Verification Commands: `.venv/bin/python manage.py makemigrations bluetooth --check --dry-run`; `.venv/bin/python manage.py migrations check`; `.venv/bin/python manage.py test run -- apps.bluetooth`.
 * Out of Scope: BlueZ integration, systemd unit installation, speech transcription, and command dispatch execution.
@@ -81,9 +81,9 @@ Do not execute arbitrary shell strings. Preserve administrator power through exp
 ### Task BT-4: Wire Lifecycle Service and Node Feature
 
 * Intent: Make the Bluetooth assistant sidecar manageable through existing Arthexis lifecycle and node-feature surfaces.
-* Scope: `apps/nodes/fixtures/node_features__nodefeature_bluetooth_assistant.json`, `apps/nodes/feature_registry.py`, `apps/bluetooth/node_features.py`, `apps/services/`, `scripts/helpers/systemd_locks.sh`, `configure.sh`, `install.sh`, `scripts/rename_service`, `docs/suite-services-report.md`, `docs/services/bluetooth-assistant-service.md`, tests under `apps/services/tests/`, `apps/nodes/tests/`, and `apps/bluetooth/tests/`.
+* Scope: `apps/nodes/fixtures/node_features__nodefeature_bluetooth_assistant.json`, `apps/services/fixtures/lifecycle_services__lifecycleservice_bluetooth_assistant.json`, `apps/nodes/feature_registry.py`, `apps/bluetooth/node_features.py`, `apps/nodes/models/features.py`, `apps/services/`, `scripts/helpers/systemd_locks.sh`, `configure.sh`, `install.sh`, `scripts/rename_service`, `docs/suite-services-report.md`, `docs/services/bluetooth-assistant-service.md`, tests under `apps/services/tests/`, `apps/nodes/tests/`, and `apps/bluetooth/tests/`.
 * Constraints: Use a lock file such as `.locks/bluetooth-service.lck`; register `bluetooth-{service}.service`; list the service in Suite Services Report even when not configured; keep install/configure toggles symmetrical with RFID and camera service toggles.
-* Acceptance Criteria: Operators can enable and disable the sidecar through install/configure flows; lifecycle reconciliation writes the correct lock and unit records; service rename preserves Bluetooth companion units; docs explain enablement, learn mode, troubleshooting, and rollback.
+* Acceptance Criteria: Operators can enable and disable the sidecar through install/configure flows; lifecycle reconciliation writes the correct lock and unit records; node feature defaults include the Bluetooth assistant slug where appropriate; service rename preserves Bluetooth companion units; docs explain enablement, learn mode, troubleshooting, and rollback.
 * Verification Commands: `.venv/bin/python manage.py migrations check`; `.venv/bin/python manage.py test run -- apps.bluetooth apps.nodes apps.services`; shellcheck-equivalent existing script validation if available.
 * Out of Scope: Implementing command dispatch internals beyond service availability.
 * Depends on: BT-2, BT-3
