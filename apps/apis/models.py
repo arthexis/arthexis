@@ -124,8 +124,8 @@ class ServiceToken(models.Model):
     token_prefix = models.CharField(max_length=24, db_index=True)
     secret_hash = models.CharField(max_length=255)
     scopes = models.JSONField(default=list, blank=True)
-    expires_at = models.DateTimeField()
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    expires_at = models.DateTimeField(db_index=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE, db_index=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -289,8 +289,8 @@ class GeneralServiceToken(models.Model):
         related_name="general_service_tokens",
         help_text="Optional SG filter. Empty means all SGs the user can access.",
     )
-    expires_at = models.DateTimeField()
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    expires_at = models.DateTimeField(db_index=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE, db_index=True)
     retired_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     revoked_reason = models.CharField(max_length=300, blank=True, default="")
@@ -343,17 +343,23 @@ class GeneralServiceToken(models.Model):
         parts = token.split(".")
         if len(parts) != 3:
             return None
-        signing_input = f"{parts[0]}.{parts[1]}".encode("utf-8")
-        expected_signature = hmac.new(
-            settings.SECRET_KEY.encode("utf-8"),
-            signing_input,
-            hashlib.sha256,
-        ).digest()
-        provided_signature = cls._urlsafe_decode(parts[2])
+        try:
+            signing_input = f"{parts[0]}.{parts[1]}".encode("utf-8")
+            expected_signature = hmac.new(
+                settings.SECRET_KEY.encode("utf-8"),
+                signing_input,
+                hashlib.sha256,
+            ).digest()
+            provided_signature = cls._urlsafe_decode(parts[2])
+        except ValueError:
+            return None
         if not hmac.compare_digest(expected_signature, provided_signature):
             return None
-        payload_bytes = cls._urlsafe_decode(parts[1])
-        payload = json.loads(payload_bytes.decode("utf-8"))
+        try:
+            payload_bytes = cls._urlsafe_decode(parts[1])
+            payload = json.loads(payload_bytes.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
         if not isinstance(payload, dict):
             return None
         return payload
@@ -404,14 +410,35 @@ class GeneralServiceToken(models.Model):
     @classmethod
     def retire_expired_tokens(cls) -> int:
         now = timezone.now()
+        expired_ids = list(
+            cls.objects.filter(
+                status=cls.Status.ACTIVE,
+                expires_at__lte=now,
+            ).values_list("id", flat=True)
+        )
         updated = cls.objects.filter(
+            id__in=expired_ids,
             status=cls.Status.ACTIVE,
-            expires_at__lte=now,
         ).update(
             status=cls.Status.RETIRED,
             retired_at=now,
             updated_at=now,
         )
+        if updated:
+            retired_ids = set(
+                cls.objects.filter(id__in=expired_ids, status=cls.Status.RETIRED, retired_at=now).values_list("id", flat=True)
+            )
+            events = [
+                GeneralServiceTokenEvent(
+                    token_id=token_id,
+                    event_type=GeneralServiceTokenEvent.EventType.RETIRED,
+                    actor=None,
+                    details={"reason": "expired"},
+                )
+                for token_id in expired_ids
+                if token_id in retired_ids
+            ]
+            GeneralServiceTokenEvent.objects.bulk_create(events)
         return int(updated)
 
     @classmethod

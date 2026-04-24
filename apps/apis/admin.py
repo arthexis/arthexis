@@ -94,7 +94,14 @@ class GeneralServiceTokenCreateForm(forms.Form):
             else:
                 cleaned["user"] = user
         group_ids_raw = cleaned.get("security_group_ids") or ""
-        group_ids = sorted({int(part.strip()) for part in group_ids_raw.split(",") if part.strip()})
+        try:
+            group_ids = sorted({int(part.strip()) for part in group_ids_raw.split(",") if part.strip()})
+        except ValueError:
+            self.add_error(
+                "security_group_ids",
+                "Security Group ids must be a comma-separated list of integers.",
+            )
+            group_ids = []
         if group_ids:
             groups = list(SecurityGroup.objects.filter(id__in=group_ids))
             found_ids = {group.id for group in groups}

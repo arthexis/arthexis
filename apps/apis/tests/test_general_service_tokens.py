@@ -1,12 +1,17 @@
 """Tests for manual JWT-backed general service token management."""
 
+import hashlib
+import hmac
+import json
 from datetime import timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.core.management import call_command
 from django.utils import timezone
 
+from apps.apis.admin import GeneralServiceTokenCreateForm
 from apps.apis.models import GeneralServiceToken, GeneralServiceTokenEvent
 from apps.groups.models import SecurityGroup
 
@@ -116,3 +121,58 @@ def test_retire_general_service_tokens_command_marks_expired_tokens_retired():
 
     expired.refresh_from_db()
     assert expired.status == GeneralServiceToken.Status.RETIRED
+    assert GeneralServiceTokenEvent.objects.filter(
+        token=expired,
+        event_type=GeneralServiceTokenEvent.EventType.RETIRED,
+        details__reason="expired",
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_general_service_token_create_form_reports_non_integer_security_group_ids():
+    user_model = get_user_model()
+    user = user_model.objects.create_user(username="token-user-5", password="pass12345")
+    form = GeneralServiceTokenCreateForm(
+        data={
+            "name": "Bad SG ids",
+            "user_id": user.id,
+            "expires_in_days": 2,
+            "security_group_ids": "1,abc,2",
+            "custom_claims": {},
+        }
+    )
+
+    assert form.is_valid() is False
+    assert "security_group_ids" in form.errors
+
+
+@pytest.mark.django_db
+def test_authentication_handles_malformed_jwt_payload():
+    user_model = get_user_model()
+    actor = user_model.objects.create_user(username="issuer-6", password="pass12345", is_staff=True)
+    target = user_model.objects.create_user(username="token-user-6", password="pass12345")
+    token, _ = GeneralServiceToken.issue(
+        actor=actor,
+        user=target,
+        name="Malformed payload",
+        expires_at=timezone.now() + timedelta(hours=1),
+    )
+    header = GeneralServiceToken._urlsafe_b64(json.dumps({"alg": "HS256", "typ": "JWT"}).encode("utf-8"))
+    malformed_payload = GeneralServiceToken._urlsafe_b64(b"\xff")
+    signing_input = f"{header}.{malformed_payload}".encode("utf-8")
+    signature = GeneralServiceToken._urlsafe_b64(
+        hmac.new(
+            key=settings.SECRET_KEY.encode("utf-8"),
+            msg=signing_input,
+            digestmod="sha256",
+        ).digest()
+    )
+    bad_payload_jwt = f"{header}.{malformed_payload}.{signature}"
+    token.token_hash = hashlib.sha256(bad_payload_jwt.encode("utf-8")).hexdigest()
+    token.save(update_fields=["token_hash", "updated_at"])
+
+    authenticated, payload, error_code = GeneralServiceToken.authenticate_jwt(bad_payload_jwt)
+
+    assert authenticated is None
+    assert payload is None
+    assert error_code == "token_signature_invalid"
