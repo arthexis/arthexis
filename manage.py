@@ -405,8 +405,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         _ensure_runserver_default_bind(args)
         if is_debug_session:
             os.environ["DEBUG"] = "1"
-        else:
-            os.environ.pop("DEBUG", None)
         if "--noreload" not in args:
             args.insert(1, "--noreload")
     try:
