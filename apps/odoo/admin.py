@@ -104,10 +104,28 @@ class OdooTemplateSetupCreateForm(forms.Form):
         self.fields["products"].queryset = OdooProduct.objects.order_by("name")
         self.fields["employees"].queryset = OdooEmployee.objects.order_by("username")
 
+    @staticmethod
+    def _has_valid_odoo_product(product: OdooProduct) -> bool:
+        payload = product.odoo_product or {}
+        if not isinstance(payload, dict):
+            return False
+        value = payload.get("id")
+        try:
+            int(value)
+        except (TypeError, ValueError):
+            return False
+        return True
+
     def clean(self):
         cleaned_data = super().clean()
         name_prefix = (cleaned_data.get("name_prefix") or "").strip() or "Setup Template"
         cleaned_data["name_prefix"] = name_prefix
+        products = cleaned_data.get("products") or []
+        if any(not self._has_valid_odoo_product(product) for product in products):
+            self.add_error(
+                "products",
+                _("Select only products imported from Odoo before creating product rules."),
+            )
         return cleaned_data
 
 
@@ -638,8 +656,12 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
             ).filter(
                 Q(odoo_template__host__isnull=True) | Q(odoo_template__database__isnull=True)
             ).first()
+        name_max_length = OdooSaleOrderTemplate._meta.get_field("name").max_length or 255
+        bounded_name = str(source_row.get("name") or f"Odoo Template {source_id}")[
+            :name_max_length
+        ]
         defaults = {
-            "name": str(source_row.get("name") or f"Odoo Template {source_id}"),
+            "name": bounded_name,
             "odoo_template": {
                 "id": source_id,
                 "name": source_row.get("name") or f"Template {source_id}",
@@ -714,19 +736,20 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                     user_updated_fields.append("email")
                 if user_updated_fields:
                     user.save(update_fields=user_updated_fields)
-            existing_updated_fields: list[str] = []
+            existing_updates = {}
+            if existing.username != desired_username:
+                existing_updates["username"] = desired_username
             if email and existing.email != email:
-                existing.email = email
-                existing_updated_fields.append("email")
+                existing_updates["email"] = email
             name = str(source_row.get("name") or existing.name)
             if existing.name != name:
-                existing.name = name
-                existing_updated_fields.append("name")
+                existing_updates["name"] = name
             if existing.partner_id != partner_id:
-                existing.partner_id = partner_id
-                existing_updated_fields.append("partner_id")
-            if existing_updated_fields:
-                existing.save(update_fields=existing_updated_fields)
+                existing_updates["partner_id"] = partner_id
+            if existing_updates:
+                OdooEmployee.objects.filter(pk=existing.pk).update(**existing_updates)
+                for key, value in existing_updates.items():
+                    setattr(existing, key, value)
             return existing, False
 
         username = self._resolve_unique_username(username_base, source_id)

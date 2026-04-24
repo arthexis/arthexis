@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from django.contrib import admin
 from django.contrib.auth.models import Permission
+from django.contrib.messages import get_messages
 from django.db import IntegrityError
 from django.urls import reverse
 from django.utils import timezone
@@ -209,6 +210,51 @@ def test_setup_templates_step_one_truncates_imported_product_name(
 
 
 @pytest.mark.django_db
+def test_setup_templates_step_one_truncates_imported_template_name(
+    admin_client, admin_user, monkeypatch
+):
+    OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoo",
+        username="admin",
+        password="secret",
+        odoo_uid=1,
+        verified_on=timezone.now(),
+    )
+    template_name_max = OdooSaleOrderTemplate._meta.get_field("name").max_length or 255
+    long_name = "T" * (template_name_max + 20)
+
+    def execute(model, method, *args, **kwargs):
+        assert method == "search_read"
+        if model != "sale.order.template":
+            raise AssertionError(f"Unexpected model: {model}")
+        fields = kwargs.get("fields") or []
+        if fields == ["id", "name"]:
+            return [{"id": 801, "name": long_name}]
+        return [{"id": 801, "name": long_name, "note": "Remote note"}]
+
+    monkeypatch.setattr(
+        OdooEmployee,
+        "execute",
+        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+    )
+
+    response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates"),
+        {
+            "source_type": "templates",
+            "selected_ids": ["801"],
+        },
+    )
+
+    assert response.status_code == 302
+    created = OdooSaleOrderTemplate.objects.get(odoo_template__id=801)
+    assert len(created.name) == template_name_max
+    assert created.name == long_name[:template_name_max]
+
+
+@pytest.mark.django_db
 def test_setup_templates_step_two_generates_unique_factor_code(admin_client):
     source_template = OdooSaleOrderTemplate.objects.create(
         name="Base",
@@ -278,16 +324,10 @@ def test_setup_templates_step_one_employee_update_syncs_user(
         assert method == "search_read"
         domain = args[0] if args else kwargs.get("domain")
         if model == "res.users":
-            if domain == [[("active", "=", True), ("share", "=", False)]]:
-                return [
-                    {
-                        "id": 55,
-                        "name": "Updated User",
-                        "email": "new@example.com",
-                        "login": "new-login",
-                        "partner_id": [301, "Partner"],
-                    }
-                ]
+            assert domain in (
+                [[("active", "=", True), ("share", "=", False)]],
+                [[("id", "=", 55)]],
+            )
             return [
                 {
                     "id": 55,
@@ -323,10 +363,9 @@ def test_setup_templates_step_one_employee_update_syncs_user(
     )
     updated_user = updated_employee.user
     assert updated_user is not None
-    assert updated_user.username.startswith("new-login")
-    assert updated_user.username != "legacy-login"
+    assert updated_user.username == "new-login"
     assert updated_user.email == "new@example.com"
-    assert updated_employee.username == "legacy-login"
+    assert updated_employee.username == "new-login"
     assert updated_employee.email == "new@example.com"
     assert updated_employee.partner_id == 301
 
@@ -355,16 +394,10 @@ def test_setup_templates_step_one_employee_import_truncates_long_username(
         if model != "res.users":
             raise AssertionError(f"Unexpected model: {model}")
         domain = args[0] if args else kwargs.get("domain")
-        if domain == [[("active", "=", True), ("share", "=", False)]]:
-            return [
-                {
-                    "id": 75,
-                    "name": "Long Username",
-                    "email": "long@example.com",
-                    "login": long_login,
-                    "partner_id": [401, "Partner"],
-                }
-            ]
+        assert domain in (
+            [[("active", "=", True), ("share", "=", False)]],
+            [[("id", "=", 75)]],
+        )
         return [
             {
                 "id": 75,
@@ -476,8 +509,11 @@ def test_setup_templates_step_one_employee_import_requires_auth_user_permissions
         {"source_type": "employees", "selected_ids": ["88"]},
     )
 
-    assert response.status_code == 200
-    assert "do not have permission to synchronize authentication users" in response.content.decode()
+    response_messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert any(
+        "do not have permission to synchronize authentication users" in message
+        for message in response_messages
+    )
     assert (
         OdooEmployee.objects.filter(host=profile.host, database=profile.database, odoo_uid=88).count()
         == 0
@@ -503,3 +539,32 @@ def test_setup_templates_step_two_rejects_overlong_cloned_template_name(admin_cl
 
     assert response.status_code == 302
     assert OdooSaleOrderTemplate.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_setup_templates_step_two_rejects_products_without_odoo_payload(admin_client):
+    source_template = OdooSaleOrderTemplate.objects.create(
+        name="Base",
+        odoo_template={"id": 90, "name": "Base"},
+    )
+    product = OdooProduct.objects.create(
+        name="Local Only",
+        renewal_period=30,
+        odoo_product=None,
+    )
+
+    response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates_create"),
+        {
+            "name_prefix": "Setup",
+            "templates": [str(source_template.pk)],
+            "products": [str(product.pk)],
+            "employees": [],
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Select only products imported from Odoo" in response.content.decode()
+    assert OdooSaleOrderTemplate.objects.filter(name="Setup: Base").count() == 0
+    assert OdooSaleFactor.objects.count() == 0
+    assert OdooSaleFactorProductRule.objects.count() == 0
