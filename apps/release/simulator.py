@@ -365,15 +365,13 @@ def _validate_version_gate(
             "validate_version_gate",
             f"Failed to parse pyproject file: {exc}",
         ) from exc
-    dynamic_version_files = (
+    dynamic_version_files = _normalize_dynamic_version_files(
         pyproject_data.get("tool", {})
         .get("setuptools", {})
         .get("dynamic", {})
         .get("version", {})
-        .get("file", [])
+        .get("file", []),
     )
-    if isinstance(dynamic_version_files, str):
-        dynamic_version_files = [dynamic_version_files]
 
     if dynamic_version_files:
         dynamic_path = _resolve_child_path(
@@ -394,6 +392,17 @@ def _validate_version_gate(
                 f"VERSION={expected_version!r}; {dynamic_path}={dynamic_version!r}.",
             )
     return expected_version
+
+
+def _normalize_dynamic_version_files(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (list, tuple)):
+        return [str(item) for item in value]
+    raise ReleaseSimulationError(
+        "validate_version_gate",
+        "setuptools dynamic version file metadata must be a string or list.",
+    )
 
 
 def _preflight_pypi(
