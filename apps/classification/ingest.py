@@ -9,21 +9,20 @@ from django.core.files.base import ContentFile
 
 from apps.media.utils import ensure_media_bucket
 
-SUPPORTED_IMAGE_PATTERNS = "\n".join(
-    [
-        "*.jpg",
-        "*.jpeg",
-        "*.png",
-        "*.webp",
-        "*.gif",
-        "*.bmp",
-        "*.tif",
-        "*.tiff",
-        "*.avif",
-        "*.heic",
-        "*.heif",
-    ]
+SUPPORTED_IMAGE_EXTENSIONS = (
+    ".avif",
+    ".bmp",
+    ".gif",
+    ".heic",
+    ".heif",
+    ".jpeg",
+    ".jpg",
+    ".png",
+    ".tif",
+    ".tiff",
+    ".webp",
 )
+SUPPORTED_IMAGE_PATTERNS = "\n".join(f"*{extension}" for extension in SUPPORTED_IMAGE_EXTENSIONS)
 
 
 def guess_image_content_type(path: Path, *, default: str = "image/png") -> str:

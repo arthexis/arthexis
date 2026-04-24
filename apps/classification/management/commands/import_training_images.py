@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,6 +11,7 @@ from django.utils.text import slugify
 from PIL import Image, UnidentifiedImageError
 
 from apps.classification.ingest import (
+    SUPPORTED_IMAGE_EXTENSIONS,
     SUPPORTED_IMAGE_PATTERNS,
     create_media_file_from_path,
 )
@@ -18,19 +19,7 @@ from apps.classification.models import ClassificationTag, TrainingSample
 from apps.media.models import MediaFile
 from apps.media.utils import ensure_media_bucket
 
-IMAGE_EXTENSIONS = {
-    ".avif",
-    ".bmp",
-    ".gif",
-    ".heic",
-    ".heif",
-    ".jpeg",
-    ".jpg",
-    ".png",
-    ".tif",
-    ".tiff",
-    ".webp",
-}
+IMAGE_EXTENSIONS = set(SUPPORTED_IMAGE_EXTENSIONS)
 
 
 @dataclass
@@ -113,7 +102,8 @@ class Command(BaseCommand):
 
         stats = ImportStats()
         explicit_tag = self._explicit_tag(options.get("tag"))
-        for path in sorted(root.rglob("*")):
+        self._tag_cache: dict[str, ClassificationTag] = {}
+        for path in root.rglob("*"):
             if not path.is_file():
                 continue
             stats.scanned += 1
@@ -226,16 +216,22 @@ class Command(BaseCommand):
     ) -> tuple[ClassificationTag, bool]:
         if explicit_tag is not None:
             slug, name = explicit_tag
-            return ClassificationTag.objects.get_or_create(slug=slug, defaults={"name": name})
-
-        relative = path.relative_to(root)
-        if label_source == "top-directory" and len(relative.parts) > 1:
-            label = relative.parts[0]
         else:
-            label = path.parent.name if path.parent != root else root.name
-        name = label.replace("-", " ").replace("_", " ").strip().title() or "Unlabeled"
-        slug = slugify(label) or "unlabeled"
-        return ClassificationTag.objects.get_or_create(slug=slug, defaults={"name": name})
+            relative = path.relative_to(root)
+            if label_source == "top-directory" and len(relative.parts) > 1:
+                label = relative.parts[0]
+            else:
+                label = path.parent.name if path.parent != root else root.name
+            name = label.replace("-", " ").replace("_", " ").strip().title() or "Unlabeled"
+            slug = slugify(label) or "unlabeled"
+
+        cached_tag = self._tag_cache.get(slug)
+        if cached_tag is not None:
+            return cached_tag, False
+
+        tag, tag_created = ClassificationTag.objects.get_or_create(slug=slug, defaults={"name": name})
+        self._tag_cache[slug] = tag
+        return tag, tag_created
 
     def _is_readable_image(self, path: Path) -> bool:
         try:
@@ -248,7 +244,7 @@ class Command(BaseCommand):
     def _compact_value(self, value: str, max_length: int) -> str:
         if len(value) <= max_length:
             return value
-        digest = hashlib.sha1(value.encode("utf-8")).hexdigest()[:12]
+        digest = f"{zlib.crc32(value.encode('utf-8')):08x}"
         suffix_width = max(max_length - len(digest) - 1, 1)
         return f"{digest}:{value[-suffix_width:]}"
 

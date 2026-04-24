@@ -7,6 +7,13 @@ import pytest
 from django.core.management import call_command
 from PIL import Image
 
+from apps.classification.ingest import (
+    SUPPORTED_IMAGE_EXTENSIONS,
+    SUPPORTED_IMAGE_PATTERNS,
+)
+from apps.classification.management.commands.import_training_images import (
+    IMAGE_EXTENSIONS,
+)
 from apps.classification.models import ClassificationTag, TrainingSample
 from apps.media.models import MediaFile
 
@@ -17,6 +24,13 @@ def _write_image(path: Path, color: tuple[int, int, int]) -> None:
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     path.write_bytes(buffer.getvalue())
+
+
+def test_supported_image_patterns_are_derived_from_extensions():
+    assert IMAGE_EXTENSIONS == set(SUPPORTED_IMAGE_EXTENSIONS)
+    assert SUPPORTED_IMAGE_PATTERNS.splitlines() == [
+        f"*{extension}" for extension in SUPPORTED_IMAGE_EXTENSIONS
+    ]
 
 
 @pytest.mark.django_db
@@ -59,3 +73,24 @@ def test_import_training_images_dry_run_does_not_create_records(tmp_path):
     assert "dry-run complete" in stdout.getvalue()
     assert MediaFile.objects.count() == 0
     assert TrainingSample.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_import_training_images_caches_repeated_tag_lookups(tmp_path, monkeypatch):
+    _write_image(tmp_path / "same-label" / "first.png", (20, 200, 20))
+    _write_image(tmp_path / "same-label" / "second.png", (20, 120, 20))
+
+    original_get_or_create = ClassificationTag.objects.get_or_create
+    calls = []
+
+    def counting_get_or_create(*args, **kwargs):
+        calls.append((args, kwargs))
+        return original_get_or_create(*args, **kwargs)
+
+    monkeypatch.setattr(ClassificationTag.objects, "get_or_create", counting_get_or_create)
+
+    call_command("import_training_images", str(tmp_path))
+
+    assert len(calls) == 1
+    assert ClassificationTag.objects.get().slug == "same-label"
+    assert TrainingSample.objects.count() == 2
