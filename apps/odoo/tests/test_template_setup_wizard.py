@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import pytest
+from django.contrib import admin
+from django.db import IntegrityError
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.odoo.admin import OdooSaleOrderTemplateAdmin
 from apps.odoo.models import (
     OdooEmployee,
     OdooProduct,
@@ -209,3 +212,105 @@ def test_setup_templates_step_one_employee_update_syncs_user(
     assert updated_employee.username == "legacy-login"
     assert updated_employee.email == "new@example.com"
     assert updated_employee.partner_id == 301
+
+
+@pytest.mark.django_db
+def test_setup_templates_step_one_employee_import_truncates_long_username(
+    admin_client,
+    admin_user,
+    django_user_model,
+    monkeypatch,
+):
+    OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoo",
+        username="profile-admin",
+        password="secret",
+        odoo_uid=1,
+        verified_on=timezone.now(),
+    )
+    username_field = django_user_model._meta.get_field(django_user_model.USERNAME_FIELD)
+    long_login = "x" * (username_field.max_length + 25)
+
+    def execute(model, method, *args, **kwargs):
+        assert method == "search_read"
+        if model != "res.users":
+            raise AssertionError(f"Unexpected model: {model}")
+        domain = args[0] if args else kwargs.get("domain")
+        if domain == [[("active", "=", True), ("share", "=", False)]]:
+            return [
+                {
+                    "id": 75,
+                    "name": "Long Username",
+                    "email": "long@example.com",
+                    "login": long_login,
+                    "partner_id": [401, "Partner"],
+                }
+            ]
+        return [
+            {
+                "id": 75,
+                "name": "Long Username",
+                "email": "long@example.com",
+                "login": long_login,
+                "partner_id": [401, "Partner"],
+            }
+        ]
+
+    monkeypatch.setattr(
+        OdooEmployee,
+        "execute",
+        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+    )
+
+    response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates"),
+        {
+            "source_type": "employees",
+            "selected_ids": ["75"],
+        },
+    )
+
+    assert response.status_code == 302
+    employee = OdooEmployee.objects.get(odoo_uid=75)
+    assert len(employee.user.username) <= username_field.max_length  # type: ignore[union-attr]
+
+
+@pytest.mark.django_db
+def test_import_employee_rolls_back_user_when_employee_create_fails(
+    admin_user, django_user_model, monkeypatch
+):
+    profile = OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoo",
+        username="profile-admin",
+        password="secret",
+        odoo_uid=1,
+        verified_on=timezone.now(),
+    )
+    model_admin = OdooSaleOrderTemplateAdmin(OdooSaleOrderTemplate, admin.site)
+
+    original_create = OdooEmployee.objects.create
+
+    def create_employee(*args, **kwargs):
+        if kwargs.get("odoo_uid") == 99:
+            raise IntegrityError("forced failure")
+        return original_create(*args, **kwargs)
+
+    monkeypatch.setattr(OdooEmployee.objects, "create", create_employee)
+
+    with pytest.raises(IntegrityError):
+        model_admin._import_employee(
+            profile,
+            {
+                "id": 99,
+                "name": "Fail Employee",
+                "email": "fail@example.com",
+                "login": "rollback-test",
+                "partner_id": [999, "Partner"],
+            },
+        )
+
+    assert not django_user_model.objects.filter(username="rollback-test").exists()

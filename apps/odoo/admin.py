@@ -1,11 +1,10 @@
 import logging
-import socket
 from xmlrpc.client import Fault, ProtocolError
 
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -104,27 +103,10 @@ class OdooTemplateSetupCreateForm(forms.Form):
         self.fields["products"].queryset = OdooProduct.objects.order_by("name")
         self.fields["employees"].queryset = OdooEmployee.objects.order_by("username")
 
-    @staticmethod
-    def _resolve_unique_factor_code(name_prefix: str) -> str:
-        base_code = slugify(f"{name_prefix} Products")[:64] or "setup-template-products"
-        if not OdooSaleFactor.objects.filter(code=base_code).exists():
-            return base_code
-
-        max_base_length = 64 - len("-99")
-        trimmed_base = base_code[:max_base_length]
-        counter = 2
-        while counter < 100:
-            candidate = f"{trimmed_base}-{counter}"
-            if not OdooSaleFactor.objects.filter(code=candidate).exists():
-                return candidate
-            counter += 1
-        raise ValidationError(_("Unable to generate a unique sale factor code."))
-
     def clean(self):
         cleaned_data = super().clean()
         name_prefix = (cleaned_data.get("name_prefix") or "").strip() or "Setup Template"
         cleaned_data["name_prefix"] = name_prefix
-        cleaned_data["factor_code"] = self._resolve_unique_factor_code(name_prefix)
         return cleaned_data
 
 
@@ -471,7 +453,7 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         return reverse("admin:odoo_odoosaleordertemplate_setup_templates_create")
 
     def get_dashboard_actions(self, request):
-        if not self.has_change_permission(request):
+        if not self._can_access_setup_wizard(request):
             return []
         return ["setup_templates"]
 
@@ -479,10 +461,15 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         extra_context = extra_context or {}
         links = list(extra_context.get("public_view_links") or [])
         setup_url = self._setup_templates_url()
-        if not any(link.get("url") == setup_url for link in links):
+        if self._can_access_setup_wizard(request) and not any(
+            link.get("url") == setup_url for link in links
+        ):
             links.append({"label": self.setup_templates.label, "url": setup_url})
         extra_context["public_view_links"] = links
         return super().changelist_view(request, extra_context=extra_context)
+
+    def _can_access_setup_wizard(self, request) -> bool:
+        return self.has_change_permission(request) and self.has_add_permission(request)
 
     def _verified_profile_or_redirect(self, request):
         profile = getattr(request.user, "odoo_employee", None)
@@ -597,14 +584,21 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
 
     def _resolve_unique_username(self, base_username: str, odoo_uid: int) -> str:
         user_model = get_user_model()
+        username_field_name = user_model.USERNAME_FIELD
+        username_max_length = user_model._meta.get_field(username_field_name).max_length or 150
+        base_username = (base_username or "").strip() or f"odoo-user-{odoo_uid}"
+        base_username = base_username[:username_max_length]
         user_manager = getattr(user_model, "all_objects", user_model.objects)
-        if not user_manager.filter(username=base_username).exists():
+        if not user_manager.filter(**{username_field_name: base_username}).exists():
             return base_username
         suffix = f"-odoo-{odoo_uid}"
-        candidate = f"{base_username}{suffix}"
+        candidate = f"{base_username[: max(username_max_length - len(suffix), 1)]}{suffix}"
+        candidate = candidate[:username_max_length]
         counter = 2
-        while user_manager.filter(username=candidate).exists():
-            candidate = f"{base_username}{suffix}-{counter}"
+        while user_manager.filter(**{username_field_name: candidate}).exists():
+            counter_suffix = f"{suffix}-{counter}"
+            trimmed = base_username[: max(username_max_length - len(counter_suffix), 1)]
+            candidate = f"{trimmed}{counter_suffix}"[:username_max_length]
             counter += 1
         return candidate
 
@@ -658,7 +652,10 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         ).first()
         login = str(source_row.get("login") or "").strip()
         email = str(source_row.get("email") or "").strip()
-        username_base = login or email or f"odoo-user-{source_id}"
+        user_model = get_user_model()
+        username_field_name = user_model.USERNAME_FIELD
+        username_max_length = user_model._meta.get_field(username_field_name).max_length or 150
+        username_base = (login or email or f"odoo-user-{source_id}")[:username_max_length]
         partner_id = self._extract_partner_id(source_row)
         if existing:
             desired_username = login or existing.username
@@ -689,23 +686,23 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                 existing.save(update_fields=existing_updated_fields)
             return existing, False
 
-        user_model = get_user_model()
         username = self._resolve_unique_username(username_base, source_id)
-        user = user_model.objects.create(username=username, email=email)
-        user.set_unusable_password()
-        user.save(update_fields=["password"])
+        with transaction.atomic():
+            user = user_model.objects.create(**{username_field_name: username, "email": email})
+            user.set_unusable_password()
+            user.save(update_fields=["password"])
 
-        employee = OdooEmployee.objects.create(
-            user=user,
-            host=profile.host,
-            database=profile.database,
-            username=login or username,
-            password="",
-            odoo_uid=source_id,
-            name=str(source_row.get("name") or ""),
-            email=email,
-            partner_id=partner_id,
-        )
+            employee = OdooEmployee.objects.create(
+                user=user,
+                host=profile.host,
+                database=profile.database,
+                username=login or username,
+                password="",
+                odoo_uid=source_id,
+                name=str(source_row.get("name") or ""),
+                email=email,
+                partner_id=partner_id,
+            )
         return employee, True
 
     def _import_source_selection(self, profile, source_type: str, selected_ids: list[str]) -> tuple[int, int]:
@@ -759,7 +756,7 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
 
         try:
             options = self._remote_options(profile, source_type)
-        except (Fault, OSError, ProtocolError, TimeoutError, socket.timeout):
+        except (Fault, OSError, ProtocolError):
             logger.exception("Could not fetch Odoo records for source_type=%s", source_type)
             self.message_user(
                 request,
@@ -784,7 +781,7 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                     source_type=form.cleaned_data["source_type"],
                     selected_ids=form.cleaned_data["selected_ids"],
                 )
-            except (Fault, OSError, ProtocolError, TimeoutError, socket.timeout):
+            except (Fault, OSError, ProtocolError):
                 logger.exception(
                     "Odoo import failed for source_type=%s",
                     form.cleaned_data["source_type"],
@@ -872,7 +869,16 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                         except IntegrityError:
                             continue
                     if factor is None:
-                        raise ValidationError(_("Unable to generate a unique sale factor code."))
+                        self.message_user(
+                            request,
+                            _(
+                                "Unable to generate a unique sale factor code. "
+                                "Please adjust the template name prefix and try again."
+                            ),
+                            level=messages.ERROR,
+                        )
+                        transaction.set_rollback(True)
+                        return HttpResponseRedirect(self._setup_templates_create_url())
                     factor.templates.set(created_templates)
                     for product in products:
                         OdooSaleFactorProductRule.objects.create(
