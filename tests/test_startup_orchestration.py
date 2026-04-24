@@ -4,7 +4,11 @@ import json
 
 import pytest
 
+from gate_markers import gate
 from scripts.startup_orchestration import extract_payload
+
+
+pytestmark = [gate.upgrade]
 
 
 def test_extract_payload_reads_last_json_object() -> None:

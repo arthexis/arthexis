@@ -7,6 +7,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from gate_markers import gate
+
+
+pytestmark = [gate.upgrade]
+
 
 def _write_fake_manage(path: Path) -> None:
     path.write_text(

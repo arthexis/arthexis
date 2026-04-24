@@ -10,7 +10,11 @@ import pytest
 
 from django.core.management.base import CommandError
 
+from gate_markers import gate
 from utils.migration_branches import BranchTagConflictError
+
+
+pytestmark = [gate.upgrade]
 
 
 @pytest.fixture

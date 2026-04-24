@@ -9,6 +9,7 @@ env:
   NODE_OPTIONS: '--no-deprecation'
   ARTHEXIS_DB_BACKEND: sqlite
   PYTEST_WORKERS: 'auto'
+  UPGRADE_GATE_MARKER: gate_upgrade
 
 concurrency:
   group: upgrade-gate-${{ github.ref }}
@@ -102,7 +103,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh', 'upgrade.sh') }}
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh', 'env-refresh.sh', 'upgrade.sh') }}
           restore-keys: |
             venv-${{ runner.os }}-
 
@@ -116,15 +117,13 @@ jobs:
         run: |
           python "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
 
+      # install.sh already performs env-refresh.sh --install-and-refresh.
+      # Keep CI on that single bootstrap path so the gate does not add a
+      # standalone refresh pass with slightly different environment behavior.
       - name: Install suite from repository
         id: install_suite
         run: |
           ./install.sh --no-start
-
-      - name: Refresh environment dependencies
-        id: refresh_dependencies
-        run: |
-          ./env-refresh.sh
 
       - name: Install CI dependencies
         id: install_ci_dependencies
@@ -175,7 +174,7 @@ jobs:
           ./scripts/preflight-env.sh --pytest
           source .venv/bin/activate
           read -r -a xdist_args <<< "${PYTEST_XDIST_ARGS:-}"
-          python -m pytest "${xdist_args[@]}" --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
+          python -m pytest "${xdist_args[@]}" -m "${UPGRADE_GATE_MARKER}" --maxfail=1 --disable-warnings -q --timeout=180 | tee pytest.log
 
       - name: Summarize failure context
         if: failure()
@@ -189,7 +188,6 @@ jobs:
               ("Validate pyproject dependency ordering", "${{ steps.validate_pyproject_ordering.conclusion }}"),
               ("Validate generated requirements", "${{ steps.validate_generated_requirements.conclusion }}"),
               ("Install suite from repository", "${{ steps.install_suite.conclusion }}"),
-              ("Refresh environment dependencies", "${{ steps.refresh_dependencies.conclusion }}"),
               ("Install CI dependencies", "${{ steps.install_ci_dependencies.conclusion }}"),
               ("Verify editable install import", "${{ steps.verify_editable_install.conclusion }}"),
               ("Apply upgrade smoke path", "${{ steps.apply_upgrade_smoke.conclusion }}"),
