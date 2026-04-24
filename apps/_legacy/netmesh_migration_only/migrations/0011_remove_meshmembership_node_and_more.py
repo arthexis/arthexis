@@ -10,6 +10,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RemoveConstraint(
+            model_name="meshmembership",
+            name="netmesh_unique_membership_default_scope",
+        ),
+        migrations.RemoveConstraint(
+            model_name="meshmembership",
+            name="netmesh_unique_membership_site_scope",
+        ),
         migrations.RemoveField(
             model_name="meshmembership",
             name="node",
@@ -21,9 +29,17 @@ class Migration(migrations.Migration):
         migrations.DeleteModel(
             name="NetmeshAgentStatus",
         ),
+        migrations.RemoveConstraint(
+            model_name="nodekeymaterial",
+            name="netmesh_node_single_active_transport_key",
+        ),
         migrations.RemoveField(
             model_name="nodekeymaterial",
             name="node",
+        ),
+        migrations.RemoveIndex(
+            model_name="peerpolicy",
+            name="netmesh_policy_scope_src_idx",
         ),
         migrations.RemoveField(
             model_name="peerpolicy",
