@@ -56,3 +56,71 @@ def test_scan_sources_falls_back_to_attempts_for_lockfile_ingest_error(monkeypat
     result = scanner.scan_sources(timeout=0.5)
 
     assert result == sentinel
+
+
+def test_format_lcd_scan_event_prefers_card_label():
+    result = rfid_service.format_lcd_scan_event(
+        {"label_id": 42, "custom_label": "Front Desk", "rfid": "abcd1234"}
+    )
+
+    assert result == ("Label Front Desk", "ID ABCD1234")
+
+
+def test_rfid_service_scan_notifies_lcd_for_ten_seconds(settings, tmp_path, monkeypatch):
+    settings.BASE_DIR = tmp_path
+    sent: list[dict[str, object]] = []
+
+    monkeypatch.setattr(rfid_service, "lcd_feature_enabled", lambda lock_dir: True)
+    monkeypatch.setattr(
+        rfid_service,
+        "notify_event_async",
+        lambda subject, body, **kwargs: sent.append(
+            {"subject": subject, "body": body, **kwargs}
+        ),
+    )
+
+    state = rfid_service.RFIDServiceState()
+    state._notify_lcd_event({"label_id": 7, "rfid": "cafe01"})
+
+    assert sent == [
+        {
+            "subject": "Label 7",
+            "body": "ID CAFE01",
+            "duration": 10,
+            "event_id": 0,
+        }
+    ]
+
+
+def test_rfid_service_scan_skips_lcd_when_feature_disabled(settings, tmp_path, monkeypatch):
+    settings.BASE_DIR = tmp_path
+    sent: list[object] = []
+
+    monkeypatch.setattr(rfid_service, "lcd_feature_enabled", lambda lock_dir: False)
+    monkeypatch.setattr(
+        rfid_service,
+        "notify_event_async",
+        lambda *args, **kwargs: sent.append(args),
+    )
+
+    state = rfid_service.RFIDServiceState()
+    state._notify_lcd_event({"label_id": 7, "rfid": "cafe01"})
+
+    assert sent == []
+
+
+def test_rfid_service_scan_skips_lcd_without_rfid(settings, tmp_path, monkeypatch):
+    settings.BASE_DIR = tmp_path
+    sent: list[object] = []
+
+    monkeypatch.setattr(rfid_service, "lcd_feature_enabled", lambda lock_dir: True)
+    monkeypatch.setattr(
+        rfid_service,
+        "notify_event_async",
+        lambda *args, **kwargs: sent.append(args),
+    )
+
+    state = rfid_service.RFIDServiceState()
+    state._notify_lcd_event({"label_id": 7})
+
+    assert sent == []

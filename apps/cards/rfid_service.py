@@ -39,6 +39,8 @@ SENSITIVE_RFID_KEYS = {"keys", "dump"}
 SCAN_STATE_FILE = "rfid-scan.json"
 SCAN_LOG_FILE = "rfid-scans.ndjson"
 SERVICE_SCAN_LOCKFILE_ERROR = "scan requests are handled via lock-file ingest"
+RFID_LCD_SCAN_EVENT_DURATION_SECONDS = 10
+RFID_LCD_SCAN_EVENT_ID = 0
 
 
 def default_service_host() -> str:
@@ -198,18 +200,13 @@ class RFIDServiceState:
         lock_dir = base_dir / ".locks"
         if not lcd_feature_enabled(lock_dir):
             return
-        label = result.get("label_id")
-        allowed = result.get("allowed")
-        status_text = "OK" if allowed else "BAD" if allowed is not None else ""
-        subject = "RFID"
-        if label:
-            subject = f"RFID {label} {status_text}".strip()
-        elif status_text:
-            subject = f"RFID {status_text}".strip()
-        rfid_value = str(result.get("rfid", "")).strip()
-        color = str(result.get("color", "")).strip()
-        body = " ".join(part for part in (rfid_value, color) if part)
-        notify_event_async(subject, body, duration=default_event_duration(), event_id=0)
+        subject, body = format_lcd_scan_event(result)
+        notify_event_async(
+            subject,
+            body,
+            duration=RFID_LCD_SCAN_EVENT_DURATION_SECONDS,
+            event_id=RFID_LCD_SCAN_EVENT_ID,
+        )
 
     def _emit_scan_artifacts(self, result: dict[str, Any]) -> None:
         rfid_value = str(result.get("rfid", "") or "").strip().upper()
@@ -395,6 +392,16 @@ def mask_rfid(value: Any) -> str | None:
     if len(text) <= 4:
         return "*" * len(text)
     return f"{'*' * (len(text) - 4)}{text[-4:]}"
+
+
+def format_lcd_scan_event(result: dict[str, Any]) -> tuple[str, str]:
+    """Return the two-line LCD event shown for an RFID scan."""
+
+    label = str(result.get("custom_label") or result.get("label_id") or "").strip()
+    subject = f"Label {label}" if label else "Label unknown"
+    rfid_value = str(result.get("rfid") or "").strip().upper()
+    body = f"ID {rfid_value}" if rfid_value else "ID unknown"
+    return subject, body
 
 
 def rfid_service_lock_path(base_dir: Path | None = None) -> Path:
