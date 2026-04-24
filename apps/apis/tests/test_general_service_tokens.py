@@ -147,6 +147,24 @@ def test_general_service_token_create_form_reports_non_integer_security_group_id
 
 
 @pytest.mark.django_db
+def test_general_service_token_create_form_requires_custom_claims_object():
+    user_model = get_user_model()
+    user = user_model.objects.create_user(username="token-user-7", password="pass12345")
+    form = GeneralServiceTokenCreateForm(
+        data={
+            "name": "Bad claims",
+            "user_id": user.id,
+            "expires_in_days": 2,
+            "security_group_ids": "",
+            "custom_claims": ["not", "an", "object"],
+        }
+    )
+
+    assert form.is_valid() is False
+    assert "custom_claims" in form.errors
+
+
+@pytest.mark.django_db
 def test_authentication_handles_malformed_jwt_payload():
     user_model = get_user_model()
     actor = user_model.objects.create_user(username="issuer-6", password="pass12345", is_staff=True)
@@ -176,3 +194,27 @@ def test_authentication_handles_malformed_jwt_payload():
     assert authenticated is None
     assert payload is None
     assert error_code == "token_signature_invalid"
+
+
+@pytest.mark.django_db
+def test_issue_general_service_token_uses_distinct_prefixes():
+    user_model = get_user_model()
+    actor = user_model.objects.create_user(username="issuer-8", password="pass12345", is_staff=True)
+    target = user_model.objects.create_user(username="token-user-8", password="pass12345")
+
+    first, _ = GeneralServiceToken.issue(
+        actor=actor,
+        user=target,
+        name="Prefix token one",
+        expires_at=timezone.now() + timedelta(hours=1),
+    )
+    second, _ = GeneralServiceToken.issue(
+        actor=actor,
+        user=target,
+        name="Prefix token two",
+        expires_at=timezone.now() + timedelta(hours=1),
+    )
+
+    assert first.token_prefix != second.token_prefix
+    assert first.token_prefix.startswith("gst_")
+    assert second.token_prefix.startswith("gst_")

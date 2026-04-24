@@ -119,6 +119,9 @@ class GeneralServiceTokenCreateForm(forms.Form):
             cleaned["security_groups"] = groups
         else:
             cleaned["security_groups"] = []
+        custom_claims = cleaned.get("custom_claims")
+        if custom_claims is not None and not isinstance(custom_claims, dict):
+            self.add_error("custom_claims", "Custom claims must be a JSON object.")
         return cleaned
 
 

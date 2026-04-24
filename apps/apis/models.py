@@ -388,11 +388,12 @@ class GeneralServiceToken(models.Model):
             **(claims or {}),
         }
         raw_token = cls._encode_jwt(token_claims)
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
         token = cls.objects.create(
             name=name.strip(),
             user=user,
-            token_prefix=raw_token[:40],
-            token_hash=hashlib.sha256(raw_token.encode("utf-8")).hexdigest(),
+            token_prefix=f"gst_{token_claims['jti'][:20]}",
+            token_hash=token_hash,
             expires_at=expires_at,
             claims=claims or {},
             created_by=actor,
