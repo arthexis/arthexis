@@ -504,7 +504,19 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         }
         model = model_by_source[source_type]
         if self._has_add_and_change_permission(request, model):
-            return True
+            if source_type != OdooTemplateSetupImportForm.SOURCE_EMPLOYEES:
+                return True
+            if self._has_add_and_change_permission(request, get_user_model()):
+                return True
+            self.message_user(
+                request,
+                _(
+                    "You do not have permission to synchronize authentication users "
+                    "during employee import."
+                ),
+                level=messages.ERROR,
+            )
+            return False
         self.message_user(
             request,
             _("You do not have permission to import %(kind)s records.") % {"kind": source_type},
@@ -833,11 +845,33 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
             employees = list(form.cleaned_data["employees"])
             name_prefix = form.cleaned_data["name_prefix"]
             primary_employee = employees[0] if employees else None
+            template_name_max_length = (
+                OdooSaleOrderTemplate._meta.get_field("name").max_length or 255
+            )
 
             if products and not self._has_add_and_change_permission(request, OdooSaleFactor):
                 raise PermissionDenied
             if products and not self._has_add_and_change_permission(request, OdooSaleFactorProductRule):
                 raise PermissionDenied
+
+            invalid_template_name = next(
+                (
+                    f"{name_prefix}: {source_template.name}"
+                    for source_template in templates
+                    if len(f"{name_prefix}: {source_template.name}") > template_name_max_length
+                ),
+                None,
+            )
+            if invalid_template_name is not None:
+                self.message_user(
+                    request,
+                    _(
+                        "Template name is too long after applying the prefix. "
+                        "Please shorten the template name prefix and try again."
+                    ),
+                    level=messages.ERROR,
+                )
+                return HttpResponseRedirect(self._setup_templates_create_url())
 
             with transaction.atomic():
                 created_templates: list[OdooSaleOrderTemplate] = []

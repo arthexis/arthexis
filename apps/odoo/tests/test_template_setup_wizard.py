@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from django.contrib import admin
+from django.contrib.auth.models import Permission
 from django.db import IntegrityError
 from django.urls import reverse
 from django.utils import timezone
@@ -14,6 +15,20 @@ from apps.odoo.models import (
     OdooSaleFactorProductRule,
     OdooSaleOrderTemplate,
 )
+
+
+def _grant_model_perms(user, model):
+    opts = model._meta
+    user.user_permissions.add(
+        Permission.objects.get(
+            content_type__app_label=opts.app_label,
+            codename=f"add_{opts.model_name}",
+        ),
+        Permission.objects.get(
+            content_type__app_label=opts.app_label,
+            codename=f"change_{opts.model_name}",
+        ),
+    )
 
 
 @pytest.mark.django_db
@@ -314,3 +329,75 @@ def test_import_employee_rolls_back_user_when_employee_create_fails(
         )
 
     assert not django_user_model.objects.filter(username="rollback-test").exists()
+
+
+@pytest.mark.django_db
+def test_setup_templates_step_one_employee_import_requires_auth_user_permissions(
+    client,
+    django_user_model,
+    monkeypatch,
+):
+    staff_user = django_user_model.objects.create_user(
+        username="staff-importer",
+        password="testpass",
+        is_staff=True,
+    )
+    _grant_model_perms(staff_user, OdooSaleOrderTemplate)
+    _grant_model_perms(staff_user, OdooEmployee)
+    profile = OdooEmployee.objects.create(
+        user=staff_user,
+        host="https://odoo.example.com",
+        database="odoo",
+        username="staff-importer",
+        password="secret",
+        odoo_uid=1001,
+        verified_on=timezone.now(),
+    )
+    client.force_login(staff_user)
+
+    def execute(model, method, *args, **kwargs):
+        assert method == "search_read"
+        if model == "sale.order.template":
+            return []
+        if model == "res.users":
+            return [{"id": 88, "name": "Employee No Access", "login": "emp-no-access"}]
+        raise AssertionError(f"Unexpected model: {model}")
+
+    monkeypatch.setattr(
+        OdooEmployee,
+        "execute",
+        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+    )
+
+    response = client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates"),
+        {"source_type": "employees", "selected_ids": ["88"]},
+    )
+
+    assert response.status_code == 200
+    assert "do not have permission to synchronize authentication users" in response.content.decode()
+    assert (
+        OdooEmployee.objects.filter(host=profile.host, database=profile.database, odoo_uid=88).count()
+        == 0
+    )
+
+
+@pytest.mark.django_db
+def test_setup_templates_step_two_rejects_overlong_cloned_template_name(admin_client):
+    source_template = OdooSaleOrderTemplate.objects.create(
+        name="T" * 200,
+        odoo_template={"id": 90, "name": "Base"},
+    )
+
+    response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates_create"),
+        {
+            "name_prefix": "P" * 120,
+            "templates": [str(source_template.pk)],
+            "products": [],
+            "employees": [],
+        },
+    )
+
+    assert response.status_code == 302
+    assert OdooSaleOrderTemplate.objects.count() == 1
