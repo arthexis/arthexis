@@ -148,18 +148,14 @@ def test_repo_token_streams_prunes_excluded_dirs_before_scanning(
 
     settings.BASE_DIR = tmp_path
 
-    class FakeBasePath:
-        def __init__(self, path):
-            self.path = path
+    def fake_walk(path, onerror=None):
+        names = ["node_modules", "visible"]
+        yield path, names, []
+        if "node_modules" in names:
+            yield blocked, [], ["ignored.py"]
+        if "visible" in names:
+            yield visible, [], ["story.py"]
 
-        def walk(self, on_error=None):
-            names = ["node_modules", "visible"]
-            yield self.path, names, []
-            if "node_modules" in names:
-                yield blocked, [], ["ignored.py"]
-            if "visible" in names:
-                yield visible, [], ["story.py"]
-
-    monkeypatch.setattr(autocomplete, "Path", FakeBasePath)
+    monkeypatch.setattr(autocomplete.os, "walk", fake_walk)
 
     assert list(autocomplete._iter_repo_token_streams()) == [["alpha", "beta"]]

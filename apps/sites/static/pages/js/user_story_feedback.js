@@ -87,14 +87,16 @@
   };
 
   const fetchAutocompleteSuggestions = async () => {
+    if (autocompleteAbortController) {
+      autocompleteAbortController.abort();
+      autocompleteAbortController = null;
+    }
+
     if (!autocompleteUrl || !commentField || commentField.value.trim().length < 2) {
       clearAutocompleteSuggestions();
       return;
     }
 
-    if (autocompleteAbortController) {
-      autocompleteAbortController.abort();
-    }
     autocompleteAbortController = new AbortController();
 
     const url = new URL(autocompleteUrl, window.location.origin);

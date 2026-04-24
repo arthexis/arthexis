@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from collections import Counter, defaultdict
 from functools import lru_cache
@@ -115,8 +116,9 @@ def _iter_repo_token_streams():
     base_dir = Path(settings.BASE_DIR)
     include_suffixes = {".py", ".md", ".html", ".js"}
     exclude_dirs = {".git", ".venv", "node_modules"}
-    for directory, names, files in base_dir.walk(on_error=lambda error: None):
+    for directory_name, names, files in os.walk(base_dir, onerror=lambda error: None):
         names[:] = [name for name in names if name not in exclude_dirs]
+        directory = Path(directory_name)
         for file_name in files:
             path = directory / file_name
             if path.suffix.lower() not in include_suffixes:
