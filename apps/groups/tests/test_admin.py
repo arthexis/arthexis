@@ -43,7 +43,7 @@ def test_security_group_add_permission_for_staff_users(
     assert response.status_code == expected_status
 
 
-def test_site_operator_staff_cannot_change_security_groups(db):
+def test_site_operator_staff_can_change_existing_security_groups(db):
     user_model = get_user_model()
     user = user_model.objects.create_user(
         username="local-admin",
@@ -71,9 +71,9 @@ def test_site_operator_staff_cannot_change_security_groups(db):
         },
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 302
     managed_group.refresh_from_db()
-    assert managed_group.name == "managed-group"
+    assert managed_group.name == "managed-group-updated"
 
 
 def test_superuser_can_still_create_security_groups(db):

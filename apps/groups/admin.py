@@ -71,11 +71,7 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
         return not request.user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).exists()
 
     def has_change_permission(self, request, obj=None):
-        if not super().has_change_permission(request, obj):
-            return False
-        if request.user.is_superuser:
-            return True
-        return not request.user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).exists()
+        return super().has_change_permission(request, obj)
 
     def get_readonly_fields(self, request, obj=None):
         readonly_fields = list(super().get_readonly_fields(request, obj))
