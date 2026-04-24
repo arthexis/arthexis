@@ -3,21 +3,21 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from django.conf import settings
+from django.core.cache import cache
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.template import loader
 from django.template.response import TemplateResponse
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.utils.cache import patch_cache_control, patch_vary_headers
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
-from django.views.decorators.http import require_GET, require_POST
-from django.core.cache import cache
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from apps.core import changelog
+from apps.docs import rendering
 from apps.docs import views as docs_views
 from apps.features.utils import is_suite_feature_enabled
-from apps.docs import rendering
 from apps.groups.constants import AP_USER_GROUP_NAME
 from apps.links.templatetags.ref_tags import build_footer_context
 from apps.modules.models import Module
@@ -339,10 +339,11 @@ def changelog_report_data(request):
 
 
 
-@require_GET
+@require_http_methods(["GET", "POST"])
 def user_story_autocomplete(request):
-    text = request.GET.get("q", "")
-    limit_raw = request.GET.get("limit", "5")
+    payload = request.POST if request.method == "POST" else request.GET
+    text = payload.get("q", "")
+    limit_raw = payload.get("limit", "5")
     try:
         limit = max(1, min(int(limit_raw), 10))
     except (TypeError, ValueError):

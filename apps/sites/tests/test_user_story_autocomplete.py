@@ -25,6 +25,31 @@ def test_user_story_autocomplete_uses_standard_model_for_anonymous(client, monke
 
 
 @pytest.mark.django_db
+def test_user_story_autocomplete_accepts_post_body_for_anonymous(client, monkeypatch):
+    from apps.sites import autocomplete
+
+    def fake_suggest(self, *, text, is_staff, limit):
+        assert text == "sensitive draft"
+        assert is_staff is False
+        assert limit == 4
+        return ["detail"]
+
+    monkeypatch.setattr(autocomplete.FeedbackAutocompleteHarness, "suggest", fake_suggest)
+
+    response = client.post(
+        reverse("pages:user-story-autocomplete"),
+        {"q": "sensitive draft", "limit": "4"},
+        HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["model"] == "standard"
+    assert payload["suggestions"] == ["detail"]
+
+
+@pytest.mark.django_db
 def test_user_story_autocomplete_uses_repo_trained_model_for_staff(client, monkeypatch):
     from apps.sites import autocomplete
 

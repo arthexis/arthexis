@@ -104,9 +104,13 @@
     const abortController = new AbortController();
     autocompleteAbortController = abortController;
 
-    const url = new URL(autocompleteUrl, window.location.origin);
-    url.searchParams.set('q', query);
-    url.searchParams.set('limit', '5');
+    const payload = new URLSearchParams();
+    const csrfToken = form.querySelector('input[name="csrfmiddlewaretoken"]');
+    payload.set('q', query);
+    payload.set('limit', '5');
+    if (csrfToken) {
+      payload.set('csrfmiddlewaretoken', csrfToken.value);
+    }
 
     const isCurrentAutocompleteRequest = () =>
       autocompleteRequestId === requestId &&
@@ -115,8 +119,13 @@
       commentField.value === query;
 
     try {
-      const response = await fetch(url.toString(), {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      const response = await fetch(autocompleteUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: payload,
         signal: abortController.signal,
       });
       if (!response.ok) {
