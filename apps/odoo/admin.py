@@ -6,7 +6,6 @@ from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.db import DatabaseError, IntegrityError, transaction
-from django.db.models import Q
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -40,16 +39,20 @@ from .sync_features import (
 logger = logging.getLogger(__name__)
 
 
-def _has_valid_odoo_product_payload(product: OdooProduct) -> bool:
+def _get_valid_odoo_product_payload(product: OdooProduct) -> dict[str, object] | None:
     payload = product.odoo_product or {}
     if not isinstance(payload, dict):
-        return False
+        return None
     value = payload.get("id")
     try:
         int(value)
     except (TypeError, ValueError):
-        return False
-    return True
+        return None
+    return payload
+
+
+def _has_valid_odoo_product_payload(product: OdooProduct) -> bool:
+    return _get_valid_odoo_product_payload(product) is not None
 
 
 class OdooTemplateSetupImportForm(forms.Form):
@@ -654,7 +657,8 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
             existing = OdooSaleOrderTemplate.objects.filter(
                 odoo_template__id=source_id,
             ).filter(
-                Q(odoo_template__host__isnull=True) | Q(odoo_template__database__isnull=True)
+                odoo_template__host__isnull=True,
+                odoo_template__database__isnull=True,
             ).first()
         name_max_length = OdooSaleOrderTemplate._meta.get_field("name").max_length or 255
         bounded_name = str(source_row.get("name") or f"Odoo Template {source_id}")[
@@ -686,7 +690,8 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         ).first()
         if existing is None:
             existing = OdooProduct.objects.filter(odoo_product__id=source_id).filter(
-                Q(odoo_product__host__isnull=True) | Q(odoo_product__database__isnull=True)
+                odoo_product__host__isnull=True,
+                odoo_product__database__isnull=True,
             ).first()
         name_max_length = OdooProduct._meta.get_field("name").max_length or 100
         bounded_name = str(source_row.get("name") or f"Odoo Product {source_id}")[:name_max_length]
@@ -846,19 +851,6 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                     source_type=form.cleaned_data["source_type"],
                     selected_ids=form.cleaned_data["selected_ids"],
                 )
-            except (Fault, OSError, ProtocolError):
-                logger.exception(
-                    "Odoo import failed for source_type=%s",
-                    form.cleaned_data["source_type"],
-                )
-                self.message_user(
-                    request,
-                    _("Import failed due to an Odoo communication error. Please try again."),
-                    level=messages.ERROR,
-                )
-                return HttpResponseRedirect(
-                    f"{self._setup_templates_url()}?source_type={form.cleaned_data['source_type']}"
-                )
             except DatabaseError:
                 logger.exception(
                     "Could not persist Odoo import for source_type=%s",
@@ -867,6 +859,19 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                 self.message_user(
                     request,
                     _("Import failed while saving local records. Please try again."),
+                    level=messages.ERROR,
+                )
+                return HttpResponseRedirect(
+                    f"{self._setup_templates_url()}?source_type={form.cleaned_data['source_type']}"
+                )
+            except (Fault, OSError, ProtocolError):
+                logger.exception(
+                    "Odoo import failed for source_type=%s",
+                    form.cleaned_data["source_type"],
+                )
+                self.message_user(
+                    request,
+                    _("Import failed due to an Odoo communication error. Please try again."),
                     level=messages.ERROR,
                 )
                 return HttpResponseRedirect(
@@ -989,7 +994,8 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                         return HttpResponseRedirect(self._setup_templates_create_url())
                     factor.templates.set(created_templates)
                     for product in products:
-                        if not _has_valid_odoo_product_payload(product):
+                        odoo_product_payload = _get_valid_odoo_product_payload(product)
+                        if odoo_product_payload is None:
                             self.message_user(
                                 request,
                                 _(
@@ -1003,7 +1009,7 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                         OdooSaleFactorProductRule.objects.create(
                             factor=factor,
                             name=product.name,
-                            odoo_product=product.odoo_product,
+                            odoo_product=odoo_product_payload,
                         )
                         created_rules += 1
 

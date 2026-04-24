@@ -99,6 +99,14 @@ def test_setup_templates_step_one_scopes_template_upsert_by_odoo_instance(
             "database": "odoo-one",
         },
     )
+    partially_scoped = OdooSaleOrderTemplate.objects.create(
+        name="Partially Scoped Other Instance",
+        odoo_template={
+            "id": 100,
+            "name": "Starter Quote",
+            "host": "https://odoo.one.example.com",
+        },
+    )
 
     def execute(model, method, *args, **kwargs):
         assert method == "search_read"
@@ -124,12 +132,16 @@ def test_setup_templates_step_one_scopes_template_upsert_by_odoo_instance(
     )
 
     assert response.status_code == 302
-    assert OdooSaleOrderTemplate.objects.filter(odoo_template__id=100).count() == 2
+    assert OdooSaleOrderTemplate.objects.filter(odoo_template__id=100).count() == 3
     assert OdooSaleOrderTemplate.objects.filter(
         odoo_template__id=100,
         odoo_template__host=profile.host,
         odoo_template__database=profile.database,
     ).exists()
+    partially_scoped.refresh_from_db()
+    assert partially_scoped.name == "Partially Scoped Other Instance"
+    assert partially_scoped.odoo_template["host"] == "https://odoo.one.example.com"
+    assert "database" not in partially_scoped.odoo_template
 
 
 @pytest.mark.django_db
@@ -688,8 +700,8 @@ def test_setup_templates_step_two_rechecks_product_payload_before_rule_creation(
 
     monkeypatch.setattr(
         odoo_admin,
-        "_has_valid_odoo_product_payload",
-        lambda product: next(checks),
+        "_get_valid_odoo_product_payload",
+        lambda product: {"id": 501, "name": "Addon"} if next(checks) else None,
     )
 
     response = admin_client.post(
