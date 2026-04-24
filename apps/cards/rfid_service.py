@@ -44,6 +44,7 @@ SCAN_STATE_SCHEMA = "arthexis.rfid.scan.v1"
 SERVICE_SCAN_LOCKFILE_ERROR = "scan requests are handled via lock-file ingest"
 RFID_LCD_SCAN_EVENT_DURATION_SECONDS = 10
 RFID_LCD_SCAN_EVENT_ID = 0
+RFID_LCD_SCAN_EVENT_REFRESH_SECONDS = 5.0
 
 
 def default_service_host() -> str:
@@ -70,12 +71,27 @@ def default_scan_dedupe_seconds() -> float:
     return float(os.environ.get("RFID_SCAN_DEDUPE_SECONDS", "1.0"))
 
 
+def default_worker_scan_timeout() -> float:
+    return float(os.environ.get("RFID_SERVICE_WORKER_SCAN_TIMEOUT", "0.1"))
+
+
+def default_lcd_scan_event_refresh_seconds() -> float:
+    return float(
+        os.environ.get(
+            "RFID_LCD_SCAN_EVENT_REFRESH_SECONDS",
+            str(RFID_LCD_SCAN_EVENT_REFRESH_SECONDS),
+        )
+    )
+
+
 DEFAULT_SERVICE_HOST = default_service_host()
 DEFAULT_SERVICE_PORT = default_service_port()
 DEFAULT_SCAN_TIMEOUT = default_scan_timeout()
 DEFAULT_QUEUE_MAX = default_queue_max()
 DEFAULT_EVENT_DURATION = default_event_duration()
 DEFAULT_SCAN_DEDUPE_SECONDS = default_scan_dedupe_seconds()
+DEFAULT_WORKER_SCAN_TIMEOUT = default_worker_scan_timeout()
+DEFAULT_LCD_SCAN_EVENT_REFRESH_SECONDS = default_lcd_scan_event_refresh_seconds()
 
 
 def get_next_tag(timeout: float = 0.2) -> dict[str, Any] | None:
@@ -159,6 +175,8 @@ class RFIDServiceState:
         self.worker_thread: threading.Thread | None = None
         self._last_emitted_rfid: str | None = None
         self._last_emitted_at: float | None = None
+        self._last_lcd_rfid: str | None = None
+        self._last_lcd_refresh_at: float | None = None
 
     def start_worker(self) -> None:
         if self.worker_thread and self.worker_thread.is_alive():
@@ -181,7 +199,7 @@ class RFIDServiceState:
         start_reader()
         try:
             while not self.stop_event.is_set():
-                result = get_next_tag(timeout=0.2)
+                result = get_next_tag(timeout=default_worker_scan_timeout())
                 if not result:
                     continue
                 if result.get("error") or result.get("rfid"):
@@ -197,11 +215,20 @@ class RFIDServiceState:
             logger.info("RFID service worker stopped")
 
     def _notify_lcd_event(self, result: dict[str, Any]) -> None:
-        if not result.get("rfid"):
+        rfid_value = str(result.get("rfid") or "").strip().upper()
+        if not rfid_value:
             return
         base_dir = Path(settings.BASE_DIR)
         lock_dir = base_dir / ".locks"
         if not lcd_feature_enabled(lock_dir):
+            return
+        now = time.monotonic()
+        if (
+            self._last_lcd_rfid == rfid_value
+            and self._last_lcd_refresh_at is not None
+            and now - self._last_lcd_refresh_at
+            < default_lcd_scan_event_refresh_seconds()
+        ):
             return
         subject, body = format_lcd_scan_event(result)
         notify_event_async(
@@ -210,6 +237,8 @@ class RFIDServiceState:
             duration=RFID_LCD_SCAN_EVENT_DURATION_SECONDS,
             event_id=RFID_LCD_SCAN_EVENT_ID,
         )
+        self._last_lcd_rfid = rfid_value
+        self._last_lcd_refresh_at = now
 
     def _emit_scan_artifacts(self, result: dict[str, Any]) -> None:
         rfid_value = str(result.get("rfid", "") or "").strip().upper()

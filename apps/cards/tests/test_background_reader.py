@@ -94,3 +94,36 @@ def test_start_disables_hardware_when_gpio_unavailable(monkeypatch):
     background_reader.start()
 
     assert background_reader._hardware_disabled_reason == "GPIO library not available"
+
+
+def test_get_next_tag_polls_with_full_timeout_when_irq_queue_is_empty(monkeypatch):
+    captured: dict[str, float] = {}
+
+    class EmptyQueue:
+        def get(self, *, timeout):
+            captured["queue_timeout"] = timeout
+            raise background_reader.queue.Empty
+
+    monkeypatch.setattr(background_reader, "is_configured", lambda: True)
+    monkeypatch.setattr(background_reader, "_tag_queue", EmptyQueue())
+    monkeypatch.setattr(background_reader, "_log_fd_snapshot", lambda label: None)
+    monkeypatch.setattr(background_reader._irq_empty_tracker, "record", lambda: None)
+    monkeypatch.setattr(
+        background_reader._irq_empty_tracker,
+        "log_summary",
+        lambda event: None,
+    )
+    monkeypatch.setattr(background_reader, "_mark_scanner_used", lambda: None)
+
+    from apps.cards import reader
+
+    def read_rfid(*, mfrc, cleanup, timeout):
+        captured["poll_timeout"] = timeout
+        return {"rfid": "ABCD1234", "label_id": 7}
+
+    monkeypatch.setattr(reader, "read_rfid", read_rfid)
+
+    result = background_reader.get_next_tag(timeout=0.2)
+
+    assert result == {"rfid": "ABCD1234", "label_id": 7}
+    assert captured == {"queue_timeout": 0.2, "poll_timeout": 0.2}

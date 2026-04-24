@@ -172,6 +172,71 @@ def test_rfid_service_scan_notifies_lcd_for_ten_seconds(settings, tmp_path, monk
     ]
 
 
+def test_rfid_service_scan_extends_lcd_when_same_card_stays_present(
+    settings,
+    tmp_path,
+    monkeypatch,
+):
+    settings.BASE_DIR = tmp_path
+    sent: list[dict[str, object]] = []
+    ticks = iter([10.0, 14.9, 15.1])
+
+    monkeypatch.setattr(rfid_service, "lcd_feature_enabled", lambda lock_dir: True)
+    monkeypatch.setattr(rfid_service.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(
+        rfid_service,
+        "notify_event_async",
+        lambda subject, body, **kwargs: sent.append(
+            {"subject": subject, "body": body, **kwargs}
+        ),
+    )
+
+    state = rfid_service.RFIDServiceState()
+    payload = {"label_id": 7, "rfid": "cafe01"}
+    state._notify_lcd_event(payload)
+    state._notify_lcd_event(payload)
+    state._notify_lcd_event(payload)
+
+    assert sent == [
+        {
+            "subject": "Label 7",
+            "body": "ID CAFE01",
+            "duration": 10,
+            "event_id": 0,
+        },
+        {
+            "subject": "Label 7",
+            "body": "ID CAFE01",
+            "duration": 10,
+            "event_id": 0,
+        },
+    ]
+
+
+def test_rfid_service_scan_notifies_lcd_immediately_for_different_card(
+    settings,
+    tmp_path,
+    monkeypatch,
+):
+    settings.BASE_DIR = tmp_path
+    sent: list[tuple[str, str]] = []
+    ticks = iter([10.0, 11.0])
+
+    monkeypatch.setattr(rfid_service, "lcd_feature_enabled", lambda lock_dir: True)
+    monkeypatch.setattr(rfid_service.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(
+        rfid_service,
+        "notify_event_async",
+        lambda subject, body, **kwargs: sent.append((subject, body)),
+    )
+
+    state = rfid_service.RFIDServiceState()
+    state._notify_lcd_event({"label_id": 7, "rfid": "cafe01"})
+    state._notify_lcd_event({"label_id": 8, "rfid": "beef02"})
+
+    assert sent == [("Label 7", "ID CAFE01"), ("Label 8", "ID BEEF02")]
+
+
 def test_rfid_service_scan_skips_lcd_when_feature_disabled(settings, tmp_path, monkeypatch):
     settings.BASE_DIR = tmp_path
     sent: list[object] = []
