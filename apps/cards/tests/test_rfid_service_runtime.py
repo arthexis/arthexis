@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 from apps.cards import rfid_service
 from apps.cards import scanner
@@ -82,6 +83,59 @@ def test_write_rfid_scan_lock_persists_latest_scan_state(settings, tmp_path):
     assert latest["label_id"] == 8
     assert "custom_label" not in latest
     assert not any(entry.name.endswith(".tmp") for entry in path.parent.iterdir())
+
+
+def test_write_rfid_scan_lock_uses_uuid_temp_name(settings, tmp_path, monkeypatch):
+    settings.BASE_DIR = tmp_path
+    captured: list[str] = []
+    original_write_text = rfid_service.Path.write_text
+
+    monkeypatch.setattr(
+        rfid_service.uuid,
+        "uuid4",
+        lambda: SimpleNamespace(hex="fixeduuid"),
+    )
+
+    def capture_write_text(self, *args, **kwargs):
+        captured.append(self.name)
+        return original_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(rfid_service.Path, "write_text", capture_write_text)
+
+    rfid_service.write_rfid_scan_lock({"rfid": "abcd1234"})
+
+    assert captured == [
+        f".{rfid_service.SCAN_STATE_FILE}.{rfid_service.os.getpid()}.fixeduuid.tmp"
+    ]
+
+
+def test_emit_scan_artifacts_uses_shared_payload_timestamp(settings, tmp_path, monkeypatch):
+    settings.BASE_DIR = tmp_path
+    appended: list[dict[str, object]] = []
+    timestamp = "2026-04-24T22:00:00+00:00"
+    original_build_scan_state_payload = rfid_service.build_scan_state_payload
+
+    def build_with_timestamp(payload):
+        state = original_build_scan_state_payload(payload)
+        state["scanned_at"] = timestamp
+        return state
+
+    monkeypatch.setattr(rfid_service, "build_scan_state_payload", build_with_timestamp)
+    monkeypatch.setattr(
+        rfid_service,
+        "append_scan_log",
+        lambda payload: appended.append(dict(payload)),
+    )
+
+    state = rfid_service.RFIDServiceState()
+    state._emit_scan_artifacts({"rfid": "abcd1234", "label_id": 7})
+
+    lock_payload = json.loads(
+        rfid_service.rfid_scan_lock_path(tmp_path).read_text(encoding="utf-8")
+    )
+    assert lock_payload["scanned_at"] == timestamp
+    assert appended[0]["scanned_at"] == timestamp
+    assert appended[0]["schema"] == rfid_service.SCAN_STATE_SCHEMA
 
 
 def test_format_lcd_scan_event_prefers_card_label():

@@ -19,6 +19,7 @@ import socket
 import socketserver
 import threading
 import time
+import uuid
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone as datetime_timezone
@@ -223,7 +224,7 @@ class RFIDServiceState:
             return
         payload = dict(result)
         payload.setdefault("service_mode", "service")
-        payload["scanned_at"] = datetime.now(datetime_timezone.utc).isoformat()
+        payload = build_scan_state_payload(payload)
         try:
             write_rfid_scan_lock(payload)
             append_scan_log(payload)
@@ -439,7 +440,7 @@ def write_rfid_scan_lock(payload: dict[str, Any], *, base_dir: Path | None = Non
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     state = build_scan_state_payload(payload)
     tmp_path = lock_path.with_name(
-        f".{lock_path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        f".{lock_path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
     )
     try:
         tmp_path.write_text(
