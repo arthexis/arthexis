@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
   issues: write
 
 jobs:
@@ -37,7 +38,7 @@ jobs:
       - name: Submit dependency snapshot (attempt 1)
         id: submit_snapshot_attempt_1
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@7c766a0966c66533ae37f76556cf9a33be50e5f8
+        uses: actions/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
         with:
           detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
 
@@ -49,7 +50,7 @@ jobs:
         id: submit_snapshot_attempt_2
         if: steps.submit_snapshot_attempt_1.outcome == 'failure'
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@7c766a0966c66533ae37f76556cf9a33be50e5f8
+        uses: actions/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
         with:
           detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
 
@@ -61,7 +62,7 @@ jobs:
         id: submit_snapshot_attempt_3
         if: steps.submit_snapshot_attempt_2.outcome == 'failure'
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@7c766a0966c66533ae37f76556cf9a33be50e5f8
+        uses: actions/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
         with:
           detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
 
@@ -73,7 +74,7 @@ jobs:
         id: submit_snapshot_attempt_4
         if: steps.submit_snapshot_attempt_3.outcome == 'failure'
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@7c766a0966c66533ae37f76556cf9a33be50e5f8
+        uses: actions/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
         with:
           detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
 
@@ -85,7 +86,7 @@ jobs:
         id: submit_snapshot_attempt_5
         if: steps.submit_snapshot_attempt_4.outcome == 'failure'
         continue-on-error: true
-        uses: advanced-security/component-detection-dependency-submission-action@7c766a0966c66533ae37f76556cf9a33be50e5f8
+        uses: actions/component-detection-dependency-submission-action@374343effede691df3a5ffaf36b4e7acab919590
         with:
           detectorArgs: ${{ env.DEPENDENCY_DETECTOR_ARGS }}
 
