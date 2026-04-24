@@ -61,7 +61,6 @@ def test_charger_vendor_submission_persists_submission_and_redirects(client):
         in messages
     )
 
-@pytest.mark.django_db
 def test_charger_vendor_submission_rate_limits_repeated_posts(client):
     """Regression: repeated public submissions should eventually be throttled."""
 

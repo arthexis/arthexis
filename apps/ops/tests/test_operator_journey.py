@@ -365,6 +365,7 @@ class OperatorJourneyViewTests(TestCase):
             ),
         )
 
+    @patch("apps.ops.forms.github_service.validate_token")
     def test_setup_github_token_complete_saves_after_successful_validation(
         self, mock_validate_token
     ):
@@ -740,6 +741,7 @@ class OperatorJourneyViewTests(TestCase):
             ),
         )
 
+    @override_settings(NODE_ROLE="Constellation")
     def test_role_validation_normalizes_constellation_alias_for_commands(self):
         summary = _build_node_role_validation_summary()
 
