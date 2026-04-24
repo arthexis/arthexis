@@ -200,7 +200,7 @@ def run_release_simulation(
             )
             _validate_dist_directory(root=root, resolved_dist=resolved_dist)
             if clean:
-                _clean_artifacts(root=root, resolved_dist=resolved_dist)
+                _clean_artifacts(resolved_dist=resolved_dist)
             _run_subprocess(
                 [
                     sys.executable,
@@ -479,17 +479,13 @@ def _run_subprocess(
         )
 
 
-def _clean_artifacts(*, root: Path, resolved_dist: Path) -> None:
-    for target in (
-        resolved_dist,
-        root / "build",
-    ):
-        if target.is_symlink():
-            target.unlink()
-        elif target.is_dir():
-            shutil.rmtree(target)
-        elif target.exists():
-            target.unlink()
+def _clean_artifacts(*, resolved_dist: Path) -> None:
+    if resolved_dist.is_symlink():
+        resolved_dist.unlink()
+    elif resolved_dist.is_dir():
+        shutil.rmtree(resolved_dist)
+    elif resolved_dist.exists():
+        resolved_dist.unlink()
 
 
 def _validate_dist_directory(*, root: Path, resolved_dist: Path) -> None:

@@ -333,15 +333,14 @@ def test_release_simulation_rejects_symlinked_dist_dir(tmp_path: Path) -> None:
     assert target_file.read_text(encoding="utf-8") == "keep me\n"
 
 
-def test_release_simulation_unlinks_symlinked_build_dir_before_cleanup(
+def test_release_simulation_preserves_existing_build_dir(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     _write_project(tmp_path)
-    target_dir = tmp_path / "existing-build"
-    target_dir.mkdir()
-    target_file = target_dir / "keep.txt"
-    target_file.write_text("keep me\n", encoding="utf-8")
-    (tmp_path / "build").symlink_to(target_dir, target_is_directory=True)
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    build_file = build_dir / "keep.txt"
+    build_file.write_text("keep me\n", encoding="utf-8")
 
     def fake_run(cmd: list[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
         if cmd[:3] == [sys.executable, "-m", "build"]:
@@ -358,8 +357,7 @@ def test_release_simulation_unlinks_symlinked_build_dir_before_cleanup(
     )
 
     assert result.ok is True
-    assert not (tmp_path / "build").exists()
-    assert target_file.read_text(encoding="utf-8") == "keep me\n"
+    assert build_file.read_text(encoding="utf-8") == "keep me\n"
 
 
 def test_release_simulation_reports_build_timeout(
