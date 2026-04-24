@@ -175,14 +175,15 @@
       <style>
         .operator-journey-provision-layout {
           display: grid;
-          gap: 1rem;
+          align-items: start;
+          gap: var(--admin-ui-space-4, 1rem);
           grid-template-columns: minmax(380px, 1.2fr) minmax(320px, 1fr);
-          margin-top: 1rem;
+          margin-top: var(--admin-ui-space-4, 1rem);
         }
         .operator-journey-provision-panel {
           border: 1px solid var(--hairline-color);
-          border-radius: 8px;
-          padding: 1rem;
+          border-radius: var(--admin-ui-radius-md, 0.5rem);
+          padding: var(--admin-ui-space-4, 1rem);
         }
         .operator-journey-provision-panel h2 {
           margin-top: 0;
@@ -194,18 +195,18 @@
         .operator-journey-sg-table th,
         .operator-journey-sg-table td {
           border-bottom: 1px solid var(--hairline-color);
-          padding: 0.6rem;
+          padding: var(--admin-ui-space-2, 0.5rem) var(--admin-ui-space-3, 0.75rem);
           text-align: left;
-          vertical-align: top;
+          vertical-align: middle;
         }
         .operator-journey-sg-table td:first-child,
         .operator-journey-sg-table th:first-child {
-          width: calc(var(--admin-ui-control-height, 2.5rem) + var(--admin-ui-space-4, 1rem));
+          width: calc(var(--admin-ui-control-height-sm, 2.125rem) + var(--admin-ui-space-3, 0.75rem));
         }
         .operator-journey-checkbox {
-          block-size: calc(var(--admin-ui-control-height-sm, 2.125rem) - var(--admin-ui-space-3, 0.75rem));
+          block-size: calc(var(--admin-ui-control-height-sm, 2.125rem) - var(--admin-ui-space-4, 1rem));
           cursor: pointer;
-          inline-size: calc(var(--admin-ui-control-height-sm, 2.125rem) - var(--admin-ui-space-3, 0.75rem));
+          inline-size: calc(var(--admin-ui-control-height-sm, 2.125rem) - var(--admin-ui-space-4, 1rem));
           margin: 0;
         }
         .operator-journey-checkbox-hitarea {
@@ -215,9 +216,32 @@
           cursor: pointer;
           display: inline-flex;
           justify-content: center;
-          min-height: var(--admin-ui-control-height-sm, 2.125rem);
-          min-width: var(--admin-ui-control-height-sm, 2.125rem);
+          min-height: calc(var(--admin-ui-control-height-sm, 2.125rem) - var(--admin-ui-space-2, 0.5rem));
+          min-width: calc(var(--admin-ui-control-height-sm, 2.125rem) - var(--admin-ui-space-2, 0.5rem));
           padding: var(--admin-ui-space-1, 0.25rem);
+        }
+        .operator-journey-account-fields {
+          display: grid;
+          gap: var(--admin-ui-space-3, 0.75rem);
+          margin-top: 0;
+          padding: 0;
+        }
+        .operator-journey-account-row {
+          display: grid;
+          gap: var(--admin-ui-space-2, 0.5rem);
+          margin: 0;
+        }
+        .operator-journey-account-row label {
+          display: block;
+          font-weight: 600;
+          margin: 0;
+        }
+        .operator-journey-account-row .help {
+          margin: var(--admin-ui-space-1, 0.25rem) 0 0;
+        }
+        .operator-journey-account-row input:not([type="checkbox"]):not([type="radio"]),
+        .operator-journey-account-row select {
+          width: 100%;
         }
         .operator-journey-primary-button {
           font-size: 0.95rem;
@@ -264,7 +288,7 @@
                       </label>
                     </td>
                     <td>
-                      <label for="id_security_groups_{{ row.id }}"><strong>{{ row.name }}</strong></label>
+                      <label for="id_security_groups_{{ row.id }}"><strong>{{ row.name_label }}</strong></label>
                     </td>
                     <td>
                       {% if row.is_staff_group %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}
@@ -279,14 +303,14 @@
           </section>
           <section class="operator-journey-provision-panel" aria-labelledby="account-details-title">
             <h2 id="account-details-title">{% translate "User details" %}</h2>
-            <fieldset class="module aligned" style="padding: 0;">
+            <fieldset class="module aligned operator-journey-account-fields">
               {% for field in provision_superuser_form %}
                 {% if field.name != "security_groups" %}
-                  <div class="form-row" style="margin-bottom: var(--admin-ui-space-3, 0.75rem);">
-                    <label for="{{ field.id_for_label }}" style="display: block; font-weight: 600;">{{ field.label }}</label>
+                  <div class="form-row operator-journey-account-row">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                     {{ field }}
                     {% if field.help_text %}
-                      <p class="help" style="margin: var(--admin-ui-space-1, 0.25rem) 0 0;">{{ field.help_text }}</p>
+                      <p class="help">{{ field.help_text }}</p>
                     {% endif %}
                     {{ field.errors }}
                   </div>

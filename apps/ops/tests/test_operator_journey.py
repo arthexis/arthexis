@@ -1293,6 +1293,21 @@ class OperatorJourneyViewTests(TestCase):
         self.assertEqual(rows_by_name[SITE_OPERATOR_GROUP_NAME]["apps"], "—")
         self.assertFalse(rows_by_name["Custom app group"]["is_staff_group"])
         self.assertEqual(rows_by_name["Custom app group"]["apps"], "billing")
+        self.assertEqual(
+            rows_by_name["Custom app group"]["name_label"],
+            "Custom app group",
+        )
+
+    def test_security_group_rows_show_name_fallback_for_blank_names(self):
+        SecurityGroup.objects.create(name="")
+        provision_form = OperatorJourneyProvisionSuperuserForm()
+
+        security_group_rows = _build_security_group_rows(provision_form)
+
+        self.assertIn(
+            "Unnamed security group",
+            {row["name_label"] for row in security_group_rows},
+        )
 
     def test_provision_step_creates_superuser_with_assigned_groups(self):
         provision_step = OperatorJourneyStep.objects.create(
