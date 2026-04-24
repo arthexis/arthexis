@@ -16,6 +16,7 @@ from apps.core.services.health_checks import (
     run_check_rfid,
     run_check_system_user,
     run_check_time,
+    run_check_ui_style_contract,
 )
 from apps.ocpp.services.health_checks import run_check_forwarders
 from apps.release.services.health_checks import run_check_pypi
@@ -66,6 +67,13 @@ HEALTH_CHECKS = {
         group="core",
         description="Display current server time",
         runner=run_check_time,
+    ),
+    "core.ui_style_contract": HealthCheckDefinition(
+        target="core.ui_style_contract",
+        group="core",
+        description="Validate admin UI style contract across templates and stylesheets",
+        runner=run_check_ui_style_contract,
+        include_in_group=False,
     ),
     "ocpp.forwarders": HealthCheckDefinition(
         target="ocpp.forwarders",

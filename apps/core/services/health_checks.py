@@ -8,6 +8,7 @@ import math
 import random
 import string
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Iterable, Protocol, cast
@@ -73,6 +74,22 @@ def run_check_time(*, stdout, style, **_kwargs) -> None:
 
     current_time = timezone.localtime()
     stdout.write(style.SUCCESS(f"Current server time: {current_time.isoformat()}"))
+
+
+def run_check_ui_style_contract(*, stdout, **_kwargs) -> None:
+    """Validate admin UI template/style contract for class names and inline styles."""
+
+    result = subprocess.run(
+        [sys.executable, "scripts/check_ui_style_contract.py"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 0:
+        stdout.write(result.stdout.strip() or "UI style contract check passed.")
+        return
+    message = (result.stdout or result.stderr).strip()
+    raise CommandError(message or "UI style contract check failed.")
 
 
 def _collect_admin_issues(user) -> Iterable[str]:
