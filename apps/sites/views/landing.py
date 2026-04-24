@@ -27,6 +27,7 @@ from apps.ocpp.utils.websocket import resolve_ws_scheme
 from utils.decorators import security_group_required, staff_required
 from utils.sites import get_site
 
+from ..autocomplete import FeedbackAutocompleteHarness
 from ..forms import UserStoryForm
 from ..utils import (
     get_original_referer,
@@ -336,6 +337,25 @@ def changelog_report_data(request):
         {"html": html, "has_more": page_data.has_more, "next_page": page_data.next_page}
     )
 
+
+
+@require_GET
+def user_story_autocomplete(request):
+    text = request.GET.get("q", "")
+    limit_raw = request.GET.get("limit", "5")
+    try:
+        limit = max(1, min(int(limit_raw), 10))
+    except (TypeError, ValueError):
+        limit = 5
+
+    harness = FeedbackAutocompleteHarness()
+    suggestions = harness.suggest(
+        text=text,
+        is_staff=bool(request.user.is_authenticated and request.user.is_staff),
+        limit=limit,
+    )
+    model = "repo-trained" if request.user.is_authenticated and request.user.is_staff else "standard"
+    return JsonResponse({"success": True, "model": model, "suggestions": suggestions})
 
 @require_POST
 def submit_user_story(request):

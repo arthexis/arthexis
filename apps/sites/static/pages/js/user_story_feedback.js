@@ -29,6 +29,96 @@
   const canCopyStaffDetails = form.dataset.copyStaffDetails === '1';
   const securityGroups = (form.dataset.securityGroups || '').trim();
   const messageField = form.querySelector('input[name="messages"]');
+  const autocompleteUrl = form.dataset.autocompleteUrl || '';
+  const autocompleteContainer = document.createElement('div');
+  autocompleteContainer.className = 'user-story-autocomplete mt-2';
+  autocompleteContainer.setAttribute('aria-live', 'polite');
+  if (commentField && commentField.parentNode) {
+    commentField.parentNode.appendChild(autocompleteContainer);
+  }
+  let autocompleteAbortController = null;
+
+  const setCommentValue = value => {
+    if (!commentField) {
+      return;
+    }
+    commentField.value = value;
+    commentField.dispatchEvent(new Event('input', { bubbles: true }));
+    commentField.focus();
+    commentField.setSelectionRange(commentField.value.length, commentField.value.length);
+  };
+
+  const clearAutocompleteSuggestions = () => {
+    autocompleteContainer.textContent = '';
+  };
+
+  const renderAutocompleteSuggestions = suggestions => {
+    clearAutocompleteSuggestions();
+    if (!commentField || !Array.isArray(suggestions) || !suggestions.length) {
+      return;
+    }
+    const list = document.createElement('div');
+    list.className = 'd-flex flex-wrap gap-2';
+    suggestions.forEach(suggestion => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-sm btn-outline-secondary';
+      button.textContent = suggestion;
+      button.addEventListener('click', () => {
+        const currentValue = commentField.value.trim();
+        const nextValue = currentValue ? `${currentValue} ${suggestion}` : suggestion;
+        setCommentValue(nextValue);
+      });
+      list.appendChild(button);
+    });
+    autocompleteContainer.appendChild(list);
+  };
+
+  const fetchAutocompleteSuggestions = async () => {
+    if (!autocompleteUrl || !commentField || commentField.value.trim().length < 2) {
+      clearAutocompleteSuggestions();
+      return;
+    }
+
+    if (autocompleteAbortController) {
+      autocompleteAbortController.abort();
+    }
+    autocompleteAbortController = new AbortController();
+
+    const url = new URL(autocompleteUrl, window.location.origin);
+    url.searchParams.set('q', commentField.value);
+    url.searchParams.set('limit', '5');
+
+    try {
+      const response = await fetch(url.toString(), {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        signal: autocompleteAbortController.signal,
+      });
+      if (!response.ok) {
+        clearAutocompleteSuggestions();
+        return;
+      }
+      const data = await response.json();
+      renderAutocompleteSuggestions(data.suggestions || []);
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        return;
+      }
+      clearAutocompleteSuggestions();
+    }
+  };
+
+  const debounce = (fn, waitMs) => {
+    let timeout = null;
+    return (...args) => {
+      if (timeout) {
+        window.clearTimeout(timeout);
+      }
+      timeout = window.setTimeout(() => fn(...args), waitMs);
+    };
+  };
+
+  const requestAutocompleteSuggestions = debounce(fetchAutocompleteSuggestions, 150);
   let previousFocus = null;
   let copyFeedbackTimeout = null;
 
@@ -182,7 +272,10 @@
   });
 
   if (commentField) {
-    commentField.addEventListener('input', setCharCount);
+    commentField.addEventListener('input', () => {
+      setCharCount();
+      requestAutocompleteSuggestions();
+    });
     setCharCount();
   }
 
@@ -446,6 +539,7 @@
       if (response.ok) {
         form.reset();
         setCharCount();
+        clearAutocompleteSuggestions();
         setRatingHint();
         resizeFeedbackTextareas({ force: true });
         if (successAlert) {
