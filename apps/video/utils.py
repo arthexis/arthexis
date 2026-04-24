@@ -71,13 +71,13 @@ def _parse_rpicam_camera_count(output: str) -> int:
     return count
 
 
-def _list_rpicam_cameras(timeout: int = 5) -> tuple[int, str]:
-    """Return attached-camera count and the best probe message."""
+def _list_rpicam_cameras(timeout: int = 5) -> tuple[int, str, str]:
+    """Return attached-camera count, the best probe message, and raw output."""
 
     binary_paths = _rpicam_binary_paths()
     tool_path = binary_paths.get("rpicam-hello") or binary_paths.get("rpicam-still")
     if not tool_path:
-        return (0, "rpicam-hello is not available")
+        return (0, "rpicam-hello is not available", "")
 
     try:
         result = subprocess.run(
@@ -88,21 +88,21 @@ def _list_rpicam_cameras(timeout: int = 5) -> tuple[int, str]:
             timeout=timeout,
         )
     except (OSError, subprocess.SubprocessError) as exc:  # pragma: no cover
-        return (0, f"Unable to list cameras: {exc}")
+        return (0, f"Unable to list cameras: {exc}", "")
 
     output = (result.stdout or result.stderr or "").strip()
     if result.returncode != 0:
-        return (0, output or "Unable to list cameras")
+        return (0, output or "Unable to list cameras", output)
     if not output:
-        return (0, "No camera information returned")
+        return (0, "No camera information returned", "")
     if "No cameras available" in output:
-        return (0, "No attached cameras detected")
+        return (0, "No attached cameras detected", output)
 
     camera_count = _parse_rpicam_camera_count(output)
     if camera_count > 0:
         suffix = "camera" if camera_count == 1 else "cameras"
-        return (camera_count, f"{camera_count} attached {suffix} detected")
-    return (0, "Unable to determine attached cameras")
+        return (camera_count, f"{camera_count} attached {suffix} detected", output)
+    return (0, "Unable to determine attached cameras", output)
 
 
 def has_rpicam_binaries() -> bool:
@@ -125,7 +125,7 @@ def probe_rpi_camera_stack(timeout: int = 5) -> CameraStackProbe:
     rpicam_available = has_rpicam_binaries()
     rpicam_reason = ""
     if rpicam_available:
-        camera_count, rpicam_reason = _list_rpicam_cameras(timeout=timeout)
+        camera_count, rpicam_reason, _output = _list_rpicam_cameras(timeout=timeout)
         if camera_count > 0:
             return CameraStackProbe(
                 available=True,
@@ -171,30 +171,12 @@ def has_rpi_camera_stack() -> bool:
 def get_camera_resolutions() -> list[tuple[int, int]]:
     """Return supported camera resolutions when available."""
 
-    probe = probe_rpi_camera_stack()
-    if not probe.available or probe.backend != "rpicam":
-        return list(FALLBACK_CAMERA_RESOLUTIONS)
-
-    tool_path = shutil.which("rpicam-hello")
-    if not tool_path:
-        return list(FALLBACK_CAMERA_RESOLUTIONS)
-
-    try:
-        result = subprocess.run(
-            [tool_path, "--list-cameras"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return list(FALLBACK_CAMERA_RESOLUTIONS)
-
-    if result.returncode != 0:
+    camera_count, _reason, output = _list_rpicam_cameras()
+    if camera_count <= 0:
         return list(FALLBACK_CAMERA_RESOLUTIONS)
 
     resolutions: set[tuple[int, int]] = set()
-    for line in result.stdout.splitlines():
+    for line in output.splitlines():
         if "x" not in line:
             continue
         for chunk in line.split():
