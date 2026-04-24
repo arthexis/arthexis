@@ -8,6 +8,7 @@ STATUS_WAIT_TIMEOUT=60
 exit_code=0
 WAIT_FOR_REACHABLE=false
 
+# Lifecycle CLI contract: keep help/options aligned with docs/development/install-lifecycle-scripts-manual.md.
 usage() {
   cat <<'EOF'
 Usage: ./status.sh [options]

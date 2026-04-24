@@ -2,7 +2,37 @@
 
 > **Single source of truth:** Keep operational flag and behavior details in this file. Update `apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md` only with role-oriented guidance and a link back here.
 
-This is the canonical reference for Linux lifecycle scripts: `install.sh`, `start.sh`, `stop.sh`, `upgrade.sh`, `configure.sh`, and `uninstall.sh`.
+This is the canonical reference for Linux lifecycle scripts: `install.sh`, `start.sh`, `stop.sh`, `status.sh`, `command.sh`, `upgrade.sh`, `configure.sh`, and `uninstall.sh`.
+
+
+## Lifecycle map (operator contract)
+
+```mermaid
+flowchart TD
+    I[install.sh
+Bootstrap node] --> C[configure.sh
+Adjust role/features/locks]
+    I --> S[start.sh
+Launch services]
+    C --> S
+    S --> T[status.sh
+Inspect readiness and metadata]
+    S --> O[command.sh
+Run allowlisted ops commands]
+    S --> P[stop.sh
+Graceful shutdown]
+    P --> U[upgrade.sh
+Pull/update/migrate]
+    U --> S
+    U --> T
+    P --> X[uninstall.sh
+Retire node]
+
+    classDef safety fill:#fff8e6,stroke:#b36b00,color:#3d2500;
+    class T,O safety;
+```
+
+This map is a regression guardrail: lifecycle changes should preserve these operator touchpoints unless the manual and tests are updated together.
 
 ## Git remotes for preloaded environments
 
@@ -149,7 +179,32 @@ Both supported backends emit a consistent reconciliation report that includes co
 | `--repair` | Restore lock state from existing role and lock files. |
 | `--failover ROLE` | Provide role fallback for repair when role lock cannot be resolved. |
 
-## 5. Uninstall (`uninstall.sh`)
+
+## 5. Runtime status (`status.sh`)
+
+`status.sh` reports installation metadata, configured role/service/port state, upgrade in-progress markers, and service reachability probes.
+
+### Supported flags
+
+| Flag | Notes |
+| --- | --- |
+| `-h`, `--help` | Print usage and exit successfully. |
+| `--wait` | Poll until reachability checks succeed or timeout windows expire. |
+
+## 6. Operational command entrypoint (`command.sh`)
+
+`command.sh` is the allowlisted operational command wrapper. It validates the runtime environment, logs invocation metadata safely, and dispatches to `utils.command_api`.
+
+### Interface contract
+
+| Invocation | Notes |
+| --- | --- |
+| `./command.sh list` | Show allowlisted operational commands. |
+| `./command.sh <operational-command> [args...]` | Run one allowlisted ops command. |
+
+For non-ops/admin Django commands, use `.venv/bin/python manage.py ...` directly.
+
+## 7. Uninstall (`uninstall.sh`)
 
 `uninstall.sh` tears down managed units, local locks, and local SQLite DB.
 
@@ -161,7 +216,7 @@ Both supported backends emit a consistent reconciliation report that includes co
 | `--no-warn` | Skip DB deletion warning prompt. |
 | `--rfid-service`, `--no-rfid-service` | Control whether RFID unit/lock is removed during uninstall. |
 
-## 6. Documentation maintenance check
+## 8. Documentation maintenance check
 
 When lifecycle script docs are updated:
 

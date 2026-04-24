@@ -82,6 +82,7 @@ is_debian_host() {
     return 1
 }
 
+# Lifecycle CLI contract: keep this usage block aligned with docs/development/install-lifecycle-scripts-manual.md and lifecycle contract tests.
 usage() {
     echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--rfid-service|--no-rfid-service] [--camera-service|--no-camera-service] [--boot-upgrade|--no-boot-upgrade] [--clean] [--start|--no-start] [--repair]" >&2
     exit 1
