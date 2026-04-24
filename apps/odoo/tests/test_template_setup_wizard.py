@@ -25,7 +25,7 @@ def test_setup_templates_step_one_imports_selected_records(admin_client, admin_u
         verified_on=timezone.now(),
     )
 
-    def execute(model, method, domain, **kwargs):
+    def execute(model, method, *args, **kwargs):
         assert method == "search_read"
         if model == "sale.order.template":
             fields = kwargs.get("fields") or []
@@ -37,8 +37,8 @@ def test_setup_templates_step_one_imports_selected_records(admin_client, admin_u
     monkeypatch.setattr(
         OdooEmployee,
         "execute",
-        lambda self, model, method, domain, **kwargs: execute(
-            model, method, domain, **kwargs
+        lambda self, model, method, *args, **kwargs: execute(
+            model, method, *args, **kwargs
         ),
     )
 
@@ -94,11 +94,16 @@ def test_setup_templates_step_two_generates_unique_factor_code(admin_client):
         name="Base",
         odoo_template={"id": 90, "name": "Base"},
     )
+    product = OdooProduct.objects.create(
+        name="Addon",
+        renewal_period=30,
+        odoo_product={"id": 501, "name": "Addon"},
+    )
 
     payload = {
         "name_prefix": "Setup",
         "templates": [str(source_template.pk)],
-        "products": [],
+        "products": [str(product.pk)],
         "employees": [],
     }
 
@@ -149,8 +154,9 @@ def test_setup_templates_step_one_employee_update_syncs_user(
         verified_on=timezone.now(),
     )
 
-    def execute(model, method, domain, **kwargs):
+    def execute(model, method, *args, **kwargs):
         assert method == "search_read"
+        domain = args[0] if args else kwargs.get("domain")
         if model == "res.users":
             if domain == [[("active", "=", True), ("share", "=", False)]]:
                 return [
@@ -176,8 +182,8 @@ def test_setup_templates_step_one_employee_update_syncs_user(
     monkeypatch.setattr(
         OdooEmployee,
         "execute",
-        lambda self, model, method, domain, **kwargs: execute(
-            model, method, domain, **kwargs
+        lambda self, model, method, *args, **kwargs: execute(
+            model, method, *args, **kwargs
         ),
     )
 

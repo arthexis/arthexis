@@ -1,8 +1,12 @@
+import logging
+import socket
+from xmlrpc.client import Fault, ProtocolError
+
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -32,6 +36,8 @@ from .sync_features import (
     ODOO_SYNC_DEPLOYMENT_DISCOVERY_PARAMETER_KEY,
     is_odoo_sync_integration_enabled,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class OdooTemplateSetupImportForm(forms.Form):
@@ -489,6 +495,36 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
             return None
         return profile
 
+    def _has_add_and_change_permission(self, request, model) -> bool:
+        model_admin = self.admin_site._registry.get(model)
+        if model_admin is not None:
+            return model_admin.has_add_permission(request) and model_admin.has_change_permission(
+                request
+            )
+        opts = model._meta
+        return request.user.has_perms(
+            (
+                f"{opts.app_label}.add_{opts.model_name}",
+                f"{opts.app_label}.change_{opts.model_name}",
+            )
+        )
+
+    def _source_permissions_ok(self, request, source_type: str) -> bool:
+        model_by_source = {
+            OdooTemplateSetupImportForm.SOURCE_TEMPLATES: OdooSaleOrderTemplate,
+            OdooTemplateSetupImportForm.SOURCE_PRODUCTS: OdooProduct,
+            OdooTemplateSetupImportForm.SOURCE_EMPLOYEES: OdooEmployee,
+        }
+        model = model_by_source[source_type]
+        if self._has_add_and_change_permission(request, model):
+            return True
+        self.message_user(
+            request,
+            _("You do not have permission to import %(kind)s records.") % {"kind": source_type},
+            level=messages.ERROR,
+        )
+        return False
+
     def _remote_options(self, profile, source_type: str) -> list[tuple[str, str]]:
         if source_type == OdooTemplateSetupImportForm.SOURCE_TEMPLATES:
             rows = profile.execute(
@@ -628,15 +664,29 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
             desired_username = login or existing.username
             user = existing.user
             if user is not None:
+                user_updated_fields: list[str] = []
                 if user.username != desired_username:
                     desired_username = self._resolve_unique_username(desired_username, source_id)
-                user.username = desired_username
-                user.email = email
-                user.save(update_fields=["username", "email"])
-            existing.email = email
-            existing.name = str(source_row.get("name") or existing.name)
-            existing.partner_id = partner_id
-            existing.save(update_fields=["email", "name", "partner_id"])
+                    user.username = desired_username
+                    user_updated_fields.append("username")
+                if email and user.email != email:
+                    user.email = email
+                    user_updated_fields.append("email")
+                if user_updated_fields:
+                    user.save(update_fields=user_updated_fields)
+            existing_updated_fields: list[str] = []
+            if email and existing.email != email:
+                existing.email = email
+                existing_updated_fields.append("email")
+            name = str(source_row.get("name") or existing.name)
+            if existing.name != name:
+                existing.name = name
+                existing_updated_fields.append("name")
+            if existing.partner_id != partner_id:
+                existing.partner_id = partner_id
+                existing_updated_fields.append("partner_id")
+            if existing_updated_fields:
+                existing.save(update_fields=existing_updated_fields)
             return existing, False
 
         user_model = get_user_model()
@@ -704,10 +754,13 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         source_type = request.POST.get("source_type") or request.GET.get("source_type")
         if source_type not in dict(OdooTemplateSetupImportForm.SOURCE_CHOICES):
             source_type = OdooTemplateSetupImportForm.SOURCE_TEMPLATES
+        if not self._source_permissions_ok(request, source_type):
+            source_type = OdooTemplateSetupImportForm.SOURCE_TEMPLATES
 
         try:
             options = self._remote_options(profile, source_type)
-        except Exception:
+        except (Fault, OSError, ProtocolError, TimeoutError, socket.timeout):
+            logger.exception("Could not fetch Odoo records for source_type=%s", source_type)
             self.message_user(
                 request,
                 _("Could not fetch Odoo records right now. Please verify your Odoo connection."),
@@ -721,13 +774,21 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         )
 
         if request.method == "POST" and form.is_valid():
+            if not self._source_permissions_ok(request, form.cleaned_data["source_type"]):
+                return HttpResponseRedirect(
+                    f"{self._setup_templates_url()}?source_type={form.cleaned_data['source_type']}"
+                )
             try:
                 created, updated = self._import_source_selection(
                     profile,
                     source_type=form.cleaned_data["source_type"],
                     selected_ids=form.cleaned_data["selected_ids"],
                 )
-            except Exception:
+            except (Fault, OSError, ProtocolError, TimeoutError, socket.timeout):
+                logger.exception(
+                    "Odoo import failed for source_type=%s",
+                    form.cleaned_data["source_type"],
+                )
                 self.message_user(
                     request,
                     _("Import failed due to an Odoo communication error. Please try again."),
@@ -774,8 +835,12 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
             products = list(form.cleaned_data["products"])
             employees = list(form.cleaned_data["employees"])
             name_prefix = form.cleaned_data["name_prefix"]
-            factor_code = form.cleaned_data["factor_code"]
             primary_employee = employees[0] if employees else None
+
+            if products and not self._has_add_and_change_permission(request, OdooSaleFactor):
+                raise PermissionDenied
+            if products and not self._has_add_and_change_permission(request, OdooSaleFactorProductRule):
+                raise PermissionDenied
 
             with transaction.atomic():
                 created_templates: list[OdooSaleOrderTemplate] = []
@@ -792,11 +857,22 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
                     created_templates.append(copied)
 
                 created_rules = 0
-                if created_templates:
-                    factor = OdooSaleFactor.objects.create(
-                        name=f"{name_prefix} Products",
-                        code=factor_code,
-                    )
+                if created_templates and products:
+                    factor = None
+                    base_code = slugify(f"{name_prefix} Products")[:64] or "setup-template-products"
+                    for counter in range(1, 101):
+                        candidate = base_code if counter == 1 else f"{base_code[: 64 - len(str(counter)) - 1]}-{counter}"
+                        try:
+                            with transaction.atomic():
+                                factor = OdooSaleFactor.objects.create(
+                                    name=f"{name_prefix} Products",
+                                    code=candidate,
+                                )
+                            break
+                        except IntegrityError:
+                            continue
+                    if factor is None:
+                        raise ValidationError(_("Unable to generate a unique sale factor code."))
                     factor.templates.set(created_templates)
                     for product in products:
                         OdooSaleFactorProductRule.objects.create(
