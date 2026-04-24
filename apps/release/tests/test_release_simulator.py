@@ -227,6 +227,39 @@ def test_release_simulation_reports_escaped_dist_dir_as_build_failure(
     assert "Dist directory escapes repository root" in result.error
 
 
+def test_release_simulation_rejects_root_dist_dir_before_cleanup(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        dist_dir=Path("."),
+        skip_pypi=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "build_package"
+    assert "not the repository root" in result.error
+    assert (tmp_path / "VERSION").exists()
+    assert (tmp_path / "pyproject.toml").exists()
+
+
+def test_release_simulation_rejects_file_dist_dir_before_cleanup(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    dist_file = tmp_path / "dist"
+    dist_file.write_text("keep me\n", encoding="utf-8")
+
+    result = run_release_simulation(
+        root=tmp_path,
+        dist_dir=Path("dist"),
+        skip_pypi=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "build_package"
+    assert "exists but is not a directory" in result.error
+    assert dist_file.read_text(encoding="utf-8") == "keep me\n"
+
+
 def test_release_simulation_reports_build_timeout(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

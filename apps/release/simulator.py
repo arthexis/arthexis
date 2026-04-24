@@ -197,6 +197,7 @@ def run_release_simulation(
                 label="dist directory",
                 step="build_package",
             )
+            _validate_dist_directory(root=root, resolved_dist=resolved_dist)
             if clean:
                 _clean_artifacts(root=root, resolved_dist=resolved_dist)
             _run_subprocess(
@@ -477,6 +478,19 @@ def _clean_artifacts(*, root: Path, resolved_dist: Path) -> None:
             shutil.rmtree(target)
         elif target.exists():
             target.unlink()
+
+
+def _validate_dist_directory(*, root: Path, resolved_dist: Path) -> None:
+    if resolved_dist == root:
+        raise ReleaseSimulationError(
+            "build_package",
+            "Dist directory must be a dedicated subdirectory, not the repository root.",
+        )
+    if resolved_dist.exists() and not resolved_dist.is_dir():
+        raise ReleaseSimulationError(
+            "build_package",
+            f"Dist directory exists but is not a directory: {resolved_dist}",
+        )
 
 
 def _resolve_child_path(
