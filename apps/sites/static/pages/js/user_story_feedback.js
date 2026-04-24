@@ -29,6 +29,137 @@
   const canCopyStaffDetails = form.dataset.copyStaffDetails === '1';
   const securityGroups = (form.dataset.securityGroups || '').trim();
   const messageField = form.querySelector('input[name="messages"]');
+  const autocompleteUrl = form.dataset.autocompleteUrl || '';
+  const autocompleteContainer = document.createElement('div');
+  autocompleteContainer.className = 'user-story-autocomplete mt-2';
+  autocompleteContainer.setAttribute('aria-live', 'polite');
+  if (commentField && commentField.parentNode) {
+    commentField.parentNode.appendChild(autocompleteContainer);
+  }
+  let autocompleteAbortController = null;
+  let autocompleteRequestId = 0;
+
+  const setCommentValue = value => {
+    if (!commentField) {
+      return;
+    }
+    commentField.value = value;
+    commentField.dispatchEvent(new Event('input', { bubbles: true }));
+    commentField.focus();
+    commentField.setSelectionRange(commentField.value.length, commentField.value.length);
+  };
+
+  const applyAutocompleteSuggestion = suggestion => {
+    const currentValue = commentField.value;
+    const trailingWhitespace = currentValue.match(/\s+$/);
+    if (trailingWhitespace) {
+      return `${currentValue}${suggestion}`;
+    }
+    const activeToken = currentValue.match(/\S+$/);
+    if (activeToken && suggestion.toLowerCase().startsWith(activeToken[0].toLowerCase())) {
+      return `${currentValue.slice(0, activeToken.index)}${suggestion}`;
+    }
+    const separator = currentValue.trim() ? ' ' : '';
+    return `${currentValue.trimEnd()}${separator}${suggestion}`;
+  };
+
+  const clearAutocompleteSuggestions = () => {
+    autocompleteContainer.textContent = '';
+  };
+
+  const renderAutocompleteSuggestions = suggestions => {
+    clearAutocompleteSuggestions();
+    if (!commentField || !Array.isArray(suggestions) || !suggestions.length) {
+      return;
+    }
+    const list = document.createElement('div');
+    list.className = 'd-flex flex-wrap gap-2';
+    suggestions.forEach(suggestion => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-sm btn-outline-secondary';
+      button.textContent = suggestion;
+      button.addEventListener('click', () => {
+        setCommentValue(applyAutocompleteSuggestion(suggestion));
+      });
+      list.appendChild(button);
+    });
+    autocompleteContainer.appendChild(list);
+  };
+
+  const fetchAutocompleteSuggestions = async () => {
+    if (autocompleteAbortController) {
+      autocompleteAbortController.abort();
+      autocompleteAbortController = null;
+    }
+
+    if (!autocompleteUrl || !commentField || commentField.value.trim().length < 2) {
+      clearAutocompleteSuggestions();
+      return;
+    }
+
+    const requestId = autocompleteRequestId + 1;
+    autocompleteRequestId = requestId;
+    const query = commentField.value;
+    const abortController = new AbortController();
+    autocompleteAbortController = abortController;
+
+    const payload = new URLSearchParams();
+    const csrfToken = form.querySelector('input[name="csrfmiddlewaretoken"]');
+    payload.set('q', query);
+    payload.set('limit', '5');
+    const headers = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-Requested-With': 'XMLHttpRequest',
+    };
+    if (csrfToken) {
+      headers['X-CSRFToken'] = csrfToken.value;
+    }
+
+    const isCurrentAutocompleteRequest = () =>
+      autocompleteRequestId === requestId &&
+      autocompleteAbortController === abortController &&
+      commentField &&
+      commentField.value === query;
+
+    try {
+      const response = await fetch(autocompleteUrl, {
+        method: 'POST',
+        headers,
+        body: payload,
+        signal: abortController.signal,
+      });
+      if (!response.ok) {
+        if (isCurrentAutocompleteRequest()) {
+          clearAutocompleteSuggestions();
+        }
+        return;
+      }
+      const data = await response.json();
+      if (isCurrentAutocompleteRequest()) {
+        renderAutocompleteSuggestions(data.suggestions || []);
+      }
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        return;
+      }
+      if (isCurrentAutocompleteRequest()) {
+        clearAutocompleteSuggestions();
+      }
+    }
+  };
+
+  const debounce = (fn, waitMs) => {
+    let timeout = null;
+    return (...args) => {
+      if (timeout) {
+        window.clearTimeout(timeout);
+      }
+      timeout = window.setTimeout(() => fn(...args), waitMs);
+    };
+  };
+
+  const requestAutocompleteSuggestions = debounce(fetchAutocompleteSuggestions, 150);
   let previousFocus = null;
   let copyFeedbackTimeout = null;
 
@@ -182,7 +313,10 @@
   });
 
   if (commentField) {
-    commentField.addEventListener('input', setCharCount);
+    commentField.addEventListener('input', () => {
+      setCharCount();
+      requestAutocompleteSuggestions();
+    });
     setCharCount();
   }
 
@@ -446,6 +580,7 @@
       if (response.ok) {
         form.reset();
         setCharCount();
+        clearAutocompleteSuggestions();
         setRatingHint();
         resizeFeedbackTextareas({ force: true });
         if (successAlert) {

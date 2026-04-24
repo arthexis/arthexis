@@ -37,4 +37,5 @@ urlpatterns = [
         name="invitation-login",
     ),
     path("feedback/user-story/", landing.submit_user_story, name="user-story-submit"),
+    path("feedback/user-story/autocomplete/", landing.user_story_autocomplete, name="user-story-autocomplete"),
 ]
