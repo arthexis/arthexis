@@ -8,6 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.admin import GROUP_PROFILE_INLINES
 from apps.core.admin.mixins import OwnedObjectLinksMixin
 from apps.core.models import get_owned_objects_for_group
+from .constants import SITE_OPERATOR_GROUP_NAME
 from .models import SecurityGroup
 
 
@@ -61,6 +62,13 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
     list_filter = ("app",)
     readonly_fields = ("security_model_label",)
     search_fields = ("name", "app", "parent__name")
+
+    def has_add_permission(self, request):
+        if not super().has_add_permission(request):
+            return False
+        if request.user.is_superuser:
+            return True
+        return not request.user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).exists()
 
     def get_readonly_fields(self, request, obj=None):
         readonly_fields = list(super().get_readonly_fields(request, obj))
