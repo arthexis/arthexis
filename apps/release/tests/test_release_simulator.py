@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
+from typing import Any
 
 import pytest
 from django.core.management import call_command
@@ -15,6 +16,20 @@ from apps.release.simulator import (
     run_release_simulation,
     write_github_output,
 )
+
+
+class _FakeResponse:
+    def __init__(self, payload: bytes) -> None:
+        self.payload = payload
+
+    def __enter__(self) -> "_FakeResponse":
+        return self
+
+    def __exit__(self, *_args: Any) -> None:
+        return None
+
+    def read(self, *_args: Any) -> bytes:
+        return self.payload
 
 
 def _write_project(root: Path, *, version: str = "1.2.3", dynamic_path: str = "VERSION") -> None:
@@ -76,6 +91,64 @@ def test_release_simulation_reports_version_gate_mismatch(tmp_path: Path) -> Non
     assert result.failed_step == "validate_version_gate"
     assert "differ" in result.error
     assert "validate_version_gate" in result.summary_markdown
+
+
+def test_release_simulation_reports_malformed_pyproject(tmp_path: Path) -> None:
+    _write_project(tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project\n", encoding="utf-8")
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_pypi=True,
+        skip_build=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "validate_version_gate"
+    assert "Failed to parse pyproject file" in result.error
+
+
+def test_release_simulation_quotes_package_name_for_pypi(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_project(tmp_path)
+    requested_urls: list[str] = []
+
+    def fake_urlopen(url: str, *, timeout: float) -> _FakeResponse:
+        requested_urls.append(url)
+        assert timeout == 15.0
+        return _FakeResponse(b'{"releases": {}}')
+
+    monkeypatch.setattr("apps.release.simulator.urlopen", fake_urlopen)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        package_name="arthexis suite/test",
+        skip_build=True,
+    )
+
+    assert result.ok is True
+    assert requested_urls == ["https://pypi.org/pypi/arthexis%20suite%2Ftest/json"]
+
+
+def test_release_simulation_reports_invalid_pypi_json(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_project(tmp_path)
+
+    def fake_urlopen(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(b"{not json")
+
+    monkeypatch.setattr("apps.release.simulator.urlopen", fake_urlopen)
+
+    result = run_release_simulation(
+        root=tmp_path,
+        skip_build=True,
+    )
+
+    assert result.ok is False
+    assert result.failed_step == "preflight_pypi"
+    assert "Received invalid JSON from PyPI" in result.error
 
 
 def test_release_simulation_skips_when_blockers_are_provided(tmp_path: Path) -> None:

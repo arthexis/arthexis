@@ -11,6 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Sequence
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import urlopen
 
 try:  # Python 3.11+
@@ -336,7 +337,13 @@ def _validate_version_gate(
             f"Version file is empty: {version_path}",
         )
 
-    pyproject_data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    try:
+        pyproject_data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ReleaseSimulationError(
+            "validate_version_gate",
+            f"Failed to parse pyproject file: {exc}",
+        ) from exc
     dynamic_version_files = (
         pyproject_data.get("tool", {})
         .get("setuptools", {})
@@ -374,10 +381,16 @@ def _preflight_pypi(
     package_version: str,
     timeout: float,
 ) -> None:
-    pypi_url = f"https://pypi.org/pypi/{package_name}/json"
+    pypi_url = f"https://pypi.org/pypi/{quote(package_name, safe='')}/json"
     try:
         with urlopen(pypi_url, timeout=timeout) as response:
-            payload = json.load(response)
+            try:
+                payload = json.load(response)
+            except json.JSONDecodeError as exc:
+                raise ReleaseSimulationError(
+                    "preflight_pypi",
+                    f"Received invalid JSON from PyPI: {exc}",
+                ) from exc
     except HTTPError as exc:
         if exc.code == 404:
             payload = {"releases": {}}
