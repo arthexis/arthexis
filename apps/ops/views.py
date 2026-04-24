@@ -286,6 +286,24 @@ def _resolve_oauth_step_or_redirect(
     return step, None
 
 
+def _complete_current_step_with_lock(
+    request: HttpRequest, *, step: OperatorJourneyStep
+) -> HttpResponseRedirect | None:
+    """Complete the current step under a user lock or redirect with warning."""
+
+    request.user.__class__._default_manager.select_for_update().get(pk=request.user.pk)
+    if complete_step_for_user(user=request.user, step=step):
+        return None
+    locked_step = next_step_for_user(user=request.user)
+    messages.warning(
+        request,
+        "That step is not available yet. Finish the current required operator step first.",
+    )
+    if locked_step is None:
+        return redirect(reverse(ADMIN_INDEX_URL_NAME))
+    return redirect(operator_journey_step_url(step=locked_step))
+
+
 @staff_member_required
 def clear_active_operation(request: HttpRequest):
     """Clear the active operation from session storage."""
@@ -459,24 +477,11 @@ def complete_operator_journey_step(
         action = (request.POST.get("journey_action") or "").strip().lower()
         if action == "skip":
             with transaction.atomic():
-                request.user.__class__._default_manager.select_for_update().get(
-                    pk=request.user.pk
+                redirect_response = _complete_current_step_with_lock(
+                    request, step=step
                 )
-                locked_step = next_step_for_user(user=request.user)
-                if locked_step is None:
-                    return redirect(reverse(ADMIN_INDEX_URL_NAME))
-                if locked_step.pk != step.pk:
-                    messages.warning(
-                        request,
-                        "That step is not available yet. Finish the current required operator step first.",
-                    )
-                    return redirect(operator_journey_step_url(step=locked_step))
-                if not complete_step_for_user(user=request.user, step=step):
-                    messages.warning(
-                        request,
-                        "That step is not available yet. Finish the current required operator step first.",
-                    )
-                    return redirect(operator_journey_step_url(step=locked_step))
+                if redirect_response is not None:
+                    return redirect_response
             next_step = next_step_for_user(user=request.user)
             if next_step is None:
                 return render(request, "admin/ops/operator_journey_complete.html")
@@ -495,24 +500,9 @@ def complete_operator_journey_step(
                 context,
             )
         with transaction.atomic():
-            request.user.__class__._default_manager.select_for_update().get(
-                pk=request.user.pk
-            )
-            locked_step = next_step_for_user(user=request.user)
-            if locked_step is None:
-                return redirect(reverse(ADMIN_INDEX_URL_NAME))
-            if locked_step.pk != step.pk:
-                messages.warning(
-                    request,
-                    "That step is not available yet. Finish the current required operator step first.",
-                )
-                return redirect(operator_journey_step_url(step=locked_step))
-            if not complete_step_for_user(user=request.user, step=step):
-                messages.warning(
-                    request,
-                    "That step is not available yet. Finish the current required operator step first.",
-                )
-                return redirect(operator_journey_step_url(step=locked_step))
+            redirect_response = _complete_current_step_with_lock(request, step=step)
+            if redirect_response is not None:
+                return redirect_response
             new_user, password, created_user = provision_form.save()
         next_step = next_step_for_user(user=request.user)
         return render(

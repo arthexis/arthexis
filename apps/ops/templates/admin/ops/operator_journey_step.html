@@ -327,7 +327,7 @@
         </div>
         <div class="operator-journey-form-actions">
           <button type="submit" name="journey_action" value="provision" class="button default operator-journey-primary-button">{% translate "Create account and complete step" %}</button>
-          <button type="submit" name="journey_action" value="skip" class="button">{% translate "Skip this step and continue" %}</button>
+          <button type="submit" name="journey_action" value="skip" formnovalidate class="button">{% translate "Skip this step and continue" %}</button>
         </div>
       </form>
     {% elif github_access_form %}

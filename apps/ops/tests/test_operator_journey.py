@@ -1005,6 +1005,11 @@ class OperatorJourneyViewTests(TestCase):
         )
 
         self.assertContains(response, "Skip this step and continue")
+        self.assertContains(
+            response,
+            'name="journey_action" value="skip" formnovalidate',
+            html=False,
+        )
 
     def test_tag_returns_empty_status_without_request_context(self):
         rendered = Template(
