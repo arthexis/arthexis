@@ -6,6 +6,7 @@ from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -624,12 +625,27 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
         except (TypeError, ValueError):
             return None
 
-    def _import_template(self, source_row: dict[str, object]) -> tuple[OdooSaleOrderTemplate, bool]:
+    def _import_template(self, profile, source_row: dict[str, object]) -> tuple[OdooSaleOrderTemplate, bool]:
         source_id = int(source_row["id"])
-        existing = OdooSaleOrderTemplate.objects.filter(odoo_template__id=source_id).first()
+        existing = OdooSaleOrderTemplate.objects.filter(
+            odoo_template__id=source_id,
+            odoo_template__host=profile.host,
+            odoo_template__database=profile.database,
+        ).first()
+        if existing is None:
+            existing = OdooSaleOrderTemplate.objects.filter(
+                odoo_template__id=source_id,
+            ).filter(
+                Q(odoo_template__host__isnull=True) | Q(odoo_template__database__isnull=True)
+            ).first()
         defaults = {
             "name": str(source_row.get("name") or f"Odoo Template {source_id}"),
-            "odoo_template": {"id": source_id, "name": source_row.get("name") or f"Template {source_id}"},
+            "odoo_template": {
+                "id": source_id,
+                "name": source_row.get("name") or f"Template {source_id}",
+                "host": profile.host,
+                "database": profile.database,
+            },
             "note_template": str(source_row.get("note") or ""),
         }
         if existing:
@@ -639,14 +655,29 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
             return existing, False
         return OdooSaleOrderTemplate.objects.create(**defaults), True
 
-    def _import_product(self, source_row: dict[str, object]) -> tuple[OdooProduct, bool]:
+    def _import_product(self, profile, source_row: dict[str, object]) -> tuple[OdooProduct, bool]:
         source_id = int(source_row["id"])
-        existing = OdooProduct.objects.filter(odoo_product__id=source_id).first()
+        existing = OdooProduct.objects.filter(
+            odoo_product__id=source_id,
+            odoo_product__host=profile.host,
+            odoo_product__database=profile.database,
+        ).first()
+        if existing is None:
+            existing = OdooProduct.objects.filter(odoo_product__id=source_id).filter(
+                Q(odoo_product__host__isnull=True) | Q(odoo_product__database__isnull=True)
+            ).first()
+        name_max_length = OdooProduct._meta.get_field("name").max_length or 100
+        bounded_name = str(source_row.get("name") or f"Odoo Product {source_id}")[:name_max_length]
         defaults = {
-            "name": str(source_row.get("name") or f"Odoo Product {source_id}"),
+            "name": bounded_name,
             "description": str(source_row.get("description_sale") or ""),
             "renewal_period": 30,
-            "odoo_product": {"id": source_id, "name": source_row.get("name") or f"Product {source_id}"},
+            "odoo_product": {
+                "id": source_id,
+                "name": source_row.get("name") or f"Product {source_id}",
+                "host": profile.host,
+                "database": profile.database,
+            },
         }
         if existing:
             for key, value in defaults.items():
@@ -729,9 +760,9 @@ class OdooSaleOrderTemplateAdmin(EntityModelAdmin):
             if not source_row:
                 continue
             if source_type == OdooTemplateSetupImportForm.SOURCE_TEMPLATES:
-                _, was_created = self._import_template(source_row)
+                _, was_created = self._import_template(profile, source_row)
             elif source_type == OdooTemplateSetupImportForm.SOURCE_PRODUCTS:
-                _, was_created = self._import_product(source_row)
+                _, was_created = self._import_product(profile, source_row)
             else:
                 _, was_created = self._import_employee(profile, source_row)
             if was_created:

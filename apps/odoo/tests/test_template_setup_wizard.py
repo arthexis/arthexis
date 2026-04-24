@@ -71,6 +71,63 @@ def test_setup_templates_step_one_imports_selected_records(admin_client, admin_u
     assert response.status_code == 302
     created = OdooSaleOrderTemplate.objects.get(odoo_template__id=100)
     assert created.name == "Starter Quote"
+    assert created.odoo_template["host"] == profile.host
+    assert created.odoo_template["database"] == profile.database
+
+
+@pytest.mark.django_db
+def test_setup_templates_step_one_scopes_template_upsert_by_odoo_instance(
+    admin_client, admin_user, monkeypatch
+):
+    profile = OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.two.example.com",
+        database="odoo-two",
+        username="admin",
+        password="secret",
+        odoo_uid=1,
+        verified_on=timezone.now(),
+    )
+    OdooSaleOrderTemplate.objects.create(
+        name="Original Other Instance",
+        odoo_template={
+            "id": 100,
+            "name": "Starter Quote",
+            "host": "https://odoo.one.example.com",
+            "database": "odoo-one",
+        },
+    )
+
+    def execute(model, method, *args, **kwargs):
+        assert method == "search_read"
+        if model == "sale.order.template":
+            fields = kwargs.get("fields") or []
+            if fields == ["id", "name"]:
+                return [{"id": 100, "name": "Starter Quote"}]
+            return [{"id": 100, "name": "Starter Quote", "note": "Generated"}]
+        raise AssertionError(f"Unexpected model: {model}")
+
+    monkeypatch.setattr(
+        OdooEmployee,
+        "execute",
+        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+    )
+
+    response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates"),
+        {
+            "source_type": "templates",
+            "selected_ids": ["100"],
+        },
+    )
+
+    assert response.status_code == 302
+    assert OdooSaleOrderTemplate.objects.filter(odoo_template__id=100).count() == 2
+    assert OdooSaleOrderTemplate.objects.filter(
+        odoo_template__id=100,
+        odoo_template__host=profile.host,
+        odoo_template__database=profile.database,
+    ).exists()
 
 
 @pytest.mark.django_db
@@ -104,6 +161,51 @@ def test_setup_templates_step_two_creates_linked_objects(admin_client):
         factor=factor,
         odoo_product__id=501,
     ).exists()
+
+
+@pytest.mark.django_db
+def test_setup_templates_step_one_truncates_imported_product_name(
+    admin_client, admin_user, monkeypatch
+):
+    OdooEmployee.objects.create(
+        user=admin_user,
+        host="https://odoo.example.com",
+        database="odoo",
+        username="admin",
+        password="secret",
+        odoo_uid=1,
+        verified_on=timezone.now(),
+    )
+    product_name_max = OdooProduct._meta.get_field("name").max_length or 100
+    long_name = "P" * (product_name_max + 20)
+
+    def execute(model, method, *args, **kwargs):
+        assert method == "search_read"
+        if model != "product.product":
+            raise AssertionError(f"Unexpected model: {model}")
+        fields = kwargs.get("fields") or []
+        if fields == ["id", "name"]:
+            return [{"id": 701, "name": long_name}]
+        return [{"id": 701, "name": long_name, "description_sale": "Remote description"}]
+
+    monkeypatch.setattr(
+        OdooEmployee,
+        "execute",
+        lambda self, model, method, *args, **kwargs: execute(model, method, *args, **kwargs),
+    )
+
+    response = admin_client.post(
+        reverse("admin:odoo_odoosaleordertemplate_setup_templates"),
+        {
+            "source_type": "products",
+            "selected_ids": ["701"],
+        },
+    )
+
+    assert response.status_code == 302
+    created = OdooProduct.objects.get(odoo_product__id=701)
+    assert len(created.name) == product_name_max
+    assert created.odoo_product["host"] == "https://odoo.example.com"
 
 
 @pytest.mark.django_db
