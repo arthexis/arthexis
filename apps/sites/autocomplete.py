@@ -1,13 +1,11 @@
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 from functools import lru_cache
 from pathlib import Path
-import re
 
 from django.conf import settings
-
-from apps.tasks.tasks import LocalLLMSummarizer
 
 TOKEN_RE = re.compile(r"[a-zA-Z0-9_/-]{2,}")
 
@@ -26,35 +24,40 @@ STANDARD_FEEDBACK_PHRASES: tuple[str, ...] = (
 class FeedbackAutocompleteHarness:
     """Autocomplete harness for user and staff feedback dialogs."""
 
-    def __init__(self) -> None:
-        self._deterministic = LocalLLMSummarizer()
-
     def suggest(self, *, text: str, is_staff: bool, limit: int = 5) -> list[str]:
-        cleaned = (text or "").strip()
         if is_staff:
-            return self._repo_trained_suggestions(text=cleaned, limit=limit)
-        return self._standard_suggestions(text=cleaned, limit=limit)
+            return self._repo_trained_suggestions(text=(text or "").strip(), limit=limit)
+        return self._standard_suggestions(text=text or "", limit=limit)
 
     def _standard_suggestions(self, *, text: str, limit: int) -> list[str]:
-        tail = text.split()[-1].lower() if text.split() else ""
+        words = [word.strip(".,;:!?()").lower() for word in text.split()]
+        has_trailing_space = bool(text) and text[-1].isspace()
+        prefix = words if has_trailing_space else words[:-1]
+        active = "" if has_trailing_space or not words else words[-1]
         suggestions: list[str] = []
-        if tail:
-            for phrase in STANDARD_FEEDBACK_PHRASES:
-                for token in phrase.split():
-                    normalized = token.strip(".,;:!?()").lower()
-                    if normalized.startswith(tail) and normalized != tail:
-                        suggestions.append(token.strip(".,;:!?()"))
-                if len(suggestions) >= limit:
-                    break
-        if len(suggestions) < limit:
-            prompt = self._build_feedback_prompt(text=text)
-            generated = self._deterministic.summarize(prompt)
-            for line in generated.splitlines():
-                candidate = line.strip(" -")
-                if candidate and candidate not in suggestions:
-                    suggestions.append(candidate)
-                if len(suggestions) >= limit:
-                    break
+        for phrase in STANDARD_FEEDBACK_PHRASES:
+            phrase_words = [word.strip(".,;:!?()") for word in phrase.split()]
+            normalized_phrase = [word.lower() for word in phrase_words]
+            if len(prefix) > len(normalized_phrase):
+                continue
+            if normalized_phrase[: len(prefix)] != prefix:
+                continue
+            candidate_index = len(prefix)
+            if candidate_index >= len(phrase_words):
+                continue
+            if active:
+                candidate = normalized_phrase[candidate_index]
+                if candidate == active:
+                    candidate_index += 1
+                    if candidate_index >= len(phrase_words):
+                        continue
+                elif not candidate.startswith(active):
+                    continue
+            suggestion = phrase_words[candidate_index]
+            if suggestion not in suggestions:
+                suggestions.append(suggestion)
+            if len(suggestions) >= limit:
+                break
         return suggestions[:limit]
 
     def _repo_trained_suggestions(self, *, text: str, limit: int) -> list[str]:
@@ -75,46 +78,45 @@ class FeedbackAutocompleteHarness:
                 break
         return suggestions
 
-    def _build_feedback_prompt(self, *, text: str) -> str:
-        compact_input = text[:200]
-        return f"Summarize feedback context for suggestions.\\nLOGS:\\n{compact_input}"
-
-
 @lru_cache(maxsize=1)
-def _repo_token_model() -> dict[str, list[str]]:
+def _repo_stats() -> tuple[dict[str, list[str]], list[str]]:
     counts: dict[str, Counter[str]] = defaultdict(Counter)
+    counter: Counter[str] = Counter()
     for token_stream in _iter_repo_token_streams():
         previous = None
         for token in token_stream:
+            counter[token] += 1
             if previous is not None:
                 counts[previous][token] += 1
             previous = token
-    return {
+    model = {
         token: [candidate for candidate, _ in counter.most_common(10)]
         for token, counter in counts.items()
     }
+    common = [token for token, _ in counter.most_common(10)]
+    return model, common
 
 
-@lru_cache(maxsize=1)
+def _repo_token_model() -> dict[str, list[str]]:
+    return _repo_stats()[0]
+
+
 def _repo_common_tokens() -> list[str]:
-    counter: Counter[str] = Counter()
-    for token_stream in _iter_repo_token_streams():
-        counter.update(token_stream)
-    return [token for token, _ in counter.most_common(10)]
+    return _repo_stats()[1]
 
 
 def _iter_repo_token_streams():
     base_dir = Path(settings.BASE_DIR)
     include_suffixes = {".py", ".md", ".html", ".js"}
-    for path in base_dir.rglob("*"):
-        if not path.is_file() or path.suffix.lower() not in include_suffixes:
-            continue
-        if "/.venv/" in str(path) or "/node_modules/" in str(path):
-            continue
-        try:
-            content = path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        tokens = [token.lower() for token in TOKEN_RE.findall(content)]
-        if tokens:
-            yield tokens
+    exclude_dirs = {".git", ".venv", "node_modules"}
+    for suffix in include_suffixes:
+        for path in base_dir.rglob(f"*{suffix}"):
+            if not path.is_file() or any(part in exclude_dirs for part in path.parts):
+                continue
+            try:
+                content = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            tokens = [token.lower() for token in TOKEN_RE.findall(content)]
+            if tokens:
+                yield tokens

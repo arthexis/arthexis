@@ -48,6 +48,20 @@
     commentField.setSelectionRange(commentField.value.length, commentField.value.length);
   };
 
+  const applyAutocompleteSuggestion = suggestion => {
+    const currentValue = commentField.value;
+    const trailingWhitespace = currentValue.match(/\s+$/);
+    if (trailingWhitespace) {
+      return `${currentValue}${suggestion}`;
+    }
+    const activeToken = currentValue.match(/\S+$/);
+    if (activeToken && suggestion.toLowerCase().startsWith(activeToken[0].toLowerCase())) {
+      return `${currentValue.slice(0, activeToken.index)}${suggestion}`;
+    }
+    const separator = currentValue.trim() ? ' ' : '';
+    return `${currentValue.trimEnd()}${separator}${suggestion}`;
+  };
+
   const clearAutocompleteSuggestions = () => {
     autocompleteContainer.textContent = '';
   };
@@ -65,9 +79,7 @@
       button.className = 'btn btn-sm btn-outline-secondary';
       button.textContent = suggestion;
       button.addEventListener('click', () => {
-        const currentValue = commentField.value.trim();
-        const nextValue = currentValue ? `${currentValue} ${suggestion}` : suggestion;
-        setCommentValue(nextValue);
+        setCommentValue(applyAutocompleteSuggestion(suggestion));
       });
       list.appendChild(button);
     });
