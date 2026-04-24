@@ -451,6 +451,12 @@ def _preflight_pypi(
             f"Network failure while checking PyPI for an existing release: {exc.reason}.",
         ) from exc
 
+    if not isinstance(payload, dict):
+        raise ReleaseSimulationError(
+            "preflight_pypi",
+            f"Unexpected PyPI payload type: {type(payload).__name__}.",
+        )
+
     releases = payload.get("releases")
     if releases is None:
         releases = {}
