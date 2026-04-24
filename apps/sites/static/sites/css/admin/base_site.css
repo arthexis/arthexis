@@ -526,6 +526,7 @@ body.user-story-open {
 
 .user-story-card .user-story-title {
     margin-bottom: 0.25rem;
+    font-size: var(--admin-ui-font-size-lg, 1.35rem);
     color: var(--user-story-accent);
 }
 
