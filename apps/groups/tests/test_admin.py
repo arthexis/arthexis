@@ -29,6 +29,7 @@ def add_site_operator_membership(user):
         name=SITE_OPERATOR_GROUP_NAME
     )
     user.groups.add(site_operator_group)
+    return site_operator_group
 
 
 @pytest.mark.parametrize(
@@ -81,6 +82,32 @@ def test_staff_users_can_change_existing_security_groups(db, is_site_operator):
     assert response.status_code == 302
     managed_group.refresh_from_db()
     assert managed_group.name == "managed-group-updated"
+
+
+def test_site_operator_cannot_rename_own_group_to_bypass_add_restriction(db):
+    user = create_staff_user_with_security_group_permissions(
+        "local-admin",
+        "add_securitygroup",
+        "change_securitygroup",
+    )
+    site_operator_group = add_site_operator_membership(user)
+
+    client = Client()
+    client.force_login(user)
+
+    response = client.post(
+        reverse("admin:groups_securitygroup_change", args=[site_operator_group.pk]),
+        data={
+            "name": "Renamed Site Operator",
+            "permissions": [],
+            "users": [user.pk],
+        },
+    )
+
+    assert response.status_code == 302
+    site_operator_group.refresh_from_db()
+    assert site_operator_group.name == SITE_OPERATOR_GROUP_NAME
+    assert client.get(reverse("admin:groups_securitygroup_add")).status_code == 403
 
 
 def test_superuser_can_still_create_security_groups(db):

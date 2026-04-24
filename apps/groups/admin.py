@@ -68,12 +68,19 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
             return False
         if request.user.is_superuser:
             return True
-        return not request.user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).exists()
+        return not self._site_operator_group_ids_for_user(request.user)
 
     def get_readonly_fields(self, request, obj=None):
         readonly_fields = list(super().get_readonly_fields(request, obj))
         if "security_model_label" not in readonly_fields:
             readonly_fields.append("security_model_label")
+        if (
+            obj is not None
+            and not request.user.is_superuser
+            and obj.pk in self._site_operator_group_ids_for_user(request.user)
+            and "name" not in readonly_fields
+        ):
+            readonly_fields.append("name")
         if obj is not None and obj.pk == request.user.groups.first():  # type: ignore[comparison-overlap]
             messages.warning(
                 request,
@@ -113,6 +120,11 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
         self._attach_owned_objects(context, payload)
         return super().render_change_form(
             request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
+
+    def _site_operator_group_ids_for_user(self, user):
+        return set(
+            user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).values_list("pk", flat=True)
         )
 
 
