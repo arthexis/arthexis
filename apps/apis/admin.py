@@ -407,6 +407,7 @@ class GeneralServiceTokenAdmin(admin.ModelAdmin):
 
     def create_token(self, request: HttpRequest) -> HttpResponse:
         self._require_manage_permission(request)
+        self._require_reveal_permission(request)
         form = GeneralServiceTokenCreateForm(request.POST or None)
         if request.method == "POST" and form.is_valid():
             expires_at = timezone.now() + timedelta(days=form.cleaned_data["expires_in_days"])

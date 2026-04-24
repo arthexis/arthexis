@@ -6,14 +6,46 @@ import json
 from datetime import timedelta
 
 import pytest
-from django.contrib.auth import get_user_model
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.management import call_command
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.apis.admin import GeneralServiceTokenCreateForm
 from apps.apis.models import GeneralServiceToken, GeneralServiceTokenEvent
 from apps.groups.models import SecurityGroup
+
+
+@pytest.fixture
+def general_token_staff_user(db):
+    return get_user_model().objects.create_user(
+        username="general-token-operator",
+        password="pass12345",
+        is_staff=True,
+    )
+
+
+@pytest.mark.django_db
+def test_general_service_token_create_requires_reveal_permission(client, general_token_staff_user):
+    manage_permission = Permission.objects.get(codename="manage_general_service_tokens")
+    general_token_staff_user.user_permissions.add(manage_permission)
+    client.force_login(general_token_staff_user)
+
+    response = client.post(
+        reverse("admin:apis_generalservicetoken_create"),
+        {
+            "name": "Unrevealable token",
+            "user_id": general_token_staff_user.id,
+            "expires_in_days": 2,
+            "security_group_ids": "",
+            "custom_claims": {},
+        },
+    )
+
+    assert response.status_code == 403
+    assert not GeneralServiceToken.objects.filter(name="Unrevealable token").exists()
 
 
 @pytest.mark.django_db
