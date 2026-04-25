@@ -53,7 +53,7 @@ def build_report(state_dir: Path, limit: int) -> dict[str, Any]:
         if not mac:
             continue
         entry = clients.setdefault(mac, {"mac_address": mac, "event_count": 0})
-        entry["authorized"] = True
+        entry["authorized"] = mac in authorized
         entry["email"] = consent.get("email")
         entry["accepted_at"] = consent.get("accepted_at")
         entry["last_ip_address"] = consent.get("ip_address")
