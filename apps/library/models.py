@@ -212,7 +212,7 @@ class OwnerLibraryHolding(Entity):
             state = self.ReconciliationState.UNKNOWN
 
         self.reconciliation_state = state
-        self.reconciled_at = timezone.localtime()
+        self.reconciled_at = timezone.now()
         if save:
             self.save(
                 update_fields=("reconciliation_state", "reconciled_at", "updated_at")

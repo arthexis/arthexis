@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.library.models import (
@@ -83,6 +83,21 @@ class LibraryModelTests(TestCase):
         state = holding.refresh_reconciliation_state()
 
         self.assertEqual(state, OwnerLibraryHolding.ReconciliationState.LOCAL_NEWER)
+
+    @override_settings(USE_TZ=False)
+    def test_holding_reconciliation_timestamp_handles_disabled_timezones(self):
+        holding = OwnerLibraryHolding.objects.create(
+            owner=self.owner,
+            entry=self.entry,
+            local_path="/library/Tracked Book.kfx",
+            local_modified_at=timezone.now(),
+            remote_version="remote-v1",
+        )
+
+        state = holding.refresh_reconciliation_state()
+
+        self.assertEqual(state, OwnerLibraryHolding.ReconciliationState.LOCAL_NEWER)
+        self.assertIsNotNone(holding.reconciled_at)
 
     def test_holding_reconciliation_detects_matching_checksums(self):
         holding = OwnerLibraryHolding.objects.create(
