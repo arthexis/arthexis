@@ -23,11 +23,39 @@ EVENT_LOG = STATE_DIR / "events.jsonl"
 LOCK_PATH = STATE_DIR / "state.lock"
 ARCHIVE_DIR = STATE_DIR / "turns"
 DEFAULT_CLEANUP_TIMEOUT_SECONDS = 600
+DEFAULT_TURN_CADENCE_SECONDS = 600
 TERM_GRACE_SECONDS = 15
 
 
 def now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def parse_timestamp(value: str | None) -> dt.datetime | None:
+    if not value:
+        return None
+    try:
+        return dt.datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def turn_elapsed_seconds(state: dict[str, Any], *, now: dt.datetime | None = None) -> int:
+    started_at = parse_timestamp(state.get("started_at"))
+    if started_at is None:
+        return 0
+    current = now or dt.datetime.now(dt.timezone.utc).astimezone()
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=current.tzinfo)
+    elapsed = current - started_at.astimezone(current.tzinfo)
+    return max(0, int(elapsed.total_seconds()))
+
+
+def cadence_rest_seconds(state: dict[str, Any], cadence_seconds: int, *, now: dt.datetime | None = None) -> int:
+    cadence_seconds = max(0, int(cadence_seconds))
+    if cadence_seconds <= 0:
+        return 0
+    return max(0, cadence_seconds - turn_elapsed_seconds(state, now=now))
 
 
 def ensure_state_dir() -> None:
@@ -308,6 +336,14 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
         else {"sigterm_sent": [], "sigkill_sent": [], "still_alive": []}
     )
 
+    cadence_seconds = max(0, int(args.cadence))
+    elapsed_before_rest = turn_elapsed_seconds(state)
+    rest_seconds = 0 if args.skip_cadence_rest else cadence_rest_seconds(state, cadence_seconds)
+    rest_started_at = now_iso() if rest_seconds else ""
+    if rest_seconds > 0 and not args.no_sleep:
+        time.sleep(rest_seconds)
+    rest_finished_at = now_iso() if rest_seconds else ""
+
     with state_lock():
         state = read_json(ACTIVE_STATE) or state
         state["status"] = "complete"
@@ -316,6 +352,13 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
             "timeout_seconds": timeout_seconds,
             "live_before": live_before,
             "lingering_after_wait": sorted(lingering),
+            "cadence_seconds": cadence_seconds,
+            "turn_elapsed_seconds_before_rest": elapsed_before_rest,
+            "cadence_rest_seconds": rest_seconds,
+            "cadence_rest_skipped": bool(args.skip_cadence_rest),
+            "cadence_rest_no_sleep": bool(args.no_sleep),
+            "cadence_rest_started_at": rest_started_at,
+            "cadence_rest_finished_at": rest_finished_at,
             **termination,
         }
         archive_state(state)
@@ -331,6 +374,11 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
     print(f"sigterm_sent: {len(termination['sigterm_sent'])}")
     print(f"sigkill_sent: {len(termination['sigkill_sent'])}")
     print(f"still_alive: {len(termination['still_alive'])}")
+    print(f"cadence_seconds: {cadence_seconds}")
+    print(f"turn_elapsed_seconds_before_rest: {elapsed_before_rest}")
+    print(f"cadence_rest_seconds: {rest_seconds}")
+    print(f"cadence_rest_skipped: {bool(args.skip_cadence_rest)}")
+    print(f"cadence_rest_no_sleep: {bool(args.no_sleep)}")
     print(f"archive: {ARCHIVE_DIR / (str(state.get('turn_id')) + '.json')}")
     return 0 if not termination["still_alive"] else 1
 
@@ -379,6 +427,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     cleanup = subparsers.add_parser("cleanup-step")
     cleanup.add_argument("--timeout", type=int, default=DEFAULT_CLEANUP_TIMEOUT_SECONDS)
+    cleanup.add_argument("--cadence", type=int, default=DEFAULT_TURN_CADENCE_SECONDS)
+    cleanup.add_argument("--skip-cadence-rest", action="store_true")
+    cleanup.add_argument("--no-sleep", action="store_true")
     cleanup.add_argument("--force-kill", action="store_true")
     cleanup.set_defaults(func=cmd_cleanup_step)
 
