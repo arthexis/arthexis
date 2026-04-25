@@ -210,6 +210,7 @@ def test_imager_build_command_prints_metadata(mock_build, tmp_path: Path) -> Non
         "v0-5-0",
         "--base-image-uri",
         str(output_path),
+        "--skip-recovery-ssh",
         stdout=out,
     )
 
@@ -250,6 +251,7 @@ def test_imager_build_command_passes_connect_ota_profile_metadata(mock_build, tm
         "ota-v1",
         "--base-image-uri",
         str(output_path),
+        "--skip-recovery-ssh",
         "--profile",
         "connect-ota",
         "--profile-metadata",
@@ -421,6 +423,81 @@ def test_imager_build_command_reports_non_utf8_recovery_key_file(tmp_path: Path)
             "--recovery-authorized-key-file",
             str(authorized_key_file),
         )
+
+
+def test_imager_build_command_requires_recovery_ssh_key_by_default(tmp_path: Path) -> None:
+    """Regression: customized builds should fail fast unless recovery SSH is explicit."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+
+    with pytest.raises(CommandError, match="Recovery SSH is required for customized image builds"):
+        call_command(
+            "imager",
+            "build",
+            "--name",
+            "recovery-required",
+            "--base-image-uri",
+            str(output_path),
+        )
+
+
+def test_imager_build_command_rejects_skip_recovery_ssh_with_keys(tmp_path: Path) -> None:
+    """Regression: skip flag should not allow contradictory key arguments."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+
+    with pytest.raises(CommandError, match="cannot be combined"):
+        call_command(
+            "imager",
+            "build",
+            "--name",
+            "recovery-skip-conflict",
+            "--base-image-uri",
+            str(output_path),
+            "--skip-recovery-ssh",
+            "--recovery-authorized-key",
+            VALID_RECOVERY_KEY_ONE,
+        )
+
+
+@pytest.mark.django_db
+@patch("apps.imager.management.commands.imager.build_rpi4b_image")
+def test_imager_build_command_allows_explicit_skip_recovery_ssh(mock_build, tmp_path: Path) -> None:
+    """Regression: operators can intentionally opt out of recovery SSH lane."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+    mock_build.return_value = type(
+        "BuildResult",
+        (),
+        {
+            "output_path": output_path,
+            "sha256": "abc123",
+            "size_bytes": 2,
+            "download_uri": "",
+            "build_engine": "arthexis-bootstrap",
+            "build_profile": "bootstrap",
+            "profile_manifest": {},
+        },
+    )()
+
+    stdout = StringIO()
+    call_command(
+        "imager",
+        "build",
+        "--name",
+        "recovery-skip",
+        "--base-image-uri",
+        str(output_path),
+        "--skip-recovery-ssh",
+        stdout=stdout,
+    )
+
+    assert mock_build.call_args.kwargs["recovery_authorized_keys"] == []
+    assert mock_build.call_args.kwargs["recovery_ssh_user"] == ""
+    assert "recovery_ssh=disabled (--skip-recovery-ssh)" in stdout.getvalue()
 
 
 def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided(

@@ -157,13 +157,23 @@ class Command(BaseCommand):
         if timeout is None or timeout <= 0:
             raise CommandError("Timeout must be a positive number of seconds")
 
-        result = self._scan_via_attempt(timeout)
-        if (result.get("rfid") is None) and not result.get("error"):
-            result = self._scan_via_local(timeout)
+        no_irq = options.get("no_irq")
+        if no_irq:
+            result = self._scan_via_local(timeout, no_irq=True)
+        else:
+            start = time.monotonic()
+            result = self._scan_via_attempt(timeout)
+            if (result.get("rfid") is None) and not result.get("error"):
+                elapsed = time.monotonic() - start
+                remaining = max(0.0, timeout - elapsed)
+                if remaining <= 0:
+                    result = {"rfid": None, "label_id": None}
+                else:
+                    result = self._scan_via_local(remaining)
         if result.get("error"):
             return result
         if not result.get("rfid"):
-            if not service_available():
+            if not no_irq and not service_available():
                 return {"error": "RFID scanner service not configured or detected"}
             return {"error": "No RFID detected before timeout"}
         return result
@@ -195,7 +205,7 @@ class Command(BaseCommand):
             payload.setdefault("label_id", attempt.label_id)
         return payload
 
-    def _scan_via_local(self, timeout: float) -> dict:
+    def _scan_via_local(self, timeout: float, *, no_irq: bool = False) -> dict:
         interactive = sys.stdin.isatty()
         if interactive:
             self.stdout.write("Press any key to stop scanning.")
@@ -205,7 +215,13 @@ class Command(BaseCommand):
         while True:
             if interactive and user_requested_stop():
                 return {"error": "Scan cancelled by user"}
-            result = scan_sources(timeout=0.2)
+            chunk_timeout = 0.2
+            if not interactive:
+                remaining = max(0.0, timeout - (time.monotonic() - start))
+                if remaining <= 0:
+                    return {"rfid": None, "label_id": None}
+                chunk_timeout = min(chunk_timeout, remaining)
+            result = scan_sources(timeout=chunk_timeout, no_irq=no_irq)
             if result.get("rfid") or result.get("error"):
                 return result
             if not interactive and time.monotonic() - start >= timeout:

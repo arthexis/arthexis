@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from apps.cards import rfid_service
+from apps.cards import reader
 from apps.cards import scanner
 
 
@@ -56,3 +57,63 @@ def test_scan_sources_falls_back_to_attempts_for_lockfile_ingest_error(monkeypat
     result = scanner.scan_sources(timeout=0.5)
 
     assert result == sentinel
+
+
+def test_scan_sources_no_irq_uses_direct_reader(monkeypatch):
+    """`--no-irq` scans should bypass the service and poll the reader directly."""
+
+    sentinel = {"rfid": "ABCD1234", "service_mode": "on-demand"}
+    monkeypatch.setattr(
+        scanner,
+        "request_service",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("service should not be called")
+        ),
+    )
+    monkeypatch.setattr(
+        reader,
+        "read_rfid",
+        lambda **kwargs: {"rfid": "ABCD1234", "label_id": 7},
+    )
+    monkeypatch.setattr(
+        scanner,
+        "record_scan_attempt",
+        lambda result, **kwargs: object(),
+    )
+    monkeypatch.setattr(
+        scanner,
+        "build_attempt_response",
+        lambda attempt, **kwargs: sentinel,
+    )
+
+    result = scanner.scan_sources(timeout=0.5, no_irq=True)
+
+    assert result == sentinel
+
+
+def test_scan_sources_no_irq_returns_direct_empty_result(monkeypatch):
+    """Empty direct reads should return without recording an attempt."""
+
+    monkeypatch.setattr(
+        scanner,
+        "request_service",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("service should not be called")
+        ),
+    )
+    monkeypatch.setattr(
+        reader,
+        "read_rfid",
+        lambda **kwargs: {"rfid": None, "label_id": None},
+    )
+    monkeypatch.setattr(
+        scanner,
+        "record_scan_attempt",
+        lambda result, **kwargs: (_ for _ in ()).throw(
+            AssertionError("empty scan should not be recorded")
+        ),
+    )
+
+    result = scanner.scan_sources(timeout=0.5, no_irq=True)
+
+    assert result == {"rfid": None, "label_id": None}

@@ -84,6 +84,14 @@ jobs:
         id: setup-python
         with:
           python-version: '3.12'
+      - name: Align python executables with setup-python
+        run: |
+          python_bin='${{ steps.setup-python.outputs.python-path }}'
+          echo "ARTHEXIS_PYTHON_BIN=${python_bin}" >> "${GITHUB_ENV}"
+          echo "$(dirname "${python_bin}")" >> "${GITHUB_PATH}"
+          "${python_bin}" --version
+          python --version
+          python3 --version
       - name: Cache pip
         uses: actions/cache@v5
         with:
@@ -102,10 +110,10 @@ jobs:
             venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ steps.setup-python.outputs.python-version }}-
       - name: Validate pyproject dependency ordering
         run: |
-          python3 "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
+          "${ARTHEXIS_PYTHON_BIN}" "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
       - name: Validate generated requirements
         run: |
-          python3 "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
+          "${ARTHEXIS_PYTHON_BIN}" "$GITHUB_WORKSPACE/scripts/generate_requirements.py" --check
       - name: Install redis CLI
         run: |
           if command -v sudo >/dev/null 2>&1; then

@@ -478,7 +478,12 @@ def run_service(host: str | None = None, port: int | None = None) -> None:
 
     def _handle_signal(signum, frame) -> None:  # pragma: no cover - signal handling
         logger.info("RFID service received shutdown signal %s", signum)
-        runner.shutdown()
+        shutdown_thread = threading.Thread(
+            target=runner.shutdown,
+            name="rfid-service-shutdown",
+            daemon=True,
+        )
+        shutdown_thread.start()
 
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
