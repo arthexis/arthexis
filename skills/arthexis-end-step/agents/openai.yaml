@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arthexis End Step"
+  short_description: "Trigger end-of-turn effects."
+  default_prompt: "Use $arthexis-end-step to trigger declared end-of-turn effects before cleanup."
