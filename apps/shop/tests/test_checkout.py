@@ -125,6 +125,45 @@ class ShopCheckoutTests(TestCase):
         self.assertEqual(item.line_total, Decimal("34.00"))
         self.assertEqual(order.total_amount, Decimal("34.00"))
 
+    def test_store_prefills_gallery_image_from_gallery_handoff(self):
+        shop = Shop.objects.create(
+            name="Card Shop",
+            slug="card-shop-handoff",
+            default_payment_provider="stripe",
+        )
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Custom Card",
+            sku="CARD-HANDOFF",
+            unit_price=Decimal("10.00"),
+            stock_quantity=20,
+            supports_gallery_image_printing=True,
+            gallery_image_print_price=Decimal("3.50"),
+        )
+        owner = self._create_user("gallery-handoff-owner", "handoff@example.com")
+        image = create_gallery_image(
+            uploaded_file=self._upload_image("handoff.jpg"),
+            title="Handoff Art",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+
+        response = self.client.get(reverse("shop:index"), {"gallery_image": image.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Using <strong>Handoff Art</strong>")
+        self.assertContains(response, f'name="gallery_image" value="{image.id}"')
+
+        self.client.post(
+            reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": product.id}),
+            {"quantity": 1, "gallery_image": image.id},
+            follow=True,
+        )
+        checkout_response = self.client.get(reverse("shop:checkout"))
+
+        self.assertEqual(checkout_response.status_code, 200)
+        self.assertContains(checkout_response, f'<option value="{image.id}" selected>')
+
     def test_checkout_rejects_unavailable_gallery_image_selection(self):
         shop = Shop.objects.create(name="Card Shop", slug="card-shop-invalid")
         product = ShopProduct.objects.create(

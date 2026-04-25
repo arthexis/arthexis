@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import urlencode
 from uuid import uuid4
 
 from django.contrib import messages
@@ -7,9 +8,11 @@ from django.contrib.auth.decorators import login_required
 from django.core.files import File
 from django.core.files.storage import default_storage
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
-from django.db.models import Q
+from django.db.models import CharField, Q
+from django.db.models.functions import Cast
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from .forms import (
     GalleryCategoryForm,
@@ -61,7 +64,7 @@ def _visible_images_for_user(user):
         "media_file",
         "owner_user",
         "owner_group",
-    )
+    ).prefetch_related("categories", "credits", "trait_values__category", "trait_values__trait")
     if can_manage_gallery(user):
         return queryset
     visibility_filter = Q(include_in_public_gallery=True)
@@ -72,9 +75,106 @@ def _visible_images_for_user(user):
     return queryset.filter(visibility_filter).distinct()
 
 
+def _apply_gallery_search(queryset, search_query: str):
+    search_query = search_query.strip()
+    if not search_query:
+        return queryset
+
+    queryset = queryset.annotate(
+        search_id=Cast("id", output_field=CharField()),
+        search_slug=Cast("slug", output_field=CharField()),
+        search_content_sample_name=Cast("content_sample__name", output_field=CharField()),
+    )
+    filter_q = (
+        Q(search_id__icontains=search_query)
+        | Q(search_slug__icontains=search_query)
+        | Q(title__icontains=search_query)
+        | Q(description__icontains=search_query)
+        | Q(owner_user__username__icontains=search_query)
+        | Q(owner_user__email__icontains=search_query)
+        | Q(owner_user__first_name__icontains=search_query)
+        | Q(owner_user__last_name__icontains=search_query)
+        | Q(owner_group__name__icontains=search_query)
+        | Q(media_file__original_name__icontains=search_query)
+        | Q(media_file__content_type__icontains=search_query)
+        | Q(media_file__source_member__icontains=search_query)
+        | Q(media_file__file__icontains=search_query)
+        | Q(content_sample__kind__icontains=search_query)
+        | Q(content_sample__content__icontains=search_query)
+        | Q(content_sample__path__icontains=search_query)
+        | Q(content_sample__method__icontains=search_query)
+        | Q(content_sample__hash__icontains=search_query)
+        | Q(search_content_sample_name__icontains=search_query)
+        | Q(categories__name__icontains=search_query)
+        | Q(categories__slug__icontains=search_query)
+        | Q(categories__description__icontains=search_query)
+        | Q(credits__display_name__icontains=search_query)
+        | Q(credits__artist__icontains=search_query)
+        | Q(credits__series__icontains=search_query)
+        | Q(credits__era__icontains=search_query)
+        | Q(credits__apa_citation__icontains=search_query)
+        | Q(credits__contributed_elements__icontains=search_query)
+        | Q(credits__excluded_elements__icontains=search_query)
+        | Q(credits__link_url__icontains=search_query)
+        | Q(trait_values__category__name__icontains=search_query)
+        | Q(trait_values__category__slug__icontains=search_query)
+        | Q(trait_values__trait__name__icontains=search_query)
+        | Q(trait_values__trait__slug__icontains=search_query)
+        | Q(trait_values__trait__description__icontains=search_query)
+        | Q(trait_values__qualitative_value__icontains=search_query)
+    )
+    normalized_query = search_query.casefold()
+    if normalized_query in {"public", "published", "true", "yes"}:
+        filter_q |= Q(include_in_public_gallery=True)
+    if normalized_query in {"private", "false", "no"}:
+        filter_q |= Q(include_in_public_gallery=False)
+    try:
+        filter_q |= Q(trait_values__float_value=float(search_query))
+    except ValueError:
+        pass
+    return queryset.filter(filter_q).distinct()
+
+
+def _gallery_navigation_for_image(*, image: GalleryImage, user, search_query: str):
+    queryset = _visible_images_for_user(user)
+    if search_query:
+        filtered_queryset = _apply_gallery_search(queryset, search_query)
+        if filtered_queryset.filter(pk=image.pk).exists():
+            queryset = filtered_queryset
+    images = list(queryset.order_by("title", "id"))
+    current_index = next((index for index, candidate in enumerate(images) if candidate.pk == image.pk), None)
+    if current_index is None:
+        return None, None
+    previous_image = images[current_index - 1] if current_index > 0 else None
+    next_image = images[current_index + 1] if current_index < len(images) - 1 else None
+    return previous_image, next_image
+
+
+def _rf_card_store_url_for_image(image: GalleryImage) -> str:
+    from apps.shop.models import ShopProduct
+
+    store_is_setup = ShopProduct.objects.filter(
+        is_active=True,
+        stock_quantity__gt=0,
+        supports_gallery_image_printing=True,
+        shop__is_active=True,
+    ).exists()
+    if not store_is_setup:
+        return ""
+    return f"{reverse('shop:index')}?gallery_image={image.id}"
+
+
 def gallery_index(request):
-    images = _visible_images_for_user(request.user)
-    return render(request, "gallery/index.html", {"images": images})
+    search_query = (request.GET.get("q") or "").strip()
+    images = _apply_gallery_search(_visible_images_for_user(request.user), search_query).order_by("title", "id")
+    return render(
+        request,
+        "gallery/index.html",
+        {
+            "images": images,
+            "search_query": search_query,
+        },
+    )
 
 
 def gallery_detail(request, slug):
@@ -102,6 +202,12 @@ def gallery_detail(request, slug):
     share_form = GalleryShareForm()
     trait_form = GalleryTraitAssignmentForm()
     credit_form = GalleryCreditForm()
+    search_query = (request.GET.get("q") or "").strip()
+    previous_image, next_image = _gallery_navigation_for_image(
+        image=image,
+        user=request.user,
+        search_query=search_query,
+    )
 
     if request.method == "POST":
         action = request.POST.get("action", "")
@@ -154,6 +260,11 @@ def gallery_detail(request, slug):
         "image_form": image_form,
         "trait_form": trait_form,
         "credit_form": credit_form,
+        "gallery_query_string": f"?{urlencode({'q': search_query})}" if search_query else "",
+        "next_image": next_image,
+        "previous_image": previous_image,
+        "rf_card_store_url": _rf_card_store_url_for_image(image),
+        "search_query": search_query,
     }
     return render(request, "gallery/detail.html", context)
 

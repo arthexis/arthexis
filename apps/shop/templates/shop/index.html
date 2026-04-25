@@ -6,6 +6,11 @@
     <h1 class="mb-0">Shop</h1>
     <a class="btn btn-outline-primary btn-lg px-4" href="{% url 'shop:cart' %}">🛒 View cart</a>
   </div>
+  {% if selected_gallery_image %}
+    <div class="alert alert-info">
+      Using <strong>{{ selected_gallery_image.title }}</strong> for the next RF card customization.
+    </div>
+  {% endif %}
 
   {% for shop in shops %}
     <section class="mb-4">
@@ -21,10 +26,16 @@
                   {% if product.description %}<p>{{ product.description }}</p>{% endif %}
                   <form method="post" action="{% url 'shop:add_to_cart' shop.slug product.id %}" class="mt-auto">
                     {% csrf_token %}
+                    {% if selected_gallery_image and product.supports_gallery_image_printing %}
+                      <input type="hidden" name="gallery_image" value="{{ selected_gallery_image.id }}">
+                    {% endif %}
                     <div class="d-flex justify-content-between align-items-end gap-2 mb-2">
                       <div>
                         <p class="mb-1"><strong>{{ product.unit_price }} {{ product.currency }}</strong></p>
                         <p class="text-muted small mb-0">Stock: {{ product.stock_quantity }}</p>
+                        {% if selected_gallery_image and product.supports_gallery_image_printing %}
+                          <p class="text-muted small mb-0">RF card image: {{ selected_gallery_image.title }}</p>
+                        {% endif %}
                       </div>
                       <div style="width: 78px;">
                         <label for="qty-{{ product.id }}" class="form-label small text-muted mb-1">Qty</label>
@@ -52,5 +63,8 @@
       {% endif %}
     {% endif %}
   {% endfor %}
+  {% if selected_gallery_image and not shops %}
+    <p class="text-muted">The selected gallery image will be available when an RF card store is open.</p>
+  {% endif %}
 </div>
 {% endblock %}

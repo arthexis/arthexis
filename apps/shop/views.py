@@ -86,6 +86,20 @@ def _gallery_images_for_checkout(request: HttpRequest) -> QuerySet[GalleryImage]
     return queryset.filter(visibility_filter).distinct()
 
 
+def _selected_gallery_image_for_store(request: HttpRequest) -> GalleryImage | None:
+    selected_gallery_image_id = (request.GET.get("gallery_image") or "").strip()
+    if not selected_gallery_image_id:
+        return None
+    try:
+        image_id = int(selected_gallery_image_id)
+    except ValueError:
+        return None
+    image = _gallery_images_for_checkout(request).filter(pk=image_id).first()
+    if image is None:
+        messages.error(request, "Selected gallery image is unavailable for RF card customization.")
+    return image
+
+
 def _extract_card_customizations(
     request: HttpRequest,
     entries: list[dict],
@@ -163,12 +177,14 @@ def shop_index(request: HttpRequest) -> HttpResponse:
             else localized_next_opening.strftime("%a, %d %b %H:%M")
         )
 
+    selected_gallery_image = _selected_gallery_image_for_store(request)
     context = {
         "shops": open_shops,
         "all_shops_closed_for_time": bool(active_shops and not open_shops and next_opening_candidates),
         "next_opening_at": next_opening_at,
         "next_opening_same_day": next_opening_same_day,
         "next_opening_display": next_opening_display,
+        "selected_gallery_image": selected_gallery_image,
     }
     return render(request, "shop/index.html", context)
 
@@ -220,6 +236,20 @@ def add_to_cart(request: HttpRequest, shop_slug: str, product_id: int) -> HttpRe
         messages.error(request, str(exc))
     else:
         _save_cart(request, cart)
+        selected_gallery_image_id = (request.POST.get("gallery_image") or "").strip()
+        if selected_gallery_image_id and product.supports_gallery_image_printing:
+            try:
+                gallery_image_id = int(selected_gallery_image_id)
+            except ValueError:
+                gallery_image_id = None
+            if gallery_image_id and _gallery_images_for_checkout(request).filter(pk=gallery_image_id).exists():
+                request.session["shop_cart_gallery_image"] = {
+                    "product_id": product.id,
+                    "gallery_image_id": str(gallery_image_id),
+                }
+                request.session.modified = True
+            else:
+                messages.error(request, "Selected gallery image is unavailable for RF card customization.")
         messages.success(request, f"Added {product.name} to cart.")
 
     return redirect("shop:index")
@@ -282,6 +312,19 @@ def checkout(request: HttpRequest) -> HttpResponse:
     if customization_entries:
         gallery_images = list(_gallery_images_for_checkout(request).order_by("title", "id"))
         gallery_image_map = {image.id: image for image in gallery_images}
+    stored_gallery_selection = request.session.get("shop_cart_gallery_image") or {}
+    if request.method == "GET" and stored_gallery_selection and customization_entries:
+        stored_product_id = stored_gallery_selection.get("product_id")
+        stored_gallery_image_id = stored_gallery_selection.get("gallery_image_id")
+        try:
+            stored_gallery_image_id_int = int(stored_gallery_image_id)
+        except (TypeError, ValueError):
+            stored_gallery_image_id_int = None
+        if stored_gallery_image_id_int in gallery_image_map:
+            for entry_data in customization_entries:
+                if entry_data["product"].id == stored_product_id:
+                    entry_data["selected_front"] = str(stored_gallery_image_id_int)
+                    break
 
     if request.method == "GET":
         form = CheckoutForm()
@@ -378,6 +421,7 @@ def checkout(request: HttpRequest) -> HttpResponse:
         customer_email=order.customer_email,
     )
 
+    request.session.pop("shop_cart_gallery_image", None)
     _save_cart(request, {})
     messages.success(request, "Order placed successfully.")
     return redirect(reverse("shop:order_tracking", kwargs={"tracking_token": order.tracking_token}))

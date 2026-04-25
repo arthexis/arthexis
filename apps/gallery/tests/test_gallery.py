@@ -10,6 +10,7 @@ from PIL import Image
 from apps.content.models import ContentSample
 from apps.groups.models import SecurityGroup
 from apps.media.models import MediaFile
+from apps.shop.models import Shop, ShopProduct
 
 from ..constants import GALLERY_MANAGER_GROUP_NAME
 from ..models import GalleryCategory, GalleryImage, GalleryImageTrait, GalleryTrait
@@ -74,6 +75,87 @@ class GalleryVisibilityTests(TestCase):
                 )
         self.assertEqual(MediaFile.objects.count(), before_count)
         self.assertFalse(GalleryImage.objects.filter(title="Cleanup").exists())
+
+
+class GalleryIndexTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="gallery-search-owner", password="pw")
+
+    def _upload(self, name="gallery.jpg"):
+        buffer = BytesIO()
+        Image.new("RGB", (10, 10), "yellow").save(buffer, format="JPEG")
+        return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/jpeg")
+
+    def test_index_search_matches_image_fields_and_related_traits(self):
+        visible = create_gallery_image(
+            uploaded_file=self._upload("searchable.jpg"),
+            title="Sunlit Plaza",
+            description="Warm stone plaza",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+        hidden = create_gallery_image(
+            uploaded_file=self._upload("hidden.jpg"),
+            title="Forest",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+        category = GalleryCategory.objects.create(name="Palette", slug="palette")
+        trait = GalleryTrait.objects.create(name="Mood", slug="mood")
+        GalleryImageTrait.objects.create(
+            image=visible,
+            category=category,
+            trait=trait,
+            qualitative_value="citrine",
+        )
+
+        response = self.client.get("/gallery/", {"q": "citrine"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunlit Plaza")
+        self.assertNotContains(response, "Forest")
+        self.assertEqual(list(response.context["images"]), [visible])
+        self.assertNotIn(hidden, list(response.context["images"]))
+
+    def test_detail_layout_includes_navigation_feedback_context_and_store_link(self):
+        first = create_gallery_image(
+            uploaded_file=self._upload("first.jpg"),
+            title="Alpha",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+        current = create_gallery_image(
+            uploaded_file=self._upload("current.jpg"),
+            title="Beacon",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+        last = create_gallery_image(
+            uploaded_file=self._upload("last.jpg"),
+            title="Coda",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+        shop = Shop.objects.create(name="RF Store", slug="rf-store")
+        ShopProduct.objects.create(
+            shop=shop,
+            name="RF Card",
+            sku="RF-1",
+            unit_price="10.00",
+            stock_quantity=5,
+            supports_gallery_image_printing=True,
+        )
+
+        response = self.client.get(f"/gallery/images/{current.slug}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Image ID")
+        self.assertContains(response, f"data-feedback-context=\"Image ID: {current.id}")
+        self.assertContains(response, f"/gallery/images/{first.slug}/")
+        self.assertContains(response, f"/gallery/images/{last.slug}/")
+        self.assertContains(response, "Use for RF Card")
+        self.assertContains(response, f"/shop/?gallery_image={current.id}")
+
 
 class GalleryManagementPermissionTests(TestCase):
     def setUp(self):
