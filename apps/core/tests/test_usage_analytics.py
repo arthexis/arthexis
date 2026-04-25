@@ -224,10 +224,12 @@ class UsageAnalyticsBootstrapFallbackTests(TestCase):
     def test_usage_analytics_helper_caches_confirmed_feature_table_during_atomic_bootstrap(
         self,
     ):
+        atomic_block = object()
         feature_queryset = MagicMock()
         feature_queryset.values_list.return_value.first.return_value = True
         with (
             patch("apps.features.utils.connection.in_atomic_block", True),
+            patch("apps.features.utils.connection.atomic_blocks", [atomic_block]),
             patch(
                 "apps.features.utils.connection.introspection.table_names",
                 return_value=[Feature._meta.db_table],
@@ -242,3 +244,34 @@ class UsageAnalyticsBootstrapFallbackTests(TestCase):
             self.assertTrue(usage_analytics_enabled())
 
         table_names.assert_called_once()
+
+    def test_usage_analytics_helper_revalidates_feature_table_for_new_atomic_block(
+        self,
+    ):
+        first_atomic_block = object()
+        second_atomic_block = object()
+        feature_queryset = MagicMock()
+        feature_queryset.values_list.return_value.first.return_value = True
+        with (
+            patch("apps.features.utils.connection.in_atomic_block", True),
+            patch(
+                "apps.features.utils.connection.introspection.table_names",
+                side_effect=[[Feature._meta.db_table], []],
+            ) as table_names,
+            patch(
+                "apps.features.utils.Feature.objects.filter",
+                return_value=feature_queryset,
+            ) as feature_filter,
+            patch("apps.features.utils._CONFIRMED_FEATURE_TABLES", set()),
+        ):
+            with patch(
+                "apps.features.utils.connection.atomic_blocks", [first_atomic_block]
+            ):
+                self.assertTrue(usage_analytics_enabled())
+            with patch(
+                "apps.features.utils.connection.atomic_blocks", [second_atomic_block]
+            ):
+                self.assertFalse(usage_analytics_enabled())
+
+        self.assertEqual(table_names.call_count, 2)
+        feature_filter.assert_called_once()
