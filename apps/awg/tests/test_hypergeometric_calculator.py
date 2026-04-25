@@ -4,6 +4,16 @@ from django.urls import reverse
 from apps.awg.models import HypergeometricTemplate
 from apps.awg.views.reports import _calculate_hypergeometric_totals
 
+
+def test_calculator_index_links_to_mtg_hypergeometric_calculator(db):
+    response = Client().get(reverse("awg:calculator"))
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert reverse("awg:mtg_hypergeometric") in body
+    assert "MTG Hypergeometric" in body
+
+
 def test_mtg_hypergeometric_calculator_shows_public_presets(db):
     HypergeometricTemplate.objects.create(
         name="Turn-One Sol Ring",
@@ -15,6 +25,18 @@ def test_mtg_hypergeometric_calculator_shows_public_presets(db):
 
     assert response.status_code == 200
     assert "Turn-One Sol Ring" in response.content.decode()
+
+
+def test_mtg_hypergeometric_calculator_includes_seeded_format_presets(db):
+    response = Client().get(reverse("awg:mtg_hypergeometric"))
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "40-card Draft" in body
+    assert "60-card Standard" in body
+    assert "100-card Commander" in body
+    assert "360-card Realm" in body
+
 
 def test_mtg_hypergeometric_calculator_returns_probability_results(db):
     response = Client().post(
