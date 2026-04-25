@@ -15,6 +15,7 @@ from apps.shop.models import Shop, ShopProduct
 from ..constants import GALLERY_MANAGER_GROUP_NAME
 from ..models import GalleryCategory, GalleryImage, GalleryImageTrait, GalleryTrait
 from ..services import create_gallery_image
+from ..views import _apply_gallery_search
 
 
 class GalleryVisibilityTests(TestCase):
@@ -117,6 +118,44 @@ class GalleryIndexTests(TestCase):
         self.assertEqual(list(response.context["images"]), [visible])
         self.assertNotIn(hidden, list(response.context["images"]))
 
+    def test_index_search_matches_exact_ids_without_partial_numeric_matches(self):
+        visible = create_gallery_image(
+            uploaded_file=self._upload("id-match.jpg"),
+            title="Numeric Match",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+        other = create_gallery_image(
+            uploaded_file=self._upload("id-other.jpg"),
+            title="Numeric Other",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+
+        matches = list(_apply_gallery_search(GalleryImage.objects.all(), str(visible.id)))
+
+        self.assertIn(visible, matches)
+        self.assertNotIn(other, matches)
+
+    def test_index_search_matches_exact_gallery_slug(self):
+        visible = create_gallery_image(
+            uploaded_file=self._upload("slug-match.jpg"),
+            title="Slug Match",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+        other = create_gallery_image(
+            uploaded_file=self._upload("slug-other.jpg"),
+            title="Slug Other",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+
+        matches = list(_apply_gallery_search(GalleryImage.objects.all(), str(visible.slug)))
+
+        self.assertEqual(matches, [visible])
+        self.assertNotIn(other, matches)
+
     def test_detail_layout_includes_navigation_feedback_context_and_store_link(self):
         first = create_gallery_image(
             uploaded_file=self._upload("first.jpg"),
@@ -126,6 +165,12 @@ class GalleryIndexTests(TestCase):
         )
         current = create_gallery_image(
             uploaded_file=self._upload("current.jpg"),
+            title="Beacon",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+        same_title_next = create_gallery_image(
+            uploaded_file=self._upload("same-title-next.jpg"),
             title="Beacon",
             owner_user=self.user,
             include_in_public_gallery=True,
@@ -152,7 +197,8 @@ class GalleryIndexTests(TestCase):
         self.assertContains(response, "Image ID")
         self.assertContains(response, f"data-feedback-context=\"Image ID: {current.id}")
         self.assertContains(response, f"/gallery/images/{first.slug}/")
-        self.assertContains(response, f"/gallery/images/{last.slug}/")
+        self.assertContains(response, f"/gallery/images/{same_title_next.slug}/")
+        self.assertNotContains(response, f"/gallery/images/{last.slug}/")
         self.assertContains(response, "Use for RF Card")
         self.assertContains(response, f"/shop/?gallery_image={current.id}")
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 from urllib.parse import urlencode
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -8,8 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.files import File
 from django.core.files.storage import default_storage
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
-from django.db.models import CharField, Q
-from django.db.models.functions import Cast
+from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -64,7 +63,7 @@ def _visible_images_for_user(user):
         "media_file",
         "owner_user",
         "owner_group",
-    ).prefetch_related("categories", "credits", "trait_values__category", "trait_values__trait")
+    )
     if can_manage_gallery(user):
         return queryset
     visibility_filter = Q(include_in_public_gallery=True)
@@ -80,15 +79,8 @@ def _apply_gallery_search(queryset, search_query: str):
     if not search_query:
         return queryset
 
-    queryset = queryset.annotate(
-        search_id=Cast("id", output_field=CharField()),
-        search_slug=Cast("slug", output_field=CharField()),
-        search_content_sample_name=Cast("content_sample__name", output_field=CharField()),
-    )
     filter_q = (
-        Q(search_id__icontains=search_query)
-        | Q(search_slug__icontains=search_query)
-        | Q(title__icontains=search_query)
+        Q(title__icontains=search_query)
         | Q(description__icontains=search_query)
         | Q(owner_user__username__icontains=search_query)
         | Q(owner_user__email__icontains=search_query)
@@ -104,7 +96,6 @@ def _apply_gallery_search(queryset, search_query: str):
         | Q(content_sample__path__icontains=search_query)
         | Q(content_sample__method__icontains=search_query)
         | Q(content_sample__hash__icontains=search_query)
-        | Q(search_content_sample_name__icontains=search_query)
         | Q(categories__name__icontains=search_query)
         | Q(categories__slug__icontains=search_query)
         | Q(categories__description__icontains=search_query)
@@ -124,6 +115,16 @@ def _apply_gallery_search(queryset, search_query: str):
         | Q(trait_values__qualitative_value__icontains=search_query)
     )
     normalized_query = search_query.casefold()
+    try:
+        filter_q |= Q(id=int(search_query))
+    except ValueError:
+        pass
+    try:
+        parsed_uuid = UUID(search_query)
+    except ValueError:
+        pass
+    else:
+        filter_q |= Q(slug=parsed_uuid) | Q(content_sample__name=parsed_uuid)
     if normalized_query in {"public", "published", "true", "yes"}:
         filter_q |= Q(include_in_public_gallery=True)
     if normalized_query in {"private", "false", "no"}:
@@ -141,12 +142,16 @@ def _gallery_navigation_for_image(*, image: GalleryImage, user, search_query: st
         filtered_queryset = _apply_gallery_search(queryset, search_query)
         if filtered_queryset.filter(pk=image.pk).exists():
             queryset = filtered_queryset
-    images = list(queryset.order_by("title", "id"))
-    current_index = next((index for index, candidate in enumerate(images) if candidate.pk == image.pk), None)
-    if current_index is None:
-        return None, None
-    previous_image = images[current_index - 1] if current_index > 0 else None
-    next_image = images[current_index + 1] if current_index < len(images) - 1 else None
+    previous_image = (
+        queryset.filter(Q(title__lt=image.title) | Q(title=image.title, id__lt=image.id))
+        .order_by("-title", "-id")
+        .first()
+    )
+    next_image = (
+        queryset.filter(Q(title__gt=image.title) | Q(title=image.title, id__gt=image.id))
+        .order_by("title", "id")
+        .first()
+    )
     return previous_image, next_image
 
 
