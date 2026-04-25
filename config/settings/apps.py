@@ -60,6 +60,7 @@ PROJECT_LOCAL_APPS = [
     "apps.imager",
     "apps.rpiconnect",
     "apps.leads",
+    "apps.library",
     "apps.links",
     "apps.locale",
     "apps.locals",
