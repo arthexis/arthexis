@@ -24,7 +24,7 @@ ACTIVE_STATE = STATE_DIR / "active-turn.json"
 EVENT_LOG = STATE_DIR / "events.jsonl"
 LOCK_PATH = STATE_DIR / "state.lock"
 ARCHIVE_DIR = STATE_DIR / "turns"
-WRITE_TMP = STATE_DIR / ".write-json.tmp"
+WRITE_TMP_NAME = ".write-json.tmp"
 DEFAULT_CLEANUP_TIMEOUT_SECONDS = 600
 TERM_GRACE_SECONDS = 15
 SAFE_TURN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
@@ -75,9 +75,17 @@ def read_json(path: Path) -> dict[str, Any] | None:
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     ensure_state_dir()
     path = checked_state_path(path)
-    tmp = checked_state_path(WRITE_TMP)
-    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    if path.parent not in {checked_state_path(STATE_DIR), checked_state_path(ARCHIVE_DIR)}:
+        raise ValueError(f"refusing unsupported turn state file path: {path}")
+    content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    dir_fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        fd = os.open(WRITE_TMP_NAME, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o600, dir_fd=dir_fd)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        os.replace(WRITE_TMP_NAME, path.name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+    finally:
+        os.close(dir_fd)
 
 
 def append_event(event: dict[str, Any]) -> None:
