@@ -354,7 +354,10 @@ class Attention(Entity):
     def _strip_key(text: str, key: str) -> str:
         if not key:
             return (text or "").strip()
-        return re.sub(re.escape(key), "", text or "", count=1, flags=re.IGNORECASE).strip(" :-\n\t")
+        pattern = rf"(?<![A-Z0-9]){re.escape(key)}(?![A-Z0-9])"
+        return re.sub(pattern, "", text or "", count=1, flags=re.IGNORECASE).strip(
+            " :-\n\t"
+        )
 
     def notification_body(self) -> str:
         lines = [
@@ -419,15 +422,22 @@ class Attention(Entity):
         from_phone: str = "",
         webhook_message: WhatsAppWebhookMessage | None = None,
         payload: dict | None = None,
+        require_key: bool = False,
     ) -> "Attention | None":
         key = cls.find_key(text)
         with transaction.atomic():
             queryset = cls.objects.select_for_update().filter(status=cls.Status.PENDING)
             if key:
                 attention = queryset.filter(key__iexact=key).first()
-            elif from_phone:
+            elif from_phone and not require_key:
                 candidates = list(queryset.filter(recipient=from_phone)[:2])
                 attention = candidates[0] if len(candidates) == 1 else None
+                if len(candidates) > 1:
+                    logger.info(
+                        "Skipped ambiguous Attention phone fallback for %s; %s pending matches",
+                        from_phone,
+                        len(candidates),
+                    )
             else:
                 attention = None
             if attention is None:

@@ -51,6 +51,11 @@ class Command(BaseCommand):
         respond.add_argument("key", help="Attention key")
         respond.add_argument("message", help="Response message")
         respond.add_argument("--from-phone", default="", help="Response sender phone")
+        respond.add_argument(
+            "--force",
+            action="store_true",
+            help="Overwrite an existing Attention response explicitly",
+        )
 
     def handle(self, *args, **options):
         action = options["action"]
@@ -81,7 +86,14 @@ class Command(BaseCommand):
 
     def _handle_ask(self, options):
         recipient = self._resolve_recipient(options["recipient"])
-        bridge = None if options["no_send"] else self._resolve_bridge(options["bridge"])
+        if options["no_send"]:
+            bridge = (
+                self._resolve_bridge(options["bridge"])
+                if options["bridge"] is not None
+                else None
+            )
+        else:
+            bridge = self._resolve_bridge(options["bridge"])
         attention = Attention.objects.create(
             bridge=bridge,
             recipient=recipient,
@@ -140,6 +152,10 @@ class Command(BaseCommand):
 
     def _handle_respond(self, options):
         attention = self._get_attention(options["key"])
+        if attention.status == Attention.Status.RESPONDED and not options["force"]:
+            raise CommandError(
+                f"Attention {attention.key} already has a response; use --force to overwrite."
+            )
         attention.mark_responded(
             response_text=options["message"],
             response_from_phone=options["from_phone"],

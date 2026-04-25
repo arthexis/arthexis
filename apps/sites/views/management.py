@@ -992,7 +992,12 @@ def whatsapp_webhook(request):
         display_name=display_name,
         source="whatsapp",
     )
-    Attention.capture_response(text=text, from_phone=from_number, payload=payload)
+    Attention.capture_response(
+        text=text,
+        from_phone=from_number,
+        payload=payload,
+        require_key=True,
+    )
     response_payload = {"status": "ok", "session": str(session.uuid)}
     if getattr(message, "pk", None):
         response_payload["message"] = message.pk
