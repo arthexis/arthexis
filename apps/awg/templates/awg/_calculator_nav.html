@@ -1,0 +1,18 @@
+{% load i18n %}
+<nav class="d-flex flex-wrap gap-2 mb-4" aria-label="{% trans 'Calculator modules' %}">
+  <a class="btn btn-sm btn-outline-secondary{% if active_calculator == 'cable' %} active{% endif %}" {% if active_calculator == 'cable' %}aria-current="page"{% endif %} href="{% url 'awg:calculator' %}">
+    {% trans "Cable & Conduit" %}
+  </a>
+  <a class="btn btn-sm btn-outline-secondary{% if active_calculator == 'energy_tariff' %} active{% endif %}" {% if active_calculator == 'energy_tariff' %}aria-current="page"{% endif %} href="{% url 'awg:energy_tariff' %}">
+    {% trans "Energy Tariff" %}
+  </a>
+  <a class="btn btn-sm btn-outline-secondary{% if active_calculator == 'electrical_power' %} active{% endif %}" {% if active_calculator == 'electrical_power' %}aria-current="page"{% endif %} href="{% url 'awg:electrical_power' %}">
+    {% trans "Electrical Power" %}
+  </a>
+  <a class="btn btn-sm btn-outline-secondary{% if active_calculator == 'ev_charging' %} active{% endif %}" {% if active_calculator == 'ev_charging' %}aria-current="page"{% endif %} href="{% url 'awg:ev_charging' %}">
+    {% trans "EV Charging" %}
+  </a>
+  <a class="btn btn-sm btn-outline-secondary{% if active_calculator == 'mtg_hypergeometric' %} active{% endif %}" {% if active_calculator == 'mtg_hypergeometric' %}aria-current="page"{% endif %} href="{% url 'awg:mtg_hypergeometric' %}">
+    {% trans "MTG Hypergeometric" %}
+  </a>
+</nav>
