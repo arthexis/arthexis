@@ -8,6 +8,7 @@ from django.db.utils import OperationalError, ProgrammingError
 from django.shortcuts import resolve_url
 from django.urls import Resolver404, resolve
 from django.utils.encoding import force_str
+from django.utils.translation import gettext as _
 
 from apps.features.utils import is_suite_feature_enabled
 from apps.groups.models import SecurityGroup
@@ -48,9 +49,7 @@ _ROLE_FAVICONS = {
     if role != "default"
 }
 ARTHEXIS_FUNDING_HOST = "arthexis.com"
-DEFAULT_FUNDING_ISSUE_URL = (
-    "https://github.com/arthexis/arthexis/issues/7433"
-)
+DEFAULT_FUNDING_ISSUE_URL = "https://github.com/arthexis/arthexis/issues/7433"
 
 
 def _parse_user_story_attachment_limit() -> int:
@@ -85,8 +84,8 @@ def _build_funding_banner(request):
 
     issue_url = getattr(settings, "ARTHEXIS_FUNDING_ISSUE_URL", "")
     return {
-        "title": "Arthexis needs funding to keep maintenance running",
-        "message": (
+        "title": _("Arthexis needs funding to keep maintenance running"),
+        "message": _(
             "The PR Overseer and supporting maintenance automation depend on "
             "available operating credits. Funding helps keep reviews, fixes, "
             "and continuity work moving."

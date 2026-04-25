@@ -760,7 +760,7 @@ body.user-story-open {
 .funding-banner {
   align-items: center;
   background: #1f2937;
-  border: 1px solid #facc15;
+  border: 1px solid var(--site-accent);
   border-radius: 0.375rem;
   color: #f8fafc;
   display: flex;
@@ -791,7 +791,7 @@ body.user-story-open {
   color: #fef3c7;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 575.98px) {
   .funding-banner {
     align-items: flex-start;
     flex-direction: column;
