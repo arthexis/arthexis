@@ -7,7 +7,7 @@ description: Write a concise high-priority attention message to the local Arthex
 
 Use this skill to post a brief, high-signal message on the device LCD after long processing or when waiting on the user. Keep the output safe for a shared screen and concise enough to fit a 16x2 character display.
 
-When user attention is required between Arthexis main phases, use a critical sustained display. The helper writes to the sticky high-priority LCD lock immediately and, when sustained mode is enabled, rewrites the same message at a bounded interval so it remains visible while the agent waits.
+When user attention is required between Arthexis main phases, use a critical sustained display. The helper writes to the sticky high-priority LCD lock immediately and, when sustained mode is enabled, adds a bounded expiry so the message remains visible while the agent waits without blocking the agent or spawning a refresh loop.
 
 ## Workflow
 
@@ -22,7 +22,7 @@ python3 scripts/post_attention.py --code WAIT --hint APPROVE --critical --sustai
 
 5. Use `--print-only` while testing or when you only need the rendered 16x2 preview.
 
-The helper writes through the live Arthexis suite at `/home/arthe/arthexis` by running `manage.py lcd write --sticky`, which targets the high-priority LCD lock.
+The helper writes the high-priority LCD lock directly under the configured Arthexis base directory. Sustained messages are bounded by the lock-file expiry line and the script returns after the initial atomic write.
 
 ## Format
 
@@ -31,7 +31,7 @@ The helper writes through the live Arthexis suite at `/home/arthe/arthexis` by r
 - Prefer uppercase ASCII and simple words that are readable from a distance.
 - Avoid secrets, tokens, stack traces, filenames, or detailed status text.
 - Avoid using this for ordinary short turns when the user is already actively watching the session.
-- Keep sustained attention bounded. The default sustained duration is 600 seconds with a 15-second refresh interval.
+- Keep sustained attention bounded. The default sustained duration is 600 seconds; no background worker is started, and the LCD runner drops the message when the lock expiry passes.
 
 ## Commands
 
@@ -46,5 +46,4 @@ python3 scripts/post_attention.py --code WAIT --hint APPROVE --critical --sustai
 ## Notes
 
 - Default Arthexis base dir: `/home/arthe/arthexis`
-- Default Python runner: `/home/arthe/arthexis/.venv/bin/python` when present
 - If you need more message ideas, read `references/message-patterns.md`

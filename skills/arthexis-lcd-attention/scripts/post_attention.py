@@ -2,12 +2,10 @@
 from __future__ import annotations
 
 import argparse
-import shutil
+import os
 import subprocess
-import sys
-import time
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 WIDTH = 16
@@ -56,38 +54,33 @@ def build_lines(code: str, hint: str, action: str | None, time_text: str | None)
     return subject, body
 
 
-def _suite_python(base_dir: Path) -> str:
-    venv_python = base_dir / ".venv" / "bin" / "python"
-    if venv_python.exists():
-        return str(venv_python)
-    python3 = shutil.which("python3")
-    if python3:
-        return python3
-    return sys.executable
+def _render_lcd_lock_file(
+    *, subject: str, body: str, expires_at: datetime | None = None
+) -> str:
+    lines = [subject.strip()[:64], body.strip()[:64]]
+    if expires_at is not None:
+        lines.append(expires_at.isoformat())
+    return "\n".join(lines) + "\n"
 
 
-def _write_message(base_dir: Path, subject: str, body: str) -> subprocess.CompletedProcess[str]:
-    manage_py = base_dir / "manage.py"
-    if not manage_py.exists():
-        raise FileNotFoundError(f"Arthexis manage.py not found at {manage_py}")
+def _write_message(
+    base_dir: Path, subject: str, body: str, expires_at: datetime | None = None
+) -> subprocess.CompletedProcess[str]:
+    if not base_dir.exists():
+        raise FileNotFoundError(f"Arthexis base directory not found at {base_dir}")
 
-    command = [
-        _suite_python(base_dir),
-        str(manage_py),
-        "lcd",
-        "write",
-        "--subject",
-        subject,
-        "--body",
-        body,
-        "--sticky",
-    ]
-    return subprocess.run(
-        command,
-        cwd=base_dir,
-        capture_output=True,
-        text=True,
-        check=False,
+    lock_dir = base_dir / ".locks"
+    lock_file = lock_dir / "lcd-high"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    payload = _render_lcd_lock_file(subject=subject, body=body, expires_at=expires_at)
+    temp_file = lock_file.with_name(f".{lock_file.name}.{os.getpid()}.tmp")
+    temp_file.write_text(payload, encoding="utf-8")
+    temp_file.replace(lock_file)
+    return subprocess.CompletedProcess(
+        args=["write-lcd-lock", str(lock_file)],
+        returncode=0,
+        stdout=f"Updated {lock_file}\n",
+        stderr="",
     )
 
 
@@ -121,19 +114,10 @@ def _write_sustained_message(
     if interval_seconds <= 0:
         raise ValueError("interval seconds must be greater than zero")
 
-    result = _write_message(base_dir, subject, body)
-    if result.returncode != 0 or duration_seconds <= 0:
-        return result
-
-    deadline = time.monotonic() + duration_seconds
-    while True:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return result
-        time.sleep(min(interval_seconds, remaining))
-        result = _write_message(base_dir, subject, body)
-        if result.returncode != 0:
-            return result
+    if duration_seconds > 0:
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
+        return _write_message(base_dir, subject, body, expires_at=expires_at)
+    return _write_message(base_dir, subject, body)
 
 
 def main() -> int:
@@ -163,7 +147,10 @@ def main() -> int:
     parser.add_argument(
         "--sustained",
         action="store_true",
-        help=f"Refresh the sticky LCD message for {int(DEFAULT_SUSTAIN_SECONDS)} seconds.",
+        help=(
+            "Keep the sticky LCD message visible with a bounded expiry "
+            f"for {int(DEFAULT_SUSTAIN_SECONDS)} seconds."
+        ),
     )
     parser.add_argument(
         "--sustain-seconds",
@@ -180,7 +167,10 @@ def main() -> int:
         "--interval",
         type=float,
         default=DEFAULT_REFRESH_INTERVAL,
-        help=f"Seconds between sustained refreshes (default: {int(DEFAULT_REFRESH_INTERVAL)}).",
+        help=(
+            "Accepted for compatibility; sustained mode uses a bounded lock expiry "
+            f"instead of a refresh loop (default: {int(DEFAULT_REFRESH_INTERVAL)})."
+        ),
     )
     args = parser.parse_args()
 
@@ -203,7 +193,7 @@ def main() -> int:
         print("priority: critical")
     if sustain_seconds > 0:
         print(f"sustain_seconds: {sustain_seconds:g}")
-        print(f"refresh_interval: {args.interval:g}")
+        print("sustain_mode: bounded lock expiry")
 
     if args.print_only:
         return 0
