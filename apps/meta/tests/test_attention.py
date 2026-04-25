@@ -6,6 +6,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
+from apps.meta.management.commands import attention as attention_command
 from apps.meta.models import Attention, WhatsAppChatBridge
 
 
@@ -34,6 +35,74 @@ def test_attention_command_creates_no_send_request():
     assert attention.status == Attention.Status.PENDING
     assert attention.key in stdout.getvalue()
     assert "sent=no" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_attention_command_wait_fails_fast_when_delivery_fails(monkeypatch):
+    bridge = WhatsAppChatBridge.objects.create(
+        phone_number_id="12345",
+        access_token="token",
+        is_default=True,
+    )
+    stdout = StringIO()
+
+    monkeypatch.setattr(Attention, "send", lambda self: False)
+
+    with pytest.raises(CommandError, match="was not delivered; refusing to wait"):
+        call_command(
+            "attention",
+            "ask",
+            "Continue with the risky step?",
+            "--recipient",
+            "15551234567",
+            "--bridge",
+            str(bridge.pk),
+            "--wait",
+            stdout=stdout,
+        )
+
+    attention = Attention.objects.get()
+    assert attention.status == Attention.Status.PENDING
+    assert f"attention={attention.key}" in stdout.getvalue()
+    assert "sent=no" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_attention_command_wait_returns_when_delivery_succeeds(monkeypatch):
+    bridge = WhatsAppChatBridge.objects.create(
+        phone_number_id="12345",
+        access_token="token",
+        is_default=True,
+    )
+    stdout = StringIO()
+
+    def fake_send(self):
+        self.mark_responded(
+            response_text=f"{self.key} approved",
+            response_from_phone=self.recipient,
+            response_payload={"source": "test"},
+        )
+        return True
+
+    monkeypatch.setattr(Attention, "send", fake_send)
+    monkeypatch.setattr(attention_command, "close_old_connections", lambda: None)
+
+    call_command(
+        "attention",
+        "ask",
+        "Continue with the risky step?",
+        "--recipient",
+        "15551234567",
+        "--bridge",
+        str(bridge.pk),
+        "--wait",
+        stdout=stdout,
+    )
+
+    attention = Attention.objects.get()
+    assert attention.status == Attention.Status.RESPONDED
+    assert "sent=yes" in stdout.getvalue()
+    assert "response=approved" in stdout.getvalue()
 
 
 @pytest.mark.django_db

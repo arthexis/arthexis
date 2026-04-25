@@ -115,6 +115,10 @@ class Command(BaseCommand):
         self.stdout.write(f"status={attention.status}")
         self.stdout.write(f"sent={'yes' if sent else 'no'}")
         if options["wait"]:
+            if not sent:
+                raise CommandError(
+                    f"Attention {attention.key} was not delivered; refusing to wait."
+                )
             return self._handle_wait(attention.key, options)
         return None
 
