@@ -232,6 +232,7 @@ def test_subscribe_rolls_back_new_authorization_when_activity_log_fails(tmp_path
 
     assert synced_macs == [{"aa:bb:cc:dd:ee:ff"}, set()]
     assert not state.config.authorized_macs_path.exists()
+    assert not state.config.consents_path.exists()
     assert "aa:bb:cc:dd:ee:ff" not in state._authorized
 
 

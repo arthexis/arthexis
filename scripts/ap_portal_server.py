@@ -409,6 +409,7 @@ class PortalState:
                 next_authorized.add(mac_address)
                 if self.config.sync_firewall:
                     self._firewall.sync(next_authorized)
+                consent_rollback_position = self._consent_log_position()
                 try:
                     self._write_authorized_macs(next_authorized)
                     self._append_consent(record)
@@ -422,6 +423,7 @@ class PortalState:
                         host=host,
                     )
                 except OSError:
+                    self._restore_consent_log(consent_rollback_position)
                     self._restore_authorized_macs(previous_authorized, existed=authorized_file_existed)
                     if self.config.sync_firewall:
                         self._firewall.sync(previous_authorized)
@@ -500,6 +502,18 @@ class PortalState:
 
     def _append_consent(self, record: dict[str, Any]) -> None:
         _append_jsonl(self.config.consents_path, record)
+
+    def _consent_log_position(self) -> int | None:
+        if not self.config.consents_path.exists():
+            return None
+        return self.config.consents_path.stat().st_size
+
+    def _restore_consent_log(self, position: int | None) -> None:
+        if position is None:
+            self.config.consents_path.unlink(missing_ok=True)
+            return
+        with self.config.consents_path.open("r+b") as handle:
+            handle.truncate(position)
 
 
 class PortalApplication:
