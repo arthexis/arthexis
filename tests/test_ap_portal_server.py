@@ -373,6 +373,26 @@ def test_client_summary_combines_authorization_consent_and_activity(tmp_path):
     assert summary[0]["event_count"] >= 1
 
 
+def test_client_summary_does_not_treat_consent_history_as_authorization(tmp_path):
+    module = load_portal_module()
+    state = module.PortalState(make_config(module, tmp_path))
+    state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
+    state.subscribe(
+        email="guest@example.com",
+        accept_terms=True,
+        ip_address="10.42.0.25",
+        user_agent="client-test",
+        host="arthexis.net",
+    )
+    state.config.authorized_macs_path.write_text("", encoding="utf-8")
+
+    summary = state.activity.client_summary()
+
+    assert summary[0]["mac_address"] == "aa:bb:cc:dd:ee:ff"
+    assert summary[0]["email"] == "guest@example.com"
+    assert summary[0]["authorized"] is False
+
+
 def test_firewall_ruleset_keeps_authorized_clients_and_redirects_unapproved_http():
     module = load_portal_module()
     ruleset = module.FirewallManager(interface="wlan0")._render_ruleset(["aa:bb:cc:dd:ee:ff"])
