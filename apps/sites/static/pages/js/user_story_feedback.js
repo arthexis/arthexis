@@ -529,20 +529,22 @@
     feedbackContexts.forEach(context => {
       details.push(context);
     });
-    const nextOpsTask = getAdminDashboardNextTask();
-    const netMessage = getAdminDashboardNetMessage();
-    const roleSiteNode = getRoleSiteNodeSummary();
-    if (nextOpsTask) {
-      details.push(`Next: ${nextOpsTask}`);
-    }
-    if (netMessage) {
-      details.push(`Net Message: ${netMessage}`);
-    }
-    if (roleSiteNode) {
-      details.push(`Role / Site / Node: ${roleSiteNode}`);
-    }
-    if (securityGroups) {
-      details.push(`Security groups: ${securityGroups}`);
+    if (canCopyStaffDetails) {
+      const nextOpsTask = getAdminDashboardNextTask();
+      const netMessage = getAdminDashboardNetMessage();
+      const roleSiteNode = getRoleSiteNodeSummary();
+      if (nextOpsTask) {
+        details.push(`Next: ${nextOpsTask}`);
+      }
+      if (netMessage) {
+        details.push(`Net Message: ${netMessage}`);
+      }
+      if (roleSiteNode) {
+        details.push(`Role / Site / Node: ${roleSiteNode}`);
+      }
+      if (securityGroups) {
+        details.push(`Security groups: ${securityGroups}`);
+      }
     }
     const messages = getPageMessages();
     syncMessageField(messages);
