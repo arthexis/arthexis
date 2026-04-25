@@ -196,6 +196,8 @@ class OwnerLibraryHolding(Entity):
             and self.local_checksum_sha256 == self.remote_checksum_sha256
         ):
             state = self.ReconciliationState.MATCHED
+        # Phase 1 uses timestamp precedence: if both sides diverge, the
+        # newer mtime wins and equal/unknown mtimes fall through to conflict.
         elif self.local_is_newer():
             state = self.ReconciliationState.LOCAL_NEWER
         elif self.remote_is_newer():
@@ -270,7 +272,7 @@ class KindleLibraryTransfer(Entity):
         choices=OwnerLibraryHolding.ReconciliationState.choices,
         default=OwnerLibraryHolding.ReconciliationState.UNKNOWN,
     )
-    started_at = models.DateTimeField(default=timezone.localtime)
+    started_at = models.DateTimeField(default=timezone.now)
     finished_at = models.DateTimeField(null=True, blank=True)
     error_message = models.TextField(blank=True, default="")
     metadata = models.JSONField(blank=True, default=dict)

@@ -400,7 +400,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "started_at",
-                    models.DateTimeField(default=django.utils.timezone.localtime),
+                    models.DateTimeField(default=django.utils.timezone.now),
                 ),
                 ("finished_at", models.DateTimeField(blank=True, null=True)),
                 ("error_message", models.TextField(blank=True, default="")),

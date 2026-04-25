@@ -65,6 +65,25 @@ class LibraryModelTests(TestCase):
         self.assertEqual(state, OwnerLibraryHolding.ReconciliationState.LOCAL_NEWER)
         self.assertIsNotNone(holding.reconciled_at)
 
+    def test_holding_reconciliation_prefers_newer_timestamp_for_divergent_checksums(
+        self,
+    ):
+        now = timezone.now()
+        holding = OwnerLibraryHolding.objects.create(
+            owner=self.owner,
+            entry=self.entry,
+            local_path="/library/Tracked Book.kfx",
+            local_modified_at=now,
+            local_checksum_sha256="a" * 64,
+            remote_version="remote-v1",
+            remote_modified_at=now - timedelta(hours=1),
+            remote_checksum_sha256="b" * 64,
+        )
+
+        state = holding.refresh_reconciliation_state()
+
+        self.assertEqual(state, OwnerLibraryHolding.ReconciliationState.LOCAL_NEWER)
+
     def test_holding_reconciliation_detects_matching_checksums(self):
         holding = OwnerLibraryHolding.objects.create(
             owner=self.owner,
