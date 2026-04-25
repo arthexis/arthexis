@@ -24,6 +24,7 @@ ACTIVE_STATE = STATE_DIR / "active-turn.json"
 EVENT_LOG = STATE_DIR / "events.jsonl"
 LOCK_PATH = STATE_DIR / "state.lock"
 ARCHIVE_DIR = STATE_DIR / "turns"
+WRITE_TMP = STATE_DIR / ".write-json.tmp"
 DEFAULT_CLEANUP_TIMEOUT_SECONDS = 600
 TERM_GRACE_SECONDS = 15
 SAFE_TURN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
@@ -74,7 +75,7 @@ def read_json(path: Path) -> dict[str, Any] | None:
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     ensure_state_dir()
     path = checked_state_path(path)
-    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    tmp = checked_state_path(WRITE_TMP)
     tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     tmp.replace(path)
 
