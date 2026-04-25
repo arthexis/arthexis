@@ -278,6 +278,35 @@ def test_subscribe_rolls_back_new_authorization_when_authorized_write_fails(tmp_
     assert "aa:bb:cc:dd:ee:ff" not in state._authorized
 
 
+def test_subscribe_rolls_back_existing_authorization_consent_when_activity_log_fails(tmp_path):
+    module = load_portal_module()
+    config = make_config(module, tmp_path)
+    state = module.PortalState(config)
+    state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
+    state.subscribe(
+        email="guest@example.com",
+        accept_terms=True,
+        ip_address="10.42.0.25",
+        user_agent="client-test",
+        host="arthexis.net",
+    )
+    original_consents = state.config.consents_path.read_text(encoding="utf-8")
+    state.activity.record = lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("activity log unavailable"))
+
+    with pytest.raises(OSError, match="activity log unavailable"):
+        state.subscribe(
+            email="retry@example.com",
+            accept_terms=True,
+            ip_address="10.42.0.25",
+            user_agent="client-test",
+            host="arthexis.net",
+        )
+
+    assert state.config.consents_path.read_text(encoding="utf-8") == original_consents
+    assert state.config.authorized_macs_path.read_text(encoding="utf-8") == "aa:bb:cc:dd:ee:ff\n"
+    assert "aa:bb:cc:dd:ee:ff" in state._authorized
+
+
 def test_client_ip_prefers_nginx_real_ip_over_spoofed_forwarded_for():
     module = load_portal_module()
     headers = {

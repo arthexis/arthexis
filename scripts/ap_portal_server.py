@@ -430,16 +430,21 @@ class PortalState:
                     raise
                 self._authorized = next_authorized
             else:
-                self._append_consent(record)
-                self.activity.record(
-                    "consent_accepted",
-                    ip_address=ip_address,
-                    mac_address=mac_address,
-                    email=normalized_email,
-                    already_authorized=already_authorized,
-                    user_agent=user_agent,
-                    host=host,
-                )
+                consent_rollback_position = self._consent_log_position()
+                try:
+                    self._append_consent(record)
+                    self.activity.record(
+                        "consent_accepted",
+                        ip_address=ip_address,
+                        mac_address=mac_address,
+                        email=normalized_email,
+                        already_authorized=already_authorized,
+                        user_agent=user_agent,
+                        host=host,
+                    )
+                except OSError:
+                    self._restore_consent_log(consent_rollback_position)
+                    raise
 
         return {
             "authorized": True,
