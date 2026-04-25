@@ -38,6 +38,25 @@ def test_run_log_retention_preserves_active_transactional_logs(settings, tmp_pat
     assert (tmp_path / "error.log").exists()
 
 
+def test_run_log_retention_preserves_managed_active_artifacts(
+    settings,
+    tmp_path,
+    monkeypatch,
+):
+    settings.LOG_DIR = str(tmp_path)
+    monkeypatch.setattr(
+        log_retention,
+        "MANAGED_LOG_BASENAMES",
+        {*log_retention.MANAGED_LOG_BASENAMES, "rfid-scans.ndjson"},
+    )
+    _write_file(tmp_path / "rfid-scans.ndjson", days_old=365)
+
+    result = log_retention._run_log_retention()
+
+    assert result.deleted_files == 0
+    assert (tmp_path / "rfid-scans.ndjson").exists()
+
+
 def test_run_log_retention_preserves_non_log_files(settings, tmp_path):
     settings.LOG_DIR = str(tmp_path)
     _write_file(tmp_path / "content-drops" / "sample.json", days_old=900)
@@ -97,4 +116,3 @@ def test_run_log_retention_sends_alert_when_disk_remains_high(settings, tmp_path
 
     assert result.alert_sent is True
     assert calls == [(85.0, 85.0)]
-

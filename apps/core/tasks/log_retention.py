@@ -92,9 +92,7 @@ def _is_managed_transactional_log(path: Path, *, archive_dir: Path) -> bool:
 
 
 def _is_protected_active_log(path: Path, *, archive_dir: Path) -> bool:
-    return _is_active_log_file(path) and _is_managed_transactional_log(
-        path, archive_dir=archive_dir
-    )
+    return path.parent != archive_dir and path.name in MANAGED_LOG_BASENAMES
 
 
 def _retention_days_for(path: Path, *, archive_dir: Path) -> int:
