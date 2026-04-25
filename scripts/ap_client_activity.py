@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -12,12 +13,24 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_STATE_DIR = BASE_DIR / ".state" / "ap_portal"
 
 
-def _load_jsonl(path: Path, limit: int | None = None) -> list[dict[str, Any]]:
-    if not path.exists():
+def _tail_lines(path: Path, limit: int, chunk_size: int = 8192) -> list[str]:
+    if limit <= 0:
         return []
-    lines = path.read_text(encoding="utf-8").splitlines()
-    if limit is not None:
-        lines = lines[-limit:]
+    with path.open("rb") as handle:
+        handle.seek(0, 2)
+        position = handle.tell()
+        buffer = b""
+        lines: list[bytes] = []
+        while position > 0 and len(lines) <= limit:
+            read_size = min(chunk_size, position)
+            position -= read_size
+            handle.seek(position)
+            buffer = handle.read(read_size) + buffer
+            lines = buffer.splitlines()
+    return [line.decode("utf-8", errors="replace") for line in lines[-limit:]]
+
+
+def _parse_jsonl_lines(lines: Iterable[str]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for line in lines:
         try:
@@ -27,6 +40,17 @@ def _load_jsonl(path: Path, limit: int | None = None) -> list[dict[str, Any]]:
         if isinstance(payload, dict):
             rows.append(payload)
     return rows
+
+
+def _load_jsonl(path: Path, limit: int | None = None) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    if limit is not None and limit <= 0:
+        return []
+    if limit is None:
+        with path.open(encoding="utf-8") as handle:
+            return _parse_jsonl_lines(handle)
+    return _parse_jsonl_lines(_tail_lines(path, limit))
 
 
 def _load_authorized(path: Path) -> set[str]:

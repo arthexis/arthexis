@@ -18,6 +18,35 @@ def load_activity_module():
     return module
 
 
+def test_load_jsonl_limit_uses_bounded_tail_without_reading_whole_file(tmp_path, monkeypatch):
+    module = load_activity_module()
+    log_path = tmp_path / "activity.jsonl"
+    rows = [
+        {"event_type": "old"},
+        {"event_type": "middle"},
+        {"event_type": "new"},
+    ]
+    log_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    def fail_read_text(*_args, **_kwargs):
+        raise AssertionError("_load_jsonl should not read the whole file for limited loads")
+
+    monkeypatch.setattr(module.Path, "read_text", fail_read_text)
+
+    loaded = module._load_jsonl(log_path, limit=2)
+
+    assert [row["event_type"] for row in loaded] == ["middle", "new"]
+
+
+def test_load_jsonl_non_positive_limit_returns_no_rows(tmp_path):
+    module = load_activity_module()
+    log_path = tmp_path / "activity.jsonl"
+    log_path.write_text(json.dumps({"event_type": "new"}) + "\n", encoding="utf-8")
+
+    assert module._load_jsonl(log_path, limit=0) == []
+    assert module._load_jsonl(log_path, limit=-1) == []
+
+
 def test_build_report_does_not_treat_consent_history_as_authorization(tmp_path):
     module = load_activity_module()
     state_dir = tmp_path / "ap_portal"
