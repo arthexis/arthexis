@@ -261,6 +261,8 @@ def _read_limited_request_body(headers: Any, rfile: Any) -> str:
         length = int(headers.get("Content-Length", "0") or "0")
     except ValueError as exc:
         raise ValueError("Invalid Content-Length.") from exc
+    if length < 0:
+        raise ValueError("Invalid Content-Length.")
     if length > MAX_PAYLOAD_BYTES:
         raise ValueError("Payload too large.")
     return rfile.read(length).decode("utf-8") if length else ""
@@ -376,9 +378,9 @@ class PortalState:
             if not already_authorized:
                 next_authorized = set(self._authorized)
                 next_authorized.add(mac_address)
-                self._write_authorized_macs(next_authorized)
                 if self.config.sync_firewall:
                     self._firewall.sync(next_authorized)
+                self._write_authorized_macs(next_authorized)
                 self._authorized = next_authorized
             self._append_consent(record)
             self.activity.record(

@@ -101,6 +101,43 @@ def test_subscribe_rejects_string_false_consent_without_authorizing(tmp_path):
     assert not state.config.consents_path.exists()
 
 
+def test_subscribe_does_not_persist_authorization_when_firewall_sync_fails(tmp_path):
+    module = load_portal_module()
+    config = make_config(module, tmp_path)
+    state = module.PortalState(config)
+    config = module.PortalConfig(
+        bind=config.bind,
+        port=config.port,
+        assets_dir=config.assets_dir,
+        state_dir=config.state_dir,
+        authorized_macs_path=config.authorized_macs_path,
+        consents_path=config.consents_path,
+        activity_path=config.activity_path,
+        source_url=config.source_url,
+        sync_firewall=True,
+    )
+    state.config = config
+    state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
+
+    def fail_sync(_macs):
+        raise module.FirewallSyncError("nft failed")
+
+    state._firewall.sync = fail_sync
+
+    with pytest.raises(module.FirewallSyncError, match="nft failed"):
+        state.subscribe(
+            email="guest@example.com",
+            accept_terms=True,
+            ip_address="10.42.0.25",
+            user_agent="client-test",
+            host="arthexis.net",
+        )
+
+    assert not state.config.authorized_macs_path.exists()
+    assert not state.config.consents_path.exists()
+    assert "aa:bb:cc:dd:ee:ff" not in state._authorized
+
+
 def test_client_ip_prefers_nginx_real_ip_over_spoofed_forwarded_for():
     module = load_portal_module()
     headers = {
@@ -226,3 +263,11 @@ def test_read_limited_request_body_rejects_large_payload():
 
     with pytest.raises(ValueError, match="Payload too large"):
         module._read_limited_request_body(headers, io.BytesIO())
+
+
+def test_read_limited_request_body_rejects_negative_length_before_reading():
+    module = load_portal_module()
+    headers = {"Content-Length": "-1"}
+
+    with pytest.raises(ValueError, match="Invalid Content-Length"):
+        module._read_limited_request_body(headers, io.BytesIO(b"email=guest@example.com"))
