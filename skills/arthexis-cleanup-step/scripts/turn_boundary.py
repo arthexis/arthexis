@@ -421,6 +421,7 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
             print("status: turn-completed-or-changed")
             return 0
         state = state_after_wait
+        lingering.update(live_turn_process_identities(state))
         lingering = matching_process_identities(lingering)
         if lingering:
             termination = terminate_pids(lingering, force_kill=args.force_kill)
