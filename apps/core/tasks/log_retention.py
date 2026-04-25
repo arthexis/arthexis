@@ -23,13 +23,21 @@ MANAGED_LOG_BASENAMES = {
     "celery.log",
     "cp_forwarder.log",
     "error.log",
+    "lcd-screen.log",
     "page_misses.log",
     "rfid.log",
+    "register_local_node.log",
+    "register_visitor_node.log",
     "tests-celery.log",
+    "tests-cp_forwarder.log",
     "tests-error.log",
     "tests-page_misses.log",
+    "tests-rfid.log",
     "tests.log",
 }
+LOG_ARTIFACT_SUFFIXES = {".log", ".ndjson"}
+SESSION_LOG_SUFFIXES = {".json"}
+SESSION_LOG_DIR_NAMES = {"sessions"}
 
 
 @dataclass(frozen=True)
@@ -56,7 +64,14 @@ def _disk_usage_percent(path: Path) -> float:
 
 def _is_log_artifact(path: Path) -> bool:
     name = path.name.lower()
-    return path.suffix.lower() == ".log" or ".log." in name
+    suffix = path.suffix.lower()
+    if suffix in LOG_ARTIFACT_SUFFIXES:
+        return True
+    if ".log." in name or ".ndjson." in name:
+        return True
+    return suffix in SESSION_LOG_SUFFIXES and bool(
+        SESSION_LOG_DIR_NAMES.intersection(path.parts)
+    )
 
 
 def _is_active_log_file(path: Path) -> bool:
@@ -74,6 +89,12 @@ def _is_managed_transactional_log(path: Path, *, archive_dir: Path) -> bool:
                 return True
 
     return False
+
+
+def _is_protected_active_log(path: Path, *, archive_dir: Path) -> bool:
+    return _is_active_log_file(path) and _is_managed_transactional_log(
+        path, archive_dir=archive_dir
+    )
 
 
 def _retention_days_for(path: Path, *, archive_dir: Path) -> int:
@@ -103,11 +124,14 @@ def _collect_log_candidates(log_dir: Path) -> list[LogCandidate]:
 
 def _delete_candidates(log_dir: Path, *, max_age_days: int) -> tuple[int, int]:
     cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    archive_dir = log_dir / "archive"
     deleted_files = 0
     deleted_bytes = 0
 
     for candidate in _collect_log_candidates(log_dir):
-        if _is_active_log_file(candidate.path) or candidate.modified >= cutoff:
+        if _is_protected_active_log(candidate.path, archive_dir=archive_dir):
+            continue
+        if candidate.modified >= cutoff:
             continue
         try:
             candidate.path.unlink()
@@ -126,7 +150,7 @@ def _trim_with_policy(log_dir: Path) -> tuple[int, int]:
     now = datetime.now(timezone.utc)
     archive_dir = log_dir / "archive"
     for candidate in _collect_log_candidates(log_dir):
-        if _is_active_log_file(candidate.path):
+        if _is_protected_active_log(candidate.path, archive_dir=archive_dir):
             continue
         retention_days = _retention_days_for(candidate.path, archive_dir=archive_dir)
         cutoff = now - timedelta(days=retention_days)

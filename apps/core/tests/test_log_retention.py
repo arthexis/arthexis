@@ -48,6 +48,34 @@ def test_run_log_retention_preserves_non_log_files(settings, tmp_path):
     assert (tmp_path / "content-drops" / "sample.json").exists()
 
 
+def test_run_log_retention_trims_stale_unmanaged_active_logs(settings, tmp_path):
+    settings.LOG_DIR = str(tmp_path)
+    _write_file(tmp_path / "command.log", days_old=731)
+    _write_file(tmp_path / "error.log", days_old=365)
+
+    result = log_retention._run_log_retention()
+
+    assert result.deleted_files == 1
+    assert not (tmp_path / "command.log").exists()
+    assert (tmp_path / "error.log").exists()
+
+
+def test_run_log_retention_trims_stale_scan_and_session_logs(settings, tmp_path):
+    settings.LOG_DIR = str(tmp_path)
+    _write_file(tmp_path / "rfid-scans.ndjson", days_old=731)
+    _write_file(tmp_path / "rfid-scans.rotated.ndjson", days_old=731)
+    _write_file(tmp_path / "sessions" / "CID" / "202404240001.json", days_old=731)
+    _write_file(tmp_path / "content-drops" / "sample.json", days_old=900)
+
+    result = log_retention._run_log_retention()
+
+    assert result.deleted_files == 3
+    assert not (tmp_path / "rfid-scans.ndjson").exists()
+    assert not (tmp_path / "rfid-scans.rotated.ndjson").exists()
+    assert not (tmp_path / "sessions" / "CID" / "202404240001.json").exists()
+    assert (tmp_path / "content-drops" / "sample.json").exists()
+
+
 def test_run_log_retention_sends_alert_when_disk_remains_high(settings, tmp_path, monkeypatch):
     settings.LOG_DIR = str(tmp_path)
 
@@ -69,5 +97,4 @@ def test_run_log_retention_sends_alert_when_disk_remains_high(settings, tmp_path
 
     assert result.alert_sent is True
     assert calls == [(85.0, 85.0)]
-
 
