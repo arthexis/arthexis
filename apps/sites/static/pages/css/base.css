@@ -757,3 +757,43 @@ body.user-story-open {
     display: flex;
   }
 }
+.funding-banner {
+  align-items: center;
+  background: #1f2937;
+  border: 1px solid #facc15;
+  border-radius: 0.375rem;
+  color: #f8fafc;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.875rem 1rem;
+}
+
+.funding-banner p {
+  color: #d1d5db;
+}
+
+.funding-banner__mark {
+  color: #f472b6;
+  flex: 0 0 auto;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.funding-banner__link {
+  color: #fde68a;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.funding-banner__link:focus,
+.funding-banner__link:hover {
+  color: #fef3c7;
+}
+
+@media (max-width: 640px) {
+  .funding-banner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

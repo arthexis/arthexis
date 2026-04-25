@@ -47,6 +47,10 @@ _ROLE_FAVICONS = {
     for role, filename in _FAVICON_FILENAMES.items()
     if role != "default"
 }
+ARTHEXIS_FUNDING_HOST = "arthexis.com"
+DEFAULT_FUNDING_ISSUE_URL = (
+    "https://github.com/arthexis/arthexis/issues/7433"
+)
 
 
 def _parse_user_story_attachment_limit() -> int:
@@ -61,6 +65,34 @@ def _parse_user_story_attachment_limit() -> int:
         return int(raw_limit)
     except (TypeError, ValueError):
         return 3
+
+
+def _is_arthexis_dot_com_request(request) -> bool:
+    """Return whether the current request is for the canonical public host."""
+
+    try:
+        host = request.get_host().split(":", 1)[0].lower()
+    except Exception:
+        return False
+    return host == ARTHEXIS_FUNDING_HOST
+
+
+def _build_funding_banner(request):
+    """Build the public funding banner, shown only on arthexis.com."""
+
+    if not _is_arthexis_dot_com_request(request):
+        return None
+
+    issue_url = getattr(settings, "ARTHEXIS_FUNDING_ISSUE_URL", "")
+    return {
+        "title": "Arthexis needs funding to keep maintenance running",
+        "message": (
+            "The PR Overseer and supporting maintenance automation depend on "
+            "available operating credits. Funding helps keep reviews, fixes, "
+            "and continuity work moving."
+        ),
+        "issue_url": issue_url or DEFAULT_FUNDING_ISSUE_URL,
+    }
 
 
 def _resolve_landing_visibility(
@@ -581,6 +613,7 @@ def nav_links(request):
         "favicon_url": _select_favicon_url(current_module, site, node),
         "header_references": _load_header_references(request, site, node),
         "site_highlight": _load_latest_site_highlight(),
+        "funding_banner": _build_funding_banner(request),
         "login_url": resolve_url(settings.LOGIN_URL),
         "site_template": _select_site_template(site, user),
         "operator_interface_mode": operator_interface_mode,
