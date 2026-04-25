@@ -11,8 +11,10 @@ from apps.classification.ingest import (
     SUPPORTED_IMAGE_EXTENSIONS,
     SUPPORTED_IMAGE_PATTERNS,
 )
+from apps.classification.management.commands import import_training_images
 from apps.classification.management.commands.import_training_images import (
     IMAGE_EXTENSIONS,
+    Command,
 )
 from apps.classification.models import ClassificationTag, TrainingSample
 from apps.media.models import MediaFile
@@ -61,6 +63,54 @@ def test_import_training_images_can_verify_and_reuse_existing_samples(tmp_path):
     assert MediaFile.objects.count() == 1
     sample = TrainingSample.objects.get()
     assert sample.is_verified is True
+
+
+@pytest.mark.django_db
+def test_import_training_images_imports_changed_file_with_same_name_and_size(tmp_path, monkeypatch):
+    image_path = tmp_path / "seed" / "first.png"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image_path.write_bytes(b"first-payload")
+
+    monkeypatch.setattr(Command, "_is_readable_image", lambda self, path: True)
+
+    call_command("import_training_images", str(tmp_path), "--tag", "seed-image")
+    image_path.write_bytes(b"secondpayload")
+    call_command("import_training_images", str(tmp_path), "--tag", "seed-image")
+
+    assert MediaFile.objects.count() == 2
+    assert TrainingSample.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_import_training_images_reuses_same_file_bytes(tmp_path, monkeypatch):
+    image_path = tmp_path / "seed" / "first.png"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image_path.write_bytes(b"same-payload")
+
+    monkeypatch.setattr(Command, "_is_readable_image", lambda self, path: True)
+
+    call_command("import_training_images", str(tmp_path), "--tag", "seed-image")
+    call_command("import_training_images", str(tmp_path), "--tag", "seed-image")
+
+    assert MediaFile.objects.count() == 1
+    assert TrainingSample.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_import_training_images_counts_decompression_bombs_as_unreadable(tmp_path, monkeypatch):
+    image_path = tmp_path / "oversized.png"
+    image_path.write_bytes(b"oversized")
+
+    def raise_decompression_bomb(path):
+        raise Image.DecompressionBombError("too large")
+
+    monkeypatch.setattr(import_training_images.Image, "open", raise_decompression_bomb)
+
+    stdout = StringIO()
+    call_command("import_training_images", str(tmp_path), stdout=stdout)
+
+    assert "skipped_unreadable=1" in stdout.getvalue()
+    assert MediaFile.objects.count() == 0
 
 
 @pytest.mark.django_db

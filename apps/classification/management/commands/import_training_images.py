@@ -190,11 +190,12 @@ class Command(BaseCommand):
             MediaFile._meta.get_field("original_name").max_length,
         )
         size = path.stat().st_size
-        existing = MediaFile.objects.filter(
+        existing = self._find_matching_media_file(
             bucket__slug=bucket_slug,
             original_name=original_name,
             size=size,
-        ).first()
+            path=path,
+        )
         if existing:
             return existing, False
         media_file = create_media_file_from_path(
@@ -205,6 +206,25 @@ class Command(BaseCommand):
             queue_for_classification=False,
         )
         return media_file, True
+
+    def _find_matching_media_file(self, *, path: Path, **filters) -> MediaFile | None:
+        for media_file in MediaFile.objects.filter(**filters):
+            if self._media_file_matches_path(media_file=media_file, path=path):
+                return media_file
+        return None
+
+    def _media_file_matches_path(self, *, media_file: MediaFile, path: Path) -> bool:
+        if not media_file.file:
+            return False
+        try:
+            media_file.file.open("rb")
+            with media_file.file as stored_file, path.open("rb") as incoming_file:
+                while stored_chunk := stored_file.read(1024 * 1024):
+                    if stored_chunk != incoming_file.read(len(stored_chunk)):
+                        return False
+                return incoming_file.read(1) == b""
+        except (OSError, ValueError):
+            return False
 
     def _get_or_create_tag(
         self,
@@ -237,7 +257,7 @@ class Command(BaseCommand):
         try:
             with Image.open(path) as image:
                 image.verify()
-        except (OSError, UnidentifiedImageError, ValueError):
+        except (OSError, UnidentifiedImageError, ValueError, Image.DecompressionBombError):
             return False
         return True
 
