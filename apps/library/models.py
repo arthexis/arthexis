@@ -196,16 +196,16 @@ class OwnerLibraryHolding(Entity):
             and self.local_checksum_sha256 == self.remote_checksum_sha256
         ):
             state = self.ReconciliationState.MATCHED
-        # Phase 1 uses timestamp precedence: if both sides diverge, the
-        # newer mtime wins and equal/unknown mtimes fall through to conflict.
-        elif self.local_is_newer():
-            state = self.ReconciliationState.LOCAL_NEWER
-        elif self.remote_is_newer():
-            state = self.ReconciliationState.REMOTE_NEWER
         elif not self.local_path and self.remote_version:
             state = self.ReconciliationState.MISSING_LOCAL
         elif self.local_path and not self.remote_version:
             state = self.ReconciliationState.MISSING_REMOTE
+        # Phase 1 uses timestamp precedence once both sides appear present: if
+        # they diverge, the newer mtime wins and equal/unknown mtimes conflict.
+        elif self.local_is_newer():
+            state = self.ReconciliationState.LOCAL_NEWER
+        elif self.remote_is_newer():
+            state = self.ReconciliationState.REMOTE_NEWER
         elif self.local_checksum_sha256 and self.remote_checksum_sha256:
             state = self.ReconciliationState.CONFLICT
         else:
