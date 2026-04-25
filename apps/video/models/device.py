@@ -19,8 +19,7 @@ from apps.video.utils import (
     RPI_CAMERA_BINARIES,
     RPI_CAMERA_DEVICE,
     capture_rpi_snapshot,
-    has_rpi_camera_stack,
-    has_rpicam_binaries,
+    probe_rpi_camera_stack,
 )
 
 
@@ -103,15 +102,19 @@ class VideoDevice(Ownable):
     def detect_devices(cls) -> list[DetectedVideoDevice]:
         """Return detected video devices for the Raspberry Pi stack."""
 
-        if not has_rpi_camera_stack():
+        probe = probe_rpi_camera_stack()
+        if not probe.available:
             return []
         identifier = str(RPI_CAMERA_DEVICE)
-        if has_rpicam_binaries():
+        if probe.backend == "rpicam":
             description = "Raspberry Pi Camera"
-            raw_info = f"device={identifier} binaries={', '.join(RPI_CAMERA_BINARIES)}"
+            raw_info = (
+                f"device={identifier} binaries={', '.join(RPI_CAMERA_BINARIES)} "
+                f"cameras={probe.detected_cameras}"
+            )
         else:
             description = "Video4Linux Camera"
-            raw_info = f"device={identifier} binaries=ffmpeg"
+            raw_info = f"device={identifier} backend=ffmpeg reason={probe.reason}"
         return [
             DetectedVideoDevice(
                 identifier=identifier,

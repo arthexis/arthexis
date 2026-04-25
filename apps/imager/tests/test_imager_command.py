@@ -1,6 +1,7 @@
 """Regression tests for Raspberry Pi imager workflows."""
 
 import lzma
+import shlex
 import socket
 from contextlib import nullcontext
 from io import BytesIO, StringIO
@@ -21,8 +22,9 @@ from apps.imager.services import (
     _build_download_uri,
     _customize_image,
     _download_remote_base_image,
-    _guestfish_write,
     _guestfish_remove_file,
+    _guestfish_symlink,
+    _guestfish_write,
     _resolve_root_disk_path,
     _validate_remote_base_image_url,
     build_rpi4b_image,
@@ -143,7 +145,40 @@ def test_guestfish_remove_file_uses_architecture_neutral_rm_f(tmp_path: Path) ->
     with patch("apps.imager.services.subprocess.run", return_value=result) as run_mock:
         _guestfish_remove_file(image_path, "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf")
 
-    assert run_mock.call_args.kwargs["input"] == "rm-f /etc/ssh/sshd_config.d/20-arthexis-recovery.conf\n"
+    assert run_mock.call_args.kwargs["input"] == (
+        "rm-f /etc/ssh/sshd_config.d/20-arthexis-recovery.conf\n"
+    )
+    env = run_mock.call_args.kwargs["env"]
+    assert env["TMPDIR"].startswith(str(tmp_path))
+    assert env["LIBGUESTFS_TMPDIR"] == env["TMPDIR"]
+    assert env["LIBGUESTFS_CACHEDIR"] == str(tmp_path / ".libguestfs-cache")
+
+
+def test_guestfish_symlink_uses_guestfish_ln_sf(tmp_path: Path) -> None:
+    """Regression: systemd enablement should be written as image-native symlinks."""
+
+    image_path = tmp_path / "image.img"
+    image_path.write_bytes(b"img")
+    result = SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    with patch("apps.imager.services.subprocess.run", return_value=result) as run_mock:
+        _guestfish_symlink(
+            image_path,
+            target="/etc/systemd/system/arthexis-recovery-access.service",
+            link_path=(
+                "/etc/systemd/system/multi-user.target.wants/"
+                "arthexis-recovery-access.service"
+            ),
+        )
+
+    assert run_mock.call_args.kwargs["input"] == (
+        "ln-sf /etc/systemd/system/arthexis-recovery-access.service "
+        "/etc/systemd/system/multi-user.target.wants/arthexis-recovery-access.service\n"
+    )
+    env = run_mock.call_args.kwargs["env"]
+    assert env["TMPDIR"].startswith(str(tmp_path))
+    assert env["LIBGUESTFS_TMPDIR"] == env["TMPDIR"]
+    assert env["LIBGUESTFS_CACHEDIR"] == str(tmp_path / ".libguestfs-cache")
 
 
 @pytest.mark.django_db
@@ -175,6 +210,7 @@ def test_imager_build_command_prints_metadata(mock_build, tmp_path: Path) -> Non
         "v0-5-0",
         "--base-image-uri",
         str(output_path),
+        "--skip-recovery-ssh",
         stdout=out,
     )
 
@@ -215,6 +251,7 @@ def test_imager_build_command_passes_connect_ota_profile_metadata(mock_build, tm
         "ota-v1",
         "--base-image-uri",
         str(output_path),
+        "--skip-recovery-ssh",
         "--profile",
         "connect-ota",
         "--profile-metadata",
@@ -388,21 +425,107 @@ def test_imager_build_command_reports_non_utf8_recovery_key_file(tmp_path: Path)
         )
 
 
-def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided(tmp_path: Path) -> None:
+def test_imager_build_command_requires_recovery_ssh_key_by_default(tmp_path: Path) -> None:
+    """Regression: customized builds should fail fast unless recovery SSH is explicit."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+
+    with pytest.raises(CommandError, match="Recovery SSH is required for customized image builds"):
+        call_command(
+            "imager",
+            "build",
+            "--name",
+            "recovery-required",
+            "--base-image-uri",
+            str(output_path),
+        )
+
+
+def test_imager_build_command_rejects_skip_recovery_ssh_with_keys(tmp_path: Path) -> None:
+    """Regression: skip flag should not allow contradictory key arguments."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+
+    with pytest.raises(CommandError, match="cannot be combined"):
+        call_command(
+            "imager",
+            "build",
+            "--name",
+            "recovery-skip-conflict",
+            "--base-image-uri",
+            str(output_path),
+            "--skip-recovery-ssh",
+            "--recovery-authorized-key",
+            VALID_RECOVERY_KEY_ONE,
+        )
+
+
+@pytest.mark.django_db
+@patch("apps.imager.management.commands.imager.build_rpi4b_image")
+def test_imager_build_command_allows_explicit_skip_recovery_ssh(mock_build, tmp_path: Path) -> None:
+    """Regression: operators can intentionally opt out of recovery SSH lane."""
+
+    output_path = tmp_path / "artifact.img"
+    output_path.write_bytes(b"pi")
+    mock_build.return_value = type(
+        "BuildResult",
+        (),
+        {
+            "output_path": output_path,
+            "sha256": "abc123",
+            "size_bytes": 2,
+            "download_uri": "",
+            "build_engine": "arthexis-bootstrap",
+            "build_profile": "bootstrap",
+            "profile_manifest": {},
+        },
+    )()
+
+    stdout = StringIO()
+    call_command(
+        "imager",
+        "build",
+        "--name",
+        "recovery-skip",
+        "--base-image-uri",
+        str(output_path),
+        "--skip-recovery-ssh",
+        stdout=stdout,
+    )
+
+    assert mock_build.call_args.kwargs["recovery_authorized_keys"] == []
+    assert mock_build.call_args.kwargs["recovery_ssh_user"] == ""
+    assert "recovery_ssh=disabled (--skip-recovery-ssh)" in stdout.getvalue()
+
+
+def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided(
+    tmp_path: Path,
+) -> None:
     """Regression: recovery customization must enable first-boot SSH access files."""
 
     image_path = tmp_path / "artifact.img"
     image_path.write_bytes(b"pi")
     written_files: dict[str, tuple[str, str | None]] = {}
+    guestfish_batches: list[list[str]] = []
 
-    def capture_write(
+    def capture_guestfish(
         image_path_arg: Path,
-        local_path: Path,
-        remote_path: str,
-        chmod_mode: str | None = None,
+        commands: list[str],
+        *,
+        error_message: str,
     ) -> None:
         assert image_path_arg == image_path
-        written_files[remote_path] = (local_path.read_text(encoding="utf-8"), chmod_mode)
+        assert error_message
+        guestfish_batches.append(commands)
+        for command in commands:
+            parts = shlex.split(command)
+            if parts and parts[0] == "upload":
+                written_files[parts[2]] = (Path(parts[1]).read_text(encoding="utf-8"), None)
+            elif parts and parts[0] == "chmod":
+                content, _mode = written_files[parts[2]]
+                written_files[parts[2]] = (content, parts[1])
 
     recovery_access = type(
         "RecoverySSHAccess",
@@ -418,8 +541,7 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
 
     with (
         patch("apps.imager.services._ensure_guestfish"),
-        patch("apps.imager.services._guestfish_mkdir_p") as mkdir_mock,
-        patch("apps.imager.services._guestfish_write", side_effect=capture_write),
+        patch("apps.imager.services._guestfish_run_commands", side_effect=capture_guestfish),
     ):
         _customize_image(
             image_path,
@@ -427,50 +549,79 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
             recovery_ssh_access=recovery_access,
         )
 
-    mkdir_mock.assert_called_once_with(image_path, "/usr/local/share/arthexis")
+    assert len(guestfish_batches) == 3
+    assert "mkdir-p /etc/systemd/system/multi-user.target.wants" in guestfish_batches[0]
+    assert (
+        "ln-sf /etc/systemd/system/arthexis-bootstrap.service "
+        "/etc/systemd/system/multi-user.target.wants/arthexis-bootstrap.service"
+    ) in guestfish_batches[0]
+    assert "mkdir-p /usr/local/share/arthexis" in guestfish_batches[1]
+    assert (
+        "ln-sf /etc/systemd/system/arthexis-recovery-access.service "
+        "/etc/systemd/system/multi-user.target.wants/arthexis-recovery-access.service"
+    ) in guestfish_batches[1]
     assert "/usr/local/bin/arthexis-bootstrap.sh" in written_files
     assert "/usr/local/bin/arthexis-recovery-access.sh" in written_files
     assert "/usr/local/share/arthexis/recovery_authorized_keys" in written_files
+    assert "/etc/systemd/system/arthexis-bootstrap.service" in written_files
+    assert "/etc/systemd/system/arthexis-recovery-access.service" in written_files
     assert "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf" in written_files
     assert "/boot/firstrun.sh" in written_files
 
     recovery_script, recovery_mode = written_files["/usr/local/bin/arthexis-recovery-access.sh"]
     recovery_keys, keys_mode = written_files["/usr/local/share/arthexis/recovery_authorized_keys"]
+    recovery_service, recovery_service_mode = written_files[
+        "/etc/systemd/system/arthexis-recovery-access.service"
+    ]
     firstrun_script, _firstrun_mode = written_files["/boot/firstrun.sh"]
     sshd_config, sshd_mode = written_files["/etc/ssh/sshd_config.d/20-arthexis-recovery.conf"]
 
     assert recovery_mode == "0755"
     assert keys_mode == "0600"
     assert sshd_mode == "0644"
+    assert recovery_service_mode == "0644"
     assert "RECOVERY_USER=arthe" in recovery_script
     assert "NOPASSWD:ALL" in recovery_script
     assert "systemctl enable ssh" in recovery_script
+    assert "systemctl restart ssh" not in recovery_script
+    assert "Before=ssh.service sshd.service arthexis-bootstrap.service" in recovery_service
+    assert "ExecStart=/usr/local/bin/arthexis-recovery-access.sh" in recovery_service
     assert recovery_keys == "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestRecovery recovery\n"
     assert "/usr/local/bin/arthexis-recovery-access.sh" in firstrun_script
     assert "arthexis-recovery-access.sh failed; continuing with bootstrap" in firstrun_script
     assert "PasswordAuthentication no" in sshd_config
 
 
-def test_customize_image_does_not_add_recovery_boot_hook_when_recovery_is_disabled(tmp_path: Path) -> None:
+def test_customize_image_does_not_add_recovery_boot_hook_when_recovery_is_disabled(
+    tmp_path: Path,
+) -> None:
     """Regression: first-boot recovery hook should be gated by explicit recovery settings."""
 
     image_path = tmp_path / "artifact.img"
     image_path.write_bytes(b"pi")
     written_files: dict[str, tuple[str, str | None]] = {}
+    guestfish_batches: list[list[str]] = []
 
-    def capture_write(
+    def capture_guestfish(
         image_path_arg: Path,
-        local_path: Path,
-        remote_path: str,
-        chmod_mode: str | None = None,
+        commands: list[str],
+        *,
+        error_message: str,
     ) -> None:
         assert image_path_arg == image_path
-        written_files[remote_path] = (local_path.read_text(encoding="utf-8"), chmod_mode)
+        assert error_message
+        guestfish_batches.append(commands)
+        for command in commands:
+            parts = shlex.split(command)
+            if parts and parts[0] == "upload":
+                written_files[parts[2]] = (Path(parts[1]).read_text(encoding="utf-8"), None)
+            elif parts and parts[0] == "chmod":
+                content, _mode = written_files[parts[2]]
+                written_files[parts[2]] = (content, parts[1])
 
     with (
         patch("apps.imager.services._ensure_guestfish"),
-        patch("apps.imager.services._guestfish_remove_file") as remove_file_mock,
-        patch("apps.imager.services._guestfish_write", side_effect=capture_write),
+        patch("apps.imager.services._guestfish_run_commands", side_effect=capture_guestfish),
     ):
         _customize_image(
             image_path,
@@ -480,11 +631,24 @@ def test_customize_image_does_not_add_recovery_boot_hook_when_recovery_is_disabl
 
     firstrun_script, _firstrun_mode = written_files["/boot/firstrun.sh"]
     assert "/usr/local/bin/arthexis-recovery-access.sh" not in firstrun_script
-    assert remove_file_mock.call_args_list == [
-        call(image_path, "/usr/local/share/arthexis/recovery_authorized_keys"),
-        call(image_path, "/usr/local/bin/arthexis-recovery-access.sh"),
-        call(image_path, "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf"),
-        call(image_path, "/etc/sudoers.d/90-arthexis-recovery"),
+    assert "/etc/systemd/system/arthexis-bootstrap.service" in written_files
+    assert "/etc/systemd/system/arthexis-recovery-access.service" not in written_files
+    assert len(guestfish_batches) == 3
+    assert "mkdir-p /etc/systemd/system/multi-user.target.wants" in guestfish_batches[0]
+    assert (
+        "ln-sf /etc/systemd/system/arthexis-bootstrap.service "
+        "/etc/systemd/system/multi-user.target.wants/arthexis-bootstrap.service"
+    ) in guestfish_batches[0]
+    assert guestfish_batches[1] == [
+        "rm-f /usr/local/share/arthexis/recovery_authorized_keys",
+        "rm-f /usr/local/bin/arthexis-recovery-access.sh",
+        "rm-f /etc/ssh/sshd_config.d/20-arthexis-recovery.conf",
+        "rm-f /etc/systemd/system/arthexis-recovery-access.service",
+        (
+            "rm-f /etc/systemd/system/multi-user.target.wants/"
+            "arthexis-recovery-access.service"
+        ),
+        "rm-f /etc/sudoers.d/90-arthexis-recovery",
     ]
 
 

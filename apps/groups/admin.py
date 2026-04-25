@@ -8,6 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.admin import GROUP_PROFILE_INLINES
 from apps.core.admin.mixins import OwnedObjectLinksMixin
 from apps.core.models import get_owned_objects_for_group
+from .constants import SITE_OPERATOR_GROUP_NAME
 from .models import SecurityGroup
 
 
@@ -24,12 +25,14 @@ class SecurityGroupAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.instance.pk:
+        if self.instance.pk and "users" in self.fields:
             self.fields["users"].initial = self.instance.user_set.all()
 
     def save(self, commit=True):
         instance = super().save(commit)
-        users = self.cleaned_data.get("users")
+        if "users" not in self.cleaned_data:
+            return instance
+        users = self.cleaned_data["users"]
         if commit:
             instance.user_set.set(users)
         else:
@@ -62,10 +65,41 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
     readonly_fields = ("security_model_label",)
     search_fields = ("name", "app", "parent__name")
 
+    def has_add_permission(self, request):
+        if not super().has_add_permission(request):
+            return False
+        if request.user.is_superuser:
+            return True
+        return not self._site_operator_group_ids_for_user(request.user)
+
+    def has_delete_permission(self, request, obj=None):
+        if not super().has_delete_permission(request, obj=obj):
+            return False
+        if request.user.is_superuser or obj is None:
+            return True
+        return obj.pk not in self._site_operator_group_ids_for_user(request.user)
+
+    def delete_queryset(self, request, queryset):
+        if request.user.is_superuser:
+            return super().delete_queryset(request, queryset)
+        site_operator_group_ids = self._site_operator_group_ids_for_user(request.user)
+        return super().delete_queryset(
+            request,
+            queryset.exclude(pk__in=site_operator_group_ids),
+        )
+
     def get_readonly_fields(self, request, obj=None):
         readonly_fields = list(super().get_readonly_fields(request, obj))
         if "security_model_label" not in readonly_fields:
             readonly_fields.append("security_model_label")
+        if (
+            obj is not None
+            and not request.user.is_superuser
+            and obj.pk in self._site_operator_group_ids_for_user(request.user)
+        ):
+            for field_name in ("name", "users"):
+                if field_name not in readonly_fields:
+                    readonly_fields.append(field_name)
         if obj is not None and obj.pk == request.user.groups.first():  # type: ignore[comparison-overlap]
             messages.warning(
                 request,
@@ -105,6 +139,11 @@ class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
         self._attach_owned_objects(context, payload)
         return super().render_change_form(
             request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
+
+    def _site_operator_group_ids_for_user(self, user):
+        return set(
+            user.groups.filter(name=SITE_OPERATOR_GROUP_NAME).values_list("pk", flat=True)
         )
 
 
