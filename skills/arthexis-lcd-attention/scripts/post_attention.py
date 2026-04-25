@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+import sys
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
