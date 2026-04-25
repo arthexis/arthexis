@@ -62,16 +62,20 @@ def _disk_usage_percent(path: Path) -> float:
     return (usage.used / usage.total) * 100
 
 
-def _is_log_artifact(path: Path) -> bool:
+def _is_log_artifact(path: Path, *, log_dir: Path) -> bool:
     name = path.name.lower()
     suffix = path.suffix.lower()
     if suffix in LOG_ARTIFACT_SUFFIXES:
         return True
     if ".log." in name or ".ndjson." in name:
         return True
-    return suffix in SESSION_LOG_SUFFIXES and bool(
-        SESSION_LOG_DIR_NAMES.intersection(path.parts)
-    )
+    if suffix not in SESSION_LOG_SUFFIXES:
+        return False
+    try:
+        relative_parts = path.relative_to(log_dir).parts
+    except ValueError:
+        return False
+    return bool(relative_parts) and relative_parts[0] in SESSION_LOG_DIR_NAMES
 
 
 def _is_active_log_file(path: Path) -> bool:
@@ -106,7 +110,7 @@ def _retention_days_for(path: Path, *, archive_dir: Path) -> int:
 def _collect_log_candidates(log_dir: Path) -> list[LogCandidate]:
     candidates: list[LogCandidate] = []
     for path in log_dir.rglob("*"):
-        if not path.is_file() or not _is_log_artifact(path):
+        if not path.is_file() or not _is_log_artifact(path, log_dir=log_dir):
             continue
         try:
             st = path.stat()
