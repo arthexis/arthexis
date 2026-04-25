@@ -78,6 +78,26 @@ def _is_log_artifact(path: Path, *, log_dir: Path) -> bool:
     return bool(relative_parts) and relative_parts[0] in SESSION_LOG_DIR_NAMES
 
 
+def _is_session_log_artifact(path: Path, *, log_dir: Path) -> bool:
+    if path.suffix.lower() not in SESSION_LOG_SUFFIXES:
+        return False
+    try:
+        relative_parts = path.relative_to(log_dir).parts
+    except ValueError:
+        return False
+    return bool(relative_parts) and relative_parts[0] in SESSION_LOG_DIR_NAMES
+
+
+def _is_in_progress_session_log(path: Path, *, log_dir: Path) -> bool:
+    if not _is_session_log_artifact(path, log_dir=log_dir):
+        return False
+    try:
+        content = path.read_text(encoding="utf-8").rstrip()
+    except OSError:
+        return True
+    return not content.endswith("]")
+
+
 def _is_active_log_file(path: Path) -> bool:
     return path.suffix.lower() == ".log" and ".log." not in path.name.lower()
 
@@ -95,7 +115,9 @@ def _is_managed_transactional_log(path: Path, *, archive_dir: Path) -> bool:
     return False
 
 
-def _is_protected_active_log(path: Path, *, archive_dir: Path) -> bool:
+def _is_protected_active_log(path: Path, *, archive_dir: Path, log_dir: Path) -> bool:
+    if _is_in_progress_session_log(path, log_dir=log_dir):
+        return True
     return path.parent != archive_dir and (
         _is_active_log_file(path) or path.name in MANAGED_LOG_BASENAMES
     )
@@ -133,7 +155,11 @@ def _delete_candidates(log_dir: Path, *, max_age_days: int) -> tuple[int, int]:
     deleted_bytes = 0
 
     for candidate in _collect_log_candidates(log_dir):
-        if _is_protected_active_log(candidate.path, archive_dir=archive_dir):
+        if _is_protected_active_log(
+            candidate.path,
+            archive_dir=archive_dir,
+            log_dir=log_dir,
+        ):
             continue
         if candidate.modified >= cutoff:
             continue
@@ -154,7 +180,11 @@ def _trim_with_policy(log_dir: Path) -> tuple[int, int]:
     now = datetime.now(timezone.utc)
     archive_dir = log_dir / "archive"
     for candidate in _collect_log_candidates(log_dir):
-        if _is_protected_active_log(candidate.path, archive_dir=archive_dir):
+        if _is_protected_active_log(
+            candidate.path,
+            archive_dir=archive_dir,
+            log_dir=log_dir,
+        ):
             continue
         retention_days = _retention_days_for(candidate.path, archive_dir=archive_dir)
         cutoff = now - timedelta(days=retention_days)
