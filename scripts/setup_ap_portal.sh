@@ -81,6 +81,18 @@ rotate_nginx_backups() {
     done
 }
 
+restore_nginx_site() {
+    local latest_backup
+    latest_backup="$(find "$NGINX_BACKUP_DIR" -maxdepth 1 -type f -name 'arthexis.conf.pre-ap-portal-*' -printf '%T@ %p\n' 2>/dev/null \
+        | sort -rn \
+        | awk 'NR == 1 { sub(/^[^ ]+ /, ""); print }')"
+    if [[ -n "$latest_backup" ]]; then
+        cp "$latest_backup" "$NGINX_SITE"
+    else
+        rm -f -- "$NGINX_SITE"
+    fi
+}
+
 install_nginx_site() {
     local timestamp
     timestamp="$(date +%Y%m%d%H%M%S)"
@@ -134,7 +146,10 @@ ensure_ap_profile
 install_service
 install_nginx_site
 
-nginx -t
+if ! nginx -t; then
+    restore_nginx_site
+    exit 1
+fi
 systemctl daemon-reload
 systemctl enable nginx arthexis-ap-portal.service
 systemctl restart nginx arthexis-ap-portal.service

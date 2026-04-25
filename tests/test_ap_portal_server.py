@@ -83,6 +83,29 @@ def test_accept_terms_requires_explicit_true():
     assert module._accept_terms_is_explicit(1) is False
 
 
+def test_form_accept_terms_only_accepts_html_checkbox_literal():
+    module = load_portal_module()
+
+    assert module._form_accept_terms_is_explicit("on") is True
+    assert module._form_accept_terms_is_explicit("true") is False
+    assert module._form_accept_terms_is_explicit("1") is False
+    assert module._form_accept_terms_is_explicit("yes") is False
+    assert module._form_accept_terms_is_explicit("") is False
+
+
+def test_form_payload_accepts_only_html_checkbox_literal():
+    module = load_portal_module()
+
+    assert module._parse_form_payload("email=guest%40example.com&accept_terms=on") == {
+        "email": "guest@example.com",
+        "accept_terms": True,
+    }
+    assert module._parse_form_payload("email=guest%40example.com&accept_terms=true") == {
+        "email": "guest@example.com",
+        "accept_terms": False,
+    }
+
+
 def test_subscribe_rejects_string_false_consent_without_authorizing(tmp_path):
     module = load_portal_module()
     state = module.PortalState(make_config(module, tmp_path))
@@ -212,6 +235,48 @@ def test_subscribe_rolls_back_new_authorization_when_activity_log_fails(tmp_path
     assert "aa:bb:cc:dd:ee:ff" not in state._authorized
 
 
+def test_subscribe_rolls_back_new_authorization_when_authorized_write_fails(tmp_path):
+    module = load_portal_module()
+    config = make_config(module, tmp_path)
+    state = module.PortalState(config)
+    config = module.PortalConfig(
+        bind=config.bind,
+        port=config.port,
+        assets_dir=config.assets_dir,
+        state_dir=config.state_dir,
+        authorized_macs_path=config.authorized_macs_path,
+        consents_path=config.consents_path,
+        activity_path=config.activity_path,
+        source_url=config.source_url,
+        sync_firewall=True,
+    )
+    state.config = config
+    state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
+    synced_macs = []
+    state._firewall.sync = lambda macs: synced_macs.append(set(macs))
+
+    def fail_new_authorization_write(macs):
+        if "aa:bb:cc:dd:ee:ff" in macs:
+            raise OSError("authorized store unavailable")
+        module.PortalState._write_authorized_macs(state, macs)
+
+    state._write_authorized_macs = fail_new_authorization_write
+
+    with pytest.raises(OSError, match="authorized store unavailable"):
+        state.subscribe(
+            email="guest@example.com",
+            accept_terms=True,
+            ip_address="10.42.0.25",
+            user_agent="client-test",
+            host="arthexis.net",
+        )
+
+    assert synced_macs == [{"aa:bb:cc:dd:ee:ff"}, set()]
+    assert not state.config.consents_path.exists()
+    assert not state.config.activity_path.exists()
+    assert "aa:bb:cc:dd:ee:ff" not in state._authorized
+
+
 def test_client_ip_prefers_nginx_real_ip_over_spoofed_forwarded_for():
     module = load_portal_module()
     headers = {
@@ -307,6 +372,31 @@ def test_firewall_sync_replaces_existing_table_in_single_apply(monkeypatch):
     assert "elements = { aa:bb:cc:dd:ee:ff }" in ruleset
 
 
+def test_jsonl_append_uses_single_locked_write():
+    module = load_portal_module()
+    writes = []
+
+    class FakeHandle:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def write(self, value):
+            writes.append(value)
+
+    class FakePath:
+        def open(self, *_args, **_kwargs):
+            return FakeHandle()
+
+    module._append_jsonl(FakePath(), {"event_type": "status_check"})
+
+    assert len(writes) == 1
+    assert writes[0].endswith("\n")
+    assert json.loads(writes[0])["event_type"] == "status_check"
+
+
 def test_resolve_mac_reads_proc_arp_without_subprocess(tmp_path, monkeypatch):
     module = load_portal_module()
     arp_table = tmp_path / "arp"
@@ -329,6 +419,31 @@ def test_resolve_mac_reads_proc_arp_without_subprocess(tmp_path, monkeypatch):
 
     assert state.resolve_mac("10.42.0.25") == "aa:bb:cc:dd:ee:ff"
     assert state.resolve_mac("10.42.0.26") is None
+
+
+def test_resolve_mac_reads_ipv6_neighbor_cache(tmp_path, monkeypatch):
+    module = load_portal_module()
+    arp_table = tmp_path / "arp"
+    arp_table.write_text(
+        "IP address       HW type     Flags       HW address            Mask     Device\n",
+        encoding="utf-8",
+    )
+    ndisc_cache = tmp_path / "ndisc_cache"
+    ndisc_cache.write_text(
+        "fd42:0000:0000:0042:0000:0000:0000:0025 dev wlan0 lladdr AA:BB:CC:DD:EE:FF router STALE\n",
+        encoding="utf-8",
+    )
+
+    def fail_run(*_args, **_kwargs):
+        raise AssertionError("resolve_mac should not spawn neighbor lookup subprocesses")
+
+    monkeypatch.setattr(module, "ARP_TABLE_PATH", arp_table)
+    monkeypatch.setattr(module, "NDISC_CACHE_PATH", ndisc_cache)
+    monkeypatch.setattr(module.subprocess, "run", fail_run)
+    state = module.PortalState(make_config(module, tmp_path))
+
+    assert state.resolve_mac("fd42:0:0:42::25") == "aa:bb:cc:dd:ee:ff"
+    assert state.resolve_mac("fd42:0:0:42::26") is None
 
 
 def test_read_limited_request_body_rejects_large_payload():

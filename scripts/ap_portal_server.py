@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import logging
 import mimetypes
@@ -30,6 +31,7 @@ AUTHORIZED_SET_NAME = "authorized_macs"
 TERMS_VERSION = "qol-recording-v2"
 MAX_PAYLOAD_BYTES = 1024 * 1024
 ARP_TABLE_PATH = Path("/proc/net/arp")
+NDISC_CACHE_PATH = Path("/proc/net/ndisc_cache")
 TERMS_STATEMENT = (
     "I accept that my internet experience may be altered and recorded "
     "for quality of life purposes while using this access point."
@@ -42,6 +44,7 @@ MONITORING_NOTICE = (
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MAC_RE = re.compile(r"(?P<mac>([0-9a-f]{2}:){5}[0-9a-f]{2})", re.IGNORECASE)
 LOGGER = logging.getLogger("arthexis.ap_portal")
+JSONL_APPEND_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -94,6 +97,17 @@ def _client_ip_from_headers(headers: Any, fallback: str | None) -> str | None:
 
 def _accept_terms_is_explicit(value: Any) -> bool:
     return value is True
+
+
+def _form_accept_terms_is_explicit(value: str) -> bool:
+    return value == "on"
+
+
+def _ip_addresses_match(left: str, right: str) -> bool:
+    try:
+        return ipaddress.ip_address(left) == ipaddress.ip_address(right)
+    except ValueError:
+        return left == right
 
 
 class FirewallManager:
@@ -170,9 +184,7 @@ class ActivityRecorder:
             "monitoring_notice": MONITORING_NOTICE,
         }
         event.update({key: value for key, value in fields.items() if value not in (None, "")})
-        with self.config.activity_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(event, sort_keys=True))
-            handle.write("\n")
+        _append_jsonl(self.config.activity_path, event)
         return event
 
     def read_events(self, limit: int = 100) -> list[dict[str, Any]]:
@@ -256,6 +268,12 @@ def _read_authorized_macs(path: Path) -> set[str]:
     }
 
 
+def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
+    line = json.dumps(payload, sort_keys=True) + "\n"
+    with JSONL_APPEND_LOCK, path.open("a", encoding="utf-8") as handle:
+        handle.write(line)
+
+
 def _read_limited_request_body(headers: Any, rfile: Any) -> str:
     try:
         length = int(headers.get("Content-Length", "0") or "0")
@@ -266,6 +284,15 @@ def _read_limited_request_body(headers: Any, rfile: Any) -> str:
     if length > MAX_PAYLOAD_BYTES:
         raise ValueError("Payload too large.")
     return rfile.read(length).decode("utf-8") if length else ""
+
+
+def _parse_form_payload(raw: str) -> dict[str, Any]:
+    form = parse_qs(raw)
+    accept_terms = form.get("accept_terms", [""])[0]
+    return {
+        "email": form.get("email", [""])[0],
+        "accept_terms": _form_accept_terms_is_explicit(accept_terms),
+    }
 
 
 class PortalState:
@@ -376,11 +403,14 @@ class PortalState:
         with self._lock:
             already_authorized = mac_address in self._authorized
             if not already_authorized:
+                previous_authorized = set(self._authorized)
+                authorized_file_existed = self.config.authorized_macs_path.exists()
                 next_authorized = set(self._authorized)
                 next_authorized.add(mac_address)
                 if self.config.sync_firewall:
                     self._firewall.sync(next_authorized)
                 try:
+                    self._write_authorized_macs(next_authorized)
                     self._append_consent(record)
                     self.activity.record(
                         "consent_accepted",
@@ -391,10 +421,10 @@ class PortalState:
                         user_agent=user_agent,
                         host=host,
                     )
-                    self._write_authorized_macs(next_authorized)
                 except OSError:
+                    self._restore_authorized_macs(previous_authorized, existed=authorized_file_existed)
                     if self.config.sync_firewall:
-                        self._firewall.sync(self._authorized)
+                        self._firewall.sync(previous_authorized)
                     raise
                 self._authorized = next_authorized
             else:
@@ -422,6 +452,12 @@ class PortalState:
         if not ip_address:
             return None
 
+        mac_address = self._resolve_mac_from_arp(ip_address)
+        if mac_address:
+            return mac_address
+        return self._resolve_mac_from_ndisc(ip_address)
+
+    def _resolve_mac_from_arp(self, ip_address: str) -> str | None:
         try:
             arp_rows = ARP_TABLE_PATH.read_text(encoding="utf-8").splitlines()
         except OSError:
@@ -429,8 +465,22 @@ class PortalState:
 
         for row in arp_rows[1:]:
             fields = row.split()
-            if len(fields) >= 4 and fields[0] == ip_address:
+            if len(fields) >= 4 and _ip_addresses_match(fields[0], ip_address):
                 match = MAC_RE.fullmatch(fields[3])
+                if match:
+                    return _normalize_mac(match.group("mac"))
+        return None
+
+    def _resolve_mac_from_ndisc(self, ip_address: str) -> str | None:
+        try:
+            neighbor_rows = NDISC_CACHE_PATH.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return None
+
+        for row in neighbor_rows:
+            fields = row.split()
+            if fields and _ip_addresses_match(fields[0], ip_address):
+                match = MAC_RE.search(row)
                 if match:
                     return _normalize_mac(match.group("mac"))
         return None
@@ -442,10 +492,14 @@ class PortalState:
             payload += "\n"
         self.config.authorized_macs_path.write_text(payload, encoding="utf-8")
 
+    def _restore_authorized_macs(self, macs: set[str], *, existed: bool) -> None:
+        if existed:
+            self._write_authorized_macs(macs)
+        else:
+            self.config.authorized_macs_path.unlink(missing_ok=True)
+
     def _append_consent(self, record: dict[str, Any]) -> None:
-        with self.config.consents_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, sort_keys=True))
-            handle.write("\n")
+        _append_jsonl(self.config.consents_path, record)
 
 
 class PortalApplication:
@@ -569,11 +623,7 @@ class PortalApplication:
                     if not isinstance(parsed, dict):
                         raise ValueError("Invalid request payload.")
                     return parsed
-                form = parse_qs(raw)
-                return {
-                    "email": form.get("email", [""])[0],
-                    "accept_terms": form.get("accept_terms", [""])[0] in {"1", "true", "on", "yes"},
-                }
+                return _parse_form_payload(raw)
 
             def _json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
                 body = json.dumps(payload, sort_keys=True).encode("utf-8")
