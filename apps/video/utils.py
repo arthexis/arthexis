@@ -108,7 +108,22 @@ def _list_rpicam_cameras(timeout: int = 5) -> tuple[int, str, str]:
 def has_rpicam_binaries() -> bool:
     """Return ``True`` when the Raspberry Pi camera binaries are available."""
 
-    return all(_rpicam_binary_paths().values())
+    for tool_path in _rpicam_binary_paths().values():
+        if not tool_path:
+            return False
+        try:
+            result = subprocess.run(
+                [tool_path, "--help"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return False
+        if result.returncode != 0:
+            return False
+    return True
 
 
 def _has_ffmpeg_capture_support() -> bool:
