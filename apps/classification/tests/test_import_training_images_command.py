@@ -103,6 +103,24 @@ def test_import_training_images_can_verify_and_reuse_existing_samples(tmp_path):
 
 
 @pytest.mark.django_db
+def test_import_training_images_limit_counts_new_imports_not_reused_rows(tmp_path):
+    _write_image(tmp_path / "seed" / "01-first.png", (20, 200, 20))
+    _write_image(tmp_path / "seed" / "02-second.png", (20, 120, 20))
+
+    first_stdout = StringIO()
+    call_command("import_training_images", str(tmp_path), "--tag", "seed-image", "--limit", "1", stdout=first_stdout)
+    second_stdout = StringIO()
+    call_command("import_training_images", str(tmp_path), "--tag", "seed-image", "--limit", "1", stdout=second_stdout)
+
+    assert "imported=1" in first_stdout.getvalue()
+    assert "reused=0" in first_stdout.getvalue()
+    assert "imported=1" in second_stdout.getvalue()
+    assert "reused=1" in second_stdout.getvalue()
+    assert MediaFile.objects.count() == 2
+    assert TrainingSample.objects.count() == 2
+
+
+@pytest.mark.django_db
 def test_import_training_images_imports_changed_file_with_same_name_and_size(tmp_path, monkeypatch):
     image_path = tmp_path / "seed" / "first.png"
     image_path.parent.mkdir(parents=True, exist_ok=True)

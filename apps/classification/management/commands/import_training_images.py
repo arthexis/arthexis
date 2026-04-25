@@ -164,7 +164,7 @@ class Command(BaseCommand):
                 if updates:
                     TrainingSample.objects.filter(pk=sample.pk).update(**updates)
 
-            if options["limit"] and (stats.imported + stats.reused) >= options["limit"]:
+            if options["limit"] and stats.imported >= options["limit"]:
                 break
 
         self.stdout.write(self._summary(stats=stats, root=root, dry_run=options["dry_run"]))
