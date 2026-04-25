@@ -398,7 +398,10 @@ class Migration(migrations.Migration):
                         max_length=30,
                     ),
                 ),
-                ("started_at", models.DateTimeField(default=django.utils.timezone.now)),
+                (
+                    "started_at",
+                    models.DateTimeField(default=django.utils.timezone.localtime),
+                ),
                 ("finished_at", models.DateTimeField(blank=True, null=True)),
                 ("error_message", models.TextField(blank=True, default="")),
                 ("metadata", models.JSONField(blank=True, default=dict)),

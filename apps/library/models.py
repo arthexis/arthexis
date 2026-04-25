@@ -210,7 +210,7 @@ class OwnerLibraryHolding(Entity):
             state = self.ReconciliationState.UNKNOWN
 
         self.reconciliation_state = state
-        self.reconciled_at = timezone.now()
+        self.reconciled_at = timezone.localtime()
         if save:
             self.save(
                 update_fields=("reconciliation_state", "reconciled_at", "updated_at")
@@ -270,7 +270,7 @@ class KindleLibraryTransfer(Entity):
         choices=OwnerLibraryHolding.ReconciliationState.choices,
         default=OwnerLibraryHolding.ReconciliationState.UNKNOWN,
     )
-    started_at = models.DateTimeField(default=timezone.now)
+    started_at = models.DateTimeField(default=timezone.localtime)
     finished_at = models.DateTimeField(null=True, blank=True)
     error_message = models.TextField(blank=True, default="")
     metadata = models.JSONField(blank=True, default=dict)
