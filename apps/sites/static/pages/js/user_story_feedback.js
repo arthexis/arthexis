@@ -28,6 +28,7 @@
   const copyAriaLabel = form.dataset.copyAriaLabel;
   const canCopyStaffDetails = form.dataset.copyStaffDetails === '1';
   const securityGroups = (form.dataset.securityGroups || '').trim();
+  const copyFieldNamesToSkip = new Set(['csrfmiddlewaretoken', 'feedback_context', 'messages', 'path']);
   const messageField = form.querySelector('input[name="messages"]');
   const contextField = form.querySelector('input[name="feedback_context"]');
   const autocompleteUrl = form.dataset.autocompleteUrl || '';
@@ -454,7 +455,7 @@
     const formData = new FormData(form);
     const details = [];
     for (const [name, value] of formData.entries()) {
-      if (name === 'csrfmiddlewaretoken' || name === 'path' || name === 'messages') {
+      if (copyFieldNamesToSkip.has(name)) {
         continue;
       }
       if (typeof value !== 'string') {
