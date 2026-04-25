@@ -74,7 +74,15 @@ def _visible_images_for_user(user):
     return queryset.filter(visibility_filter).distinct()
 
 
-def _apply_gallery_search(queryset, search_query: str):
+def _metadata_visibility_filter_for_user(user):
+    if user is None or can_manage_gallery(user):
+        return Q()
+    if not getattr(user, "is_authenticated", False):
+        return Q(pk__in=[])
+    return Q(owner_user=user) | Q(owner_group__in=user.groups.all())
+
+
+def _apply_gallery_search(queryset, search_query: str, *, user=None):
     search_query = search_query.strip()
     if not search_query:
         return queryset
@@ -82,22 +90,25 @@ def _apply_gallery_search(queryset, search_query: str):
     direct_fields_q = (
         Q(title__icontains=search_query)
         | Q(description__icontains=search_query)
-        | Q(owner_user__username__icontains=search_query)
-        | Q(owner_user__email__icontains=search_query)
-        | Q(owner_user__first_name__icontains=search_query)
-        | Q(owner_user__last_name__icontains=search_query)
-        | Q(owner_group__name__icontains=search_query)
         | Q(media_file__original_name__icontains=search_query)
         | Q(media_file__content_type__icontains=search_query)
         | Q(media_file__source_member__icontains=search_query)
         | Q(media_file__file__icontains=search_query)
+    )
+    metadata_direct_fields_q = (
+        Q(owner_user__username__icontains=search_query)
+        | Q(owner_user__email__icontains=search_query)
+        | Q(owner_user__first_name__icontains=search_query)
+        | Q(owner_user__last_name__icontains=search_query)
+        | Q(owner_group__name__icontains=search_query)
+        | Q(content_sample__name__icontains=search_query)
         | Q(content_sample__kind__icontains=search_query)
         | Q(content_sample__content__icontains=search_query)
         | Q(content_sample__path__icontains=search_query)
         | Q(content_sample__method__icontains=search_query)
         | Q(content_sample__hash__icontains=search_query)
     )
-    related_fields_q = (
+    metadata_related_fields_q = (
         Q(categories__name__icontains=search_query)
         | Q(categories__slug__icontains=search_query)
         | Q(categories__description__icontains=search_query)
@@ -126,25 +137,34 @@ def _apply_gallery_search(queryset, search_query: str):
     except ValueError:
         pass
     else:
-        direct_fields_q |= Q(slug=parsed_uuid) | Q(content_sample__name=parsed_uuid)
+        direct_fields_q |= Q(slug=parsed_uuid)
+        metadata_direct_fields_q |= Q(content_sample__name=parsed_uuid)
     if normalized_query in {"public", "published", "true", "yes"}:
         direct_fields_q |= Q(include_in_public_gallery=True)
     if normalized_query in {"private", "false", "no"}:
         direct_fields_q |= Q(include_in_public_gallery=False)
     try:
-        related_fields_q |= Q(trait_values__float_value=float(search_query))
+        metadata_related_fields_q |= Q(trait_values__float_value=float(search_query))
     except ValueError:
         pass
 
     direct_match_ids = queryset.filter(direct_fields_q).values_list("id", flat=True)
-    related_match_ids = queryset.filter(related_fields_q).values_list("id", flat=True).distinct()
-    return queryset.filter(Q(id__in=direct_match_ids) | Q(id__in=related_match_ids))
+    metadata_queryset = queryset.filter(_metadata_visibility_filter_for_user(user))
+    metadata_direct_match_ids = metadata_queryset.filter(metadata_direct_fields_q).values_list("id", flat=True)
+    metadata_related_match_ids = (
+        metadata_queryset.filter(metadata_related_fields_q).values_list("id", flat=True).distinct()
+    )
+    return queryset.filter(
+        Q(id__in=direct_match_ids)
+        | Q(id__in=metadata_direct_match_ids)
+        | Q(id__in=metadata_related_match_ids)
+    )
 
 
 def _gallery_navigation_for_image(*, image: GalleryImage, user, search_query: str):
     queryset = _visible_images_for_user(user)
     if search_query:
-        filtered_queryset = _apply_gallery_search(queryset, search_query)
+        filtered_queryset = _apply_gallery_search(queryset, search_query, user=user)
         if filtered_queryset.filter(pk=image.pk).exists():
             queryset = filtered_queryset
     previous_image = (
@@ -176,7 +196,10 @@ def _rf_card_store_url_for_image(image: GalleryImage) -> str:
 
 def gallery_index(request):
     search_query = (request.GET.get("q") or "").strip()
-    images = _apply_gallery_search(_visible_images_for_user(request.user), search_query).order_by("title", "id")
+    images = _apply_gallery_search(_visible_images_for_user(request.user), search_query, user=request.user).order_by(
+        "title",
+        "id",
+    )
     return render(
         request,
         "gallery/index.html",

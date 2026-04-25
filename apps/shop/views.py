@@ -237,19 +237,25 @@ def add_to_cart(request: HttpRequest, shop_slug: str, product_id: int) -> HttpRe
     else:
         _save_cart(request, cart)
         selected_gallery_image_id = (request.POST.get("gallery_image") or "").strip()
-        if selected_gallery_image_id and product.supports_gallery_image_printing:
-            try:
-                gallery_image_id = int(selected_gallery_image_id)
-            except ValueError:
-                gallery_image_id = None
-            if gallery_image_id and _gallery_images_for_checkout(request).filter(pk=gallery_image_id).exists():
-                request.session["shop_cart_gallery_image"] = {
-                    "product_id": product.id,
-                    "gallery_image_id": str(gallery_image_id),
-                }
-                request.session.modified = True
+        if product.supports_gallery_image_printing:
+            if selected_gallery_image_id:
+                try:
+                    gallery_image_id = int(selected_gallery_image_id)
+                except ValueError:
+                    gallery_image_id = None
+                if gallery_image_id and _gallery_images_for_checkout(request).filter(pk=gallery_image_id).exists():
+                    request.session["shop_cart_gallery_image"] = {
+                        "product_id": product.id,
+                        "gallery_image_id": str(gallery_image_id),
+                    }
+                    request.session.modified = True
+                else:
+                    request.session.pop("shop_cart_gallery_image", None)
+                    request.session.modified = True
+                    messages.error(request, "Selected gallery image is unavailable for RF card customization.")
             else:
-                messages.error(request, "Selected gallery image is unavailable for RF card customization.")
+                request.session.pop("shop_cart_gallery_image", None)
+                request.session.modified = True
         messages.success(request, f"Added {product.name} to cart.")
 
     return redirect("shop:index")

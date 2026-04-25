@@ -51,7 +51,7 @@
             <dd class="col-sm-8">{{ image.owner_group.name }}</dd>
           {% endif %}
         {% endif %}
-        {% if image.content_sample %}
+        {% if can_view_metadata and image.content_sample %}
           <dt class="col-sm-4">{% trans "Content sample" %}</dt>
           <dd class="col-sm-8 text-break">{{ image.content_sample.name }}</dd>
         {% endif %}
