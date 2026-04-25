@@ -10,8 +10,6 @@ from django.http import HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
-from config.middleware import UsageAnalyticsMiddleware
-
 from apps.core.analytics import (
     USAGE_ANALYTICS_FEATURE_SLUG,
     flush_usage_event_buffer,
@@ -20,6 +18,7 @@ from apps.core.analytics import (
 )
 from apps.core.models import UsageEvent
 from apps.features.models import Feature
+from config.middleware import UsageAnalyticsMiddleware
 
 
 def _dummy_view(request):
@@ -205,3 +204,18 @@ class UsageAnalyticsBootstrapFallbackTests(TestCase):
             side_effect=OperationalError("no such table: features_feature"),
         ):
             self.assertFalse(usage_analytics_enabled())
+
+    def test_usage_analytics_helper_avoids_missing_feature_table_during_atomic_bootstrap(
+        self,
+    ):
+        with (
+            patch("apps.features.utils.connection.in_atomic_block", True),
+            patch(
+                "apps.features.utils.connection.introspection.table_names",
+                return_value=[],
+            ),
+            patch("apps.features.utils.Feature.objects.filter") as feature_filter,
+        ):
+            self.assertFalse(usage_analytics_enabled())
+
+        feature_filter.assert_not_called()

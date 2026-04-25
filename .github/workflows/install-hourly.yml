@@ -75,6 +75,9 @@ jobs:
       POSTGRES_PASSWORD: postgres
       POSTGRES_PORT: '5432'
       POSTGRES_USER: postgres
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Install base system dependencies
         run: |

@@ -3,12 +3,24 @@
 from __future__ import annotations
 
 from django.core.cache import cache
+from django.db import connection
 from django.db.utils import OperationalError, ProgrammingError
 
 from .models import Feature
 from .parameters import get_feature_parameter
 
 QUICK_WEB_SHARE_FEATURE_SLUG = "quick-web-share"
+
+
+def _feature_table_available_for_atomic_lookup() -> bool:
+    """Avoid dirtying atomic migrations with a query against a missing table."""
+
+    if not connection.in_atomic_block:
+        return True
+    try:
+        return Feature._meta.db_table in connection.introspection.table_names()
+    except (OperationalError, ProgrammingError):
+        return False
 
 
 def is_suite_feature_enabled(slug: str, *, default: bool = True) -> bool:
@@ -25,6 +37,9 @@ def is_suite_feature_enabled(slug: str, *, default: bool = True) -> bool:
     Returns:
         bool: Whether the suite feature is enabled.
     """
+
+    if not _feature_table_available_for_atomic_lookup():
+        return default
 
     try:
         is_enabled = (
