@@ -329,10 +329,20 @@ def cmd_end_step(args: argparse.Namespace) -> int:
     return 0
 
 
+def matching_process_identities(identities: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    return {
+        pid: identity
+        for pid, identity in identities.items()
+        if process_identity_matches(identity)
+    }
+
+
 def wait_for_processes(state: dict[str, Any], timeout_seconds: int) -> dict[int, dict[str, Any]]:
     deadline = time.monotonic() + max(0, timeout_seconds)
+    candidates = live_turn_process_identities(state)
     while True:
-        identities = live_turn_process_identities(state)
+        candidates.update(live_turn_process_identities(state))
+        identities = matching_process_identities(candidates)
         if not identities or time.monotonic() >= deadline:
             return identities
         time.sleep(min(5.0, max(0.1, deadline - time.monotonic())))
@@ -399,13 +409,9 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
         return 0
 
     timeout_seconds = max(0, int(args.timeout))
-    live_before = sorted(live_turn_pids(state))
+    live_before = sorted(live_turn_process_identities(state))
     lingering = wait_for_processes(state, timeout_seconds)
-    termination = (
-        terminate_pids(lingering, force_kill=args.force_kill)
-        if lingering
-        else {"sigterm_sent": [], "sigkill_sent": [], "still_alive": []}
-    )
+    termination = {"sigterm_sent": [], "sigkill_sent": [], "still_alive": []}
     archive_path: Path | None = None
 
     with state_lock():
@@ -415,6 +421,9 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
             print("status: turn-completed-or-changed")
             return 0
         state = state_after_wait
+        lingering = matching_process_identities(lingering)
+        if lingering:
+            termination = terminate_pids(lingering, force_kill=args.force_kill)
         state["cleanup_step_at"] = now_iso()
         state["cleanup"] = {
             "timeout_seconds": timeout_seconds,
