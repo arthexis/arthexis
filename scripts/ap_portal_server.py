@@ -81,13 +81,19 @@ def _utc_now() -> str:
 
 
 def _client_ip_from_headers(headers: Any, fallback: str | None) -> str | None:
-    forwarded = headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",", 1)[0].strip() or fallback
     real_ip = headers.get("X-Real-IP", "")
     if real_ip:
         return real_ip.strip()
+    forwarded = headers.get("X-Forwarded-For", "")
+    if forwarded:
+        trusted_hops = [part.strip() for part in forwarded.split(",") if part.strip()]
+        if trusted_hops:
+            return trusted_hops[-1]
     return fallback
+
+
+def _accept_terms_is_explicit(value: Any) -> bool:
+    return value is True
 
 
 class FirewallManager:
@@ -481,7 +487,7 @@ class PortalApplication:
                     data = self._read_payload()
                     result = app.state.subscribe(
                         email=str(data.get("email") or ""),
-                        accept_terms=bool(data.get("accept_terms")),
+                        accept_terms=_accept_terms_is_explicit(data.get("accept_terms")),
                         ip_address=self._client_ip(),
                         user_agent=self.headers.get("User-Agent", ""),
                         host=self.headers.get("Host", ""),

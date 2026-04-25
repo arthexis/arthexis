@@ -72,6 +72,52 @@ def test_subscribe_records_consent_activity_and_authorizes_client(tmp_path):
     assert activity[-1]["ip_address"] == "10.42.0.25"
 
 
+def test_accept_terms_requires_explicit_true():
+    module = load_portal_module()
+
+    assert module._accept_terms_is_explicit(True) is True
+    assert module._accept_terms_is_explicit(False) is False
+    assert module._accept_terms_is_explicit("true") is False
+    assert module._accept_terms_is_explicit("false") is False
+    assert module._accept_terms_is_explicit("0") is False
+    assert module._accept_terms_is_explicit(1) is False
+
+
+def test_subscribe_rejects_string_false_consent_without_authorizing(tmp_path):
+    module = load_portal_module()
+    state = module.PortalState(make_config(module, tmp_path))
+    state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
+
+    with pytest.raises(ValueError, match="accept the access terms"):
+        state.subscribe(
+            email="guest@example.com",
+            accept_terms=module._accept_terms_is_explicit("false"),
+            ip_address="10.42.0.25",
+            user_agent="client-test",
+            host="arthexis.net",
+        )
+
+    assert not state.config.authorized_macs_path.exists()
+    assert not state.config.consents_path.exists()
+
+
+def test_client_ip_prefers_nginx_real_ip_over_spoofed_forwarded_for():
+    module = load_portal_module()
+    headers = {
+        "X-Forwarded-For": "203.0.113.50, 198.51.100.10",
+        "X-Real-IP": "10.42.0.25",
+    }
+
+    assert module._client_ip_from_headers(headers, "127.0.0.1") == "10.42.0.25"
+
+
+def test_client_ip_uses_trusted_rightmost_forwarded_hop_without_real_ip():
+    module = load_portal_module()
+    headers = {"X-Forwarded-For": "203.0.113.50, 10.42.0.25"}
+
+    assert module._client_ip_from_headers(headers, "127.0.0.1") == "10.42.0.25"
+
+
 def test_status_records_activity_and_exposes_monitoring_paths(tmp_path):
     module = load_portal_module()
     state = module.PortalState(make_config(module, tmp_path))
