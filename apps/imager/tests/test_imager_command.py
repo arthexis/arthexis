@@ -579,7 +579,10 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
 
     assert bootstrap_mode == "0755"
     assert "missing_packages+=(git ca-certificates)" in bootstrap_script
+    apt_update_retry = "apt-get update || { sleep 10; apt-get update; }"
+    assert apt_update_retry in bootstrap_script
     assert "apt-get install -y --no-install-recommends" in bootstrap_script
+    assert bootstrap_script.index(apt_update_retry) < bootstrap_script.index("apt-get install")
     assert bootstrap_script.index("apt-get install") < bootstrap_script.index("git clone")
     assert recovery_mode == "0755"
     assert keys_mode == "0600"

@@ -44,7 +44,7 @@ fi
 
 if [ "${#missing_packages[@]}" -gt 0 ]; then
   export DEBIAN_FRONTEND=noninteractive
-  apt-get update
+  apt-get update || { sleep 10; apt-get update; }
   apt-get install -y --no-install-recommends "${missing_packages[@]}"
 fi
 
