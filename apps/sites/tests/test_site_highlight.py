@@ -98,3 +98,20 @@ def test_nav_links_includes_selected_site_highlight(
 
     assert context["site_highlight"] is not None
     assert context["site_highlight"].pk == highlight.pk
+
+
+def test_funding_banner_only_shows_on_arthexis_dot_com(
+    rf: RequestFactory,
+    settings,
+) -> None:
+    settings.ALLOWED_HOSTS = ["arthexis.com", "example.com"]
+    settings.ARTHEXIS_FUNDING_ISSUE_URL = "https://github.com/arthexis/arthexis/issues/1"
+
+    canonical_request = rf.get("/", HTTP_HOST="arthexis.com")
+    other_request = rf.get("/", HTTP_HOST="example.com")
+
+    banner = context_processors._build_funding_banner(canonical_request)
+
+    assert banner is not None
+    assert banner["issue_url"] == "https://github.com/arthexis/arthexis/issues/1"
+    assert context_processors._build_funding_banner(other_request) is None
