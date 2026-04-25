@@ -380,18 +380,34 @@ class PortalState:
                 next_authorized.add(mac_address)
                 if self.config.sync_firewall:
                     self._firewall.sync(next_authorized)
-                self._write_authorized_macs(next_authorized)
+                try:
+                    self._append_consent(record)
+                    self.activity.record(
+                        "consent_accepted",
+                        ip_address=ip_address,
+                        mac_address=mac_address,
+                        email=normalized_email,
+                        already_authorized=already_authorized,
+                        user_agent=user_agent,
+                        host=host,
+                    )
+                    self._write_authorized_macs(next_authorized)
+                except OSError:
+                    if self.config.sync_firewall:
+                        self._firewall.sync(self._authorized)
+                    raise
                 self._authorized = next_authorized
-            self._append_consent(record)
-            self.activity.record(
-                "consent_accepted",
-                ip_address=ip_address,
-                mac_address=mac_address,
-                email=normalized_email,
-                already_authorized=already_authorized,
-                user_agent=user_agent,
-                host=host,
-            )
+            else:
+                self._append_consent(record)
+                self.activity.record(
+                    "consent_accepted",
+                    ip_address=ip_address,
+                    mac_address=mac_address,
+                    email=normalized_email,
+                    already_authorized=already_authorized,
+                    user_agent=user_agent,
+                    host=host,
+                )
 
         return {
             "authorized": True,
@@ -501,6 +517,13 @@ class PortalApplication:
                     LOGGER.exception("Firewall sync failed")
                     self._json(
                         {"error": "Unable to authorize this device right now.", "details": str(exc)},
+                        status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    )
+                    return
+                except OSError as exc:
+                    LOGGER.exception("Consent audit logging failed")
+                    self._json(
+                        {"error": "Unable to record consent right now.", "details": str(exc)},
                         status=HTTPStatus.INTERNAL_SERVER_ERROR,
                     )
                     return

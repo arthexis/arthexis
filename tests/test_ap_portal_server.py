@@ -138,6 +138,80 @@ def test_subscribe_does_not_persist_authorization_when_firewall_sync_fails(tmp_p
     assert "aa:bb:cc:dd:ee:ff" not in state._authorized
 
 
+def test_subscribe_rolls_back_new_authorization_when_consent_log_fails(tmp_path):
+    module = load_portal_module()
+    config = make_config(module, tmp_path)
+    state = module.PortalState(config)
+    config = module.PortalConfig(
+        bind=config.bind,
+        port=config.port,
+        assets_dir=config.assets_dir,
+        state_dir=config.state_dir,
+        authorized_macs_path=config.authorized_macs_path,
+        consents_path=config.consents_path,
+        activity_path=config.activity_path,
+        source_url=config.source_url,
+        sync_firewall=True,
+    )
+    state.config = config
+    state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
+    synced_macs = []
+    state._firewall.sync = lambda macs: synced_macs.append(set(macs))
+
+    def fail_append(_record):
+        raise OSError("consent log unavailable")
+
+    state._append_consent = fail_append
+
+    with pytest.raises(OSError, match="consent log unavailable"):
+        state.subscribe(
+            email="guest@example.com",
+            accept_terms=True,
+            ip_address="10.42.0.25",
+            user_agent="client-test",
+            host="arthexis.net",
+        )
+
+    assert synced_macs == [{"aa:bb:cc:dd:ee:ff"}, set()]
+    assert not state.config.authorized_macs_path.exists()
+    assert "aa:bb:cc:dd:ee:ff" not in state._authorized
+
+
+def test_subscribe_rolls_back_new_authorization_when_activity_log_fails(tmp_path):
+    module = load_portal_module()
+    config = make_config(module, tmp_path)
+    state = module.PortalState(config)
+    config = module.PortalConfig(
+        bind=config.bind,
+        port=config.port,
+        assets_dir=config.assets_dir,
+        state_dir=config.state_dir,
+        authorized_macs_path=config.authorized_macs_path,
+        consents_path=config.consents_path,
+        activity_path=config.activity_path,
+        source_url=config.source_url,
+        sync_firewall=True,
+    )
+    state.config = config
+    state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
+    synced_macs = []
+    state._firewall.sync = lambda macs: synced_macs.append(set(macs))
+    state.activity.record = lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("activity log unavailable"))
+
+    with pytest.raises(OSError, match="activity log unavailable"):
+        state.subscribe(
+            email="guest@example.com",
+            accept_terms=True,
+            ip_address="10.42.0.25",
+            user_agent="client-test",
+            host="arthexis.net",
+        )
+
+    assert synced_macs == [{"aa:bb:cc:dd:ee:ff"}, set()]
+    assert not state.config.authorized_macs_path.exists()
+    assert "aa:bb:cc:dd:ee:ff" not in state._authorized
+
+
 def test_client_ip_prefers_nginx_real_ip_over_spoofed_forwarded_for():
     module = load_portal_module()
     headers = {
