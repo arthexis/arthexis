@@ -23,6 +23,7 @@ from apps.imager.services import (
     _download_remote_base_image,
     _guestfish_write,
     _guestfish_remove_file,
+    _guestfish_symlink,
     _resolve_root_disk_path,
     _validate_remote_base_image_url,
     build_rpi4b_image,
@@ -144,6 +145,29 @@ def test_guestfish_remove_file_uses_architecture_neutral_rm_f(tmp_path: Path) ->
         _guestfish_remove_file(image_path, "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf")
 
     assert run_mock.call_args.kwargs["input"] == "rm-f /etc/ssh/sshd_config.d/20-arthexis-recovery.conf\n"
+
+
+def test_guestfish_symlink_uses_guestfish_ln_sf(tmp_path: Path) -> None:
+    """Regression: systemd enablement should be written as image-native symlinks."""
+
+    image_path = tmp_path / "image.img"
+    image_path.write_bytes(b"img")
+    result = SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    with patch("apps.imager.services.subprocess.run", return_value=result) as run_mock:
+        _guestfish_symlink(
+            image_path,
+            target="/etc/systemd/system/arthexis-recovery-access.service",
+            link_path=(
+                "/etc/systemd/system/multi-user.target.wants/"
+                "arthexis-recovery-access.service"
+            ),
+        )
+
+    assert run_mock.call_args.kwargs["input"] == (
+        "ln-sf /etc/systemd/system/arthexis-recovery-access.service "
+        "/etc/systemd/system/multi-user.target.wants/arthexis-recovery-access.service\n"
+    )
 
 
 @pytest.mark.django_db
@@ -419,6 +443,7 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
     with (
         patch("apps.imager.services._ensure_guestfish"),
         patch("apps.imager.services._guestfish_mkdir_p") as mkdir_mock,
+        patch("apps.imager.services._guestfish_symlink") as symlink_mock,
         patch("apps.imager.services._guestfish_write", side_effect=capture_write),
     ):
         _customize_image(
@@ -427,24 +452,50 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
             recovery_ssh_access=recovery_access,
         )
 
-    mkdir_mock.assert_called_once_with(image_path, "/usr/local/share/arthexis")
+    assert mkdir_mock.call_args_list == [
+        call(image_path, "/etc/systemd/system/multi-user.target.wants"),
+        call(image_path, "/usr/local/share/arthexis"),
+    ]
+    assert symlink_mock.call_args_list == [
+        call(
+            image_path,
+            target="/etc/systemd/system/arthexis-bootstrap.service",
+            link_path="/etc/systemd/system/multi-user.target.wants/arthexis-bootstrap.service",
+        ),
+        call(
+            image_path,
+            target="/etc/systemd/system/arthexis-recovery-access.service",
+            link_path=(
+                "/etc/systemd/system/multi-user.target.wants/"
+                "arthexis-recovery-access.service"
+            ),
+        ),
+    ]
     assert "/usr/local/bin/arthexis-bootstrap.sh" in written_files
     assert "/usr/local/bin/arthexis-recovery-access.sh" in written_files
     assert "/usr/local/share/arthexis/recovery_authorized_keys" in written_files
+    assert "/etc/systemd/system/arthexis-bootstrap.service" in written_files
+    assert "/etc/systemd/system/arthexis-recovery-access.service" in written_files
     assert "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf" in written_files
     assert "/boot/firstrun.sh" in written_files
 
     recovery_script, recovery_mode = written_files["/usr/local/bin/arthexis-recovery-access.sh"]
     recovery_keys, keys_mode = written_files["/usr/local/share/arthexis/recovery_authorized_keys"]
+    recovery_service, recovery_service_mode = written_files[
+        "/etc/systemd/system/arthexis-recovery-access.service"
+    ]
     firstrun_script, _firstrun_mode = written_files["/boot/firstrun.sh"]
     sshd_config, sshd_mode = written_files["/etc/ssh/sshd_config.d/20-arthexis-recovery.conf"]
 
     assert recovery_mode == "0755"
     assert keys_mode == "0600"
     assert sshd_mode == "0644"
+    assert recovery_service_mode == "0644"
     assert "RECOVERY_USER=arthe" in recovery_script
     assert "NOPASSWD:ALL" in recovery_script
     assert "systemctl enable ssh" in recovery_script
+    assert "Before=ssh.service sshd.service arthexis-bootstrap.service" in recovery_service
+    assert "ExecStart=/usr/local/bin/arthexis-recovery-access.sh" in recovery_service
     assert recovery_keys == "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestRecovery recovery\n"
     assert "/usr/local/bin/arthexis-recovery-access.sh" in firstrun_script
     assert "arthexis-recovery-access.sh failed; continuing with bootstrap" in firstrun_script
@@ -469,7 +520,9 @@ def test_customize_image_does_not_add_recovery_boot_hook_when_recovery_is_disabl
 
     with (
         patch("apps.imager.services._ensure_guestfish"),
+        patch("apps.imager.services._guestfish_mkdir_p") as mkdir_mock,
         patch("apps.imager.services._guestfish_remove_file") as remove_file_mock,
+        patch("apps.imager.services._guestfish_symlink") as symlink_mock,
         patch("apps.imager.services._guestfish_write", side_effect=capture_write),
     ):
         _customize_image(
@@ -480,10 +533,24 @@ def test_customize_image_does_not_add_recovery_boot_hook_when_recovery_is_disabl
 
     firstrun_script, _firstrun_mode = written_files["/boot/firstrun.sh"]
     assert "/usr/local/bin/arthexis-recovery-access.sh" not in firstrun_script
+    assert "/etc/systemd/system/arthexis-bootstrap.service" in written_files
+    assert "/etc/systemd/system/arthexis-recovery-access.service" not in written_files
+    mkdir_mock.assert_called_once_with(image_path, "/etc/systemd/system/multi-user.target.wants")
+    symlink_mock.assert_called_once_with(
+        image_path,
+        target="/etc/systemd/system/arthexis-bootstrap.service",
+        link_path="/etc/systemd/system/multi-user.target.wants/arthexis-bootstrap.service",
+    )
     assert remove_file_mock.call_args_list == [
         call(image_path, "/usr/local/share/arthexis/recovery_authorized_keys"),
         call(image_path, "/usr/local/bin/arthexis-recovery-access.sh"),
         call(image_path, "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf"),
+        call(image_path, "/etc/systemd/system/arthexis-recovery-access.service"),
+        call(
+            image_path,
+            "/etc/systemd/system/multi-user.target.wants/"
+            "arthexis-recovery-access.service",
+        ),
         call(image_path, "/etc/sudoers.d/90-arthexis-recovery"),
     ]
 

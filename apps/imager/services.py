@@ -47,10 +47,17 @@ cd "$APP_HOME"
 
 RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH = "/usr/local/share/arthexis/recovery_authorized_keys"
 RECOVERY_SSHD_CONFIG_REMOTE_PATH = "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf"
+BOOTSTRAP_SYSTEMD_SERVICE_PATH = "/etc/systemd/system/arthexis-bootstrap.service"
+RECOVERY_SYSTEMD_SERVICE_PATH = "/etc/systemd/system/arthexis-recovery-access.service"
+SYSTEMD_MULTI_USER_WANTS_PATH = "/etc/systemd/system/multi-user.target.wants"
+BOOTSTRAP_SYSTEMD_WANTS_PATH = f"{SYSTEMD_MULTI_USER_WANTS_PATH}/arthexis-bootstrap.service"
+RECOVERY_SYSTEMD_WANTS_PATH = f"{SYSTEMD_MULTI_USER_WANTS_PATH}/arthexis-recovery-access.service"
 RECOVERY_STALE_FILE_PATHS = (
     RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH,
     "/usr/local/bin/arthexis-recovery-access.sh",
     RECOVERY_SSHD_CONFIG_REMOTE_PATH,
+    RECOVERY_SYSTEMD_SERVICE_PATH,
+    RECOVERY_SYSTEMD_WANTS_PATH,
     "/etc/sudoers.d/90-arthexis-recovery",
 )
 
@@ -80,6 +87,22 @@ KbdInteractiveAuthentication no
 ChallengeResponseAuthentication no
 PubkeyAuthentication yes
 PermitRootLogin no
+"""
+
+RECOVERY_SYSTEMD_SERVICE = """[Unit]
+Description=Arthexis recovery SSH access
+DefaultDependencies=no
+After=local-fs.target
+Before=ssh.service sshd.service arthexis-bootstrap.service
+Wants=ssh.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/arthexis-recovery-access.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
 """
 
 SYSTEMD_SERVICE = """[Unit]
@@ -612,6 +635,23 @@ def _guestfish_remove_file(image_path: Path, remote_path: str) -> None:
         raise ImagerBuildError(result.stderr.strip() or "guestfish failed while removing files")
 
 
+def _guestfish_symlink(image_path: Path, *, target: str, link_path: str) -> None:
+    """Create or replace a symlink inside the disk image using guestfish."""
+
+    script = f"ln-sf {shlex.quote(target)} {shlex.quote(link_path)}\n"
+    result = subprocess.run(
+        ["guestfish", "--rw", "-a", str(image_path), "-i"],
+        input=script,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ImagerBuildError(
+            result.stderr.strip() or "guestfish failed while enabling systemd units"
+        )
+
+
 def _normalize_recovery_ssh_access(
     *,
     recovery_ssh_user: str,
@@ -655,9 +695,11 @@ def _customize_image(
         bootstrap = work_dir / "arthexis-bootstrap.sh"
         service = work_dir / "arthexis-bootstrap.service"
         firstrun = work_dir / "firstrun.sh"
+        recovery_service = work_dir / "arthexis-recovery-access.service"
 
         bootstrap.write_text(BOOTSTRAP_SCRIPT, encoding="utf-8")
         service.write_text(SYSTEMD_SERVICE.format(git_url=git_url), encoding="utf-8")
+        recovery_service.write_text(RECOVERY_SYSTEMD_SERVICE, encoding="utf-8")
         firstrun.write_text(
             FIRST_RUN_SCRIPT.format(
                 recovery_boot_hook=RECOVERY_BOOT_HOOK
@@ -667,8 +709,19 @@ def _customize_image(
             encoding="utf-8",
         )
 
-        _guestfish_write(image_path, bootstrap, "/usr/local/bin/arthexis-bootstrap.sh", chmod_mode="0755")
-        _guestfish_write(image_path, service, "/etc/systemd/system/arthexis-bootstrap.service")
+        _guestfish_write(
+            image_path,
+            bootstrap,
+            "/usr/local/bin/arthexis-bootstrap.sh",
+            chmod_mode="0755",
+        )
+        _guestfish_write(image_path, service, BOOTSTRAP_SYSTEMD_SERVICE_PATH)
+        _guestfish_mkdir_p(image_path, SYSTEMD_MULTI_USER_WANTS_PATH)
+        _guestfish_symlink(
+            image_path,
+            target=BOOTSTRAP_SYSTEMD_SERVICE_PATH,
+            link_path=BOOTSTRAP_SYSTEMD_WANTS_PATH,
+        )
         if recovery_ssh_access and recovery_ssh_access.enabled:
             _guestfish_mkdir_p(image_path, str(Path(RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH).parent))
             recovery_keys = work_dir / "recovery_authorized_keys"
@@ -705,6 +758,17 @@ def _customize_image(
                 recovery_sshd_config,
                 RECOVERY_SSHD_CONFIG_REMOTE_PATH,
                 chmod_mode="0644",
+            )
+            _guestfish_write(
+                image_path,
+                recovery_service,
+                RECOVERY_SYSTEMD_SERVICE_PATH,
+                chmod_mode="0644",
+            )
+            _guestfish_symlink(
+                image_path,
+                target=RECOVERY_SYSTEMD_SERVICE_PATH,
+                link_path=RECOVERY_SYSTEMD_WANTS_PATH,
             )
         else:
             for stale_file_path in RECOVERY_STALE_FILE_PATHS:
