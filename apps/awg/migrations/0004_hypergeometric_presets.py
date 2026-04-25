@@ -13,7 +13,6 @@ PRESETS = [
         "min_successes": 1,
         "exact_successes": None,
         "show_in_pages": True,
-        "is_seed_data": True,
     },
     {
         "name": "60-card Standard",
@@ -24,7 +23,6 @@ PRESETS = [
         "min_successes": 1,
         "exact_successes": None,
         "show_in_pages": True,
-        "is_seed_data": True,
     },
     {
         "name": "100-card Commander",
@@ -35,7 +33,6 @@ PRESETS = [
         "min_successes": 1,
         "exact_successes": None,
         "show_in_pages": True,
-        "is_seed_data": True,
     },
     {
         "name": "360-card Realm",
@@ -46,7 +43,6 @@ PRESETS = [
         "min_successes": 1,
         "exact_successes": None,
         "show_in_pages": True,
-        "is_seed_data": True,
     },
 ]
 
@@ -54,20 +50,19 @@ PRESETS = [
 def create_presets(apps, schema_editor):
     HypergeometricTemplate = apps.get_model("awg", "HypergeometricTemplate")
     for preset in PRESETS:
-        values = preset.copy()
-        name = values.pop("name")
-        HypergeometricTemplate.objects.update_or_create(
-            name=name,
-            defaults=values,
-        )
+        seed_preset = {**preset, "is_seed_data": True}
+        if HypergeometricTemplate.objects.filter(**seed_preset).exists():
+            continue
+        HypergeometricTemplate.objects.create(**seed_preset)
 
 
 def remove_presets(apps, schema_editor):
     HypergeometricTemplate = apps.get_model("awg", "HypergeometricTemplate")
-    HypergeometricTemplate.objects.filter(
-        name__in=[preset["name"] for preset in PRESETS],
-        is_seed_data=True,
-    ).delete()
+    for preset in PRESETS:
+        HypergeometricTemplate.objects.filter(
+            **preset,
+            is_seed_data=True,
+        ).delete()
 
 
 class Migration(migrations.Migration):

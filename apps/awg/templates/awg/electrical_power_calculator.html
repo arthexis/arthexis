@@ -3,6 +3,7 @@
 {% block title %}{% trans "Electrical Power Calculator" %}{% endblock %}
 {% block content %}
 <h1>{% trans "Electrical Power Calculator" %}</h1>
+{% include "awg/_calculator_nav.html" with active_calculator="electrical_power" %}
 <form method="post" id="electrical-power-calculator" class="mb-3">
   {% csrf_token %}
   <div class="row g-3">

@@ -3,6 +3,7 @@
 {% block title %}{% trans "EV Charging Session Calculator" %}{% endblock %}
 {% block content %}
 <h1>{% trans "EV Charging Session Calculator" %}</h1>
+{% include "awg/_calculator_nav.html" with active_calculator="ev_charging" %}
 <p class="text-muted">{% trans "Estimate charging energy from battery SOC, charger power, and efficiency." %}</p>
 <form method="post" id="ev-charging-calculator" class="mb-3">
   {% csrf_token %}

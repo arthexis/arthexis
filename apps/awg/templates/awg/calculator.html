@@ -9,23 +9,7 @@
   }
 </style>
 <h1>{% trans "Cable & Conduit Calculator" %}</h1>
-<nav class="d-flex flex-wrap gap-2 mb-4" aria-label="{% trans 'Calculator modules' %}">
-  <a class="btn btn-sm btn-outline-secondary active" aria-current="page" href="{% url 'awg:calculator' %}">
-    {% trans "Cable & Conduit" %}
-  </a>
-  <a class="btn btn-sm btn-outline-secondary" href="{% url 'awg:energy_tariff' %}">
-    {% trans "Energy Tariff" %}
-  </a>
-  <a class="btn btn-sm btn-outline-secondary" href="{% url 'awg:electrical_power' %}">
-    {% trans "Electrical Power" %}
-  </a>
-  <a class="btn btn-sm btn-outline-secondary" href="{% url 'awg:ev_charging' %}">
-    {% trans "EV Charging" %}
-  </a>
-  <a class="btn btn-sm btn-outline-secondary" href="{% url 'awg:mtg_hypergeometric' %}">
-    {% trans "MTG Hypergeometric" %}
-  </a>
-</nav>
+{% include "awg/_calculator_nav.html" with active_calculator="cable" %}
 <form method="post" id="awg-calculator">
   {% csrf_token %}
   <div class="row g-4 mb-3">
