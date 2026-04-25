@@ -15,11 +15,11 @@ Use this skill at the very end of a turn, after `$arthexis-end-step`.
 
 ## Workflow
 
-1. Re-read `/home/arthe/AGENTS.md` and `/home/arthe/workgroup.txt` when coordination may matter.
+1. Re-read `~/AGENTS.md` and `~/workgroup.txt` when coordination may matter.
 2. Run cleanup with the default 10-minute wait:
 
 ```bash
-python3 /home/arthe/.codex/skills/arthexis-cleanup-step/scripts/turn_boundary.py cleanup-step --timeout 600
+python3 ~/.codex/skills/arthexis-cleanup-step/scripts/turn_boundary.py cleanup-step --timeout 600
 ```
 
 3. Report the turn id, wait timeout, turn-owned process count, termination count, and archive path.
@@ -30,13 +30,13 @@ python3 /home/arthe/.codex/skills/arthexis-cleanup-step/scripts/turn_boundary.py
 Start a tracked turn before untap:
 
 ```bash
-python3 /home/arthe/.codex/skills/arthexis-cleanup-step/scripts/turn_boundary.py start-turn --label "turn-label"
+python3 ~/.codex/skills/arthexis-cleanup-step/scripts/turn_boundary.py start-turn --label "turn-label"
 ```
 
 Register long-running process IDs that were intentionally started during a turn:
 
 ```bash
-python3 /home/arthe/.codex/skills/arthexis-cleanup-step/scripts/turn_boundary.py register-pid <pid> --label "why it is turn-owned"
+python3 ~/.codex/skills/arthexis-cleanup-step/scripts/turn_boundary.py register-pid <pid> --label "why it is turn-owned"
 ```
 
-Cleanup verifies the registered PID identity before acting, includes descendants of registered processes, waits up to the timeout for clean exit, sends `SIGTERM` to lingering registered processes, and archives completed turn state under `/home/arthe/.local/state/arthexis-turn/turns/`.
+Cleanup verifies the registered PID identity before acting, includes descendants of registered processes, waits up to the timeout for clean exit, sends `SIGTERM` to lingering registered processes, and archives completed turn state under `~/.local/state/arthexis-turn/turns/`.

@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import errno
 import datetime as dt
+import errno
 import fcntl
 import json
 import os
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 
-STATE_DIR = Path("/home/arthe/.local/state/arthexis-turn")
+STATE_DIR = Path.home() / ".local" / "state" / "arthexis-turn"
 ACTIVE_STATE = STATE_DIR / "active-turn.json"
 EVENT_LOG = STATE_DIR / "events.jsonl"
 LOCK_PATH = STATE_DIR / "state.lock"
