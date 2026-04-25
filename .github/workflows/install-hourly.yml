@@ -26,15 +26,19 @@ jobs:
         include:
           - os_flavor: ubuntu
             container_image: ubuntu:24.04
+            python_cache_version: python3.12
             db_backend: sqlite
           - os_flavor: ubuntu
             container_image: ubuntu:24.04
+            python_cache_version: python3.12
             db_backend: postgres
           - os_flavor: debian
             container_image: debian:12
+            python_cache_version: python3.11
             db_backend: sqlite
           - os_flavor: debian
             container_image: debian:12
+            python_cache_version: python3.11
             db_backend: postgres
     permissions:
       contents: read
@@ -76,38 +80,46 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            ca-certificates curl git sudo python3 python3-venv
+            ca-certificates curl git sudo python3 python3-venv \
+            libcairo2 libgdk-pixbuf-2.0-0 libpango-1.0-0 \
+            libpangocairo-1.0-0 shared-mime-info
       - uses: actions/checkout@v6
         with:
           clean: true
       - uses: actions/setup-python@v6
         id: setup-python
+        if: matrix.os_flavor == 'ubuntu'
         with:
           python-version: '3.12'
-      - name: Align python executables with setup-python
+      - name: Select Python runtime
         run: |
-          python_bin='${{ steps.setup-python.outputs.python-path }}'
+          if [ '${{ matrix.os_flavor }}' = 'ubuntu' ]; then
+            python_bin='${{ steps.setup-python.outputs.python-path }}'
+          else
+            python_bin="$(command -v python3)"
+          fi
           echo "ARTHEXIS_PYTHON_BIN=${python_bin}" >> "${GITHUB_ENV}"
           echo "$(dirname "${python_bin}")" >> "${GITHUB_PATH}"
           "${python_bin}" --version
-          python --version
+          if command -v python >/dev/null 2>&1; then
+            python --version
+          fi
           python3 --version
       - name: Cache pip
         uses: actions/cache@v5
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
+          key: pip-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.python_cache_version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
           restore-keys: |
-            pip-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ steps.setup-python.outputs.python-version }}-
             pip-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-
             pip-${{ runner.os }}-${{ matrix.os_flavor }}-
       - name: Cache virtualenv
         uses: actions/cache@v5
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
+          key: venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.python_cache_version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'install.sh') }}
           restore-keys: |
-            venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ steps.setup-python.outputs.python-version }}-
+            venv-${{ runner.os }}-${{ matrix.os_flavor }}-${{ matrix.db_backend }}-${{ matrix.python_cache_version }}-
       - name: Validate pyproject dependency ordering
         run: |
           "${ARTHEXIS_PYTHON_BIN}" "$GITHUB_WORKSPACE/scripts/sort_pyproject_deps.py" --check
