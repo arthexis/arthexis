@@ -110,6 +110,36 @@ class LibraryModelTests(TestCase):
         self.assertTrue(holding.local_is_newer())
         self.assertEqual(state, OwnerLibraryHolding.ReconciliationState.MISSING_REMOTE)
 
+    def test_holding_reconciliation_prefers_missing_local_over_stale_equal_checksums(
+        self,
+    ):
+        holding = OwnerLibraryHolding.objects.create(
+            owner=self.owner,
+            entry=self.entry,
+            remote_version="remote-v1",
+            local_checksum_sha256="a" * 64,
+            remote_checksum_sha256="a" * 64,
+        )
+
+        state = holding.refresh_reconciliation_state()
+
+        self.assertEqual(state, OwnerLibraryHolding.ReconciliationState.MISSING_LOCAL)
+
+    def test_holding_reconciliation_prefers_missing_remote_over_stale_equal_checksums(
+        self,
+    ):
+        holding = OwnerLibraryHolding.objects.create(
+            owner=self.owner,
+            entry=self.entry,
+            local_path="/library/Tracked Book.kfx",
+            local_checksum_sha256="a" * 64,
+            remote_checksum_sha256="a" * 64,
+        )
+
+        state = holding.refresh_reconciliation_state()
+
+        self.assertEqual(state, OwnerLibraryHolding.ReconciliationState.MISSING_REMOTE)
+
     @override_settings(USE_TZ=False)
     def test_holding_reconciliation_timestamp_handles_disabled_timezones(self):
         holding = OwnerLibraryHolding.objects.create(

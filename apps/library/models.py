@@ -192,7 +192,9 @@ class OwnerLibraryHolding(Entity):
 
     def refresh_reconciliation_state(self, *, save: bool = False) -> str:
         if (
-            self.local_checksum_sha256
+            self.local_path
+            and self.remote_version
+            and self.local_checksum_sha256
             and self.local_checksum_sha256 == self.remote_checksum_sha256
         ):
             state = self.ReconciliationState.MATCHED
