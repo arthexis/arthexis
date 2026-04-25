@@ -33,6 +33,7 @@ class MigrationFile:
     """Metadata parsed from a migration file path."""
 
     app_label: str
+    migration_label: str
     name: str
     number: int
     path: Path
@@ -180,6 +181,60 @@ def _parse_replaces(path: Path) -> list[tuple[str, str]]:
     return _parse_assignment_tuples(path, "replaces")
 
 
+def _app_migration_label(app_dir: Path) -> str:
+    """Return the Django migration label for ``app_dir``.
+
+    Most local app directories use their directory name as the Django app label.
+    ``apps.sites`` is an intentional exception: its runtime package is
+    ``apps.sites`` while its historical migration/model label remains ``pages``.
+    The static conflict check must follow dependencies by Django label, not by
+    filesystem directory name.
+    """
+
+    apps_py = app_dir / "apps.py"
+    if not apps_py.exists():
+        return app_dir.name
+
+    try:
+        module = ast.parse(apps_py.read_text(encoding="utf-8"), filename=str(apps_py))
+    except (OSError, SyntaxError):
+        return app_dir.name
+
+    expected_name = f"apps.{app_dir.name}"
+    fallback_label: str | None = None
+    for node in module.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+
+        config_name: str | None = None
+        config_label: str | None = None
+        for statement in node.body:
+            if not isinstance(statement, ast.Assign):
+                continue
+            for target in statement.targets:
+                if not isinstance(target, ast.Name):
+                    continue
+                if (
+                    target.id == "name"
+                    and isinstance(statement.value, ast.Constant)
+                    and isinstance(statement.value.value, str)
+                ):
+                    config_name = statement.value.value
+                if (
+                    target.id == "label"
+                    and isinstance(statement.value, ast.Constant)
+                    and isinstance(statement.value.value, str)
+                ):
+                    config_label = statement.value.value
+
+        if config_name == expected_name:
+            return config_label or app_dir.name
+        if config_name is None and config_label is not None:
+            fallback_label = config_label
+
+    return fallback_label or app_dir.name
+
+
 def _migration_files_for_app(app_dir: Path) -> list[MigrationFile]:
     """Collect migration files for ``app_dir`` sorted by number and name."""
 
@@ -187,6 +242,7 @@ def _migration_files_for_app(app_dir: Path) -> list[MigrationFile]:
     if not migrations_dir.exists():
         return []
 
+    migration_label = _app_migration_label(app_dir)
     files: list[MigrationFile] = []
     for path in migrations_dir.glob("*.py"):
         if path.name == "__init__.py":
@@ -197,6 +253,7 @@ def _migration_files_for_app(app_dir: Path) -> list[MigrationFile]:
         files.append(
             MigrationFile(
                 app_label=app_dir.name,
+                migration_label=migration_label,
                 name=path.stem,
                 number=int(match.group("number")),
                 path=path,
@@ -209,7 +266,7 @@ def _leaf_migrations(files: list[MigrationFile], dependencies_by_name: dict[str,
     """Return migrations that are not depended on by another local migration."""
 
     pointed_to: set[str] = set()
-    app_label = files[0].app_label if files else ""
+    app_label = files[0].migration_label if files else ""
     for dependencies in dependencies_by_name.values():
         for dep_app, dep_name in dependencies:
             if dep_app == app_label:
@@ -255,7 +312,7 @@ def _check_app(files: list[MigrationFile], *, repo_root: Path = REPO_ROOT) -> li
         replace_name
         for replaces in replaces_by_name.values()
         for replace_app, replace_name in replaces
-        if replace_app == files[0].app_label
+        if replace_app == files[0].migration_label
     }
 
     active_files = [migration for migration in files if migration.name not in replaced_names]
@@ -274,7 +331,7 @@ def _check_app(files: list[MigrationFile], *, repo_root: Path = REPO_ROOT) -> li
     merge_chain = [
         migration
         for migration in merge_files
-        if any(dep_app == files[0].app_label and dep_name in merge_name_set for dep_app, dep_name in dependencies_by_name[migration.name])
+        if any(dep_app == files[0].migration_label and dep_name in merge_name_set for dep_app, dep_name in dependencies_by_name[migration.name])
     ]
     if len(merge_files) > 1 and (len(merge_chain) > 0 or len([leaf for leaf in leaves if _is_merge_migration(leaf.name)]) > 1):
         merge_paths = ", ".join(
@@ -429,6 +486,7 @@ def _local_installed_app_labels(repo_root: Path) -> list[str]:
         except ValueError:
             continue
         labels.append(app_config.label)
+        labels.append(Path(app_config.path).name)
     return labels
 
 def run_checks(repo_root: Path = REPO_ROOT, *, app_labels: set[str] | None = None) -> int:
