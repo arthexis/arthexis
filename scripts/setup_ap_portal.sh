@@ -10,6 +10,7 @@ SOURCE_URL="${SOURCE_URL:-https://github.com/arthexis/arthexis/blob/main/scripts
 SERVICE_FILE="/etc/systemd/system/arthexis-ap-portal.service"
 NGINX_SITE="/etc/nginx/sites-enabled/arthexis.conf"
 NGINX_BACKUP_DIR="/etc/nginx/sites-available"
+NGINX_BACKUP_RETENTION="${NGINX_BACKUP_RETENTION:-10}"
 DEFAULT_CERT_PATH="/etc/letsencrypt/live/arthexis.com/fullchain.pem"
 DEFAULT_KEY_PATH="/etc/letsencrypt/live/arthexis.com/privkey.pem"
 
@@ -65,13 +66,28 @@ WantedBy=multi-user.target
 EOF
 }
 
+rotate_nginx_backups() {
+    if ! [[ "$NGINX_BACKUP_RETENTION" =~ ^[0-9]+$ ]] || (( NGINX_BACKUP_RETENTION == 0 )); then
+        return
+    fi
+
+    mapfile -t expired_backups < <(
+        find "$NGINX_BACKUP_DIR" -maxdepth 1 -type f -name 'arthexis.conf.pre-ap-portal-*' -printf '%T@ %p\n' \
+            | sort -rn \
+            | awk -v limit="$NGINX_BACKUP_RETENTION" 'NR > limit { sub(/^[^ ]+ /, ""); print }'
+    )
+    for backup in "${expired_backups[@]}"; do
+        rm -f -- "$backup"
+    done
+}
+
 install_nginx_site() {
     local timestamp
     timestamp="$(date +%Y%m%d%H%M%S)"
-    rm -f /etc/nginx/sites-enabled/arthexis.conf.pre-ap-portal-*
     if [[ -f "$NGINX_SITE" ]]; then
         mkdir -p "$NGINX_BACKUP_DIR"
         cp "$NGINX_SITE" "${NGINX_BACKUP_DIR}/arthexis.conf.pre-ap-portal-${timestamp}"
+        rotate_nginx_backups
     fi
 
     local https_block=""

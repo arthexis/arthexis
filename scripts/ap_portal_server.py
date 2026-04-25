@@ -28,6 +28,8 @@ ACTIVITY_PATH = DEFAULT_STATE_DIR / "activity.jsonl"
 NFT_TABLE_NAME = "arthexis_ap_portal"
 AUTHORIZED_SET_NAME = "authorized_macs"
 TERMS_VERSION = "qol-recording-v2"
+MAX_PAYLOAD_BYTES = 1024 * 1024
+ARP_TABLE_PATH = Path("/proc/net/arp")
 TERMS_STATEMENT = (
     "I accept that my internet experience may be altered and recorded "
     "for quality of life purposes while using this access point."
@@ -93,14 +95,9 @@ class FirewallManager:
         self.interface = interface
 
     def sync(self, macs: set[str]) -> None:
-        subprocess.run(
-            ["nft", "delete", "table", "inet", NFT_TABLE_NAME],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-
         ruleset = self._render_ruleset(sorted(macs))
+        if self._table_exists():
+            ruleset = f"delete table inet {NFT_TABLE_NAME}\n{ruleset}"
         result = subprocess.run(
             ["nft", "-f", "-"],
             input=ruleset,
@@ -111,6 +108,15 @@ class FirewallManager:
         if result.returncode != 0:
             details = (result.stderr or result.stdout or "nft apply failed").strip()
             raise FirewallSyncError(details)
+
+    def _table_exists(self) -> bool:
+        result = subprocess.run(
+            ["nft", "list", "table", "inet", NFT_TABLE_NAME],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        return result.returncode == 0
 
     def _render_ruleset(self, macs: list[str]) -> str:
         set_block = [f"    set {AUTHORIZED_SET_NAME} {{", "        type ether_addr"]
@@ -242,6 +248,16 @@ def _read_authorized_macs(path: Path) -> set[str]:
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     }
+
+
+def _read_limited_request_body(headers: Any, rfile: Any) -> str:
+    try:
+        length = int(headers.get("Content-Length", "0") or "0")
+    except ValueError as exc:
+        raise ValueError("Invalid Content-Length.") from exc
+    if length > MAX_PAYLOAD_BYTES:
+        raise ValueError("Payload too large.")
+    return rfile.read(length).decode("utf-8") if length else ""
 
 
 class PortalState:
@@ -382,26 +398,17 @@ class PortalState:
         if not ip_address:
             return None
 
-        commands = [
-            ["ip", "neigh", "show", ip_address],
-            ["arp", "-n", ip_address],
-        ]
-        for command in commands:
-            try:
-                result = subprocess.run(
-                    command,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    timeout=2,
-                )
-            except FileNotFoundError:
-                continue
-            if result.returncode != 0:
-                continue
-            match = MAC_RE.search(result.stdout)
-            if match:
-                return _normalize_mac(match.group("mac"))
+        try:
+            arp_rows = ARP_TABLE_PATH.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return None
+
+        for row in arp_rows[1:]:
+            fields = row.split()
+            if len(fields) >= 4 and fields[0] == ip_address:
+                match = MAC_RE.fullmatch(fields[3])
+                if match:
+                    return _normalize_mac(match.group("mac"))
         return None
 
     def _write_authorized_macs(self, macs: set[str]) -> None:
@@ -524,8 +531,7 @@ class PortalApplication:
                 self.wfile.write(body)
 
             def _read_payload(self) -> dict[str, Any]:
-                length = int(self.headers.get("Content-Length", "0") or "0")
-                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                raw = _read_limited_request_body(self.headers, self.rfile)
                 content_type = self.headers.get("Content-Type", "")
                 if "application/json" in content_type:
                     parsed = json.loads(raw or "{}")

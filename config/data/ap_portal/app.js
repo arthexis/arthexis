@@ -38,7 +38,7 @@ form.addEventListener("submit", async (event) => {
     }
     statusEl.textContent = "Access recorded. Redirecting to a connectivity check.";
     window.setTimeout(() => {
-      window.location.href = result.redirect_url || "http://neverssl.com/";
+      window.location.href = result.redirect_url || "/";
     }, 700);
   } catch (error) {
     statusEl.textContent = error.message;

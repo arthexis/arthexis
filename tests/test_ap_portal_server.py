@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import sys
 from pathlib import Path
+
+import pytest
 
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "ap_portal_server.py"
@@ -126,3 +129,54 @@ def test_firewall_ruleset_keeps_authorized_clients_and_redirects_unapproved_http
     assert "elements = { aa:bb:cc:dd:ee:ff }" in ruleset
     assert "meta l4proto tcp redirect to :80" in ruleset
     assert 'iifname "wlan0" drop' in ruleset
+
+
+def test_firewall_sync_replaces_existing_table_in_single_apply(monkeypatch):
+    module = load_portal_module()
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return module.subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    module.FirewallManager(interface="wlan0").sync({"aa:bb:cc:dd:ee:ff"})
+
+    apply_calls = [call for call in calls if call[0] == ["nft", "-f", "-"]]
+    assert len(apply_calls) == 1
+    ruleset = apply_calls[0][1]["input"]
+    assert ruleset.startswith("delete table inet arthexis_ap_portal\n")
+    assert "elements = { aa:bb:cc:dd:ee:ff }" in ruleset
+
+
+def test_resolve_mac_reads_proc_arp_without_subprocess(tmp_path, monkeypatch):
+    module = load_portal_module()
+    arp_table = tmp_path / "arp"
+    arp_table.write_text(
+        "\n".join(
+            [
+                "IP address       HW type     Flags       HW address            Mask     Device",
+                "10.42.0.25       0x1         0x2         AA:BB:CC:DD:EE:FF     *        wlan0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    def fail_run(*_args, **_kwargs):
+        raise AssertionError("resolve_mac should not spawn neighbor lookup subprocesses")
+
+    monkeypatch.setattr(module, "ARP_TABLE_PATH", arp_table)
+    monkeypatch.setattr(module.subprocess, "run", fail_run)
+    state = module.PortalState(make_config(module, tmp_path))
+
+    assert state.resolve_mac("10.42.0.25") == "aa:bb:cc:dd:ee:ff"
+    assert state.resolve_mac("10.42.0.26") is None
+
+
+def test_read_limited_request_body_rejects_large_payload():
+    module = load_portal_module()
+    headers = {"Content-Length": str(module.MAX_PAYLOAD_BYTES + 1)}
+
+    with pytest.raises(ValueError, match="Payload too large"):
+        module._read_limited_request_body(headers, io.BytesIO())
