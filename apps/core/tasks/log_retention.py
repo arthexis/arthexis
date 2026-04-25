@@ -92,10 +92,10 @@ def _is_in_progress_session_log(path: Path, *, log_dir: Path) -> bool:
     if not _is_session_log_artifact(path, log_dir=log_dir):
         return False
     try:
-        content = path.read_text(encoding="utf-8").rstrip()
+        content = path.read_bytes().rstrip()
     except OSError:
         return True
-    return not content.endswith("]")
+    return not content.endswith(b"]")
 
 
 def _is_active_log_file(path: Path) -> bool:
