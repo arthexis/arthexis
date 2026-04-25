@@ -500,8 +500,7 @@ def get_next_tag(timeout: float | None = 0) -> Optional[dict]:
         try:
             from .reader import read_rfid
 
-            poll_timeout = max(0.0, timeout)
-            res = read_rfid(mfrc=_reader, cleanup=False, timeout=poll_timeout)
+            res = read_rfid(mfrc=_reader, cleanup=False, timeout=timeout)
             if res.get("rfid") or res.get("error"):
                 _irq_empty_tracker.log_summary("polling read")
                 logger.debug("Polling read result: %s", res)

@@ -383,6 +383,7 @@ def _build_tag_response(
     result = {
         "rfid": rfid,
         "label_id": tag.pk,
+        "custom_label": getattr(tag, "custom_label", ""),
         "created": created,
         "color": tag.color,
         "allowed": allowed,
