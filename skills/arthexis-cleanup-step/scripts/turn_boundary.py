@@ -90,9 +90,19 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def append_event(event: dict[str, Any]) -> None:
     ensure_state_dir()
+    path = checked_state_path(EVENT_LOG)
+    if path.parent != checked_state_path(STATE_DIR):
+        raise ValueError(f"refusing unsupported event log path: {path}")
     event = {"time": now_iso(), **event}
-    with EVENT_LOG.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(event, sort_keys=True) + "\n")
+    flags = os.O_CREAT | os.O_APPEND | os.O_WRONLY
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    dir_fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        fd = os.open(path.name, flags | nofollow, 0o600, dir_fd=dir_fd)
+        with os.fdopen(fd, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, sort_keys=True) + "\n")
+    finally:
+        os.close(dir_fd)
 
 
 def proc_identity(pid: int) -> dict[str, Any] | None:
@@ -378,6 +388,7 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
         if lingering
         else {"sigterm_sent": [], "sigkill_sent": [], "still_alive": []}
     )
+    archive_path: Path | None = None
 
     with state_lock():
         state_after_wait = read_json(ACTIVE_STATE)
@@ -386,7 +397,6 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
             print("status: turn-completed-or-changed")
             return 0
         state = state_after_wait
-        state["status"] = "complete"
         state["cleanup_step_at"] = now_iso()
         state["cleanup"] = {
             "timeout_seconds": timeout_seconds,
@@ -394,10 +404,17 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
             "lingering_after_wait": sorted(lingering),
             **termination,
         }
-        archive_state(state)
-        if ACTIVE_STATE.exists():
-            ACTIVE_STATE.unlink()
-        append_event({"event": "cleanup-complete", "turn_id": state["turn_id"], "cleanup": state["cleanup"]})
+        if termination["still_alive"] and not args.force_kill:
+            state["status"] = "active"
+            write_json(ACTIVE_STATE, state)
+            append_event({"event": "cleanup-incomplete", "turn_id": state["turn_id"], "cleanup": state["cleanup"]})
+        else:
+            state["status"] = "complete"
+            archive_state(state)
+            archive_path = ARCHIVE_DIR / (safe_turn_id(state.get("turn_id")) + ".json")
+            if ACTIVE_STATE.exists():
+                ACTIVE_STATE.unlink()
+            append_event({"event": "cleanup-complete", "turn_id": state["turn_id"], "cleanup": state["cleanup"]})
 
     print("arthexis-cleanup-step")
     print(f"turn_id: {state.get('turn_id')}")
@@ -407,7 +424,10 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
     print(f"sigterm_sent: {len(termination['sigterm_sent'])}")
     print(f"sigkill_sent: {len(termination['sigkill_sent'])}")
     print(f"still_alive: {len(termination['still_alive'])}")
-    print(f"archive: {ARCHIVE_DIR / (str(state.get('turn_id')) + '.json')}")
+    if archive_path is None:
+        print(f"active_state: {ACTIVE_STATE}")
+    else:
+        print(f"archive: {archive_path}")
     return 0 if not termination["still_alive"] else 1
 
 
