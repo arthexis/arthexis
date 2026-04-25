@@ -42,12 +42,14 @@
         <dd class="col-sm-8">
           {% if image.include_in_public_gallery %}{% trans "Public" %}{% else %}{% trans "Private" %}{% endif %}
         </dd>
-        {% if image.owner_user %}
-          <dt class="col-sm-4">{% trans "Owner" %}</dt>
-          <dd class="col-sm-8">{{ image.owner_user.get_username }}</dd>
-        {% elif image.owner_group %}
-          <dt class="col-sm-4">{% trans "Owner group" %}</dt>
-          <dd class="col-sm-8">{{ image.owner_group.name }}</dd>
+        {% if can_view_metadata %}
+          {% if image.owner_user %}
+            <dt class="col-sm-4">{% trans "Owner" %}</dt>
+            <dd class="col-sm-8">{{ image.owner_user.get_username }}</dd>
+          {% elif image.owner_group %}
+            <dt class="col-sm-4">{% trans "Owner group" %}</dt>
+            <dd class="col-sm-8">{{ image.owner_group.name }}</dd>
+          {% endif %}
         {% endif %}
         {% if image.content_sample %}
           <dt class="col-sm-4">{% trans "Content sample" %}</dt>

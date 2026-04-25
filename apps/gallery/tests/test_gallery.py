@@ -489,3 +489,23 @@ class GalleryImageSharingTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(self.image.shared_with_users.filter(pk=self.other.pk).exists())
+
+    def test_shared_user_detail_hides_owner_metadata(self):
+        self.image.shared_with_users.add(self.recipient)
+        self.client.force_login(self.recipient)
+
+        response = self.client.get(f"/gallery/images/{self.image.slug}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Shared")
+        self.assertNotContains(response, "Owner")
+        self.assertNotContains(response, self.owner.username)
+
+    def test_owner_detail_shows_owner_metadata(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get(f"/gallery/images/{self.image.slug}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Owner")
+        self.assertContains(response, self.owner.username)
