@@ -23,7 +23,7 @@ python3 ~/.codex/skills/arthexis-cleanup-step/scripts/turn_boundary.py end-step
 ```
 
 3. Report the turn id, triggered effect count, and any effect notes.
-4. Continue immediately into `$arthexis-cleanup-step` for explicit `turn` or `next turn`.
+4. Continue immediately into `$arthexis-cleanup-step` for explicit `turn` or `next turn`; cleanup applies the adaptive 10-minute turn cadence rest after process cleanup. If the user has explicitly commanded the device to go again immediately, pass the cleanup skill's cadence-skip path for the current turn instead of waiting.
 
 ## Declaring End Effects
 

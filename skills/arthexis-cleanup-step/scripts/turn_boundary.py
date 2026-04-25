@@ -24,14 +24,72 @@ ACTIVE_STATE = STATE_DIR / "active-turn.json"
 EVENT_LOG = STATE_DIR / "events.jsonl"
 LOCK_PATH = STATE_DIR / "state.lock"
 ARCHIVE_DIR = STATE_DIR / "turns"
+CADENCE_STATE = STATE_DIR / "cadence-rest.json"
 WRITE_TMP_NAME = ".write-json.tmp"
 DEFAULT_CLEANUP_TIMEOUT_SECONDS = 600
+DEFAULT_TURN_CADENCE_SECONDS = 600
 TERM_GRACE_SECONDS = 15
 SAFE_TURN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 
 
 def now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def parse_timestamp(value: str | None) -> dt.datetime | None:
+    if not value:
+        return None
+    try:
+        return dt.datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def turn_elapsed_seconds(state: dict[str, Any], *, now: dt.datetime | None = None) -> int:
+    started_at = parse_timestamp(state.get("started_at"))
+    if started_at is None:
+        return 0
+    current = now or dt.datetime.now(dt.timezone.utc).astimezone()
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=current.tzinfo)
+    elapsed = current - started_at.astimezone(current.tzinfo)
+    return max(0, int(elapsed.total_seconds()))
+
+
+def cadence_rest_seconds(state: dict[str, Any], cadence_seconds: int, *, now: dt.datetime | None = None) -> int:
+    cadence_seconds = max(0, int(cadence_seconds))
+    if cadence_seconds <= 0:
+        return 0
+    return max(0, cadence_seconds - turn_elapsed_seconds(state, now=now))
+
+
+def cadence_rest_payload(
+    state: dict[str, Any],
+    cadence_seconds: int,
+    *,
+    skip_rest: bool,
+    now: dt.datetime,
+) -> dict[str, Any]:
+    cadence_seconds = max(0, int(cadence_seconds))
+    elapsed_before_rest = turn_elapsed_seconds(state, now=now)
+    rest_seconds = 0 if skip_rest else cadence_rest_seconds(state, cadence_seconds, now=now)
+    rest_started_at = now.isoformat(timespec="seconds") if rest_seconds else ""
+    rest_expires_at = (now + dt.timedelta(seconds=rest_seconds)).isoformat(timespec="seconds") if rest_seconds else ""
+    return {
+        "cadence_seconds": cadence_seconds,
+        "turn_elapsed_seconds_before_rest": elapsed_before_rest,
+        "cadence_rest_seconds": rest_seconds,
+        "cadence_rest_skipped": bool(skip_rest),
+        "cadence_rest_started_at": rest_started_at,
+        "cadence_rest_expires_at": rest_expires_at,
+    }
+
+
+def write_cadence_rest_state(turn_id: str, payload: dict[str, Any]) -> None:
+    if payload["cadence_rest_seconds"] <= 0:
+        checked_state_path(CADENCE_STATE).unlink(missing_ok=True)
+        return
+    write_json(CADENCE_STATE, {"turn_id": safe_turn_id(turn_id), **payload})
 
 
 def ensure_state_dir() -> None:
@@ -414,6 +472,8 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
     termination = {"sigterm_sent": [], "sigkill_sent": [], "still_alive": []}
     archive_path: Path | None = None
 
+    cadence_payload: dict[str, Any] = {}
+
     with state_lock():
         state_after_wait = read_json(ACTIVE_STATE)
         if not state_after_wait or state_after_wait.get("turn_id") != state.get("turn_id"):
@@ -425,11 +485,19 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
         lingering = matching_process_identities(lingering)
         if lingering:
             termination = terminate_pids(lingering, force_kill=args.force_kill)
-        state["cleanup_step_at"] = now_iso()
+        now = dt.datetime.now(dt.timezone.utc).astimezone()
+        cadence_payload = cadence_rest_payload(
+            state,
+            args.cadence,
+            skip_rest=args.skip_cadence_rest,
+            now=now,
+        )
+        state["cleanup_step_at"] = now.isoformat(timespec="seconds")
         state["cleanup"] = {
             "timeout_seconds": timeout_seconds,
             "live_before": live_before,
             "lingering_after_wait": sorted(lingering),
+            **cadence_payload,
             **termination,
         }
         if termination["still_alive"]:
@@ -438,6 +506,7 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
             append_event({"event": "cleanup-incomplete", "turn_id": state["turn_id"], "cleanup": state["cleanup"]})
         else:
             state["status"] = "complete"
+            write_cadence_rest_state(str(state["turn_id"]), cadence_payload)
             archive_state(state)
             archive_path = ARCHIVE_DIR / (safe_turn_id(state.get("turn_id")) + ".json")
             if ACTIVE_STATE.exists():
@@ -452,6 +521,11 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
     print(f"sigterm_sent: {len(termination['sigterm_sent'])}")
     print(f"sigkill_sent: {len(termination['sigkill_sent'])}")
     print(f"still_alive: {len(termination['still_alive'])}")
+    print("cadence_seconds: {}".format(cadence_payload.get("cadence_seconds", 0)))
+    print("turn_elapsed_seconds_before_rest: {}".format(cadence_payload.get("turn_elapsed_seconds_before_rest", 0)))
+    print("cadence_rest_seconds: {}".format(cadence_payload.get("cadence_rest_seconds", 0)))
+    print("cadence_rest_skipped: {}".format(cadence_payload.get("cadence_rest_skipped", False)))
+    print("cadence_rest_expires_at: {}".format(cadence_payload.get("cadence_rest_expires_at", "")))
     if archive_path is None:
         print(f"active_state: {ACTIVE_STATE}")
     else:
@@ -503,6 +577,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     cleanup = subparsers.add_parser("cleanup-step")
     cleanup.add_argument("--timeout", type=int, default=DEFAULT_CLEANUP_TIMEOUT_SECONDS)
+    cleanup.add_argument("--cadence", type=int, default=DEFAULT_TURN_CADENCE_SECONDS)
+    cleanup.add_argument("--skip-cadence-rest", action="store_true")
     cleanup.add_argument("--force-kill", action="store_true")
     cleanup.set_defaults(func=cmd_cleanup_step)
 
