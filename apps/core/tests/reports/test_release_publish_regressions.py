@@ -506,6 +506,23 @@ def test_step_prune_low_value_tests_accepts_scheduled_setting(
     }
 
 
+def test_step_prune_low_value_tests_ignores_setting_for_interactive_release(
+    monkeypatch, settings, tmp_path: Path
+):
+    settings.RELEASE_PUBLISH_TEST_PRUNING_PR_URL = (
+        "https://github.com/arthexis/arthexis/pull/7000"
+    )
+    monkeypatch.setattr(pipeline, "_append_log", lambda *_args, **_kwargs: None)
+    ctx: dict[str, object] = {}
+
+    with pytest.raises(PublishPending):
+        pipeline._step_prune_low_value_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert ctx["test_pruning_required"] is True
+    assert "test_pruning_result" not in ctx
+    assert "test_pruning_pr_url" not in ctx
+
+
 def test_step_prune_low_value_tests_rejects_explicit_failure(
     monkeypatch, tmp_path: Path
 ):
@@ -575,6 +592,56 @@ def test_publish_workflow_records_operator_test_pruning_evidence(
         captured["test_pruning_pr_url"]
         == "https://github.com/arthexis/arthexis/pull/7000"
     )
+
+
+def test_publish_workflow_rejects_invalid_test_pruning_url(monkeypatch, tmp_path: Path):
+    captured: dict[str, object] = {}
+    request = RequestFactory().post(
+        "/release/publish",
+        {
+            "set_test_pruning_evidence": "1",
+            "test_pruning_pr_url": "https://github.com/arthexis/arthexis/issues/7000",
+        },
+    )
+    request.user = type("User", (), {"is_authenticated": False})()
+    request.session = {}
+    monkeypatch.setattr(
+        workflow_module.messages, "error", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        workflow_module,
+        "store_release_context",
+        lambda _request, _session_key, ctx: captured.update(ctx),
+    )
+
+    workflow = workflow_module.ReleasePublishWorkflow(
+        request=request,
+        session_key="release_publish_1",
+        lock_path=tmp_path / "release.lock",
+        restart_path=tmp_path / "release.restarts",
+        clean_redirect_path=lambda _request, path: path,
+        collect_dirty_files=lambda: [],
+        validate_manual_git_push=lambda _pending_push: True,
+        append_log=lambda *_args, **_kwargs: None,
+    )
+    ctx = workflow_module.ReleasePublishContext(
+        step=5,
+        started=True,
+        paused=True,
+        extras={"test_pruning_required": True},
+    )
+
+    result, resume_requested, response = workflow.resume(ctx)
+
+    assert resume_requested is False
+    assert response.status_code == 302
+    assert response["Location"] == "/release/publish"
+    assert result.paused is True
+    assert result.extras["test_pruning_required"] is True
+    assert "valid GitHub pull request URL" in result.extras["test_pruning_error"]
+    assert "test_pruning_result" not in result.extras
+    assert captured["test_pruning_required"] is True
+    assert "test_pruning_result" not in captured
 
 
 def test_step_confirm_pypi_trusted_publisher_settings_fails_on_mismatch(

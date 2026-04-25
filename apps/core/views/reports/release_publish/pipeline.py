@@ -1684,7 +1684,7 @@ def _step_prune_low_value_tests(release, ctx, log_path: Path, *, user=None) -> N
             pruning_pr_url = str(pruning_result.get("pr_url") or pruning_pr_url).strip()
             pruning_source = str(pruning_result.get("source") or pruning_source)
 
-    if not pruning_pr_url:
+    if not pruning_pr_url and ctx.get("auto_release"):
         pruning_pr_url = str(
             getattr(settings, TEST_PRUNING_PR_URL_SETTING, "") or ""
         ).strip()

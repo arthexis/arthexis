@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from django.contrib import messages
 from django.shortcuts import redirect
@@ -22,6 +22,16 @@ from .context import (
     store_release_context,
 )
 from .steps import StepDefinition, run_release_step
+
+
+def _is_pull_request_url(value: str) -> bool:
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    if parsed.netloc.lower() != "github.com":
+        return False
+    parts = [part for part in parsed.path.split("/") if part]
+    return len(parts) == 4 and parts[2] == "pull" and parts[3].isdigit()
 
 
 @dataclass(slots=True)
@@ -247,7 +257,7 @@ class ReleasePublishWorkflow:
 
     def _resume_with_test_pruning_evidence(self, state: dict[str, Any]):
         pr_url = (self.request.POST.get("test_pruning_pr_url") or "").strip()
-        if pr_url:
+        if pr_url and _is_pull_request_url(pr_url):
             state["test_pruning_pr_url"] = pr_url
             state["test_pruning_result"] = {
                 "success": True,
@@ -270,8 +280,12 @@ class ReleasePublishWorkflow:
             return ReleasePublishContext.from_dict(state), False, redirect(target)
 
         state["test_pruning_required"] = True
-        state["test_pruning_error"] = _("Enter the test pruning PR URL to continue.")
-        messages.error(self.request, _("Enter the test pruning PR URL to continue."))
+        if pr_url:
+            message = _("Enter a valid GitHub pull request URL to continue.")
+        else:
+            message = _("Enter the test pruning PR URL to continue.")
+        state["test_pruning_error"] = message
+        messages.error(self.request, message)
         self._store(state)
         target = self.clean_redirect_path(self.request, self.request.path)
         return ReleasePublishContext.from_dict(state), False, redirect(target)
