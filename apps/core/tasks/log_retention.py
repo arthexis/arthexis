@@ -12,6 +12,8 @@ from django.conf import settings
 from apps.emails import mailer
 from apps.emails.utils import resolve_recipient_fallbacks
 from apps.nodes.models import Node
+from config.active_app import get_active_app
+from utils.loggers.filenames import normalize_log_filename
 from utils.loggers.rotation import TRANSACTIONAL_LOG_RETENTION_DAYS
 
 logger = logging.getLogger(__name__)
@@ -91,8 +93,14 @@ def _is_managed_transactional_log(path: Path, *, archive_dir: Path) -> bool:
     return False
 
 
+def _active_app_log_basename() -> str:
+    return f"{normalize_log_filename(get_active_app())}.log"
+
+
 def _is_protected_active_log(path: Path, *, archive_dir: Path) -> bool:
-    return path.parent != archive_dir and path.name in MANAGED_LOG_BASENAMES
+    return path.parent != archive_dir and (
+        path.name in MANAGED_LOG_BASENAMES or path.name == _active_app_log_basename()
+    )
 
 
 def _retention_days_for(path: Path, *, archive_dir: Path) -> int:

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from apps.core.tasks import log_retention
+from config.active_app import active_app
 
 
 def _write_file(path: Path, *, days_old: int) -> None:
@@ -55,6 +56,17 @@ def test_run_log_retention_preserves_managed_active_artifacts(
 
     assert result.deleted_files == 0
     assert (tmp_path / "rfid-scans.ndjson").exists()
+
+
+def test_run_log_retention_preserves_dynamic_active_app_log(settings, tmp_path):
+    settings.LOG_DIR = str(tmp_path)
+    _write_file(tmp_path / "front-desk.log", days_old=365)
+
+    with active_app("front-desk"):
+        result = log_retention._run_log_retention()
+
+    assert result.deleted_files == 0
+    assert (tmp_path / "front-desk.log").exists()
 
 
 def test_run_log_retention_preserves_non_log_files(settings, tmp_path):
