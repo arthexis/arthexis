@@ -236,6 +236,41 @@ def test_subscribe_rolls_back_new_authorization_when_activity_log_fails(tmp_path
     assert "aa:bb:cc:dd:ee:ff" not in state._authorized
 
 
+def test_subscribe_resyncs_firewall_when_file_rollback_fails(tmp_path):
+    module = load_portal_module()
+    config = make_config(module, tmp_path)
+    state = module.PortalState(config)
+    config = module.PortalConfig(
+        bind=config.bind,
+        port=config.port,
+        assets_dir=config.assets_dir,
+        state_dir=config.state_dir,
+        authorized_macs_path=config.authorized_macs_path,
+        consents_path=config.consents_path,
+        activity_path=config.activity_path,
+        source_url=config.source_url,
+        sync_firewall=True,
+    )
+    state.config = config
+    state.resolve_mac = lambda _ip: "aa:bb:cc:dd:ee:ff"
+    synced_macs = []
+    state._firewall.sync = lambda macs: synced_macs.append(set(macs))
+    state.activity.record = lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("activity log unavailable"))
+    state._restore_consent_log = lambda _position: (_ for _ in ()).throw(OSError("consent rollback failed"))
+
+    with pytest.raises(OSError, match="consent rollback failed"):
+        state.subscribe(
+            email="guest@example.com",
+            accept_terms=True,
+            ip_address="10.42.0.25",
+            user_agent="client-test",
+            host="arthexis.net",
+        )
+
+    assert synced_macs == [{"aa:bb:cc:dd:ee:ff"}, set()]
+    assert "aa:bb:cc:dd:ee:ff" not in state._authorized
+
+
 def test_subscribe_rolls_back_new_authorization_when_authorized_write_fails(tmp_path):
     module = load_portal_module()
     config = make_config(module, tmp_path)
@@ -343,6 +378,26 @@ def test_status_records_activity_and_exposes_monitoring_paths(tmp_path):
     activity = json.loads(state.config.activity_path.read_text(encoding="utf-8").splitlines()[0])
     assert activity["event_type"] == "status_check"
     assert activity["monitoring_notice"] == module.MONITORING_NOTICE
+
+
+def test_read_events_uses_bounded_tail_without_reading_whole_file(tmp_path, monkeypatch):
+    module = load_portal_module()
+    state = module.PortalState(make_config(module, tmp_path))
+    lines = [
+        json.dumps({"event_type": "old"}),
+        json.dumps({"event_type": "middle"}),
+        json.dumps({"event_type": "new"}),
+    ]
+    state.config.activity_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def fail_read_text(*_args, **_kwargs):
+        raise AssertionError("read_events should not read the whole file")
+
+    monkeypatch.setattr(module.Path, "read_text", fail_read_text)
+
+    events = state.activity.read_events(limit=2)
+
+    assert [event["event_type"] for event in events] == ["middle", "new"]
 
 
 def test_client_summary_combines_authorization_consent_and_activity(tmp_path):

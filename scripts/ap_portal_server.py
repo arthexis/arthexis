@@ -10,6 +10,7 @@ import os
 import re
 import subprocess
 import threading
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from http import HTTPStatus
@@ -190,9 +191,12 @@ class ActivityRecorder:
     def read_events(self, limit: int = 100) -> list[dict[str, Any]]:
         if not self.config.activity_path.exists():
             return []
-        lines = self.config.activity_path.read_text(encoding="utf-8").splitlines()
+        if limit <= 0:
+            return []
         events: list[dict[str, Any]] = []
-        for line in lines[-limit:]:
+        with self.config.activity_path.open(encoding="utf-8") as handle:
+            lines = deque(handle, maxlen=limit)
+        for line in lines:
             try:
                 payload = json.loads(line)
             except json.JSONDecodeError:
@@ -423,10 +427,27 @@ class PortalState:
                         host=host,
                     )
                 except OSError:
-                    self._restore_consent_log(consent_rollback_position)
-                    self._restore_authorized_macs(previous_authorized, existed=authorized_file_existed)
-                    if self.config.sync_firewall:
-                        self._firewall.sync(previous_authorized)
+                    rollback_error = None
+                    try:
+                        self._restore_consent_log(consent_rollback_position)
+                    except OSError as exc:
+                        rollback_error = exc
+                    try:
+                        self._restore_authorized_macs(previous_authorized, existed=authorized_file_existed)
+                    except OSError as exc:
+                        if rollback_error is not None:
+                            rollback_error.add_note(str(exc))
+                        else:
+                            rollback_error = exc
+                    try:
+                        if self.config.sync_firewall:
+                            self._firewall.sync(previous_authorized)
+                    except FirewallSyncError as exc:
+                        if rollback_error is not None:
+                            exc.add_note(f"file rollback failed: {rollback_error}")
+                        raise
+                    if rollback_error is not None:
+                        raise rollback_error
                     raise
                 self._authorized = next_authorized
             else:
