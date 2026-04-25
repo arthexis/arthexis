@@ -37,7 +37,7 @@
                           <p class="text-muted small mb-0">RF card image: {{ selected_gallery_image.title }}</p>
                         {% endif %}
                       </div>
-                      <div style="width: 78px;">
+                      <div class="col-auto">
                         <label for="qty-{{ product.id }}" class="form-label small text-muted mb-1">Qty</label>
                         <input id="qty-{{ product.id }}" class="form-control form-control-sm" type="number" name="quantity" min="1" value="1" max="{{ product.stock_quantity }}">
                       </div>

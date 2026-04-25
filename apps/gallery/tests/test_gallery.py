@@ -305,6 +305,33 @@ class GalleryIndexTests(TestCase):
         self.assertEqual(matches, [visible])
         self.assertNotIn(other, matches)
 
+    def test_index_search_common_boolean_words_do_not_toggle_visibility(self):
+        title_match = create_gallery_image(
+            uploaded_file=self._upload("yes-title.jpg"),
+            title="Yes Title Match",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+        public_other = create_gallery_image(
+            uploaded_file=self._upload("public-other.jpg"),
+            title="Public Other",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+        private_other = create_gallery_image(
+            uploaded_file=self._upload("private-other.jpg"),
+            title="Private Other",
+            owner_user=self.user,
+        )
+
+        self.assertEqual(list(_apply_gallery_search(GalleryImage.objects.all(), "yes")), [title_match])
+        for query in ["no", "true", "false"]:
+            with self.subTest(query=query):
+                matches = list(_apply_gallery_search(GalleryImage.objects.all(), query))
+                self.assertNotIn(public_other, matches)
+                self.assertNotIn(private_other, matches)
+                self.assertEqual(matches, [])
+
     def test_detail_layout_includes_navigation_feedback_context_and_store_link(self):
         first = create_gallery_image(
             uploaded_file=self._upload("first.jpg"),

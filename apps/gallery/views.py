@@ -13,6 +13,8 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
+from apps.shop.models import ShopProduct
+
 from .forms import (
     GalleryCategoryForm,
     GalleryCreditForm,
@@ -139,9 +141,9 @@ def _apply_gallery_search(queryset, search_query: str, *, user=None):
     else:
         direct_fields_q |= Q(slug=parsed_uuid)
         metadata_direct_fields_q |= Q(content_sample__name=parsed_uuid)
-    if normalized_query in {"public", "published", "true", "yes"}:
+    if normalized_query in {"public", "published"}:
         direct_fields_q |= Q(include_in_public_gallery=True)
-    if normalized_query in {"private", "false", "no"}:
+    if normalized_query == "private":
         direct_fields_q |= Q(include_in_public_gallery=False)
     try:
         metadata_related_fields_q |= Q(trait_values__float_value=float(search_query))
@@ -181,8 +183,6 @@ def _gallery_navigation_for_image(*, image: GalleryImage, user, search_query: st
 
 
 def _rf_card_store_url_for_image(image: GalleryImage) -> str:
-    from apps.shop.models import ShopProduct
-
     store_is_setup = ShopProduct.objects.filter(
         is_active=True,
         stock_quantity__gt=0,
