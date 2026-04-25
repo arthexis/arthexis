@@ -6,6 +6,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
+from apps.features.models import Feature
 from apps.meta.management.commands import attention as attention_command
 from apps.meta.models import Attention, WhatsAppChatBridge
 
@@ -35,6 +36,70 @@ def test_attention_command_creates_no_send_request():
     assert attention.status == Attention.Status.PENDING
     assert attention.key in stdout.getvalue()
     assert "sent=no" in stdout.getvalue()
+
+
+@pytest.mark.django_db
+def test_attention_send_returns_false_when_whatsapp_feature_disabled(monkeypatch):
+    Feature.objects.update_or_create(
+        slug="whatsapp-chat-bridge",
+        defaults={"display": "WhatsApp Chat Bridge", "is_enabled": False},
+    )
+    bridge = WhatsAppChatBridge.objects.create(
+        phone_number_id="12345",
+        access_token="token",
+        is_default=True,
+    )
+    attention = Attention.objects.create(
+        bridge=bridge,
+        recipient="15551234567",
+        title="Attention",
+        message="Continue?",
+    )
+
+    def fail_send(*args, **kwargs):
+        raise AssertionError("send_message should not be called when feature is disabled")
+
+    monkeypatch.setattr(bridge, "send_message", fail_send)
+
+    assert attention.send() is False
+    attention.refresh_from_db()
+    assert attention.sent_at is None
+
+
+@pytest.mark.django_db
+def test_attention_send_delivers_when_whatsapp_feature_enabled(monkeypatch):
+    Feature.objects.update_or_create(
+        slug="whatsapp-chat-bridge",
+        defaults={"display": "WhatsApp Chat Bridge", "is_enabled": True},
+    )
+    bridge = WhatsAppChatBridge.objects.create(
+        phone_number_id="12345",
+        access_token="token",
+        is_default=True,
+    )
+    attention = Attention.objects.create(
+        bridge=bridge,
+        recipient="15551234567",
+        title="Attention",
+        message="Continue?",
+    )
+    calls = []
+
+    def fake_send_message(**kwargs):
+        calls.append(kwargs)
+        return True
+
+    monkeypatch.setattr(bridge, "send_message", fake_send_message)
+
+    assert attention.send() is True
+    attention.refresh_from_db()
+    assert attention.sent_at is not None
+    assert calls == [
+        {
+            "recipient": "15551234567",
+            "content": attention.notification_body(),
+        }
+    ]
 
 
 @pytest.mark.django_db

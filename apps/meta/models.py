@@ -18,6 +18,7 @@ from django.utils.translation import gettext, gettext_lazy as _
 
 from apps.chats.models import ChatBridge, ChatBridgeManager
 from apps.core.entity import Entity
+from apps.features.utils import is_suite_feature_enabled
 
 
 logger = logging.getLogger(__name__)
@@ -378,6 +379,8 @@ class Attention(Entity):
 
     def send(self) -> bool:
         if not self.bridge_id or not self.bridge or not self.recipient:
+            return False
+        if not is_suite_feature_enabled(WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG, default=True):
             return False
         sent = self.bridge.send_message(
             recipient=self.recipient,
