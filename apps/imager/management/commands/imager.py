@@ -108,6 +108,11 @@ class Command(BaseCommand):
                 "May be repeated to avoid bundling key material in repository files."
             ),
         )
+        build_parser.add_argument(
+            "--skip-recovery-ssh",
+            action="store_true",
+            help="Intentionally disable recovery SSH setup for this build.",
+        )
 
         subparsers.add_parser("devices", help="List candidate block devices for image writing.")
         subparsers.add_parser("list", help="List generated Raspberry Pi image artifacts.")
@@ -161,7 +166,18 @@ class Command(BaseCommand):
             file_paths=[str(path) for path in options.get("recovery_authorized_key_file", [])],
             inline_keys=[str(key) for key in options.get("recovery_authorized_key", [])],
         )
+        skip_recovery_ssh = options["skip_recovery_ssh"]
+        customize = not options["skip_customize"]
         recovery_ssh_user = str(options["recovery_ssh_user"]).strip()
+        if skip_recovery_ssh and (recovery_authorized_keys or recovery_ssh_user):
+            raise CommandError(
+                "--skip-recovery-ssh cannot be combined with recovery SSH key options or --recovery-ssh-user."
+            )
+        if customize and not skip_recovery_ssh and not recovery_authorized_keys:
+            raise CommandError(
+                "Recovery SSH is required for customized image builds. "
+                "Provide --recovery-authorized-key-file/--recovery-authorized-key or pass --skip-recovery-ssh to opt out."
+            )
         if recovery_authorized_keys:
             recovery_ssh_user = recovery_ssh_user or DEFAULT_RECOVERY_SSH_USER
 
@@ -172,7 +188,7 @@ class Command(BaseCommand):
                 output_dir=Path(str(options["output_dir"])),
                 download_base_uri=str(options["download_base_uri"]),
                 git_url=str(options["git_url"]),
-                customize=not bool(options["skip_customize"]),
+                customize=customize,
                 build_engine=str(options["build_engine"]),
                 profile=str(options["profile"]),
                 profile_metadata=profile_metadata,
@@ -187,6 +203,8 @@ class Command(BaseCommand):
         self.stdout.write(f"size_bytes={result.size_bytes}")
         if result.download_uri:
             self.stdout.write(f"download_uri={result.download_uri}")
+        if customize and skip_recovery_ssh:
+            self.stdout.write("recovery_ssh=disabled (--skip-recovery-ssh)")
 
     def _read_recovery_authorized_keys(
         self,
