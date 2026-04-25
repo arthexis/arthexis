@@ -114,7 +114,7 @@ def _repo_common_tokens() -> list[str]:
 
 
 def _iter_repo_token_streams():
-    base_dir = Path(settings.BASE_DIR)
+    base_dir = Path(getattr(settings, "APPS_DIR", Path(settings.BASE_DIR) / "apps"))
     include_suffixes = {".py", ".md", ".html", ".js"}
     exclude_dirs = {".git", ".venv", "node_modules"}
     for directory_name, names, files in os.walk(base_dir, onerror=lambda error: None):
