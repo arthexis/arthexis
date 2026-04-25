@@ -216,6 +216,54 @@ class ShopCheckoutTests(TestCase):
         self.assertIsNone(response.context["selected_gallery_image"])
         self.assertNotIn("shop_cart_gallery_image", self.client.session)
 
+    def test_store_clears_pending_gallery_handoff_for_invalid_query_param(self):
+        shop = Shop.objects.create(
+            name="Card Shop",
+            slug="card-shop-invalid-query-handoff",
+            default_payment_provider="stripe",
+        )
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Custom Card",
+            sku="CARD-INVALID-QUERY-HANDOFF",
+            unit_price=Decimal("10.00"),
+            stock_quantity=20,
+            supports_gallery_image_printing=True,
+            gallery_image_print_price=Decimal("3.50"),
+        )
+        owner = self._create_user("gallery-invalid-query-owner", "invalid-query@example.com")
+
+        for invalid_value in ("", "not-a-number"):
+            with self.subTest(gallery_image=invalid_value):
+                image = create_gallery_image(
+                    uploaded_file=self._upload_image(f"invalid-query-{invalid_value or 'empty'}.jpg"),
+                    title=f"Invalid Query Handoff Art {invalid_value or 'empty'}",
+                    owner_user=owner,
+                    include_in_public_gallery=True,
+                )
+                session = self.client.session
+                session["shop_cart_gallery_image"] = {
+                    "product_id": None,
+                    "gallery_image_id": str(image.id),
+                }
+                session.save()
+
+                response = self.client.get(reverse("shop:index"), {"gallery_image": invalid_value})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIsNone(response.context["selected_gallery_image"])
+                self.assertNotIn("shop_cart_gallery_image", self.client.session)
+
+                self.client.post(
+                    reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": product.id}),
+                    {"quantity": 1},
+                    follow=True,
+                )
+                checkout_response = self.client.get(reverse("shop:checkout"))
+
+                self.assertEqual(checkout_response.status_code, 200)
+                self.assertNotContains(checkout_response, f'<option value="{image.id}" selected>')
+
     def test_gallery_handoff_survives_non_customizable_add_before_card(self):
         shop = Shop.objects.create(
             name="Card Shop",

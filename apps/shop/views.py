@@ -107,10 +107,14 @@ def _selected_gallery_image_for_store(request: HttpRequest) -> GalleryImage | No
 
     selected_gallery_image_id = selected_gallery_image_id.strip()
     if not selected_gallery_image_id:
+        request.session.pop(GALLERY_HANDOFF_SESSION_KEY, None)
+        request.session.modified = True
         return None
     try:
         image_id = int(selected_gallery_image_id)
     except ValueError:
+        request.session.pop(GALLERY_HANDOFF_SESSION_KEY, None)
+        request.session.modified = True
         return None
     image = _gallery_images_for_checkout(request).filter(pk=image_id).first()
     if image is None:
