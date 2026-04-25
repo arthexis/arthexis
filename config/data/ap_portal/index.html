@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arthexis AP Access</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel" aria-labelledby="portal-title">
+        <p class="eyebrow">ARTHEXIS-1</p>
+        <h1 id="portal-title">AP activity is monitored</h1>
+        <p class="notice">
+          Your activities on this AP <strong>ARE being monitored</strong>. Arthexis records gateway-visible
+          connection metadata, portal requests, device identifiers, consent submissions, and authorization state
+          for diagnostics, safety, and quality-of-life purposes.
+        </p>
+        <p class="source">
+          The implementation is open for inspection:
+          <a id="source-link" href="https://github.com/arthexis/arthexis/blob/main/scripts/ap_portal_server.py" rel="noreferrer">view the source code</a>.
+        </p>
+
+        <form id="consent-form" novalidate>
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required />
+
+          <label class="check">
+            <input id="accept_terms" name="accept_terms" type="checkbox" required />
+            <span>I accept that my internet experience may be altered and recorded for quality of life purposes while using this access point.</span>
+          </label>
+
+          <button type="submit">Continue</button>
+        </form>
+
+        <p id="status" class="status" role="status"></p>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
