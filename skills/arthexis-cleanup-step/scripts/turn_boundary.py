@@ -9,6 +9,7 @@ import errno
 import fcntl
 import json
 import os
+import re
 import signal
 import sys
 import time
@@ -25,6 +26,7 @@ LOCK_PATH = STATE_DIR / "state.lock"
 ARCHIVE_DIR = STATE_DIR / "turns"
 DEFAULT_CLEANUP_TIMEOUT_SECONDS = 600
 TERM_GRACE_SECONDS = 15
+SAFE_TURN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 
 
 def now_iso() -> str:
@@ -44,7 +46,23 @@ def state_lock():
         yield
 
 
+def checked_state_path(path: Path) -> Path:
+    resolved = path.expanduser().resolve(strict=False)
+    state_root = STATE_DIR.expanduser().resolve(strict=False)
+    if not resolved.is_relative_to(state_root):
+        raise ValueError(f"refusing path outside turn state directory: {path}")
+    return resolved
+
+
+def safe_turn_id(value: Any) -> str:
+    turn_id = str(value or uuid.uuid4().hex)
+    if not SAFE_TURN_ID.fullmatch(turn_id):
+        raise ValueError("turn_id must contain only letters, digits, underscores, periods, or hyphens")
+    return turn_id
+
+
 def read_json(path: Path) -> dict[str, Any] | None:
+    path = checked_state_path(path)
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -55,7 +73,8 @@ def read_json(path: Path) -> dict[str, Any] | None:
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     ensure_state_dir()
-    tmp = path.with_suffix(f"{path.suffix}.tmp")
+    path = checked_state_path(path)
+    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     tmp.replace(path)
 
@@ -166,7 +185,7 @@ def live_turn_pids(state: dict[str, Any]) -> set[int]:
 
 
 def archive_state(state: dict[str, Any]) -> None:
-    turn_id = state.get("turn_id") or uuid.uuid4().hex
+    turn_id = safe_turn_id(state.get("turn_id"))
     write_json(ARCHIVE_DIR / f"{turn_id}.json", state)
 
 
@@ -177,7 +196,11 @@ def cmd_start_turn(args: argparse.Namespace) -> int:
             print(f"active_turn: {existing.get('turn_id')}")
             print("status: already-active")
             return 2
-        turn_id = args.turn_id or uuid.uuid4().hex
+        try:
+            turn_id = safe_turn_id(args.turn_id or uuid.uuid4().hex)
+        except ValueError as exc:
+            print(f"status: invalid-turn-id {exc}")
+            return 2
         state = {
             "turn_id": turn_id,
             "label": args.label or "",
