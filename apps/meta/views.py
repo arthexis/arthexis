@@ -124,6 +124,7 @@ def whatsapp_webhook(request: HttpRequest, route_key: str) -> HttpResponse:
                     from_phone=webhook_message.from_phone or webhook_message.wa_id,
                     webhook_message=webhook_message,
                     payload=message,
+                    bridge=webhook.bridge,
                 )
 
     if not feature_enabled:

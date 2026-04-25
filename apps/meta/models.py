@@ -423,13 +423,17 @@ class Attention(Entity):
         webhook_message: WhatsAppWebhookMessage | None = None,
         payload: dict | None = None,
         require_key: bool = False,
+        bridge: WhatsAppChatBridge | None = None,
     ) -> "Attention | None":
         key = cls.find_key(text)
+        bridge_id = getattr(bridge, "pk", None)
         with transaction.atomic():
             queryset = cls.objects.select_for_update().filter(status=cls.Status.PENDING)
             if key:
                 attention = queryset.filter(key__iexact=key).first()
             elif from_phone and not require_key:
+                if bridge_id is not None:
+                    queryset = queryset.filter(bridge_id=bridge_id)
                 candidates = list(queryset.filter(recipient=from_phone)[:2])
                 attention = candidates[0] if len(candidates) == 1 else None
                 if len(candidates) > 1:
