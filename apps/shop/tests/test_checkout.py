@@ -164,6 +164,38 @@ class ShopCheckoutTests(TestCase):
         self.assertEqual(checkout_response.status_code, 200)
         self.assertContains(checkout_response, f'<option value="{image.id}" selected>')
 
+    def test_repeated_add_preserves_gallery_handoff_when_redirect_omits_query(self):
+        shop = Shop.objects.create(
+            name="Card Shop",
+            slug="card-shop-repeat-handoff",
+            default_payment_provider="stripe",
+        )
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Custom Card",
+            sku="CARD-REPEAT-HANDOFF",
+            unit_price=Decimal("10.00"),
+            stock_quantity=20,
+            supports_gallery_image_printing=True,
+            gallery_image_print_price=Decimal("3.50"),
+        )
+        owner = self._create_user("gallery-repeat-owner", "repeat@example.com")
+        image = create_gallery_image(
+            uploaded_file=self._upload_image("repeat-handoff.jpg"),
+            title="Repeat Handoff Art",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+        add_url = reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": product.id})
+
+        self.client.post(add_url, {"quantity": 1, "gallery_image": image.id}, follow=True)
+        self.client.post(add_url, {"quantity": 1}, follow=True)
+
+        checkout_response = self.client.get(reverse("shop:checkout"))
+
+        self.assertEqual(checkout_response.status_code, 200)
+        self.assertContains(checkout_response, f'<option value="{image.id}" selected>')
+
     def test_add_customizable_product_without_gallery_image_clears_stale_handoff(self):
         shop = Shop.objects.create(
             name="Card Shop",

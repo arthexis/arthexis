@@ -228,6 +228,7 @@ def add_to_cart(request: HttpRequest, shop_slug: str, product_id: int) -> HttpRe
             )
 
     existing = cart.get(str(product.id))
+    existing_handoff = request.session.get("shop_cart_gallery_image") or {}
     next_qty = qty + int(existing["quantity"]) if existing else qty
 
     try:
@@ -254,8 +255,22 @@ def add_to_cart(request: HttpRequest, shop_slug: str, product_id: int) -> HttpRe
                     request.session.modified = True
                     messages.error(request, "Selected gallery image is unavailable for RF card customization.")
             else:
-                request.session.pop("shop_cart_gallery_image", None)
-                request.session.modified = True
+                existing_gallery_image_id = existing_handoff.get("gallery_image_id")
+                try:
+                    existing_gallery_image_id_int = int(existing_gallery_image_id)
+                except (TypeError, ValueError):
+                    existing_gallery_image_id_int = None
+                should_preserve_existing_handoff = (
+                    existing is not None
+                    and existing_handoff.get("product_id") == product.id
+                    and existing_gallery_image_id_int is not None
+                    and _gallery_images_for_checkout(request).filter(pk=existing_gallery_image_id_int).exists()
+                )
+                if should_preserve_existing_handoff:
+                    request.session.modified = True
+                else:
+                    request.session.pop("shop_cart_gallery_image", None)
+                    request.session.modified = True
         messages.success(request, f"Added {product.name} to cart.")
 
     return redirect("shop:index")
