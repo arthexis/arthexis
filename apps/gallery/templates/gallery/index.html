@@ -14,6 +14,23 @@
       </div>
     {% endif %}
   </div>
+  <form class="mb-4" method="get" role="search">
+    <label class="form-label" for="gallery-search">{% trans "Search image fields" %}</label>
+    <div class="input-group">
+      <input
+        id="gallery-search"
+        class="form-control"
+        type="search"
+        name="q"
+        value="{{ search_query }}"
+        placeholder="{% trans 'Search by title, ID, owner, category, trait, credit, filename, or content sample' %}"
+      >
+      <button class="btn btn-outline-primary" type="submit">{% trans "Search" %}</button>
+      {% if search_query %}
+        <a class="btn btn-outline-secondary" href="{% url 'gallery:index' %}">{% trans "Clear" %}</a>
+      {% endif %}
+    </div>
+  </form>
   <div class="row g-4">
     {% for image in images %}
       <div class="col-md-6 col-lg-4">
@@ -24,12 +41,20 @@
             {% if image.description %}
               <p class="text-muted">{{ image.description|truncatechars:120 }}</p>
             {% endif %}
-            <a class="btn btn-sm btn-outline-primary" href="{% url 'gallery:detail' slug=image.slug %}">{% trans "Open" %}</a>
+            <a class="btn btn-sm btn-outline-primary" href="{% url 'gallery:detail' slug=image.slug %}{% if search_query %}?q={{ search_query|urlencode }}{% endif %}">{% trans "Open" %}</a>
           </div>
         </div>
       </div>
     {% empty %}
-      <div class="col-12"><div class="alert alert-info">{% trans "No images yet." %}</div></div>
+      <div class="col-12">
+        <div class="alert alert-info">
+          {% if search_query %}
+            {% trans "No images matched your search." %}
+          {% else %}
+            {% trans "No images yet." %}
+          {% endif %}
+        </div>
+      </div>
     {% endfor %}
   </div>
 </div>
