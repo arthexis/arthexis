@@ -166,6 +166,22 @@ def test_run_log_retention_handles_invalid_session_json_bytes(settings, tmp_path
     assert session_log.exists()
 
 
+def test_run_log_retention_trims_large_completed_session_json(settings, tmp_path):
+    settings.LOG_DIR = str(tmp_path)
+    session_log = tmp_path / "sessions" / "CID" / "202404240001.json"
+    session_log.parent.mkdir(parents=True, exist_ok=True)
+    session_log.write_bytes(
+        b"[" + (b'{"message":"boot"},\n' * 5000) + b'{"message":"stop"}]\n'
+    )
+    stamp = (datetime.now(timezone.utc) - timedelta(days=731)).timestamp()
+    os.utime(session_log, (stamp, stamp))
+
+    result = log_retention._run_log_retention()
+
+    assert result.deleted_files == 1
+    assert not session_log.exists()
+
+
 def test_run_log_retention_sends_alert_when_disk_remains_high(settings, tmp_path, monkeypatch):
     settings.LOG_DIR = str(tmp_path)
 

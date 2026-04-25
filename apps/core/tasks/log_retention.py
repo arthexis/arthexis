@@ -38,6 +38,7 @@ MANAGED_LOG_BASENAMES = {
 LOG_ARTIFACT_SUFFIXES = {".log", ".ndjson"}
 SESSION_LOG_SUFFIXES = {".json"}
 SESSION_LOG_DIR_NAMES = {"sessions"}
+SESSION_LOG_TAIL_CHUNK_BYTES = 4096
 
 
 @dataclass(frozen=True)
@@ -92,10 +93,19 @@ def _is_in_progress_session_log(path: Path, *, log_dir: Path) -> bool:
     if not _is_session_log_artifact(path, log_dir=log_dir):
         return False
     try:
-        content = path.read_bytes().rstrip()
+        with path.open("rb") as handle:
+            handle.seek(0, 2)
+            position = handle.tell()
+            while position > 0:
+                chunk_size = min(SESSION_LOG_TAIL_CHUNK_BYTES, position)
+                position -= chunk_size
+                handle.seek(position)
+                chunk = handle.read(chunk_size).rstrip()
+                if chunk:
+                    return not chunk.endswith(b"]")
     except OSError:
         return True
-    return not content.endswith(b"]")
+    return True
 
 
 def _is_active_log_file(path: Path) -> bool:
