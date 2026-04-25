@@ -87,6 +87,7 @@ def cadence_rest_payload(
 
 def write_cadence_rest_state(turn_id: str, payload: dict[str, Any]) -> None:
     if payload["cadence_rest_seconds"] <= 0:
+        checked_state_path(CADENCE_STATE).unlink(missing_ok=True)
         return
     write_json(CADENCE_STATE, {"turn_id": safe_turn_id(turn_id), **payload})
 

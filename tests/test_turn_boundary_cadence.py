@@ -109,3 +109,74 @@ def test_cleanup_step_records_cadence_expiry_without_sleeping(tmp_path, monkeypa
     assert cadence_state["cadence_rest_expires_at"]
     archive = json.loads((module.ARCHIVE_DIR / "turn-cadence-test.json").read_text())
     assert archive["cleanup"]["cadence_rest_expires_at"] == cadence_state["cadence_rest_expires_at"]
+
+
+def test_cleanup_step_clears_stale_cadence_state_when_rest_is_skipped(tmp_path, monkeypatch):
+    module = load_turn_boundary()
+    state_dir = tmp_path / "turn-state"
+    monkeypatch.setattr(module, "STATE_DIR", state_dir)
+    monkeypatch.setattr(module, "ACTIVE_STATE", state_dir / "active-turn.json")
+    monkeypatch.setattr(module, "EVENT_LOG", state_dir / "events.jsonl")
+    monkeypatch.setattr(module, "LOCK_PATH", state_dir / "state.lock")
+    monkeypatch.setattr(module, "ARCHIVE_DIR", state_dir / "turns")
+    monkeypatch.setattr(module, "CADENCE_STATE", state_dir / "cadence-rest.json")
+    monkeypatch.setattr(module, "live_turn_process_identities", lambda state: {})
+    monkeypatch.setattr(module, "wait_for_processes", lambda state, timeout_seconds: {})
+
+    module.write_json(module.CADENCE_STATE, {"turn_id": "old-turn", "cadence_rest_seconds": 500})
+    module.write_json(
+        module.ACTIVE_STATE,
+        {
+            "turn_id": "skip-cadence-test",
+            "label": "",
+            "status": "active",
+            "started_at": dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds"),
+            "registered_processes": [],
+            "pending_end_effects": [],
+            "triggered_end_effects": [],
+        },
+    )
+    args = argparse.Namespace(timeout=0, cadence=600, skip_cadence_rest=True, force_kill=False)
+
+    assert module.cmd_cleanup_step(args) == 0
+
+    assert not module.CADENCE_STATE.exists()
+    archive = json.loads((module.ARCHIVE_DIR / "skip-cadence-test.json").read_text())
+    assert archive["cleanup"]["cadence_rest_seconds"] == 0
+    assert archive["cleanup"]["cadence_rest_skipped"] is True
+
+
+def test_cleanup_step_clears_stale_cadence_state_when_cadence_already_elapsed(tmp_path, monkeypatch):
+    module = load_turn_boundary()
+    state_dir = tmp_path / "turn-state"
+    monkeypatch.setattr(module, "STATE_DIR", state_dir)
+    monkeypatch.setattr(module, "ACTIVE_STATE", state_dir / "active-turn.json")
+    monkeypatch.setattr(module, "EVENT_LOG", state_dir / "events.jsonl")
+    monkeypatch.setattr(module, "LOCK_PATH", state_dir / "state.lock")
+    monkeypatch.setattr(module, "ARCHIVE_DIR", state_dir / "turns")
+    monkeypatch.setattr(module, "CADENCE_STATE", state_dir / "cadence-rest.json")
+    monkeypatch.setattr(module, "live_turn_process_identities", lambda state: {})
+    monkeypatch.setattr(module, "wait_for_processes", lambda state, timeout_seconds: {})
+
+    module.write_json(module.CADENCE_STATE, {"turn_id": "old-turn", "cadence_rest_seconds": 500})
+    started_at = (dt.datetime.now(dt.timezone.utc).astimezone() - dt.timedelta(seconds=601)).isoformat(timespec="seconds")
+    module.write_json(
+        module.ACTIVE_STATE,
+        {
+            "turn_id": "elapsed-cadence-test",
+            "label": "",
+            "status": "active",
+            "started_at": started_at,
+            "registered_processes": [],
+            "pending_end_effects": [],
+            "triggered_end_effects": [],
+        },
+    )
+    args = argparse.Namespace(timeout=0, cadence=600, skip_cadence_rest=False, force_kill=False)
+
+    assert module.cmd_cleanup_step(args) == 0
+
+    assert not module.CADENCE_STATE.exists()
+    archive = json.loads((module.ARCHIVE_DIR / "elapsed-cadence-test.json").read_text())
+    assert archive["cleanup"]["cadence_rest_seconds"] == 0
+    assert archive["cleanup"]["cadence_rest_skipped"] is False
