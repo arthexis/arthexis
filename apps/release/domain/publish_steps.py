@@ -12,6 +12,7 @@ from typing import Any, Protocol
 
 BUILD_RELEASE_ARTIFACTS_STEP_NAME = "Build release artifacts"
 FIXTURE_REVIEW_STEP_NAME = "Freeze, squash and approve migrations"
+TEST_PRUNING_STEP_NAME = "Prune worst 1% of tests by PR"
 
 
 class ReleaseStep(Protocol):
@@ -31,6 +32,7 @@ PUBLISH_STEPS: list[tuple[str, str]] = [
     ("Execute pre-release actions", "_step_pre_release_actions"),
     (BUILD_RELEASE_ARTIFACTS_STEP_NAME, "_step_promote_build"),
     ("Complete test suite with --all flag", "_step_run_tests"),
+    (TEST_PRUNING_STEP_NAME, "_step_prune_low_value_tests"),
     (
         "Confirm PyPI Trusted Publisher settings",
         "_step_confirm_pypi_trusted_publisher_settings",
@@ -50,4 +52,5 @@ __all__ = [
     "BUILD_RELEASE_ARTIFACTS_STEP_NAME",
     "FIXTURE_REVIEW_STEP_NAME",
     "PUBLISH_STEPS",
+    "TEST_PRUNING_STEP_NAME",
 ]

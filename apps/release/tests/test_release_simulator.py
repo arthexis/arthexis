@@ -75,8 +75,13 @@ def test_release_simulation_can_run_without_pypi_or_build(tmp_path: Path) -> Non
         "install_build_backend",
         "build_package",
         "validate_metadata",
+        "release_readiness_checklist",
         "authorization_boundary",
     ]
+    checklist_step = result.steps[-2]
+    assert "worst 1% of tests" in checklist_step.detail
+    assert "over-mocked" in checklist_step.detail
+    assert "prune the worst 1% of tests by PR" in result.summary_markdown
 
 
 def test_release_simulation_reports_version_gate_mismatch(tmp_path: Path) -> None:

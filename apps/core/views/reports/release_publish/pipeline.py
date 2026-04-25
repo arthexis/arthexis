@@ -1642,6 +1642,48 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
     _append_log(log_path, "Release test gate passed")
 
 
+def _step_prune_low_value_tests(release, ctx, log_path: Path, *, user=None) -> None:
+    """Require per-release test-suite pruning evidence.
+
+    Prerequisites: release test gate completed.
+    Side effects: records the pruning PR evidence in release context/logs.
+    Rollback expectations: no rollback; missing evidence pauses progression.
+    """
+    _ = release, user
+    _append_log(log_path, "Prune worst 1% of tests by PR")
+    pruning_result = ctx.get("test_pruning_result")
+    pruning_pr_url = str(ctx.get("test_pruning_pr_url") or "").strip()
+    if isinstance(pruning_result, dict) and pruning_result.get("success") is True:
+        pruning_pr_url = str(pruning_result.get("pr_url") or pruning_pr_url).strip()
+    elif not pruning_pr_url:
+        _fail_release_gate(
+            ctx,
+            log_path,
+            "Release readiness blocked: prune the worst 1% of tests by PR before "
+            "publishing. Prioritize low-value, duplicate, over-mocked, confusing, "
+            "or misleading tests. Record test_pruning_pr_url or "
+            "test_pruning_result.success=true in the release context and rerun.",
+        )
+
+    ctx["test_pruning_result"] = {
+        "success": True,
+        "source": "release_context",
+        "pr_url": pruning_pr_url,
+        "criteria": [
+            "low value",
+            "duplicate",
+            "over-mocked",
+            "confusing",
+            "misleading",
+        ],
+    }
+    _append_log(
+        log_path,
+        "Test pruning gate passed"
+        + (f" using PR {pruning_pr_url}" if pruning_pr_url else ""),
+    )
+
+
 def _step_confirm_pypi_trusted_publisher_settings(
     release, ctx, log_path: Path, *, user=None
 ) -> None:
@@ -2339,6 +2381,7 @@ _STEP_HANDLER_MAP = {
     "_step_pre_release_actions": _step_pre_release_actions,
     "_step_promote_build": _step_promote_build,
     "_step_record_publish_metadata": _step_record_publish_metadata,
+    "_step_prune_low_value_tests": _step_prune_low_value_tests,
     "_step_run_tests": _step_run_tests,
     "_step_verify_release_environment": _step_verify_release_environment,
     "_step_wait_for_github_actions_publish": _step_wait_for_github_actions_publish,

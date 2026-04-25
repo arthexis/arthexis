@@ -29,6 +29,10 @@ BUILD_SKIPPED_DETAIL = "Build was skipped by caller."
 PYPI_USER_AGENT = "arthexis-release-simulator"
 SIMULATION_RESULT_HEADING = "### Simulation result"
 SUBPROCESS_TIMEOUT_SECONDS = 1800.0
+TEST_PRUNING_CHECKLIST_ACTIVITY = (
+    "Prune the worst 1% of tests by PR, prioritizing low-value, duplicate, "
+    "over-mocked, confusing, or misleading tests."
+)
 
 
 @dataclass
@@ -240,6 +244,13 @@ def run_release_simulation(
                 )
             )
 
+        steps.append(
+            SimulationStep(
+                name="release_readiness_checklist",
+                outcome="passed",
+                detail=TEST_PRUNING_CHECKLIST_ACTIVITY,
+            )
+        )
         steps.append(
             SimulationStep(
                 name="authorization_boundary",
@@ -617,6 +628,7 @@ def _success_summary() -> str:
             "",
             "- OK Release simulation reached the authorization boundary successfully.",
             "- INFO Publish to PyPI was intentionally skipped because authorization is required.",
+            "- TODO Release readiness: prune the worst 1% of tests by PR before every release.",
             "- OK Recommendation: release is ready if maintainers approve "
             "and trigger a real publish.",
         ]

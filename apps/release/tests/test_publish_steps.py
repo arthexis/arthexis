@@ -14,6 +14,7 @@ EXPECTED_STEP_ORDER = [
     "Execute pre-release actions",
     "Build release artifacts",
     "Complete test suite with --all flag",
+    "Prune worst 1% of tests by PR",
     "Confirm PyPI Trusted Publisher settings",
     "Verify release environment",
     "Export artifacts and push release tag",
@@ -21,4 +22,15 @@ EXPECTED_STEP_ORDER = [
     "Record publish URLs & update fixtures",
     "Capture PyPI publish logs",
 ]
+
+
+def test_release_publish_steps_share_canonical_order() -> None:
+    assert [name for name, _handler in DOMAIN_PUBLISH_STEPS] == EXPECTED_STEP_ORDER
+    assert [name for name, _handler in UI_PUBLISH_STEPS] == EXPECTED_STEP_ORDER
+
+
+def test_headless_release_workflow_uses_canonical_order() -> None:
+    workflow = _build_release_workflow()
+
+    assert [step.name for step in workflow.steps] == EXPECTED_STEP_ORDER
 
