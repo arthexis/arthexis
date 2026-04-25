@@ -80,6 +80,8 @@ def _is_log_artifact(path: Path, *, log_dir: Path) -> bool:
 
 
 def _is_session_log_artifact(path: Path, *, log_dir: Path) -> bool:
+    """Return True when *path* is a session JSON artifact under LOG_DIR/sessions."""
+
     if path.suffix.lower() not in SESSION_LOG_SUFFIXES:
         return False
     try:
@@ -89,8 +91,27 @@ def _is_session_log_artifact(path: Path, *, log_dir: Path) -> bool:
     return bool(relative_parts) and relative_parts[0] in SESSION_LOG_DIR_NAMES
 
 
-def _is_in_progress_session_log(path: Path, *, log_dir: Path) -> bool:
+def _is_in_progress_session_log(
+    path: Path,
+    *,
+    log_dir: Path,
+    now: datetime | None = None,
+) -> bool:
+    """Return True when a recent session JSON array appears to still be open.
+
+    Session writers create JSON arrays incrementally, so recent files without a
+    closing bracket are preserved. Files older than the normal retention horizon
+    are not treated as active, which lets orphaned partial logs age out.
+    """
+
     if not _is_session_log_artifact(path, log_dir=log_dir):
+        return False
+    try:
+        modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        return True
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=MAX_LOG_RETENTION_DAYS)
+    if modified < cutoff:
         return False
     try:
         with path.open("rb") as handle:
