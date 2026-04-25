@@ -64,7 +64,7 @@ def remove_presets(apps, schema_editor):
     templates = HypergeometricTemplate.objects.using(db_alias)
     for preset in PRESETS:
         templates.filter(
-            **preset,
+            name=preset["name"],
             is_seed_data=True,
         ).delete()
 

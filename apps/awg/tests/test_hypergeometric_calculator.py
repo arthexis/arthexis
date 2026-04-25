@@ -121,12 +121,20 @@ def test_hypergeometric_preset_migration_reverse_removes_only_seed_rows(db):
     hypergeometric_presets_migration.create_presets(
         MigrationApps(), MigrationSchemaEditor()
     )
+    HypergeometricTemplate.objects.filter(
+        name="60-card Standard",
+        is_seed_data=True,
+    ).update(description="Admin edited seeded preset")
 
     hypergeometric_presets_migration.remove_presets(
         MigrationApps(), MigrationSchemaEditor()
     )
 
     assert HypergeometricTemplate.objects.filter(pk=user_template.pk).exists()
+    assert HypergeometricTemplate.objects.filter(
+        pk=user_template.pk,
+        description="User standard preset",
+    ).exists()
     assert not HypergeometricTemplate.objects.filter(is_seed_data=True).exists()
 
 
