@@ -119,6 +119,7 @@ def proc_identity(pid: int) -> dict[str, Any] | None:
     rest = stat[close + 2 :].split()
     if len(rest) < 20:
         return None
+    proc_state = rest[0]
     uid = None
     for line in status.splitlines():
         if line.startswith("Uid:"):
@@ -130,14 +131,23 @@ def proc_identity(pid: int) -> dict[str, Any] | None:
         "pid": pid,
         "ppid": int(rest[1]),
         "comm": comm,
+        "state": proc_state,
         "start_ticks": int(rest[19]),
         "uid": uid,
     }
 
 
+def process_identity_is_live(identity: dict[str, Any]) -> bool:
+    return identity.get("state") != "Z"
+
+
 def process_matches(record: dict[str, Any]) -> bool:
     identity = proc_identity(int(record.get("pid", 0)))
-    if identity is None or identity.get("uid") != os.getuid():
+    if (
+        identity is None
+        or identity.get("uid") != os.getuid()
+        or not process_identity_is_live(identity)
+    ):
         return False
     return identity.get("start_ticks") == record.get("start_ticks")
 
@@ -179,7 +189,11 @@ def process_identity_matches(snapshot: dict[str, Any]) -> bool:
     if type(pid) is not int or pid <= 1 or pid == os.getpid():
         return False
     identity = proc_identity(pid)
-    if identity is None or identity.get("uid") != os.getuid():
+    if (
+        identity is None
+        or identity.get("uid") != os.getuid()
+        or not process_identity_is_live(identity)
+    ):
         return False
     return identity.get("start_ticks") == snapshot.get("start_ticks")
 
@@ -194,7 +208,11 @@ def live_turn_process_identities(state: dict[str, Any]) -> dict[int, dict[str, A
         if pid <= 1 or pid == current_pid:
             continue
         identity = proc_identity(pid)
-        if identity is not None and identity.get("uid") == own_uid:
+        if (
+            identity is not None
+            and identity.get("uid") == own_uid
+            and process_identity_is_live(identity)
+        ):
             safe[pid] = identity
     return safe
 
@@ -404,7 +422,7 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
             "lingering_after_wait": sorted(lingering),
             **termination,
         }
-        if termination["still_alive"] and not args.force_kill:
+        if termination["still_alive"]:
             state["status"] = "active"
             write_json(ACTIVE_STATE, state)
             append_event({"event": "cleanup-incomplete", "turn_id": state["turn_id"], "cleanup": state["cleanup"]})
