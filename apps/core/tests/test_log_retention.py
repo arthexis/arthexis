@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from apps.core.tasks import log_retention
-from config.active_app import active_app
 
 
 def _write_file(path: Path, *, days_old: int) -> None:
@@ -58,15 +57,16 @@ def test_run_log_retention_preserves_managed_active_artifacts(
     assert (tmp_path / "rfid-scans.ndjson").exists()
 
 
-def test_run_log_retention_preserves_dynamic_active_app_log(settings, tmp_path):
+def test_run_log_retention_preserves_dynamic_root_active_app_logs(settings, tmp_path):
     settings.LOG_DIR = str(tmp_path)
     _write_file(tmp_path / "front-desk.log", days_old=365)
+    _write_file(tmp_path / "back-office.log", days_old=365)
 
-    with active_app("front-desk"):
-        result = log_retention._run_log_retention()
+    result = log_retention._run_log_retention()
 
     assert result.deleted_files == 0
     assert (tmp_path / "front-desk.log").exists()
+    assert (tmp_path / "back-office.log").exists()
 
 
 def test_run_log_retention_preserves_non_log_files(settings, tmp_path):
@@ -79,15 +79,15 @@ def test_run_log_retention_preserves_non_log_files(settings, tmp_path):
     assert (tmp_path / "content-drops" / "sample.json").exists()
 
 
-def test_run_log_retention_trims_stale_unmanaged_active_logs(settings, tmp_path):
+def test_run_log_retention_trims_stale_unmanaged_rotated_logs(settings, tmp_path):
     settings.LOG_DIR = str(tmp_path)
-    _write_file(tmp_path / "command.log", days_old=731)
+    _write_file(tmp_path / "command.log.1", days_old=731)
     _write_file(tmp_path / "error.log", days_old=365)
 
     result = log_retention._run_log_retention()
 
     assert result.deleted_files == 1
-    assert not (tmp_path / "command.log").exists()
+    assert not (tmp_path / "command.log.1").exists()
     assert (tmp_path / "error.log").exists()
 
 
