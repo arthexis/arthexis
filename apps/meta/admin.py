@@ -4,7 +4,59 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.features.utils import is_suite_feature_enabled
 from apps.locals.user_data import EntityModelAdmin
-from apps.meta.models import WhatsAppWebhook, WhatsAppWebhookMessage
+from apps.meta.models import Attention, WhatsAppWebhook, WhatsAppWebhookMessage
+
+
+@admin.register(Attention)
+class AttentionAdmin(EntityModelAdmin):
+    list_display = (
+        "key",
+        "title",
+        "status",
+        "agent",
+        "recipient",
+        "created_at",
+        "responded_at",
+    )
+    list_filter = ("status", "severity", "bridge")
+    search_fields = ("key", "title", "message", "response_text", "agent", "recipient")
+    readonly_fields = (
+        "key",
+        "status",
+        "created_at",
+        "sent_at",
+        "responded_at",
+        "response_from_phone",
+        "response_text",
+        "response_payload",
+        "response_message",
+        "is_seed_data",
+        "is_user_data",
+        "is_deleted",
+    )
+    fieldsets = (
+        (None, {"fields": ("key", "title", "message", "severity", "status")}),
+        (_("Delivery"), {"fields": ("bridge", "recipient", "agent", "sent_at")}),
+        (
+            _("Response"),
+            {
+                "fields": (
+                    "responded_at",
+                    "response_from_phone",
+                    "response_text",
+                    "response_message",
+                    "response_payload",
+                )
+            },
+        ),
+        (
+            _("Flags"),
+            {
+                "fields": ("is_seed_data", "is_user_data", "is_deleted"),
+                "classes": ("collapse",),
+            },
+        ),
+    )
 
 
 @admin.register(WhatsAppWebhook)

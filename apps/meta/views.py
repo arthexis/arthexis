@@ -13,7 +13,7 @@ from django.http import HttpRequest, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.features.utils import is_suite_feature_enabled
-from apps.meta.models import WhatsAppWebhook, WhatsAppWebhookMessage
+from apps.meta.models import Attention, WhatsAppWebhook, WhatsAppWebhookMessage
 
 
 def _iter_messages(payload: dict[str, Any]):
@@ -101,7 +101,7 @@ def whatsapp_webhook(request: HttpRequest, route_key: str) -> HttpResponse:
 
             text = message.get("text") if isinstance(message.get("text"), dict) else {}
             context = message.get("context") if isinstance(message.get("context"), dict) else {}
-            WhatsAppWebhookMessage.objects.update_or_create(
+            webhook_message, _created = WhatsAppWebhookMessage.objects.update_or_create(
                 webhook=webhook,
                 message_id=message_id,
                 defaults={
@@ -118,6 +118,13 @@ def whatsapp_webhook(request: HttpRequest, route_key: str) -> HttpResponse:
                     "payload": message,
                 },
             )
+            if feature_enabled and webhook_message.text_body:
+                Attention.capture_response(
+                    text=webhook_message.text_body,
+                    from_phone=webhook_message.from_phone or webhook_message.wa_id,
+                    webhook_message=webhook_message,
+                    payload=message,
+                )
 
     if not feature_enabled:
         return HttpResponse("accepted without bridge activity", status=202)
