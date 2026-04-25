@@ -13,7 +13,13 @@ from apps.media.models import MediaFile
 from apps.shop.models import Shop, ShopProduct
 
 from ..constants import GALLERY_MANAGER_GROUP_NAME
-from ..models import GalleryCategory, GalleryImage, GalleryImageTrait, GalleryTrait
+from ..models import (
+    GalleryCategory,
+    GalleryCredit,
+    GalleryImage,
+    GalleryImageTrait,
+    GalleryTrait,
+)
 from ..services import create_gallery_image
 from ..views import _apply_gallery_search
 
@@ -117,6 +123,54 @@ class GalleryIndexTests(TestCase):
         self.assertNotContains(response, "Forest")
         self.assertEqual(list(response.context["images"]), [visible])
         self.assertNotIn(hidden, list(response.context["images"]))
+
+    def test_index_search_combines_direct_and_multivalued_matches_by_pk(self):
+        direct_match = create_gallery_image(
+            uploaded_file=self._upload("direct.jpg"),
+            title="Citrine Skyline",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+        related_match = create_gallery_image(
+            uploaded_file=self._upload("related.jpg"),
+            title="Related Match",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+        hidden = create_gallery_image(
+            uploaded_file=self._upload("hidden.jpg"),
+            title="Forest",
+            owner_user=self.user,
+            include_in_public_gallery=True,
+        )
+        category = GalleryCategory.objects.create(name="Palette", slug="palette")
+        trait = GalleryTrait.objects.create(name="Mood", slug="mood")
+        GalleryImageTrait.objects.create(
+            image=related_match,
+            category=category,
+            trait=trait,
+            qualitative_value="citrine",
+        )
+        GalleryCredit.objects.create(
+            image=related_match,
+            display_name="Citrine Archive",
+        )
+
+        matches = list(_apply_gallery_search(GalleryImage.objects.all(), "citrine").order_by("title"))
+
+        self.assertEqual(matches, [direct_match, related_match])
+        self.assertNotIn(hidden, matches)
+
+    def test_index_search_keeps_multivalued_joins_inside_pk_subqueries(self):
+        queryset = _apply_gallery_search(GalleryImage.objects.all(), "citrine")
+
+        sql = str(queryset.query)
+        outer_select = sql.split(" WHERE ", 1)[0]
+
+        self.assertIn(" IN (SELECT ", sql)
+        self.assertNotIn("apps_gallery_galleryimage_categories", outer_select)
+        self.assertNotIn("apps_gallery_gallerycredit", outer_select)
+        self.assertNotIn("apps_gallery_galleryimagetrait", outer_select)
 
     def test_index_search_matches_exact_ids_without_partial_numeric_matches(self):
         visible = create_gallery_image(

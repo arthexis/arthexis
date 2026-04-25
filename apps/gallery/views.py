@@ -79,7 +79,7 @@ def _apply_gallery_search(queryset, search_query: str):
     if not search_query:
         return queryset
 
-    filter_q = (
+    direct_fields_q = (
         Q(title__icontains=search_query)
         | Q(description__icontains=search_query)
         | Q(owner_user__username__icontains=search_query)
@@ -96,7 +96,9 @@ def _apply_gallery_search(queryset, search_query: str):
         | Q(content_sample__path__icontains=search_query)
         | Q(content_sample__method__icontains=search_query)
         | Q(content_sample__hash__icontains=search_query)
-        | Q(categories__name__icontains=search_query)
+    )
+    related_fields_q = (
+        Q(categories__name__icontains=search_query)
         | Q(categories__slug__icontains=search_query)
         | Q(categories__description__icontains=search_query)
         | Q(credits__display_name__icontains=search_query)
@@ -116,7 +118,7 @@ def _apply_gallery_search(queryset, search_query: str):
     )
     normalized_query = search_query.casefold()
     try:
-        filter_q |= Q(id=int(search_query))
+        direct_fields_q |= Q(id=int(search_query))
     except ValueError:
         pass
     try:
@@ -124,16 +126,19 @@ def _apply_gallery_search(queryset, search_query: str):
     except ValueError:
         pass
     else:
-        filter_q |= Q(slug=parsed_uuid) | Q(content_sample__name=parsed_uuid)
+        direct_fields_q |= Q(slug=parsed_uuid) | Q(content_sample__name=parsed_uuid)
     if normalized_query in {"public", "published", "true", "yes"}:
-        filter_q |= Q(include_in_public_gallery=True)
+        direct_fields_q |= Q(include_in_public_gallery=True)
     if normalized_query in {"private", "false", "no"}:
-        filter_q |= Q(include_in_public_gallery=False)
+        direct_fields_q |= Q(include_in_public_gallery=False)
     try:
-        filter_q |= Q(trait_values__float_value=float(search_query))
+        related_fields_q |= Q(trait_values__float_value=float(search_query))
     except ValueError:
         pass
-    return queryset.filter(filter_q).distinct()
+
+    direct_match_ids = queryset.filter(direct_fields_q).values_list("id", flat=True)
+    related_match_ids = queryset.filter(related_fields_q).values_list("id", flat=True).distinct()
+    return queryset.filter(Q(id__in=direct_match_ids) | Q(id__in=related_match_ids))
 
 
 def _gallery_navigation_for_image(*, image: GalleryImage, user, search_query: str):
