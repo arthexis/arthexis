@@ -568,6 +568,7 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
     assert "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf" in written_files
     assert "/boot/firstrun.sh" in written_files
 
+    bootstrap_script, bootstrap_mode = written_files["/usr/local/bin/arthexis-bootstrap.sh"]
     recovery_script, recovery_mode = written_files["/usr/local/bin/arthexis-recovery-access.sh"]
     recovery_keys, keys_mode = written_files["/usr/local/share/arthexis/recovery_authorized_keys"]
     recovery_service, recovery_service_mode = written_files[
@@ -576,6 +577,10 @@ def test_customize_image_writes_recovery_ssh_files_when_authorized_keys_provided
     firstrun_script, _firstrun_mode = written_files["/boot/firstrun.sh"]
     sshd_config, sshd_mode = written_files["/etc/ssh/sshd_config.d/20-arthexis-recovery.conf"]
 
+    assert bootstrap_mode == "0755"
+    assert "missing_packages+=(git ca-certificates)" in bootstrap_script
+    assert "apt-get install -y --no-install-recommends" in bootstrap_script
+    assert bootstrap_script.index("apt-get install") < bootstrap_script.index("git clone")
     assert recovery_mode == "0755"
     assert keys_mode == "0600"
     assert sshd_mode == "0644"
