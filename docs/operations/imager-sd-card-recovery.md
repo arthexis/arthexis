@@ -15,6 +15,7 @@ Build a Raspberry Pi image artifact with first-boot bootstrap scripts:
 .venv/bin/python manage.py imager build \
   --name stable \
   --base-image-uri /path/to/raspios.img.xz \
+  --skip-recovery-ssh \
   --download-base-uri https://downloads.example.com/images
 ```
 
@@ -118,3 +119,5 @@ What this adds:
 - password login disabled in the generated image's SSH config
 
 This is intended to give operators a safe default recovery path over the address the device gets on `eth0` before Arthexis finishes bootstrapping.
+
+Recovery SSH key provisioning is required for customized builds unless you intentionally opt out with `--skip-recovery-ssh`.
