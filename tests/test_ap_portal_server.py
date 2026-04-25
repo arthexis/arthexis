@@ -565,3 +565,27 @@ def test_read_limited_request_body_rejects_negative_length_before_reading():
 
     with pytest.raises(ValueError, match="Invalid Content-Length"):
         module._read_limited_request_body(headers, io.BytesIO(b"email=guest@example.com"))
+
+
+def test_subscribe_post_returns_json_error_when_request_logging_fails(tmp_path):
+    module = load_portal_module()
+    handler_class = module.PortalApplication(make_config(module, tmp_path)).handler_class()
+    handler = object.__new__(handler_class)
+    handler.path = "/api/subscribe"
+    responses = []
+
+    def fail_record(_path):
+        raise OSError("activity log unavailable")
+
+    handler._record_request = fail_record
+    handler._json = lambda payload, status=module.HTTPStatus.OK: responses.append((payload, status))
+    handler._read_payload = lambda: (_ for _ in ()).throw(AssertionError("payload should not be read"))
+
+    handler.do_POST()
+
+    assert responses == [
+        (
+            {"error": "Unable to record consent right now.", "details": "activity log unavailable"},
+            module.HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
+    ]

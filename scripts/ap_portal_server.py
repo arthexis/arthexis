@@ -594,8 +594,8 @@ class PortalApplication:
                 if parsed.path != "/api/subscribe":
                     self.send_error(HTTPStatus.NOT_FOUND)
                     return
-                self._record_request(parsed.path)
                 try:
+                    self._record_request(parsed.path)
                     data = self._read_payload()
                     result = app.state.subscribe(
                         email=str(data.get("email") or ""),
