@@ -244,6 +244,8 @@ class Command(BaseCommand):
                 label = path.parent.name if path.parent != root else root.name
             name = label.replace("-", " ").replace("_", " ").strip().title() or "Unlabeled"
             slug = slugify(label) or "unlabeled"
+            slug = self._compact_value(slug, ClassificationTag._meta.get_field("slug").max_length)
+            name = self._compact_value(name, ClassificationTag._meta.get_field("name").max_length)
 
         cached_tag = self._tag_cache.get(slug)
         if cached_tag is not None:

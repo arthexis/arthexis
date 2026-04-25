@@ -53,6 +53,24 @@ def test_import_training_images_creates_unverified_samples_from_parent_folders(t
 
 
 @pytest.mark.django_db
+def test_import_training_images_compacts_long_folder_labels(tmp_path):
+    prefix_a = "alpha-" * 18
+    prefix_b = "bravo-" * 18
+    shared_suffix = "shared-long-training-label"
+    _write_image(tmp_path / f"{prefix_a}{shared_suffix}" / "first.png", (200, 20, 20))
+    _write_image(tmp_path / f"{prefix_b}{shared_suffix}" / "second.png", (20, 20, 200))
+
+    call_command("import_training_images", str(tmp_path))
+
+    tags = list(ClassificationTag.objects.order_by("slug"))
+    assert len(tags) == 2
+    assert {len(tag.slug) for tag in tags} == {ClassificationTag._meta.get_field("slug").max_length}
+    assert all(len(tag.name) <= ClassificationTag._meta.get_field("name").max_length for tag in tags)
+    assert tags[0].slug != tags[1].slug
+    assert TrainingSample.objects.count() == 2
+
+
+@pytest.mark.django_db
 def test_import_training_images_can_verify_and_reuse_existing_samples(tmp_path):
     _write_image(tmp_path / "seed" / "first.png", (20, 200, 20))
 
