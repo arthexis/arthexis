@@ -147,6 +147,69 @@ def test_whatsapp_webhook_captures_attention_response(client):
 
 
 @pytest.mark.django_db
+def test_whatsapp_webhook_does_not_capture_keyed_response_across_bridges(client):
+    site_a = Site.objects.create(domain="key-bridge-a.example.test", name="key bridge a")
+    site_b = Site.objects.create(domain="key-bridge-b.example.test", name="key bridge b")
+    bridge_a = WhatsAppChatBridge.objects.create(
+        site=site_a,
+        phone_number_id="12345",
+        access_token="token-a",
+    )
+    bridge_b = WhatsAppChatBridge.objects.create(
+        site=site_b,
+        phone_number_id="67890",
+        access_token="token-b",
+    )
+    webhook_b = WhatsAppWebhook.objects.create(
+        bridge=bridge_b,
+        route_key="route-key-cross-bridge-key",
+        verify_token="verify-token-cross-bridge-key",
+    )
+    attention = Attention.objects.create(
+        bridge=bridge_a,
+        recipient="15551234567",
+        title="Attention",
+        message="Continue?",
+    )
+    payload = {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "contacts": [{"wa_id": "15551234567"}],
+                            "messages": [
+                                {
+                                    "id": "wamid.CROSS.BRIDGE.KEY",
+                                    "from": "15551234567",
+                                    "type": "text",
+                                    "text": {"body": f"{attention.key} approved"},
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+
+    response = client.post(
+        reverse("meta:whatsapp-webhook", kwargs={"route_key": webhook_b.route_key}),
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    attention.refresh_from_db()
+    assert attention.status == Attention.Status.PENDING
+    assert attention.response_text == ""
+    assert WhatsAppWebhookMessage.objects.filter(
+        webhook=webhook_b,
+        message_id="wamid.CROSS.BRIDGE.KEY",
+    ).exists()
+
+
+@pytest.mark.django_db
 def test_whatsapp_webhook_captures_phone_fallback_for_same_bridge(client):
     site = Site.objects.create(domain="same-bridge.example.test", name="same bridge")
     bridge = WhatsAppChatBridge.objects.create(
