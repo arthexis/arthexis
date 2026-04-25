@@ -11,6 +11,7 @@ from apps.meta.models import Attention, WhatsAppChatBridge
 
 
 CONNECTION_CLEANUP_INTERVAL = 60.0
+ATTENTION_KEY_HELP = "Attention key"
 
 
 class Command(BaseCommand):
@@ -38,17 +39,17 @@ class Command(BaseCommand):
         ask.add_argument("--poll-interval", type=float, default=1.0, help="Wait polling interval")
 
         wait = subparsers.add_parser("wait", help="Wait for an Attention response")
-        wait.add_argument("key", help="Attention key")
+        wait.add_argument("key", help=ATTENTION_KEY_HELP)
         wait.add_argument(
             "--timeout", type=float, default=0, help="Seconds to wait; 0 means forever"
         )
         wait.add_argument("--poll-interval", type=float, default=1.0, help="Wait polling interval")
 
         show = subparsers.add_parser("show", help="Show an Attention request")
-        show.add_argument("key", help="Attention key")
+        show.add_argument("key", help=ATTENTION_KEY_HELP)
 
         respond = subparsers.add_parser("respond", help="Record a manual Attention response")
-        respond.add_argument("key", help="Attention key")
+        respond.add_argument("key", help=ATTENTION_KEY_HELP)
         respond.add_argument("message", help="Response message")
         respond.add_argument("--from-phone", default="", help="Response sender phone")
         respond.add_argument(
@@ -138,6 +139,8 @@ class Command(BaseCommand):
                 self.stdout.write(f"response_from={attention.response_from_phone}")
                 self.stdout.write(f"response={attention.response_text}")
                 return None
+            if attention.status == Attention.Status.CANCELLED:
+                raise CommandError(f"Attention {attention.key} was cancelled")
             if deadline is not None and time.monotonic() >= deadline:
                 raise CommandError(f"Timed out waiting for Attention {attention.key}")
             time.sleep(poll_interval)

@@ -171,6 +171,27 @@ def test_attention_command_wait_returns_when_delivery_succeeds(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_attention_command_wait_fails_fast_when_attention_cancelled(monkeypatch):
+    attention = Attention.objects.create(
+        recipient="15551234567",
+        title="Attention",
+        message="Continue?",
+        status=Attention.Status.CANCELLED,
+    )
+
+    monkeypatch.setattr(attention_command, "close_old_connections", lambda: None)
+
+    with pytest.raises(CommandError, match=f"Attention {attention.key} was cancelled"):
+        call_command(
+            "attention",
+            "wait",
+            attention.key,
+            "--poll-interval",
+            "0.1",
+        )
+
+
+@pytest.mark.django_db
 def test_attention_command_records_manual_response():
     attention = Attention.objects.create(
         recipient="15551234567",
