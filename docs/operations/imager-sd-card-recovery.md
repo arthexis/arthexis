@@ -98,7 +98,9 @@ When `--artifact` is used, the artifact record stores `metadata.last_write` with
 
 ## Recovery SSH customization
 
-For field recovery images, bake in a key-only SSH lane before writing media:
+For field recovery images, bake in a key-only SSH lane before writing media. This is the
+quick-recovery path to use when an SD card must be reachable over `eth0` before the full
+Arthexis bootstrap is healthy:
 
 ```bash
 .venv/bin/python manage.py imager build \
@@ -117,7 +119,22 @@ What this adds:
 - `authorized_keys` for the provided public key file(s)
 - `ssh` enabled and started on first boot
 - password login disabled in the generated image's SSH config
+- directly enabled systemd units for recovery access and Arthexis bootstrap, so recovery
+  SSH does not depend on the slower bootstrap path or on an external writer step
 
 This is intended to give operators a safe default recovery path over the address the device gets on `eth0` before Arthexis finishes bootstrapping.
 
 Recovery SSH key provisioning is required for customized builds unless you intentionally opt out with `--skip-recovery-ssh`.
+
+Then write the recovery-enabled artifact:
+
+```bash
+.venv/bin/python manage.py imager write \
+  --artifact repair-2026-04-23 \
+  --device /dev/sdb \
+  --yes
+```
+
+If you write with `--image-path`, verify that the image was already built with recovery
+metadata or use a freshly built recovery artifact. The write command verifies bytes on
+the target media, but it does not retrofit recovery SSH into an arbitrary image.
