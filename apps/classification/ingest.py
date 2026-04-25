@@ -9,6 +9,21 @@ from django.core.files.base import ContentFile
 
 from apps.media.utils import ensure_media_bucket
 
+SUPPORTED_IMAGE_EXTENSIONS = (
+    ".avif",
+    ".bmp",
+    ".gif",
+    ".heic",
+    ".heif",
+    ".jpeg",
+    ".jpg",
+    ".png",
+    ".tif",
+    ".tiff",
+    ".webp",
+)
+SUPPORTED_IMAGE_PATTERNS = "\n".join(f"*{extension}" for extension in SUPPORTED_IMAGE_EXTENSIONS)
+
 
 def guess_image_content_type(path: Path, *, default: str = "image/png") -> str:
     """Return the best-effort MIME type for an image path."""
@@ -38,7 +53,7 @@ def create_media_file_from_bytes(
     bucket = ensure_media_bucket(
         slug=bucket_slug,
         name=bucket_name,
-        allowed_patterns="*.jpg\n*.jpeg\n*.png",
+        allowed_patterns=SUPPORTED_IMAGE_PATTERNS,
     )
     initial_content_type = content_type if queue_for_classification else ""
     media_file = MediaFile(
