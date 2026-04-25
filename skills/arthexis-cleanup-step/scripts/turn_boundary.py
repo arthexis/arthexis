@@ -135,19 +135,33 @@ def live_turn_process_records(state: dict[str, Any]) -> list[dict[str, Any]]:
     return [record for record in state.get("registered_processes", []) if process_matches(record)]
 
 
-def live_turn_pids(state: dict[str, Any]) -> set[int]:
+def process_identity_matches(snapshot: dict[str, Any]) -> bool:
+    pid = snapshot.get("pid")
+    if type(pid) is not int or pid <= 1 or pid == os.getpid():
+        return False
+    identity = proc_identity(pid)
+    if identity is None or identity.get("uid") != os.getuid():
+        return False
+    return identity.get("start_ticks") == snapshot.get("start_ticks")
+
+
+def live_turn_process_identities(state: dict[str, Any]) -> dict[int, dict[str, Any]]:
     roots = {int(record["pid"]) for record in live_turn_process_records(state)}
     candidates = roots | descendant_pids(roots)
     own_uid = os.getuid()
     current_pid = os.getpid()
-    safe: set[int] = set()
+    safe: dict[int, dict[str, Any]] = {}
     for pid in candidates:
-        if pid == current_pid:
+        if pid <= 1 or pid == current_pid:
             continue
         identity = proc_identity(pid)
         if identity is not None and identity.get("uid") == own_uid:
-            safe.add(pid)
+            safe[pid] = identity
     return safe
+
+
+def live_turn_pids(state: dict[str, Any]) -> set[int]:
+    return set(live_turn_process_identities(state))
 
 
 def archive_state(state: dict[str, Any]) -> None:
@@ -254,20 +268,22 @@ def cmd_end_step(args: argparse.Namespace) -> int:
     return 0
 
 
-def wait_for_processes(state: dict[str, Any], timeout_seconds: int) -> set[int]:
+def wait_for_processes(state: dict[str, Any], timeout_seconds: int) -> dict[int, dict[str, Any]]:
     deadline = time.monotonic() + max(0, timeout_seconds)
     while True:
-        pids = live_turn_pids(state)
-        if not pids or time.monotonic() >= deadline:
-            return pids
+        identities = live_turn_process_identities(state)
+        if not identities or time.monotonic() >= deadline:
+            return identities
         time.sleep(min(5.0, max(0.1, deadline - time.monotonic())))
 
 
-def terminate_pids(pids: set[int], *, force_kill: bool) -> dict[str, Any]:
+def terminate_pids(identities: dict[int, dict[str, Any]], *, force_kill: bool) -> dict[str, Any]:
     result: dict[str, Any] = {"sigterm_sent": [], "sigkill_sent": [], "still_alive": []}
-    for pid in sorted(pids, reverse=True):
+    for pid in sorted(identities, reverse=True):
+        if not process_identity_matches(identities[pid]):
+            continue
         try:
-            os.kill(pid, signal.SIGTERM)
+            os.kill(pid, signal.SIGTERM)  # NOSONAR: PID identity is revalidated immediately before signaling.
         except ProcessLookupError:
             continue
         except PermissionError:
@@ -277,16 +293,18 @@ def terminate_pids(pids: set[int], *, force_kill: bool) -> dict[str, Any]:
     if not result["sigterm_sent"]:
         return result
     time.sleep(TERM_GRACE_SECONDS)
-    lingering = {pid for pid in pids if proc_identity(pid) is not None}
+    lingering = {pid for pid, identity in identities.items() if process_identity_matches(identity)}
     if force_kill:
         for pid in sorted(lingering, reverse=True):
+            if not process_identity_matches(identities[pid]):
+                continue
             try:
-                os.kill(pid, signal.SIGKILL)
+                os.kill(pid, signal.SIGKILL)  # NOSONAR: PID identity is revalidated immediately before signaling.
             except (ProcessLookupError, PermissionError):
                 continue
             result["sigkill_sent"].append(pid)
         time.sleep(1)
-        lingering = {pid for pid in lingering if proc_identity(pid) is not None}
+        lingering = {pid for pid in lingering if process_identity_matches(identities[pid])}
     result["still_alive"] = sorted(lingering)
     return result
 
@@ -309,7 +327,12 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
     )
 
     with state_lock():
-        state = read_json(ACTIVE_STATE) or state
+        state_after_wait = read_json(ACTIVE_STATE)
+        if not state_after_wait or state_after_wait.get("turn_id") != state.get("turn_id"):
+            print("arthexis-cleanup-step")
+            print("status: turn-completed-or-changed")
+            return 0
+        state = state_after_wait
         state["status"] = "complete"
         state["cleanup_step_at"] = now_iso()
         state["cleanup"] = {
