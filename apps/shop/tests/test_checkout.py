@@ -164,6 +164,140 @@ class ShopCheckoutTests(TestCase):
         self.assertEqual(checkout_response.status_code, 200)
         self.assertContains(checkout_response, f'<option value="{image.id}" selected>')
 
+    def test_gallery_handoff_survives_non_customizable_add_before_card(self):
+        shop = Shop.objects.create(
+            name="Card Shop",
+            slug="card-shop-noncustom-handoff",
+            default_payment_provider="stripe",
+        )
+        standard_product = ShopProduct.objects.create(
+            shop=shop,
+            name="Standard Sleeve",
+            sku="SLEEVE-HANDOFF",
+            unit_price=Decimal("2.00"),
+            stock_quantity=20,
+            supports_gallery_image_printing=False,
+        )
+        card_product = ShopProduct.objects.create(
+            shop=shop,
+            name="Custom Card",
+            sku="CARD-NONCUSTOM-HANDOFF",
+            unit_price=Decimal("10.00"),
+            stock_quantity=20,
+            supports_gallery_image_printing=True,
+            gallery_image_print_price=Decimal("3.50"),
+        )
+        owner = self._create_user("gallery-noncustom-owner", "noncustom@example.com")
+        image = create_gallery_image(
+            uploaded_file=self._upload_image("noncustom-handoff.jpg"),
+            title="Noncustom Handoff Art",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+
+        self.client.get(reverse("shop:index"), {"gallery_image": image.id})
+        self.client.post(
+            reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": standard_product.id}),
+            {"quantity": 1},
+            follow=True,
+        )
+        self.client.post(
+            reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": card_product.id}),
+            {"quantity": 1},
+            follow=True,
+        )
+        checkout_response = self.client.get(reverse("shop:checkout"))
+
+        self.assertEqual(checkout_response.status_code, 200)
+        self.assertContains(checkout_response, f'<option value="{image.id}" selected>')
+
+    def test_unrelated_customizable_add_does_not_clear_existing_handoff(self):
+        shop = Shop.objects.create(
+            name="Card Shop",
+            slug="card-shop-unrelated-handoff",
+            default_payment_provider="stripe",
+        )
+        selected_product = ShopProduct.objects.create(
+            shop=shop,
+            name="Selected Custom Card",
+            sku="CARD-SELECTED-HANDOFF",
+            unit_price=Decimal("10.00"),
+            stock_quantity=20,
+            supports_gallery_image_printing=True,
+            gallery_image_print_price=Decimal("3.50"),
+        )
+        unrelated_product = ShopProduct.objects.create(
+            shop=shop,
+            name="Other Custom Card",
+            sku="CARD-OTHER-HANDOFF",
+            unit_price=Decimal("11.00"),
+            stock_quantity=20,
+            supports_gallery_image_printing=True,
+            gallery_image_print_price=Decimal("3.50"),
+        )
+        owner = self._create_user("gallery-unrelated-owner", "unrelated@example.com")
+        image = create_gallery_image(
+            uploaded_file=self._upload_image("unrelated-handoff.jpg"),
+            title="Unrelated Handoff Art",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+        session = self.client.session
+        session["shop_cart_gallery_image"] = {
+            "product_id": selected_product.id,
+            "gallery_image_id": str(image.id),
+        }
+        session.save()
+
+        self.client.post(
+            reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": unrelated_product.id}),
+            {"quantity": 1},
+            follow=True,
+        )
+
+        self.assertEqual(
+            self.client.session.get("shop_cart_gallery_image"),
+            {"product_id": selected_product.id, "gallery_image_id": str(image.id)},
+        )
+
+    def test_add_customizable_product_clears_stale_pending_handoff(self):
+        shop = Shop.objects.create(
+            name="Card Shop",
+            slug="card-shop-stale-pending-handoff",
+            default_payment_provider="stripe",
+        )
+        product = ShopProduct.objects.create(
+            shop=shop,
+            name="Custom Card",
+            sku="CARD-STALE-PENDING-HANDOFF",
+            unit_price=Decimal("10.00"),
+            stock_quantity=20,
+            supports_gallery_image_printing=True,
+            gallery_image_print_price=Decimal("3.50"),
+        )
+        owner = self._create_user("gallery-stale-pending-owner", "stale-pending@example.com")
+        image = create_gallery_image(
+            uploaded_file=self._upload_image("stale-pending-handoff.jpg"),
+            title="Stale Pending Handoff Art",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+        session = self.client.session
+        session["shop_cart_gallery_image"] = {
+            "product_id": None,
+            "gallery_image_id": str(image.id),
+        }
+        session.save()
+        image.delete()
+
+        self.client.post(
+            reverse("shop:add_to_cart", kwargs={"shop_slug": shop.slug, "product_id": product.id}),
+            {"quantity": 1},
+            follow=True,
+        )
+
+        self.assertNotIn("shop_cart_gallery_image", self.client.session)
+
     def test_repeated_add_preserves_gallery_handoff_when_redirect_omits_query(self):
         shop = Shop.objects.create(
             name="Card Shop",
