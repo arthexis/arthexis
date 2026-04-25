@@ -49,17 +49,21 @@ PRESETS = [
 
 def create_presets(apps, schema_editor):
     HypergeometricTemplate = apps.get_model("awg", "HypergeometricTemplate")
+    db_alias = schema_editor.connection.alias
+    templates = HypergeometricTemplate.objects.using(db_alias)
     for preset in PRESETS:
         seed_preset = {**preset, "is_seed_data": True}
-        if HypergeometricTemplate.objects.filter(**seed_preset).exists():
+        if templates.filter(**seed_preset).exists():
             continue
-        HypergeometricTemplate.objects.create(**seed_preset)
+        templates.create(**seed_preset)
 
 
 def remove_presets(apps, schema_editor):
     HypergeometricTemplate = apps.get_model("awg", "HypergeometricTemplate")
+    db_alias = schema_editor.connection.alias
+    templates = HypergeometricTemplate.objects.using(db_alias)
     for preset in PRESETS:
-        HypergeometricTemplate.objects.filter(
+        templates.filter(
             **preset,
             is_seed_data=True,
         ).delete()

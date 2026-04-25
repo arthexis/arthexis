@@ -19,6 +19,14 @@ class MigrationApps:
         return HypergeometricTemplate
 
 
+class MigrationConnection:
+    alias = "default"
+
+
+class MigrationSchemaEditor:
+    connection = MigrationConnection()
+
+
 def test_calculator_index_links_to_mtg_hypergeometric_calculator(db):
     response = Client().get(reverse("awg:calculator"))
 
@@ -52,7 +60,9 @@ def test_mtg_hypergeometric_calculator_uses_shared_navigation(db):
 
 
 def test_mtg_hypergeometric_calculator_includes_seeded_format_presets(db):
-    hypergeometric_presets_migration.create_presets(MigrationApps(), None)
+    hypergeometric_presets_migration.create_presets(
+        MigrationApps(), MigrationSchemaEditor()
+    )
 
     response = Client().get(reverse("awg:mtg_hypergeometric"))
 
@@ -84,7 +94,9 @@ def test_hypergeometric_preset_migration_preserves_duplicate_user_names(db):
         show_in_pages=True,
     )
 
-    hypergeometric_presets_migration.create_presets(MigrationApps(), None)
+    hypergeometric_presets_migration.create_presets(
+        MigrationApps(), MigrationSchemaEditor()
+    )
 
     draft_templates = HypergeometricTemplate.objects.filter(name="40-card Draft")
     assert draft_templates.count() == 3
@@ -106,9 +118,13 @@ def test_hypergeometric_preset_migration_reverse_removes_only_seed_rows(db):
         min_successes=1,
         show_in_pages=True,
     )
-    hypergeometric_presets_migration.create_presets(MigrationApps(), None)
+    hypergeometric_presets_migration.create_presets(
+        MigrationApps(), MigrationSchemaEditor()
+    )
 
-    hypergeometric_presets_migration.remove_presets(MigrationApps(), None)
+    hypergeometric_presets_migration.remove_presets(
+        MigrationApps(), MigrationSchemaEditor()
+    )
 
     assert HypergeometricTemplate.objects.filter(pk=user_template.pk).exists()
     assert not HypergeometricTemplate.objects.filter(is_seed_data=True).exists()
