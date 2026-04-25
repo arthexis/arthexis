@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import datetime as dt
 import fcntl
 import json
@@ -277,32 +278,52 @@ def wait_for_processes(state: dict[str, Any], timeout_seconds: int) -> dict[int,
         time.sleep(min(5.0, max(0.1, deadline - time.monotonic())))
 
 
+def send_signal_to_verified_process(snapshot: dict[str, Any], signum: signal.Signals) -> bool:
+    if not process_identity_matches(snapshot):
+        return False
+    pidfd_open = getattr(os, "pidfd_open", None)
+    pidfd_send_signal = getattr(signal, "pidfd_send_signal", None)
+    if pidfd_open is None or pidfd_send_signal is None:
+        raise RuntimeError("pidfd signaling is required for turn cleanup")
+    try:
+        pidfd = pidfd_open(snapshot["pid"], 0)
+    except OSError as exc:
+        if exc.errno == errno.ESRCH:
+            return False
+        raise
+    try:
+        if not process_identity_matches(snapshot):
+            return False
+        pidfd_send_signal(pidfd, signum)
+        return True
+    finally:
+        os.close(pidfd)
+
+
 def terminate_pids(identities: dict[int, dict[str, Any]], *, force_kill: bool) -> dict[str, Any]:
     result: dict[str, Any] = {"sigterm_sent": [], "sigkill_sent": [], "still_alive": []}
     for pid in sorted(identities, reverse=True):
-        if not process_identity_matches(identities[pid]):
-            continue
         try:
-            os.kill(pid, signal.SIGTERM)  # NOSONAR: PID identity is revalidated immediately before signaling.
+            sent = send_signal_to_verified_process(identities[pid], signal.SIGTERM)
         except ProcessLookupError:
             continue
         except PermissionError:
             result["still_alive"].append(pid)
             continue
-        result["sigterm_sent"].append(pid)
+        if sent:
+            result["sigterm_sent"].append(pid)
     if not result["sigterm_sent"]:
         return result
     time.sleep(TERM_GRACE_SECONDS)
     lingering = {pid for pid, identity in identities.items() if process_identity_matches(identity)}
     if force_kill:
         for pid in sorted(lingering, reverse=True):
-            if not process_identity_matches(identities[pid]):
-                continue
             try:
-                os.kill(pid, signal.SIGKILL)  # NOSONAR: PID identity is revalidated immediately before signaling.
+                sent = send_signal_to_verified_process(identities[pid], signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 continue
-            result["sigkill_sent"].append(pid)
+            if sent:
+                result["sigkill_sent"].append(pid)
         time.sleep(1)
         lingering = {pid for pid in lingering if process_identity_matches(identities[pid])}
     result["still_alive"] = sorted(lingering)
