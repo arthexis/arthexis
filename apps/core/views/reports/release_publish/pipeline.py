@@ -130,6 +130,14 @@ EXPECTED_PUBLISH_ENVIRONMENT = "pypi"
 RELEASE_VALIDATION_COMMAND_SETTING = "RELEASE_PUBLISH_VALIDATION_COMMAND"
 RELEASE_VALIDATION_TIMEOUT_SETTING = "RELEASE_PUBLISH_VALIDATION_TIMEOUT_SECONDS"
 DEFAULT_RELEASE_VALIDATION_TIMEOUT_SECONDS = 900
+TEST_PRUNING_PR_URL_SETTING = "RELEASE_PUBLISH_TEST_PRUNING_PR_URL"
+TEST_PRUNING_CRITERIA = (
+    "low value",
+    "duplicate",
+    "over-mocked",
+    "confusing",
+    "misleading",
+)
 
 
 def _resolve_github_token(
@@ -312,9 +320,7 @@ def _handle_release_sync(
             request,
             release,
             action,
-            _(
-                "Another release already exists for %(package)s %(version)s."
-            )
+            _("Another release already exists for %(package)s %(version)s.")
             % {
                 "package": release.package.name,
                 "version": conflicting_release.version,
@@ -460,7 +466,9 @@ def _update_publish_controls(
                     group=None,
                     defaults={"token": token},
                 )
-                message = _("GitHub token stored for this publish session and your account.")
+                message = _(
+                    "GitHub token stored for this publish session and your account."
+                )
             else:
                 message = _("GitHub token stored for this publish session.")
             messages.success(request, message)
@@ -494,8 +502,12 @@ def _update_publish_controls(
             ctx["started"] = True
         ctx["paused"] = bool(ctx.get("pending_git_push") or ctx.get("dirty_files"))
         _store_release_context(request, session_key, ctx)
-        return ctx, False, redirect(
-            _clean_redirect_path(request, request.path),
+        return (
+            ctx,
+            False,
+            redirect(
+                _clean_redirect_path(request, request.path),
+            ),
         )
 
     if request.GET.get("set_dry_run") is not None:
@@ -584,7 +596,11 @@ def _build_artifacts_stale(
     ctx: dict, step_count: int, steps: Sequence[tuple[str, object]]
 ) -> bool:
     build_step_index = next(
-        (index for index, (name, _) in enumerate(steps) if name == BUILD_RELEASE_ARTIFACTS_STEP_NAME),
+        (
+            index
+            for index, (name, _) in enumerate(steps)
+            if name == BUILD_RELEASE_ARTIFACTS_STEP_NAME
+        ),
         None,
     )
     if build_step_index is None:
@@ -639,7 +655,9 @@ def _handle_dirty_repository_action(request, ctx: dict, log_path: Path):
         elif dirty_action == "commit":
             message = request.POST.get("dirty_message", "").strip()
             if not message:
-                message = ctx.get("dirty_commit_message") or DIRTY_COMMIT_DEFAULT_MESSAGE
+                message = (
+                    ctx.get("dirty_commit_message") or DIRTY_COMMIT_DEFAULT_MESSAGE
+                )
             ctx["dirty_commit_message"] = message
             try:
                 GIT_ADAPTER.run(["git", "add", "--all"], check=True)
@@ -656,8 +674,7 @@ def _handle_dirty_repository_action(request, ctx: dict, log_path: Path):
                     ctx.pop("dirty_log_message", None)
                 _append_log(
                     log_path,
-                    _("Committed pending changes: %(message)s")
-                    % {"message": message},
+                    _("Committed pending changes: %(message)s") % {"message": message},
                 )
     return ctx
 
@@ -753,7 +770,9 @@ def _sync_with_origin_main(log_path: Path) -> None:
     """Ensure the current branch is rebased onto ``origin/main``."""
 
     if not _has_remote("origin"):
-        _append_log(log_path, "No git remote configured; skipping sync with origin/main")
+        _append_log(
+            log_path, "No git remote configured; skipping sync with origin/main"
+        )
         return
 
     try:
@@ -898,7 +917,9 @@ def _resolve_github_repository(release: PackageRelease) -> tuple[str, str]:
     parsed = _parse_github_repository(repo_url)
     if parsed:
         return parsed
-    remote_url = git_utils.git_remote_url("origin", use_push_url=True) or git_utils.git_remote_url("origin")
+    remote_url = git_utils.git_remote_url(
+        "origin", use_push_url=True
+    ) or git_utils.git_remote_url("origin")
     if remote_url:
         parsed = _parse_github_repository(remote_url)
         if parsed:
@@ -1191,9 +1212,7 @@ def _push_release_changes(log_path: Path, ctx: dict, *, step_name: str) -> bool:
                 details=details or None,
             )
             raise PublishPending() from exc
-        _append_log(
-            log_path, f"Failed to push release changes to origin: {details}"
-        )
+        _append_log(log_path, f"Failed to push release changes to origin: {details}")
         raise RuntimeError("Failed to push release changes") from exc
 
     _append_log(log_path, "Pushed release changes to origin")
@@ -1357,7 +1376,9 @@ def _handle_version_step_dirty_repository(ctx: dict, log_path: Path) -> bool:
     ctx.setdefault("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE)
     ctx.pop("fixtures", None)
     ctx.pop("dirty_commit_error", None)
-    details = ", ".join(entry["path"] for entry in dirty_entries) if dirty_entries else ""
+    details = (
+        ", ".join(entry["path"] for entry in dirty_entries) if dirty_entries else ""
+    )
     message = "Git repository has uncommitted changes"
     if details:
         message += f": {details}"
@@ -1521,9 +1542,7 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
             check=True,
         )
         staged_release_fixtures = [Path(path) for path in release_fixture_status]
-        formatted = ", ".join(
-            _format_path(path) for path in staged_release_fixtures
-        )
+        formatted = ", ".join(_format_path(path) for path in staged_release_fixtures)
         _append_log(log_path, "Staged release fixtures " + formatted)
     version_path = Path("VERSION")
     previous_version_text = (
@@ -1548,9 +1567,7 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
         )
         _append_log(log_path, f"Committed VERSION update for {release.version}")
     else:
-        _append_log(
-            log_path, "No release metadata changes detected; skipping commit"
-        )
+        _append_log(log_path, "No release metadata changes detected; skipping commit")
     _append_log(log_path, "Pre-release actions complete")
 
 
@@ -1649,39 +1666,55 @@ def _step_prune_low_value_tests(release, ctx, log_path: Path, *, user=None) -> N
     Side effects: records the pruning PR evidence in release context/logs.
     Rollback expectations: no rollback; missing evidence pauses progression.
     """
-    _ = release, user
+    del release, user
     _append_log(log_path, "Prune worst 1% of tests by PR")
     pruning_result = ctx.get("test_pruning_result")
     pruning_pr_url = str(ctx.get("test_pruning_pr_url") or "").strip()
-    if isinstance(pruning_result, dict) and pruning_result.get("success") is True:
-        pruning_pr_url = str(pruning_result.get("pr_url") or pruning_pr_url).strip()
-    elif not pruning_pr_url:
-        _fail_release_gate(
-            ctx,
-            log_path,
-            "Release readiness blocked: prune the worst 1% of tests by PR before "
-            "publishing. Prioritize low-value, duplicate, over-mocked, confusing, "
-            "or misleading tests. Record test_pruning_pr_url or "
-            "test_pruning_result.success=true in the release context and rerun.",
-        )
+    pruning_source = "release_context"
 
+    if isinstance(pruning_result, dict):
+        if pruning_result.get("success") is False:
+            _fail_release_gate(
+                ctx,
+                log_path,
+                "Release test pruning gate failed: recorded pruning evidence "
+                "explicitly failed. Fix the pruning PR and rerun this step.",
+            )
+        if pruning_result.get("success") is True:
+            pruning_pr_url = str(pruning_result.get("pr_url") or pruning_pr_url).strip()
+            pruning_source = str(pruning_result.get("source") or pruning_source)
+
+    if not pruning_pr_url:
+        pruning_pr_url = str(
+            getattr(settings, TEST_PRUNING_PR_URL_SETTING, "") or ""
+        ).strip()
+        if pruning_pr_url:
+            pruning_source = "settings"
+
+    if not pruning_pr_url:
+        message = (
+            "Release readiness paused: prune the worst 1% of tests by PR before "
+            "publishing. Prioritize low-value, duplicate, over-mocked, confusing, "
+            "or misleading tests. Record a test pruning PR URL in the publish "
+            "workflow or configure RELEASE_PUBLISH_TEST_PRUNING_PR_URL for "
+            "scheduled releases, then rerun this step."
+        )
+        ctx["paused"] = True
+        ctx["test_pruning_required"] = True
+        ctx["test_pruning_error"] = _(message)
+        _append_log(log_path, message)
+        raise PublishPending()
+
+    ctx.pop("test_pruning_required", None)
+    ctx.pop("test_pruning_error", None)
+    ctx["test_pruning_pr_url"] = pruning_pr_url
     ctx["test_pruning_result"] = {
         "success": True,
-        "source": "release_context",
+        "source": pruning_source,
         "pr_url": pruning_pr_url,
-        "criteria": [
-            "low value",
-            "duplicate",
-            "over-mocked",
-            "confusing",
-            "misleading",
-        ],
+        "criteria": list(TEST_PRUNING_CRITERIA),
     }
-    _append_log(
-        log_path,
-        "Test pruning gate passed"
-        + (f" using PR {pruning_pr_url}" if pruning_pr_url else ""),
-    )
+    _append_log(log_path, f"Test pruning gate passed using PR {pruning_pr_url}")
 
 
 def _step_confirm_pypi_trusted_publisher_settings(
@@ -1927,7 +1960,8 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
         if status_output:
             _append_log(
                 log_path,
-                "Git repository is not clean; git status --porcelain:\n" + status_output,
+                "Git repository is not clean; git status --porcelain:\n"
+                + status_output,
             )
         release_utils.promote(
             package=release.to_package(),
@@ -2020,9 +2054,7 @@ def _step_verify_release_environment(
         release,
         ctx,
         log_path,
-        message=_(
-            "GitHub token missing. Provide a token to continue publishing."
-        ),
+        message=_("GitHub token missing. Provide a token to continue publishing."),
         user=user,
     )
 
@@ -2070,9 +2102,7 @@ def _step_export_and_dispatch(release, ctx, log_path: Path, *, user=None) -> Non
         release,
         ctx,
         log_path,
-        message=_(
-            "GitHub token missing. Provide a token to continue publishing."
-        ),
+        message=_("GitHub token missing. Provide a token to continue publishing."),
         user=user,
     )
     tag_name = _ensure_release_tag(release, log_path)
@@ -2172,9 +2202,7 @@ def _step_wait_for_github_actions_publish(
         release,
         ctx,
         log_path,
-        message=_(
-            "GitHub token missing. Provide a token to continue publishing."
-        ),
+        message=_("GitHub token missing. Provide a token to continue publishing."),
         user=user,
     )
     _wait_for_publish_workflow_completion(
@@ -2219,8 +2247,7 @@ def _pypi_release_available(release) -> bool:
             if not same_version:
                 continue
             if any(
-                isinstance(file_data, dict)
-                and not file_data.get("yanked", False)
+                isinstance(file_data, dict) and not file_data.get("yanked", False)
                 for file_data in files or []
             ):
                 return True
@@ -2310,9 +2337,7 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
                     "GitHub token missing; PyPI publish logs were not captured."
                 ),
                 "followups": [
-                    _(
-                        "Provide a GitHub token in the publish workflow to capture logs."
-                    )
+                    _("Provide a GitHub token in the publish workflow to capture logs.")
                 ],
             }
         )
@@ -2373,18 +2398,18 @@ def _step_capture_publish_logs(release, ctx, log_path: Path, *, user=None) -> No
 
 
 _STEP_HANDLER_MAP = {
-    "_step_capture_publish_logs": _step_capture_publish_logs,
     "_step_check_version": _step_check_version,
-    "_step_confirm_pypi_trusted_publisher_settings": _step_confirm_pypi_trusted_publisher_settings,
-    "_step_export_and_dispatch": _step_export_and_dispatch,
     "_step_handle_migrations": _step_handle_migrations,
     "_step_pre_release_actions": _step_pre_release_actions,
     "_step_promote_build": _step_promote_build,
-    "_step_record_publish_metadata": _step_record_publish_metadata,
-    "_step_prune_low_value_tests": _step_prune_low_value_tests,
     "_step_run_tests": _step_run_tests,
+    "_step_prune_low_value_tests": _step_prune_low_value_tests,
+    "_step_confirm_pypi_trusted_publisher_settings": _step_confirm_pypi_trusted_publisher_settings,
     "_step_verify_release_environment": _step_verify_release_environment,
+    "_step_export_and_dispatch": _step_export_and_dispatch,
     "_step_wait_for_github_actions_publish": _step_wait_for_github_actions_publish,
+    "_step_record_publish_metadata": _step_record_publish_metadata,
+    "_step_capture_publish_logs": _step_capture_publish_logs,
 }
 
 PUBLISH_STEPS = [
@@ -2525,7 +2550,7 @@ def release_progress_impl(request, pk: int, action: str):
             message_text=_(
                 "Source changes detected after build. Restarting publish workflow."
             ),
-    )
+        )
 
     ctx = _handle_dirty_repository_action(request, ctx, log_path)
     ctx = _handle_manual_git_push_action(request, ctx, log_path)
@@ -2561,7 +2586,9 @@ def release_progress_impl(request, pk: int, action: str):
         _broadcast_release_message(release)
         ctx["release_net_message_sent"] = True
 
-    show_log, log_content = _resolve_release_log_display(ctx, step_count, done, log_path)
+    show_log, log_content = _resolve_release_log_display(
+        ctx, step_count, done, log_path
+    )
     next_step = _resolve_next_step(ctx, step_count, done)
     dirty_files = ctx.get("dirty_files")
     if dirty_files:
@@ -2683,15 +2710,24 @@ def _is_release_start_enabled(ctx: dict, step_count: int, total_steps: int) -> b
     return (not started_flag or paused_flag) and not done_flag and not error_flag
 
 
-def _resolve_release_log_display(ctx: dict, step_count: int, done: bool, log_path: Path):
-    show_log = bool(ctx.get("started")) or step_count > 0 or done or bool(ctx.get("error"))
+def _resolve_release_log_display(
+    ctx: dict, step_count: int, done: bool, log_path: Path
+):
+    show_log = (
+        bool(ctx.get("started")) or step_count > 0 or done or bool(ctx.get("error"))
+    )
     if show_log and log_path.exists():
         return show_log, log_path.read_text(encoding="utf-8")
     return show_log, ""
 
 
 def _resolve_next_step(ctx: dict, step_count: int, done: bool):
-    if ctx.get("started") and not ctx.get("paused") and not done and not ctx.get("error"):
+    if (
+        ctx.get("started")
+        and not ctx.get("paused")
+        and not done
+        and not ctx.get("error")
+    ):
         return step_count
     return None
 
@@ -2786,7 +2822,9 @@ def _build_release_progress_context(
         "cert_log": ctx.get("cert_log"),
         "fixtures": fixtures_summary,
         "dirty_files": dirty_files,
-        "dirty_commit_message": ctx.get("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE),
+        "dirty_commit_message": ctx.get(
+            "dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE
+        ),
         "dirty_commit_error": ctx.get("dirty_commit_error"),
         "restart_count": restart_count,
         "started": ctx.get("started", False),
@@ -2811,6 +2849,9 @@ def _build_release_progress_context(
         "manual_git_push_error": ctx.get("pending_git_push_error"),
         "publish_pending": publish_pending,
         "publish_workflow_url": ctx.get("publish_workflow_url", ""),
+        "test_pruning_required": ctx.get("test_pruning_required", False),
+        "test_pruning_error": ctx.get("test_pruning_error"),
+        "test_pruning_pr_url": ctx.get("test_pruning_pr_url", ""),
         "status_guidance": status_guidance,
     }
 

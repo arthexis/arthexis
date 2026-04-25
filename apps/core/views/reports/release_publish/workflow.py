@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.shortcuts import redirect
@@ -34,7 +36,7 @@ class ReleasePublishContext:
     extras: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any] | None) -> "ReleasePublishContext":
+    def from_dict(cls, payload: dict[str, Any] | None) -> ReleasePublishContext:
         payload = dict(payload or {})
         return cls(
             step=int(payload.pop("step", 0) or 0),
@@ -84,7 +86,9 @@ class ReleasePublishWorkflow:
         self.validate_manual_git_push = validate_manual_git_push
         self.append_log = append_log
 
-    def load(self, log_dir_warning_message: str | None) -> tuple[ReleasePublishContext, str | None]:
+    def load(
+        self, log_dir_warning_message: str | None
+    ) -> tuple[ReleasePublishContext, str | None]:
         session_ctx = self.request.session.get(self.session_key)
         loaded_ctx = load_release_context(session_ctx, self.lock_path)
         typed_ctx = ReleasePublishContext.from_dict(
@@ -102,7 +106,9 @@ class ReleasePublishWorkflow:
 
         return typed_ctx, log_dir_warning_message
 
-    def start(self, ctx: ReleasePublishContext, *, start_enabled: bool) -> ReleasePublishContext:
+    def start(
+        self, ctx: ReleasePublishContext, *, start_enabled: bool
+    ) -> ReleasePublishContext:
         state = ctx.to_dict()
         if self.request.GET.get("set_dry_run") is not None:
             if start_enabled:
@@ -117,12 +123,19 @@ class ReleasePublishWorkflow:
             state["paused"] = False
         return ReleasePublishContext.from_dict(state)
 
-    def resume(self, ctx: ReleasePublishContext) -> tuple[ReleasePublishContext, bool, Any | None]:
+    def resume(
+        self, ctx: ReleasePublishContext
+    ) -> tuple[ReleasePublishContext, bool, Any | None]:
         state = ctx.to_dict()
         state["dry_run"] = bool(state.get("dry_run"))
 
         if self.request.method == "POST" and self.request.POST.get("set_github_token"):
             return self._resume_with_github_token(state)
+
+        if self.request.method == "POST" and self.request.POST.get(
+            "set_test_pruning_evidence"
+        ):
+            return self._resume_with_test_pruning_evidence(state)
 
         if self.request.method == "POST" and self.request.POST.get("ack_error"):
             return self._resume_ack_error(state)
@@ -142,7 +155,9 @@ class ReleasePublishWorkflow:
 
     def poll(self, ctx: ReleasePublishContext) -> tuple[bool, bool]:
         poll_requested = self.request.GET.get("poll") == "1"
-        return poll_requested, bool(poll_requested and ctx.extras.get("publish_pending"))
+        return poll_requested, bool(
+            poll_requested and ctx.extras.get("publish_pending")
+        )
 
     def advance(
         self,
@@ -183,7 +198,9 @@ class ReleasePublishWorkflow:
 
         return ctx.to_dict()
 
-    def step_progress(self, ctx: ReleasePublishContext, *, resume_requested: bool) -> tuple[int, str | None]:
+    def step_progress(
+        self, ctx: ReleasePublishContext, *, resume_requested: bool
+    ) -> tuple[int, str | None]:
         restart_count = 0
         if self.restart_path.exists():
             try:
@@ -213,7 +230,9 @@ class ReleasePublishWorkflow:
                     group=None,
                     user=self.request.user,
                 )
-                message = _("GitHub token stored for this publish session and your account.")
+                message = _(
+                    "GitHub token stored for this publish session and your account."
+                )
             else:
                 message = _("GitHub token stored for this publish session.")
             messages.success(self.request, message)
@@ -223,6 +242,37 @@ class ReleasePublishWorkflow:
             messages.error(self.request, _("Enter a GitHub token to continue."))
             self._store(state)
 
+        target = self.clean_redirect_path(self.request, self.request.path)
+        return ReleasePublishContext.from_dict(state), False, redirect(target)
+
+    def _resume_with_test_pruning_evidence(self, state: dict[str, Any]):
+        pr_url = (self.request.POST.get("test_pruning_pr_url") or "").strip()
+        if pr_url:
+            state["test_pruning_pr_url"] = pr_url
+            state["test_pruning_result"] = {
+                "success": True,
+                "source": "operator",
+                "pr_url": pr_url,
+            }
+            state.pop("test_pruning_required", None)
+            state.pop("test_pruning_error", None)
+            state.pop("error", None)
+            if not state.get("started"):
+                state["started"] = True
+            if not state.get("dirty_files") and not state.get("pending_git_push"):
+                state["paused"] = False
+            messages.success(self.request, _("Test pruning evidence recorded."))
+            self._persist(state)
+            query = urlencode({"resume": "1", "step": state.get("step", 0)})
+            target = (
+                f"{self.clean_redirect_path(self.request, self.request.path)}?{query}"
+            )
+            return ReleasePublishContext.from_dict(state), False, redirect(target)
+
+        state["test_pruning_required"] = True
+        state["test_pruning_error"] = _("Enter the test pruning PR URL to continue.")
+        messages.error(self.request, _("Enter the test pruning PR URL to continue."))
+        self._store(state)
         target = self.clean_redirect_path(self.request, self.request.path)
         return ReleasePublishContext.from_dict(state), False, redirect(target)
 
@@ -249,7 +299,9 @@ class ReleasePublishWorkflow:
 
         if not state.get("started"):
             state["started"] = True
-        state["paused"] = bool(state.get("pending_git_push") or state.get("dirty_files"))
+        state["paused"] = bool(
+            state.get("pending_git_push") or state.get("dirty_files")
+        )
         self._store(state)
 
         target = self.clean_redirect_path(self.request, self.request.path)

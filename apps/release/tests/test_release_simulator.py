@@ -34,7 +34,9 @@ class _FakeResponse:
         return self.payload
 
 
-def _write_project(root: Path, *, version: str = "1.2.3", dynamic_path: str = "VERSION") -> None:
+def _write_project(
+    root: Path, *, version: str = "1.2.3", dynamic_path: str = "VERSION"
+) -> None:
     (root / "VERSION").write_text(f"{version}\n", encoding="utf-8")
     if dynamic_path != "VERSION":
         dynamic_file = root / dynamic_path
@@ -78,7 +80,9 @@ def test_release_simulation_can_run_without_pypi_or_build(tmp_path: Path) -> Non
         "release_readiness_checklist",
         "authorization_boundary",
     ]
-    checklist_step = result.steps[-2]
+    checklist_step = next(
+        step for step in result.steps if step.name == "release_readiness_checklist"
+    )
     assert "worst 1% of tests" in checklist_step.detail
     assert "over-mocked" in checklist_step.detail
     assert "prune the worst 1% of tests by PR" in result.summary_markdown
@@ -274,7 +278,9 @@ def test_release_simulation_quotes_package_name_for_pypi(
 
     def fake_urlopen(url: Any, *, timeout: float) -> _FakeResponse:
         requested_urls.append(url.full_url if hasattr(url, "full_url") else url)
-        user_agents.append(url.get_header("User-agent") if hasattr(url, "get_header") else None)
+        user_agents.append(
+            url.get_header("User-agent") if hasattr(url, "get_header") else None
+        )
         assert timeout == 15.0
         return _FakeResponse(b'{"releases": {}}')
 
@@ -309,7 +315,9 @@ def test_release_simulation_reports_invalid_pypi_timeout(
 
     assert result.ok is False
     assert result.failed_step == "preflight_pypi"
-    assert "PyPI timeout must be a finite value greater than zero seconds" in result.error
+    assert (
+        "PyPI timeout must be a finite value greater than zero seconds" in result.error
+    )
 
 
 def test_release_simulation_reports_non_finite_pypi_timeout(
@@ -330,7 +338,9 @@ def test_release_simulation_reports_non_finite_pypi_timeout(
 
     assert result.ok is False
     assert result.failed_step == "preflight_pypi"
-    assert "PyPI timeout must be a finite value greater than zero seconds" in result.error
+    assert (
+        "PyPI timeout must be a finite value greater than zero seconds" in result.error
+    )
 
 
 def test_release_simulation_reports_invalid_pypi_json(
@@ -465,7 +475,9 @@ def test_release_simulation_reports_escaped_dist_dir_as_build_failure(
     assert "Dist directory escapes repository root" in result.error
 
 
-def test_release_simulation_rejects_root_dist_dir_before_cleanup(tmp_path: Path) -> None:
+def test_release_simulation_rejects_root_dist_dir_before_cleanup(
+    tmp_path: Path,
+) -> None:
     _write_project(tmp_path)
 
     result = run_release_simulation(
@@ -481,7 +493,9 @@ def test_release_simulation_rejects_root_dist_dir_before_cleanup(tmp_path: Path)
     assert (tmp_path / "pyproject.toml").exists()
 
 
-def test_release_simulation_rejects_file_dist_dir_before_cleanup(tmp_path: Path) -> None:
+def test_release_simulation_rejects_file_dist_dir_before_cleanup(
+    tmp_path: Path,
+) -> None:
     _write_project(tmp_path)
     dist_file = tmp_path / "dist"
     dist_file.write_text("keep me\n", encoding="utf-8")

@@ -34,3 +34,13 @@ def test_headless_release_workflow_uses_canonical_order() -> None:
 
     assert [step.name for step in workflow.steps] == EXPECTED_STEP_ORDER
 
+
+def test_test_pruning_step_order_is_intentional() -> None:
+    step_names = [name for name, _handler in DOMAIN_PUBLISH_STEPS]
+
+    assert step_names.index("Complete test suite with --all flag") < step_names.index(
+        "Prune worst 1% of tests by PR"
+    )
+    assert step_names.index("Prune worst 1% of tests by PR") < step_names.index(
+        "Confirm PyPI Trusted Publisher settings"
+    )

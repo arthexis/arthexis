@@ -32,6 +32,8 @@ PUBLISH_STEPS: list[tuple[str, str]] = [
     ("Execute pre-release actions", "_step_pre_release_actions"),
     (BUILD_RELEASE_ARTIFACTS_STEP_NAME, "_step_promote_build"),
     ("Complete test suite with --all flag", "_step_run_tests"),
+    # Pruning evidence is reviewed after the full suite proves releasability and
+    # before any external publish prerequisite can advance.
     (TEST_PRUNING_STEP_NAME, "_step_prune_low_value_tests"),
     (
         "Confirm PyPI Trusted Publisher settings",

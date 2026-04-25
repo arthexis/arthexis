@@ -7,11 +7,15 @@ import pytest
 from django.http import HttpResponse
 from django.test import RequestFactory
 
+import apps.core.views.reports.release_publish.workflow as workflow_module
 from apps.core.views.reports.release_publish import pipeline
 from apps.core.views.reports.release_publish.exceptions import PublishPending
 from apps.core.views.reports.release_publish.workflow import ReleasePublishContext
 
-def test_publish_workflow_polling_pauses_when_run_in_progress(monkeypatch, tmp_path: Path):
+
+def test_publish_workflow_polling_pauses_when_run_in_progress(
+    monkeypatch, tmp_path: Path
+):
     class DummyRelease:
         pk = 1
         version = "1.2.3"
@@ -19,12 +23,20 @@ def test_publish_workflow_polling_pauses_when_run_in_progress(monkeypatch, tmp_p
     ctx: dict[str, object] = {}
     log_path = tmp_path / "publish.log"
 
-    monkeypatch.setattr(pipeline, "_resolve_github_token", lambda *_args, **_kwargs: "token")
-    monkeypatch.setattr(pipeline, "_resolve_github_repository", lambda _release: ("acme", "widget"))
+    monkeypatch.setattr(
+        pipeline, "_resolve_github_token", lambda *_args, **_kwargs: "token"
+    )
+    monkeypatch.setattr(
+        pipeline, "_resolve_github_repository", lambda _release: ("acme", "widget")
+    )
     monkeypatch.setattr(
         pipeline,
         "_fetch_publish_workflow_run",
-        lambda **_kwargs: {"id": 1, "status": "in_progress", "html_url": "https://example/run/1"},
+        lambda **_kwargs: {
+            "id": 1,
+            "status": "in_progress",
+            "html_url": "https://example/run/1",
+        },
     )
 
     with pytest.raises(PublishPending):
@@ -32,6 +44,7 @@ def test_publish_workflow_polling_pauses_when_run_in_progress(monkeypatch, tmp_p
 
     assert ctx.get("publish_pending") is True
     assert ctx.get("publish_workflow_url") == "https://example/run/1"
+
 
 def test_release_artifact_collection_finds_wheel_and_sdist(tmp_path: Path, monkeypatch):
     dist = tmp_path / "dist"
@@ -47,6 +60,7 @@ def test_release_artifact_collection_finds_wheel_and_sdist(tmp_path: Path, monke
     assert {path.name for path in artifacts} == {wheel.name, sdist.name}
     assert len(artifacts) == 2
 
+
 def test_prepare_step_progress_invalid_restart_counter_defaults_to_zero(tmp_path: Path):
     restart_path = tmp_path / "release.restarts"
     restart_path.write_text("bad-counter", encoding="utf-8")
@@ -61,13 +75,17 @@ def test_prepare_step_progress_invalid_restart_counter_defaults_to_zero(tmp_path
     assert restart_count == 0
     assert step_param == "4"
 
+
 def test_current_git_revision_returns_empty_on_subprocess_failure(monkeypatch):
     def boom(_args):
-        raise subprocess.CalledProcessError(returncode=2, cmd=["git", "rev-parse", "HEAD"])
+        raise subprocess.CalledProcessError(
+            returncode=2, cmd=["git", "rev-parse", "HEAD"]
+        )
 
     monkeypatch.setattr(pipeline, "_git_stdout", boom)
 
     assert pipeline._current_git_revision() == ""
+
 
 def test_broadcast_release_message_logs_failures(monkeypatch, caplog):
     class DummyRelease:
@@ -84,6 +102,7 @@ def test_broadcast_release_message_logs_failures(monkeypatch, caplog):
         pipeline._broadcast_release_message(DummyRelease())
 
     assert "Failed to broadcast release Net Message" in caplog.text
+
 
 def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path: Path):
     class DummyRelease:
@@ -143,16 +162,26 @@ def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path
             assert done is False
 
     monkeypatch.setattr(pipeline, "ReleasePublishWorkflow", FakeWorkflow)
-    monkeypatch.setattr(pipeline, "_get_release_or_response", lambda *_args: (DummyRelease(), None))
-    monkeypatch.setattr(pipeline, "_resolve_release_log_dir", lambda _path: (tmp_path, None))
-    monkeypatch.setattr(pipeline, "_handle_release_sync", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(pipeline, "_handle_release_restart", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        pipeline, "_get_release_or_response", lambda *_args: (DummyRelease(), None)
+    )
+    monkeypatch.setattr(
+        pipeline, "_resolve_release_log_dir", lambda _path: (tmp_path, None)
+    )
+    monkeypatch.setattr(
+        pipeline, "_handle_release_sync", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        pipeline, "_handle_release_restart", lambda *_args, **_kwargs: None
+    )
     monkeypatch.setattr(
         pipeline,
         "_prepare_logging",
         lambda ctx, *_args, **_kwargs: (ctx, tmp_path / "publish.log", ctx["step"]),
     )
-    monkeypatch.setattr(pipeline, "_build_artifacts_stale", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(
+        pipeline, "_build_artifacts_stale", lambda *_args, **_kwargs: False
+    )
     monkeypatch.setattr(
         pipeline,
         "_handle_dirty_repository_action",
@@ -167,13 +196,19 @@ def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path
         "_handle_manual_git_push_action",
         lambda _request, ctx, _log_path: ctx,
     )
-    monkeypatch.setattr(pipeline, "_resolve_release_log_display", lambda *_args, **_kwargs: (False, ""))
+    monkeypatch.setattr(
+        pipeline, "_resolve_release_log_display", lambda *_args, **_kwargs: (False, "")
+    )
     monkeypatch.setattr(pipeline, "_resolve_next_step", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(pipeline, "_build_release_step_states", lambda **_kwargs: [])
     monkeypatch.setattr(pipeline, "_get_user_github_token", lambda _user: None)
-    monkeypatch.setattr(pipeline, "_resolve_github_token", lambda *_args, **_kwargs: "token")
+    monkeypatch.setattr(
+        pipeline, "_resolve_github_token", lambda *_args, **_kwargs: "token"
+    )
     monkeypatch.setattr(pipeline, "build_release_guidance", lambda **_kwargs: {})
-    monkeypatch.setattr(pipeline, "_build_release_progress_context", lambda **_kwargs: {})
+    monkeypatch.setattr(
+        pipeline, "_build_release_progress_context", lambda **_kwargs: {}
+    )
     monkeypatch.setattr(
         pipeline,
         "_finalize_release_progress_response",
@@ -188,6 +223,7 @@ def test_release_progress_uses_mutated_context_for_advance(monkeypatch, tmp_path
     assert captured["ctx"].paused is True
     assert captured["ctx"].extras["pending_git_push"] == {"branch": "main"}
 
+
 def test_publish_step_compatibility_resets_inflight_session():
     typed_ctx = ReleasePublishContext(
         step=3,
@@ -196,7 +232,9 @@ def test_publish_step_compatibility_resets_inflight_session():
         extras={"publish_steps_schema": "old-step-order"},
     )
 
-    result = pipeline._ensure_publish_step_compatibility(typed_ctx, pipeline.PUBLISH_STEPS)
+    result = pipeline._ensure_publish_step_compatibility(
+        typed_ctx, pipeline.PUBLISH_STEPS
+    )
 
     assert result.step == 0
     assert result.started is False
@@ -208,10 +246,13 @@ def test_publish_step_compatibility_resets_inflight_session():
         name for name, _func in pipeline.PUBLISH_STEPS
     )
 
+
 def test_publish_step_compatibility_records_schema_for_new_session():
     typed_ctx = ReleasePublishContext(step=0, started=False, paused=False, extras={})
 
-    result = pipeline._ensure_publish_step_compatibility(typed_ctx, pipeline.PUBLISH_STEPS)
+    result = pipeline._ensure_publish_step_compatibility(
+        typed_ctx, pipeline.PUBLISH_STEPS
+    )
 
     assert result.step == 0
     assert result.started is False
@@ -220,9 +261,11 @@ def test_publish_step_compatibility_records_schema_for_new_session():
         name for name, _func in pipeline.PUBLISH_STEPS
     )
 
+
 def test_resolve_safe_child_path_rejects_parent_traversal(tmp_path: Path):
     with pytest.raises(ValueError):
         pipeline._resolve_safe_child_path(tmp_path, "../escape.txt")
+
 
 def test_release_progress_returns_400_for_invalid_state_path(monkeypatch):
     class DummyRelease:
@@ -231,7 +274,9 @@ def test_release_progress_returns_400_for_invalid_state_path(monkeypatch):
     def raise_unsafe_path(*_args, **_kwargs):
         raise ValueError("unsafe")
 
-    monkeypatch.setattr(pipeline, "_get_release_or_response", lambda *_args: (DummyRelease(), None))
+    monkeypatch.setattr(
+        pipeline, "_get_release_or_response", lambda *_args: (DummyRelease(), None)
+    )
     monkeypatch.setattr(
         pipeline,
         "_resolve_safe_child_path",
@@ -250,6 +295,7 @@ def test_release_progress_returns_400_for_invalid_state_path(monkeypatch):
 
     assert response.status_code == 400
 
+
 def test_step_run_tests_accepts_recorded_successful_test_evidence(tmp_path: Path):
     ctx = {
         "tests_verified_at": "2026-04-10T00:00:00+00:00",
@@ -260,6 +306,7 @@ def test_step_run_tests_accepts_recorded_successful_test_evidence(tmp_path: Path
     pipeline._step_run_tests(object(), ctx, tmp_path / "publish.log")
 
     assert ctx["tests_result"]["success"] is True
+
 
 def test_step_run_tests_requires_evidence_or_configured_command(
     monkeypatch, settings, tmp_path: Path
@@ -276,6 +323,7 @@ def test_step_run_tests_requires_evidence_or_configured_command(
         pipeline._step_run_tests(object(), ctx, tmp_path / "publish.log")
 
     assert "tests_verified_at" in ctx["error"]
+
 
 def test_step_run_tests_executes_configured_validation_command(
     monkeypatch, settings, tmp_path: Path
@@ -294,6 +342,7 @@ def test_step_run_tests_executes_configured_validation_command(
     assert ctx["tests_result"]["source"] == "pipeline_command"
     assert ctx["tests_command"] == "echo 'release tests ok'"
     assert "tests_verified_at" in ctx
+
 
 def test_step_run_tests_passes_configured_timeout_to_subprocess_run(
     monkeypatch, settings, tmp_path: Path
@@ -325,6 +374,7 @@ def test_step_run_tests_passes_configured_timeout_to_subprocess_run(
     assert call["command"] == ["echo", "release", "tests", "ok"]
     assert call["kwargs"]["timeout"] == 42
     assert ctx["tests_result"]["success"] is True
+
 
 def test_step_run_tests_records_timeout_result_and_logs_gate_failure(
     monkeypatch, settings, tmp_path: Path
@@ -359,6 +409,7 @@ def test_step_run_tests_records_timeout_result_and_logs_gate_failure(
     assert any("timeout=15s" in message for message in logged_messages)
     assert any("timed out after 15 seconds" in message for message in logged_messages)
 
+
 def test_step_confirm_pypi_trusted_publisher_settings_validates_expected_workflow_metadata(
     monkeypatch, tmp_path: Path
 ):
@@ -388,6 +439,7 @@ def test_step_confirm_pypi_trusted_publisher_settings_validates_expected_workflo
     assert ctx["trusted_publisher_environment"] == "pypi"
     assert "trusted_publisher_verified_at" in ctx
 
+
 def test_step_confirm_pypi_trusted_publisher_settings_accepts_yaml_variants(
     monkeypatch, tmp_path: Path
 ):
@@ -414,6 +466,116 @@ def test_step_confirm_pypi_trusted_publisher_settings_accepts_yaml_variants(
 
     assert ctx["trusted_publisher_ref"] == "refs/tags/v*"
     assert ctx["trusted_publisher_environment"] == "pypi"
+
+
+def test_step_prune_low_value_tests_pauses_for_operator_evidence(
+    monkeypatch, settings, tmp_path: Path
+):
+    settings.RELEASE_PUBLISH_TEST_PRUNING_PR_URL = ""
+    monkeypatch.setattr(pipeline, "_append_log", lambda *_args, **_kwargs: None)
+    ctx: dict[str, object] = {}
+
+    with pytest.raises(PublishPending):
+        pipeline._step_prune_low_value_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert ctx["paused"] is True
+    assert ctx["test_pruning_required"] is True
+    assert "worst 1% of tests" in ctx["test_pruning_error"]
+    assert "error" not in ctx
+
+
+def test_step_prune_low_value_tests_accepts_scheduled_setting(
+    monkeypatch, settings, tmp_path: Path
+):
+    settings.RELEASE_PUBLISH_TEST_PRUNING_PR_URL = (
+        "https://github.com/arthexis/arthexis/pull/7000"
+    )
+    monkeypatch.setattr(pipeline, "_append_log", lambda *_args, **_kwargs: None)
+    ctx: dict[str, object] = {"auto_release": True}
+
+    pipeline._step_prune_low_value_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert (
+        ctx["test_pruning_pr_url"] == "https://github.com/arthexis/arthexis/pull/7000"
+    )
+    assert ctx["test_pruning_result"] == {
+        "success": True,
+        "source": "settings",
+        "pr_url": "https://github.com/arthexis/arthexis/pull/7000",
+        "criteria": list(pipeline.TEST_PRUNING_CRITERIA),
+    }
+
+
+def test_step_prune_low_value_tests_rejects_explicit_failure(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.setattr(pipeline, "_append_log", lambda *_args, **_kwargs: None)
+    ctx = {
+        "test_pruning_result": {"success": False},
+        "test_pruning_pr_url": "https://github.com/arthexis/arthexis/pull/7000",
+    }
+
+    with pytest.raises(PublishPending):
+        pipeline._step_prune_low_value_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert "explicitly failed" in ctx["error"]
+
+
+def test_publish_workflow_records_operator_test_pruning_evidence(
+    monkeypatch, tmp_path: Path
+):
+    captured: dict[str, object] = {}
+    request = RequestFactory().post(
+        "/release/publish",
+        {
+            "set_test_pruning_evidence": "1",
+            "test_pruning_pr_url": "https://github.com/arthexis/arthexis/pull/7000",
+        },
+    )
+    request.user = type("User", (), {"is_authenticated": False})()
+    request.session = {}
+    monkeypatch.setattr(
+        workflow_module.messages, "success", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        workflow_module,
+        "persist_release_context",
+        lambda _request, _session_key, ctx, _lock_path: captured.update(ctx),
+    )
+
+    workflow = workflow_module.ReleasePublishWorkflow(
+        request=request,
+        session_key="release_publish_1",
+        lock_path=tmp_path / "release.lock",
+        restart_path=tmp_path / "release.restarts",
+        clean_redirect_path=lambda _request, path: path,
+        collect_dirty_files=lambda: [],
+        validate_manual_git_push=lambda _pending_push: True,
+        append_log=lambda *_args, **_kwargs: None,
+    )
+    ctx = workflow_module.ReleasePublishContext(
+        step=5,
+        started=True,
+        paused=True,
+        extras={"test_pruning_required": True},
+    )
+
+    result, resume_requested, response = workflow.resume(ctx)
+
+    assert resume_requested is False
+    assert response.status_code == 302
+    assert response["Location"] == "/release/publish?resume=1&step=5"
+    assert result.paused is False
+    assert result.extras["test_pruning_result"] == {
+        "success": True,
+        "source": "operator",
+        "pr_url": "https://github.com/arthexis/arthexis/pull/7000",
+    }
+    assert (
+        captured["test_pruning_pr_url"]
+        == "https://github.com/arthexis/arthexis/pull/7000"
+    )
+
 
 def test_step_confirm_pypi_trusted_publisher_settings_fails_on_mismatch(
     monkeypatch, tmp_path: Path
@@ -534,4 +696,3 @@ def test_step_confirm_pypi_trusted_publisher_settings_allows_non_publish_step_to
     )
 
     assert "trusted_publisher_verified_at" in ctx
-
