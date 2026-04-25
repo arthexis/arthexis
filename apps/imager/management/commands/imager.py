@@ -166,8 +166,8 @@ class Command(BaseCommand):
             file_paths=[str(path) for path in options.get("recovery_authorized_key_file", [])],
             inline_keys=[str(key) for key in options.get("recovery_authorized_key", [])],
         )
-        skip_recovery_ssh = bool(options["skip_recovery_ssh"])
-        customize = not bool(options["skip_customize"])
+        skip_recovery_ssh = options["skip_recovery_ssh"]
+        customize = not options["skip_customize"]
         recovery_ssh_user = str(options["recovery_ssh_user"]).strip()
         if skip_recovery_ssh and (recovery_authorized_keys or recovery_ssh_user):
             raise CommandError(
@@ -192,8 +192,8 @@ class Command(BaseCommand):
                 build_engine=str(options["build_engine"]),
                 profile=str(options["profile"]),
                 profile_metadata=profile_metadata,
-                recovery_ssh_user="" if skip_recovery_ssh else recovery_ssh_user,
-                recovery_authorized_keys=[] if skip_recovery_ssh else recovery_authorized_keys,
+                recovery_ssh_user=recovery_ssh_user,
+                recovery_authorized_keys=recovery_authorized_keys,
             )
         except ImagerBuildError as exc:
             raise CommandError(str(exc)) from exc
