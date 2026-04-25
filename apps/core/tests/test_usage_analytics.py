@@ -1,7 +1,9 @@
+import gc
 import json
 from io import StringIO
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+from weakref import WeakKeyDictionary
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
@@ -9,8 +11,6 @@ from django.db.utils import OperationalError
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
-
-from config.middleware import UsageAnalyticsMiddleware
 
 from apps.core.analytics import (
     USAGE_ANALYTICS_FEATURE_SLUG,
@@ -20,6 +20,11 @@ from apps.core.analytics import (
 )
 from apps.core.models import UsageEvent
 from apps.features.models import Feature
+from config.middleware import UsageAnalyticsMiddleware
+
+
+class _AtomicBlock:
+    pass
 
 
 def _dummy_view(request):
@@ -205,3 +210,105 @@ class UsageAnalyticsBootstrapFallbackTests(TestCase):
             side_effect=OperationalError("no such table: features_feature"),
         ):
             self.assertFalse(usage_analytics_enabled())
+
+    def test_usage_analytics_helper_avoids_missing_feature_table_during_atomic_bootstrap(
+        self,
+    ):
+        with (
+            patch("apps.features.utils.connection.in_atomic_block", True),
+            patch(
+                "apps.features.utils.connection.introspection.table_names",
+                return_value=[],
+            ),
+            patch("apps.features.utils.Feature.objects.filter") as feature_filter,
+            patch(
+                "apps.features.utils._CONFIRMED_FEATURE_TABLES", WeakKeyDictionary()
+            ),
+        ):
+            self.assertFalse(usage_analytics_enabled())
+
+        feature_filter.assert_not_called()
+
+    def test_usage_analytics_helper_caches_confirmed_feature_table_during_atomic_bootstrap(
+        self,
+    ):
+        atomic_block = _AtomicBlock()
+        feature_queryset = MagicMock()
+        feature_queryset.values_list.return_value.first.return_value = True
+        confirmed_tables = WeakKeyDictionary()
+        with (
+            patch("apps.features.utils.connection.in_atomic_block", True),
+            patch("apps.features.utils.connection.atomic_blocks", [atomic_block]),
+            patch(
+                "apps.features.utils.connection.introspection.table_names",
+                return_value=[Feature._meta.db_table],
+            ) as table_names,
+            patch(
+                "apps.features.utils.Feature.objects.filter",
+                return_value=feature_queryset,
+            ),
+            patch("apps.features.utils._CONFIRMED_FEATURE_TABLES", confirmed_tables),
+        ):
+            self.assertTrue(usage_analytics_enabled())
+            self.assertTrue(usage_analytics_enabled())
+
+        table_names.assert_called_once()
+
+    def test_usage_analytics_helper_revalidates_feature_table_for_new_atomic_block(
+        self,
+    ):
+        first_atomic_block = _AtomicBlock()
+        second_atomic_block = _AtomicBlock()
+        feature_queryset = MagicMock()
+        feature_queryset.values_list.return_value.first.return_value = True
+        with (
+            patch("apps.features.utils.connection.in_atomic_block", True),
+            patch(
+                "apps.features.utils.connection.introspection.table_names",
+                side_effect=[[Feature._meta.db_table], []],
+            ) as table_names,
+            patch(
+                "apps.features.utils.Feature.objects.filter",
+                return_value=feature_queryset,
+            ) as feature_filter,
+            patch(
+                "apps.features.utils._CONFIRMED_FEATURE_TABLES", WeakKeyDictionary()
+            ),
+        ):
+            with patch(
+                "apps.features.utils.connection.atomic_blocks", [first_atomic_block]
+            ):
+                self.assertTrue(usage_analytics_enabled())
+            with patch(
+                "apps.features.utils.connection.atomic_blocks", [second_atomic_block]
+            ):
+                self.assertFalse(usage_analytics_enabled())
+
+        self.assertEqual(table_names.call_count, 2)
+        feature_filter.assert_called_once()
+
+    def test_confirmed_feature_table_cache_expires_with_atomic_block(self):
+        atomic_block = _AtomicBlock()
+        confirmed_tables = WeakKeyDictionary()
+        feature_queryset = MagicMock()
+        feature_queryset.values_list.return_value.first.return_value = True
+        with (
+            patch("apps.features.utils.connection.in_atomic_block", True),
+            patch("apps.features.utils.connection.atomic_blocks", [atomic_block]),
+            patch(
+                "apps.features.utils.connection.introspection.table_names",
+                return_value=[Feature._meta.db_table],
+            ),
+            patch(
+                "apps.features.utils.Feature.objects.filter",
+                return_value=feature_queryset,
+            ),
+            patch("apps.features.utils._CONFIRMED_FEATURE_TABLES", confirmed_tables),
+        ):
+            self.assertTrue(usage_analytics_enabled())
+            self.assertEqual(len(confirmed_tables), 1)
+
+        del atomic_block
+        gc.collect()
+
+        self.assertEqual(len(confirmed_tables), 0)

@@ -15,11 +15,11 @@ Use this skill after all `$arthexis-main-phase` work for a turn is complete and 
 
 ## Workflow
 
-1. Re-read `/home/arthe/AGENTS.md` and `/home/arthe/workgroup.txt` when coordination may matter.
+1. Re-read `~/AGENTS.md` and `~/workgroup.txt` when coordination may matter.
 2. Run the end step:
 
 ```bash
-python3 /home/arthe/.codex/skills/arthexis-cleanup-step/scripts/turn_boundary.py end-step
+python3 ~/.codex/skills/arthexis-cleanup-step/scripts/turn_boundary.py end-step
 ```
 
 3. Report the turn id, triggered effect count, and any effect notes.
@@ -30,7 +30,7 @@ python3 /home/arthe/.codex/skills/arthexis-cleanup-step/scripts/turn_boundary.py
 During a turn, an agent may declare a note to trigger at end step:
 
 ```bash
-python3 /home/arthe/.codex/skills/arthexis-cleanup-step/scripts/turn_boundary.py declare-effect --name "effect-name" --source "source" --note "what should be considered at end step"
+python3 ~/.codex/skills/arthexis-cleanup-step/scripts/turn_boundary.py declare-effect --name "effect-name" --source "source" --note "what should be considered at end step"
 ```
 
-The end step marks these effects as triggered and writes an event log under `/home/arthe/.local/state/arthexis-turn/events.jsonl`.
+The end step marks these effects as triggered and writes an event log under `~/.local/state/arthexis-turn/events.jsonl`.

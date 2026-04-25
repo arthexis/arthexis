@@ -35,6 +35,19 @@ RECOVERY_SSH_FORBIDDEN_USERS = frozenset({"root"})
 BOOTSTRAP_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
 
+missing_packages=()
+if ! command -v git >/dev/null 2>&1; then
+  missing_packages+=(git ca-certificates)
+elif [ ! -e /etc/ssl/certs/ca-certificates.crt ]; then
+  missing_packages+=(ca-certificates)
+fi
+
+if [ "${#missing_packages[@]}" -gt 0 ]; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update || { sleep 10; apt-get update; }
+  apt-get install -y --no-install-recommends "${missing_packages[@]}"
+fi
+
 APP_HOME=/opt/arthexis
 if [ ! -d "$APP_HOME/.git" ]; then
   git clone --depth 1 "${ARTHEXIS_GIT_URL}" "$APP_HOME"

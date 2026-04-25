@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import errno
 import fcntl
 import json
 import os
+import re
 import signal
 import sys
 import time
@@ -17,14 +19,17 @@ from pathlib import Path
 from typing import Any
 
 
-STATE_DIR = Path("/home/arthe/.local/state/arthexis-turn")
+STATE_DIR = Path.home() / ".local" / "state" / "arthexis-turn"
 ACTIVE_STATE = STATE_DIR / "active-turn.json"
 EVENT_LOG = STATE_DIR / "events.jsonl"
 LOCK_PATH = STATE_DIR / "state.lock"
 ARCHIVE_DIR = STATE_DIR / "turns"
+CADENCE_STATE = STATE_DIR / "cadence-rest.json"
+WRITE_TMP_NAME = ".write-json.tmp"
 DEFAULT_CLEANUP_TIMEOUT_SECONDS = 600
 DEFAULT_TURN_CADENCE_SECONDS = 600
 TERM_GRACE_SECONDS = 15
+SAFE_TURN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 
 
 def now_iso() -> str:
@@ -58,6 +63,34 @@ def cadence_rest_seconds(state: dict[str, Any], cadence_seconds: int, *, now: dt
     return max(0, cadence_seconds - turn_elapsed_seconds(state, now=now))
 
 
+def cadence_rest_payload(
+    state: dict[str, Any],
+    cadence_seconds: int,
+    *,
+    skip_rest: bool,
+    now: dt.datetime,
+) -> dict[str, Any]:
+    cadence_seconds = max(0, int(cadence_seconds))
+    elapsed_before_rest = turn_elapsed_seconds(state, now=now)
+    rest_seconds = 0 if skip_rest else cadence_rest_seconds(state, cadence_seconds, now=now)
+    rest_started_at = now.isoformat(timespec="seconds") if rest_seconds else ""
+    rest_expires_at = (now + dt.timedelta(seconds=rest_seconds)).isoformat(timespec="seconds") if rest_seconds else ""
+    return {
+        "cadence_seconds": cadence_seconds,
+        "turn_elapsed_seconds_before_rest": elapsed_before_rest,
+        "cadence_rest_seconds": rest_seconds,
+        "cadence_rest_skipped": bool(skip_rest),
+        "cadence_rest_started_at": rest_started_at,
+        "cadence_rest_expires_at": rest_expires_at,
+    }
+
+
+def write_cadence_rest_state(turn_id: str, payload: dict[str, Any]) -> None:
+    if payload["cadence_rest_seconds"] <= 0:
+        return
+    write_json(CADENCE_STATE, {"turn_id": safe_turn_id(turn_id), **payload})
+
+
 def ensure_state_dir() -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
@@ -71,7 +104,23 @@ def state_lock():
         yield
 
 
+def checked_state_path(path: Path) -> Path:
+    resolved = path.expanduser().resolve(strict=False)
+    state_root = STATE_DIR.expanduser().resolve(strict=False)
+    if not resolved.is_relative_to(state_root):
+        raise ValueError(f"refusing path outside turn state directory: {path}")
+    return resolved
+
+
+def safe_turn_id(value: Any) -> str:
+    turn_id = str(value or uuid.uuid4().hex)
+    if not SAFE_TURN_ID.fullmatch(turn_id):
+        raise ValueError("turn_id must contain only letters, digits, underscores, periods, or hyphens")
+    return turn_id
+
+
 def read_json(path: Path) -> dict[str, Any] | None:
+    path = checked_state_path(path)
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -82,16 +131,35 @@ def read_json(path: Path) -> dict[str, Any] | None:
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     ensure_state_dir()
-    tmp = path.with_suffix(f"{path.suffix}.tmp")
-    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    path = checked_state_path(path)
+    if path.parent not in {checked_state_path(STATE_DIR), checked_state_path(ARCHIVE_DIR)}:
+        raise ValueError(f"refusing unsupported turn state file path: {path}")
+    content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    dir_fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        fd = os.open(WRITE_TMP_NAME, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o600, dir_fd=dir_fd)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        os.replace(WRITE_TMP_NAME, path.name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+    finally:
+        os.close(dir_fd)
 
 
 def append_event(event: dict[str, Any]) -> None:
     ensure_state_dir()
+    path = checked_state_path(EVENT_LOG)
+    if path.parent != checked_state_path(STATE_DIR):
+        raise ValueError(f"refusing unsupported event log path: {path}")
     event = {"time": now_iso(), **event}
-    with EVENT_LOG.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(event, sort_keys=True) + "\n")
+    flags = os.O_CREAT | os.O_APPEND | os.O_WRONLY
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    dir_fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        fd = os.open(path.name, flags | nofollow, 0o600, dir_fd=dir_fd)
+        with os.fdopen(fd, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, sort_keys=True) + "\n")
+    finally:
+        os.close(dir_fd)
 
 
 def proc_identity(pid: int) -> dict[str, Any] | None:
@@ -108,6 +176,7 @@ def proc_identity(pid: int) -> dict[str, Any] | None:
     rest = stat[close + 2 :].split()
     if len(rest) < 20:
         return None
+    proc_state = rest[0]
     uid = None
     for line in status.splitlines():
         if line.startswith("Uid:"):
@@ -119,14 +188,23 @@ def proc_identity(pid: int) -> dict[str, Any] | None:
         "pid": pid,
         "ppid": int(rest[1]),
         "comm": comm,
+        "state": proc_state,
         "start_ticks": int(rest[19]),
         "uid": uid,
     }
 
 
+def process_identity_is_live(identity: dict[str, Any]) -> bool:
+    return identity.get("state") != "Z"
+
+
 def process_matches(record: dict[str, Any]) -> bool:
     identity = proc_identity(int(record.get("pid", 0)))
-    if identity is None or identity.get("uid") != os.getuid():
+    if (
+        identity is None
+        or identity.get("uid") != os.getuid()
+        or not process_identity_is_live(identity)
+    ):
         return False
     return identity.get("start_ticks") == record.get("start_ticks")
 
@@ -163,23 +241,45 @@ def live_turn_process_records(state: dict[str, Any]) -> list[dict[str, Any]]:
     return [record for record in state.get("registered_processes", []) if process_matches(record)]
 
 
-def live_turn_pids(state: dict[str, Any]) -> set[int]:
+def process_identity_matches(snapshot: dict[str, Any]) -> bool:
+    pid = snapshot.get("pid")
+    if type(pid) is not int or pid <= 1 or pid == os.getpid():
+        return False
+    identity = proc_identity(pid)
+    if (
+        identity is None
+        or identity.get("uid") != os.getuid()
+        or not process_identity_is_live(identity)
+    ):
+        return False
+    return identity.get("start_ticks") == snapshot.get("start_ticks")
+
+
+def live_turn_process_identities(state: dict[str, Any]) -> dict[int, dict[str, Any]]:
     roots = {int(record["pid"]) for record in live_turn_process_records(state)}
     candidates = roots | descendant_pids(roots)
     own_uid = os.getuid()
     current_pid = os.getpid()
-    safe: set[int] = set()
+    safe: dict[int, dict[str, Any]] = {}
     for pid in candidates:
-        if pid == current_pid:
+        if pid <= 1 or pid == current_pid:
             continue
         identity = proc_identity(pid)
-        if identity is not None and identity.get("uid") == own_uid:
-            safe.add(pid)
+        if (
+            identity is not None
+            and identity.get("uid") == own_uid
+            and process_identity_is_live(identity)
+        ):
+            safe[pid] = identity
     return safe
 
 
+def live_turn_pids(state: dict[str, Any]) -> set[int]:
+    return set(live_turn_process_identities(state))
+
+
 def archive_state(state: dict[str, Any]) -> None:
-    turn_id = state.get("turn_id") or uuid.uuid4().hex
+    turn_id = safe_turn_id(state.get("turn_id"))
     write_json(ARCHIVE_DIR / f"{turn_id}.json", state)
 
 
@@ -190,7 +290,11 @@ def cmd_start_turn(args: argparse.Namespace) -> int:
             print(f"active_turn: {existing.get('turn_id')}")
             print("status: already-active")
             return 2
-        turn_id = args.turn_id or uuid.uuid4().hex
+        try:
+            turn_id = safe_turn_id(args.turn_id or uuid.uuid4().hex)
+        except ValueError as exc:
+            print(f"status: invalid-turn-id {exc}")
+            return 2
         state = {
             "turn_id": turn_id,
             "label": args.label or "",
@@ -282,39 +386,73 @@ def cmd_end_step(args: argparse.Namespace) -> int:
     return 0
 
 
-def wait_for_processes(state: dict[str, Any], timeout_seconds: int) -> set[int]:
+def matching_process_identities(identities: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    return {
+        pid: identity
+        for pid, identity in identities.items()
+        if process_identity_matches(identity)
+    }
+
+
+def wait_for_processes(state: dict[str, Any], timeout_seconds: int) -> dict[int, dict[str, Any]]:
     deadline = time.monotonic() + max(0, timeout_seconds)
+    candidates = live_turn_process_identities(state)
     while True:
-        pids = live_turn_pids(state)
-        if not pids or time.monotonic() >= deadline:
-            return pids
+        candidates.update(live_turn_process_identities(state))
+        identities = matching_process_identities(candidates)
+        if not identities or time.monotonic() >= deadline:
+            return identities
         time.sleep(min(5.0, max(0.1, deadline - time.monotonic())))
 
 
-def terminate_pids(pids: set[int], *, force_kill: bool) -> dict[str, Any]:
+def send_signal_to_verified_process(snapshot: dict[str, Any], signum: signal.Signals) -> bool:
+    if not process_identity_matches(snapshot):
+        return False
+    pidfd_open = getattr(os, "pidfd_open", None)
+    pidfd_send_signal = getattr(signal, "pidfd_send_signal", None)
+    if pidfd_open is None or pidfd_send_signal is None:
+        raise RuntimeError("pidfd signaling is required for turn cleanup")
+    try:
+        pidfd = pidfd_open(snapshot["pid"], 0)
+    except OSError as exc:
+        if exc.errno == errno.ESRCH:
+            return False
+        raise
+    try:
+        if not process_identity_matches(snapshot):
+            return False
+        pidfd_send_signal(pidfd, signum)
+        return True
+    finally:
+        os.close(pidfd)
+
+
+def terminate_pids(identities: dict[int, dict[str, Any]], *, force_kill: bool) -> dict[str, Any]:
     result: dict[str, Any] = {"sigterm_sent": [], "sigkill_sent": [], "still_alive": []}
-    for pid in sorted(pids, reverse=True):
+    for pid in sorted(identities, reverse=True):
         try:
-            os.kill(pid, signal.SIGTERM)
+            sent = send_signal_to_verified_process(identities[pid], signal.SIGTERM)
         except ProcessLookupError:
             continue
         except PermissionError:
             result["still_alive"].append(pid)
             continue
-        result["sigterm_sent"].append(pid)
+        if sent:
+            result["sigterm_sent"].append(pid)
     if not result["sigterm_sent"]:
         return result
     time.sleep(TERM_GRACE_SECONDS)
-    lingering = {pid for pid in pids if proc_identity(pid) is not None}
+    lingering = {pid for pid, identity in identities.items() if process_identity_matches(identity)}
     if force_kill:
         for pid in sorted(lingering, reverse=True):
             try:
-                os.kill(pid, signal.SIGKILL)
+                sent = send_signal_to_verified_process(identities[pid], signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 continue
-            result["sigkill_sent"].append(pid)
+            if sent:
+                result["sigkill_sent"].append(pid)
         time.sleep(1)
-        lingering = {pid for pid in lingering if proc_identity(pid) is not None}
+        lingering = {pid for pid in lingering if process_identity_matches(identities[pid])}
     result["still_alive"] = sorted(lingering)
     return result
 
@@ -328,43 +466,51 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
         return 0
 
     timeout_seconds = max(0, int(args.timeout))
-    live_before = sorted(live_turn_pids(state))
+    live_before = sorted(live_turn_process_identities(state))
     lingering = wait_for_processes(state, timeout_seconds)
-    termination = (
-        terminate_pids(lingering, force_kill=args.force_kill)
-        if lingering
-        else {"sigterm_sent": [], "sigkill_sent": [], "still_alive": []}
-    )
+    termination = {"sigterm_sent": [], "sigkill_sent": [], "still_alive": []}
+    archive_path: Path | None = None
 
-    cadence_seconds = max(0, int(args.cadence))
-    elapsed_before_rest = turn_elapsed_seconds(state)
-    rest_seconds = 0 if args.skip_cadence_rest else cadence_rest_seconds(state, cadence_seconds)
-    rest_started_at = now_iso() if rest_seconds else ""
-    if rest_seconds > 0 and not args.no_sleep:
-        time.sleep(rest_seconds)
-    rest_finished_at = now_iso() if rest_seconds else ""
+    cadence_payload: dict[str, Any] = {}
 
     with state_lock():
-        state = read_json(ACTIVE_STATE) or state
-        state["status"] = "complete"
-        state["cleanup_step_at"] = now_iso()
+        state_after_wait = read_json(ACTIVE_STATE)
+        if not state_after_wait or state_after_wait.get("turn_id") != state.get("turn_id"):
+            print("arthexis-cleanup-step")
+            print("status: turn-completed-or-changed")
+            return 0
+        state = state_after_wait
+        lingering.update(live_turn_process_identities(state))
+        lingering = matching_process_identities(lingering)
+        if lingering:
+            termination = terminate_pids(lingering, force_kill=args.force_kill)
+        now = dt.datetime.now(dt.timezone.utc).astimezone()
+        cadence_payload = cadence_rest_payload(
+            state,
+            args.cadence,
+            skip_rest=args.skip_cadence_rest,
+            now=now,
+        )
+        state["cleanup_step_at"] = now.isoformat(timespec="seconds")
         state["cleanup"] = {
             "timeout_seconds": timeout_seconds,
             "live_before": live_before,
             "lingering_after_wait": sorted(lingering),
-            "cadence_seconds": cadence_seconds,
-            "turn_elapsed_seconds_before_rest": elapsed_before_rest,
-            "cadence_rest_seconds": rest_seconds,
-            "cadence_rest_skipped": bool(args.skip_cadence_rest),
-            "cadence_rest_no_sleep": bool(args.no_sleep),
-            "cadence_rest_started_at": rest_started_at,
-            "cadence_rest_finished_at": rest_finished_at,
+            **cadence_payload,
             **termination,
         }
-        archive_state(state)
-        if ACTIVE_STATE.exists():
-            ACTIVE_STATE.unlink()
-        append_event({"event": "cleanup-complete", "turn_id": state["turn_id"], "cleanup": state["cleanup"]})
+        if termination["still_alive"]:
+            state["status"] = "active"
+            write_json(ACTIVE_STATE, state)
+            append_event({"event": "cleanup-incomplete", "turn_id": state["turn_id"], "cleanup": state["cleanup"]})
+        else:
+            state["status"] = "complete"
+            write_cadence_rest_state(str(state["turn_id"]), cadence_payload)
+            archive_state(state)
+            archive_path = ARCHIVE_DIR / (safe_turn_id(state.get("turn_id")) + ".json")
+            if ACTIVE_STATE.exists():
+                ACTIVE_STATE.unlink()
+            append_event({"event": "cleanup-complete", "turn_id": state["turn_id"], "cleanup": state["cleanup"]})
 
     print("arthexis-cleanup-step")
     print(f"turn_id: {state.get('turn_id')}")
@@ -374,12 +520,15 @@ def cmd_cleanup_step(args: argparse.Namespace) -> int:
     print(f"sigterm_sent: {len(termination['sigterm_sent'])}")
     print(f"sigkill_sent: {len(termination['sigkill_sent'])}")
     print(f"still_alive: {len(termination['still_alive'])}")
-    print(f"cadence_seconds: {cadence_seconds}")
-    print(f"turn_elapsed_seconds_before_rest: {elapsed_before_rest}")
-    print(f"cadence_rest_seconds: {rest_seconds}")
-    print(f"cadence_rest_skipped: {bool(args.skip_cadence_rest)}")
-    print(f"cadence_rest_no_sleep: {bool(args.no_sleep)}")
-    print(f"archive: {ARCHIVE_DIR / (str(state.get('turn_id')) + '.json')}")
+    print("cadence_seconds: {}".format(cadence_payload.get("cadence_seconds", 0)))
+    print("turn_elapsed_seconds_before_rest: {}".format(cadence_payload.get("turn_elapsed_seconds_before_rest", 0)))
+    print("cadence_rest_seconds: {}".format(cadence_payload.get("cadence_rest_seconds", 0)))
+    print("cadence_rest_skipped: {}".format(cadence_payload.get("cadence_rest_skipped", False)))
+    print("cadence_rest_expires_at: {}".format(cadence_payload.get("cadence_rest_expires_at", "")))
+    if archive_path is None:
+        print(f"active_state: {ACTIVE_STATE}")
+    else:
+        print(f"archive: {archive_path}")
     return 0 if not termination["still_alive"] else 1
 
 
@@ -429,7 +578,6 @@ def build_parser() -> argparse.ArgumentParser:
     cleanup.add_argument("--timeout", type=int, default=DEFAULT_CLEANUP_TIMEOUT_SECONDS)
     cleanup.add_argument("--cadence", type=int, default=DEFAULT_TURN_CADENCE_SECONDS)
     cleanup.add_argument("--skip-cadence-rest", action="store_true")
-    cleanup.add_argument("--no-sleep", action="store_true")
     cleanup.add_argument("--force-kill", action="store_true")
     cleanup.set_defaults(func=cmd_cleanup_step)
 

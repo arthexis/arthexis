@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arthexis LCD Attention"
+  short_description: "Post concise LCD attention prompts."
+  default_prompt: "Use $arthexis-lcd-attention to write a short attention prompt to the Arthexis 16x2 LCD."

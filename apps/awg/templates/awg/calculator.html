@@ -9,6 +9,7 @@
   }
 </style>
 <h1>{% trans "Cable & Conduit Calculator" %}</h1>
+{% include "awg/_calculator_nav.html" with active_calculator="cable" %}
 <form method="post" id="awg-calculator">
   {% csrf_token %}
   <div class="row g-4 mb-3">

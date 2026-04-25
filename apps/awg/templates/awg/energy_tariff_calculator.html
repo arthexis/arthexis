@@ -3,6 +3,7 @@
 {% block title %}{% trans "Energy Tariff Calculator" %}{% endblock %}
 {% block content %}
 <h1>{% trans "Energy Tariff Calculator" %}</h1>
+{% include "awg/_calculator_nav.html" with active_calculator="energy_tariff" %}
 <form method="post" id="energy-tariff-calculator">
   {% csrf_token %}
   <div class="row g-4 mb-3">

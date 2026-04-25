@@ -52,7 +52,7 @@ from apps.chats.models import ChatSession
 from apps.core.models import InviteLead
 from apps.emails import mailer
 from apps.features.utils import is_suite_feature_enabled
-from apps.meta.models import WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG
+from apps.meta.models import Attention, WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG
 from apps.nodes.models import Node
 from apps.nodes.utils import ensure_feature_enabled
 from apps.users.models import PasskeyCredential
@@ -991,6 +991,12 @@ def whatsapp_webhook(request):
         content=text,
         display_name=display_name,
         source="whatsapp",
+    )
+    Attention.capture_response(
+        text=text,
+        from_phone=from_number,
+        payload=payload,
+        require_key=True,
     )
     response_payload = {"status": "ok", "session": str(session.uuid)}
     if getattr(message, "pk", None):
