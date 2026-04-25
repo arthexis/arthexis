@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from django.core.management import call_command
+from django.core.validators import validate_slug
 from PIL import Image
 
 from apps.classification.ingest import (
@@ -66,8 +67,26 @@ def test_import_training_images_compacts_long_folder_labels(tmp_path):
     assert len(tags) == 2
     assert {len(tag.slug) for tag in tags} == {ClassificationTag._meta.get_field("slug").max_length}
     assert all(len(tag.name) <= ClassificationTag._meta.get_field("name").max_length for tag in tags)
+    assert all(":" not in tag.slug for tag in tags)
+    for tag in tags:
+        validate_slug(tag.slug)
     assert tags[0].slug != tags[1].slug
     assert TrainingSample.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_import_training_images_compacts_long_explicit_tag(tmp_path):
+    _write_image(tmp_path / "seed" / "first.png", (20, 200, 20))
+    explicit_tag = f"{'explicit-' * 20}training-tag"
+
+    call_command("import_training_images", str(tmp_path), "--tag", explicit_tag)
+
+    tag = ClassificationTag.objects.get()
+    assert len(tag.slug) == ClassificationTag._meta.get_field("slug").max_length
+    assert len(tag.name) <= ClassificationTag._meta.get_field("name").max_length
+    assert ":" not in tag.slug
+    validate_slug(tag.slug)
+    assert TrainingSample.objects.count() == 1
 
 
 @pytest.mark.django_db

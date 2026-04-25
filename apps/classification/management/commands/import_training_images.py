@@ -175,7 +175,8 @@ class Command(BaseCommand):
         slug = slugify(value)
         if not slug:
             raise CommandError("--tag must contain at least one slug character.")
-        return slug, value.replace("-", " ").replace("_", " ").strip().title() or slug
+        name = value.replace("-", " ").replace("_", " ").strip().title() or slug
+        return self._compact_tag_slug(slug), self._compact_tag_name(name)
 
     def _get_or_create_media_file(
         self,
@@ -244,8 +245,8 @@ class Command(BaseCommand):
                 label = path.parent.name if path.parent != root else root.name
             name = label.replace("-", " ").replace("_", " ").strip().title() or "Unlabeled"
             slug = slugify(label) or "unlabeled"
-            slug = self._compact_value(slug, ClassificationTag._meta.get_field("slug").max_length)
-            name = self._compact_value(name, ClassificationTag._meta.get_field("name").max_length)
+            slug = self._compact_tag_slug(slug)
+            name = self._compact_tag_name(name)
 
         cached_tag = self._tag_cache.get(slug)
         if cached_tag is not None:
@@ -269,6 +270,17 @@ class Command(BaseCommand):
         digest = f"{zlib.crc32(value.encode('utf-8')):08x}"
         suffix_width = max(max_length - len(digest) - 1, 1)
         return f"{digest}:{value[-suffix_width:]}"
+
+    def _compact_tag_slug(self, value: str) -> str:
+        max_length = ClassificationTag._meta.get_field("slug").max_length
+        if len(value) <= max_length:
+            return value
+        digest = f"{zlib.crc32(value.encode('utf-8')):08x}"
+        suffix_width = max(max_length - len(digest) - 1, 1)
+        return f"{digest}-{value[-suffix_width:]}"
+
+    def _compact_tag_name(self, value: str) -> str:
+        return self._compact_value(value, ClassificationTag._meta.get_field("name").max_length)
 
     def _summary(self, *, stats: ImportStats, root: Path, dry_run: bool) -> str:
         mode = "dry-run" if dry_run else "import"
