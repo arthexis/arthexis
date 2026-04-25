@@ -331,7 +331,7 @@ class Attention(Entity):
     class Meta:
         ordering = ["-created_at", "-pk"]
         verbose_name = _("Attention")
-        verbose_name_plural = _("Attention")
+        verbose_name_plural = _("Attention Requests")
 
     def __str__(self) -> str:
         return f"{self.key or 'Attention'}: {self.title}"
@@ -421,8 +421,8 @@ class Attention(Entity):
         payload: dict | None = None,
     ) -> "Attention | None":
         key = cls.find_key(text)
-        queryset = cls.objects.select_for_update().filter(status=cls.Status.PENDING)
         with transaction.atomic():
+            queryset = cls.objects.select_for_update().filter(status=cls.Status.PENDING)
             if key:
                 attention = queryset.filter(key__iexact=key).first()
             elif from_phone:

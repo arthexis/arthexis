@@ -10,6 +10,9 @@ from django.db import close_old_connections
 from apps.meta.models import Attention, WhatsAppChatBridge
 
 
+CONNECTION_CLEANUP_INTERVAL = 60.0
+
+
 class Command(BaseCommand):
     help = "Create, send, and wait for Attention requests."
 
@@ -107,8 +110,12 @@ class Command(BaseCommand):
         attention = self._get_attention(key)
         deadline = time.monotonic() + options["timeout"] if options["timeout"] else None
         poll_interval = max(float(options["poll_interval"]), 0.1)
+        last_connection_cleanup = 0.0
         while True:
-            close_old_connections()
+            now = time.monotonic()
+            if now - last_connection_cleanup >= CONNECTION_CLEANUP_INTERVAL:
+                close_old_connections()
+                last_connection_cleanup = now
             attention.refresh_from_db()
             if attention.status == Attention.Status.RESPONDED:
                 self.stdout.write(f"attention={attention.key}")
