@@ -1,7 +1,7 @@
 import json
 from io import StringIO
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
@@ -215,7 +215,30 @@ class UsageAnalyticsBootstrapFallbackTests(TestCase):
                 return_value=[],
             ),
             patch("apps.features.utils.Feature.objects.filter") as feature_filter,
+            patch("apps.features.utils._CONFIRMED_FEATURE_TABLES", set()),
         ):
             self.assertFalse(usage_analytics_enabled())
 
         feature_filter.assert_not_called()
+
+    def test_usage_analytics_helper_caches_confirmed_feature_table_during_atomic_bootstrap(
+        self,
+    ):
+        feature_queryset = MagicMock()
+        feature_queryset.values_list.return_value.first.return_value = True
+        with (
+            patch("apps.features.utils.connection.in_atomic_block", True),
+            patch(
+                "apps.features.utils.connection.introspection.table_names",
+                return_value=[Feature._meta.db_table],
+            ) as table_names,
+            patch(
+                "apps.features.utils.Feature.objects.filter",
+                return_value=feature_queryset,
+            ),
+            patch("apps.features.utils._CONFIRMED_FEATURE_TABLES", set()),
+        ):
+            self.assertTrue(usage_analytics_enabled())
+            self.assertTrue(usage_analytics_enabled())
+
+        table_names.assert_called_once()

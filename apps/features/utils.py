@@ -10,6 +10,7 @@ from .models import Feature
 from .parameters import get_feature_parameter
 
 QUICK_WEB_SHARE_FEATURE_SLUG = "quick-web-share"
+_CONFIRMED_FEATURE_TABLES: set[tuple[str, str]] = set()
 
 
 def _feature_table_available_for_atomic_lookup() -> bool:
@@ -17,10 +18,16 @@ def _feature_table_available_for_atomic_lookup() -> bool:
 
     if not connection.in_atomic_block:
         return True
+    table_key = (connection.alias, Feature._meta.db_table)
+    if table_key in _CONFIRMED_FEATURE_TABLES:
+        return True
     try:
-        return Feature._meta.db_table in connection.introspection.table_names()
+        table_exists = Feature._meta.db_table in connection.introspection.table_names()
     except (OperationalError, ProgrammingError):
         return False
+    if table_exists:
+        _CONFIRMED_FEATURE_TABLES.add(table_key)
+    return table_exists
 
 
 def is_suite_feature_enabled(slug: str, *, default: bool = True) -> bool:
