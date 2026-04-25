@@ -60,6 +60,7 @@ sqlparse==0.5.5
 tablib==3.9.0
 tinycss2==1.5.1
 toml==0.10.2
+tomli>=1.1.0; python_version < "3.11"
 Twisted==25.5.0
 txaio==25.9.2
 typing_extensions==4.15.0

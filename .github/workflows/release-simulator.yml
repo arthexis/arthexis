@@ -152,164 +152,30 @@ jobs:
     needs:
       - evaluate
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     outputs:
-      simulated_ok: ${{ steps.finalize.outputs.simulated_ok }}
-      summary_markdown: ${{ steps.finalize.outputs.summary_markdown }}
+      simulated_ok: ${{ steps.simulate.outputs.simulated_ok }}
+      summary_markdown: ${{ steps.simulate.outputs.summary_markdown }}
     steps:
       - uses: actions/checkout@v6
-        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
         with:
           clean: false
       - uses: actions/setup-python@v6
-        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
         with:
           python-version: '3.11'
-      - name: Validate release tag version gate (simulated)
-        id: validate_version_gate
-        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+      - name: Run release simulator
+        id: simulate
+        env:
+          BLOCKERS_JSON: ${{ needs.evaluate.outputs.blockers_json }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import tomllib
-
-          root = Path('.')
-          expected_version = (root / 'VERSION').read_text(encoding='utf-8').strip()
-          pyproject = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))
-          dynamic_version_files = (
-              pyproject.get('tool', {})
-              .get('setuptools', {})
-              .get('dynamic', {})
-              .get('version', {})
-              .get('file', [])
-          )
-          if isinstance(dynamic_version_files, str):
-              dynamic_version_files = [dynamic_version_files]
-
-          if dynamic_version_files:
-              dynamic_path = root / dynamic_version_files[0]
-              dynamic_version = dynamic_path.read_text(encoding='utf-8').strip()
-              if dynamic_version != expected_version:
-                  raise SystemExit(
-                      'Release simulation blocked: VERSION and setuptools dynamic version file differ. '
-                      f'VERSION={expected_version!r}; {dynamic_path}={dynamic_version!r}.'
-                  )
-
-          print(f'Simulated tag/version gate passed for VERSION={expected_version!r}.')
-          PY
-      - name: Preflight PyPI version availability (simulated)
-        id: preflight_pypi
-        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
-        run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          from urllib.error import HTTPError, URLError
-          from urllib.request import urlopen
-
-          package_name = 'arthexis'
-          package_version = Path('VERSION').read_text(encoding='utf-8').strip()
-          pypi_url = f'https://pypi.org/pypi/{package_name}/json'
-
-          try:
-              with urlopen(pypi_url, timeout=15) as response:
-                  payload = json.load(response)
-          except HTTPError as exc:
-              if exc.code == 404:
-                  payload = {'releases': {}}
-              else:
-                  raise SystemExit(
-                      'Release simulation blocked: unable to verify existing PyPI versions '
-                      f'(HTTP {exc.code} from {pypi_url}).'
-                  ) from exc
-          except URLError as exc:
-              raise SystemExit(
-                  'Release simulation blocked: network failure while checking PyPI for an existing release '
-                  f'({exc.reason}).'
-              ) from exc
-
-          releases = payload.get('releases', {})
-          if package_version in releases:
-              raise SystemExit(
-                  f'Release simulation blocked: {package_name} {package_version} is already available on PyPI.'
-              )
-
-          print(f'Simulated PyPI preflight passed for {package_name} {package_version}.')
-          PY
-      - name: Install build backend
-        id: install_build_backend
-        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install build twine
-      - name: Build sdist and wheel (simulated)
-        id: build_package
-        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
-        run: |
-          python -m build
-      - name: Validate package metadata (simulated)
-        id: validate_metadata
-        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
-        run: |
-          python -m twine check dist/*
-      - name: Stop before authorization-required publish step
-        id: authorization_boundary
-        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
-        run: |
-          echo "Release simulator intentionally stopped before PyPI trusted-publisher authorization/publish."
-      - name: Generate release simulation summary
-        id: finalize
-        if: ${{ always() }}
-        run: |
-          if [ "${{ needs.evaluate.outputs.can_simulate }}" = "true" ]; then
-            if [ "${{ job.status }}" = "success" ]; then
-              {
-                echo 'summary_markdown<<EOF'
-                echo '### Simulation result'
-                echo ''
-                echo '- ✅ Release simulation reached the authorization boundary successfully.'
-                echo '- ℹ️ Publish to PyPI was intentionally skipped because authorization is required.'
-                echo '- ✅ Recommendation: release is ready if maintainers approve and trigger a real publish.'
-                echo 'EOF'
-                echo 'simulated_ok=true'
-              } >> "$GITHUB_OUTPUT"
-            else
-              FAILED_STEP='the simulation pipeline'
-              if [ "${{ steps.validate_version_gate.outcome }}" = "failure" ]; then
-                FAILED_STEP='validate_version_gate'
-              elif [ "${{ steps.preflight_pypi.outcome }}" = "failure" ]; then
-                FAILED_STEP='preflight_pypi'
-              elif [ "${{ steps.install_build_backend.outcome }}" = "failure" ]; then
-                FAILED_STEP='install_build_backend'
-              elif [ "${{ steps.build_package.outcome }}" = "failure" ]; then
-                FAILED_STEP='build_package'
-              elif [ "${{ steps.validate_metadata.outcome }}" = "failure" ]; then
-                FAILED_STEP='validate_metadata'
-              elif [ "${{ steps.authorization_boundary.outcome }}" = "failure" ]; then
-                FAILED_STEP='authorization_boundary'
-              fi
-              {
-                echo 'summary_markdown<<EOF'
-                echo '### Simulation result'
-                echo ''
-                echo '- ❌ Release simulation failed before reaching the authorization boundary.'
-                echo "- ❌ First failing step: \`$FAILED_STEP\`."
-                echo "- 🔎 Inspect this workflow run for detailed logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                echo 'EOF'
-                echo 'simulated_ok=false'
-              } >> "$GITHUB_OUTPUT"
-            fi
-          else
-            {
-              echo 'summary_markdown<<EOF'
-              echo '### Simulation result'
-              echo ''
-              echo '- ⏭️ Release simulation was skipped because install/upgrade blockers are open.'
-              echo 'EOF'
-              echo 'simulated_ok=false'
-            } >> "$GITHUB_OUTPUT"
-          fi
+          python -m apps.release.simulator \
+            --blockers-json "$BLOCKERS_JSON" \
+            --github-output "$GITHUB_OUTPUT" \
+            --install-missing-tools \
+            --run-url "$RUN_URL"
 
   report:
     if: ${{ always() && github.event_name != 'push' }}
