@@ -164,6 +164,58 @@ class ShopCheckoutTests(TestCase):
         self.assertEqual(checkout_response.status_code, 200)
         self.assertContains(checkout_response, f'<option value="{image.id}" selected>')
 
+    def test_store_rehydrates_pending_gallery_handoff_without_query_param(self):
+        Shop.objects.create(
+            name="Card Shop",
+            slug="card-shop-rehydrate-handoff",
+            default_payment_provider="stripe",
+        )
+        owner = self._create_user("gallery-rehydrate-owner", "rehydrate@example.com")
+        image = create_gallery_image(
+            uploaded_file=self._upload_image("rehydrate-handoff.jpg"),
+            title="Rehydrated Handoff Art",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+        session = self.client.session
+        session["shop_cart_gallery_image"] = {
+            "product_id": None,
+            "gallery_image_id": str(image.id),
+        }
+        session.save()
+
+        response = self.client.get(reverse("shop:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_gallery_image"], image)
+        self.assertContains(response, "Using <strong>Rehydrated Handoff Art</strong>")
+        self.assertEqual(
+            self.client.session.get("shop_cart_gallery_image"),
+            {"product_id": None, "gallery_image_id": str(image.id)},
+        )
+
+    def test_store_clears_stale_pending_gallery_handoff_without_query_param(self):
+        owner = self._create_user("gallery-stale-store-owner", "stale-store@example.com")
+        image = create_gallery_image(
+            uploaded_file=self._upload_image("stale-store-handoff.jpg"),
+            title="Stale Store Handoff Art",
+            owner_user=owner,
+            include_in_public_gallery=True,
+        )
+        session = self.client.session
+        session["shop_cart_gallery_image"] = {
+            "product_id": None,
+            "gallery_image_id": str(image.id),
+        }
+        session.save()
+        image.delete()
+
+        response = self.client.get(reverse("shop:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["selected_gallery_image"])
+        self.assertNotIn("shop_cart_gallery_image", self.client.session)
+
     def test_gallery_handoff_survives_non_customizable_add_before_card(self):
         shop = Shop.objects.create(
             name="Card Shop",

@@ -88,7 +88,24 @@ def _gallery_images_for_checkout(request: HttpRequest) -> QuerySet[GalleryImage]
 
 
 def _selected_gallery_image_for_store(request: HttpRequest) -> GalleryImage | None:
-    selected_gallery_image_id = (request.GET.get("gallery_image") or "").strip()
+    selected_gallery_image_id = request.GET.get("gallery_image")
+    if selected_gallery_image_id is None:
+        stored_selection = request.session.get(GALLERY_HANDOFF_SESSION_KEY) or {}
+        try:
+            image_id = int(stored_selection.get("gallery_image_id"))
+        except (TypeError, ValueError):
+            if stored_selection:
+                request.session.pop(GALLERY_HANDOFF_SESSION_KEY, None)
+                request.session.modified = True
+            return None
+
+        image = _gallery_images_for_checkout(request).filter(pk=image_id).first()
+        if image is None:
+            request.session.pop(GALLERY_HANDOFF_SESSION_KEY, None)
+            request.session.modified = True
+        return image
+
+    selected_gallery_image_id = selected_gallery_image_id.strip()
     if not selected_gallery_image_id:
         return None
     try:
