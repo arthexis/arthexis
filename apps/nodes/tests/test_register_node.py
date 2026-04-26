@@ -8,7 +8,7 @@ import requests
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
-from django.db import IntegrityError
+from django.db import DatabaseError, IntegrityError
 from django.http import HttpResponse, JsonResponse
 from django.test import RequestFactory
 
@@ -233,6 +233,46 @@ def test_get_local_does_not_return_deleted_self_after_zero_row_mac_update(monkey
     assert local is None
     assert "aa:bb:cc:dd:ee:01" not in Node._local_cache
     assert not original_filter(pk=self_node.pk).exists()
+
+
+@pytest.mark.django_db
+def test_get_local_returns_self_after_transient_mac_update_error(monkeypatch):
+    self_node = Node.objects.create(
+        hostname="transient-self-node",
+        mac_address="00:11:22:33:44:57",
+        current_relation=Node.Relation.SELF,
+    )
+    other_node = Node.objects.create(
+        hostname="other-node",
+        mac_address="00:11:22:33:44:58",
+        current_relation=Node.Relation.PEER,
+    )
+    Node._local_cache.clear()
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:02")
+    )
+
+    original_filter = Node.objects.filter
+
+    class FailingUpdate:
+        def update(self, **kwargs):
+            raise DatabaseError("simulated transient write failure")
+
+    def failing_filter(*args, **kwargs):
+        if kwargs == {"pk": self_node.pk}:
+            return FailingUpdate()
+        return original_filter(*args, **kwargs)
+
+    monkeypatch.setattr(Node.objects, "filter", failing_filter)
+
+    local = Node.get_local()
+
+    assert local is not None
+    assert local.pk == self_node.pk
+    assert local.pk != other_node.pk
+    self_node.refresh_from_db()
+    assert self_node.mac_address == "00:11:22:33:44:57"
+    assert "aa:bb:cc:dd:ee:02" not in Node._local_cache
 
 
 @pytest.mark.django_db

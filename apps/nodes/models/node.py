@@ -448,12 +448,14 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             current_mac = mac.strip().lower()
             should_cache = True
             if stored_mac != current_mac:
+                self_node_missing = False
                 try:
                     with transaction.atomic():
                         rows_updated = cls.objects.filter(pk=node.pk).update(
                             mac_address=mac
                         )
                     if rows_updated != 1:
+                        self_node_missing = True
                         raise DatabaseError(
                             "stale self node disappeared before MAC refresh"
                         )
@@ -493,7 +495,8 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
                         },
                         exc_info=True,
                     )
-                    node = None
+                    if self_node_missing:
+                        node = None
                 else:
                     logger.warning(
                         "nodes.Node.get_local refreshed stale self-node MAC address",
