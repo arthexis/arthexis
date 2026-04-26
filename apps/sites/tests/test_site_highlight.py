@@ -112,9 +112,13 @@ def test_funding_banner_only_shows_on_arthexis_dot_com(
     settings.ARTHEXIS_FUNDING_ISSUE_URL = (
         "https://github.com/arthexis/arthexis/issues/1"
     )
-    monkeypatch.setattr(
-        context_processors, "_is_github_issue_open", lambda *_args, **_kwargs: True
-    )
+    issue_checks = []
+
+    def issue_is_open(issue_url):
+        issue_checks.append(issue_url)
+        return True
+
+    monkeypatch.setattr(context_processors, "_is_github_issue_open", issue_is_open)
 
     canonical_request = rf.get("/", HTTP_HOST="arthexis.com")
     other_request = rf.get("/", HTTP_HOST="example.com")
@@ -123,6 +127,7 @@ def test_funding_banner_only_shows_on_arthexis_dot_com(
 
     assert banner is not None
     assert banner["issue_url"] == "https://github.com/arthexis/arthexis/issues/1"
+    assert issue_checks == ["https://github.com/arthexis/arthexis/issues/1"]
     assert context_processors._build_funding_banner(other_request) is None
 
 
@@ -192,3 +197,18 @@ def test_github_issue_open_caches_unknown_state_on_fetch_failure(monkeypatch) ->
         is True
     )
     assert calls == 1
+
+
+def test_funding_banner_skip_does_not_check_issue_state(
+    rf: RequestFactory, settings, monkeypatch
+) -> None:
+    settings.ALLOWED_HOSTS = ["arthexis.com"]
+    request = rf.get("/", HTTP_HOST="arthexis.com")
+    request.hide_funding_banner = True
+
+    def fail_issue_lookup(*_args, **_kwargs):
+        raise AssertionError("hidden funding banner must not check issue state")
+
+    monkeypatch.setattr(context_processors, "_is_github_issue_open", fail_issue_lookup)
+
+    assert context_processors._build_funding_banner(request) is None

@@ -22,9 +22,12 @@ def test_login_view_does_not_consume_registration_session_prefill_on_post(client
 
 
 def test_login_view_hides_navigation_and_funding_banner(client, monkeypatch):
+    def fail_issue_lookup(*_args, **_kwargs):
+        raise AssertionError("login render must not check GitHub funding issue state")
+
     monkeypatch.setattr(
         "apps.sites.context_processors._is_github_issue_open",
-        lambda *_args, **_kwargs: True,
+        fail_issue_lookup,
     )
 
     response = client.get(reverse("pages:login"), HTTP_HOST="arthexis.com")

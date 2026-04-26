@@ -83,8 +83,21 @@ def _is_arthexis_dot_com_request(request) -> bool:
     return host == ARTHEXIS_FUNDING_HOST
 
 
+def _request_hides_funding_banner(request) -> bool:
+    """Return whether the resolved page suppresses funding banner chrome."""
+
+    if getattr(request, "hide_funding_banner", False):
+        return True
+
+    resolver_match = getattr(request, "resolver_match", None)
+    return getattr(resolver_match, "view_name", "") == "pages:login"
+
+
 def _build_funding_banner(request):
     """Build the public funding banner, shown only on arthexis.com."""
+
+    if _request_hides_funding_banner(request):
+        return None
 
     if not _is_arthexis_dot_com_request(request):
         return None
