@@ -23,7 +23,7 @@ class ContentSample(Entity):
     kind = models.CharField(max_length=10, choices=KIND_CHOICES)
     content = models.TextField(blank=True)
     path = models.CharField(max_length=255, blank=True)
-    method = models.CharField(max_length=10, default="", blank=True)
+    method = models.CharField(max_length=100, default="", blank=True)
     hash = models.CharField(max_length=64, blank=True)
     transaction_uuid = models.UUIDField(
         default=uuid.uuid4,
@@ -77,7 +77,9 @@ class ContentClassifier(TranslatableModel, Entity):
         label=models.CharField(max_length=150),
     )
     kind = models.CharField(max_length=10, choices=ContentSample.KIND_CHOICES)
-    entrypoint = models.CharField(max_length=255, help_text="Dotted path to classifier callable")
+    entrypoint = models.CharField(
+        max_length=255, help_text="Dotted path to classifier callable"
+    )
     run_by_default = models.BooleanField(default=True)
     active = models.BooleanField(default=True)
 
