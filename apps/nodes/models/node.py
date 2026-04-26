@@ -450,7 +450,9 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             if stored_mac != current_mac:
                 node.mac_address = mac
                 try:
-                    node.save(update_fields=["mac_address"])
+                    with transaction.atomic():
+                        cls.objects.filter(pk=node.pk).update(mac_address=mac)
+                    node.mac_address = mac
                 except IntegrityError:
                     node.mac_address = stored_mac
                     logger.warning(

@@ -20,12 +20,14 @@ from apps.nodes.views import node_info, register_node
 from apps.nodes.views.registration import handlers
 from apps.sites.models import SiteProfile
 
+
 @pytest.fixture
 def admin_user(db):
     User = get_user_model()
     return User.objects.create_superuser(
         username="admin", email="admin@example.com", password="password"
     )
+
 
 def _build_request(factory, payload):
     request = factory.post(
@@ -34,6 +36,7 @@ def _build_request(factory, payload):
         content_type="application/json",
     )
     return request
+
 
 @pytest.mark.django_db
 def test_register_node_rejects_invalid_enrollment_token_without_creating_node(
@@ -57,6 +60,7 @@ def test_register_node_rejects_invalid_enrollment_token_without_creating_node(
 
     assert response.status_code == 400
     assert not Node.objects.filter(mac_address=payload["mac_address"]).exists()
+
 
 @pytest.mark.django_db
 def test_register_node_accepts_valid_enrollment_token_for_existing_node(admin_user):
@@ -87,6 +91,7 @@ def test_register_node_accepts_valid_enrollment_token_for_existing_node(admin_us
     node.refresh_from_db()
     assert response.status_code == 200
     assert node.public_key == payload["public_key"]
+
 
 @pytest.mark.django_db
 def test_register_node_updates_mesh_identity_fields(admin_user):
@@ -127,6 +132,7 @@ def test_register_node_updates_mesh_identity_fields(admin_user):
     assert node.last_mesh_heartbeat is not None
     assert node.mesh_capability_flags == sorted(payload["mesh_capability_flags"])
 
+
 @pytest.mark.django_db
 def test_node_info_omits_sensitive_identity_fields():
     node = Node.objects.create(
@@ -153,6 +159,7 @@ def test_node_info_omits_sensitive_identity_fields():
     assert "host_instance_id" not in data
     assert "uuid" not in data
 
+
 @pytest.mark.django_db
 def test_get_local_does_not_cache_stale_self_after_mac_conflict(monkeypatch):
     self_node = Node.objects.create(
@@ -165,18 +172,22 @@ def test_get_local_does_not_cache_stale_self_after_mac_conflict(monkeypatch):
         Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
     )
 
-    original_save = Node.save
+    original_filter = Node.objects.filter
+    race_inserted = False
 
-    def conflicting_save(self, *args, **kwargs):
-        if self.pk == self_node.pk and kwargs.get("update_fields") == ["mac_address"]:
+    def racing_filter(*args, **kwargs):
+        nonlocal race_inserted
+        if kwargs == {"mac_address__iexact": "aa:bb:cc:dd:ee:ff"} and not race_inserted:
+            race_inserted = True
             Node.objects.create(
                 hostname="racer",
                 mac_address="aa:bb:cc:dd:ee:ff",
                 current_relation=Node.Relation.PEER,
             )
-        return original_save(self, *args, **kwargs)
+            return Node.objects.none()
+        return original_filter(*args, **kwargs)
 
-    monkeypatch.setattr(Node, "save", conflicting_save)
+    monkeypatch.setattr(Node.objects, "filter", racing_filter)
 
     local = Node.get_local()
 
@@ -185,6 +196,7 @@ def test_get_local_does_not_cache_stale_self_after_mac_conflict(monkeypatch):
     self_node.refresh_from_db()
     assert self_node.mac_address == "00:11:22:33:44:55"
     assert Node._local_cache["aa:bb:cc:dd:ee:ff"][0].hostname == "racer"
+
 
 @pytest.mark.django_db
 def test_get_local_logs_redacted_mac_values(monkeypatch, caplog):
@@ -198,10 +210,18 @@ def test_get_local_logs_redacted_mac_values(monkeypatch, caplog):
         Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:ff")
     )
 
-    def raise_conflict(*args, **kwargs):
-        raise IntegrityError("simulated uniqueness conflict")
+    original_filter = Node.objects.filter
 
-    monkeypatch.setattr(Node, "save", raise_conflict)
+    class ConflictingUpdate:
+        def update(self, **kwargs):
+            raise IntegrityError("simulated uniqueness conflict")
+
+    def conflicting_filter(*args, **kwargs):
+        if kwargs == {"pk": self_node.pk}:
+            return ConflictingUpdate()
+        return original_filter(*args, **kwargs)
+
+    monkeypatch.setattr(Node.objects, "filter", conflicting_filter)
 
     caplog.set_level(logging.WARNING, logger="apps.nodes.models.node")
     Node.get_local()
