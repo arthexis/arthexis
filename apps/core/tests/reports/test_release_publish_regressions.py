@@ -523,6 +523,37 @@ def test_step_prune_low_value_tests_ignores_setting_for_interactive_release(
     assert "test_pruning_pr_url" not in ctx
 
 
+def test_step_prune_low_value_tests_rejects_invalid_scheduled_setting(
+    monkeypatch, settings, tmp_path: Path
+):
+    settings.RELEASE_PUBLISH_TEST_PRUNING_PR_URL = (
+        "https://github.com/arthexis/arthexis/issues/7000"
+    )
+    monkeypatch.setattr(pipeline, "_append_log", lambda *_args, **_kwargs: None)
+    ctx: dict[str, object] = {"auto_release": True}
+
+    with pytest.raises(PublishPending):
+        pipeline._step_prune_low_value_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert "GitHub pull request URL" in ctx["error"]
+    assert "test_pruning_result" not in ctx
+
+
+def test_step_prune_low_value_tests_rejects_invalid_prepopulated_url(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.setattr(pipeline, "_append_log", lambda *_args, **_kwargs: None)
+    ctx: dict[str, object] = {
+        "test_pruning_pr_url": "https://example.com/arthexis/arthexis/pull/7000"
+    }
+
+    with pytest.raises(PublishPending):
+        pipeline._step_prune_low_value_tests(object(), ctx, tmp_path / "publish.log")
+
+    assert "GitHub pull request URL" in ctx["error"]
+    assert "test_pruning_result" not in ctx
+
+
 def test_step_prune_low_value_tests_rejects_explicit_failure(
     monkeypatch, tmp_path: Path
 ):

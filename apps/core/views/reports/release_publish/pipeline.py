@@ -120,7 +120,11 @@ from .github_ops import (
     upload_release_assets as gh_upload_release_assets,
 )
 from .steps import StepDefinition, run_release_step
-from .workflow import ReleasePublishContext, ReleasePublishWorkflow
+from .workflow import (
+    ReleasePublishContext,
+    ReleasePublishWorkflow,
+    _is_pull_request_url,
+)
 
 logger = logging.getLogger(__name__)
 GIT_ADAPTER = SubprocessGitAdapter()
@@ -1704,6 +1708,14 @@ def _step_prune_low_value_tests(release, ctx, log_path: Path, *, user=None) -> N
         ctx["test_pruning_error"] = _(message)
         _append_log(log_path, message)
         raise PublishPending()
+
+    if not _is_pull_request_url(pruning_pr_url):
+        _fail_release_gate(
+            ctx,
+            log_path,
+            "Release test pruning gate failed: recorded pruning evidence must be "
+            "a GitHub pull request URL.",
+        )
 
     ctx.pop("test_pruning_required", None)
     ctx.pop("test_pruning_error", None)
