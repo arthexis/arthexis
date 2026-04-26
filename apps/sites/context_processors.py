@@ -1,4 +1,9 @@
+import json
+from http.client import HTTPException, IncompleteRead
 from pathlib import Path
+from urllib.error import URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from django.apps import apps
 from django.conf import settings
@@ -50,6 +55,9 @@ _ROLE_FAVICONS = {
 }
 ARTHEXIS_FUNDING_HOST = "arthexis.com"
 DEFAULT_FUNDING_ISSUE_URL = "https://github.com/arthexis/arthexis/issues/7433"
+FUNDING_ISSUE_STATE_CACHE_TTL_SECONDS = 900
+FUNDING_ISSUE_FAILURE_CACHE_TTL_SECONDS = 300
+FUNDING_ISSUE_STATE_UNKNOWN = "unknown"
 
 
 def _parse_user_story_attachment_limit() -> int:
@@ -76,13 +84,30 @@ def _is_arthexis_dot_com_request(request) -> bool:
     return host == ARTHEXIS_FUNDING_HOST
 
 
+def _request_hides_funding_banner(request) -> bool:
+    """Return whether the resolved page suppresses funding banner chrome."""
+
+    if getattr(request, "hide_funding_banner", False):
+        return True
+
+    resolver_match = getattr(request, "resolver_match", None)
+    return getattr(resolver_match, "view_name", "") == "pages:login"
+
+
 def _build_funding_banner(request):
     """Build the public funding banner, shown only on arthexis.com."""
+
+    if _request_hides_funding_banner(request):
+        return None
 
     if not _is_arthexis_dot_com_request(request):
         return None
 
     issue_url = getattr(settings, "ARTHEXIS_FUNDING_ISSUE_URL", "")
+    resolved_issue_url = issue_url or DEFAULT_FUNDING_ISSUE_URL
+    if not _is_github_issue_open(resolved_issue_url):
+        return None
+
     return {
         "title": _("Arthexis needs funding to keep maintenance running"),
         "message": _(
@@ -90,8 +115,89 @@ def _build_funding_banner(request):
             "available operating credits. Funding helps keep reviews, fixes, "
             "and continuity work moving."
         ),
-        "issue_url": issue_url or DEFAULT_FUNDING_ISSUE_URL,
+        "issue_url": resolved_issue_url,
     }
+
+
+def _github_issue_api_url(issue_url: str) -> str | None:
+    """Return the matching GitHub issue API URL for ``issue_url`` when parseable."""
+
+    if not isinstance(issue_url, str):
+        return None
+
+    parsed = urlparse(issue_url)
+    if parsed.netloc.lower() != "github.com":
+        return None
+
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) != 4 or parts[2] != "issues":
+        return None
+
+    owner, repo, _issues, number = parts
+    if not number.isdigit():
+        return None
+    return f"https://api.github.com/repos/{owner}/{repo}/issues/{number}"
+
+
+def _read_github_issue_state(issue_url: str) -> str | None:
+    """Read and return the issue state for ``issue_url`` from GitHub when available."""
+
+    api_url = _github_issue_api_url(issue_url)
+    if not api_url:
+        return None
+
+    request = Request(
+        api_url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "arthexis-funding-banner",
+        },
+    )
+    try:
+        with urlopen(request, timeout=2) as response:  # noqa: S310
+            payload = response.read().decode("utf-8")
+    except (
+        HTTPException,
+        IncompleteRead,
+        OSError,
+        TimeoutError,
+        URLError,
+        UnicodeDecodeError,
+        ValueError,
+    ):
+        return None
+
+    try:
+        data = json.loads(payload)
+    except (TypeError, json.JSONDecodeError):
+        return None
+
+    state = data.get("state") if isinstance(data, dict) else None
+    if state in {"open", "closed"}:
+        return state
+    return None
+
+
+def _is_github_issue_open(issue_url: str) -> bool:
+    """Return whether the configured GitHub funding issue is currently open."""
+
+    cache_key = f"sites:funding_issue_state:{issue_url}"
+    cached_state = cache.get(cache_key)
+    if cached_state in {"open", "closed"}:
+        return cached_state == "open"
+    if cached_state == FUNDING_ISSUE_STATE_UNKNOWN:
+        return True
+
+    state = _read_github_issue_state(issue_url)
+    if state in {"open", "closed"}:
+        cache.set(cache_key, state, timeout=FUNDING_ISSUE_STATE_CACHE_TTL_SECONDS)
+        return state == "open"
+    cache.set(
+        cache_key,
+        FUNDING_ISSUE_STATE_UNKNOWN,
+        timeout=FUNDING_ISSUE_FAILURE_CACHE_TTL_SECONDS,
+    )
+    return True
 
 
 def _resolve_landing_visibility(

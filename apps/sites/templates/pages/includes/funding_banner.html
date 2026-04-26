@@ -1,13 +1,20 @@
 {% load i18n %}
 {% if funding_banner %}
-  <section class="funding-banner{% if funding_banner_classes %} {{ funding_banner_classes }}{% endif %}" aria-labelledby="{{ funding_banner_title_id|default:'funding-banner-title' }}">
+  <section
+    class="funding-banner{% if funding_banner_classes %} {{ funding_banner_classes }}{% endif %}"
+    aria-labelledby="{{ funding_banner_title_id|default:'funding-banner-title' }}"
+    data-funding-banner-cache-key="funding-banner-dismissed-{{ funding_banner.issue_url|slugify }}"
+  >
     <span class="funding-banner__mark" aria-hidden="true">💖</span>
-    <div>
+    <div class="funding-banner__body">
       <strong id="{{ funding_banner_title_id|default:'funding-banner-title' }}">{{ funding_banner.title }}</strong>
       <p class="mb-0">{{ funding_banner.message }}</p>
     </div>
     <a class="funding-banner__link" href="{{ funding_banner.issue_url }}" target="_blank" rel="noopener noreferrer">
       {% trans "View funding issue" %}
     </a>
+    <button type="button" class="btn-close funding-banner__close" data-funding-banner-close="true">
+      <span class="visually-hidden">{% trans "Dismiss funding banner" %}</span>
+    </button>
   </section>
 {% endif %}

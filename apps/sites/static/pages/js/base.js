@@ -358,6 +358,46 @@ const setupSiteHighlightDismissal = () => {
   });
 };
 
+/**
+ * Dismiss the funding banner in browser-local storage only.
+ */
+const setupFundingBannerDismissal = () => {
+  const banner = document.querySelector('[data-funding-banner-cache-key]');
+  if (!banner) {
+    return;
+  }
+  const cacheKey = banner.dataset.fundingBannerCacheKey;
+  if (!cacheKey) {
+    return;
+  }
+
+  let localStorageAvailable = true;
+  try {
+    if (window.localStorage.getItem(cacheKey) === '1') {
+      banner.remove();
+      return;
+    }
+  } catch (error) {
+    localStorageAvailable = false;
+  }
+
+  const closeButton = banner.querySelector('[data-funding-banner-close="true"]');
+  if (!closeButton) {
+    return;
+  }
+  closeButton.addEventListener('click', event => {
+    event.preventDefault();
+    if (localStorageAvailable) {
+      try {
+        window.localStorage.setItem(cacheKey, '1');
+      } catch (error) {
+        // Keep close behavior even if storage is unavailable.
+      }
+    }
+    banner.remove();
+  });
+};
+
 applySiteThemeVariables();
 setupThemeToggle();
 initThemeState();
@@ -366,4 +406,5 @@ setupUserInfoTooltip();
 setupLanguageSelect();
 setupShareModal();
 setupSiteHighlightDismissal();
+setupFundingBannerDismissal();
 window.addEventListener('load', syncDebugToolbarTheme);

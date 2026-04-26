@@ -769,6 +769,11 @@ body.user-story-open {
   padding: var(--funding-banner-spacing, var(--bs-spacer, 1rem));
 }
 
+.funding-banner__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .funding-banner p {
   color: var(--bs-secondary-color);
 }
@@ -791,10 +796,8 @@ body.user-story-open {
   color: var(--funding-banner-link-hover, var(--bs-link-hover-color));
 }
 
-.funding-banner--sidebar {
-  position: sticky;
-  top: var(--funding-banner-spacing, var(--bs-spacer, 1rem));
-  z-index: 1;
+.funding-banner__close {
+  flex: 0 0 auto;
 }
 
 html[data-bs-theme='light'] .funding-banner {
@@ -819,7 +822,4 @@ html[data-bs-theme='dark'] .funding-banner {
     flex-direction: column;
   }
 
-  .funding-banner--sidebar {
-    position: static;
-  }
 }
