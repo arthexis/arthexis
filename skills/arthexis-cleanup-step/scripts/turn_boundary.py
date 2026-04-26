@@ -12,6 +12,7 @@ import os
 import re
 import signal
 import sys
+import tempfile
 import time
 import uuid
 from contextlib import contextmanager
@@ -25,7 +26,6 @@ EVENT_LOG = STATE_DIR / "events.jsonl"
 LOCK_PATH = STATE_DIR / "state.lock"
 ARCHIVE_DIR = STATE_DIR / "turns"
 CADENCE_STATE = STATE_DIR / "cadence-rest.json"
-WRITE_TMP_NAME = ".write-json.tmp"
 DEFAULT_CLEANUP_TIMEOUT_SECONDS = 600
 DEFAULT_TURN_CADENCE_SECONDS = 600
 TERM_GRACE_SECONDS = 15
@@ -136,14 +136,16 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     if path.parent not in {checked_state_path(STATE_DIR), checked_state_path(ARCHIVE_DIR)}:
         raise ValueError(f"refusing unsupported turn state file path: {path}")
     content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
-    dir_fd = os.open(path.parent, os.O_RDONLY)
+    temp_path: Path | None = None
     try:
-        fd = os.open(WRITE_TMP_NAME, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o600, dir_fd=dir_fd)
+        fd, temp_name = tempfile.mkstemp(prefix=".write-json-", suffix=".tmp", dir=path.parent)
+        temp_path = Path(temp_name)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(content)
-        os.replace(WRITE_TMP_NAME, path.name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+        temp_path.replace(path)
     finally:
-        os.close(dir_fd)
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
 
 
 def append_event(event: dict[str, Any]) -> None:
