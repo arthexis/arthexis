@@ -17,6 +17,8 @@ def test_funding_banner_include_renders_supplied_layout_classes():
     )
 
     assert 'class="funding-banner funding-banner--sidebar mb-4"' in html
+    assert 'data-funding-banner-cache-key="funding-banner-dismissed-' in html
+    assert 'data-funding-banner-close="true"' in html
     assert 'href="https://github.com/arthexis/arthexis/issues/1"' in html
     assert "View funding issue" in html
 
@@ -40,3 +42,14 @@ def test_funding_banner_css_uses_defined_tokens():
     assert "#cfe2ff" not in funding_banner_css
     assert "var(--bs-link-color)" in funding_banner_css
     assert "var(--bs-link-hover-color)" in funding_banner_css
+
+
+def test_funding_banner_stays_in_page_flow_and_has_dismiss_script_hook():
+    css = Path("apps/sites/static/pages/css/base.css").read_text()
+    funding_banner_css = css[css.index(".funding-banner {") :]
+    script = Path("apps/sites/static/pages/js/base.js").read_text()
+
+    assert "position: fixed" not in funding_banner_css
+    assert "position: sticky" not in funding_banner_css
+    assert "setupFundingBannerDismissal();" in script
+    assert "data-funding-banner-close" in script

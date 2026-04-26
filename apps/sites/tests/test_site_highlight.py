@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 from django.contrib.auth.models import AnonymousUser
@@ -89,8 +88,12 @@ def test_nav_links_includes_selected_site_highlight(
     )
     monkeypatch.setattr(context_processors, "_load_header_references", lambda *args: [])
     monkeypatch.setattr(context_processors, "_load_visible_modules", lambda *args: [])
-    monkeypatch.setattr(context_processors, "_parse_user_story_attachment_limit", lambda: 3)
-    monkeypatch.setattr(context_processors, "_select_current_module", lambda *args: None)
+    monkeypatch.setattr(
+        context_processors, "_parse_user_story_attachment_limit", lambda: 3
+    )
+    monkeypatch.setattr(
+        context_processors, "_select_current_module", lambda *args: None
+    )
     monkeypatch.setattr(context_processors, "_select_favicon_url", lambda *args: "")
     monkeypatch.setattr(context_processors, "_select_site_template", lambda *args: None)
 
@@ -106,8 +109,12 @@ def test_funding_banner_only_shows_on_arthexis_dot_com(
     monkeypatch,
 ) -> None:
     settings.ALLOWED_HOSTS = ["arthexis.com", "example.com"]
-    settings.ARTHEXIS_FUNDING_ISSUE_URL = "https://github.com/arthexis/arthexis/issues/1"
-    monkeypatch.setattr(context_processors, "_is_github_issue_open", lambda *_args, **_kwargs: True)
+    settings.ARTHEXIS_FUNDING_ISSUE_URL = (
+        "https://github.com/arthexis/arthexis/issues/1"
+    )
+    monkeypatch.setattr(
+        context_processors, "_is_github_issue_open", lambda *_args, **_kwargs: True
+    )
 
     canonical_request = rf.get("/", HTTP_HOST="arthexis.com")
     other_request = rf.get("/", HTTP_HOST="example.com")
@@ -119,11 +126,69 @@ def test_funding_banner_only_shows_on_arthexis_dot_com(
     assert context_processors._build_funding_banner(other_request) is None
 
 
-def test_funding_banner_is_hidden_when_issue_is_closed(rf: RequestFactory, settings, monkeypatch) -> None:
+def test_funding_banner_is_hidden_when_issue_is_closed(
+    rf: RequestFactory, settings, monkeypatch
+) -> None:
     settings.ALLOWED_HOSTS = ["arthexis.com"]
-    settings.ARTHEXIS_FUNDING_ISSUE_URL = "https://github.com/arthexis/arthexis/issues/1"
-    monkeypatch.setattr(context_processors, "_is_github_issue_open", lambda *_args, **_kwargs: False)
+    settings.ARTHEXIS_FUNDING_ISSUE_URL = (
+        "https://github.com/arthexis/arthexis/issues/1"
+    )
+    monkeypatch.setattr(
+        context_processors, "_is_github_issue_open", lambda *_args, **_kwargs: False
+    )
 
     canonical_request = rf.get("/", HTTP_HOST="arthexis.com")
 
     assert context_processors._build_funding_banner(canonical_request) is None
+
+
+def test_github_issue_state_uses_json_response(monkeypatch) -> None:
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            return b'{"state": "closed"}'
+
+    monkeypatch.setattr(
+        context_processors, "urlopen", lambda *_args, **_kwargs: Response()
+    )
+
+    assert (
+        context_processors._read_github_issue_state(
+            context_processors.DEFAULT_FUNDING_ISSUE_URL
+        )
+        == "closed"
+    )
+
+
+def test_github_issue_open_caches_unknown_state_on_fetch_failure(monkeypatch) -> None:
+    calls = 0
+
+    def failing_reader(_issue_url):
+        nonlocal calls
+        calls += 1
+        return None
+
+    cache_key = (
+        "sites:funding_issue_state:" f"{context_processors.DEFAULT_FUNDING_ISSUE_URL}"
+    )
+    context_processors.cache.delete(cache_key)
+    monkeypatch.setattr(context_processors, "_read_github_issue_state", failing_reader)
+
+    assert (
+        context_processors._is_github_issue_open(
+            context_processors.DEFAULT_FUNDING_ISSUE_URL
+        )
+        is True
+    )
+    assert (
+        context_processors._is_github_issue_open(
+            context_processors.DEFAULT_FUNDING_ISSUE_URL
+        )
+        is True
+    )
+    assert calls == 1

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urlparse
@@ -54,6 +55,8 @@ _ROLE_FAVICONS = {
 ARTHEXIS_FUNDING_HOST = "arthexis.com"
 DEFAULT_FUNDING_ISSUE_URL = "https://github.com/arthexis/arthexis/issues/7433"
 FUNDING_ISSUE_STATE_CACHE_TTL_SECONDS = 900
+FUNDING_ISSUE_FAILURE_CACHE_TTL_SECONDS = 300
+FUNDING_ISSUE_STATE_UNKNOWN = "unknown"
 
 
 def _parse_user_story_attachment_limit() -> int:
@@ -136,18 +139,17 @@ def _read_github_issue_state(issue_url: str) -> str | None:
     try:
         with urlopen(request, timeout=2) as response:  # noqa: S310
             payload = response.read().decode("utf-8")
-    except (TimeoutError, URLError, ValueError):
+    except (TimeoutError, URLError, UnicodeDecodeError, ValueError):
         return None
 
-    state_marker = '"state":'
-    marker_index = payload.find(state_marker)
-    if marker_index == -1:
+    try:
+        data = json.loads(payload)
+    except (TypeError, json.JSONDecodeError):
         return None
-    state_fragment = payload[marker_index + len(state_marker) : marker_index + len(state_marker) + 24]
-    if '"open"' in state_fragment:
-        return "open"
-    if '"closed"' in state_fragment:
-        return "closed"
+
+    state = data.get("state") if isinstance(data, dict) else None
+    if state in {"open", "closed"}:
+        return state
     return None
 
 
@@ -158,11 +160,18 @@ def _is_github_issue_open(issue_url: str) -> bool:
     cached_state = cache.get(cache_key)
     if cached_state in {"open", "closed"}:
         return cached_state == "open"
+    if cached_state == FUNDING_ISSUE_STATE_UNKNOWN:
+        return True
 
     state = _read_github_issue_state(issue_url)
     if state in {"open", "closed"}:
         cache.set(cache_key, state, timeout=FUNDING_ISSUE_STATE_CACHE_TTL_SECONDS)
         return state == "open"
+    cache.set(
+        cache_key,
+        FUNDING_ISSUE_STATE_UNKNOWN,
+        timeout=FUNDING_ISSUE_FAILURE_CACHE_TTL_SECONDS,
+    )
     return True
 
 
