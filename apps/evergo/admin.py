@@ -7,7 +7,7 @@ from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import CharField, Prefetch, Q, Value
-from django.db.models.fields.json import KeyTextTransform
+from django.db.models.fields.json import KeyTextTransform, KeyTransform
 from django.db.models.functions import Coalesce, NullIf
 from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
@@ -1068,7 +1068,7 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
                 NullIf("latest_order__site_name", Value("")),
                 KeyTextTransform(
                     "marca_cargador",
-                    KeyTextTransform("orden_instalacion", "raw_payload"),
+                    KeyTransform("orden_instalacion", "raw_payload"),
                 ),
                 output_field=CharField(),
             )
