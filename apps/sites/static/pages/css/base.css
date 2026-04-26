@@ -759,41 +759,67 @@ body.user-story-open {
 }
 .funding-banner {
   align-items: center;
-  background: #1f2937;
-  border: 1px solid var(--site-accent);
-  border-radius: 0.375rem;
-  color: #f8fafc;
+  background: var(--funding-banner-bg, rgba(var(--bs-emphasis-color-rgb), 0.06));
+  border: var(--bs-border-width) solid var(--funding-banner-border, rgba(var(--bs-emphasis-color-rgb), 0.15));
+  border-radius: var(--bs-border-radius);
+  color: var(--bs-body-color);
   display: flex;
-  gap: 1rem;
+  gap: var(--funding-banner-spacing, var(--bs-spacer, 1rem));
   justify-content: space-between;
-  padding: 0.875rem 1rem;
+  padding: var(--funding-banner-spacing, var(--bs-spacer, 1rem));
 }
 
 .funding-banner p {
-  color: #d1d5db;
+  color: var(--bs-secondary-color);
 }
 
 .funding-banner__mark {
-  color: #f472b6;
+  color: var(--funding-banner-mark, var(--bs-secondary-color));
   flex: 0 0 auto;
-  font-size: 1.35rem;
+  font-size: 1.25em;
   line-height: 1;
 }
 
 .funding-banner__link {
-  color: #fde68a;
+  color: var(--funding-banner-link, var(--bs-link-color));
   font-weight: 700;
   white-space: nowrap;
 }
 
 .funding-banner__link:focus,
 .funding-banner__link:hover {
-  color: #fef3c7;
+  color: var(--funding-banner-link-hover, var(--bs-link-hover-color));
+}
+
+.funding-banner--sidebar {
+  position: sticky;
+  top: var(--funding-banner-spacing, var(--bs-spacer, 1rem));
+  z-index: 1;
+}
+
+html[data-bs-theme='light'] .funding-banner {
+  --funding-banner-bg: rgba(var(--bs-emphasis-color-rgb), 0.035);
+  --funding-banner-border: rgba(var(--bs-emphasis-color-rgb), 0.14);
+  --funding-banner-link: var(--bs-link-color);
+  --funding-banner-link-hover: var(--bs-link-hover-color);
+  --funding-banner-mark: rgba(var(--bs-emphasis-color-rgb), 0.7);
+}
+
+html[data-bs-theme='dark'] .funding-banner {
+  --funding-banner-bg: rgba(var(--bs-emphasis-color-rgb), 0.08);
+  --funding-banner-border: rgba(var(--bs-emphasis-color-rgb), 0.24);
+  --funding-banner-link: var(--bs-link-color);
+  --funding-banner-link-hover: var(--bs-link-hover-color);
+  --funding-banner-mark: rgba(var(--bs-emphasis-color-rgb), 0.75);
 }
 
 @media (max-width: 575.98px) {
   .funding-banner {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .funding-banner--sidebar {
+    position: static;
   }
 }

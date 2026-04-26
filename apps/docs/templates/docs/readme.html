@@ -29,6 +29,7 @@
   </div>
   {% endif %}
   <div class="{% if toc %}col-12 col-lg-9 order-1 order-lg-2{% else %}col-12{% endif %}">
+    {% include "pages/includes/funding_banner.html" with funding_banner=funding_banner funding_banner_classes="funding-banner--sidebar mb-4" only %}
     <div class="markdown-body" id="reader-content">
       {{ content|safe }}
       {% if has_remaining_sections %}
@@ -85,6 +86,8 @@
   })();
 </script>
 {% endblock %}
+
+{% block funding_banner %}{% endblock %}
 
 {% block extra_scripts %}
   <script src="{% static 'docs/js/qrcode.min.js' %}"></script>
