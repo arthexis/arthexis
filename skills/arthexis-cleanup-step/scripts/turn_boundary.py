@@ -136,12 +136,21 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     if path.parent not in {checked_state_path(STATE_DIR), checked_state_path(ARCHIVE_DIR)}:
         raise ValueError(f"refusing unsupported turn state file path: {path}")
     content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    tmp_name = f"{WRITE_TMP_NAME}.{uuid.uuid4().hex}"
     dir_fd = os.open(path.parent, os.O_RDONLY)
     try:
-        fd = os.open(WRITE_TMP_NAME, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o600, dir_fd=dir_fd)
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(tmp_name, flags, 0o600, dir_fd=dir_fd)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(content)
-        os.replace(WRITE_TMP_NAME, path.name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+        os.replace(tmp_name, path.name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+    except Exception:
+        try:
+            os.unlink(tmp_name, dir_fd=dir_fd)
+        except FileNotFoundError:
+            pass
+        raise
     finally:
         os.close(dir_fd)
 
