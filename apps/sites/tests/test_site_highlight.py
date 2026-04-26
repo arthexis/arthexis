@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from http.client import IncompleteRead
 
 import pytest
 from django.contrib.auth.models import AnonymousUser
@@ -167,6 +168,29 @@ def test_github_issue_state_uses_json_response(monkeypatch) -> None:
             context_processors.DEFAULT_FUNDING_ISSUE_URL
         )
         == "closed"
+    )
+
+
+def test_github_issue_state_treats_incomplete_read_as_unknown(monkeypatch) -> None:
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            raise IncompleteRead(b'{"state":')
+
+    monkeypatch.setattr(
+        context_processors, "urlopen", lambda *_args, **_kwargs: Response()
+    )
+
+    assert (
+        context_processors._read_github_issue_state(
+            context_processors.DEFAULT_FUNDING_ISSUE_URL
+        )
+        is None
     )
 
 
