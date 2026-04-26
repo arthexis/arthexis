@@ -122,6 +122,9 @@ def _build_funding_banner(request):
 def _github_issue_api_url(issue_url: str) -> str | None:
     """Return the matching GitHub issue API URL for ``issue_url`` when parseable."""
 
+    if not isinstance(issue_url, str):
+        return None
+
     parsed = urlparse(issue_url)
     if parsed.netloc.lower() != "github.com":
         return None

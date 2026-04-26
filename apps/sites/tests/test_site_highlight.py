@@ -148,6 +148,43 @@ def test_funding_banner_is_hidden_when_issue_is_closed(
     assert context_processors._build_funding_banner(canonical_request) is None
 
 
+def test_funding_banner_uses_default_issue_url_when_setting_is_blank(
+    rf: RequestFactory, settings, monkeypatch
+) -> None:
+    settings.ALLOWED_HOSTS = ["arthexis.com"]
+    settings.ARTHEXIS_FUNDING_ISSUE_URL = ""
+    issue_checks = []
+
+    def issue_is_open(issue_url):
+        issue_checks.append(issue_url)
+        return True
+
+    monkeypatch.setattr(context_processors, "_is_github_issue_open", issue_is_open)
+
+    banner = context_processors._build_funding_banner(
+        rf.get("/", HTTP_HOST="arthexis.com")
+    )
+
+    assert banner is not None
+    assert banner["issue_url"] == context_processors.DEFAULT_FUNDING_ISSUE_URL
+    assert issue_checks == [context_processors.DEFAULT_FUNDING_ISSUE_URL]
+
+
+def test_mistyped_funding_issue_url_setting_does_not_break_rendering(
+    rf: RequestFactory, settings
+) -> None:
+    settings.ALLOWED_HOSTS = ["arthexis.com"]
+    settings.ARTHEXIS_FUNDING_ISSUE_URL = 7433
+
+    banner = context_processors._build_funding_banner(
+        rf.get("/", HTTP_HOST="arthexis.com")
+    )
+
+    assert banner is not None
+    assert banner["issue_url"] == 7433
+    assert context_processors._github_issue_api_url(True) is None
+
+
 def test_github_issue_state_uses_json_response(monkeypatch) -> None:
     class Response:
         def __enter__(self):
