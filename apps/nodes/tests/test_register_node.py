@@ -199,6 +199,43 @@ def test_get_local_does_not_cache_stale_self_after_mac_conflict(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_get_local_does_not_return_deleted_self_after_zero_row_mac_update(monkeypatch):
+    self_node = Node.objects.create(
+        hostname="deleted-self-node",
+        mac_address="00:11:22:33:44:56",
+        current_relation=Node.Relation.SELF,
+    )
+    Node._local_cache.clear()
+    monkeypatch.setattr(
+        Node, "get_current_mac", staticmethod(lambda: "aa:bb:cc:dd:ee:01")
+    )
+
+    original_filter = Node.objects.filter
+    deleted_during_update = False
+
+    class DeletingUpdate:
+        def update(self, **kwargs):
+            nonlocal deleted_during_update
+            deleted_during_update = True
+            original_filter(pk=self_node.pk).delete()
+            return 0
+
+    def deleting_filter(*args, **kwargs):
+        if kwargs == {"pk": self_node.pk}:
+            return DeletingUpdate()
+        return original_filter(*args, **kwargs)
+
+    monkeypatch.setattr(Node.objects, "filter", deleting_filter)
+
+    local = Node.get_local()
+
+    assert deleted_during_update is True
+    assert local is None
+    assert "aa:bb:cc:dd:ee:01" not in Node._local_cache
+    assert not original_filter(pk=self_node.pk).exists()
+
+
+@pytest.mark.django_db
 def test_get_local_logs_redacted_mac_values(monkeypatch, caplog):
     self_node = Node.objects.create(
         hostname="self-node",
