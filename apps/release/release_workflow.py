@@ -115,7 +115,10 @@ def run_headless_publish(release, *, auto_release: bool = False) -> Path:
             logger.warning("%s: %s", release, message)
             raise ReleaseWorkflowBlocked(message, log_path=log_path) from exc
         except PublishPending as exc:
-            message = "Scheduled release awaiting publish completion"
+            if context.get("test_pruning_required"):
+                message = "Scheduled release awaiting test pruning evidence"
+            else:
+                message = "Scheduled release awaiting publish completion"
             _append_log(log_path, message)
             context["error"] = message
             logger.warning("%s: %s", release, message)

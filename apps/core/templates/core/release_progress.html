@@ -325,6 +325,20 @@
       </li>
     {% endfor %}
     </ol>
+    {% if test_pruning_required %}
+    <div class="token-card">
+      <h2>{% trans "Test pruning evidence required" %}</h2>
+      <p>{% trans "Enter the pull request URL that prunes the lowest-value tests for this release." %}</p>
+      {% if test_pruning_error %}
+      <p class="error">{{ test_pruning_error }}</p>
+      {% endif %}
+      <form method="post">
+        {% csrf_token %}
+        <input type="url" name="test_pruning_pr_url" value="{{ test_pruning_pr_url }}" placeholder="https://github.com/org/repo/pull/123" aria-label="{% trans 'Test pruning PR URL' %}">
+        <button type="submit" name="set_test_pruning_evidence" value="1">{% trans "Record evidence" %}</button>
+      </form>
+    </div>
+    {% endif %}
     {% if not done %}
     {% if github_credentials_missing or github_token_using_stored %}
     <div class="token-card">
