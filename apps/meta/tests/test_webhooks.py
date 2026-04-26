@@ -7,7 +7,12 @@ from django.contrib.sites.models import Site
 from django.urls import reverse
 
 from apps.features.models import Feature
-from apps.meta.models import Attention, WhatsAppChatBridge, WhatsAppWebhook, WhatsAppWebhookMessage
+from apps.meta.models import (
+    Attention,
+    WhatsAppChatBridge,
+    WhatsAppWebhook,
+    WhatsAppWebhookMessage,
+)
 
 
 @pytest.mark.django_db
@@ -75,12 +80,10 @@ def test_whatsapp_webhook_disabled_feature_still_stores_messages_for_audit(clien
     )
 
     assert response.status_code == 202
-    assert (
-        WhatsAppWebhookMessage.objects.filter(
-            webhook=webhook,
-            message_id="wamid.DISABLED",
-        ).exists()
-    )
+    assert WhatsAppWebhookMessage.objects.filter(
+        webhook=webhook,
+        message_id="wamid.DISABLED",
+    ).exists()
 
 
 @pytest.mark.django_db
@@ -103,6 +106,7 @@ def test_whatsapp_webhook_captures_attention_response(client):
         title="Attention",
         message="Continue?",
     )
+    Attention.objects.filter(pk=attention.pk).update(recipient=" +15551234567 ")
 
     payload = {
         "entry": [
@@ -111,7 +115,9 @@ def test_whatsapp_webhook_captures_attention_response(client):
                     {
                         "value": {
                             "messaging_product": "whatsapp",
-                            "contacts": [{"wa_id": "15551234567", "profile": {"name": "Ops"}}],
+                            "contacts": [
+                                {"wa_id": "15551234567", "profile": {"name": "Ops"}}
+                            ],
                             "metadata": {"phone_number_id": "12345"},
                             "messages": [
                                 {
@@ -137,6 +143,7 @@ def test_whatsapp_webhook_captures_attention_response(client):
 
     assert response.status_code == 200
     attention.refresh_from_db()
+    assert attention.recipient == " +15551234567 "
     assert attention.status == Attention.Status.RESPONDED
     assert attention.response_text == "approved"
     assert attention.response_from_phone == "15551234567"
@@ -147,9 +154,75 @@ def test_whatsapp_webhook_captures_attention_response(client):
 
 
 @pytest.mark.django_db
+def test_whatsapp_webhook_does_not_capture_keyed_response_from_wrong_sender(client):
+    site = Site.objects.create(
+        domain="attention-wrong-sender.example.test", name="attention"
+    )
+    bridge = WhatsAppChatBridge.objects.create(
+        site=site,
+        phone_number_id="12345",
+        access_token="token",
+    )
+    webhook = WhatsAppWebhook.objects.create(
+        bridge=bridge,
+        route_key="route-key-attention-wrong-sender",
+        verify_token="verify-token-attention-wrong-sender",
+    )
+    attention = Attention.objects.create(
+        bridge=bridge,
+        recipient="15551234567",
+        title="Attention",
+        message="Continue?",
+    )
+    Attention.objects.filter(pk=attention.pk).update(recipient=" +15551234567 ")
+
+    payload = {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "messages": [
+                                {
+                                    "id": "wamid.ATTENTION.WRONG.SENDER",
+                                    "from": "15557654321",
+                                    "type": "text",
+                                    "text": {"body": f"{attention.key} approved"},
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+
+    response = client.post(
+        reverse("meta:whatsapp-webhook", kwargs={"route_key": webhook.route_key}),
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    attention.refresh_from_db()
+    assert attention.recipient == " +15551234567 "
+    assert attention.status == Attention.Status.PENDING
+    assert attention.response_text == ""
+    assert attention.response_from_phone == ""
+    assert WhatsAppWebhookMessage.objects.filter(
+        webhook=webhook,
+        message_id="wamid.ATTENTION.WRONG.SENDER",
+    ).exists()
+
+
+@pytest.mark.django_db
 def test_whatsapp_webhook_does_not_capture_keyed_response_across_bridges(client):
-    site_a = Site.objects.create(domain="key-bridge-a.example.test", name="key bridge a")
-    site_b = Site.objects.create(domain="key-bridge-b.example.test", name="key bridge b")
+    site_a = Site.objects.create(
+        domain="key-bridge-a.example.test", name="key bridge a"
+    )
+    site_b = Site.objects.create(
+        domain="key-bridge-b.example.test", name="key bridge b"
+    )
     bridge_a = WhatsAppChatBridge.objects.create(
         site=site_a,
         phone_number_id="12345",
@@ -335,7 +408,9 @@ def test_whatsapp_webhook_disabled_feature_does_not_capture_attention_response(c
         slug="whatsapp-chat-bridge",
         defaults={"display": "WhatsApp Chat Bridge", "is_enabled": False},
     )
-    site = Site.objects.create(domain="attention-disabled.example.test", name="attention disabled")
+    site = Site.objects.create(
+        domain="attention-disabled.example.test", name="attention disabled"
+    )
     bridge = WhatsAppChatBridge.objects.create(
         site=site,
         phone_number_id="12345",
