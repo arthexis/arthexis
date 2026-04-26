@@ -29,18 +29,7 @@
   </div>
   {% endif %}
   <div class="{% if toc %}col-12 col-lg-9 order-1 order-lg-2{% else %}col-12{% endif %}">
-    {% if funding_banner %}
-      <section class="funding-banner funding-banner--sidebar mb-4" aria-labelledby="funding-banner-title">
-        <span class="funding-banner__mark" aria-hidden="true">💖</span>
-        <div>
-          <strong id="funding-banner-title">{{ funding_banner.title }}</strong>
-          <p class="mb-0">{{ funding_banner.message }}</p>
-        </div>
-        <a class="funding-banner__link" href="{{ funding_banner.issue_url }}" target="_blank" rel="noopener noreferrer">
-          {% trans "View funding issue" %}
-        </a>
-      </section>
-    {% endif %}
+    {% include "pages/includes/funding_banner.html" with funding_banner=funding_banner funding_banner_classes="funding-banner--sidebar mb-4" only %}
     <div class="markdown-body" id="reader-content">
       {{ content|safe }}
       {% if has_remaining_sections %}
