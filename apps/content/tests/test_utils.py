@@ -1,18 +1,13 @@
-from pathlib import Path
-
 import pytest
-from django.conf import settings
 
 from apps.content.utils import save_screenshot
 
 pytestmark = pytest.mark.django_db
 
 
-def test_save_screenshot_preserves_long_method_label(monkeypatch):
-    monkeypatch.setattr(
-        "apps.content.classifiers.registry.run_default_classifiers", lambda sample: []
-    )
-    screenshot_path = Path(settings.LOG_DIR) / "screenshots" / "long-method.png"
+def test_save_screenshot_preserves_long_method_label(monkeypatch, tmp_path):
+    monkeypatch.setattr("apps.content.utils.run_default_classifiers", lambda sample: [])
+    screenshot_path = tmp_path / "screenshots" / "long-method.png"
     screenshot_path.parent.mkdir(parents=True, exist_ok=True)
     screenshot_path.write_bytes(b"fake screenshot bytes")
 
@@ -25,4 +20,5 @@ def test_save_screenshot_preserves_long_method_label(monkeypatch):
     )
 
     assert sample is not None
+    sample.refresh_from_db()
     assert sample.method == method
