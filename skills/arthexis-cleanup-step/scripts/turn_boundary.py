@@ -148,7 +148,7 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     except Exception:
         try:
             os.unlink(tmp_name, dir_fd=dir_fd)
-        except FileNotFoundError:
+        except OSError:
             pass
         raise
     finally:
