@@ -14,12 +14,12 @@ from django.db import models, transaction
 from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.translation import gettext, gettext_lazy as _
+from django.utils.translation import gettext
+from django.utils.translation import gettext_lazy as _
 
 from apps.chats.models import ChatBridge, ChatBridgeManager
 from apps.core.entity import Entity
 from apps.features.utils import is_suite_feature_enabled
-
 
 logger = logging.getLogger(__name__)
 
@@ -234,7 +234,9 @@ class WhatsAppWebhook(Entity):
     def verify_querystring(self) -> str:
         """Return helper query parameters expected by webhook verification requests."""
 
-        return urlencode({"hub.mode": "subscribe", "hub.verify_token": self.verify_token})
+        return urlencode(
+            {"hub.mode": "subscribe", "hub.verify_token": self.verify_token}
+        )
 
     def suite_feature_disable_summary(self) -> str:
         """Return the disable contract that operators should expect for this webhook."""
@@ -343,6 +345,11 @@ class Attention(Entity):
         super().save(*args, **kwargs)
 
     @staticmethod
+    def normalize_phone_identifier(value: str) -> str:
+        normalized = re.sub(r"\s+", "", value or "")
+        return normalized.removeprefix("+")
+
+    @staticmethod
     def _new_key() -> str:
         return f"ATT-{secrets.token_hex(6).upper()}"
 
@@ -380,7 +387,9 @@ class Attention(Entity):
     def send(self) -> bool:
         if not self.bridge_id or not self.bridge or not self.recipient:
             return False
-        if not is_suite_feature_enabled(WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG, default=True):
+        if not is_suite_feature_enabled(
+            WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG, default=True
+        ):
             return False
         sent = self.bridge.send_message(
             recipient=self.recipient,
@@ -427,7 +436,7 @@ class Attention(Entity):
         payload: dict | None = None,
         require_key: bool = False,
         bridge: WhatsAppChatBridge | None = None,
-    ) -> "Attention | None":
+    ) -> Attention | None:
         key = cls.find_key(text)
         bridge_id = getattr(bridge, "pk", None)
         with transaction.atomic():
@@ -436,7 +445,12 @@ class Attention(Entity):
                 queryset = queryset.filter(bridge_id=bridge_id)
             if key:
                 attention = queryset.filter(key__iexact=key).first()
-                if attention and attention.recipient != from_phone:
+                normalized_from_phone = cls.normalize_phone_identifier(from_phone)
+                if (
+                    attention
+                    and cls.normalize_phone_identifier(attention.recipient)
+                    != normalized_from_phone
+                ):
                     logger.info(
                         "Skipped keyed Attention response for %s; sender %s did not match recipient",
                         attention.key,
