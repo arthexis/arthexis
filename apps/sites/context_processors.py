@@ -1,5 +1,5 @@
 import json
-from http.client import IncompleteRead
+from http.client import HTTPException, IncompleteRead
 from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urlparse
@@ -157,7 +157,9 @@ def _read_github_issue_state(issue_url: str) -> str | None:
         with urlopen(request, timeout=2) as response:  # noqa: S310
             payload = response.read().decode("utf-8")
     except (
+        HTTPException,
         IncompleteRead,
+        OSError,
         TimeoutError,
         URLError,
         UnicodeDecodeError,

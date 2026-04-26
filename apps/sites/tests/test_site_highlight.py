@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from http.client import IncompleteRead
+from http.client import IncompleteRead, RemoteDisconnected
 
 import pytest
 from django.contrib.auth.models import AnonymousUser
@@ -218,6 +218,46 @@ def test_github_issue_state_treats_incomplete_read_as_unknown(monkeypatch) -> No
 
         def read(self):
             raise IncompleteRead(b'{"state":')
+
+    monkeypatch.setattr(
+        context_processors, "urlopen", lambda *_args, **_kwargs: Response()
+    )
+
+    assert (
+        context_processors._read_github_issue_state(
+            context_processors.DEFAULT_FUNDING_ISSUE_URL
+        )
+        is None
+    )
+
+
+def test_github_issue_state_treats_remote_disconnect_as_unknown(monkeypatch) -> None:
+    monkeypatch.setattr(
+        context_processors,
+        "urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RemoteDisconnected("remote closed connection")
+        ),
+    )
+
+    assert (
+        context_processors._read_github_issue_state(
+            context_processors.DEFAULT_FUNDING_ISSUE_URL
+        )
+        is None
+    )
+
+
+def test_github_issue_state_treats_socket_os_error_as_unknown(monkeypatch) -> None:
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            raise OSError("socket read failed")
 
     monkeypatch.setattr(
         context_processors, "urlopen", lambda *_args, **_kwargs: Response()
