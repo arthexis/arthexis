@@ -436,6 +436,13 @@ class Attention(Entity):
                 queryset = queryset.filter(bridge_id=bridge_id)
             if key:
                 attention = queryset.filter(key__iexact=key).first()
+                if attention and attention.recipient != from_phone:
+                    logger.info(
+                        "Skipped keyed Attention response for %s; sender %s did not match recipient",
+                        attention.key,
+                        from_phone,
+                    )
+                    return None
             elif from_phone and not require_key:
                 candidates = list(queryset.filter(recipient=from_phone)[:2])
                 attention = candidates[0] if len(candidates) == 1 else None

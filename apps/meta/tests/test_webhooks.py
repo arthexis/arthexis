@@ -147,6 +147,64 @@ def test_whatsapp_webhook_captures_attention_response(client):
 
 
 @pytest.mark.django_db
+def test_whatsapp_webhook_does_not_capture_keyed_response_from_wrong_sender(client):
+    site = Site.objects.create(domain="attention-wrong-sender.example.test", name="attention")
+    bridge = WhatsAppChatBridge.objects.create(
+        site=site,
+        phone_number_id="12345",
+        access_token="token",
+    )
+    webhook = WhatsAppWebhook.objects.create(
+        bridge=bridge,
+        route_key="route-key-attention-wrong-sender",
+        verify_token="verify-token-attention-wrong-sender",
+    )
+    attention = Attention.objects.create(
+        bridge=bridge,
+        recipient="15551234567",
+        title="Attention",
+        message="Continue?",
+    )
+
+    payload = {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "messages": [
+                                {
+                                    "id": "wamid.ATTENTION.WRONG.SENDER",
+                                    "from": "15557654321",
+                                    "type": "text",
+                                    "text": {"body": f"{attention.key} approved"},
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+
+    response = client.post(
+        reverse("meta:whatsapp-webhook", kwargs={"route_key": webhook.route_key}),
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    attention.refresh_from_db()
+    assert attention.status == Attention.Status.PENDING
+    assert attention.response_text == ""
+    assert attention.response_from_phone == ""
+    assert WhatsAppWebhookMessage.objects.filter(
+        webhook=webhook,
+        message_id="wamid.ATTENTION.WRONG.SENDER",
+    ).exists()
+
+
+@pytest.mark.django_db
 def test_whatsapp_webhook_does_not_capture_keyed_response_across_bridges(client):
     site_a = Site.objects.create(domain="key-bridge-a.example.test", name="key bridge a")
     site_b = Site.objects.create(domain="key-bridge-b.example.test", name="key bridge b")
