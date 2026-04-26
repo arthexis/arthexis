@@ -7,20 +7,26 @@ from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import CharField, Prefetch, Q, Value
+from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Coalesce, NullIf
-from django.utils.html import format_html, format_html_join
 from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 from django.utils import timezone
-from django.utils.translation import gettext_lazy as _, ngettext
+from django.utils.html import format_html, format_html_join
+from django.utils.translation import gettext_lazy as _
+from django.utils.translation import ngettext
 from django_object_actions import DjangoObjectActions
 
 from apps.core.admin import OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction
 from apps.core.admin.mixins import _build_credentials_actions
 
 from .exceptions import EvergoAPIError
-from .forms import EvergoContractorLoginWizardForm, EvergoLoadCustomersForm, EvergoUserAdminForm
+from .forms import (
+    EvergoContractorLoginWizardForm,
+    EvergoLoadCustomersForm,
+    EvergoUserAdminForm,
+)
 from .models import (
     EvergoArtifact,
     EvergoCustomer,
@@ -1060,7 +1066,10 @@ class EvergoCustomerAdmin(DjangoObjectActions, admin.ModelAdmin):
         queryset = super().get_queryset(request).annotate(
             brand_sort_value=Coalesce(
                 NullIf("latest_order__site_name", Value("")),
-                "raw_payload__orden_instalacion__marca_cargador__text",
+                KeyTextTransform(
+                    "marca_cargador",
+                    KeyTextTransform("orden_instalacion", "raw_payload"),
+                ),
                 output_field=CharField(),
             )
         )
