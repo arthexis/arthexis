@@ -103,9 +103,11 @@ def test_nav_links_includes_selected_site_highlight(
 def test_funding_banner_only_shows_on_arthexis_dot_com(
     rf: RequestFactory,
     settings,
+    monkeypatch,
 ) -> None:
     settings.ALLOWED_HOSTS = ["arthexis.com", "example.com"]
     settings.ARTHEXIS_FUNDING_ISSUE_URL = "https://github.com/arthexis/arthexis/issues/1"
+    monkeypatch.setattr(context_processors, "_is_github_issue_open", lambda *_args, **_kwargs: True)
 
     canonical_request = rf.get("/", HTTP_HOST="arthexis.com")
     other_request = rf.get("/", HTTP_HOST="example.com")
@@ -115,3 +117,13 @@ def test_funding_banner_only_shows_on_arthexis_dot_com(
     assert banner is not None
     assert banner["issue_url"] == "https://github.com/arthexis/arthexis/issues/1"
     assert context_processors._build_funding_banner(other_request) is None
+
+
+def test_funding_banner_is_hidden_when_issue_is_closed(rf: RequestFactory, settings, monkeypatch) -> None:
+    settings.ALLOWED_HOSTS = ["arthexis.com"]
+    settings.ARTHEXIS_FUNDING_ISSUE_URL = "https://github.com/arthexis/arthexis/issues/1"
+    monkeypatch.setattr(context_processors, "_is_github_issue_open", lambda *_args, **_kwargs: False)
+
+    canonical_request = rf.get("/", HTTP_HOST="arthexis.com")
+
+    assert context_processors._build_funding_banner(canonical_request) is None
