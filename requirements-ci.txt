@@ -9,7 +9,7 @@ autobahn==24.4.2
 black==26.3.1
 bleach==6.3.0
 boto3==1.42.91
-botocore==1.42.91
+botocore==1.42.96
 celery==5.5.3
 cffi==2.0.0
 channels-redis==4.3.0
