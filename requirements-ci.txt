@@ -81,7 +81,7 @@ sqlparse==0.5.5
 tablib==3.9.0
 tinycss2==1.5.1
 toml==0.10.2
-tomli>=1.1.0; python_version < "3.11"
+tomli>=2.4.1; python_version < "3.11"
 trio-websocket==0.12.2
 trio==0.31.0
 twine==6.1.0
