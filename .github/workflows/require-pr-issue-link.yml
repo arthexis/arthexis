@@ -32,7 +32,11 @@ jobs:
               return;
             }
 
-            if (context.actor === 'dependabot[bot]' || pullRequest.user?.login === 'dependabot[bot]') {
+            const dependabotAccounts = new Set(['dependabot[bot]', 'app/dependabot']);
+            if (
+              dependabotAccounts.has(context.actor) ||
+              dependabotAccounts.has(pullRequest.user?.login || '')
+            ) {
               core.info('Dependabot PR; skipping issue-link requirement.');
               return;
             }
