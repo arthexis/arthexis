@@ -32,6 +32,27 @@ jobs:
               return;
             }
 
+            const dependabotAccounts = new Set(['dependabot[bot]', 'app/dependabot']);
+            const actorLogins = [
+              context.actor,
+              context.payload?.actor?.login,
+              pullRequest.user?.login,
+              context.payload?.sender?.login,
+              context.payload?.author?.login,
+            ].filter(Boolean);
+            const isDependabotActor = actorLogins.some((login) =>
+              dependabotAccounts.has((login || '').toLowerCase()),
+            );
+
+            if (isDependabotActor) {
+              core.info('Dependabot PR; skipping issue-link requirement.');
+              return;
+            }
+
+            if (actorLogins.length === 0) {
+              core.info('Actor metadata is unavailable; applying standard PR enforcement logic.');
+            }
+
             const defaultBranch = context.payload.repository?.default_branch;
             if (defaultBranch && pullRequest.base.ref !== defaultBranch) {
               core.info(
