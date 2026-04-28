@@ -113,22 +113,22 @@ jobs:
               });
 
               const releaseCompletedAt = latestRelease.published_at || latestRelease.created_at;
-              if (releaseCompletedAt) {
-                const ageMillis = Date.now() - Date.parse(releaseCompletedAt);
-                if (ageMillis >= releaseCutoffMillis) {
-                  shouldRun = false;
-                  skipReason = `Latest release ${latestRelease.tag_name} completed at ${releaseCompletedAt}, which is at least three full days old.`;
-                }
-              }
+              const { data: comparison } = await github.rest.repos.compareCommits({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                base: latestRelease.tag_name,
+                head: defaultBranch,
+              });
 
-              if (shouldRun) {
-                const { data: comparison } = await github.rest.repos.compareCommits({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  base: latestRelease.tag_name,
-                  head: defaultBranch,
-                });
-                if (!comparison.ahead_by) {
+              if (!comparison.ahead_by) {
+                const ageMillis = releaseCompletedAt
+                  ? Date.now() - Date.parse(releaseCompletedAt)
+                  : 0;
+
+                if (releaseCompletedAt && ageMillis >= releaseCutoffMillis) {
+                  shouldRun = false;
+                  skipReason = `Latest release ${latestRelease.tag_name} is at least three full days old and there are no new commits on ${defaultBranch}.`;
+                } else {
                   shouldRun = false;
                   skipReason = `No new commits on ${defaultBranch} since ${latestRelease.tag_name}; a new release is not currently needed.`;
                 }
