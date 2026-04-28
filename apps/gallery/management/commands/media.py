@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.core.files import File
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from apps.groups.models import SecurityGroup
 
@@ -21,6 +22,11 @@ class Command(BaseCommand):
         upload.add_argument("--title", required=True)
         upload.add_argument("--description", default="")
         upload.add_argument("--public", action="store_true", default=False)
+        upload.add_argument(
+            "--release-at",
+            default="",
+            help="ISO datetime when the image should become public (for example 2026-06-01T09:00:00+00:00).",
+        )
         upload.add_argument("--as-content-sample", action="store_true", default=False)
         upload.add_argument("--owner-user", default="")
         upload.add_argument("--owner-group", default="")
@@ -89,11 +95,21 @@ class Command(BaseCommand):
         file_path = options["file"]
         with open(file_path, "rb") as handle:
             uploaded_file = File(handle, name=file_path.split("/")[-1])
+            release_at_raw = (options.get("release_at") or "").strip()
+            public_release_at = None
+            if release_at_raw:
+                try:
+                    parsed_release_at = timezone.datetime.fromisoformat(release_at_raw)
+                except ValueError as exc:
+                    raise CommandError("Invalid --release-at value; use ISO datetime format.") from exc
+                public_release_at = timezone.make_aware(parsed_release_at) if timezone.is_naive(parsed_release_at) else parsed_release_at
+            elif options["public"]:
+                public_release_at = timezone.now()
             image = create_gallery_image(
                 uploaded_file=uploaded_file,
                 title=options["title"],
                 description=options["description"],
-                include_in_public_gallery=options["public"],
+                public_release_at=public_release_at,
                 create_content_sample=options["as_content_sample"],
                 owner_user=owner_user,
                 owner_group=owner_group,

@@ -49,7 +49,7 @@ def create_gallery_image(
     uploaded_file,
     title: str,
     description: str = "",
-    include_in_public_gallery: bool = False,
+    public_release_at=None,
     create_content_sample: bool = False,
     owner_user=None,
     owner_group=None,
@@ -72,7 +72,7 @@ def create_gallery_image(
                 content_sample=content_sample,
                 title=title,
                 description=description,
-                include_in_public_gallery=include_in_public_gallery,
+                public_release_at=public_release_at,
                 owner_user=owner_user,
                 owner_group=owner_group,
             )
