@@ -32,6 +32,11 @@ jobs:
               return;
             }
 
+            if (context.actor === 'dependabot[bot]' || pullRequest.user?.login === 'dependabot[bot]') {
+              core.info('Dependabot PR; skipping issue-link requirement.');
+              return;
+            }
+
             const defaultBranch = context.payload.repository?.default_branch;
             if (defaultBranch && pullRequest.base.ref !== defaultBranch) {
               core.info(
