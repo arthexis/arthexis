@@ -110,6 +110,15 @@
     <form method="post" enctype="multipart/form-data" id="tracking-form">
         {% csrf_token %}
         <div class="card">
+            <h2>Evergo account</h2>
+            <label for="id_tracking_contractor">Contractor account</label>
+            <select id="id_tracking_contractor" name="contractor" onchange="window.location='?contractor='+this.value">
+                {% for contractor in contractor_options %}
+                    <option value="{{ contractor.pk }}" {% if selected_contractor_id == contractor.pk|stringformat:'s' %}selected{% endif %}>{{ contractor }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="card">
             <h2>Datos principales</h2>
             {{ form.non_field_errors }}
             <div class="grid">

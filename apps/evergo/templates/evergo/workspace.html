@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Evergo Workspace</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 1rem; }
+        .tabs { display: flex; gap: .5rem; margin-bottom: 1rem; }
+        .tab-link { padding: .5rem .75rem; text-decoration: none; border: 1px solid #cbd5e1; border-radius: .5rem; color: inherit; }
+        .tab-link.active { background: #e2e8f0; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border-bottom: 1px solid #e2e8f0; padding: .5rem; text-align: left; }
+    </style>
+</head>
+<body>
+    <h1>Evergo</h1>
+    <nav class="tabs" aria-label="Evergo views">
+        <a class="tab-link {% if active_tab == 'customers' %}active{% endif %}" href="?tab=customers{% if selected_contractor_id %}&contractor={{ selected_contractor_id }}{% endif %}">Customers</a>
+        <a class="tab-link {% if active_tab == 'orders' %}active{% endif %}" href="?tab=orders{% if selected_contractor_id %}&contractor={{ selected_contractor_id }}{% endif %}">Orders</a>
+    </nav>
+    <form method="get" style="margin-bottom:1rem;">
+        <input type="hidden" name="tab" value="{{ active_tab }}">
+        <label for="id_workspace_contractor">Contractor account</label>
+        <select id="id_workspace_contractor" name="contractor" onchange="this.form.submit()">
+            <option value="">All contractors</option>
+            {% for contractor in contractors %}
+                <option value="{{ contractor.pk }}" {% if selected_contractor_id == contractor.pk|stringformat:'s' %}selected{% endif %}>{{ contractor }}</option>
+            {% endfor %}
+        </select>
+    </form>
+
+    {% if active_tab == "customers" %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Last SO</th>
+                    <th>Name</th>
+                    <th>Address</th>
+                    <th>Brand</th>
+                    <th>Phone number</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for customer in customers %}
+                <tr>
+                    <td><a href="{% url 'evergo:customer-public-detail' public_id=customer.public_id %}">{{ customer.latest_so|default:"-" }}</a></td>
+                    <td>{{ customer.name|default:"-" }}</td>
+                    <td>{{ customer.address|default:"-" }}</td>
+                    <td>{{ customer.latest_order.site_name|default:"-" }}</td>
+                    <td>{{ customer.phone_number|default:"-" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5">No customers found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Order Number</th>
+                    <th>Customer</th>
+                    <th>Status Name</th>
+                    <th>Address</th>
+                    <th>Phone</th>
+                    <th>Brand</th>
+                    <th>Municipio</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr>
+                    <td><a href="{% url 'evergo:order-tracking-public' order_id=order.remote_id %}{% if selected_contractor_id %}?contractor={{ selected_contractor_id }}{% endif %}">{{ order.order_number|default:order.remote_id }}</a></td>
+                    <td>{{ order.client_name|default:"-" }}</td>
+                    <td>{{ order.status_name|default:"-" }}</td>
+                    <td>{{ order.address_street|default:"-" }}</td>
+                    <td>{{ order.phone_primary|default:order.phone_secondary|default:"-" }}</td>
+                    <td>{{ order.site_name|default:"-" }}</td>
+                    <td>{{ order.address_municipality|default:"-" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7">No orders found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</body>
+</html>
