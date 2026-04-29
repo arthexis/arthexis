@@ -1,74 +1,70 @@
 # Versioning and Maturity Policy
 
-This policy explains how Arthexis uses a versioning scheme inspired by semantic versioning to communicate release confidence and operational readiness.
-
-Arthexis is currently in the `0.2.x` track, which maps to the **Beta** maturity stage defined below.
-
-## Policy goals
-
-- Make maturity visible in every released version string.
-- Provide predictable promotion criteria from one maturity stage to the next.
-- Keep operators, integrators, and contributors aligned on what each release guarantees.
-
-## Version format
+This policy defines how Arthexis versions are advanced during the release procedure.
 
 Arthexis versions follow `MAJOR.MINOR.PATCH`.
 
-- **MAJOR**: Breaking changes that define a new generation of the suite.
-- **MINOR**: Maturity stage for the current major-zero line.
-- **PATCH**: Iterative progress steps within the active maturity stage.
+## Version increment rules
 
-## Minor maturity stages
+### MAJOR
 
-Within the current `0.x` line, minor values map to fixed maturity meanings:
+Increment **MAJOR** when a release adds or removes an app, or drastically changes an app interface.
 
-| Minor | Maturity stage | Meaning |
-| --- | --- | --- |
-| `.0` | Experimental | New direction, exploratory integrations, and rapid learning cycles. |
-| `.1` | Preview | Early adopter quality with key workflows available for controlled pilots. |
-| `.2` | Beta | Broad feature readiness with active hardening, compatibility checks, and feedback incorporation. |
-| `.3` | Release Candidate | Stabilization-focused builds intended to validate production readiness. |
-| `.4` | Stable (GA) | General Availability with conservative change management and reliability focus. |
+Examples:
 
-> Example: `0.2.7` means "Major 0, Beta maturity, patch step 7 in Beta."
+- adding a new app
+- deleting an existing app
+- drastically changing an app interface
 
-## Patch step meaning
+When MAJOR increments, MINOR and PATCH reset to `0`.
 
-Patch increments are variable, practical steps toward maturity completion.
+### MINOR
 
-Each patch can deliver one or more of the following:
+Increment **MINOR** when a release includes any inter-app public contract change, including:
 
-- defect fixes and regression cleanup
-- security hardening
-- operational reliability improvements
-- integration compatibility updates (OCPP, external services, node roles)
-- admin UX and workflow polish
-- documentation and migration clarifications
+- public-facing views, forms, or fields that affect cross-app behavior
+- public APIs used across app boundaries
+- creating or deleting models within an app
+- changes to global settings
+- introducing new environment variables
 
-Patch numbers are **not** time-based and are **not** interpreted as risk scores by themselves.
-They indicate progression inside the current maturity stage.
+When MINOR increments, PATCH resets to `0`.
 
-## Promotion criteria between maturity stages
+### PATCH
 
-Promotion to the next minor stage should be based on evidence, not calendar pressure.
+Use **PATCH** for all other changes that do not meet MAJOR or MINOR criteria.
 
-A release manager should confirm:
+Typical PATCH examples include:
 
-1. Relevant tests pass for the targeted scope.
-2. Known regressions are triaged and documented.
-3. Migration and upgrade paths are validated for representative deployments.
-4. Core operator/admin workflows remain functional.
-5. OCPP and integration behaviors covered by the release are validated.
-6. Release notes clearly describe known limitations and upgrade considerations.
+- admin-only changes
+- scripts and tooling updates
+- dependency updates
+- documentation updates
+- tests and examples
+- app seed data changes
+- CI/workflow rule updates
 
-## Release note convention
+## Release procedure ownership
 
-Each release note should include:
+Developers should not manually edit `VERSION` while implementing changes.
 
-- current maturity stage
-- shipped changes in that release
-- known constraints, limitations, and upgrade considerations
+The release procedure is responsible for selecting the next version by applying this policy to the full set of changes included in that release.
 
-Release notes are a factual record of what shipped and what operators should account for now. They are not a roadmap, forecast, or commitment to future milestones.
+Version advancement is collapsed to a single step per release:
 
-This policy is governance and reference guidance for consistent maturity signaling across the Arthexis suite.
+- do not increment once per file or once per app change
+- select the highest required bump level found in the release diff
+- apply that bump once
+
+Example:
+
+- Current release: `0.2.5`
+- Changes before next release: public-facing view changes in three apps
+- Required bump: MINOR
+- Next release: `0.3.0`
+
+## Summary
+
+- If any MAJOR condition is met, bump MAJOR and reset MINOR/PATCH.
+- Else if any MINOR condition is met, bump MINOR and reset PATCH.
+- Else bump PATCH.
