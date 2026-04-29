@@ -63,12 +63,25 @@ def test_fetch_repository_pull_requests_raises_on_error(monkeypatch):
 
 def test_resolve_repository_token_prefers_user_token_then_env(monkeypatch):
     user = type("User", (), {"is_authenticated": True})()
-    monkeypatch.setattr(github, "_get_user_stored_token", lambda user=None: "user-token")
-    monkeypatch.setattr(github, "_get_env_token", lambda: "env-token")
+    env_called = False
+
+    def fake_user_lookup(user=None):
+        assert user is user_instance
+        return "user-token"
+
+    def fake_env_lookup():
+        nonlocal env_called
+        env_called = True
+        return "env-token"
+
+    user_instance = user
+    monkeypatch.setattr(github, "_get_user_stored_token", fake_user_lookup)
+    monkeypatch.setattr(github, "_get_env_token", fake_env_lookup)
 
     token = github.resolve_repository_token(package=None, user=user)
 
     assert token == "user-token"
+    assert env_called is False
 
 
 def test_create_pull_request_comment_posts_to_issue_comments_for_open_pr(monkeypatch):

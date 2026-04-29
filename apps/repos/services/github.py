@@ -132,6 +132,7 @@ def resolve_configured_token(*, user=None) -> str | None:
 def resolve_repository_token(package: Package | None, *, user=None) -> str:
     """Return the configured GitHub token (user first, then environment)."""
 
+    _ = package
     token = resolve_configured_token(user=user)
     if not token:
         raise GitHubRepositoryError("GitHub token is not configured")

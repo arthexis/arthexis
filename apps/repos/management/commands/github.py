@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from argparse import ArgumentParser
-from collections import OrderedDict
 from getpass import getpass
+
+from filelock import FileLock
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
@@ -40,7 +41,10 @@ class Command(BaseCommand):
         if action != "set-token":
             raise CommandError(f"Unsupported action: {action}")
 
-        token = getpass("GitHub token: ").strip()
+        try:
+            token = getpass("GitHub token: ").strip()
+        except (EOFError, KeyboardInterrupt) as exc:
+            raise CommandError("Token entry aborted.") from exc
         if not token:
             raise CommandError("No token entered.")
 
@@ -50,7 +54,10 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(message))
         target_label = "global environment" if options.get("global_target") else f"user {options.get('user')}"
-        confirm = input(f"Store token for {target_label}? [y/N]: ").strip().lower()
+        try:
+            confirm = input(f"Store token for {target_label}? [y/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt) as exc:
+            raise CommandError("Confirmation aborted.") from exc
         if confirm not in {"y", "yes"}:
             self.stdout.write("Aborted without saving.")
             return
@@ -66,11 +73,11 @@ class Command(BaseCommand):
 
     def _store_global_token(self, token: str) -> None:
         path = env_path()
-        values = read_env(path)
-        if not isinstance(values, OrderedDict):
-            values = OrderedDict(values)
-        values["GITHUB_TOKEN"] = token
-        write_env(path, values)
+        lock_path = path.with_suffix(path.suffix + ".lock")
+        with FileLock(lock_path, timeout=5):
+            values = read_env(path)
+            values["GITHUB_TOKEN"] = token
+            write_env(path, values)
 
     def _store_user_token(self, *, username: str, token: str, github_login: str) -> None:
         if not username:
