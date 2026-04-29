@@ -100,41 +100,42 @@ def validate_token(
     return True, "Connected to GitHub.", ""
 
 
-def _get_latest_release_token() -> str | None:
-    """Return the GitHub token from the latest package release, if available."""
+def _get_user_stored_token(user=None) -> str | None:
+    """Return stored user token when available."""
 
-    try:
-        from apps.release.models import PackageRelease
-    except Exception:  # pragma: no cover - optional dependency during service-only tests
+    if not user or not getattr(user, "is_authenticated", False):
         return None
+    from apps.repos.models import GitHubToken
 
-    latest_release = PackageRelease.latest()
-    if latest_release:
-        token = latest_release.get_github_token()
-        if token is not None:
-            cleaned = token.strip() if isinstance(token, str) else str(token).strip()
-            if cleaned:
-                return cleaned
-    return None
+    stored = GitHubToken.objects.filter(user=user).first()
+    if not stored:
+        return None
+    cleaned = (stored.token or "").strip()
+    return cleaned or None
 
 
-def resolve_repository_token(package: Package | None) -> str:
-    """Return the GitHub token for ``package`` or the environment."""
-
-    def _clean_token(token: object | None) -> str:
-        if token is None:
-            return ""
-        return token.strip() if isinstance(token, str) else str(token).strip()
-
-    release_token = _get_latest_release_token()
-    if release_token:
-        return release_token
-
+def _get_env_token() -> str | None:
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN", "")
-    cleaned_env = _clean_token(token)
-    if not cleaned_env:
+    cleaned = token.strip() if isinstance(token, str) else str(token).strip()
+    return cleaned or None
+
+
+def resolve_configured_token(*, user=None) -> str | None:
+    """Resolve token from user storage first, then environment."""
+
+    stored = _get_user_stored_token(user=user)
+    if stored:
+        return stored
+    return _get_env_token()
+
+
+def resolve_repository_token(package: Package | None, *, user=None) -> str:
+    """Return the configured GitHub token (user first, then environment)."""
+
+    token = resolve_configured_token(user=user)
+    if not token:
         raise GitHubRepositoryError("GitHub token is not configured")
-    return cleaned_env
+    return token
 
 
 def _build_repository_payload(
@@ -502,25 +503,14 @@ def build_issue_payload(
     return payload
 
 
-def get_github_issue_token() -> str:
+def get_github_issue_token(*, user=None) -> str:
     """Return the configured GitHub token for issue reporting."""
 
-    from apps.release.models import PackageRelease
     from apps.release import DEFAULT_PACKAGE
 
-    latest_release = PackageRelease.latest()
-    if latest_release:
-        token = latest_release.get_github_token()
-        if token is not None:
-            cleaned = token.strip() if isinstance(token, str) else str(token).strip()
-            if cleaned:
-                return cleaned
-
-    env_token = os.environ.get("GITHUB_TOKEN")
-    if env_token is not None:
-        cleaned = env_token.strip() if isinstance(env_token, str) else str(env_token).strip()
-        if cleaned:
-            return cleaned
+    token = resolve_configured_token(user=user)
+    if token:
+        return token
 
     raise GitHubRepositoryError(
         f"GitHub token is not configured; set one via {DEFAULT_PACKAGE.repository_url}"

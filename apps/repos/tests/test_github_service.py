@@ -61,13 +61,14 @@ def test_fetch_repository_pull_requests_raises_on_error(monkeypatch):
         list(github.fetch_repository_pull_requests(token="tok", owner="octo", name="demo"))
 
 
-def test_resolve_repository_token_uses_latest_release_when_available(monkeypatch):
-    monkeypatch.setenv("GITHUB_TOKEN", "")
-    monkeypatch.setattr(github, "_get_latest_release_token", lambda: "release-token")
+def test_resolve_repository_token_prefers_user_token_then_env(monkeypatch):
+    user = type("User", (), {"is_authenticated": True})()
+    monkeypatch.setattr(github, "_get_user_stored_token", lambda user=None: "user-token")
+    monkeypatch.setattr(github, "_get_env_token", lambda: "env-token")
 
-    token = github.resolve_repository_token(package=None)
+    token = github.resolve_repository_token(package=None, user=user)
 
-    assert token == "release-token"
+    assert token == "user-token"
 
 
 def test_create_pull_request_comment_posts_to_issue_comments_for_open_pr(monkeypatch):
