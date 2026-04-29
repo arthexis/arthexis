@@ -1,0 +1,8 @@
+[
+  {"model": "skills.agentskill", "pk": 1, "fields": {"slug": "arthexis-cleanup-step", "title": "Arthexis Cleanup Step", "markdown": ""}},
+  {"model": "skills.agentskill", "pk": 2, "fields": {"slug": "arthexis-end-step", "title": "Arthexis End Step", "markdown": ""}},
+  {"model": "skills.agentskill", "pk": 3, "fields": {"slug": "arthexis-lcd-attention", "title": "Arthexis Lcd Attention", "markdown": ""}},
+  {"model": "skills.agentskill", "pk": 4, "fields": {"slug": "cp-doctor", "title": "Cp Doctor", "markdown": ""}},
+  {"model": "skills.agentskill", "pk": 5, "fields": {"slug": "django-change-safety", "title": "Django Change Safety", "markdown": ""}},
+  {"model": "skills.agentskill", "pk": 6, "fields": {"slug": "ui-preview-capture", "title": "Ui Preview Capture", "markdown": ""}}
+]
