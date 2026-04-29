@@ -97,7 +97,7 @@ class OperatorJourneyFlowTests(TestCase):
 
         self.assertFalse(completed)
 
-    def test_product_developer_follow_up_steps_are_ordered_after_token_setup(self):
+    def test_product_developer_follow_up_steps_are_ordered_without_token_setup(self):
         github_journey = OperatorJourney.objects.create(
             name="Product Developer GitHub Access",
             slug="product-developer-github-access",
@@ -105,21 +105,13 @@ class OperatorJourneyFlowTests(TestCase):
             is_active=True,
             priority=1,
         )
-        setup_step = OperatorJourneyStep.objects.create(
-            journey=github_journey,
-            title="Connect your GitHub access",
-            slug="setup-github-token",
-            instruction="Configure GitHub access directly in this step.",
-            iframe_url="/admin/repos/githubrepository/setup-token/",
-            order=1,
-        )
         issue_inbox_step = OperatorJourneyStep.objects.create(
             journey=github_journey,
             title="Review GitHub issue inbox",
             slug="review-issue-inbox",
             instruction="Triage open repository issues.",
             iframe_url="/admin/repos/repositoryissue/?state__exact=open",
-            order=2,
+            order=1,
         )
         pr_queue_step = OperatorJourneyStep.objects.create(
             journey=github_journey,
@@ -127,7 +119,7 @@ class OperatorJourneyFlowTests(TestCase):
             slug="review-pr-queue",
             instruction="Review open pull requests.",
             iframe_url="/admin/repos/repositorypullrequest/?state__exact=open",
-            order=3,
+            order=2,
         )
         issue_lifecycle_step = OperatorJourneyStep.objects.create(
             journey=github_journey,
@@ -135,7 +127,7 @@ class OperatorJourneyFlowTests(TestCase):
             slug="run-issue-lifecycle-actions",
             instruction="Perform issue follow-up and closure actions.",
             iframe_url="/admin/repos/repositoryissue/",
-            order=4,
+            order=3,
         )
         pr_lifecycle_step = OperatorJourneyStep.objects.create(
             journey=github_journey,
@@ -143,7 +135,7 @@ class OperatorJourneyFlowTests(TestCase):
             slug="run-pr-lifecycle-actions",
             instruction="Perform pull request review and completion actions.",
             iframe_url="/admin/repos/repositorypullrequest/",
-            order=5,
+            order=4,
         )
 
         step_titles_in_order = list(
@@ -155,7 +147,6 @@ class OperatorJourneyFlowTests(TestCase):
         self.assertEqual(
             step_titles_in_order,
             [
-                setup_step.title,
                 issue_inbox_step.title,
                 pr_queue_step.title,
                 issue_lifecycle_step.title,
@@ -163,7 +154,7 @@ class OperatorJourneyFlowTests(TestCase):
             ],
         )
 
-    def test_product_developer_progression_advances_after_token_setup(self):
+    def test_product_developer_progression_starts_at_issue_inbox_without_token_setup(self):
         github_journey = OperatorJourney.objects.create(
             name="Product Developer GitHub Access",
             slug="product-developer-github-access",
@@ -171,26 +162,15 @@ class OperatorJourneyFlowTests(TestCase):
             is_active=True,
             priority=1,
         )
-        setup_step = OperatorJourneyStep.objects.create(
-            journey=github_journey,
-            title="Connect your GitHub access",
-            slug="setup-github-token",
-            instruction="Configure GitHub access directly in this step.",
-            iframe_url="/admin/repos/githubrepository/setup-token/",
-            order=1,
-        )
         issue_inbox_step = OperatorJourneyStep.objects.create(
             journey=github_journey,
             title="Review GitHub issue inbox",
             slug="review-issue-inbox",
             instruction="Triage open repository issues.",
             iframe_url="/admin/repos/repositoryissue/?state__exact=open",
-            order=2,
+            order=1,
         )
 
-        self.assertEqual(next_step_for_user(user=self.user), setup_step)
-
-        self.assertTrue(complete_step_for_user(user=self.user, step=setup_step))
         self.assertEqual(next_step_for_user(user=self.user), issue_inbox_step)
 
     @patch("apps.ops.operator_journey._local_node_role_is_available", return_value=True)
