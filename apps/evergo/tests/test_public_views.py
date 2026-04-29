@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoCustomerShareLink, EvergoUser
 
+
 def _create_customer(*, username: str = "evergo-owner") -> EvergoCustomer:
     user_model = get_user_model()
     owner = user_model.objects.create_user(username=username, email=f"{username}@example.com")
@@ -24,6 +25,7 @@ def _create_customer(*, username: str = "evergo-owner") -> EvergoCustomer:
         address="Monterrey, NL",
         latest_so="SO-777",
     )
+
 
 @pytest.mark.django_db
 def test_order_tracking_public_requires_login(client):
@@ -46,6 +48,7 @@ def test_order_tracking_public_requires_login(client):
 
     assert response.status_code == 302
     assert "login" in response["Location"]
+
 
 @pytest.mark.django_db
 def test_my_evergo_dashboard_renders_and_generates_table_from_local_orders(client):
@@ -84,6 +87,7 @@ def test_my_evergo_dashboard_renders_and_generates_table_from_local_orders(clien
     assert "https://portal-mex.evergo.com/ordenes/28690" in content
     assert "Copy / Paste table" in content
 
+
 def test_to_tsv_sanitizes_formula_and_line_break_characters():
     """Security: TSV export must neutralize formulas and sanitize control characters."""
 
@@ -111,11 +115,32 @@ def test_to_tsv_sanitizes_formula_and_line_break_characters():
     assert "'-brand" in tsv
     assert "Monterrey NL" in tsv
 
+
 def _login_customer_owner(client, customer: EvergoCustomer):
     client.force_login(customer.user.user)
 
+
 @pytest.mark.django_db
+def test_customer_public_detail_requires_login(client):
+    customer = _create_customer()
+
+    response = client.get(reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id}))
+
+    assert response.status_code == 302
+    assert "login" in response["Location"]
+
+
 @pytest.mark.django_db
+def test_customer_public_detail_rejects_logged_in_user_without_access(client):
+    customer = _create_customer(username="owner-private-access")
+    outsider = get_user_model().objects.create_user(username="outsider", email="outsider@example.com")
+    client.force_login(outsider)
+
+    response = client.get(reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id}))
+
+    assert response.status_code == 404
+
+
 @pytest.mark.django_db
 def test_customer_public_detail_does_not_expose_google_maps_api_key(client, settings):
     settings.GOOGLE_MAPS_API_KEY = "super-secret-key"
@@ -129,6 +154,7 @@ def test_customer_public_detail_does_not_expose_google_maps_api_key(client, sett
     assert "maps.googleapis.com/maps/api/staticmap" in content
     assert "super-secret-key" not in content
     assert "&key=" not in content
+
 
 @pytest.mark.django_db
 def test_customer_public_detail_uploads_and_deletes_image(client):
@@ -161,6 +187,7 @@ def test_customer_public_detail_uploads_and_deletes_image(client):
     assert not EvergoArtifact.objects.filter(customer=customer).exists()
     assert not artifact.file.storage.exists(storage_name)
 
+
 @pytest.mark.django_db
 def test_customer_public_detail_delete_image_with_invalid_artifact_id_returns_404(client):
     customer = _create_customer(username="owner-invalid-artifact-id")
@@ -174,7 +201,9 @@ def test_customer_public_detail_delete_image_with_invalid_artifact_id_returns_40
 
     assert response.status_code == 404
 
+
 @pytest.mark.django_db
+
 
 @pytest.mark.django_db
 def test_customer_public_detail_enforces_image_and_storage_limits(client, settings):
@@ -207,6 +236,7 @@ def test_customer_public_detail_enforces_image_and_storage_limits(client, settin
     assert response.status_code == 200
     assert "You can only add up to 1 image." in response.content.decode()
 
+
 @pytest.mark.django_db
 def test_customer_public_detail_ignores_unreadable_blob_size(client, monkeypatch):
     customer = _create_customer(username="owner-unreadable-size")
@@ -229,6 +259,7 @@ def test_customer_public_detail_ignores_unreadable_blob_size(client, monkeypatch
     response = client.get(reverse("evergo:customer-public-detail", kwargs={"public_id": customer.public_id}))
 
     assert response.status_code == 200
+
 
 @pytest.mark.django_db
 def test_customer_public_detail_handles_artifact_model_validation_error(client, monkeypatch):
@@ -257,6 +288,7 @@ def test_customer_public_detail_handles_artifact_model_validation_error(client, 
     assert "Only image files and PDFs are allowed." in response.content.decode()
     assert not EvergoArtifact.objects.filter(customer=customer).exists()
 
+
 @pytest.mark.django_db
 def test_customer_public_detail_rejects_upload_that_resolves_to_non_image_artifact_type(client):
     customer = _create_customer(username="owner-non-image-artifact")
@@ -279,6 +311,7 @@ def test_customer_public_detail_rejects_upload_that_resolves_to_non_image_artifa
     assert "Only image files are allowed for this upload." in response.content.decode()
     assert not EvergoArtifact.objects.filter(customer=customer).exists()
 
+
 @pytest.mark.django_db
 def test_customer_pdf_download_generates_pdf_without_deleting_uploaded_images(client, monkeypatch):
     customer = _create_customer(username="owner-pdf")
@@ -300,6 +333,7 @@ def test_customer_pdf_download_generates_pdf_without_deleting_uploaded_images(cl
     assert response["Content-Type"] == "application/pdf"
     assert EvergoArtifact.objects.filter(customer=customer).exists()
     assert artifact.file.storage.exists(storage_name)
+
 
 @pytest.mark.django_db
 def test_customer_pdf_download_passes_data_uris_to_template(client, monkeypatch):
@@ -327,6 +361,7 @@ def test_customer_pdf_download_passes_data_uris_to_template(client, monkeypatch)
     assert captured_context["google_maps_snapshot_data_uri"].startswith("data:image/png;base64,")
     assert captured_context["image_artifacts"][0]["url"].startswith("data:image/")
 
+
 @pytest.mark.django_db
 def test_customer_pdf_download_sanitizes_content_disposition_filename(client, monkeypatch):
     customer = _create_customer(username="owner-pdf-filename")
@@ -340,6 +375,7 @@ def test_customer_pdf_download_sanitizes_content_disposition_filename(client, mo
 
     assert response.status_code == 200
     assert response["Content-Disposition"] == 'attachment; filename="evergo-SObad.pdf"'
+
 
 @pytest.mark.django_db
 def test_customer_pdf_download_not_blocked_by_reports_pdf_toggle(client, monkeypatch, settings):
@@ -361,6 +397,7 @@ def test_customer_pdf_download_not_blocked_by_reports_pdf_toggle(client, monkeyp
     assert response.status_code == 200
     assert captured["enabled_setting_name"] == "EVERGO_PUBLIC_HTML_TO_PDF_ENABLED"
 
+
 @pytest.mark.django_db
 def test_artifact_image_data_uri_returns_empty_string_for_unreadable_blob(monkeypatch):
     customer = _create_customer(username="owner-pdf-unreadable")
@@ -380,6 +417,7 @@ def test_artifact_image_data_uri_returns_empty_string_for_unreadable_blob(monkey
 
     assert _artifact_image_data_uri(artifact) == ""
 
+
 @pytest.mark.django_db
 def test_customer_shared_detail_allows_access_without_login(client):
     customer = _create_customer(username="owner-shared")
@@ -390,6 +428,7 @@ def test_customer_shared_detail_allows_access_without_login(client):
     assert response.status_code == 200
     assert "Download PDF" in response.content.decode()
 
+
 @pytest.mark.django_db
 def test_customer_shared_detail_rejects_revoked_link(client):
     customer = _create_customer(username="owner-shared-revoked")
@@ -399,6 +438,7 @@ def test_customer_shared_detail_rejects_revoked_link(client):
     response = client.get(reverse("evergo:customer-shared-detail", kwargs={"share_id": share_link.share_id}))
 
     assert response.status_code == 404
+
 
 @pytest.mark.django_db
 def test_customer_shared_detail_uses_creator_permissions(client):
@@ -415,6 +455,7 @@ def test_customer_shared_detail_uses_creator_permissions(client):
 
     assert response.status_code == 404
 
+
 @pytest.mark.django_db
 def test_customer_shared_detail_rejects_inactive_creator(client):
     customer = _create_customer(username="owner-shared-inactive-creator")
@@ -426,6 +467,7 @@ def test_customer_shared_detail_rejects_inactive_creator(client):
     response = client.get(reverse("evergo:customer-shared-detail", kwargs={"share_id": share_link.share_id}))
 
     assert response.status_code == 404
+
 
 @pytest.mark.django_db
 def test_customer_shared_detail_upload_redirects_back_to_share_route(client):
@@ -447,6 +489,7 @@ def test_customer_shared_detail_upload_redirects_back_to_share_route(client):
 
     assert response.status_code == 302
     assert response["Location"] == shared_url
+
 
 @pytest.mark.django_db
 def test_customer_shared_detail_delete_redirects_back_to_share_route(client):
