@@ -70,7 +70,7 @@ def _visible_images_for_user(user):
     )
     if can_manage_gallery(user):
         return queryset
-    visibility_filter = Q(public_release_at__isnull=False, public_release_at__lte=now)
+    visibility_filter = Q(public_release_at__lte=now)
     if getattr(user, "is_authenticated", False):
         visibility_filter |= Q(owner_user=user)
         visibility_filter |= Q(owner_group__in=user.groups.all())
@@ -132,6 +132,7 @@ def _apply_gallery_search(queryset, search_query: str, *, user=None):
         | Q(trait_values__qualitative_value__icontains=search_query)
     )
     normalized_query = search_query.casefold()
+    now = timezone.now()
     try:
         direct_fields_q |= Q(id=int(search_query))
     except ValueError:
@@ -144,9 +145,9 @@ def _apply_gallery_search(queryset, search_query: str, *, user=None):
         direct_fields_q |= Q(slug=parsed_uuid)
         metadata_direct_fields_q |= Q(content_sample__name=parsed_uuid)
     if normalized_query in {"public", "published"}:
-        direct_fields_q |= Q(public_release_at__isnull=False, public_release_at__lte=timezone.now())
+        direct_fields_q |= Q(public_release_at__lte=now)
     if normalized_query == "private":
-        direct_fields_q |= Q(public_release_at__isnull=True) | Q(public_release_at__gt=timezone.now())
+        direct_fields_q |= Q(public_release_at__isnull=True) | Q(public_release_at__gt=now)
     try:
         metadata_related_fields_q |= Q(trait_values__float_value=float(search_query))
     except ValueError:

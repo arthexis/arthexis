@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core.files import File
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.groups.models import SecurityGroup
 
@@ -98,10 +99,9 @@ class Command(BaseCommand):
             release_at_raw = (options.get("release_at") or "").strip()
             public_release_at = None
             if release_at_raw:
-                try:
-                    parsed_release_at = timezone.datetime.fromisoformat(release_at_raw)
-                except ValueError as exc:
-                    raise CommandError("Invalid --release-at value; use ISO datetime format.") from exc
+                parsed_release_at = parse_datetime(release_at_raw)
+                if parsed_release_at is None:
+                    raise CommandError("Invalid --release-at value; use ISO datetime format.")
                 public_release_at = timezone.make_aware(parsed_release_at) if timezone.is_naive(parsed_release_at) else parsed_release_at
             elif options["public"]:
                 public_release_at = timezone.now()

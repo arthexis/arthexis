@@ -3,6 +3,7 @@ from pathlib import Path
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from apps.content.models import ContentSample
 from apps.content.utils import save_content_sample
@@ -50,12 +51,23 @@ def create_gallery_image(
     title: str,
     description: str = "",
     public_release_at=None,
+    include_in_public_gallery: bool | None = None,
     create_content_sample: bool = False,
     owner_user=None,
     owner_group=None,
 ) -> GalleryImage:
     if bool(owner_user) == bool(owner_group):
         raise ValidationError({"owner": "Choose exactly one owner user or owner group."})
+    if include_in_public_gallery is not None and public_release_at is not None:
+        raise ValidationError(
+            {
+                "public_release_at": (
+                    "Choose either public_release_at or include_in_public_gallery, not both."
+                )
+            }
+        )
+    if include_in_public_gallery is True:
+        public_release_at = timezone.now()
 
     bucket = get_gallery_bucket()
     media_file = create_media_file(bucket=bucket, uploaded_file=uploaded_file)

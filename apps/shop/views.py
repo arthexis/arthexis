@@ -79,7 +79,7 @@ def _gallery_images_for_checkout(request: HttpRequest) -> QuerySet[GalleryImage]
     if can_manage_gallery(request.user):
         return queryset
 
-    visibility_filter = Q(include_in_public_gallery=True)
+    visibility_filter = Q(public_release_at__lte=timezone.now())
     if request.user.is_authenticated:
         visibility_filter |= Q(owner_user=request.user)
         visibility_filter |= Q(owner_group__in=request.user.groups.all())
