@@ -8,7 +8,6 @@ from apps.library.models import (
     RegisteredKindle,
 )
 
-
 class LibraryAdminRegistrationTests(SimpleTestCase):
     def test_library_models_are_registered_in_admin(self):
         for model in (

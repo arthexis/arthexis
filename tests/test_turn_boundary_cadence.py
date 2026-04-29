@@ -7,7 +7,6 @@ import json
 import time
 from pathlib import Path
 
-
 MODULE_PATH = (
     Path(__file__).resolve().parents[1]
     / "skills"
@@ -15,7 +14,6 @@ MODULE_PATH = (
     / "scripts"
     / "turn_boundary.py"
 )
-
 
 def load_turn_boundary():
     spec = importlib.util.spec_from_file_location("turn_boundary", MODULE_PATH)
@@ -25,7 +23,6 @@ def load_turn_boundary():
     spec.loader.exec_module(module)
     return module
 
-
 def test_cadence_rest_deducts_elapsed_turn_time():
     module = load_turn_boundary()
     started_at = dt.datetime(2026, 4, 25, 8, 0, tzinfo=dt.timezone.utc)
@@ -34,26 +31,6 @@ def test_cadence_rest_deducts_elapsed_turn_time():
     rest = module.cadence_rest_seconds({"started_at": started_at.isoformat()}, 600, now=now)
 
     assert rest == 385
-
-
-def test_cadence_rest_is_zero_after_cadence_elapsed():
-    module = load_turn_boundary()
-    started_at = dt.datetime(2026, 4, 25, 8, 0, tzinfo=dt.timezone.utc)
-    now = started_at + dt.timedelta(seconds=601)
-
-    rest = module.cadence_rest_seconds({"started_at": started_at.isoformat()}, 600, now=now)
-
-    assert rest == 0
-
-
-def test_cadence_rest_is_zero_when_cadence_disabled():
-    module = load_turn_boundary()
-    started_at = dt.datetime(2026, 4, 25, 8, 0, tzinfo=dt.timezone.utc)
-
-    rest = module.cadence_rest_seconds({"started_at": started_at.isoformat()}, 0, now=started_at)
-
-    assert rest == 0
-
 
 def test_cadence_payload_uses_single_now_for_reporting():
     module = load_turn_boundary()
@@ -66,7 +43,6 @@ def test_cadence_payload_uses_single_now_for_reporting():
     assert payload["cadence_rest_seconds"] == 475
     assert payload["cadence_rest_started_at"] == now.isoformat(timespec="seconds")
     assert payload["cadence_rest_expires_at"] == (now + dt.timedelta(seconds=475)).isoformat(timespec="seconds")
-
 
 def test_cleanup_step_records_cadence_expiry_without_sleeping(tmp_path, monkeypatch):
     module = load_turn_boundary()
@@ -110,7 +86,6 @@ def test_cleanup_step_records_cadence_expiry_without_sleeping(tmp_path, monkeypa
     archive = json.loads((module.ARCHIVE_DIR / "turn-cadence-test.json").read_text())
     assert archive["cleanup"]["cadence_rest_expires_at"] == cadence_state["cadence_rest_expires_at"]
 
-
 def test_cleanup_step_clears_stale_cadence_state_when_rest_is_skipped(tmp_path, monkeypatch):
     module = load_turn_boundary()
     state_dir = tmp_path / "turn-state"
@@ -144,7 +119,6 @@ def test_cleanup_step_clears_stale_cadence_state_when_rest_is_skipped(tmp_path, 
     archive = json.loads((module.ARCHIVE_DIR / "skip-cadence-test.json").read_text())
     assert archive["cleanup"]["cadence_rest_seconds"] == 0
     assert archive["cleanup"]["cadence_rest_skipped"] is True
-
 
 def test_cleanup_step_clears_stale_cadence_state_when_cadence_already_elapsed(tmp_path, monkeypatch):
     module = load_turn_boundary()

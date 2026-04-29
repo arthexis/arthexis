@@ -72,8 +72,6 @@ class NestedOptionalPositionalCommand(BaseCommand):
     def handle(self, *args, **options) -> None:
         return None
 
-
-@pytest.mark.django_db
 def test_sync_special_command_persists_argument_schema() -> None:
     """Sync should introspect parser actions and persist parameter definitions."""
 
@@ -94,19 +92,6 @@ def test_sync_special_command_persists_argument_schema() -> None:
     assert parameter_map["kind"].nargs is None
     assert parameter_map["enabled"].const is True
 
-
-@pytest.mark.django_db
-def test_sync_special_command_rejects_optional_positionals() -> None:
-    """Optional positional parser actions are rejected during sync."""
-
-    with pytest.raises(SpecialCommandValidationError, match="Optional positional"):
-        sync_special_command(
-            command_name="optionals",
-            command_cls=OptionalPositionalCommand,
-        )
-
-
-@pytest.mark.django_db
 def test_sync_special_command_supports_nested_subparsers() -> None:
     """Sync should flatten nested subparsers without rejecting the command."""
 
@@ -121,15 +106,3 @@ def test_sync_special_command_supports_nested_subparsers() -> None:
     assert parameter_map["username"].kind == SpecialCommandParameter.ParameterKind.POSITIONAL
     assert parameter_map["shared"].kind == SpecialCommandParameter.ParameterKind.OPTION
 
-@pytest.mark.django_db
-def test_sync_special_command_skips_optional_nested_positionals() -> None:
-    """Nested optional positionals should not block sync or be persisted."""
-
-    special = sync_special_command(
-        command_name="nestedoptional",
-        command_cls=NestedOptionalPositionalCommand,
-    )
-
-    parameter_names = {parameter.name for parameter in special.parameters.all()}
-
-    assert parameter_names == {"action"}

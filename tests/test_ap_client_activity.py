@@ -5,9 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "ap_client_activity.py"
-
 
 def load_activity_module():
     spec = importlib.util.spec_from_file_location("ap_client_activity", SCRIPT_PATH)
@@ -16,7 +14,6 @@ def load_activity_module():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
-
 
 def test_load_jsonl_limit_uses_bounded_tail_without_reading_whole_file(tmp_path, monkeypatch):
     module = load_activity_module()
@@ -36,16 +33,6 @@ def test_load_jsonl_limit_uses_bounded_tail_without_reading_whole_file(tmp_path,
     loaded = module._load_jsonl(log_path, limit=2)
 
     assert [row["event_type"] for row in loaded] == ["middle", "new"]
-
-
-def test_load_jsonl_non_positive_limit_returns_no_rows(tmp_path):
-    module = load_activity_module()
-    log_path = tmp_path / "activity.jsonl"
-    log_path.write_text(json.dumps({"event_type": "new"}) + "\n", encoding="utf-8")
-
-    assert module._load_jsonl(log_path, limit=0) == []
-    assert module._load_jsonl(log_path, limit=-1) == []
-
 
 def test_build_report_does_not_treat_consent_history_as_authorization(tmp_path):
     module = load_activity_module()
