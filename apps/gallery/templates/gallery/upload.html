@@ -55,12 +55,10 @@
             {{ form.owner_group.errors }}
           </div>
           <div class="col-12">
-            <div class="form-check">
-              {{ form.include_in_public_gallery }}
-              <label class="form-check-label" for="{{ form.include_in_public_gallery.id_for_label }}">
-                {{ form.include_in_public_gallery.label }}
-              </label>
-            </div>
+            <label class="form-label" for="{{ form.public_release_at.id_for_label }}">{{ form.public_release_at.label }}</label>
+            {{ form.public_release_at }}
+            {{ form.public_release_at.errors }}
+            <div class="form-text">{% trans "Leave blank to keep this image private." %}</div>
           </div>
           <div class="col-12">
             <div class="form-check">

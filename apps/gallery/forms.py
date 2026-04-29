@@ -23,9 +23,14 @@ class GalleryUploadForm(forms.Form):
             }
         ),
     )
-    include_in_public_gallery = forms.BooleanField(
+    public_release_at = forms.DateTimeField(
         required=False,
-        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        widget=forms.DateTimeInput(
+            attrs={
+                "class": "form-control",
+                "type": "datetime-local",
+            }
+        ),
     )
     create_content_sample = forms.BooleanField(
         required=False,
@@ -102,7 +107,7 @@ class GalleryImageForm(forms.ModelForm):
         fields = (
             "title",
             "description",
-            "include_in_public_gallery",
+            "public_release_at",
             "owner_user",
             "owner_group",
             "categories",
