@@ -59,6 +59,7 @@ TRACKING_PREFILL_SOURCE_KEYS = (
     "tracking",
     "data",
 )
+EVERGO_CONTRACTORS_GROUP_NAME = "Evergo Contractors"
 
 
 def _parse_user_story_attachment_limit() -> int:
@@ -94,12 +95,68 @@ def _build_public_widget_context(*, user) -> dict[str, object]:
     }
 
 
+def _has_evergo_workspace_access(*, user) -> bool:
+    if not user.is_authenticated:
+        return False
+    return user.groups.filter(name=EVERGO_CONTRACTORS_GROUP_NAME).exists() or user.is_superuser
+
+
 def _normalize_display_text(value: str | None, *, default: str = "-") -> str:
     """Normalize common encoding artifacts in user-facing Evergo text."""
     normalized = str(value or "").strip()
     if not normalized:
         return default
     return DISPLAY_TEXT_FIXUPS.get(normalized, normalized)
+
+
+@login_required
+def evergo_workspace(request) -> HttpResponse:
+    """Render a tabbed Evergo workspace with customer/order snapshots."""
+    if not _has_evergo_workspace_access(user=request.user):
+        raise Http404("Evergo workspace not found.")
+
+    tab = request.GET.get("tab", "customers")
+    selected_contractor_id = request.GET.get("contractor", "")
+    if tab not in {"customers", "orders"}:
+        tab = "customers"
+
+    customers = (
+        EvergoCustomer.objects.select_related("latest_order")
+        .order_by("latest_so", "pk")
+        .only("public_id", "latest_so", "name", "address", "phone_number", "latest_order__site_name")
+    )
+    orders = (
+        EvergoOrder.objects.order_by("order_number", "pk")
+        .only(
+            "remote_id",
+            "order_number",
+            "client_name",
+            "status_name",
+            "address_street",
+            "phone_primary",
+            "phone_secondary",
+            "site_name",
+            "address_municipality",
+        )
+    )
+    contractors = EvergoUser.objects.order_by("name", "email", "pk").only("pk", "name", "email", "evergo_email")
+    if selected_contractor_id.isdigit():
+        contractor_pk = int(selected_contractor_id)
+        customers = customers.filter(user_id=contractor_pk)
+        orders = orders.filter(user_id=contractor_pk)
+    else:
+        selected_contractor_id = ""
+    return render(
+        request,
+        "evergo/workspace.html",
+        {
+            "active_tab": tab,
+            "customers": customers,
+            "orders": orders,
+            "contractors": contractors,
+            "selected_contractor_id": selected_contractor_id,
+        },
+    )
 
 
 def _get_evergo_public_image_limit() -> int:
@@ -646,7 +703,14 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
     if not request.user.is_staff:
         order_lookup["user__user"] = request.user
     order = get_object_or_404(EvergoOrder.objects.select_related("user"), **order_lookup)
+    contractor_options = EvergoUser.objects.order_by("name", "email", "pk").only("pk", "name", "email", "evergo_email")
+    requested_contractor_id = request.POST.get("contractor") or request.GET.get("contractor") or ""
     profile = order.user
+    if requested_contractor_id.isdigit():
+        selected_profile = contractor_options.filter(pk=int(requested_contractor_id)).first()
+        if selected_profile is not None:
+            profile = selected_profile
+    selected_contractor_id = str(profile.pk)
     brands = profile.fetch_charger_brand_options()
     remote_image_urls: dict[str, str] = {}
 
@@ -702,7 +766,9 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
                         request,
                         f"Orden enviada correctamente. {completed_steps}/4 pasos completados.",
                     )
-                    return redirect("evergo:order-tracking-public", order_id=order_id)
+                    return redirect(
+                        f"{reverse('evergo:order-tracking-public', kwargs={'order_id': order_id})}?contractor={selected_contractor_id}"
+                    )
     else:
         remote_initial_data, remote_prefill_errors, remote_image_urls = _load_remote_phase_one_initial_data(
             profile=profile,
@@ -741,6 +807,8 @@ def order_tracking_public(request, order_id: int) -> HttpResponse:
                 if order.remote_id is not None
                 else ""
             ),
+            "contractor_options": contractor_options,
+            "selected_contractor_id": selected_contractor_id,
             **_build_public_widget_context(user=request.user),
         },
     )
