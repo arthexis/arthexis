@@ -12,6 +12,7 @@ from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.shop.models import ShopProduct
 
@@ -60,6 +61,7 @@ def _clear_staged_upload(*, staged_path: str | None):
 
 
 def _visible_images_for_user(user):
+    now = timezone.now()
     queryset = GalleryImage.objects.select_related(
         "content_sample",
         "media_file",
@@ -68,7 +70,7 @@ def _visible_images_for_user(user):
     )
     if can_manage_gallery(user):
         return queryset
-    visibility_filter = Q(include_in_public_gallery=True)
+    visibility_filter = Q(public_release_at__lte=now)
     if getattr(user, "is_authenticated", False):
         visibility_filter |= Q(owner_user=user)
         visibility_filter |= Q(owner_group__in=user.groups.all())
@@ -130,6 +132,7 @@ def _apply_gallery_search(queryset, search_query: str, *, user=None):
         | Q(trait_values__qualitative_value__icontains=search_query)
     )
     normalized_query = search_query.casefold()
+    now = timezone.now()
     try:
         direct_fields_q |= Q(id=int(search_query))
     except ValueError:
@@ -142,9 +145,9 @@ def _apply_gallery_search(queryset, search_query: str, *, user=None):
         direct_fields_q |= Q(slug=parsed_uuid)
         metadata_direct_fields_q |= Q(content_sample__name=parsed_uuid)
     if normalized_query in {"public", "published"}:
-        direct_fields_q |= Q(include_in_public_gallery=True)
+        direct_fields_q |= Q(public_release_at__lte=now)
     if normalized_query == "private":
-        direct_fields_q |= Q(include_in_public_gallery=False)
+        direct_fields_q |= Q(public_release_at__isnull=True) | Q(public_release_at__gt=now)
     try:
         metadata_related_fields_q |= Q(trait_values__float_value=float(search_query))
     except ValueError:
@@ -356,7 +359,7 @@ def gallery_upload(request):
                 uploaded_file=uploaded_file,
                 title=form.cleaned_data["title"],
                 description=form.cleaned_data.get("description", ""),
-                include_in_public_gallery=form.cleaned_data.get("include_in_public_gallery", False),
+                public_release_at=form.cleaned_data.get("public_release_at"),
                 create_content_sample=form.cleaned_data.get("create_content_sample", False),
                 owner_user=owner_user,
                 owner_group=form.cleaned_data.get("owner_group"),
