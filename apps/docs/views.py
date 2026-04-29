@@ -719,7 +719,7 @@ def _latest_gallery_images_for_user(
     if is_gallery_manager:
         return queryset.order_by("-media_file__uploaded_at", "-pk")[:limit]
 
-    visibility_filter = Q(include_in_public_gallery=True)
+    visibility_filter = Q(public_release_at__lte=timezone.now())
     if getattr(user, "is_authenticated", False):
         visibility_filter |= Q(owner_user=user)
         visibility_filter |= Q(owner_group__in=user.groups.all())

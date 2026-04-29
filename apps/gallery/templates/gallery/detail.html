@@ -40,7 +40,10 @@
         <dd class="col-sm-8 text-break">{{ image.media_file.original_name|default:image.media_file.file.name }}</dd>
         <dt class="col-sm-4">{% trans "Visibility" %}</dt>
         <dd class="col-sm-8">
-          {% if image.include_in_public_gallery %}{% trans "Public" %}{% else %}{% trans "Private" %}{% endif %}
+          {% if image.is_publicly_visible %}{% trans "Public" %}{% elif image.public_release_at %}{% trans "Scheduled" %}{% else %}{% trans "Private" %}{% endif %}
+          {% if image.public_release_at %}
+            <div class="text-muted">{{ image.public_release_at }}</div>
+          {% endif %}
         </dd>
         {% if can_view_metadata %}
           {% if image.owner_user %}

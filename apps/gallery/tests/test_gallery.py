@@ -1,10 +1,12 @@
 from io import BytesIO
+from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core import signing
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from PIL import Image
 
 from apps.content.models import ContentSample
@@ -39,7 +41,7 @@ class GalleryVisibilityTests(TestCase):
         public = create_gallery_image(
             uploaded_file=self._upload("public.jpg"),
             title="Public",
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
             owner_user=self.user,
         )
         self.assertFalse(private.can_view(self.other))
@@ -52,6 +54,15 @@ class GalleryVisibilityTests(TestCase):
             owner_user=self.user,
         )
         self.assertTrue(image.can_view(self.user))
+        self.assertFalse(image.can_view(self.other))
+
+    def test_future_release_date_stays_private_for_public_viewers(self):
+        image = create_gallery_image(
+            uploaded_file=self._upload("scheduled.jpg"),
+            title="Scheduled",
+            public_release_at=timezone.now() + timedelta(days=1),
+            owner_user=self.user,
+        )
         self.assertFalse(image.can_view(self.other))
 
     def test_optional_content_sample_link_is_created_when_requested(self):
@@ -99,13 +110,13 @@ class GalleryIndexTests(TestCase):
             title="Sunlit Plaza",
             description="Warm stone plaza",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
         hidden = create_gallery_image(
             uploaded_file=self._upload("hidden.jpg"),
             title="Forest",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
         category = GalleryCategory.objects.create(name="Palette", slug="palette")
         trait = GalleryTrait.objects.create(name="Mood", slug="mood")
@@ -130,19 +141,19 @@ class GalleryIndexTests(TestCase):
             uploaded_file=self._upload("direct.jpg"),
             title="Citrine Skyline",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
         related_match = create_gallery_image(
             uploaded_file=self._upload("related.jpg"),
             title="Related Match",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
         hidden = create_gallery_image(
             uploaded_file=self._upload("hidden.jpg"),
             title="Forest",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
         category = GalleryCategory.objects.create(name="Palette", slug="palette")
         trait = GalleryTrait.objects.create(name="Mood", slug="mood")
@@ -218,7 +229,7 @@ class GalleryIndexTests(TestCase):
             uploaded_file=self._upload("public-metadata.jpg"),
             title="Public Plain Title",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
             create_content_sample=True,
         )
         image.content_sample.content = "public hidden citrine sample"
@@ -272,13 +283,13 @@ class GalleryIndexTests(TestCase):
             uploaded_file=self._upload("id-match.jpg"),
             title="Numeric Match",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
         other = create_gallery_image(
             uploaded_file=self._upload("id-other.jpg"),
             title="Numeric Other",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
 
         matches = list(_apply_gallery_search(GalleryImage.objects.all(), str(visible.id)))
@@ -291,13 +302,13 @@ class GalleryIndexTests(TestCase):
             uploaded_file=self._upload("slug-match.jpg"),
             title="Slug Match",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
         other = create_gallery_image(
             uploaded_file=self._upload("slug-other.jpg"),
             title="Slug Other",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
 
         matches = list(_apply_gallery_search(GalleryImage.objects.all(), str(visible.slug)))
@@ -310,13 +321,13 @@ class GalleryIndexTests(TestCase):
             uploaded_file=self._upload("yes-title.jpg"),
             title="Yes Title Match",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
         public_other = create_gallery_image(
             uploaded_file=self._upload("public-other.jpg"),
             title="Public Other",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
         private_other = create_gallery_image(
             uploaded_file=self._upload("private-other.jpg"),
@@ -337,25 +348,25 @@ class GalleryIndexTests(TestCase):
             uploaded_file=self._upload("first.jpg"),
             title="Alpha",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
         current = create_gallery_image(
             uploaded_file=self._upload("current.jpg"),
             title="Beacon",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
         same_title_next = create_gallery_image(
             uploaded_file=self._upload("same-title-next.jpg"),
             title="Beacon",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
         last = create_gallery_image(
             uploaded_file=self._upload("last.jpg"),
             title="Coda",
             owner_user=self.user,
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
         )
         shop = Shop.objects.create(name="RF Store", slug="rf-store")
         ShopProduct.objects.create(
@@ -398,7 +409,7 @@ class GalleryManagementPermissionTests(TestCase):
                 "image": self._upload(),
                 "title": "Managed",
                 "description": "",
-                "include_in_public_gallery": True,
+                "public_release_at": timezone.now().strftime("%Y-%m-%dT%H:%M"),
                 "owner_user": self.manager.username,
             },
         )
@@ -415,7 +426,12 @@ class GalleryManagementPermissionTests(TestCase):
         self.client.force_login(non_manager)
         response = self.client.post(
             "/gallery/upload/",
-            {"image": self._upload("denied.jpg"), "title": "Denied", "description": "", "include_in_public_gallery": True},
+            {
+                "image": self._upload("denied.jpg"),
+                "title": "Denied",
+                "description": "",
+                "public_release_at": timezone.now().strftime("%Y-%m-%dT%H:%M"),
+            },
         )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(GalleryImage.objects.filter(title="Denied").exists())
@@ -428,7 +444,7 @@ class GalleryManagementPermissionTests(TestCase):
                 "image": self._upload("sampled-managed.jpg"),
                 "title": "Managed With Sample",
                 "description": "",
-                "include_in_public_gallery": True,
+                "public_release_at": timezone.now().strftime("%Y-%m-%dT%H:%M"),
                 "create_content_sample": True,
                 "owner_user": self.manager.username,
             },

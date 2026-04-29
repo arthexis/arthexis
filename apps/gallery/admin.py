@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils import timezone
 
 from .models import GalleryCategory, GalleryCredit, GalleryImage, GalleryImageTrait, GalleryTrait
 
@@ -17,16 +18,21 @@ class GalleryImageTraitInline(admin.TabularInline):
 class GalleryImageAdmin(admin.ModelAdmin):
     list_display = (
         "title",
-        "include_in_public_gallery",
+        "public_status",
+        "public_release_at",
         "content_sample",
         "owner_user",
         "owner_group",
     )
-    list_filter = ("include_in_public_gallery", "categories")
+    list_filter = ("public_release_at", "categories")
     search_fields = ("title", "description")
     filter_horizontal = ("categories",)
     inlines = (GalleryCreditInline, GalleryImageTraitInline)
     change_form_template = "admin/gallery/galleryimage/change_form.html"
+
+    @admin.display(boolean=True, description="Public now")
+    def public_status(self, obj):
+        return obj.is_publicly_visible(now=timezone.now())
 
 
 @admin.register(GalleryCategory)
