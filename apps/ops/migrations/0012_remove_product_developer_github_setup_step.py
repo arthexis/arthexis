@@ -22,10 +22,21 @@ def remove_product_developer_github_setup_step(apps, schema_editor):
     remaining_steps = list(
         OperatorJourneyStep.objects.filter(journey=journey).order_by("order", "id")
     )
+    if not remaining_steps:
+        return
+
+    max_order = max(step.order for step in remaining_steps) + len(remaining_steps)
+    temp_steps = []
     for position, step in enumerate(remaining_steps, start=1):
-        if step.order != position:
-            step.order = position
-            step.save(update_fields=["order"])
+        step.order = max_order + position
+        temp_steps.append(step)
+
+    OperatorJourneyStep.objects.bulk_update(temp_steps, ["order"])
+
+    for position, step in enumerate(remaining_steps, start=1):
+        step.order = position
+
+    OperatorJourneyStep.objects.bulk_update(remaining_steps, ["order"])
 
 
 def noop_reverse(apps, schema_editor):
