@@ -27,3 +27,12 @@ class AgentTerminalAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request).select_related("node_role")
+        terminal_role = queryset.model._meta.get_field("node_role").remote_field.model.objects.filter(
+            name="Terminal"
+        ).first()
+        for terminal in queryset:
+            terminal._cached_terminal_role = terminal.node_role or terminal_role
+        return queryset

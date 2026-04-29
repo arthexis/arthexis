@@ -1,18 +1,19 @@
 from django.views.generic import DetailView, ListView
 
-from .models import TerminalsItem
+from .models import AgentTerminal
 
 
-class TerminalsItemListView(ListView):
-    """Starter list view for generated model."""
+class AgentTerminalListView(ListView):
+    """Starter list view for agent terminals."""
 
-    model = TerminalsItem
-    template_name = "terminals/terminals-item_list.html"
-    context_object_name = "terminals-item_list"
+    model = AgentTerminal
+    template_name = "terminals/agent_terminal_list.html"
+    context_object_name = "agent_terminals"
 
-class TerminalsItemDetailView(DetailView):
-    """Starter detail view for generated model."""
 
-    model = TerminalsItem
-    template_name = "terminals/terminals-item_detail.html"
-    context_object_name = "terminals-item"
+class AgentTerminalDetailView(DetailView):
+    """Starter detail view for agent terminals."""
+
+    model = AgentTerminal
+    template_name = "terminals/agent_terminal_detail.html"
+    context_object_name = "agent_terminal"

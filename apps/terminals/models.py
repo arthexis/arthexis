@@ -70,6 +70,9 @@ class AgentTerminal(Profile):
         return resolved
 
     def effective_node_role(self):
+        cached_terminal_role = getattr(self, "_cached_terminal_role", None)
+        if cached_terminal_role is not None:
+            return cached_terminal_role
         if self.node_role_id:
             return self.node_role
         return NodeRole.objects.filter(name="Terminal").first()
