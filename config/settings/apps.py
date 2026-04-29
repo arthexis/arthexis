@@ -96,6 +96,7 @@ PROJECT_LOCAL_APPS = [
     "apps.tasks",
     "apps.teams",
     "apps.terms",
+    "apps.terminals",
     "apps.tests",
     "apps.totp",
     "apps.users",
