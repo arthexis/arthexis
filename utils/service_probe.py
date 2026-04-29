@@ -81,8 +81,12 @@ def _parse_pgrep_line(line: str) -> tuple[int | None, str]:
 def _process_cwd_matches_base_dir(pid: int, base_dir: Path) -> bool:
     """Return whether the process working directory matches ``base_dir``."""
 
+    proc_cwd_path = Path(f"/proc/{pid}/cwd")
+    if not proc_cwd_path.exists():
+        return False
+
     try:
-        process_cwd = Path(f"/proc/{pid}/cwd").resolve(strict=True)
+        process_cwd = proc_cwd_path.resolve()
     except OSError:
         return False
 
@@ -205,7 +209,13 @@ def detect_runserver_port(base_dir: str | Path | None = None) -> int | None:
     if result.returncode != 0:
         return None
 
-    resolved_base_dir = Path(base_dir).resolve(strict=True) if base_dir is not None else None
+    if base_dir is not None:
+        try:
+            resolved_base_dir = Path(base_dir).resolve()
+        except OSError:
+            return None
+    else:
+        resolved_base_dir = None
 
     for line in result.stdout.splitlines():
         pid, command_line = _parse_pgrep_line(line)

@@ -63,6 +63,31 @@ def test_detect_runserver_port_returns_none_when_no_process_matches_base_dir(
     assert detected_port is None
 
 
+def test_detect_runserver_port_returns_none_when_base_dir_is_missing(
+    monkeypatch, tmp_path: Path
+):
+    missing_base_dir = tmp_path / "does-not-exist"
+
+    monkeypatch.setattr(
+        service_probe.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="999999 python manage.py runserver 0.0.0.0:8889 --noreload\n",
+        ),
+    )
+
+    detected_port = service_probe.detect_runserver_port(missing_base_dir)
+
+    assert detected_port is None
+
+
+def test_process_cwd_matches_base_dir_handles_missing_proc_entry():
+    assert (
+        service_probe._process_cwd_matches_base_dir(999999, Path("/tmp")) is False
+    )
+
+
 def test_main_detect_runserver_port_accepts_base_dir(monkeypatch, tmp_path: Path, capsys):
     target_base_dir = tmp_path / "arthexis"
     target_base_dir.mkdir()
