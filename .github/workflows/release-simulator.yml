@@ -303,7 +303,7 @@ jobs:
                   simulated_version = serialize_version(simulated_parts)
 
           if simulated_version != current_version:
-              version_path.write_text(simulated_version + '\\n', encoding='utf-8')
+              version_path.write_text(simulated_version + '\n', encoding='utf-8')
               print(
                   f'Release simulation adjusted VERSION from {current_version!r} to {simulated_version!r} '
                   'because the candidate version already exists on PyPI.'
@@ -312,9 +312,9 @@ jobs:
               print(f'Simulated release version {simulated_version!r} is not yet published on PyPI.')
 
           with open(Path(os.environ['GITHUB_OUTPUT']), 'a', encoding='utf-8') as output:
-              output.write(f'version_bumped={str(simulated_version != current_version).lower()}\\n')
-              output.write(f'previous_version={current_version}\\n')
-              output.write(f'simulated_version={simulated_version}\\n')
+              output.write(f'version_bumped={str(simulated_version != current_version).lower()}\n')
+              output.write(f'previous_version={current_version}\n')
+              output.write(f'simulated_version={simulated_version}\n')
           PY
       - name: Validate release tag version gate (simulated)
         id: validate_version_gate
@@ -433,7 +433,9 @@ jobs:
               } >> "$GITHUB_OUTPUT"
             else
               FAILED_STEP='the simulation pipeline'
-              if [ "${{ steps.validate_version_gate.outcome }}" = "failure" ]; then
+              if [ "${{ steps.resolve_simulation_version.outcome }}" = "failure" ]; then
+                FAILED_STEP='resolve_simulation_version'
+              elif [ "${{ steps.validate_version_gate.outcome }}" = "failure" ]; then
                 FAILED_STEP='validate_version_gate'
               elif [ "${{ steps.preflight_pypi.outcome }}" = "failure" ]; then
                 FAILED_STEP='preflight_pypi'

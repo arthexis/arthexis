@@ -111,6 +111,12 @@ jobs:
           version_seed = version_path.read_text(encoding="utf-8").strip()
           ref_name = os.environ["GITHUB_REF_NAME"].strip()
           tag_version = ref_name[1:] if ref_name.startswith("v") else ""
+
+          if ref_name.startswith("v") and not tag_version:
+              raise SystemExit(
+                  "Release publish blocked: tag 'v' does not include a version."
+              )
+
           resolved_seed = tag_version or version_seed
 
           if not resolved_seed:
