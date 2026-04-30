@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import re
 import secrets
 from urllib.parse import urlencode
 
@@ -9,19 +10,22 @@ import requests
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.urls import reverse
-from django.utils.translation import gettext, gettext_lazy as _
+from django.utils import timezone
+from django.utils.translation import gettext
+from django.utils.translation import gettext_lazy as _
 
 from apps.chats.models import ChatBridge, ChatBridgeManager
 from apps.core.entity import Entity
-
+from apps.features.utils import is_suite_feature_enabled
 
 logger = logging.getLogger(__name__)
 
 
 WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG = "whatsapp-chat-bridge"
+ATTENTION_KEY_RE = re.compile(r"\b(ATT-[A-F0-9]{12})\b", re.IGNORECASE)
 
 
 class WhatsAppChatBridge(ChatBridge):
@@ -230,7 +234,9 @@ class WhatsAppWebhook(Entity):
     def verify_querystring(self) -> str:
         """Return helper query parameters expected by webhook verification requests."""
 
-        return urlencode({"hub.mode": "subscribe", "hub.verify_token": self.verify_token})
+        return urlencode(
+            {"hub.mode": "subscribe", "hub.verify_token": self.verify_token}
+        )
 
     def suite_feature_disable_summary(self) -> str:
         """Return the disable contract that operators should expect for this webhook."""
@@ -277,3 +283,197 @@ class WhatsAppWebhookMessage(Entity):
             "sender": self.from_phone or self.wa_id or gettext("unknown"),
             "type": self.message_type or gettext("message"),
         }
+
+
+class Attention(Entity):
+    """Urgent attention request sent through the suite WhatsApp bridge."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", _("Pending")
+        RESPONDED = "responded", _("Responded")
+        CANCELLED = "cancelled", _("Cancelled")
+
+    key = models.CharField(max_length=16, unique=True, db_index=True, editable=False)
+    bridge = models.ForeignKey(
+        WhatsAppChatBridge,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="attentions",
+    )
+    recipient = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text=_("WhatsApp recipient phone number for the Attention request."),
+    )
+    agent = models.CharField(max_length=128, blank=True)
+    severity = models.CharField(max_length=32, default="urgent")
+    title = models.CharField(max_length=255, default="Attention")
+    message = models.TextField()
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    response_from_phone = models.CharField(max_length=64, blank=True)
+    response_text = models.TextField(blank=True)
+    response_payload = models.JSONField(default=dict, blank=True)
+    response_message = models.ForeignKey(
+        WhatsAppWebhookMessage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="attentions",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = _("Attention")
+        verbose_name_plural = _("Attention Requests")
+
+    def __str__(self) -> str:
+        return f"{self.key or 'Attention'}: {self.title}"
+
+    def save(self, *args, **kwargs):
+        if not self.key:
+            self.key = self._new_key()
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def normalize_phone_identifier(value: str) -> str:
+        normalized = re.sub(r"\s+", "", value or "")
+        return normalized.removeprefix("+")
+
+    @staticmethod
+    def _new_key() -> str:
+        return f"ATT-{secrets.token_hex(6).upper()}"
+
+    @staticmethod
+    def find_key(text: str) -> str:
+        match = ATTENTION_KEY_RE.search(text or "")
+        return match.group(1).upper() if match else ""
+
+    @staticmethod
+    def _strip_key(text: str, key: str) -> str:
+        if not key:
+            return (text or "").strip()
+        pattern = rf"(?<![A-Z0-9]){re.escape(key)}(?![A-Z0-9])"
+        return re.sub(pattern, "", text or "", count=1, flags=re.IGNORECASE).strip(
+            " :-\n\t"
+        )
+
+    def notification_body(self) -> str:
+        lines = [
+            f"[{self.severity.upper()}] {self.title or 'Attention'}",
+            f"Attention: {self.key}",
+        ]
+        if self.agent:
+            lines.append(f"Agent: {self.agent}")
+        lines.extend(
+            [
+                "",
+                self.message.strip(),
+                "",
+                f"Reply with: {self.key} <answer>",
+            ]
+        )
+        return "\n".join(lines)
+
+    def send(self) -> bool:
+        if not self.bridge_id or not self.bridge or not self.recipient:
+            return False
+        if not is_suite_feature_enabled(
+            WHATSAPP_CHAT_BRIDGE_FEATURE_SLUG, default=True
+        ):
+            return False
+        sent = self.bridge.send_message(
+            recipient=self.recipient,
+            content=self.notification_body(),
+        )
+        if sent:
+            self.sent_at = timezone.now()
+            self.save(update_fields=["sent_at", "updated_at"])
+        return sent
+
+    def mark_responded(
+        self,
+        *,
+        response_text: str,
+        response_from_phone: str = "",
+        response_message: WhatsAppWebhookMessage | None = None,
+        response_payload: dict | None = None,
+    ) -> None:
+        self.status = self.Status.RESPONDED
+        self.response_text = self._strip_key(response_text, self.key)
+        self.response_from_phone = response_from_phone
+        self.response_message = response_message
+        self.response_payload = response_payload or {}
+        self.responded_at = timezone.now()
+        self.save(
+            update_fields=[
+                "status",
+                "response_text",
+                "response_from_phone",
+                "response_message",
+                "response_payload",
+                "responded_at",
+                "updated_at",
+            ]
+        )
+
+    @classmethod
+    def capture_response(
+        cls,
+        *,
+        text: str,
+        from_phone: str = "",
+        webhook_message: WhatsAppWebhookMessage | None = None,
+        payload: dict | None = None,
+        require_key: bool = False,
+        bridge: WhatsAppChatBridge | None = None,
+    ) -> Attention | None:
+        key = cls.find_key(text)
+        bridge_id = getattr(bridge, "pk", None)
+        with transaction.atomic():
+            queryset = cls.objects.select_for_update().filter(status=cls.Status.PENDING)
+            if bridge_id is not None:
+                queryset = queryset.filter(bridge_id=bridge_id)
+            if key:
+                attention = queryset.filter(key__iexact=key).first()
+                normalized_from_phone = cls.normalize_phone_identifier(from_phone)
+                if (
+                    attention
+                    and cls.normalize_phone_identifier(attention.recipient)
+                    != normalized_from_phone
+                ):
+                    logger.info(
+                        "Skipped keyed Attention response for %s; sender %s did not match recipient",
+                        attention.key,
+                        from_phone,
+                    )
+                    return None
+            elif from_phone and not require_key:
+                candidates = list(queryset.filter(recipient=from_phone)[:2])
+                attention = candidates[0] if len(candidates) == 1 else None
+                if len(candidates) > 1:
+                    logger.info(
+                        "Skipped ambiguous Attention phone fallback for %s; %s pending matches",
+                        from_phone,
+                        len(candidates),
+                    )
+            else:
+                attention = None
+            if attention is None:
+                return None
+            attention.mark_responded(
+                response_text=text,
+                response_from_phone=from_phone,
+                response_message=webhook_message,
+                response_payload=payload,
+            )
+            return attention

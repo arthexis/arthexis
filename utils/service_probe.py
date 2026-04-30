@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import http.client
+from pathlib import Path
 import re
 import shlex
 import subprocess
@@ -59,6 +60,37 @@ def parse_runserver_port(command_line: str) -> int | None:
         return port
 
     return _scan_runserver_tail(tail_tokens)
+
+
+def _parse_pgrep_line(line: str) -> tuple[int | None, str]:
+    """Split a ``pgrep -af`` output line into pid and command components."""
+
+    stripped = line.strip()
+    if not stripped:
+        return None, ""
+
+    parts = stripped.split(maxsplit=1)
+    if not parts[0].isdigit():
+        return None, stripped
+
+    pid = int(parts[0])
+    command_line = parts[1] if len(parts) > 1 else ""
+    return pid, command_line
+
+
+def _process_cwd_matches_base_dir(pid: int, base_dir: Path) -> bool:
+    """Return whether the process working directory matches ``base_dir``."""
+
+    proc_cwd_path = Path(f"/proc/{pid}/cwd")
+    if not proc_cwd_path.exists():
+        return False
+
+    try:
+        process_cwd = proc_cwd_path.resolve()
+    except OSError:
+        return False
+
+    return process_cwd == base_dir
 
 
 def _extract_port_from_patterns(command_line: str) -> int | None:
@@ -148,8 +180,12 @@ def _scan_runserver_tail(tail_tokens: list[str]) -> int | None:
     return None
 
 
-def detect_runserver_port() -> int | None:
+def detect_runserver_port(base_dir: str | Path | None = None) -> int | None:
     """Find the first detected live ``manage.py runserver`` port.
+
+    Args:
+        base_dir: Optional repository root used to scope matches to a specific
+            checkout by comparing candidate process working directories.
 
     Returns:
         The first valid runserver port discovered via ``pgrep``, otherwise
@@ -173,8 +209,21 @@ def detect_runserver_port() -> int | None:
     if result.returncode != 0:
         return None
 
+    if base_dir is not None:
+        try:
+            resolved_base_dir = Path(base_dir).resolve()
+        except OSError:
+            return None
+    else:
+        resolved_base_dir = None
+
     for line in result.stdout.splitlines():
-        port = parse_runserver_port(line)
+        pid, command_line = _parse_pgrep_line(line)
+        if resolved_base_dir is not None:
+            if pid is None or not _process_cwd_matches_base_dir(pid, resolved_base_dir):
+                continue
+
+        port = parse_runserver_port(command_line or line)
         if port is not None:
             return port
     return None
@@ -232,6 +281,7 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     detect_parser = subparsers.add_parser("detect-runserver-port")
+    detect_parser.add_argument("--base-dir")
     detect_parser.set_defaults(command="detect-runserver-port")
 
     probe_parser = subparsers.add_parser("probe-admin-login")
@@ -259,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "detect-runserver-port":
-        detected_port = detect_runserver_port()
+        detected_port = detect_runserver_port(args.base_dir)
         if detected_port is None:
             return 1
         print(detected_port)

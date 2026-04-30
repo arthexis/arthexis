@@ -1,5 +1,6 @@
 from pathlib import Path
-from uuid import uuid4
+from urllib.parse import urlencode
+from uuid import UUID, uuid4
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -10,6 +11,10 @@ from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
+
+from apps.shop.models import ShopProduct
 
 from .forms import (
     GalleryCategoryForm,
@@ -56,6 +61,7 @@ def _clear_staged_upload(*, staged_path: str | None):
 
 
 def _visible_images_for_user(user):
+    now = timezone.now()
     queryset = GalleryImage.objects.select_related(
         "content_sample",
         "media_file",
@@ -64,7 +70,7 @@ def _visible_images_for_user(user):
     )
     if can_manage_gallery(user):
         return queryset
-    visibility_filter = Q(include_in_public_gallery=True)
+    visibility_filter = Q(public_release_at__lte=now)
     if getattr(user, "is_authenticated", False):
         visibility_filter |= Q(owner_user=user)
         visibility_filter |= Q(owner_group__in=user.groups.all())
@@ -72,9 +78,139 @@ def _visible_images_for_user(user):
     return queryset.filter(visibility_filter).distinct()
 
 
+def _metadata_visibility_filter_for_user(user):
+    if user is None or can_manage_gallery(user):
+        return Q()
+    if not getattr(user, "is_authenticated", False):
+        return Q(pk__in=[])
+    return Q(owner_user=user) | Q(owner_group__in=user.groups.all())
+
+
+def _apply_gallery_search(queryset, search_query: str, *, user=None):
+    search_query = search_query.strip()
+    if not search_query:
+        return queryset
+
+    direct_fields_q = (
+        Q(title__icontains=search_query)
+        | Q(description__icontains=search_query)
+        | Q(media_file__original_name__icontains=search_query)
+        | Q(media_file__content_type__icontains=search_query)
+        | Q(media_file__source_member__icontains=search_query)
+        | Q(media_file__file__icontains=search_query)
+    )
+    metadata_direct_fields_q = (
+        Q(owner_user__username__icontains=search_query)
+        | Q(owner_user__email__icontains=search_query)
+        | Q(owner_user__first_name__icontains=search_query)
+        | Q(owner_user__last_name__icontains=search_query)
+        | Q(owner_group__name__icontains=search_query)
+        | Q(content_sample__name__icontains=search_query)
+        | Q(content_sample__kind__icontains=search_query)
+        | Q(content_sample__content__icontains=search_query)
+        | Q(content_sample__path__icontains=search_query)
+        | Q(content_sample__method__icontains=search_query)
+        | Q(content_sample__hash__icontains=search_query)
+    )
+    metadata_related_fields_q = (
+        Q(categories__name__icontains=search_query)
+        | Q(categories__slug__icontains=search_query)
+        | Q(categories__description__icontains=search_query)
+        | Q(credits__display_name__icontains=search_query)
+        | Q(credits__artist__icontains=search_query)
+        | Q(credits__series__icontains=search_query)
+        | Q(credits__era__icontains=search_query)
+        | Q(credits__apa_citation__icontains=search_query)
+        | Q(credits__contributed_elements__icontains=search_query)
+        | Q(credits__excluded_elements__icontains=search_query)
+        | Q(credits__link_url__icontains=search_query)
+        | Q(trait_values__category__name__icontains=search_query)
+        | Q(trait_values__category__slug__icontains=search_query)
+        | Q(trait_values__trait__name__icontains=search_query)
+        | Q(trait_values__trait__slug__icontains=search_query)
+        | Q(trait_values__trait__description__icontains=search_query)
+        | Q(trait_values__qualitative_value__icontains=search_query)
+    )
+    normalized_query = search_query.casefold()
+    now = timezone.now()
+    try:
+        direct_fields_q |= Q(id=int(search_query))
+    except ValueError:
+        pass
+    try:
+        parsed_uuid = UUID(search_query)
+    except ValueError:
+        pass
+    else:
+        direct_fields_q |= Q(slug=parsed_uuid)
+        metadata_direct_fields_q |= Q(content_sample__name=parsed_uuid)
+    if normalized_query in {"public", "published"}:
+        direct_fields_q |= Q(public_release_at__lte=now)
+    if normalized_query == "private":
+        direct_fields_q |= Q(public_release_at__isnull=True) | Q(public_release_at__gt=now)
+    try:
+        metadata_related_fields_q |= Q(trait_values__float_value=float(search_query))
+    except ValueError:
+        pass
+
+    direct_match_ids = queryset.filter(direct_fields_q).values_list("id", flat=True)
+    metadata_queryset = queryset.filter(_metadata_visibility_filter_for_user(user))
+    metadata_direct_match_ids = metadata_queryset.filter(metadata_direct_fields_q).values_list("id", flat=True)
+    metadata_related_match_ids = (
+        metadata_queryset.filter(metadata_related_fields_q).values_list("id", flat=True).distinct()
+    )
+    return queryset.filter(
+        Q(id__in=direct_match_ids)
+        | Q(id__in=metadata_direct_match_ids)
+        | Q(id__in=metadata_related_match_ids)
+    )
+
+
+def _gallery_navigation_for_image(*, image: GalleryImage, user, search_query: str):
+    queryset = _visible_images_for_user(user)
+    if search_query:
+        filtered_queryset = _apply_gallery_search(queryset, search_query, user=user)
+        if filtered_queryset.filter(pk=image.pk).exists():
+            queryset = filtered_queryset
+    previous_image = (
+        queryset.filter(Q(title__lt=image.title) | Q(title=image.title, id__lt=image.id))
+        .order_by("-title", "-id")
+        .first()
+    )
+    next_image = (
+        queryset.filter(Q(title__gt=image.title) | Q(title=image.title, id__gt=image.id))
+        .order_by("title", "id")
+        .first()
+    )
+    return previous_image, next_image
+
+
+def _rf_card_store_url_for_image(image: GalleryImage) -> str:
+    store_is_setup = ShopProduct.objects.filter(
+        is_active=True,
+        stock_quantity__gt=0,
+        supports_gallery_image_printing=True,
+        shop__is_active=True,
+    ).exists()
+    if not store_is_setup:
+        return ""
+    return f"{reverse('shop:index')}?gallery_image={image.id}"
+
+
 def gallery_index(request):
-    images = _visible_images_for_user(request.user)
-    return render(request, "gallery/index.html", {"images": images})
+    search_query = (request.GET.get("q") or "").strip()
+    images = _apply_gallery_search(_visible_images_for_user(request.user), search_query, user=request.user).order_by(
+        "title",
+        "id",
+    )
+    return render(
+        request,
+        "gallery/index.html",
+        {
+            "images": images,
+            "search_query": search_query,
+        },
+    )
 
 
 def gallery_detail(request, slug):
@@ -102,6 +238,12 @@ def gallery_detail(request, slug):
     share_form = GalleryShareForm()
     trait_form = GalleryTraitAssignmentForm()
     credit_form = GalleryCreditForm()
+    search_query = (request.GET.get("q") or "").strip()
+    previous_image, next_image = _gallery_navigation_for_image(
+        image=image,
+        user=request.user,
+        search_query=search_query,
+    )
 
     if request.method == "POST":
         action = request.POST.get("action", "")
@@ -154,6 +296,11 @@ def gallery_detail(request, slug):
         "image_form": image_form,
         "trait_form": trait_form,
         "credit_form": credit_form,
+        "gallery_query_string": f"?{urlencode({'q': search_query})}" if search_query else "",
+        "next_image": next_image,
+        "previous_image": previous_image,
+        "rf_card_store_url": _rf_card_store_url_for_image(image),
+        "search_query": search_query,
     }
     return render(request, "gallery/detail.html", context)
 
@@ -212,7 +359,7 @@ def gallery_upload(request):
                 uploaded_file=uploaded_file,
                 title=form.cleaned_data["title"],
                 description=form.cleaned_data.get("description", ""),
-                include_in_public_gallery=form.cleaned_data.get("include_in_public_gallery", False),
+                public_release_at=form.cleaned_data.get("public_release_at"),
                 create_content_sample=form.cleaned_data.get("create_content_sample", False),
                 owner_user=owner_user,
                 owner_group=form.cleaned_data.get("owner_group"),

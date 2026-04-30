@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import gzip
+import hashlib
 import ipaddress
 import json
 import lzma
@@ -35,6 +35,19 @@ RECOVERY_SSH_FORBIDDEN_USERS = frozenset({"root"})
 BOOTSTRAP_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
 
+missing_packages=()
+if ! command -v git >/dev/null 2>&1; then
+  missing_packages+=(git ca-certificates)
+elif [ ! -e /etc/ssl/certs/ca-certificates.crt ]; then
+  missing_packages+=(ca-certificates)
+fi
+
+if [ "${#missing_packages[@]}" -gt 0 ]; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update || { sleep 10; apt-get update; }
+  apt-get install -y --no-install-recommends "${missing_packages[@]}"
+fi
+
 APP_HOME=/opt/arthexis
 if [ ! -d "$APP_HOME/.git" ]; then
   git clone --depth 1 "${ARTHEXIS_GIT_URL}" "$APP_HOME"
@@ -47,10 +60,17 @@ cd "$APP_HOME"
 
 RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH = "/usr/local/share/arthexis/recovery_authorized_keys"
 RECOVERY_SSHD_CONFIG_REMOTE_PATH = "/etc/ssh/sshd_config.d/20-arthexis-recovery.conf"
+BOOTSTRAP_SYSTEMD_SERVICE_PATH = "/etc/systemd/system/arthexis-bootstrap.service"
+RECOVERY_SYSTEMD_SERVICE_PATH = "/etc/systemd/system/arthexis-recovery-access.service"
+SYSTEMD_MULTI_USER_WANTS_PATH = "/etc/systemd/system/multi-user.target.wants"
+BOOTSTRAP_SYSTEMD_WANTS_PATH = f"{SYSTEMD_MULTI_USER_WANTS_PATH}/arthexis-bootstrap.service"
+RECOVERY_SYSTEMD_WANTS_PATH = f"{SYSTEMD_MULTI_USER_WANTS_PATH}/arthexis-recovery-access.service"
 RECOVERY_STALE_FILE_PATHS = (
     RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH,
     "/usr/local/bin/arthexis-recovery-access.sh",
     RECOVERY_SSHD_CONFIG_REMOTE_PATH,
+    RECOVERY_SYSTEMD_SERVICE_PATH,
+    RECOVERY_SYSTEMD_WANTS_PATH,
     "/etc/sudoers.d/90-arthexis-recovery",
 )
 
@@ -72,7 +92,6 @@ passwd -l "$RECOVERY_USER" >/dev/null 2>&1 || true
 install -d -m 700 -o "$RECOVERY_USER" -g "$RECOVERY_USER" "$RECOVERY_HOME/.ssh"
 install -m 600 -o "$RECOVERY_USER" -g "$RECOVERY_USER" {authorized_keys_path} "$RECOVERY_HOME/.ssh/authorized_keys"
 systemctl enable ssh
-systemctl restart ssh
 """
 
 RECOVERY_SSHD_CONFIG = """PasswordAuthentication no
@@ -80,6 +99,22 @@ KbdInteractiveAuthentication no
 ChallengeResponseAuthentication no
 PubkeyAuthentication yes
 PermitRootLogin no
+"""
+
+RECOVERY_SYSTEMD_SERVICE = """[Unit]
+Description=Arthexis recovery SSH access
+DefaultDependencies=no
+After=local-fs.target
+Before=ssh.service sshd.service arthexis-bootstrap.service
+Wants=ssh.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/arthexis-recovery-access.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
 """
 
 SYSTEMD_SERVICE = """[Unit]
@@ -554,15 +589,9 @@ def _validate_remote_base_image_url(base_image_uri: str) -> None:
             )
 
 
-def _guestfish_write(image_path: Path, local_path: Path, remote_path: str, chmod_mode: str | None = None) -> None:
-    """Upload a local file into the disk image using guestfish."""
+def _run_guestfish_script(image_path: Path, script: str, *, error_message: str) -> None:
+    """Run a guestfish script with image-local temporary and cache directories."""
 
-    script_parts = [
-        f"upload {shlex.quote(str(local_path))} {shlex.quote(remote_path)}",
-    ]
-    if chmod_mode:
-        script_parts.append(f"chmod {chmod_mode} {shlex.quote(remote_path)}")
-    script = "\n".join(script_parts) + "\n"
     cache_dir = image_path.parent / ".libguestfs-cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(dir=image_path.parent) as temp_dir:
@@ -579,37 +608,89 @@ def _guestfish_write(image_path: Path, local_path: Path, remote_path: str, chmod
             env=guestfish_env,
         )
         if result.returncode != 0:
-            raise ImagerBuildError(result.stderr.strip() or "guestfish failed while writing files")
+            raise ImagerBuildError(result.stderr.strip() or error_message)
+
+
+def _guestfish_upload_commands(
+    local_path: Path,
+    remote_path: str,
+    chmod_mode: str | None = None,
+) -> list[str]:
+    """Return guestfish commands for uploading a local file into the disk image."""
+
+    script_parts = [
+        f"upload {shlex.quote(str(local_path))} {shlex.quote(remote_path)}",
+    ]
+    if chmod_mode:
+        script_parts.append(f"chmod {chmod_mode} {shlex.quote(remote_path)}")
+    return script_parts
+
+
+def _guestfish_mkdir_p_command(remote_path: str) -> str:
+    return f"mkdir-p {shlex.quote(remote_path)}"
+
+
+def _guestfish_remove_file_command(remote_path: str) -> str:
+    return f"rm-f {shlex.quote(remote_path)}"
+
+
+def _guestfish_symlink_command(*, target: str, link_path: str) -> str:
+    return f"ln-sf {shlex.quote(target)} {shlex.quote(link_path)}"
+
+
+def _guestfish_run_commands(
+    image_path: Path,
+    commands: list[str],
+    *,
+    error_message: str,
+) -> None:
+    script = "\n".join(commands) + "\n"
+    _run_guestfish_script(image_path, script, error_message=error_message)
+
+
+def _guestfish_write(
+    image_path: Path,
+    local_path: Path,
+    remote_path: str,
+    chmod_mode: str | None = None,
+) -> None:
+    """Upload a local file into the disk image using guestfish."""
+
+    _guestfish_run_commands(
+        image_path,
+        _guestfish_upload_commands(local_path, remote_path, chmod_mode),
+        error_message="guestfish failed while writing files",
+    )
 
 
 def _guestfish_mkdir_p(image_path: Path, remote_path: str) -> None:
     """Create a directory path in the disk image using guestfish."""
 
-    script = f"mkdir-p {shlex.quote(remote_path)}\n"
-    result = subprocess.run(
-        ["guestfish", "--rw", "-a", str(image_path), "-i"],
-        input=script,
-        text=True,
-        capture_output=True,
-        check=False,
+    _guestfish_run_commands(
+        image_path,
+        [_guestfish_mkdir_p_command(remote_path)],
+        error_message="guestfish failed while creating directories",
     )
-    if result.returncode != 0:
-        raise ImagerBuildError(result.stderr.strip() or "guestfish failed while creating directories")
 
 
 def _guestfish_remove_file(image_path: Path, remote_path: str) -> None:
     """Remove a file from the disk image using guestfish, ignoring missing paths."""
 
-    script = f"rm-f {shlex.quote(remote_path)}\n"
-    result = subprocess.run(
-        ["guestfish", "--rw", "-a", str(image_path), "-i"],
-        input=script,
-        text=True,
-        capture_output=True,
-        check=False,
+    _guestfish_run_commands(
+        image_path,
+        [_guestfish_remove_file_command(remote_path)],
+        error_message="guestfish failed while removing files",
     )
-    if result.returncode != 0:
-        raise ImagerBuildError(result.stderr.strip() or "guestfish failed while removing files")
+
+
+def _guestfish_symlink(image_path: Path, *, target: str, link_path: str) -> None:
+    """Create or replace a symlink inside the disk image using guestfish."""
+
+    _guestfish_run_commands(
+        image_path,
+        [_guestfish_symlink_command(target=target, link_path=link_path)],
+        error_message="guestfish failed while enabling systemd units",
+    )
 
 
 def _normalize_recovery_ssh_access(
@@ -655,9 +736,11 @@ def _customize_image(
         bootstrap = work_dir / "arthexis-bootstrap.sh"
         service = work_dir / "arthexis-bootstrap.service"
         firstrun = work_dir / "firstrun.sh"
+        recovery_service = work_dir / "arthexis-recovery-access.service"
 
         bootstrap.write_text(BOOTSTRAP_SCRIPT, encoding="utf-8")
         service.write_text(SYSTEMD_SERVICE.format(git_url=git_url), encoding="utf-8")
+        recovery_service.write_text(RECOVERY_SYSTEMD_SERVICE, encoding="utf-8")
         firstrun.write_text(
             FIRST_RUN_SCRIPT.format(
                 recovery_boot_hook=RECOVERY_BOOT_HOOK
@@ -667,10 +750,24 @@ def _customize_image(
             encoding="utf-8",
         )
 
-        _guestfish_write(image_path, bootstrap, "/usr/local/bin/arthexis-bootstrap.sh", chmod_mode="0755")
-        _guestfish_write(image_path, service, "/etc/systemd/system/arthexis-bootstrap.service")
+        _guestfish_run_commands(
+            image_path,
+            [
+                *_guestfish_upload_commands(
+                    bootstrap,
+                    "/usr/local/bin/arthexis-bootstrap.sh",
+                    chmod_mode="0755",
+                ),
+                *_guestfish_upload_commands(service, BOOTSTRAP_SYSTEMD_SERVICE_PATH),
+                _guestfish_mkdir_p_command(SYSTEMD_MULTI_USER_WANTS_PATH),
+                _guestfish_symlink_command(
+                    target=BOOTSTRAP_SYSTEMD_SERVICE_PATH,
+                    link_path=BOOTSTRAP_SYSTEMD_WANTS_PATH,
+                ),
+            ],
+            error_message="guestfish failed while injecting bootstrap files",
+        )
         if recovery_ssh_access and recovery_ssh_access.enabled:
-            _guestfish_mkdir_p(image_path, str(Path(RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH).parent))
             recovery_keys = work_dir / "recovery_authorized_keys"
             recovery_script = work_dir / "arthexis-recovery-access.sh"
             recovery_sshd_config = work_dir / "arthexis-recovery.conf"
@@ -688,27 +785,48 @@ def _customize_image(
             )
             recovery_sshd_config.write_text(RECOVERY_SSHD_CONFIG, encoding="utf-8")
 
-            _guestfish_write(
+            _guestfish_run_commands(
                 image_path,
-                recovery_keys,
-                RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH,
-                chmod_mode="0600",
-            )
-            _guestfish_write(
-                image_path,
-                recovery_script,
-                "/usr/local/bin/arthexis-recovery-access.sh",
-                chmod_mode="0755",
-            )
-            _guestfish_write(
-                image_path,
-                recovery_sshd_config,
-                RECOVERY_SSHD_CONFIG_REMOTE_PATH,
-                chmod_mode="0644",
+                [
+                    _guestfish_mkdir_p_command(
+                        str(Path(RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH).parent)
+                    ),
+                    *_guestfish_upload_commands(
+                        recovery_keys,
+                        RECOVERY_AUTHORIZED_KEYS_REMOTE_PATH,
+                        chmod_mode="0600",
+                    ),
+                    *_guestfish_upload_commands(
+                        recovery_script,
+                        "/usr/local/bin/arthexis-recovery-access.sh",
+                        chmod_mode="0755",
+                    ),
+                    *_guestfish_upload_commands(
+                        recovery_sshd_config,
+                        RECOVERY_SSHD_CONFIG_REMOTE_PATH,
+                        chmod_mode="0644",
+                    ),
+                    *_guestfish_upload_commands(
+                        recovery_service,
+                        RECOVERY_SYSTEMD_SERVICE_PATH,
+                        chmod_mode="0644",
+                    ),
+                    _guestfish_symlink_command(
+                        target=RECOVERY_SYSTEMD_SERVICE_PATH,
+                        link_path=RECOVERY_SYSTEMD_WANTS_PATH,
+                    ),
+                ],
+                error_message="guestfish failed while injecting recovery files",
             )
         else:
-            for stale_file_path in RECOVERY_STALE_FILE_PATHS:
-                _guestfish_remove_file(image_path, stale_file_path)
+            _guestfish_run_commands(
+                image_path,
+                [
+                    _guestfish_remove_file_command(stale_file_path)
+                    for stale_file_path in RECOVERY_STALE_FILE_PATHS
+                ],
+                error_message="guestfish failed while removing stale recovery files",
+            )
         try:
             _guestfish_write(image_path, firstrun, "/boot/firstrun.sh", chmod_mode="0755")
         except ImagerBuildError:

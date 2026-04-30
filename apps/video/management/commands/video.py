@@ -27,7 +27,7 @@ from apps.video.frame_cache import (
     store_status,
 )
 from apps.video.models import MjpegDependencyError, MjpegStream, VideoDevice
-from apps.video.utils import WORK_DIR, has_rpi_camera_stack
+from apps.video.utils import WORK_DIR, probe_rpi_camera_stack
 
 logger = logging.getLogger("apps.video.camera_service")
 
@@ -631,11 +631,19 @@ class Command(BaseCommand):
                 f"Video Camera feature: {status_label} ({assignment_label})"
             )
 
-        feature_available = bool(node and is_feature_active_for_node(node=node, slug="video-cam"))
+        feature_available = bool(
+            node and is_feature_active_for_node(node=node, slug="video-cam")
+        )
         feature_status = "available" if feature_available else "missing"
         self.stdout.write(f"Video feature detection: {feature_status}")
-        camera_stack = "available" if has_rpi_camera_stack() else "missing"
-        self.stdout.write(f"Camera stack probe: {camera_stack}")
+        camera_probe = probe_rpi_camera_stack()
+        camera_stack = "available" if camera_probe.available else "missing"
+        probe_detail = (
+            f"{camera_probe.backend}: {camera_probe.reason}"
+            if camera_probe.available
+            else camera_probe.reason
+        )
+        self.stdout.write(f"Camera stack probe: {camera_stack} ({probe_detail})")
 
         self._report_devices(node)
         self._report_streams()

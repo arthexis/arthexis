@@ -4,22 +4,8 @@ PRODUCT_DEVELOPER_JOURNEY_SLUG = "product-developer-github-access"
 
 STEP_DEFINITIONS = (
     {
-        "slug": "setup-github-token",
-        "order": 1,
-        "title": "Connect your GitHub access",
-        "instruction": (
-            "Use the GitHub token setup wizard to connect your product developer account "
-            "for repository, release, and issue workflows."
-        ),
-        "help_text": (
-            "This step is for Product Developer members only. "
-            "The wizard opens your token record and keeps setup in one place."
-        ),
-        "iframe_url": "/admin/repos/githubrepository/setup-token/",
-    },
-    {
         "slug": "review-issue-inbox",
-        "order": 2,
+        "order": 1,
         "title": "Review GitHub issue inbox",
         "instruction": (
             "Open the Arthexis GitHub issue inbox and triage newly synced issues. "
@@ -33,7 +19,7 @@ STEP_DEFINITIONS = (
     },
     {
         "slug": "review-pr-queue",
-        "order": 3,
+        "order": 2,
         "title": "Review pull request queue",
         "instruction": (
             "Check the pull request supervision queue to confirm incoming changes have "
@@ -47,7 +33,7 @@ STEP_DEFINITIONS = (
     },
     {
         "slug": "run-issue-lifecycle-actions",
-        "order": 4,
+        "order": 3,
         "title": "Execute issue lifecycle actions",
         "instruction": (
             "From the issue supervision screen, perform lifecycle actions such as adding "
@@ -61,7 +47,7 @@ STEP_DEFINITIONS = (
     },
     {
         "slug": "run-pr-lifecycle-actions",
-        "order": 5,
+        "order": 4,
         "title": "Execute pull request lifecycle actions",
         "instruction": (
             "Use the pull request supervision screen to apply lifecycle actions, including "

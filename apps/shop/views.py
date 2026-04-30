@@ -24,6 +24,7 @@ from .services import (
 )
 
 CART_SESSION_KEY = "shop_cart"
+GALLERY_HANDOFF_SESSION_KEY = "shop_cart_gallery_image"
 
 
 def _get_cart(request: HttpRequest) -> dict:
@@ -78,12 +79,55 @@ def _gallery_images_for_checkout(request: HttpRequest) -> QuerySet[GalleryImage]
     if can_manage_gallery(request.user):
         return queryset
 
-    visibility_filter = Q(include_in_public_gallery=True)
+    visibility_filter = Q(public_release_at__lte=timezone.now())
     if request.user.is_authenticated:
         visibility_filter |= Q(owner_user=request.user)
         visibility_filter |= Q(owner_group__in=request.user.groups.all())
         visibility_filter |= Q(shared_with_users=request.user)
     return queryset.filter(visibility_filter).distinct()
+
+
+def _selected_gallery_image_for_store(request: HttpRequest) -> GalleryImage | None:
+    selected_gallery_image_id = request.GET.get("gallery_image")
+    if selected_gallery_image_id is None:
+        stored_selection = request.session.get(GALLERY_HANDOFF_SESSION_KEY) or {}
+        try:
+            image_id = int(stored_selection.get("gallery_image_id"))
+        except (TypeError, ValueError):
+            if stored_selection:
+                request.session.pop(GALLERY_HANDOFF_SESSION_KEY, None)
+                request.session.modified = True
+            return None
+
+        image = _gallery_images_for_checkout(request).filter(pk=image_id).first()
+        if image is None:
+            request.session.pop(GALLERY_HANDOFF_SESSION_KEY, None)
+            request.session.modified = True
+        return image
+
+    selected_gallery_image_id = selected_gallery_image_id.strip()
+    if not selected_gallery_image_id:
+        request.session.pop(GALLERY_HANDOFF_SESSION_KEY, None)
+        request.session.modified = True
+        return None
+    try:
+        image_id = int(selected_gallery_image_id)
+    except ValueError:
+        request.session.pop(GALLERY_HANDOFF_SESSION_KEY, None)
+        request.session.modified = True
+        return None
+    image = _gallery_images_for_checkout(request).filter(pk=image_id).first()
+    if image is None:
+        request.session.pop(GALLERY_HANDOFF_SESSION_KEY, None)
+        request.session.modified = True
+        messages.error(request, "Selected gallery image is unavailable for RF card customization.")
+    else:
+        request.session[GALLERY_HANDOFF_SESSION_KEY] = {
+            "product_id": None,
+            "gallery_image_id": str(image.id),
+        }
+        request.session.modified = True
+    return image
 
 
 def _extract_card_customizations(
@@ -163,12 +207,14 @@ def shop_index(request: HttpRequest) -> HttpResponse:
             else localized_next_opening.strftime("%a, %d %b %H:%M")
         )
 
+    selected_gallery_image = _selected_gallery_image_for_store(request)
     context = {
         "shops": open_shops,
         "all_shops_closed_for_time": bool(active_shops and not open_shops and next_opening_candidates),
         "next_opening_at": next_opening_at,
         "next_opening_same_day": next_opening_same_day,
         "next_opening_display": next_opening_display,
+        "selected_gallery_image": selected_gallery_image,
     }
     return render(request, "shop/index.html", context)
 
@@ -212,6 +258,7 @@ def add_to_cart(request: HttpRequest, shop_slug: str, product_id: int) -> HttpRe
             )
 
     existing = cart.get(str(product.id))
+    existing_handoff = request.session.get(GALLERY_HANDOFF_SESSION_KEY) or {}
     next_qty = qty + int(existing["quantity"]) if existing else qty
 
     try:
@@ -220,6 +267,50 @@ def add_to_cart(request: HttpRequest, shop_slug: str, product_id: int) -> HttpRe
         messages.error(request, str(exc))
     else:
         _save_cart(request, cart)
+        selected_gallery_image_id = (request.POST.get("gallery_image") or "").strip()
+        if product.supports_gallery_image_printing:
+            if selected_gallery_image_id:
+                try:
+                    gallery_image_id = int(selected_gallery_image_id)
+                except ValueError:
+                    gallery_image_id = None
+                if gallery_image_id and _gallery_images_for_checkout(request).filter(pk=gallery_image_id).exists():
+                    request.session[GALLERY_HANDOFF_SESSION_KEY] = {
+                        "product_id": product.id,
+                        "gallery_image_id": str(gallery_image_id),
+                    }
+                    request.session.modified = True
+                else:
+                    request.session.pop(GALLERY_HANDOFF_SESSION_KEY, None)
+                    request.session.modified = True
+                    messages.error(request, "Selected gallery image is unavailable for RF card customization.")
+            else:
+                existing_gallery_image_id = existing_handoff.get("gallery_image_id")
+                try:
+                    existing_gallery_image_id_int = int(existing_gallery_image_id)
+                except (TypeError, ValueError):
+                    existing_gallery_image_id_int = None
+                is_valid_existing_handoff = (
+                    existing_gallery_image_id_int is not None
+                    and _gallery_images_for_checkout(request).filter(pk=existing_gallery_image_id_int).exists()
+                )
+                should_preserve_existing_handoff = (
+                    existing is not None
+                    and existing_handoff.get("product_id") == product.id
+                    and is_valid_existing_handoff
+                )
+                should_apply_pending_handoff = existing_handoff.get("product_id") is None and is_valid_existing_handoff
+                if should_apply_pending_handoff:
+                    request.session[GALLERY_HANDOFF_SESSION_KEY] = {
+                        "product_id": product.id,
+                        "gallery_image_id": str(existing_gallery_image_id_int),
+                    }
+                    request.session.modified = True
+                elif should_preserve_existing_handoff:
+                    request.session.modified = True
+                elif existing_handoff and existing_handoff.get("product_id") in (None, product.id):
+                    request.session.pop(GALLERY_HANDOFF_SESSION_KEY, None)
+                    request.session.modified = True
         messages.success(request, f"Added {product.name} to cart.")
 
     return redirect("shop:index")
@@ -282,6 +373,19 @@ def checkout(request: HttpRequest) -> HttpResponse:
     if customization_entries:
         gallery_images = list(_gallery_images_for_checkout(request).order_by("title", "id"))
         gallery_image_map = {image.id: image for image in gallery_images}
+    stored_gallery_selection = request.session.get(GALLERY_HANDOFF_SESSION_KEY) or {}
+    if request.method == "GET" and stored_gallery_selection and customization_entries:
+        stored_product_id = stored_gallery_selection.get("product_id")
+        stored_gallery_image_id = stored_gallery_selection.get("gallery_image_id")
+        try:
+            stored_gallery_image_id_int = int(stored_gallery_image_id)
+        except (TypeError, ValueError):
+            stored_gallery_image_id_int = None
+        if stored_gallery_image_id_int in gallery_image_map:
+            for entry_data in customization_entries:
+                if entry_data["product"].id == stored_product_id:
+                    entry_data["selected_front"] = str(stored_gallery_image_id_int)
+                    break
 
     if request.method == "GET":
         form = CheckoutForm()
@@ -378,6 +482,7 @@ def checkout(request: HttpRequest) -> HttpResponse:
         customer_email=order.customer_email,
     )
 
+    request.session.pop(GALLERY_HANDOFF_SESSION_KEY, None)
     _save_cart(request, {})
     messages.success(request, "Order placed successfully.")
     return redirect(reverse("shop:order_tracking", kwargs={"tracking_token": order.tracking_token}))

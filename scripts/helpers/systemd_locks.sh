@@ -102,6 +102,17 @@ arthexis_install_rfid_service_unit() {
   rfid_service_file="${systemd_dir}/${rfid_service}.service"
   local rfid_service_user
   rfid_service_user="$(arthexis_detect_service_user "$base_dir")"
+  local rfid_supplementary_groups=""
+  if getent group gpio >/dev/null 2>&1; then
+    rfid_supplementary_groups="${rfid_supplementary_groups:+$rfid_supplementary_groups }gpio"
+  fi
+  if getent group spi >/dev/null 2>&1; then
+    rfid_supplementary_groups="${rfid_supplementary_groups:+$rfid_supplementary_groups }spi"
+  fi
+  local rfid_supplementary_groups_line=""
+  if [ -n "$rfid_supplementary_groups" ]; then
+    rfid_supplementary_groups_line="SupplementaryGroups=$rfid_supplementary_groups"
+  fi
 
   sudo bash -c "cat > '$rfid_service_file'" <<SERVICEEOF
 [Unit]
@@ -119,9 +130,11 @@ EnvironmentFile=-$base_dir/debug.env
 ExecStart=$base_dir/.venv/bin/python -m apps.cards.rfid_service
 Restart=always
 TimeoutStartSec=500
+TimeoutStopSec=15
 StandardOutput=journal
 StandardError=journal
 User=$rfid_service_user
+$rfid_supplementary_groups_line
 
 [Install]
 WantedBy=multi-user.target

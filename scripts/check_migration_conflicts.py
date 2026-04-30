@@ -180,6 +180,49 @@ def _parse_replaces(path: Path) -> list[tuple[str, str]]:
     return _parse_assignment_tuples(path, "replaces")
 
 
+def _configured_app_label(app_dir: Path) -> str:
+    """Return the Django app label for ``app_dir`` when it is declared locally."""
+
+    apps_py = app_dir / "apps.py"
+    if not apps_py.exists():
+        return app_dir.name
+
+    try:
+        module = ast.parse(apps_py.read_text(encoding="utf-8"), filename=str(apps_py))
+    except (OSError, SyntaxError):
+        return app_dir.name
+
+    for node in module.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        label = None
+        name = None
+        for statement in node.body:
+            if isinstance(statement, ast.Assign):
+                if len(statement.targets) != 1 or not isinstance(statement.targets[0], ast.Name):
+                    continue
+                target_name = statement.targets[0].id
+                value_node = statement.value
+            elif isinstance(statement, ast.AnnAssign):
+                if not isinstance(statement.target, ast.Name):
+                    continue
+                target_name = statement.target.id
+                value_node = statement.value
+            else:
+                continue
+
+            if value_node is None or not isinstance(value_node, ast.Constant) or not isinstance(value_node.value, str):
+                continue
+            if target_name == "label":
+                label = value_node.value
+            elif target_name == "name":
+                name = value_node.value
+        if name == f"apps.{app_dir.name}" and label:
+            return label
+
+    return app_dir.name
+
+
 def _migration_files_for_app(app_dir: Path) -> list[MigrationFile]:
     """Collect migration files for ``app_dir`` sorted by number and name."""
 
@@ -187,6 +230,7 @@ def _migration_files_for_app(app_dir: Path) -> list[MigrationFile]:
     if not migrations_dir.exists():
         return []
 
+    app_label = _configured_app_label(app_dir)
     files: list[MigrationFile] = []
     for path in migrations_dir.glob("*.py"):
         if path.name == "__init__.py":
@@ -196,7 +240,7 @@ def _migration_files_for_app(app_dir: Path) -> list[MigrationFile]:
             continue
         files.append(
             MigrationFile(
-                app_label=app_dir.name,
+                app_label=app_label,
                 name=path.stem,
                 number=int(match.group("number")),
                 path=path,

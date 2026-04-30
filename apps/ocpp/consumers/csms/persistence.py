@@ -10,7 +10,6 @@ from django.utils import timezone
 
 from apps.ocpp.models import Charger
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +54,12 @@ def persist_legacy_meter_values(*, charger_pk: int, payload: dict) -> None:
     Charger.objects.filter(pk=charger_pk).update(last_meter_values=payload)
 
 
-def _ocpp_security_event_key(*, charger_id: str, connector_value: int | str | None) -> str:
+SECURITY_ALERT_MESSAGE_MAX_LENGTH = 255
+
+
+def _ocpp_security_event_key(
+    *, charger_id: str, connector_value: int | str | None
+) -> str:
     """Return a deterministic security event key for a charger status stream."""
 
     connector_label = "aggregate" if connector_value is None else str(connector_value)
@@ -66,6 +70,17 @@ def _ocpp_security_event_key(*, charger_id: str, connector_value: int | str | No
     charger_hash = hashlib.sha256(charger_id.encode("utf-8")).hexdigest()[:40]
     connector_hash = hashlib.sha256(connector_label.encode("utf-8")).hexdigest()[:16]
     return f"ocpp-charger-{charger_hash}-{connector_hash}-error"
+
+
+def _truncate_security_alert_message(message: str) -> str:
+    """Fit an OCPP alert summary into the ops message column."""
+
+    if len(message) <= SECURITY_ALERT_MESSAGE_MAX_LENGTH:
+        return message
+
+    digest = hashlib.sha256(message.encode("utf-8")).hexdigest()[:12]
+    suffix = f" [sha256:{digest}]"
+    return f"{message[: SECURITY_ALERT_MESSAGE_MAX_LENGTH - len(suffix)]}{suffix}"
 
 
 def sync_charger_error_security_event(
@@ -108,7 +123,9 @@ def sync_charger_error_security_event(
         f"charger_id={charger_id}; connector={connector_label}; "
         f"status={status_label}; error_code={normalized_error_code or 'None'}"
     )
-    message = f"OCPP charger {charger_id} connector {connector_label} reported {status_label}."
+    message = _truncate_security_alert_message(
+        f"OCPP charger {charger_id} connector {connector_label} reported {status_label}."
+    )
     event_timestamp = status_timestamp or timezone.now()
 
     if existing and existing.is_active and existing.last_occurred_at == event_timestamp:
@@ -117,7 +134,13 @@ def sync_charger_error_security_event(
         existing.detail = detail
         existing.remediation_url = existing.remediation_url or "/admin/ocpp/charger/"
         existing.save(
-            update_fields=["severity", "message", "detail", "remediation_url", "updated_at"]
+            update_fields=[
+                "severity",
+                "message",
+                "detail",
+                "remediation_url",
+                "updated_at",
+            ]
         )
         return
 

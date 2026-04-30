@@ -313,6 +313,43 @@ def _patch_entity_deserialization():
                     if using:
                         obj._state.db = using
                     break
+        if getattr(obj._meta, "label_lower", "") == "groups.securitygroup":
+            from django.contrib.auth.models import Group
+            from django.db.utils import OperationalError, ProgrammingError
+
+            group_name = (getattr(obj, "name", "") or "").strip()
+            if group_name:
+                security_group_manager = type(obj)._default_manager
+                group_manager = Group.objects
+                if using:
+                    security_group_manager = security_group_manager.db_manager(using)
+                    group_manager = group_manager.db_manager(using)
+                try:
+                    explicit_pk = obj.pk
+                    if explicit_pk is None:
+                        existing_security_group = (
+                            security_group_manager.filter(name=group_name).only("pk").first()
+                        )
+                        if existing_security_group is not None:
+                            obj.pk = existing_security_group.pk
+                            obj._state.adding = False
+                        else:
+                            parent_group, _created = group_manager.get_or_create(name=group_name)
+                            obj.pk = parent_group.pk
+                    else:
+                        parent_group, created = group_manager.get_or_create(
+                            pk=explicit_pk,
+                            defaults={"name": group_name},
+                        )
+                        if not created and parent_group.name != group_name:
+                            parent_group.name = group_name
+                            parent_group.save(update_fields=["name"])
+                        obj.pk = explicit_pk
+                    setattr(obj, obj._meta.pk.attname, obj.pk)
+                    if using:
+                        obj._state.db = using
+                except (OperationalError, ProgrammingError):  # pragma: no cover - db not ready
+                    pass
         return original_save(self, save_m2m=save_m2m, using=using, **kwargs)
 
     patched_save._entity_fixture_patch = True

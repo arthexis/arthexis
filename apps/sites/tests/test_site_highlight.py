@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date
-from datetime import timedelta
+from datetime import date, timedelta
+from http.client import IncompleteRead, RemoteDisconnected
 
 import pytest
 from django.contrib.auth.models import AnonymousUser
@@ -89,8 +89,12 @@ def test_nav_links_includes_selected_site_highlight(
     )
     monkeypatch.setattr(context_processors, "_load_header_references", lambda *args: [])
     monkeypatch.setattr(context_processors, "_load_visible_modules", lambda *args: [])
-    monkeypatch.setattr(context_processors, "_parse_user_story_attachment_limit", lambda: 3)
-    monkeypatch.setattr(context_processors, "_select_current_module", lambda *args: None)
+    monkeypatch.setattr(
+        context_processors, "_parse_user_story_attachment_limit", lambda: 3
+    )
+    monkeypatch.setattr(
+        context_processors, "_select_current_module", lambda *args: None
+    )
     monkeypatch.setattr(context_processors, "_select_favicon_url", lambda *args: "")
     monkeypatch.setattr(context_processors, "_select_site_template", lambda *args: None)
 
@@ -98,3 +102,214 @@ def test_nav_links_includes_selected_site_highlight(
 
     assert context["site_highlight"] is not None
     assert context["site_highlight"].pk == highlight.pk
+
+
+def test_funding_banner_only_shows_on_arthexis_dot_com(
+    rf: RequestFactory,
+    settings,
+    monkeypatch,
+) -> None:
+    settings.ALLOWED_HOSTS = ["arthexis.com", "example.com"]
+    settings.ARTHEXIS_FUNDING_ISSUE_URL = (
+        "https://github.com/arthexis/arthexis/issues/1"
+    )
+    issue_checks = []
+
+    def issue_is_open(issue_url):
+        issue_checks.append(issue_url)
+        return True
+
+    monkeypatch.setattr(context_processors, "_is_github_issue_open", issue_is_open)
+
+    canonical_request = rf.get("/", HTTP_HOST="arthexis.com")
+    other_request = rf.get("/", HTTP_HOST="example.com")
+
+    banner = context_processors._build_funding_banner(canonical_request)
+
+    assert banner is not None
+    assert banner["issue_url"] == "https://github.com/arthexis/arthexis/issues/1"
+    assert issue_checks == ["https://github.com/arthexis/arthexis/issues/1"]
+    assert context_processors._build_funding_banner(other_request) is None
+
+
+def test_funding_banner_is_hidden_when_issue_is_closed(
+    rf: RequestFactory, settings, monkeypatch
+) -> None:
+    settings.ALLOWED_HOSTS = ["arthexis.com"]
+    settings.ARTHEXIS_FUNDING_ISSUE_URL = (
+        "https://github.com/arthexis/arthexis/issues/1"
+    )
+    monkeypatch.setattr(
+        context_processors, "_is_github_issue_open", lambda *_args, **_kwargs: False
+    )
+
+    canonical_request = rf.get("/", HTTP_HOST="arthexis.com")
+
+    assert context_processors._build_funding_banner(canonical_request) is None
+
+
+def test_funding_banner_uses_default_issue_url_when_setting_is_blank(
+    rf: RequestFactory, settings, monkeypatch
+) -> None:
+    settings.ALLOWED_HOSTS = ["arthexis.com"]
+    settings.ARTHEXIS_FUNDING_ISSUE_URL = ""
+    issue_checks = []
+
+    def issue_is_open(issue_url):
+        issue_checks.append(issue_url)
+        return True
+
+    monkeypatch.setattr(context_processors, "_is_github_issue_open", issue_is_open)
+
+    banner = context_processors._build_funding_banner(
+        rf.get("/", HTTP_HOST="arthexis.com")
+    )
+
+    assert banner is not None
+    assert banner["issue_url"] == context_processors.DEFAULT_FUNDING_ISSUE_URL
+    assert issue_checks == [context_processors.DEFAULT_FUNDING_ISSUE_URL]
+
+
+def test_mistyped_funding_issue_url_setting_does_not_break_rendering(
+    rf: RequestFactory, settings
+) -> None:
+    settings.ALLOWED_HOSTS = ["arthexis.com"]
+    settings.ARTHEXIS_FUNDING_ISSUE_URL = 7433
+
+    banner = context_processors._build_funding_banner(
+        rf.get("/", HTTP_HOST="arthexis.com")
+    )
+
+    assert banner is not None
+    assert banner["issue_url"] == 7433
+    assert context_processors._github_issue_api_url(True) is None
+
+
+def test_github_issue_state_uses_json_response(monkeypatch) -> None:
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            return b'{"state": "closed"}'
+
+    monkeypatch.setattr(
+        context_processors, "urlopen", lambda *_args, **_kwargs: Response()
+    )
+
+    assert (
+        context_processors._read_github_issue_state(
+            context_processors.DEFAULT_FUNDING_ISSUE_URL
+        )
+        == "closed"
+    )
+
+
+def test_github_issue_state_treats_incomplete_read_as_unknown(monkeypatch) -> None:
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            raise IncompleteRead(b'{"state":')
+
+    monkeypatch.setattr(
+        context_processors, "urlopen", lambda *_args, **_kwargs: Response()
+    )
+
+    assert (
+        context_processors._read_github_issue_state(
+            context_processors.DEFAULT_FUNDING_ISSUE_URL
+        )
+        is None
+    )
+
+
+def test_github_issue_state_treats_remote_disconnect_as_unknown(monkeypatch) -> None:
+    monkeypatch.setattr(
+        context_processors,
+        "urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RemoteDisconnected("remote closed connection")
+        ),
+    )
+
+    assert (
+        context_processors._read_github_issue_state(
+            context_processors.DEFAULT_FUNDING_ISSUE_URL
+        )
+        is None
+    )
+
+
+def test_github_issue_state_treats_socket_os_error_as_unknown(monkeypatch) -> None:
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            raise OSError("socket read failed")
+
+    monkeypatch.setattr(
+        context_processors, "urlopen", lambda *_args, **_kwargs: Response()
+    )
+
+    assert (
+        context_processors._read_github_issue_state(
+            context_processors.DEFAULT_FUNDING_ISSUE_URL
+        )
+        is None
+    )
+
+
+def test_github_issue_open_caches_unknown_state_on_fetch_failure(monkeypatch) -> None:
+    calls = 0
+
+    def failing_reader(_issue_url):
+        nonlocal calls
+        calls += 1
+        return None
+
+    cache_key = (
+        "sites:funding_issue_state:" f"{context_processors.DEFAULT_FUNDING_ISSUE_URL}"
+    )
+    context_processors.cache.delete(cache_key)
+    monkeypatch.setattr(context_processors, "_read_github_issue_state", failing_reader)
+
+    assert (
+        context_processors._is_github_issue_open(
+            context_processors.DEFAULT_FUNDING_ISSUE_URL
+        )
+        is True
+    )
+    assert (
+        context_processors._is_github_issue_open(
+            context_processors.DEFAULT_FUNDING_ISSUE_URL
+        )
+        is True
+    )
+    assert calls == 1
+
+
+def test_funding_banner_skip_does_not_check_issue_state(
+    rf: RequestFactory, settings, monkeypatch
+) -> None:
+    settings.ALLOWED_HOSTS = ["arthexis.com"]
+    request = rf.get("/", HTTP_HOST="arthexis.com")
+    request.hide_funding_banner = True
+
+    def fail_issue_lookup(*_args, **_kwargs):
+        raise AssertionError("hidden funding banner must not check issue state")
+
+    monkeypatch.setattr(context_processors, "_is_github_issue_open", fail_issue_lookup)
+
+    assert context_processors._build_funding_banner(request) is None

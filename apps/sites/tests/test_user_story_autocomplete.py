@@ -157,13 +157,19 @@ def test_repo_autocomplete_completes_active_staff_token(monkeypatch):
 def test_repo_token_streams_excludes_generated_and_dependency_dirs(tmp_path, settings):
     from apps.sites import autocomplete
 
-    (tmp_path / "visible.py").write_text("alpha beta", encoding="utf-8")
+    apps_dir = tmp_path / "apps"
+    apps_dir.mkdir()
+    (apps_dir / "visible.py").write_text("alpha beta", encoding="utf-8")
+    media_dir = tmp_path / "media"
+    media_dir.mkdir()
+    (media_dir / "leak.md").write_text("supersecret token", encoding="utf-8")
     for directory in (".git", ".venv", "node_modules"):
-        nested = tmp_path / directory
+        nested = apps_dir / directory
         nested.mkdir()
         (nested / "ignored.py").write_text("hidden token", encoding="utf-8")
 
     settings.BASE_DIR = tmp_path
+    settings.APPS_DIR = apps_dir
 
     assert list(autocomplete._iter_repo_token_streams()) == [["alpha", "beta"]]
 
@@ -182,7 +188,8 @@ def test_repo_token_streams_prunes_excluded_dirs_before_scanning(
     blocked.mkdir()
     (blocked / "ignored.py").write_text("hidden token", encoding="utf-8")
 
-    settings.BASE_DIR = tmp_path
+    settings.BASE_DIR = tmp_path.parent
+    settings.APPS_DIR = tmp_path
 
     def fake_walk(path, onerror=None):
         names = ["node_modules", "visible"]

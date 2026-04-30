@@ -93,6 +93,7 @@ class UserStoryForm(forms.ModelForm):
     """Feedback form used on public and admin pages."""
 
     attachments = MultipleFileField(required=False)
+    feedback_context = forms.CharField(required=False, widget=forms.HiddenInput())
     contact_via_chat = forms.BooleanField(
         required=False,
         label=_("You may contact me"),
@@ -264,6 +265,21 @@ class UserStoryForm(forms.ModelForm):
     def clean_messages(self):
         return (self.cleaned_data.get("messages") or "").strip()
 
+    def clean_feedback_context(self):
+        return (self.cleaned_data.get("feedback_context") or "").strip()
+
+    def get_messages_with_context(self) -> str:
+        messages = (self.cleaned_data.get("messages") or "").strip()
+        feedback_context = (self.cleaned_data.get("feedback_context") or "").strip()
+        if not feedback_context:
+            return messages
+        context_line = _("Context: %(context)s") % {"context": feedback_context}
+        if not messages:
+            return context_line[:2000]
+        if context_line in messages:
+            return messages[:2000]
+        return f"{messages} | {context_line}"[:2000]
+
     def update_chat_preference(self, *, owner, contact_via_chat: bool) -> None:
         """Persist chat preference for an owner using a Chat Profile record."""
 
@@ -290,6 +306,7 @@ class UserStoryForm(forms.ModelForm):
             instance.user = self.user
         instance.contact_via_chat = bool(self.cleaned_data.get("contact_via_chat"))
         instance.javascript_enabled = True
+        instance.messages = self.get_messages_with_context()
         if commit:
             instance.save()
             self.save_attachments()

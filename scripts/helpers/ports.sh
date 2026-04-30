@@ -18,7 +18,7 @@ arthexis_detect_live_runserver_port() {
     fi
 
     local detected_port=""
-    detected_port="$(PYTHONPATH="$base_dir" "$python_bin" -m utils.service_probe detect-runserver-port 2>/dev/null || true)"
+    detected_port="$(PYTHONPATH="$base_dir" "$python_bin" -m utils.service_probe detect-runserver-port --base-dir "$base_dir" 2>/dev/null || true)"
     detected_port="$(printf '%s' "$detected_port" | tr -d '\r\n[:space:]')"
     if [[ "$detected_port" =~ ^[0-9]+$ ]] && [ "$detected_port" -ge 1 ] && [ "$detected_port" -le 65535 ]; then
         printf '%s\n' "$detected_port"

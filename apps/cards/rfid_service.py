@@ -1,10 +1,11 @@
 """RFID scanner service and UDP client helpers.
 
 Design note:
-The long-running RFID worker intentionally communicates through lock/log files
-(``.locks/rfid-scan.json`` and ``logs/rfid-scans.ndjson``). Django processes
-ingest those artifacts separately, so this service can run via ``python -m``
-without a Django management command invocation.
+The long-running RFID worker intentionally communicates through lock/log files.
+``.locks/rfid-scan.json`` is the latest-scan state for local agents to inspect
+until the next card is scanned, while ``logs/rfid-scans.ndjson`` is the durable
+append-only ingest stream for Django processes. This lets the service run via
+``python -m`` without a Django management command invocation.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import socket
 import socketserver
 import threading
 import time
+import uuid
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone as datetime_timezone
@@ -38,7 +40,11 @@ SENSITIVE_RFID_KEYS = {"keys", "dump"}
 
 SCAN_STATE_FILE = "rfid-scan.json"
 SCAN_LOG_FILE = "rfid-scans.ndjson"
+SCAN_STATE_SCHEMA = "arthexis.rfid.scan.v1"
 SERVICE_SCAN_LOCKFILE_ERROR = "scan requests are handled via lock-file ingest"
+RFID_LCD_SCAN_EVENT_DURATION_SECONDS = 10
+RFID_LCD_SCAN_EVENT_ID = 0
+RFID_LCD_SCAN_EVENT_REFRESH_SECONDS = 5.0
 
 
 def default_service_host() -> str:
@@ -65,12 +71,27 @@ def default_scan_dedupe_seconds() -> float:
     return float(os.environ.get("RFID_SCAN_DEDUPE_SECONDS", "1.0"))
 
 
+def default_worker_scan_timeout() -> float:
+    return float(os.environ.get("RFID_SERVICE_WORKER_SCAN_TIMEOUT", "0.1"))
+
+
+def default_lcd_scan_event_refresh_seconds() -> float:
+    return float(
+        os.environ.get(
+            "RFID_LCD_SCAN_EVENT_REFRESH_SECONDS",
+            str(RFID_LCD_SCAN_EVENT_REFRESH_SECONDS),
+        )
+    )
+
+
 DEFAULT_SERVICE_HOST = default_service_host()
 DEFAULT_SERVICE_PORT = default_service_port()
 DEFAULT_SCAN_TIMEOUT = default_scan_timeout()
 DEFAULT_QUEUE_MAX = default_queue_max()
 DEFAULT_EVENT_DURATION = default_event_duration()
 DEFAULT_SCAN_DEDUPE_SECONDS = default_scan_dedupe_seconds()
+DEFAULT_WORKER_SCAN_TIMEOUT = default_worker_scan_timeout()
+DEFAULT_LCD_SCAN_EVENT_REFRESH_SECONDS = default_lcd_scan_event_refresh_seconds()
 
 
 def get_next_tag(timeout: float = 0.2) -> dict[str, Any] | None:
@@ -154,6 +175,8 @@ class RFIDServiceState:
         self.worker_thread: threading.Thread | None = None
         self._last_emitted_rfid: str | None = None
         self._last_emitted_at: float | None = None
+        self._last_lcd_rfid: str | None = None
+        self._last_lcd_refresh_at: float | None = None
 
     def start_worker(self) -> None:
         if self.worker_thread and self.worker_thread.is_alive():
@@ -176,7 +199,7 @@ class RFIDServiceState:
         start_reader()
         try:
             while not self.stop_event.is_set():
-                result = get_next_tag(timeout=0.2)
+                result = get_next_tag(timeout=default_worker_scan_timeout())
                 if not result:
                     continue
                 if result.get("error") or result.get("rfid"):
@@ -192,24 +215,30 @@ class RFIDServiceState:
             logger.info("RFID service worker stopped")
 
     def _notify_lcd_event(self, result: dict[str, Any]) -> None:
-        if not result.get("rfid"):
+        rfid_value = str(result.get("rfid") or "").strip().upper()
+        if not rfid_value:
             return
         base_dir = Path(settings.BASE_DIR)
         lock_dir = base_dir / ".locks"
         if not lcd_feature_enabled(lock_dir):
             return
-        label = result.get("label_id")
-        allowed = result.get("allowed")
-        status_text = "OK" if allowed else "BAD" if allowed is not None else ""
-        subject = "RFID"
-        if label:
-            subject = f"RFID {label} {status_text}".strip()
-        elif status_text:
-            subject = f"RFID {status_text}".strip()
-        rfid_value = str(result.get("rfid", "")).strip()
-        color = str(result.get("color", "")).strip()
-        body = " ".join(part for part in (rfid_value, color) if part)
-        notify_event_async(subject, body, duration=default_event_duration(), event_id=0)
+        now = time.monotonic()
+        if (
+            self._last_lcd_rfid == rfid_value
+            and self._last_lcd_refresh_at is not None
+            and now - self._last_lcd_refresh_at
+            < default_lcd_scan_event_refresh_seconds()
+        ):
+            return
+        subject, body = format_lcd_scan_event(result)
+        notify_event_async(
+            subject,
+            body,
+            duration=RFID_LCD_SCAN_EVENT_DURATION_SECONDS,
+            event_id=RFID_LCD_SCAN_EVENT_ID,
+        )
+        self._last_lcd_rfid = rfid_value
+        self._last_lcd_refresh_at = now
 
     def _emit_scan_artifacts(self, result: dict[str, Any]) -> None:
         rfid_value = str(result.get("rfid", "") or "").strip().upper()
@@ -224,7 +253,7 @@ class RFIDServiceState:
             return
         payload = dict(result)
         payload.setdefault("service_mode", "service")
-        payload["scanned_at"] = datetime.now(datetime_timezone.utc).isoformat()
+        payload = build_scan_state_payload(payload)
         try:
             write_rfid_scan_lock(payload)
             append_scan_log(payload)
@@ -397,6 +426,16 @@ def mask_rfid(value: Any) -> str | None:
     return f"{'*' * (len(text) - 4)}{text[-4:]}"
 
 
+def format_lcd_scan_event(result: dict[str, Any]) -> tuple[str, str]:
+    """Return the two-line LCD event shown for an RFID scan."""
+
+    label = str(result.get("custom_label") or result.get("label_id") or "").strip()
+    subject = f"Label {label}" if label else "Label unknown"
+    rfid_value = str(result.get("rfid") or "").strip().upper()
+    body = f"ID {rfid_value}" if rfid_value else "ID unknown"
+    return subject, body
+
+
 def rfid_service_lock_path(base_dir: Path | None = None) -> Path:
     return get_lock_dir(base_dir) / "rfid-service.lck"
 
@@ -413,10 +452,37 @@ def rfid_scan_log_path(base_dir: Path | None = None) -> Path:
     return log_dir / SCAN_LOG_FILE
 
 
+def build_scan_state_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return normalized latest-scan state for local lockfile consumers."""
+
+    state = dict(payload)
+    state["schema"] = SCAN_STATE_SCHEMA
+    rfid_value = str(state.get("rfid") or "").strip().upper()
+    if rfid_value:
+        state["rfid"] = rfid_value
+    state.setdefault("scanned_at", datetime.now(datetime_timezone.utc).isoformat())
+    return state
+
+
 def write_rfid_scan_lock(payload: dict[str, Any], *, base_dir: Path | None = None) -> None:
     lock_path = rfid_scan_lock_path(base_dir)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    state = build_scan_state_payload(payload)
+    tmp_path = lock_path.with_name(
+        f".{lock_path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
+    )
+    try:
+        tmp_path.write_text(
+            json.dumps(state, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        tmp_path.replace(lock_path)
+    finally:
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except OSError:
+            logger.debug("Unable to remove temporary RFID scan state file %s", tmp_path)
 
 
 def append_scan_log(payload: dict[str, Any], *, base_dir: Path | None = None) -> None:
@@ -478,7 +544,12 @@ def run_service(host: str | None = None, port: int | None = None) -> None:
 
     def _handle_signal(signum, frame) -> None:  # pragma: no cover - signal handling
         logger.info("RFID service received shutdown signal %s", signum)
-        runner.shutdown()
+        shutdown_thread = threading.Thread(
+            target=runner.shutdown,
+            name="rfid-service-shutdown",
+            daemon=True,
+        )
+        shutdown_thread.start()
 
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)

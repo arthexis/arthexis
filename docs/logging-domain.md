@@ -33,5 +33,5 @@ This domain centralizes how Arthexis selects log destinations and routes output 
 
 ## Retention policy and unattended disk safety
 * **Lower transactional retention stays in force**: Django/Celery transactional handlers keep using daily rotation with their existing short retention windows (for example `TRANSACTIONAL_LOG_RETENTION_DAYS`).
-* **Default ceiling for unmanaged logs**: A daily guard task (`apps.core.tasks.log_retention.enforce_log_retention`) trims log artifacts without stricter policies to a maximum age of two years.
+* **Default ceiling for unmanaged logs**: A daily guard task (`apps.core.tasks.log_retention.enforce_log_retention`) trims log artifacts without stricter policies to a maximum age of two years. This includes stale one-off `.log` files, RFID scan `.ndjson` streams, and OCPP session JSON under `logs/sessions/` while leaving unrelated JSON content samples alone.
 * **Disk pressure response**: The same guard checks filesystem usage for `LOG_DIR` every day. At or above 80% utilization it applies increasingly aggressive age-based trimming passes and sends an email alert to resolved admin recipients if usage remains above the threshold after trimming.

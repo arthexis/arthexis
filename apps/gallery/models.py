@@ -3,6 +3,7 @@ import uuid
 from django.conf import settings
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.content.models import ContentSample
@@ -54,7 +55,11 @@ class GalleryImage(Entity):
     )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
-    include_in_public_gallery = models.BooleanField(default=False)
+    public_release_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=_("When set, this image becomes public at the scheduled date and time."),
+    )
     owner_user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -93,8 +98,15 @@ class GalleryImage(Entity):
     def __str__(self) -> str:
         return self.title
 
+    def is_publicly_visible(self, *, now=None) -> bool:
+        release_at = self.public_release_at
+        if release_at is None:
+            return False
+        current_time = now or timezone.now()
+        return release_at <= current_time
+
     def can_view(self, user) -> bool:
-        if self.include_in_public_gallery:
+        if self.is_publicly_visible():
             return True
         if not getattr(user, "is_authenticated", False):
             return False

@@ -1,10 +1,12 @@
 import logging
 import os
+import re
 import shutil
 import stat
 import subprocess
 import threading
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,6 +30,16 @@ FALLBACK_CAMERA_RESOLUTIONS = (
 _CAMERA_LOCK = threading.Lock()
 
 
+@dataclass(frozen=True)
+class CameraStackProbe:
+    """Summarize camera-stack availability and the first useful reason."""
+
+    available: bool
+    backend: str
+    reason: str
+    detected_cameras: int = 0
+
+
 def _is_video_device_available(device: Path) -> bool:
     """Return ``True`` when ``device`` exists and is a readable char device."""
 
@@ -43,14 +55,60 @@ def _is_video_device_available(device: Path) -> bool:
     return True
 
 
+def _rpicam_binary_paths() -> dict[str, str | None]:
+    """Return resolved paths for Raspberry Pi camera binaries."""
+
+    return {binary: shutil.which(binary) for binary in RPI_CAMERA_BINARIES}
+
+
+def _parse_rpicam_camera_count(output: str) -> int:
+    """Return the number of attached cameras listed by ``--list-cameras``."""
+
+    count = 0
+    for line in output.splitlines():
+        if re.match(r"^\s*\d+\s*:", line):
+            count += 1
+    return count
+
+
+def _list_rpicam_cameras(timeout: int = 5) -> tuple[int, str, str]:
+    """Return attached-camera count, the best probe message, and raw output."""
+
+    binary_paths = _rpicam_binary_paths()
+    tool_path = binary_paths.get("rpicam-hello") or binary_paths.get("rpicam-still")
+    if not tool_path:
+        return (0, "rpicam-hello is not available", "")
+
+    try:
+        result = subprocess.run(
+            [tool_path, "--list-cameras"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:  # pragma: no cover
+        return (0, f"Unable to list cameras: {exc}", "")
+
+    output = (result.stdout or result.stderr or "").strip()
+    if result.returncode != 0:
+        return (0, output or "Unable to list cameras", output)
+    if not output:
+        return (0, "No camera information returned", "")
+    if "No cameras available" in output:
+        return (0, "No attached cameras detected", output)
+
+    camera_count = _parse_rpicam_camera_count(output)
+    if camera_count > 0:
+        suffix = "camera" if camera_count == 1 else "cameras"
+        return (camera_count, f"{camera_count} attached {suffix} detected", output)
+    return (0, "Unable to determine attached cameras", output)
+
+
 def has_rpicam_binaries() -> bool:
     """Return ``True`` when the Raspberry Pi camera binaries are available."""
 
-    device = RPI_CAMERA_DEVICE
-    if not _is_video_device_available(device):
-        return False
-    for binary in RPI_CAMERA_BINARIES:
-        tool_path = shutil.which(binary)
+    for tool_path in _rpicam_binary_paths().values():
         if not tool_path:
             return False
         try:
@@ -61,7 +119,7 @@ def has_rpicam_binaries() -> bool:
                 check=False,
                 timeout=5,
             )
-        except Exception:
+        except (OSError, subprocess.SubprocessError):
             return False
         if result.returncode != 0:
             return False
@@ -76,38 +134,64 @@ def _has_ffmpeg_capture_support() -> bool:
     return shutil.which("ffmpeg") is not None
 
 
+def probe_rpi_camera_stack(timeout: int = 5) -> CameraStackProbe:
+    """Return whether a usable camera stack is available and why."""
+
+    rpicam_available = has_rpicam_binaries()
+    rpicam_reason = ""
+    if rpicam_available:
+        camera_count, rpicam_reason, _output = _list_rpicam_cameras(timeout=timeout)
+        if camera_count > 0:
+            return CameraStackProbe(
+                available=True,
+                backend="rpicam",
+                reason=rpicam_reason,
+                detected_cameras=camera_count,
+            )
+
+    if _has_ffmpeg_capture_support():
+        return CameraStackProbe(
+            available=True,
+            backend="ffmpeg",
+            reason=f"Video4Linux device {RPI_CAMERA_DEVICE} is available",
+        )
+
+    if rpicam_available:
+        return CameraStackProbe(
+            available=False,
+            backend="missing",
+            reason=rpicam_reason,
+        )
+
+    missing_binaries = [
+        binary for binary, path in _rpicam_binary_paths().items() if not path
+    ]
+    reasons: list[str] = []
+    if missing_binaries:
+        reasons.append(f"missing rpicam binaries: {', '.join(missing_binaries)}")
+    if shutil.which("ffmpeg") is None:
+        reasons.append("ffmpeg is unavailable")
+    if not _is_video_device_available(RPI_CAMERA_DEVICE):
+        reasons.append(f"{RPI_CAMERA_DEVICE} is unavailable")
+    reason = "; ".join(reasons) or "No supported camera stack is available"
+    return CameraStackProbe(available=False, backend="missing", reason=reason)
+
+
 def has_rpi_camera_stack() -> bool:
     """Return ``True`` when any supported camera stack is available."""
 
-    return has_rpicam_binaries() or _has_ffmpeg_capture_support()
+    return probe_rpi_camera_stack().available
 
 
 def get_camera_resolutions() -> list[tuple[int, int]]:
     """Return supported camera resolutions when available."""
 
-    if not has_rpi_camera_stack():
-        return list(FALLBACK_CAMERA_RESOLUTIONS)
-
-    tool_path = shutil.which("rpicam-hello")
-    if not tool_path:
-        return list(FALLBACK_CAMERA_RESOLUTIONS)
-
-    try:
-        result = subprocess.run(
-            [tool_path, "--list-cameras"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=5,
-        )
-    except Exception:
-        return list(FALLBACK_CAMERA_RESOLUTIONS)
-
-    if result.returncode != 0:
+    camera_count, _reason, output = _list_rpicam_cameras()
+    if camera_count <= 0:
         return list(FALLBACK_CAMERA_RESOLUTIONS)
 
     resolutions: set[tuple[int, int]] = set()
-    for line in result.stdout.splitlines():
+    for line in output.splitlines():
         if "x" not in line:
             continue
         for chunk in line.split():
@@ -264,6 +348,7 @@ def record_rpi_video(duration_seconds: int = 5, timeout: int = 15) -> Path:
 
 
 __all__ = [
+    "CameraStackProbe",
     "CAMERA_DIR",
     "DEFAULT_CAMERA_RESOLUTION",
     "FALLBACK_CAMERA_RESOLUTIONS",
@@ -273,5 +358,6 @@ __all__ = [
     "capture_rpi_snapshot",
     "get_camera_resolutions",
     "has_rpi_camera_stack",
+    "probe_rpi_camera_stack",
     "record_rpi_video",
 ]

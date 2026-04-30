@@ -9,6 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from apps.evergo.models import EvergoArtifact, EvergoCustomer, EvergoCustomerShareLink, EvergoUser
+from apps.groups.models import SecurityGroup
 
 
 def _create_customer(*, username: str = "evergo-owner") -> EvergoCustomer:
@@ -86,6 +87,100 @@ def test_my_evergo_dashboard_renders_and_generates_table_from_local_orders(clien
     assert "Monterrey" in content
     assert "https://portal-mex.evergo.com/ordenes/28690" in content
     assert "Copy / Paste table" in content
+
+
+@pytest.mark.django_db
+def test_evergo_workspace_requires_contractors_security_group(client):
+    user_model = get_user_model()
+    user = user_model.objects.create_user(username="workspace-user", email="workspace@example.com")
+    client.force_login(user)
+
+    response = client.get(reverse("evergo:workspace"))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_evergo_workspace_renders_customers_and_orders_tabs(client):
+    user_model = get_user_model()
+    user = user_model.objects.create_user(username="workspace-member", email="member@example.com")
+    group = SecurityGroup.objects.create(name="Evergo Contractors")
+    user.groups.add(group)
+    profile = EvergoUser.objects.create(user=user, evergo_email="member@example.com", evergo_password="secret")
+    customer = EvergoCustomer.objects.create(user=profile, name="Customer One", latest_so="SO-1")
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(
+        user=profile,
+        remote_id=5001,
+        order_number="SO-1",
+        client_name=customer.name,
+        status_name="Assigned",
+    )
+    customer.latest_order = order
+    customer.save(update_fields=["latest_order"])
+    client.force_login(user)
+
+    customers_response = client.get(reverse("evergo:workspace"))
+    orders_response = client.get(reverse("evergo:workspace"), {"tab": "orders"})
+
+    assert customers_response.status_code == 200
+    assert "Customers" in customers_response.content.decode()
+    assert "Customer One" in customers_response.content.decode()
+    assert orders_response.status_code == 200
+    assert "Orders" in orders_response.content.decode()
+    assert "SO-1" in orders_response.content.decode()
+
+
+@pytest.mark.django_db
+def test_workspace_filters_rows_by_selected_contractor(client):
+    user_model = get_user_model()
+    user = user_model.objects.create_user(username="workspace-filter", email="workspace-filter@example.com")
+    group = SecurityGroup.objects.create(name="Evergo Contractors")
+    user.groups.add(group)
+    profile_a = EvergoUser.objects.create(user=user, evergo_email="a@example.com", evergo_password="secret")
+    owner_b = user_model.objects.create_user(username="workspace-b", email="workspace-b@example.com")
+    profile_b = EvergoUser.objects.create(user=owner_b, evergo_email="b@example.com", evergo_password="secret")
+    EvergoCustomer.objects.create(user=profile_a, name="Customer A", latest_so="SO-A")
+    EvergoCustomer.objects.create(user=profile_b, name="Customer B", latest_so="SO-B")
+    client.force_login(user)
+
+    response = client.get(reverse("evergo:workspace"), {"tab": "customers", "contractor": str(profile_a.pk)})
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Customer A" in content
+    assert "Customer B" not in content
+
+
+@pytest.mark.django_db
+def test_order_tracking_uses_selected_contractor_account(client, monkeypatch):
+    user_model = get_user_model()
+    staff = user_model.objects.create_user(username="tracking-staff", email="staff@example.com", is_staff=True)
+    owner_a = user_model.objects.create_user(username="owner-a", email="owner-a@example.com")
+    owner_b = user_model.objects.create_user(username="owner-b", email="owner-b@example.com")
+    profile_a = EvergoUser.objects.create(user=owner_a, evergo_email="a@example.com", evergo_password="secret")
+    profile_b = EvergoUser.objects.create(user=owner_b, evergo_email="b@example.com", evergo_password="secret")
+    from apps.evergo.models import EvergoOrder
+
+    order = EvergoOrder.objects.create(user=profile_a, remote_id=8022, order_number="SO-8022")
+
+    monkeypatch.setattr(
+        EvergoUser,
+        "fetch_charger_brand_options",
+        lambda self: ["Brand A"] if self.pk == profile_a.pk else ["Brand B"],
+    )
+    monkeypatch.setattr(
+        EvergoUser,
+        "fetch_order_detail",
+        lambda self, order_id: {},
+    )
+    client.force_login(staff)
+
+    response = client.get(reverse("evergo:order-tracking-public", args=[order.remote_id]), {"contractor": str(profile_b.pk)})
+
+    assert response.status_code == 200
+    assert "Brand B" in response.content.decode()
 
 
 def test_to_tsv_sanitizes_formula_and_line_break_characters():

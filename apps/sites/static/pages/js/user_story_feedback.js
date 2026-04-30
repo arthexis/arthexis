@@ -28,7 +28,9 @@
   const copyAriaLabel = form.dataset.copyAriaLabel;
   const canCopyStaffDetails = form.dataset.copyStaffDetails === '1';
   const securityGroups = (form.dataset.securityGroups || '').trim();
+  const copyFieldNamesToSkip = new Set(['csrfmiddlewaretoken', 'feedback_context', 'messages', 'path']);
   const messageField = form.querySelector('input[name="messages"]');
+  const contextField = form.querySelector('input[name="feedback_context"]');
   const autocompleteUrl = form.dataset.autocompleteUrl || '';
   const autocompleteContainer = document.createElement('div');
   autocompleteContainer.className = 'user-story-autocomplete mt-2';
@@ -453,7 +455,7 @@
     const formData = new FormData(form);
     const details = [];
     for (const [name, value] of formData.entries()) {
-      if (name === 'csrfmiddlewaretoken' || name === 'path' || name === 'messages') {
+      if (copyFieldNamesToSkip.has(name)) {
         continue;
       }
       if (typeof value !== 'string') {
@@ -490,6 +492,18 @@
     return [...new Set(messages)];
   };
 
+  const getFeedbackContextLines = () => {
+    const contextNodes = document.querySelectorAll('[data-feedback-context]');
+    const contexts = [];
+    contextNodes.forEach(node => {
+      const value = (node.dataset.feedbackContext || '').replace(/\s+/g, ' ').trim();
+      if (value) {
+        contexts.push(value);
+      }
+    });
+    return [...new Set(contexts)];
+  };
+
   const syncMessageField = messages => {
     if (!messageField) {
       return;
@@ -497,26 +511,40 @@
     messageField.value = messages.join(' | ').substring(0, 2000);
   };
 
+  const syncContextField = contexts => {
+    if (!contextField) {
+      return;
+    }
+    contextField.value = contexts.join(' | ').substring(0, 1000);
+  };
+
   const buildCopyValue = () => {
     const baseValue = getPageCopyValue();
-    if (!canCopyStaffDetails) {
+    const feedbackContexts = getFeedbackContextLines();
+    syncContextField(feedbackContexts);
+    if (!canCopyStaffDetails && !feedbackContexts.length) {
       return baseValue;
     }
     const details = getFormDetails();
-    const nextOpsTask = getAdminDashboardNextTask();
-    const netMessage = getAdminDashboardNetMessage();
-    const roleSiteNode = getRoleSiteNodeSummary();
-    if (nextOpsTask) {
-      details.push(`Next: ${nextOpsTask}`);
-    }
-    if (netMessage) {
-      details.push(`Net Message: ${netMessage}`);
-    }
-    if (roleSiteNode) {
-      details.push(`Role / Site / Node: ${roleSiteNode}`);
-    }
-    if (securityGroups) {
-      details.push(`Security groups: ${securityGroups}`);
+    feedbackContexts.forEach(context => {
+      details.push(context);
+    });
+    if (canCopyStaffDetails) {
+      const nextOpsTask = getAdminDashboardNextTask();
+      const netMessage = getAdminDashboardNetMessage();
+      const roleSiteNode = getRoleSiteNodeSummary();
+      if (nextOpsTask) {
+        details.push(`Next: ${nextOpsTask}`);
+      }
+      if (netMessage) {
+        details.push(`Net Message: ${netMessage}`);
+      }
+      if (roleSiteNode) {
+        details.push(`Role / Site / Node: ${roleSiteNode}`);
+      }
+      if (securityGroups) {
+        details.push(`Security groups: ${securityGroups}`);
+      }
     }
     const messages = getPageMessages();
     syncMessageField(messages);
@@ -563,6 +591,7 @@
     event.preventDefault();
     resetAlerts();
     syncMessageField(getPageMessages());
+    syncContextField(getFeedbackContextLines());
     if (submitBtn) {
       submitBtn.disabled = true;
     }

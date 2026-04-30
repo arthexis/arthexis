@@ -1,19 +1,29 @@
 from io import BytesIO
+from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core import signing
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from PIL import Image
 
 from apps.content.models import ContentSample
 from apps.groups.models import SecurityGroup
 from apps.media.models import MediaFile
+from apps.shop.models import Shop, ShopProduct
 
 from ..constants import GALLERY_MANAGER_GROUP_NAME
-from ..models import GalleryCategory, GalleryImage, GalleryImageTrait, GalleryTrait
+from ..models import (
+    GalleryCategory,
+    GalleryCredit,
+    GalleryImage,
+    GalleryImageTrait,
+    GalleryTrait,
+)
 from ..services import create_gallery_image
+from ..views import _apply_gallery_search
 
 
 class GalleryVisibilityTests(TestCase):
@@ -31,7 +41,7 @@ class GalleryVisibilityTests(TestCase):
         public = create_gallery_image(
             uploaded_file=self._upload("public.jpg"),
             title="Public",
-            include_in_public_gallery=True,
+            public_release_at=timezone.now(),
             owner_user=self.user,
         )
         self.assertFalse(private.can_view(self.other))
@@ -44,6 +54,15 @@ class GalleryVisibilityTests(TestCase):
             owner_user=self.user,
         )
         self.assertTrue(image.can_view(self.user))
+        self.assertFalse(image.can_view(self.other))
+
+    def test_future_release_date_stays_private_for_public_viewers(self):
+        image = create_gallery_image(
+            uploaded_file=self._upload("scheduled.jpg"),
+            title="Scheduled",
+            public_release_at=timezone.now() + timedelta(days=1),
+            owner_user=self.user,
+        )
         self.assertFalse(image.can_view(self.other))
 
     def test_optional_content_sample_link_is_created_when_requested(self):
@@ -75,6 +94,302 @@ class GalleryVisibilityTests(TestCase):
         self.assertEqual(MediaFile.objects.count(), before_count)
         self.assertFalse(GalleryImage.objects.filter(title="Cleanup").exists())
 
+
+class GalleryIndexTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="gallery-search-owner", password="pw")
+
+    def _upload(self, name="gallery.jpg"):
+        buffer = BytesIO()
+        Image.new("RGB", (10, 10), "yellow").save(buffer, format="JPEG")
+        return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/jpeg")
+
+    def test_index_search_matches_image_fields_and_related_traits(self):
+        visible = create_gallery_image(
+            uploaded_file=self._upload("searchable.jpg"),
+            title="Sunlit Plaza",
+            description="Warm stone plaza",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+        hidden = create_gallery_image(
+            uploaded_file=self._upload("hidden.jpg"),
+            title="Forest",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+        category = GalleryCategory.objects.create(name="Palette", slug="palette")
+        trait = GalleryTrait.objects.create(name="Mood", slug="mood")
+        GalleryImageTrait.objects.create(
+            image=visible,
+            category=category,
+            trait=trait,
+            qualitative_value="citrine",
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get("/gallery/", {"q": "citrine"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunlit Plaza")
+        self.assertNotContains(response, "Forest")
+        self.assertEqual(list(response.context["images"]), [visible])
+        self.assertNotIn(hidden, list(response.context["images"]))
+
+    def test_index_search_combines_direct_and_multivalued_matches_by_pk(self):
+        direct_match = create_gallery_image(
+            uploaded_file=self._upload("direct.jpg"),
+            title="Citrine Skyline",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+        related_match = create_gallery_image(
+            uploaded_file=self._upload("related.jpg"),
+            title="Related Match",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+        hidden = create_gallery_image(
+            uploaded_file=self._upload("hidden.jpg"),
+            title="Forest",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+        category = GalleryCategory.objects.create(name="Palette", slug="palette")
+        trait = GalleryTrait.objects.create(name="Mood", slug="mood")
+        GalleryImageTrait.objects.create(
+            image=related_match,
+            category=category,
+            trait=trait,
+            qualitative_value="citrine",
+        )
+        GalleryCredit.objects.create(
+            image=related_match,
+            display_name="Citrine Archive",
+        )
+
+        matches = list(_apply_gallery_search(GalleryImage.objects.all(), "citrine").order_by("title"))
+
+        self.assertEqual(matches, [direct_match, related_match])
+        self.assertNotIn(hidden, matches)
+
+    def test_shared_user_search_does_not_match_hidden_metadata_fields(self):
+        owner = get_user_model().objects.create_user(
+            username="metadata-owner",
+            email="metadata-owner@example.com",
+            first_name="Hidden",
+            last_name="Owner",
+            password="pw",
+        )
+        recipient = get_user_model().objects.create_user(username="metadata-recipient", password="pw")
+        image = create_gallery_image(
+            uploaded_file=self._upload("shared-metadata.jpg"),
+            title="Shared Plain Title",
+            owner_user=owner,
+            create_content_sample=True,
+        )
+        image.shared_with_users.add(recipient)
+        image.content_sample.content = "internal citrine sample"
+        image.content_sample.path = "private/citrine/path"
+        image.content_sample.save()
+        category = GalleryCategory.objects.create(name="Citrine Category", slug="citrine-category")
+        trait = GalleryTrait.objects.create(name="Citrine Trait", slug="citrine-trait")
+        image.categories.add(category)
+        GalleryImageTrait.objects.create(
+            image=image,
+            category=category,
+            trait=trait,
+            qualitative_value="citrine-secret",
+        )
+        GalleryCredit.objects.create(
+            image=image,
+            display_name="Citrine Credit",
+            artist="Citrine Artist",
+        )
+        self.client.force_login(recipient)
+
+        for query in [
+            "metadata-owner",
+            "Citrine Category",
+            "citrine-secret",
+            "Citrine Credit",
+            "internal citrine sample",
+        ]:
+            with self.subTest(query=query):
+                response = self.client.get("/gallery/", {"q": query})
+                self.assertEqual(response.status_code, 200)
+                self.assertNotContains(response, "Shared Plain Title")
+                self.assertEqual(list(response.context["images"]), [])
+
+        response = self.client.get("/gallery/", {"q": "Shared Plain Title"})
+        self.assertContains(response, "Shared Plain Title")
+
+    def test_public_viewer_search_does_not_match_hidden_metadata_fields(self):
+        image = create_gallery_image(
+            uploaded_file=self._upload("public-metadata.jpg"),
+            title="Public Plain Title",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+            create_content_sample=True,
+        )
+        image.content_sample.content = "public hidden citrine sample"
+        image.content_sample.save()
+        category = GalleryCategory.objects.create(name="Public Citrine", slug="public-citrine")
+        image.categories.add(category)
+        GalleryCredit.objects.create(
+            image=image,
+            display_name="Public Citrine Credit",
+        )
+
+        for query in ["gallery-search-owner", "Public Citrine", "Public Citrine Credit", "public hidden citrine"]:
+            with self.subTest(query=query):
+                response = self.client.get("/gallery/", {"q": query})
+                self.assertEqual(response.status_code, 200)
+                self.assertNotContains(response, "Public Plain Title")
+                self.assertEqual(list(response.context["images"]), [])
+
+        response = self.client.get("/gallery/", {"q": "Public Plain Title"})
+        self.assertContains(response, "Public Plain Title")
+
+    def test_owner_search_matches_metadata_fields_for_own_image(self):
+        image = create_gallery_image(
+            uploaded_file=self._upload("owner-metadata.jpg"),
+            title="Owner Metadata Image",
+            owner_user=self.user,
+        )
+        category = GalleryCategory.objects.create(name="Owner Citrine", slug="owner-citrine")
+        image.categories.add(category)
+        self.client.force_login(self.user)
+
+        response = self.client.get("/gallery/", {"q": "Owner Citrine"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Owner Metadata Image")
+        self.assertEqual(list(response.context["images"]), [image])
+
+    def test_index_search_keeps_multivalued_joins_inside_pk_subqueries(self):
+        queryset = _apply_gallery_search(GalleryImage.objects.all(), "citrine")
+
+        sql = str(queryset.query)
+        outer_select = sql.split(" WHERE ", 1)[0]
+
+        self.assertIn(" IN (SELECT ", sql)
+        self.assertNotIn("apps_gallery_galleryimage_categories", outer_select)
+        self.assertNotIn("apps_gallery_gallerycredit", outer_select)
+        self.assertNotIn("apps_gallery_galleryimagetrait", outer_select)
+
+    def test_index_search_matches_exact_ids_without_partial_numeric_matches(self):
+        visible = create_gallery_image(
+            uploaded_file=self._upload("id-match.jpg"),
+            title="Numeric Match",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+        other = create_gallery_image(
+            uploaded_file=self._upload("id-other.jpg"),
+            title="Numeric Other",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+
+        matches = list(_apply_gallery_search(GalleryImage.objects.all(), str(visible.id)))
+
+        self.assertIn(visible, matches)
+        self.assertNotIn(other, matches)
+
+    def test_index_search_matches_exact_gallery_slug(self):
+        visible = create_gallery_image(
+            uploaded_file=self._upload("slug-match.jpg"),
+            title="Slug Match",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+        other = create_gallery_image(
+            uploaded_file=self._upload("slug-other.jpg"),
+            title="Slug Other",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+
+        matches = list(_apply_gallery_search(GalleryImage.objects.all(), str(visible.slug)))
+
+        self.assertEqual(matches, [visible])
+        self.assertNotIn(other, matches)
+
+    def test_index_search_common_boolean_words_do_not_toggle_visibility(self):
+        title_match = create_gallery_image(
+            uploaded_file=self._upload("yes-title.jpg"),
+            title="Yes Title Match",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+        public_other = create_gallery_image(
+            uploaded_file=self._upload("public-other.jpg"),
+            title="Public Other",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+        private_other = create_gallery_image(
+            uploaded_file=self._upload("private-other.jpg"),
+            title="Private Other",
+            owner_user=self.user,
+        )
+
+        self.assertEqual(list(_apply_gallery_search(GalleryImage.objects.all(), "yes")), [title_match])
+        for query in ["no", "true", "false"]:
+            with self.subTest(query=query):
+                matches = list(_apply_gallery_search(GalleryImage.objects.all(), query))
+                self.assertNotIn(public_other, matches)
+                self.assertNotIn(private_other, matches)
+                self.assertEqual(matches, [])
+
+    def test_detail_layout_includes_navigation_feedback_context_and_store_link(self):
+        first = create_gallery_image(
+            uploaded_file=self._upload("first.jpg"),
+            title="Alpha",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+        current = create_gallery_image(
+            uploaded_file=self._upload("current.jpg"),
+            title="Beacon",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+        same_title_next = create_gallery_image(
+            uploaded_file=self._upload("same-title-next.jpg"),
+            title="Beacon",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+        last = create_gallery_image(
+            uploaded_file=self._upload("last.jpg"),
+            title="Coda",
+            owner_user=self.user,
+            public_release_at=timezone.now(),
+        )
+        shop = Shop.objects.create(name="RF Store", slug="rf-store")
+        ShopProduct.objects.create(
+            shop=shop,
+            name="RF Card",
+            sku="RF-1",
+            unit_price="10.00",
+            stock_quantity=5,
+            supports_gallery_image_printing=True,
+        )
+
+        response = self.client.get(f"/gallery/images/{current.slug}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Image ID")
+        self.assertContains(response, f"data-feedback-context=\"Image ID: {current.id}")
+        self.assertContains(response, f"/gallery/images/{first.slug}/")
+        self.assertContains(response, f"/gallery/images/{same_title_next.slug}/")
+        self.assertNotContains(response, f"/gallery/images/{last.slug}/")
+        self.assertContains(response, "Use for RF Card")
+        self.assertContains(response, f"/shop/?gallery_image={current.id}")
+
+
 class GalleryManagementPermissionTests(TestCase):
     def setUp(self):
         self.group = SecurityGroup.objects.create(name=GALLERY_MANAGER_GROUP_NAME)
@@ -94,7 +409,7 @@ class GalleryManagementPermissionTests(TestCase):
                 "image": self._upload(),
                 "title": "Managed",
                 "description": "",
-                "include_in_public_gallery": True,
+                "public_release_at": timezone.now().strftime("%Y-%m-%dT%H:%M"),
                 "owner_user": self.manager.username,
             },
         )
@@ -111,7 +426,12 @@ class GalleryManagementPermissionTests(TestCase):
         self.client.force_login(non_manager)
         response = self.client.post(
             "/gallery/upload/",
-            {"image": self._upload("denied.jpg"), "title": "Denied", "description": "", "include_in_public_gallery": True},
+            {
+                "image": self._upload("denied.jpg"),
+                "title": "Denied",
+                "description": "",
+                "public_release_at": timezone.now().strftime("%Y-%m-%dT%H:%M"),
+            },
         )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(GalleryImage.objects.filter(title="Denied").exists())
@@ -124,7 +444,7 @@ class GalleryManagementPermissionTests(TestCase):
                 "image": self._upload("sampled-managed.jpg"),
                 "title": "Managed With Sample",
                 "description": "",
-                "include_in_public_gallery": True,
+                "public_release_at": timezone.now().strftime("%Y-%m-%dT%H:%M"),
                 "create_content_sample": True,
                 "owner_user": self.manager.username,
             },
@@ -279,6 +599,7 @@ class GalleryImageSharingTests(TestCase):
             uploaded_file=self._upload("shared.jpg"),
             title="Shared",
             owner_user=self.owner,
+            create_content_sample=True,
         )
 
     def _upload(self, name="share.jpg"):
@@ -307,3 +628,27 @@ class GalleryImageSharingTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(self.image.shared_with_users.filter(pk=self.other.pk).exists())
+
+    def test_shared_user_detail_hides_owner_metadata(self):
+        self.image.shared_with_users.add(self.recipient)
+        self.client.force_login(self.recipient)
+
+        response = self.client.get(f"/gallery/images/{self.image.slug}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Shared")
+        self.assertNotContains(response, "Owner")
+        self.assertNotContains(response, self.owner.username)
+        self.assertNotContains(response, "Content sample")
+        self.assertNotContains(response, str(self.image.content_sample.name))
+
+    def test_owner_detail_shows_owner_metadata(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.get(f"/gallery/images/{self.image.slug}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Owner")
+        self.assertContains(response, self.owner.username)
+        self.assertContains(response, "Content sample")
+        self.assertContains(response, str(self.image.content_sample.name))

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import logging
+import queue
+from types import SimpleNamespace
 
 from apps.cards import background_reader
+from apps.cards import reader
 
 
 def test_setup_hardware_gpio_missing_disables_reader(caplog, monkeypatch):
@@ -94,3 +97,90 @@ def test_start_disables_hardware_when_gpio_unavailable(monkeypatch):
     background_reader.start()
 
     assert background_reader._hardware_disabled_reason == "GPIO library not available"
+
+
+def test_get_next_tag_polls_with_full_timeout_when_irq_queue_is_empty(monkeypatch):
+    captured: dict[str, float] = {}
+
+    class EmptyQueue:
+        def get(self, *, timeout):
+            captured["queue_timeout"] = timeout
+            raise background_reader.queue.Empty
+
+    monkeypatch.setattr(background_reader, "is_configured", lambda: True)
+    monkeypatch.setattr(background_reader, "_tag_queue", EmptyQueue())
+    monkeypatch.setattr(background_reader, "_log_fd_snapshot", lambda label: None)
+    monkeypatch.setattr(background_reader._irq_empty_tracker, "record", lambda: None)
+    monkeypatch.setattr(
+        background_reader._irq_empty_tracker,
+        "log_summary",
+        lambda event: None,
+    )
+    monkeypatch.setattr(background_reader, "_mark_scanner_used", lambda: None)
+
+    from apps.cards import reader
+
+    def read_rfid(*, mfrc, cleanup, timeout):
+        captured["poll_timeout"] = timeout
+        return {"rfid": "ABCD1234", "label_id": 7}
+
+    monkeypatch.setattr(reader, "read_rfid", read_rfid)
+
+    result = background_reader.get_next_tag(timeout=0.2)
+
+    assert result == {"rfid": "ABCD1234", "label_id": 7}
+    assert captured == {"queue_timeout": 0.2, "poll_timeout": 0.2}
+
+
+def test_lock_file_active_keeps_existing_service_lock(tmp_path, settings):
+    settings.BASE_DIR = str(tmp_path)
+    lock = tmp_path / ".locks" / "rfid-service.lck"
+    lock.parent.mkdir(parents=True)
+    lock.write_text("other-process-marker", encoding="utf-8")
+
+    active, path = background_reader.lock_file_active()
+
+    assert active is True
+    assert path == lock
+    assert lock.read_text(encoding="utf-8") == "other-process-marker"
+
+
+def test_worker_setup_failure_does_not_delete_service_lock(tmp_path, settings, monkeypatch):
+    settings.BASE_DIR = str(tmp_path)
+    lock = tmp_path / ".locks" / "rfid-service.lck"
+    lock.parent.mkdir(parents=True)
+    lock.write_text("configured", encoding="utf-8")
+    monkeypatch.setattr(background_reader, "_setup_hardware", lambda: False)
+    monkeypatch.setattr(background_reader, "_record_setup_failure", lambda *args, **kwargs: None)
+    monkeypatch.setattr(background_reader, "_log_fd_snapshot", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(background_reader, "_thread", object())
+
+    background_reader._worker()
+
+    assert lock.exists()
+    assert background_reader._thread is None
+
+
+def test_get_next_tag_polling_fallback_uses_original_timeout(monkeypatch):
+    calls: list[float] = []
+
+    class EmptyQueue:
+        def get(self, timeout=None):
+            raise queue.Empty
+
+    def fake_read_rfid(**kwargs):
+        calls.append(kwargs["timeout"])
+        return {"rfid": None, "label_id": None}
+
+    monkeypatch.setattr(background_reader, "is_configured", lambda: True)
+    monkeypatch.setattr(background_reader, "_tag_queue", EmptyQueue())
+    monkeypatch.setattr(background_reader, "_log_fd_snapshot", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(reader, "read_rfid", fake_read_rfid)
+    monkeypatch.setattr(
+        background_reader,
+        "_irq_empty_tracker",
+        SimpleNamespace(record=lambda: None, log_summary=lambda _event: None),
+    )
+
+    assert background_reader.get_next_tag(timeout=0.2) is None
+    assert calls == [0.2]

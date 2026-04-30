@@ -86,6 +86,8 @@ jobs:
       contents: read
       issues: read
     outputs:
+      should_run: ${{ steps.evaluate.outputs.should_run }}
+      skip_reason: ${{ steps.evaluate.outputs.skip_reason }}
       can_simulate: ${{ steps.evaluate.outputs.can_simulate }}
       blockers_json: ${{ steps.evaluate.outputs.blockers_json }}
       default_branch: ${{ steps.evaluate.outputs.default_branch }}
@@ -99,71 +101,115 @@ jobs:
             const installMarker = '<!-- install-health-check-failure -->';
             const defaultBranch = context.payload.repository.default_branch;
             const blockers = [];
+            const fullDayMillis = 24 * 60 * 60 * 1000;
+            const releaseCutoffMillis = 3 * fullDayMillis;
+            let shouldRun = true;
+            let skipReason = '';
 
-            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              per_page: 100,
-            });
+            try {
+              const { data: latestRelease } = await github.rest.repos.getLatestRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
 
-            const installFailureIssue = openIssues.find((issue) => issue.title === installIssueTitle && issue.body?.includes(installMarker));
-            if (installFailureIssue) {
-              blockers.push(`Open install failure issue: #${installFailureIssue.number}`);
-            }
+              const releaseCompletedAt = latestRelease.published_at || latestRelease.created_at;
+              const { data: comparison } = await github.rest.repos.compareCommits({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                base: latestRelease.tag_name,
+                head: defaultBranch,
+              });
 
-            const ciRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              branch: defaultBranch,
-              per_page: 100,
-            });
+              if (!comparison.ahead_by) {
+                const ageMillis = releaseCompletedAt
+                  ? Date.now() - Date.parse(releaseCompletedAt)
+                  : 0;
 
-            const latestCiRun = ciRuns
-              .filter((run) => run.name === 'Upgrade Gate')
-              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
-
-            if (latestCiRun && latestCiRun.conclusion === 'failure') {
-              let upgradeFailed = false;
-              try {
-                const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  run_id: latestCiRun.id,
-                  per_page: 100,
-                });
-                upgradeFailed = jobsData.jobs.some((job) => (job.name || '').toLowerCase().includes('upgrade') && job.conclusion === 'failure');
-              } catch (error) {
-                core.warning(`Unable to inspect CI jobs for run ${latestCiRun.id}: ${error.message}`);
+                if (releaseCompletedAt && ageMillis >= releaseCutoffMillis) {
+                  shouldRun = false;
+                  skipReason = `Latest release ${latestRelease.tag_name} is at least three full days old and there are no new commits on ${defaultBranch}.`;
+                } else {
+                  shouldRun = false;
+                  skipReason = `No new commits on ${defaultBranch} since ${latestRelease.tag_name}; a new release is not currently needed.`;
+                }
               }
-
-              if (upgradeFailed) {
-                blockers.push(`Latest CI upgrade gate failed: ${latestCiRun.html_url}`);
+            } catch (error) {
+              if (error.status === 404) {
+                core.info('No releases exist yet; continuing with release readiness checks.');
+              } else {
+                throw error;
               }
             }
 
-            const canSimulate = blockers.length === 0;
+            if (shouldRun) {
+              const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 100,
+              });
+
+              const installFailureIssue = openIssues.find((issue) => issue.title === installIssueTitle && issue.body?.includes(installMarker));
+              if (installFailureIssue) {
+                blockers.push(`Open install failure issue: #${installFailureIssue.number}`);
+              }
+
+              const ciRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: defaultBranch,
+                per_page: 100,
+              });
+
+              const latestCiRun = ciRuns
+                .filter((run) => run.name === 'Upgrade Gate')
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+
+              if (latestCiRun && latestCiRun.conclusion === 'failure') {
+                let upgradeFailed = false;
+                try {
+                  const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    run_id: latestCiRun.id,
+                    per_page: 100,
+                  });
+                  upgradeFailed = jobsData.jobs.some((job) => (job.name || '').toLowerCase().includes('upgrade') && job.conclusion === 'failure');
+                } catch (error) {
+                  core.warning(`Unable to inspect CI jobs for run ${latestCiRun.id}: ${error.message}`);
+                }
+
+                if (upgradeFailed) {
+                  blockers.push(`Latest CI upgrade gate failed: ${latestCiRun.html_url}`);
+                }
+              }
+            } else {
+              core.info(`Skipping release readiness check: ${skipReason}`);
+            }
+
+            const canSimulate = shouldRun && blockers.length === 0;
+            core.setOutput('should_run', shouldRun ? 'true' : 'false');
+            core.setOutput('skip_reason', skipReason);
             core.setOutput('can_simulate', canSimulate ? 'true' : 'false');
             core.setOutput('blockers_json', JSON.stringify(blockers));
             core.setOutput('default_branch', defaultBranch);
 
   simulate_release:
-    if: ${{ github.event_name != 'push' }}
+    if: ${{ github.event_name != 'push' && needs.evaluate.outputs.should_run == 'true' }}
     needs:
       - evaluate
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     outputs:
-      simulated_ok: ${{ steps.finalize.outputs.simulated_ok }}
-      summary_markdown: ${{ steps.finalize.outputs.summary_markdown }}
+      simulated_ok: ${{ steps.simulate.outputs.simulated_ok }}
+      summary_markdown: ${{ steps.simulate.outputs.summary_markdown }}
     steps:
       - uses: actions/checkout@v6
-        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
         with:
           clean: false
       - uses: actions/setup-python@v6
-        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
         with:
           python-version: '3.11'
       - name: Resolve simulation version against PyPI
@@ -423,7 +469,7 @@ jobs:
           fi
 
   report:
-    if: ${{ always() && github.event_name != 'push' }}
+    if: ${{ always() && github.event_name != 'push' && needs.evaluate.outputs.should_run == 'true' }}
     needs:
       - evaluate
       - simulate_release
@@ -520,3 +566,55 @@ jobs:
               body,
             });
             core.info(`Created issue #${created.data.number}.`);
+
+  close_report_when_not_needed:
+    if: ${{ github.event_name != 'push' && needs.evaluate.outputs.should_run != 'true' }}
+    needs:
+      - evaluate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Close open release readiness report when checks are not needed
+        uses: actions/github-script@v9
+        env:
+          SKIP_REASON: ${{ needs.evaluate.outputs.skip_reason }}
+        with:
+          script: |
+            const title = 'Release Readiness Report';
+            const marker = '<!-- release-readiness-report -->';
+            const skipReason = process.env.SKIP_REASON || 'Release readiness check skipped by policy.';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            const existing = openIssues.find((issue) => issue.title === title && issue.body?.includes(marker));
+            if (!existing) {
+              core.info('No open release readiness report issue found to close.');
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: existing.number,
+              body: [
+                'Closing this report because release readiness checks are currently not needed.',
+                '',
+                `- Reason: ${skipReason}`,
+                `- Workflow run: ${runUrl}`,
+              ].join('\n'),
+            });
+
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: existing.number,
+              state: 'closed',
+            });

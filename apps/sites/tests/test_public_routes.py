@@ -27,6 +27,7 @@ from apps.groups.constants import (
 )
 from apps.groups.models import SecurityGroup
 from apps.media.utils import create_media_file, ensure_media_bucket
+from apps.meta.models import Attention
 from apps.modules.models import Module
 from apps.repos.models.response_templates import GitHubResponseTemplate
 from apps.repos.services.github import GitHubRepositoryError
@@ -82,6 +83,50 @@ def test_client_report_download_enforces_login_and_ownership(client, monkeypatch
     staff_response = client.get(download_url, follow=True)
     assert staff_response.status_code == 200
     assert staff_response["Content-Type"] == "application/pdf"
+
+
+def test_whatsapp_webhook_does_not_capture_attention_by_phone_only(client, settings):
+    settings.PAGES_WHATSAPP_ENABLED = True
+    attention = Attention.objects.create(
+        recipient="+15551234",
+        title="Attention",
+        message="Continue?",
+    )
+
+    response = client.post(
+        reverse("pages:whatsapp-webhook"),
+        data=json.dumps({"from": "+15551234", "message": "approved"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 201
+    attention.refresh_from_db()
+    assert attention.status == Attention.Status.PENDING
+    assert attention.response_text == ""
+
+
+def test_whatsapp_webhook_captures_keyed_attention_response(client, settings):
+    settings.PAGES_WHATSAPP_ENABLED = True
+    attention = Attention.objects.create(
+        recipient="+15551234",
+        title="Attention",
+        message="Continue?",
+    )
+
+    response = client.post(
+        reverse("pages:whatsapp-webhook"),
+        data=json.dumps(
+            {"from": "+15551234", "message": f"{attention.key} approved"}
+        ),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 201
+    attention.refresh_from_db()
+    assert attention.status == Attention.Status.RESPONDED
+    assert attention.response_text == "approved"
+    assert attention.response_from_phone == "+15551234"
+
 def test_whatsapp_webhook_requires_post_and_feature_flag(client, settings):
     url = reverse("pages:whatsapp-webhook")
 

@@ -287,3 +287,6 @@ apps/simulators/simulator.json
 
 # Runtime cache directory
 cache/
+
+# Local AP portal consent and activity state
+.state/

@@ -448,9 +448,18 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             current_mac = mac.strip().lower()
             should_cache = True
             if stored_mac != current_mac:
-                node.mac_address = mac
+                self_node_missing = False
                 try:
-                    node.save(update_fields=["mac_address"])
+                    with transaction.atomic():
+                        rows_updated = cls.objects.filter(pk=node.pk).update(
+                            mac_address=mac
+                        )
+                    if rows_updated != 1:
+                        self_node_missing = True
+                        raise DatabaseError(
+                            "stale self node disappeared before MAC refresh"
+                        )
+                    node.mac_address = mac
                 except IntegrityError:
                     node.mac_address = stored_mac
                     logger.warning(
@@ -474,6 +483,7 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
                     except DatabaseError:
                         should_cache = False
                 except DatabaseError:
+                    node_id = node.pk
                     node.mac_address = stored_mac
                     should_cache = False
                     logger.warning(
@@ -481,10 +491,12 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
                         extra={
                             "runtime_mac_redacted": _redact_mac_for_log(mac),
                             "stored_mac_redacted": _redact_mac_for_log(stored_mac),
-                            "node_id": node.pk,
+                            "node_id": node_id,
                         },
                         exc_info=True,
                     )
+                    if self_node_missing:
+                        node = None
                 else:
                     logger.warning(
                         "nodes.Node.get_local refreshed stale self-node MAC address",
