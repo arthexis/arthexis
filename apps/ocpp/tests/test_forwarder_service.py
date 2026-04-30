@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from websocket import WebSocketException
 
-from apps.forwarder.ocpp import Forwarder, ForwardingSession
+from apps.ocpp.forwarder import Forwarder, ForwardingSession
 from apps.ocpp.models import CPForwarder, Charger
 from apps.nodes.models import Node
 
@@ -144,10 +144,10 @@ def test_sync_forwarded_charge_points_respects_existing_sessions(monkeypatch):
         raise WebSocketException("reject")
 
     fake_logger = SimpleNamespace(warning=Mock(), info=Mock())
-    monkeypatch.setattr("apps.forwarder.ocpp.logger", fake_logger)
-    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_create_connection)
+    monkeypatch.setattr("apps.ocpp.forwarder.logger", fake_logger)
+    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_create_connection)
 
-    from apps.forwarder import ocpp as forwarder_module
+    from apps.ocpp import forwarder as forwarder_module
     from apps.ocpp import forwarding_utils
 
     monkeypatch.setitem(sys.modules, "apps.ocpp.models.forwarder", forwarder_module)
@@ -281,7 +281,7 @@ def test_sync_forwarded_charge_points_dedupes_charger_ids(monkeypatch):
         connections.append(connection)
         return connection
 
-    monkeypatch.setattr("apps.forwarder.ocpp.create_connection", fake_create_connection)
+    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_create_connection)
 
     connected = forwarder.sync_forwarded_charge_points(refresh_forwarders=False)
 
@@ -439,7 +439,7 @@ def test_sync_forwarded_charge_points_flushes_buffer_when_interval_switches_to_i
     cp_forwarder.save(sync_chargers=False)
 
     monkeypatch.setattr(
-        "apps.forwarder.ocpp.create_connection",
+        "apps.ocpp.forwarder.create_connection",
         lambda *_args, **_kwargs: SimpleNamespace(connected=True, close=Mock(), send=Mock()),
     )
 
