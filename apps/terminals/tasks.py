@@ -48,7 +48,7 @@ def _terminal_pid_file(terminal_pk: int) -> Path:
 def _is_process_running(pid: int) -> bool:
     try:
         os.kill(pid, 0)
-    except (OSError, ValueError):
+    except (OSError, ValueError, SystemError):
         return False
     return True
 

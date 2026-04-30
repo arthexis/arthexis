@@ -57,6 +57,15 @@ def test_is_process_running_handles_windows_value_error(monkeypatch):
     assert tasks._is_process_running(1234) is False
 
 
+def test_is_process_running_handles_windows_system_error(monkeypatch):
+    def raise_system_error(pid, signal_number):
+        raise SystemError("invalid handle")
+
+    monkeypatch.setattr(tasks.os, "kill", raise_system_error)
+
+    assert tasks._is_process_running(1234) is False
+
+
 def test_terminal_state_dir_falls_back_to_tmp_when_posix_state_home_is_unwritable(tmp_path, monkeypatch):
     monkeypatch.delenv("ARTHEXIS_TERMINAL_STATE_DIR", raising=False)
     monkeypatch.delenv("XDG_STATE_HOME", raising=False)

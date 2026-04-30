@@ -227,6 +227,17 @@ def test_windows_path_based_state_io_writes_json_and_events(tmp_path, monkeypatc
     assert "windows-event" in module.EVENT_LOG.read_text()
 
 
+def test_turn_boundary_process_running_handles_windows_system_error(monkeypatch):
+    module = load_turn_boundary()
+
+    def raise_system_error(pid, signal_number):
+        raise SystemError("invalid handle")
+
+    monkeypatch.setattr(module.os, "kill", raise_system_error)
+
+    assert module._is_process_running(4242) is False
+
+
 def test_windows_live_turn_process_identities_preserve_registered_pids(monkeypatch):
     module = load_turn_boundary()
     monkeypatch.setattr(module.os, "name", "nt")

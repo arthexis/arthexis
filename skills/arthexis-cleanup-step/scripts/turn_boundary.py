@@ -176,7 +176,7 @@ def read_json(path: Path) -> dict[str, Any] | None:
 def _is_process_running(pid: int) -> bool:
     try:
         os.kill(pid, 0)
-    except (OSError, ValueError):
+    except (OSError, ValueError, SystemError):
         return False
     return True
 
