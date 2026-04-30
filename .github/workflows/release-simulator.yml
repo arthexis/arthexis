@@ -203,8 +203,8 @@ jobs:
     permissions:
       contents: read
     outputs:
-      simulated_ok: ${{ steps.simulate.outputs.simulated_ok }}
-      summary_markdown: ${{ steps.simulate.outputs.summary_markdown }}
+      simulated_ok: ${{ steps.finalize.outputs.simulated_ok }}
+      summary_markdown: ${{ steps.finalize.outputs.summary_markdown }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -212,17 +212,261 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-      - name: Run release simulator
-        id: simulate
-        env:
-          BLOCKERS_JSON: ${{ needs.evaluate.outputs.blockers_json }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: Resolve simulation version against PyPI
+        id: resolve_simulation_version
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
         run: |
-          python -m apps.release.simulator \
-            --blockers-json "$BLOCKERS_JSON" \
-            --github-output "$GITHUB_OUTPUT" \
-            --install-missing-tools \
-            --run-url "$RUN_URL"
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+          from urllib.error import HTTPError, URLError
+          from urllib.request import urlopen
+
+          package_name = 'arthexis'
+          version_path = Path('VERSION')
+          current_version = version_path.read_text(encoding='utf-8').strip()
+          pypi_url = f'https://pypi.org/pypi/{package_name}/json'
+          semver_re = re.compile(r'^(?:(?P<epoch>\d+)!)?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:[+].*)?$')
+
+
+          def parse_version(value: str):
+              match = semver_re.match(value.strip())
+              if not match:
+                  raise SystemExit(
+                      f'Release simulation blocked: cannot parse semver from VERSION value {value!r}.'
+                  )
+              groups = match.groupdict()
+              return (
+                  int(groups['epoch'] or 0),
+                  int(groups['major']),
+                  int(groups['minor']),
+                  int(groups['patch']),
+              )
+
+
+          def serialize_version(parts):
+              epoch, major, minor, patch = parts
+              value = f'{major}.{minor}.{patch}'
+              return f'{epoch}!{value}' if epoch else value
+
+
+          def bump_patch(parts):
+              epoch, major, minor, patch = parts
+              return epoch, major, minor, patch + 1
+
+
+          try:
+              with urlopen(pypi_url, timeout=15) as response:
+                  payload = json.load(response)
+          except HTTPError as exc:
+              if exc.code == 404:
+                  payload = {'releases': {}}
+              else:
+                  raise SystemExit(
+                      'Release simulation blocked: unable to verify existing PyPI versions '
+                      f'(HTTP {exc.code} from {pypi_url}).'
+                  ) from exc
+          except URLError as exc:
+              raise SystemExit(
+                  'Release simulation blocked: network failure while checking PyPI for an existing release '
+                  f'({exc.reason}).'
+              ) from exc
+
+          releases = payload.get('releases', {})
+          current_parts = parse_version(current_version)
+          published_parts = []
+          for release in releases.keys():
+              try:
+                  parsed = parse_version(release)
+              except SystemExit:
+                  continue
+              published_parts.append(parsed)
+
+          published_parts_by_version = {
+              serialize_version(parts): parts
+              for parts in published_parts
+          }
+
+          candidate_parts = current_parts
+          if published_parts:
+              candidate_parts = max(published_parts + [current_parts])
+          candidate_version = serialize_version(candidate_parts)
+
+          simulated_version = current_version
+          if candidate_version in published_parts_by_version or current_version in published_parts_by_version:
+              simulated_parts = bump_patch(candidate_parts)
+              simulated_version = serialize_version(simulated_parts)
+              while simulated_version in published_parts_by_version:
+                  simulated_parts = bump_patch(parse_version(simulated_version))
+                  simulated_version = serialize_version(simulated_parts)
+
+          if simulated_version != current_version:
+              version_path.write_text(simulated_version + '\\n', encoding='utf-8')
+              print(
+                  f'Release simulation adjusted VERSION from {current_version!r} to {simulated_version!r} '
+                  'because the candidate version already exists on PyPI.'
+              )
+          else:
+              print(f'Simulated release version {simulated_version!r} is not yet published on PyPI.')
+
+          with open(Path(os.environ['GITHUB_OUTPUT']), 'a', encoding='utf-8') as output:
+              output.write(f'version_bumped={str(simulated_version != current_version).lower()}\\n')
+              output.write(f'previous_version={current_version}\\n')
+              output.write(f'simulated_version={simulated_version}\\n')
+          PY
+      - name: Validate release tag version gate (simulated)
+        id: validate_version_gate
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tomllib
+
+          root = Path('.')
+          expected_version = (root / 'VERSION').read_text(encoding='utf-8').strip()
+          pyproject = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))
+          dynamic_version_files = (
+              pyproject.get('tool', {})
+              .get('setuptools', {})
+              .get('dynamic', {})
+              .get('version', {})
+              .get('file', [])
+          )
+          if isinstance(dynamic_version_files, str):
+              dynamic_version_files = [dynamic_version_files]
+
+          if dynamic_version_files:
+              dynamic_path = root / dynamic_version_files[0]
+              dynamic_version = dynamic_path.read_text(encoding='utf-8').strip()
+              if dynamic_version != expected_version:
+                  raise SystemExit(
+                      'Release simulation blocked: VERSION and setuptools dynamic version file differ. '
+                      f'VERSION={expected_version!r}; {dynamic_path}={dynamic_version!r}.'
+                  )
+
+          print(f'Simulated tag/version gate passed for VERSION={expected_version!r}.')
+          PY
+      - name: Preflight PyPI version availability (simulated)
+        id: preflight_pypi
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from urllib.error import HTTPError, URLError
+          from urllib.request import urlopen
+
+          package_name = 'arthexis'
+          package_version = Path('VERSION').read_text(encoding='utf-8').strip()
+          pypi_url = f'https://pypi.org/pypi/{package_name}/json'
+
+          try:
+              with urlopen(pypi_url, timeout=15) as response:
+                  payload = json.load(response)
+          except HTTPError as exc:
+              if exc.code == 404:
+                  payload = {'releases': {}}
+              else:
+                  raise SystemExit(
+                      'Release simulation blocked: unable to verify existing PyPI versions '
+                      f'(HTTP {exc.code} from {pypi_url}).'
+                  ) from exc
+          except URLError as exc:
+              raise SystemExit(
+                  'Release simulation blocked: network failure while checking PyPI for an existing release '
+                  f'({exc.reason}).'
+              ) from exc
+
+          releases = payload.get('releases', {})
+          if package_version in releases:
+              raise SystemExit(
+                  f'Release simulation blocked: {package_name} {package_version} is still available on PyPI '
+                  'after simulated version advancement. Please rerun manually.'
+              )
+
+          print(f'Simulated PyPI preflight passed for {package_name} {package_version}.')
+          PY
+      - name: Install build backend
+        id: install_build_backend
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+      - name: Build sdist and wheel (simulated)
+        id: build_package
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        run: |
+          python -m build
+      - name: Validate package metadata (simulated)
+        id: validate_metadata
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        run: |
+          python -m twine check dist/*
+      - name: Stop before authorization-required publish step
+        id: authorization_boundary
+        if: ${{ needs.evaluate.outputs.can_simulate == 'true' }}
+        run: |
+          echo "Release simulator intentionally stopped before PyPI trusted-publisher authorization/publish."
+      - name: Generate release simulation summary
+        id: finalize
+        if: ${{ always() }}
+        run: |
+          if [ "${{ needs.evaluate.outputs.can_simulate }}" = "true" ]; then
+            if [ "${{ job.status }}" = "success" ]; then
+              VERSION_BUMPED="${{ steps.resolve_simulation_version.outputs.version_bumped }}"
+              SIMULATED_VERSION="${{ steps.resolve_simulation_version.outputs.simulated_version }}"
+              PREVIOUS_VERSION="${{ steps.resolve_simulation_version.outputs.previous_version }}"
+              {
+                echo 'summary_markdown<<EOF'
+                echo '### Simulation result'
+                echo ''
+                echo '- ✅ Release simulation reached the authorization boundary successfully.'
+                if [ "$VERSION_BUMPED" = "true" ]; then
+                  echo "- ℹ️ Simulation version advanced from \`$PREVIOUS_VERSION\` to \`$SIMULATED_VERSION\` to avoid an existing PyPI version."
+                fi
+                echo '- ℹ️ Publish to PyPI was intentionally skipped because authorization is required.'
+                echo '- ✅ Recommendation: release is ready if maintainers approve and trigger a real publish.'
+                echo 'EOF'
+                echo 'simulated_ok=true'
+              } >> "$GITHUB_OUTPUT"
+            else
+              FAILED_STEP='the simulation pipeline'
+              if [ "${{ steps.validate_version_gate.outcome }}" = "failure" ]; then
+                FAILED_STEP='validate_version_gate'
+              elif [ "${{ steps.preflight_pypi.outcome }}" = "failure" ]; then
+                FAILED_STEP='preflight_pypi'
+              elif [ "${{ steps.install_build_backend.outcome }}" = "failure" ]; then
+                FAILED_STEP='install_build_backend'
+              elif [ "${{ steps.build_package.outcome }}" = "failure" ]; then
+                FAILED_STEP='build_package'
+              elif [ "${{ steps.validate_metadata.outcome }}" = "failure" ]; then
+                FAILED_STEP='validate_metadata'
+              elif [ "${{ steps.authorization_boundary.outcome }}" = "failure" ]; then
+                FAILED_STEP='authorization_boundary'
+              fi
+              {
+                echo 'summary_markdown<<EOF'
+                echo '### Simulation result'
+                echo ''
+                echo '- ❌ Release simulation failed before reaching the authorization boundary.'
+                echo "- ❌ First failing step: \`$FAILED_STEP\`."
+                echo "- 🔎 Inspect this workflow run for detailed logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                echo 'EOF'
+                echo 'simulated_ok=false'
+              } >> "$GITHUB_OUTPUT"
+            fi
+          else
+            {
+              echo 'summary_markdown<<EOF'
+              echo '### Simulation result'
+              echo ''
+              echo '- ⏭️ Release simulation was skipped because install/upgrade blockers are open.'
+              echo 'EOF'
+              echo 'simulated_ok=false'
+            } >> "$GITHUB_OUTPUT"
+          fi
 
   report:
     if: ${{ always() && github.event_name != 'push' && needs.evaluate.outputs.should_run == 'true' }}
