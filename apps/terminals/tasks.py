@@ -15,16 +15,30 @@ def _has_desktop_ui() -> bool:
     return bool(getattr(settings, "DESKTOP_UI_ENABLED", False) or getattr(settings, "DESKTOP_UI", False))
 
 
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
 def _terminal_state_dir() -> Path:
     override = os.environ.get("ARTHEXIS_TERMINAL_STATE_DIR")
     if override:
         return Path(override)
-    if os.name == "nt":
+    if _is_windows():
         local_app_data = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())
         base = Path(local_app_data) / "Arthexis"
     else:
-        base = Path.home() / ".local" / "state"
+        configured_state_home = os.environ.get("XDG_STATE_HOME")
+        base = Path(configured_state_home) if configured_state_home else Path.home() / ".local" / "state"
+        if not _can_create_state_dir(base):
+            return Path(os.environ.get("TMPDIR") or "/tmp") / "arthexis-agent-terminals"
     return base / "agent-terminals"
+
+
+def _can_create_state_dir(base: Path) -> bool:
+    current = base
+    while not current.exists() and current.parent != current:
+        current = current.parent
+    return current.is_dir() and os.access(current, os.W_OK | os.X_OK)
 
 
 def _terminal_pid_file(terminal_pk: int) -> Path:
@@ -108,7 +122,7 @@ def _launch_terminal(terminal: AgentTerminal) -> None:
     pid_file = _terminal_pid_file(terminal.pk)
     executable = terminal.resolved_executable()
     startup_script = _build_startup_script(terminal)
-    if os.name == "nt":
+    if _is_windows():
         raise RuntimeError(
             "_launch_terminal does not support Windows POSIX shell launch "
             f"for terminal pk={terminal.pk!r}; startup-script-present={bool(startup_script)!r}"
