@@ -62,7 +62,7 @@ def write_env(path: Path, values: OrderedDict[str, str]) -> None:
 
     lines = [f"{key}={_format_env_value(value)}" for key, value in values.items()]
     if lines:
-        # codeql[py/clear-text-storage-sensitive-data]
+        # This command intentionally persists operator-managed environment values.
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     elif path.exists():
         path.unlink()
