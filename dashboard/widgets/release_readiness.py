@@ -98,12 +98,7 @@ def summarize_release_readiness(
 ) -> ReadinessSummary:
     """Build a go-live readiness summary for the current release."""
 
-    tagged_blockers = [
-        ticket
-        for ticket in tickets
-        if current_release in ticket.tags and "blocker" in ticket.tags
-    ]
-    unresolved_blockers = tuple(ticket for ticket in tagged_blockers if not ticket.is_resolved)
+    unresolved_blockers = tuple(ticket for ticket in tickets if not ticket.is_resolved)
 
     missing_approvals = tuple(
         item for item in checklist_items if item.requires_approval and not item.approved
