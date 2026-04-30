@@ -2,6 +2,7 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
+from apps.core.admin import OwnableAdminForm
 from apps.groups.models import SecurityGroup
 from apps.terminals.admin import AgentTerminalAdmin
 from apps.terminals.models import AgentTerminal
@@ -29,3 +30,16 @@ def test_admin_disables_add_permission(db):
     request.user = User.objects.create_superuser(username="root", password="secret")
 
     assert admin.has_add_permission(request) is False
+
+
+def test_admin_owner_fields_remain_editable_for_ownable_validation(db):
+    admin = AgentTerminalAdmin(AgentTerminal, AdminSite())
+    request = RequestFactory().get("/admin/terminals/agentterminal/")
+    request.user = User.objects.create_superuser(username="owner-admin", password="secret")
+
+    readonly_fields = set(admin.get_readonly_fields(request))
+    assert {"user", "group", "avatar"}.isdisjoint(readonly_fields)
+
+    form_class = admin.get_form(request)
+    assert issubclass(form_class, OwnableAdminForm)
+    assert {"user", "group", "avatar"}.issubset(form_class.base_fields)
