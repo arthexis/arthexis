@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 import pytest
 
+from apps.core.admin import OwnableAdminForm
 from apps.groups.models import SecurityGroup
 from apps.terminals import tasks
 from apps.terminals.admin import AgentTerminalAdmin
@@ -54,3 +55,16 @@ def test_is_process_running_handles_windows_value_error(monkeypatch):
     monkeypatch.setattr(tasks.os, "kill", raise_value_error)
 
     assert tasks._is_process_running(1234) is False
+
+
+def test_admin_owner_fields_remain_editable_for_ownable_validation(db):
+    admin = AgentTerminalAdmin(AgentTerminal, AdminSite())
+    request = RequestFactory().get("/admin/terminals/agentterminal/")
+    request.user = User.objects.create_superuser(username="owner-admin", password="secret")
+
+    readonly_fields = set(admin.get_readonly_fields(request))
+    assert {"user", "group", "avatar"}.isdisjoint(readonly_fields)
+
+    form_class = admin.get_form(request)
+    assert issubclass(form_class, OwnableAdminForm)
+    assert {"user", "group", "avatar"}.issubset(form_class.base_fields)
