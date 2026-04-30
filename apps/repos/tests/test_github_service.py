@@ -5,7 +5,9 @@ from typing import Any
 
 import pytest
 from django.conf import settings
+from django.contrib.auth import get_user_model
 
+from apps.repos.models import GitHubToken
 from apps.repos.services import github
 
 
@@ -82,6 +84,22 @@ def test_resolve_repository_token_prefers_user_token_then_env(monkeypatch):
 
     assert token == "user-token"
     assert env_called is False
+
+
+@pytest.mark.django_db
+def test_resolve_repository_token_ignores_unresolved_user_sigil(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setenv("GH_TOKEN", "env-token")
+    user = get_user_model().objects.create_user(username="sigil-user")
+    GitHubToken.objects.create(
+        user=user,
+        label="stale sigil",
+        token="[ENV.GITHUB_TOKEN]",
+    )
+
+    token = github.resolve_repository_token(package=None, user=user)
+
+    assert token == "env-token"
 
 
 def test_create_pull_request_comment_posts_to_issue_comments_for_open_pr(monkeypatch):

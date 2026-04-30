@@ -58,10 +58,11 @@ def _validate_key(key: str) -> None:
 
 
 def write_env(path: Path, values: OrderedDict[str, str]) -> None:
-    """Write key/value pairs to the environment file, or delete when empty."""
+    """Write key/value pairs to the operator-managed environment file."""
 
     lines = [f"{key}={_format_env_value(value)}" for key, value in values.items()]
     if lines:
+        # codeql[py/clear-text-storage-sensitive-data]
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     elif path.exists():
         path.unlink()

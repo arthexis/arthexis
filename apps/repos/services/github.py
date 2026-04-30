@@ -100,6 +100,13 @@ def validate_token(
     return True, "Connected to GitHub.", ""
 
 
+def _clean_configured_token(token: str | None) -> str | None:
+    cleaned = (token or "").strip()
+    if not cleaned or (cleaned.startswith("[") and cleaned.endswith("]")):
+        return None
+    return cleaned
+
+
 def _get_user_stored_token(user=None) -> str | None:
     """Return stored user token when available."""
 
@@ -110,8 +117,7 @@ def _get_user_stored_token(user=None) -> str | None:
     stored = GitHubToken.objects.filter(user=user).first()
     if not stored:
         return None
-    cleaned = (stored.token or "").strip()
-    return cleaned or None
+    return _clean_configured_token(stored.token)
 
 
 def _get_env_token() -> str | None:
