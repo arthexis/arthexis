@@ -25,7 +25,7 @@ try:
     "optional-import"
     import fcntl  # type: ignore[import-not-found]
     _HAS_FCNTL = True
-except ImportError:  # pragma: no cover - exercised through platform fallback tests
+except ModuleNotFoundError:  # pragma: no cover - exercised through platform fallback tests
     fcntl = None  # type: ignore[assignment]
     _HAS_FCNTL = False
 
@@ -33,7 +33,7 @@ try:
     "optional-import"
     import msvcrt  # type: ignore[import-not-found]
     _HAS_MSVCRT = True
-except ImportError:  # pragma: no cover - exercised through platform fallback tests
+except ModuleNotFoundError:  # pragma: no cover - exercised through platform fallback tests
     msvcrt = None  # type: ignore[assignment]
     _HAS_MSVCRT = False
 
