@@ -5,7 +5,7 @@ from __future__ import annotations
 from argparse import ArgumentParser
 from getpass import getpass
 
-from filelock import FileLock
+from filelock import FileLock, Timeout
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
@@ -74,10 +74,13 @@ class Command(BaseCommand):
     def _store_global_token(self, token: str) -> None:
         path = env_path()
         lock_path = path.with_suffix(path.suffix + ".lock")
-        with FileLock(lock_path, timeout=5):
-            values = read_env(path)
-            values["GITHUB_TOKEN"] = token
-            write_env(path, values)
+        try:
+            with FileLock(lock_path, timeout=5):
+                values = read_env(path)
+                values["GITHUB_TOKEN"] = token
+                write_env(path, values)
+        except Timeout as exc:
+            raise CommandError("Could not acquire file lock to store GITHUB_TOKEN.") from exc
 
     def _store_user_token(self, *, username: str, token: str, github_login: str) -> None:
         if not username:
