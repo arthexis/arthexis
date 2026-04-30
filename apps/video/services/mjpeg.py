@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+import os
 
 from django.utils.translation import gettext_lazy as _
 
@@ -30,11 +31,27 @@ def load_cv2():
     return cv2
 
 
+def _capture_source(cv2, device_identifier: str):
+    """Return an OpenCV capture source and optional API preference."""
+
+    identifier = str(device_identifier or "").strip()
+    if identifier.isdigit():
+        source = int(identifier)
+        if os.name == "nt" and hasattr(cv2, "CAP_DSHOW"):
+            return source, cv2.CAP_DSHOW
+        return source, None
+    return identifier, None
+
+
 @contextmanager
 def _open_capture(*, cv2, device_identifier: str):
     """Create and yield an opened ``cv2.VideoCapture`` instance."""
 
-    capture = cv2.VideoCapture(device_identifier)
+    source, api_preference = _capture_source(cv2, device_identifier)
+    if api_preference is None:
+        capture = cv2.VideoCapture(source)
+    else:
+        capture = cv2.VideoCapture(source, api_preference)
     if not capture.isOpened():
         capture.release()
         raise MjpegDeviceUnavailableError(
