@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from apps.features.models import Feature
-from apps.forwarder.ocpp import Forwarder
+from apps.ocpp.forwarder import Forwarder
 from apps.ocpp.forwarder_feature import OCPP_FORWARDER_FEATURE_SLUG, ocpp_forwarder_enabled
 from apps.ocpp.tasks.forwarding import setup_forwarders
 

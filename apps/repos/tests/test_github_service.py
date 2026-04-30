@@ -5,7 +5,9 @@ from typing import Any
 
 import pytest
 from django.conf import settings
+from django.contrib.auth import get_user_model
 
+from apps.repos.models import GitHubToken
 from apps.repos.services import github
 
 
@@ -61,13 +63,43 @@ def test_fetch_repository_pull_requests_raises_on_error(monkeypatch):
         list(github.fetch_repository_pull_requests(token="tok", owner="octo", name="demo"))
 
 
-def test_resolve_repository_token_uses_latest_release_when_available(monkeypatch):
-    monkeypatch.setenv("GITHUB_TOKEN", "")
-    monkeypatch.setattr(github, "_get_latest_release_token", lambda: "release-token")
+def test_resolve_repository_token_prefers_user_token_then_env(monkeypatch):
+    user = type("User", (), {"is_authenticated": True})()
+    env_called = False
 
-    token = github.resolve_repository_token(package=None)
+    def fake_user_lookup(user=None):
+        assert user is user_instance
+        return "user-token"
 
-    assert token == "release-token"
+    def fake_env_lookup():
+        nonlocal env_called
+        env_called = True
+        return "env-token"
+
+    user_instance = user
+    monkeypatch.setattr(github, "_get_user_stored_token", fake_user_lookup)
+    monkeypatch.setattr(github, "_get_env_token", fake_env_lookup)
+
+    token = github.resolve_repository_token(package=None, user=user)
+
+    assert token == "user-token"
+    assert env_called is False
+
+
+@pytest.mark.django_db
+def test_resolve_repository_token_ignores_unresolved_user_sigil(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setenv("GH_TOKEN", "env-token")
+    user = get_user_model().objects.create_user(username="sigil-user")
+    GitHubToken.objects.create(
+        user=user,
+        label="stale sigil",
+        token="[ENV.GITHUB_TOKEN]",
+    )
+
+    token = github.resolve_repository_token(package=None, user=user)
+
+    assert token == "env-token"
 
 
 def test_create_pull_request_comment_posts_to_issue_comments_for_open_pr(monkeypatch):

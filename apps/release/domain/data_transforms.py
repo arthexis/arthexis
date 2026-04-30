@@ -545,7 +545,18 @@ def _run_nodes_legacy_cleanup(checkpoint: dict[str, object]) -> TransformResult:
     )
 
 
+def _run_agent_skills_filesystem_sync(checkpoint: dict[str, object]) -> TransformResult:
+    """Sync skills from database back to SKILL.md files after upgrades."""
+
+    del checkpoint
+    from apps.skills.services import sync_db_to_filesystem
+
+    updated = sync_db_to_filesystem()
+    return TransformResult(updated=updated, processed=updated, complete=True)
+
+
 TRANSFORMS: dict[str, TransformRunner] = {
+    "skills.sync_filesystem": _run_agent_skills_filesystem_sync,
     "modules.normalize_paths": _run_module_path_normalization,
     "nodes.legacy_data_cleanup": _run_nodes_legacy_cleanup,
     "ocpp.enable_forwarders_and_exports": _run_ocpp_forwarder_default_enablement,
