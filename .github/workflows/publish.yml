@@ -171,15 +171,18 @@ jobs:
                   continue
               published_parts.append(parsed)
 
-          resolved_parts = base_parts
-          if published_parts:
-              resolved_parts = max([base_parts] + published_parts)
-          resolved_version = serialize_version(resolved_parts)
-          published = {serialize_version(parts) for parts in published_parts}
-
-          while resolved_version in published:
-              resolved_parts = bump_patch(parse_version(resolved_version))
+          if tag_version:
+              resolved_version = serialize_version(base_parts)
+          else:
+              resolved_parts = base_parts
+              if published_parts:
+                  resolved_parts = max([base_parts] + published_parts)
               resolved_version = serialize_version(resolved_parts)
+              published = {serialize_version(parts) for parts in published_parts}
+
+              while resolved_version in published:
+                  resolved_parts = bump_patch(parse_version(resolved_version))
+                  resolved_version = serialize_version(resolved_parts)
 
           version_path.write_text(f"{resolved_version}\n", encoding="utf-8")
 
