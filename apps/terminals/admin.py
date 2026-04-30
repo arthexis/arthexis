@@ -1,10 +1,12 @@
 from django.contrib import admin
 
+from apps.core.admin import OwnableAdminMixin
+
 from .models import AgentTerminal
 
 
 @admin.register(AgentTerminal)
-class AgentTerminalAdmin(admin.ModelAdmin):
+class AgentTerminalAdmin(OwnableAdminMixin, admin.ModelAdmin):
     list_display = ("name", "owner_display", "effective_node_role", "auto_close_on_exit", "updated_at")
     list_filter = ("auto_close_on_exit", "prompt_block_mode", "node_role")
     search_fields = ("name", "executable", "launch_command", "launch_prompt")
