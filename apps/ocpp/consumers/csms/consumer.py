@@ -28,7 +28,7 @@ from config.offline import requires_network
 from decimal import Decimal, InvalidOperation
 from django.utils.dateparse import parse_datetime
 from apps.ocpp import store
-from apps.forwarder.ocpp import forwarder
+from apps.ocpp.forwarder import forwarder
 from apps.ocpp.status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
 from apps.ocpp.models import (
     Transaction,

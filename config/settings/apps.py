@@ -52,7 +52,7 @@ PROJECT_LOCAL_APPS = [
     "apps.evergo",
     "apps.features",
     "apps.flows",
-    "apps.forwarder.ocpp",
+    "apps.ocpp.forwarder",
     "apps.ftp",
     "apps.gdrive",
     "apps.gallery",

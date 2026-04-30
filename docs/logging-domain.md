@@ -29,7 +29,7 @@ This domain centralizes how Arthexis selects log destinations and routes output 
 * Recommended Loki labels: keep low-cardinality labels such as `level`, `logger`, `app`, and `hostname`.
 * Keep higher-cardinality correlation keys (`request_id`, `node_id`, `charger_id`, `session_id`) as JSON fields and query them with `| json` expressions.
 * Example query pattern:
-  * `{logger="apps.forwarder.ocpp"} | json | request_id!="" | line_format "{{.timestamp}} {{.level}} {{.charger_id}} {{.message}}"`
+  * `{logger="apps.ocpp.forwarder"} | json | request_id!="" | line_format "{{.timestamp}} {{.level}} {{.charger_id}} {{.message}}"`
 
 ## Retention policy and unattended disk safety
 * **Lower transactional retention stays in force**: Django/Celery transactional handlers keep using daily rotation with their existing short retention windows (for example `TRANSACTIONAL_LOG_RETENTION_DAYS`).
