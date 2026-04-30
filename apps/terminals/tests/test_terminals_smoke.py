@@ -38,8 +38,13 @@ def test_launch_terminal_fails_fast_on_windows_before_posix_shell(tmp_path, monk
     monkeypatch.setattr(tasks.os, "name", "nt")
     terminal = AgentTerminal(name="windows-terminal", launch_command="echo ready")
 
-    with pytest.raises(RuntimeError, match="_launch_terminal"):
+    with pytest.raises(RuntimeError, match="_launch_terminal") as exc_info:
         tasks._launch_terminal(terminal)
+
+    message = str(exc_info.value)
+    assert "echo ready" not in message
+    assert "startup_script=" not in message
+    assert "executable=" not in message
 
 
 def test_is_process_running_handles_windows_value_error(monkeypatch):

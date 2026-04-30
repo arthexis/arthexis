@@ -35,6 +35,23 @@ def configure_state_dir(module, state_dir: Path, monkeypatch):
     monkeypatch.setattr(module, "CADENCE_STATE", state_dir / "cadence-rest.json")
 
 
+def test_empty_arthexis_turn_state_dir_uses_default(monkeypatch):
+    monkeypatch.setenv("ARTHEXIS_TURN_STATE_DIR", "")
+
+    module = load_turn_boundary()
+
+    assert module.STATE_DIR == module._default_state_dir()
+    assert module.STATE_DIR != Path("")
+
+
+def test_posix_state_io_uses_dir_fd_when_open_and_unlink_support_it(monkeypatch):
+    module = load_turn_boundary()
+    monkeypatch.setattr(module.os, "name", "posix")
+    monkeypatch.setattr(module.os, "supports_dir_fd", {module.os.open, module.os.unlink})
+
+    assert module._use_path_based_state_io() is False
+
+
 def test_cadence_rest_deducts_elapsed_turn_time():
     module = load_turn_boundary()
     started_at = dt.datetime(2026, 4, 25, 8, 0, tzinfo=dt.timezone.utc)

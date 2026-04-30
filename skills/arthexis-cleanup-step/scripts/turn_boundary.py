@@ -50,7 +50,8 @@ def _default_state_dir() -> Path:
     return base / "arthexis-turn"
 
 
-STATE_DIR = Path(os.environ.get("ARTHEXIS_TURN_STATE_DIR", _default_state_dir()))
+_state_dir_override = os.environ.get("ARTHEXIS_TURN_STATE_DIR")
+STATE_DIR = Path(_state_dir_override) if _state_dir_override else _default_state_dir()
 ACTIVE_STATE = STATE_DIR / "active-turn.json"
 EVENT_LOG = STATE_DIR / "events.jsonl"
 LOCK_PATH = STATE_DIR / "state.lock"
@@ -181,10 +182,10 @@ def _is_process_running(pid: int) -> bool:
 
 
 def _use_path_based_state_io() -> bool:
+    supports_dir_fd = getattr(os, "supports_dir_fd", set())
     return os.name == "nt" or not (
-        os.open in os.supports_dir_fd
-        and os.replace in os.supports_dir_fd
-        and os.unlink in os.supports_dir_fd
+        os.open in supports_dir_fd
+        and os.unlink in supports_dir_fd
     )
 
 

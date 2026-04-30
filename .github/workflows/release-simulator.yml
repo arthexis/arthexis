@@ -433,7 +433,9 @@ jobs:
               } >> "$GITHUB_OUTPUT"
             else
               FAILED_STEP='the simulation pipeline'
-              if [ "${{ steps.validate_version_gate.outcome }}" = "failure" ]; then
+              if [ "${{ steps.resolve_simulation_version.outcome }}" = "failure" ]; then
+                FAILED_STEP='resolve_simulation_version'
+              elif [ "${{ steps.validate_version_gate.outcome }}" = "failure" ]; then
                 FAILED_STEP='validate_version_gate'
               elif [ "${{ steps.preflight_pypi.outcome }}" = "failure" ]; then
                 FAILED_STEP='preflight_pypi'

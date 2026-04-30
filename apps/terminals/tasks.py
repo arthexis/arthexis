@@ -110,8 +110,8 @@ def _launch_terminal(terminal: AgentTerminal) -> None:
     startup_script = _build_startup_script(terminal)
     if os.name == "nt":
         raise RuntimeError(
-            "_launch_terminal does not support Windows POSIX shell launch; "
-            f"executable={executable!r}, startup_script={startup_script!r}"
+            "_launch_terminal does not support Windows POSIX shell launch "
+            f"for terminal pk={terminal.pk!r}; startup-script-present={bool(startup_script)!r}"
         )
     command = [*shlex.split(executable)]
     if startup_script:
