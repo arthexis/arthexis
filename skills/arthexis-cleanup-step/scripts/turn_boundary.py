@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import errno
-import fcntl
 import json
 import os
 import re
@@ -19,7 +18,32 @@ from pathlib import Path
 from typing import Any
 
 
-STATE_DIR = Path.home() / ".local" / "state" / "arthexis-turn"
+import os as _os
+
+
+try:
+    import fcntl  # type: ignore[import-not-found]
+    _HAS_FCNTL = True
+except Exception:  # pragma: no cover - exercised through platform fallback tests
+    fcntl = None  # type: ignore[assignment]
+    _HAS_FCNTL = False
+
+
+def _default_state_dir() -> Path:
+    if os.name == "nt":
+        local_app_data = (
+            os.environ.get("LOCALAPPDATA")
+            or os.environ.get("APPDATA")
+            or str(_os.path.expanduser("~"))
+            or "/tmp"
+        )
+        base = Path(local_app_data) / "Arthexis"
+    else:
+        base = Path.home() / ".local" / "state"
+    return base / "arthexis-turn"
+
+
+STATE_DIR = Path(os.environ.get("ARTHEXIS_TURN_STATE_DIR", _default_state_dir()))
 ACTIVE_STATE = STATE_DIR / "active-turn.json"
 EVENT_LOG = STATE_DIR / "events.jsonl"
 LOCK_PATH = STATE_DIR / "state.lock"
@@ -101,7 +125,8 @@ def ensure_state_dir() -> None:
 def state_lock():
     ensure_state_dir()
     with LOCK_PATH.open("a+", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        if _HAS_FCNTL:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)  # type: ignore[attr-defined]
         yield
 
 
@@ -128,6 +153,14 @@ def read_json(path: Path) -> dict[str, Any] | None:
         return None
     except json.JSONDecodeError:
         return {"status": "corrupt", "path": str(path)}
+
+
+def _is_process_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -173,6 +206,8 @@ def append_event(event: dict[str, Any]) -> None:
 
 
 def proc_identity(pid: int) -> dict[str, Any] | None:
+    if os.name == "nt":
+        return None
     try:
         stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
         status = Path(f"/proc/{pid}/status").read_text(encoding="utf-8")
@@ -209,6 +244,9 @@ def process_identity_is_live(identity: dict[str, Any]) -> bool:
 
 
 def process_matches(record: dict[str, Any]) -> bool:
+    pid = int(record.get("pid", 0))
+    if os.name == "nt":
+        return _is_process_running(pid)
     identity = proc_identity(int(record.get("pid", 0)))
     if (
         identity is None
@@ -220,6 +258,8 @@ def process_matches(record: dict[str, Any]) -> bool:
 
 
 def all_process_identities() -> dict[int, dict[str, Any]]:
+    if os.name == "nt":
+        return {}
     identities: dict[int, dict[str, Any]] = {}
     for proc in Path("/proc").iterdir():
         if not proc.name.isdigit():
@@ -252,6 +292,8 @@ def live_turn_process_records(state: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def process_identity_matches(snapshot: dict[str, Any]) -> bool:
+    if os.name == "nt":
+        return False
     pid = snapshot.get("pid")
     if type(pid) is not int or pid <= 1 or pid == os.getpid():
         return False
@@ -266,6 +308,8 @@ def process_identity_matches(snapshot: dict[str, Any]) -> bool:
 
 
 def live_turn_process_identities(state: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    if os.name == "nt":
+        return {}
     roots = {int(record["pid"]) for record in live_turn_process_records(state)}
     candidates = roots | descendant_pids(roots)
     own_uid = os.getuid()
@@ -322,17 +366,25 @@ def cmd_start_turn(args: argparse.Namespace) -> int:
 
 def cmd_register_pid(args: argparse.Namespace) -> int:
     identity = proc_identity(args.pid)
+    if os.name == "nt":
+        if not _is_process_running(args.pid):
+            print(f"pid_status: unavailable pid={args.pid}")
+            return 1
     if identity is None:
-        print(f"pid_status: unavailable pid={args.pid}")
-        return 1
-    if identity.get("uid") != os.getuid():
-        print(f"pid_status: refused non-owned pid={args.pid}")
-        return 1
-    with state_lock():
-        state = read_json(ACTIVE_STATE)
-        if not state or state.get("status") != "active":
-            print("status: no-active-turn")
-            return 2
+        if os.name != "nt":
+            print(f"pid_status: unavailable pid={args.pid}")
+            return 1
+    if os.name == "nt":
+        record = {
+            "pid": args.pid,
+            "label": args.label or "",
+            "registered_at": now_iso(),
+            "platform": "windows",
+        }
+    else:
+        if identity.get("uid") != os.getuid():
+            print(f"pid_status: refused non-owned pid={args.pid}")
+            return 1
         record = {
             "pid": args.pid,
             "start_ticks": identity["start_ticks"],
@@ -340,6 +392,11 @@ def cmd_register_pid(args: argparse.Namespace) -> int:
             "label": args.label or "",
             "registered_at": now_iso(),
         }
+    with state_lock():
+        state = read_json(ACTIVE_STATE)
+        if not state or state.get("status") != "active":
+            print("status: no-active-turn")
+            return 2
         state.setdefault("registered_processes", []).append(record)
         write_json(ACTIVE_STATE, state)
         append_event({"event": "pid-registered", "turn_id": state["turn_id"], **record})
@@ -397,6 +454,8 @@ def cmd_end_step(args: argparse.Namespace) -> int:
 
 
 def matching_process_identities(identities: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    if os.name == "nt":
+        return {}
     return {
         pid: identity
         for pid, identity in identities.items()
@@ -418,6 +477,8 @@ def wait_for_processes(state: dict[str, Any], timeout_seconds: int) -> dict[int,
 def send_signal_to_verified_process(snapshot: dict[str, Any], signum: signal.Signals) -> bool:
     if not process_identity_matches(snapshot):
         return False
+    if os.name == "nt":
+        raise RuntimeError("pidfd signaling is not supported on this platform")
     pidfd_open = getattr(os, "pidfd_open", None)
     pidfd_send_signal = getattr(signal, "pidfd_send_signal", None)
     if pidfd_open is None or pidfd_send_signal is None:
