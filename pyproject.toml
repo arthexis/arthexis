@@ -283,6 +283,7 @@ include-package-data = true
 "apps.ocpp.admin.miscellaneous" = [ "**/*",]
 "apps.ocpp.consumers" = [ "**/*",]
 "apps.ocpp.consumers.base" = [ "**/*",]
+"apps.ocpp.forwarder" = [ "**/*",]
 "apps.ocpp.management" = [ "**/*",]
 "apps.ocpp.management.commands" = [ "**/*",]
 "apps.ocpp.migrations" = [ "**/*",]
