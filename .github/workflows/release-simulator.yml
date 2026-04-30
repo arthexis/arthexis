@@ -182,7 +182,7 @@ jobs:
           version_path = Path('VERSION')
           current_version = version_path.read_text(encoding='utf-8').strip()
           pypi_url = f'https://pypi.org/pypi/{package_name}/json'
-          semver_re = re.compile(r'^(?:(?P<epoch>\\d+)!)?(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)(?:[+].*)?$')
+          semver_re = re.compile(r'^(?:(?P<epoch>\d+)!)?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:[+].*)?$')
 
 
           def parse_version(value: str):
